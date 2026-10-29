@@ -2,11 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
   diffBlackBoxEntries,
-  enumerateBlackBoxNearbySuccesses,
-  enumerateBlackBoxRecoveryStats,
-  enumerateBlackBoxTimeline,
-  enumerateVesselBlackBoxDoctor,
-  enumerateVesselReservations,
   getBlackBoxRecoveryStats,
   getBlackBoxTimeline,
   getVesselBlackBoxDoctor,
@@ -60,37 +55,26 @@ describe('black box insight client', () => {
     expect(result.clean).toBe(true);
   });
 
-  it('pages reservations with GET query and POST body', async () => {
-    let fetchMock = stub(jsonResponse(200, { Objects: [{ Directory: 'src', MissionId: 'msn_1' }], TotalRecords: 1, Threshold: 3 }));
+  it('pages reservations with a GET query', async () => {
+    const fetchMock = stub(jsonResponse(200, { Objects: [{ Directory: 'src', MissionId: 'msn_1' }], TotalRecords: 1, Threshold: 3 }));
     const pageResult = await listVesselReservations('vsl_1', { pageNumber: 2, pageSize: 5 });
     expect(onlyCallArgs(fetchMock)[0]).toMatch(/\/api\/v1\/vessels\/vsl_1\/reservations\?pageNumber=2&pageSize=5$/);
     expect(pageResult.threshold).toBe(3);
     expect(pageResult.objects[0].directory).toBe('src');
-    fetchMock = stub(jsonResponse(200, { Objects: [] }));
-    await enumerateVesselReservations('vsl_1', { pageNumber: 3 });
-    const [url, init] = onlyCallArgs(fetchMock);
-    expect(url).toMatch(/\/reservations\/enumerate$/);
-    expect(body(init)).toEqual({ PageNumber: 3 });
   });
 
   it('reads the doctor with a window and paging', async () => {
-    let fetchMock = stub(jsonResponse(200, { Objects: [{ Key: 'k', Setting: 'LandingMode', Count: 6, Applicable: true, ExampleEntryId: 'bbx_1' }], WindowDays: 7 }));
+    const fetchMock = stub(jsonResponse(200, { Objects: [{ Key: 'k', Setting: 'LandingMode', Count: 6, Applicable: true, ExampleEntryId: 'bbx_1' }], WindowDays: 7 }));
     const doctor = await getVesselBlackBoxDoctor('vsl_1', { windowDays: 7, pageNumber: 1, pageSize: 10 });
     expect(onlyCallArgs(fetchMock)[0]).toMatch(/\/vessels\/vsl_1\/blackbox-doctor\?windowDays=7&pageNumber=1&pageSize=10$/);
     expect(doctor.objects[0].applicable).toBe(true);
-    fetchMock = stub(jsonResponse(200, { Objects: [] }));
-    await enumerateVesselBlackBoxDoctor('vsl_1', { windowDays: 90 });
-    expect(body(onlyCallArgs(fetchMock)[1])).toEqual({ WindowDays: 90 });
   });
 
   it('reads recovery statistics with filters', async () => {
-    let fetchMock = stub(jsonResponse(200, { Objects: [{ RuleId: 'BBX-LAND-001', PathId: 'p', Runs: 4, SuccessRate: 0.75 }] }));
+    const fetchMock = stub(jsonResponse(200, { Objects: [{ RuleId: 'BBX-LAND-001', PathId: 'p', Runs: 4, SuccessRate: 0.75 }] }));
     const stats = await getBlackBoxRecoveryStats({ ruleId: 'BBX-LAND-001', vesselId: 'vsl_1' });
     expect(onlyCallArgs(fetchMock)[0]).toMatch(/\/api\/v1\/blackbox\/recovery-stats\?ruleId=BBX-LAND-001&vesselId=vsl_1$/);
     expect(stats.objects[0].successRate).toBe(0.75);
-    fetchMock = stub(jsonResponse(200, { Objects: [] }));
-    await enumerateBlackBoxRecoveryStats({ ruleId: 'R', pageSize: 50 });
-    expect(body(onlyCallArgs(fetchMock)[1])).toEqual({ PageSize: 50, RuleId: 'R' });
   });
 
   it('diffs two entries and lists nearby successes', async () => {
@@ -102,20 +86,14 @@ describe('black box insight client', () => {
     const near = await listBlackBoxNearbySuccesses('bbx_2', { pageNumber: 1, pageSize: 10 });
     expect(onlyCallArgs(fetchMock)[0]).toMatch(/\/blackbox\/bbx_2\/nearby-successes\?pageNumber=1&pageSize=10$/);
     expect(near.objects[0].missionId).toBe('msn_9');
-    fetchMock = stub(jsonResponse(200, { Objects: [] }));
-    await enumerateBlackBoxNearbySuccesses('bbx_2');
-    expect(onlyCallArgs(fetchMock)[0]).toMatch(/\/nearby-successes\/enumerate$/);
   });
 
   it('reads the timeline in the requested order', async () => {
-    let fetchMock = stub(jsonResponse(200, { EntryId: 'bbx_1', Objects: [{ Source: 'Mission', Kind: 'created', Message: 'Created' }], Sources: [{ Source: 'Mission', Count: 1, Truncated: false }] }));
+    const fetchMock = stub(jsonResponse(200, { EntryId: 'bbx_1', Objects: [{ Source: 'Mission', Kind: 'created', Message: 'Created' }], Sources: [{ Source: 'Mission', Count: 1, Truncated: false }] }));
     const timeline = await getBlackBoxTimeline('bbx_1', { order: 'CreatedDescending', pageNumber: 2, pageSize: 25 });
     expect(onlyCallArgs(fetchMock)[0]).toMatch(/\/blackbox\/bbx_1\/timeline\?order=CreatedDescending&pageNumber=2&pageSize=25$/);
     expect(timeline.objects[0].source).toBe('Mission');
     expect(timeline.sources[0].count).toBe(1);
-    fetchMock = stub(jsonResponse(200, { Objects: [] }));
-    await enumerateBlackBoxTimeline('bbx_1', { order: 'CreatedAscending' });
-    expect(body(onlyCallArgs(fetchMock)[1])).toEqual({ Order: 'CreatedAscending' });
   });
 
   it('reads a voyage cascade graph and surfaces 404 as ApiError', async () => {

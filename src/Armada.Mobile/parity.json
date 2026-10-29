@@ -2137,14 +2137,6 @@
     },
     {
       "kind": "api",
-      "key": "enumerateBlackBoxNearbySuccesses",
-      "status": "not-applicable",
-      "mobile": "",
-      "workstream": "W2.2",
-      "notes": "POST twin of listBlackBoxNearbySuccesses; the app pages the GET form"
-    },
-    {
-      "kind": "api",
       "key": "enumerateBlackBoxNotes",
       "status": "not-applicable",
       "mobile": "",
@@ -2158,22 +2150,6 @@
       "mobile": "",
       "workstream": "W2.2",
       "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
-    },
-    {
-      "kind": "api",
-      "key": "enumerateBlackBoxRecoveryStats",
-      "status": "not-applicable",
-      "mobile": "",
-      "workstream": "W2.2",
-      "notes": "black box operations views (reservations, configuration doctor, attempt diff, recovery statistics) are dashboard, VS Code, TUI, CLI and MCP surfaces (BLACKBOX.md section 12); the app shows dispatch warnings, the timeline, nearby successes and the voyage cascade"
-    },
-    {
-      "kind": "api",
-      "key": "enumerateBlackBoxTimeline",
-      "status": "not-applicable",
-      "mobile": "",
-      "workstream": "W2.2",
-      "notes": "POST twin of getBlackBoxTimeline; the app pages the GET form"
     },
     {
       "kind": "api",
@@ -2337,14 +2313,6 @@
     },
     {
       "kind": "api",
-      "key": "enumerateVesselBlackBoxDoctor",
-      "status": "not-applicable",
-      "mobile": "",
-      "workstream": "W2.2",
-      "notes": "black box operations views (reservations, configuration doctor, attempt diff, recovery statistics) are dashboard, VS Code, TUI, CLI and MCP surfaces (BLACKBOX.md section 12); the app shows dispatch warnings, the timeline, nearby successes and the voyage cascade"
-    },
-    {
-      "kind": "api",
       "key": "enumerateVesselHealth",
       "status": "implemented",
       "mobile": "src/screens/vessels/health",
@@ -2358,14 +2326,6 @@
       "mobile": "src/screens/vessels/import",
       "workstream": "W3.1",
       "notes": "Vessel Import"
-    },
-    {
-      "kind": "api",
-      "key": "enumerateVesselReservations",
-      "status": "not-applicable",
-      "mobile": "",
-      "workstream": "W2.2",
-      "notes": "black box operations views (reservations, configuration doctor, attempt diff, recovery statistics) are dashboard, VS Code, TUI, CLI and MCP surfaces (BLACKBOX.md section 12); the app shows dispatch warnings, the timeline, nearby successes and the voyage cascade"
     },
     {
       "kind": "api",

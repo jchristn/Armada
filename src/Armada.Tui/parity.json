@@ -1905,6 +1905,14 @@
     },
     {
       "kind": "api",
+      "key": "diffBlackBoxEntries",
+      "status": "implemented",
+      "tui": "ArmadaClient.DiffBlackBoxEntriesAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "disableHarbor",
       "status": "implemented",
       "tui": "ArmadaClient.DisableHarborAsync",
@@ -2393,6 +2401,14 @@
     },
     {
       "kind": "api",
+      "key": "getBlackBoxRecoveryStats",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxRecoveryStatsAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "getBlackBoxRetention",
       "status": "implemented",
       "tui": "ArmadaClient.GetBlackBoxRetentionAsync",
@@ -2420,6 +2436,14 @@
       "key": "getBlackBoxStorageMigration",
       "status": "implemented",
       "tui": "ArmadaClient.GetBlackBoxStorageMigrationAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxTimeline",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxTimelineAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -2929,6 +2953,14 @@
     },
     {
       "kind": "api",
+      "key": "getVesselBlackBoxDoctor",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVesselBlackBoxDoctorAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "getVesselBranchCount",
       "status": "implemented",
       "tui": "ArmadaClient.GetVesselBranchCountAsync",
@@ -3041,6 +3073,14 @@
     },
     {
       "kind": "api",
+      "key": "getVoyageBlackBoxCascade",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVoyageBlackBoxCascadeAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "getVoyageStatus",
       "status": "implemented",
       "tui": "ArmadaClient.GetVoyageStatusAsync",
@@ -3137,6 +3177,14 @@
     },
     {
       "kind": "api",
+      "key": "lintMissionBrief",
+      "status": "implemented",
+      "tui": "ArmadaClient.LintMissionBriefAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "listAllMuxEndpoints",
       "status": "implemented",
       "tui": "ArmadaClient.ListAllMuxEndpointsAsync",
@@ -3188,6 +3236,14 @@
       "key": "listBlackBox",
       "status": "implemented",
       "tui": "ArmadaClient.ListBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "listBlackBoxNearbySuccesses",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListBlackBoxNearbySuccessesAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
@@ -3577,6 +3633,14 @@
     },
     {
       "kind": "api",
+      "key": "listVesselReservations",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListVesselReservationsAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "listVessels",
       "status": "implemented",
       "tui": "ArmadaClient.ListVesselsAsync",
@@ -3684,6 +3748,14 @@
       "key": "pinBlackBox",
       "status": "implemented",
       "tui": "ArmadaClient.PinBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "previewMissionOverlap",
+      "status": "implemented",
+      "tui": "ArmadaClient.PreviewMissionOverlapAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },
