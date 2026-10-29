@@ -1,4 +1,4 @@
-import { BlackBoxDirectoryCount, BlackBoxEntrySummary, BlackBoxFileRef } from '../api/types';
+import { BlackBoxDirectoryCount, BlackBoxEntrySummary } from '../api/types';
 
 /** Short relative age ("just now", "5m", "3h", "2d") of an ISO timestamp, relative to now. */
 export function formatAge(iso: string | null | undefined, now: Date = new Date()): string {
@@ -43,19 +43,18 @@ export function isOpen(entry: BlackBoxEntrySummary): boolean {
   return !entry.Resolution || entry.Resolution === 'Open';
 }
 
-/** Normalizes a file reference that may be a bare path string or an object. */
-export function filePath(ref: string | BlackBoxFileRef | null | undefined): string | null {
+/** Normalizes a repository-relative file path from a record section. */
+export function filePath(ref: string | null | undefined): string | null {
   if (!ref) return null;
-  if (typeof ref === 'string') return normalizeRelPath(ref);
-  return ref.Path ? normalizeRelPath(ref.Path) : null;
+  const value = normalizeRelPath(ref);
+  return value || null;
 }
 
 /** Normalizes a directory count row. */
 export function directoryPath(dir: BlackBoxDirectoryCount | string | null | undefined): string | null {
   if (!dir) return null;
   if (typeof dir === 'string') return normalizeRelPath(dir);
-  const value = dir.Directory ?? dir.Path;
-  return value ? normalizeRelPath(value) : null;
+  return dir.Directory ? normalizeRelPath(dir.Directory) : null;
 }
 
 /** Repository-relative path with forward slashes and no leading `./` or `/`. */

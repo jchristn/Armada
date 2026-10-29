@@ -138,6 +138,32 @@ namespace Armada.Core.Authorization
             Add("get_battery_run", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_battery_results", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
 
+            // Mission and voyage black box (entry visibility is checked by IBlackBoxService: an invisible entry is NotFound;
+            // recovery and recommendation steps are authorized as the underlying tool)
+            Add("get_blackbox", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("read_blackbox_section", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_objects", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("read_blackbox_object", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_entries", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("search_blackbox", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_notes", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_blackbox_bundle", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_hotspots", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_fingerprints", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_blackbox_retention", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
+            Add("get_blackbox_storage", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
+            Add("annotate_blackbox", "BlackBox", ResourceOperationEnum.Create, PermissionLevel.Authenticated);
+            Add("resolve_blackbox", "BlackBox", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("run_blackbox_recovery", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+            Add("apply_blackbox_recommendation", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+            Add("pin_blackbox", "BlackBox", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("delete_blackbox_entries", "BlackBox", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
+            Add("purge_blackbox", "BlackBox", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("run_blackbox_gc", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.AdminOnly);
+            Add("reanalyze_blackbox", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
+            Add("get_blackbox_fingerprint_trend", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("export_blackbox_fixture", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
+
             // Writes to caller-owned resources (memories, model endpoints, harbors), scoped to the caller in the tool handlers
             Add("create_memory", "Memory", ResourceOperationEnum.Create, PermissionLevel.Authenticated);
             Add("update_memory", "Memory", ResourceOperationEnum.Update, PermissionLevel.Authenticated);

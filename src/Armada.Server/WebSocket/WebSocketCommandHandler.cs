@@ -40,6 +40,18 @@ namespace Armada.Server.WebSocket
         public IMissionService? Missions { get; set; } = null;
 
         /// <summary>
+        /// Black box service for blackbox.get, blackbox.brief and blackbox.list, or null (the commands then answer
+        /// Unavailable).
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxService? BlackBox { get; set; } = null;
+
+        /// <summary>
+        /// Black box capture for the operator actions of delete_vessel (step VesselDeleted) and transition_mission_status
+        /// (step OperatorTransition), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxCapture? BlackBoxCapture { get; set; } = null;
+
+        /// <summary>
         /// Instantiate the command handler.
         /// </summary>
         /// <param name="admiral">Admiral service for command handling.</param>
@@ -312,10 +324,14 @@ namespace Armada.Server.WebSocket
                         {
                             if (dvm.Status == MissionStatusEnum.Pending || dvm.Status == MissionStatusEnum.Blocked || dvm.Status == MissionStatusEnum.Assigned || dvm.Status == MissionStatusEnum.InProgress)
                             {
+                                MissionStatusEnum dvmBefore = dvm.Status;
                                 dvm.Status = MissionStatusEnum.Cancelled;
+                                dvm.FailureKind = MissionFailureKindEnum.OperatorAction;
+                                dvm.FailureReason = "Vessel deleted";
                                 dvm.CompletedUtc = DateTime.UtcNow;
                                 dvm.LastUpdateUtc = DateTime.UtcNow;
                                 await _Database.Missions.UpdateAsync(dvm).ConfigureAwait(false);
+                                await BlackBoxOperatorCapture.RecordVesselDeletedAsync(BlackBoxCapture, dvm, dvmBefore, delVessel, "WebSocket").ConfigureAwait(false);
                             }
                         }
                     }
@@ -580,11 +596,13 @@ namespace Armada.Server.WebSocket
                     }
                     else
                     {
+                        MissionStatusEnum tmBefore = tmMission.Status;
                         tmMission.Status = tmNewStatus;
                         tmMission.LastUpdateUtc = DateTime.UtcNow;
                         if (tmNewStatus == MissionStatusEnum.Complete || tmNewStatus == MissionStatusEnum.Failed || tmNewStatus == MissionStatusEnum.LandingFailed || tmNewStatus == MissionStatusEnum.Cancelled)
                             tmMission.CompletedUtc = DateTime.UtcNow;
                         await _Database.Missions.UpdateAsync(tmMission).ConfigureAwait(false);
+                        await BlackBoxOperatorCapture.RecordTransitionAsync(BlackBoxCapture, tmMission, tmBefore, "WebSocket").ConfigureAwait(false);
                         Signal tmSignal = new Signal(SignalTypeEnum.Progress, "Mission " + tmId + " transitioned to " + tmNewStatus);
                         if (!String.IsNullOrEmpty(tmMission.CaptainId)) tmSignal.FromCaptainId = tmMission.CaptainId;
                         await _Database.Signals.CreateAsync(tmSignal).ConfigureAwait(false);
@@ -1170,10 +1188,81 @@ namespace Armada.Server.WebSocket
                     await _Database.Pipelines.DeleteAsync(delPipeline.Id).ConfigureAwait(false);
                     return new { type = "command.result", action = "delete_pipeline", data = (object)new { Status = "deleted", Name = delPipelineName } };
 
+                // ── Black box ──────────────────────────────────────────────
+
+                case "blackbox.get":
+                case "blackbox.brief":
+                case "blackbox.list":
+                    return await HandleBlackBoxAsync(action, command, rawBody, caller).ConfigureAwait(false);
+
                 // ── Default ────────────────────────────────────────────────
 
                 default:
                     return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.UnknownAction, "Unknown action: " + action);
+            }
+        }
+
+        private async Task<object> HandleBlackBoxAsync(string action, WebSocketCommand command, string rawBody, AuthContext? caller)
+        {
+            if (BlackBox == null) return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.Unavailable, "The black box is not available on this server.");
+            AuthContext ctx = caller ?? AuthContext.Authenticated(Armada.Core.Constants.DefaultTenantId, Armada.Core.Constants.DefaultUserId, true, true, "WebSocket", null, null);
+            try
+            {
+                if (action == "blackbox.list")
+                {
+                    BlackBoxEnumerateRequest query = JsonSerializer.Deserialize<WebSocketDataCommand<BlackBoxEnumerateRequest>>(rawBody, _JsonOptions)?.Data ?? new BlackBoxEnumerateRequest();
+                    if (command.Query != null)
+                    {
+                        query.PageNumber = command.Query.PageNumber;
+                        query.PageSize = command.Query.PageSize;
+                        query.Order = command.Query.Order;
+                    }
+
+                    EnumerationResult<BlackBoxEntrySummary> page = await BlackBox.EnumerateAsync(ctx, query).ConfigureAwait(false);
+                    return new { type = "command.result", action = action, data = (object)page };
+                }
+
+                WebSocketBlackBoxData data = JsonSerializer.Deserialize<WebSocketDataCommand<WebSocketBlackBoxData>>(rawBody, _JsonOptions)?.Data ?? new WebSocketBlackBoxData();
+                string? id = String.IsNullOrWhiteSpace(command.Id) ? null : command.Id.Trim();
+                string? entryId = data.EntryId;
+                string? missionId = data.MissionId;
+                string? voyageId = data.VoyageId;
+                if (id != null && entryId == null && missionId == null && voyageId == null)
+                {
+                    if (id.StartsWith(Armada.Core.Constants.MissionIdPrefix, StringComparison.Ordinal)) missionId = id;
+                    else if (id.StartsWith(Armada.Core.Constants.VoyageIdPrefix, StringComparison.Ordinal)) voyageId = id;
+                    else entryId = id;
+                }
+
+                string resolved = await BlackBox.ResolveEntryIdAsync(ctx, missionId, voyageId, entryId).ConfigureAwait(false);
+                if (action == "blackbox.get")
+                {
+                    BlackBoxEntry entry = await BlackBox.GetEntryAsync(ctx, resolved, data.IncludeRecord ?? true).ConfigureAwait(false);
+                    return new { type = "command.result", action = action, data = (object)entry };
+                }
+
+                BlackBoxAudienceEnum audience = BlackBoxAudienceEnum.Agent;
+                if (!String.IsNullOrWhiteSpace(data.Audience)
+                    && (!Armada.Core.EnumNames.TryParse(data.Audience.Trim(), true, out audience) || audience == BlackBoxAudienceEnum.Unknown))
+                    return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.InvalidArgument, "audience must be agent, user or maintainer.");
+                string brief = await BlackBox.GetBriefAsync(ctx, resolved, audience, data.RedactHosts ?? false).ConfigureAwait(false);
+                return new { type = "command.result", action = action, data = (object)new BlackBoxBriefResult { EntryId = resolved, Audience = audience, Brief = brief } };
+            }
+            catch (Armada.Core.BlackBox.BlackBoxNotFoundException ex)
+            {
+                return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.NotFound, ex.Message);
+            }
+            catch (Armada.Core.BlackBox.BlackBoxStoreUnavailableException ex)
+            {
+                return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.Unavailable, ex.Message);
+            }
+            catch (Armada.Core.BlackBox.BlackBoxException ex)
+            {
+                return WebSocketCommandError.Create(action, ex is Armada.Core.BlackBox.BlackBoxObjectMissingException ? WebSocketCommandErrorCodeEnum.NotFound : WebSocketCommandErrorCodeEnum.Conflict, ex.Message);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is JsonException || ex is UnauthorizedAccessException)
+            {
+                return WebSocketCommandError.FromException(action, ex);
             }
         }
 

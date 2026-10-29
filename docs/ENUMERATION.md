@@ -200,6 +200,15 @@ internal services); reads return only what writes allowed.
 - Captain chat `History` limited to 1000 messages; Harbor probe `Arguments` 256; failure-cause rule `Match` lists 256;
   `HarborReasons` on checkout errors at most 50 with `HarborReasonCount`.
 
+### Black box surfaces (v1.2.0)
+
+| Surface | Bound | Evidence |
+|---|---|---|
+| REST `GET /api/v1/blackbox` and `POST .../enumerate`, `POST .../search`, `GET`/`POST .../missions/{id}/blackbox/entries[/enumerate]`, `.../{id}/objects[/enumerate]`, `.../{id}/notes[/enumerate]`, `POST .../hotspots/enumerate`, `POST .../fingerprints/enumerate`; MCP `list_blackbox_*`, `search_blackbox`, `enumerate` entityType `blackbox`; WebSocket `blackbox.list` | **Paged** in SQL with the caller's scope before counting (default 10, 1 to 1000 normalized) | `E2E.BlackBox/rest_lists_and_analytics`, `/mcp_read_tools`, `Database.BlackBoxEntries`, `Database.BlackBoxFiles` |
+| Object reads (`GET .../objects/{name}`, MCP `read_blackbox_object`, resource `armada://blackbox/{entryId}/objects/{name}`) | **Limited**: REST 1 MB and MCP 64 KB per read, with `X-BlackBox-Next-Offset` / `nextOffset` and the total | `E2E.BlackBox/rest_sections_objects_download` (3 MB in 1 MB reads), `/mcp_read_tools` (64 KB chunks) |
+| `POST /api/v1/blackbox/delete`, MCP `delete_blackbox_entries` | **Limited** to 1000 ids (CollectionLimitExceeded) | `E2E.BlackBox/rest_limits_and_authorization`, `/mcp_write_tools_and_errors` |
+| Entry, record, brief, bundle, retention, storage, purge and GC results | **Fixed**: every record list carries `[CollectionBound]` (`BlackBoxLimits`); briefs at most 40 KB; bundles at most 50 entries and 1 MB; purge and GC results carry counts and at most 100 sample ids | `Models.BlackBoxSchema`, `E2E.ResponseShape` |
+
 ### Deliberately left, with reasons
 
 - `GET /api/v1/history` and `POST /api/v1/history/enumerate` return a bounded page, but the server still walks its 13

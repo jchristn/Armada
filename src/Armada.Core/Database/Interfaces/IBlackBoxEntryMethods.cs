@@ -111,6 +111,8 @@ namespace Armada.Core.Database.Interfaces
 
         /// <summary>
         /// Update every mutable column of an entry (not id, tenant, subject ids or creation time); sets LastUpdateUtc.
+        /// is_current and supersedes_id are owned by <see cref="CreateCurrentAsync"/> and <see cref="MarkSupersededAsync"/>
+        /// and never written here, so a writer holding a stale copy of a superseded entry cannot make it current again.
         /// </summary>
         /// <param name="entry">Entry.</param>
         /// <param name="token">Cancellation token.</param>
@@ -296,5 +298,57 @@ namespace Armada.Core.Database.Interfaces
         /// <returns>True when a row changed.</returns>
         /// <exception cref="ArgumentNullException">Thrown when voyageId is null or empty.</exception>
         Task<bool> SetVoyageLastEntryAsync(string voyageId, string? entryId, CancellationToken token = default);
+
+        /// <summary>
+        /// Quota eviction candidates, oldest first (created, then id).
+        /// </summary>
+        /// <param name="query">Filter and page size.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The first page of candidates and the total count.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query is null.</exception>
+        Task<EnumerationResult<BlackBoxEntry>> EnumerateEvictionCandidatesAsync(BlackBoxEvictionQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Vessels holding more than maxEntries entries (Deleting excluded), most entries first.
+        /// </summary>
+        /// <param name="maxEntries">Per-vessel limit.</param>
+        /// <param name="query">Page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A page of vessel ids.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query is null.</exception>
+        Task<EnumerationResult<string>> EnumerateVesselsOverQuotaAsync(int maxEntries, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Entries to delete with their subject: MissionDeleted (mission entries whose mission row is gone), VesselDeleted
+        /// (entries whose vessel row is gone) and TenantDeleted (every entry of subjectId's tenant). Pinned entries are
+        /// excluded except for TenantDeleted; entries in the Deleting state are excluded.
+        /// </summary>
+        /// <param name="reason">Cascade.</param>
+        /// <param name="subjectId">Limit to this mission, vessel or tenant id (required for TenantDeleted), or null.</param>
+        /// <param name="query">Page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A page of entries, oldest first.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query is null, or subjectId is null for TenantDeleted.</exception>
+        Task<EnumerationResult<BlackBoxEntry>> EnumerateCascadeCandidatesAsync(BlackBoxCascadeReasonEnum reason, string? subjectId, EnumerationQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Keyset scan in id order (entries after query.AfterId), filtered by storage target and vessel.
+        /// </summary>
+        /// <param name="query">Scan.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The next page; TotalRecords counts the entries remaining after the cursor.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query is null.</exception>
+        Task<EnumerationResult<BlackBoxEntry>> ScanAsync(BlackBoxScanQuery query, CancellationToken token = default);
+
+        /// <summary>
+        /// Switch an entry's storage target and key prefix (storage migration), without touching last_update_utc.
+        /// </summary>
+        /// <param name="id">Entry id.</param>
+        /// <param name="target">Target.</param>
+        /// <param name="storagePrefix">Key prefix for an external target, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the row was updated.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when id is null or empty.</exception>
+        Task<bool> UpdateStorageAsync(string id, BlackBoxStorageTargetEnum target, string? storagePrefix, CancellationToken token = default);
     }
 }

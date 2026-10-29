@@ -21,6 +21,11 @@ namespace Armada.Server.Routes
     /// </summary>
     public class VesselRoutes
     {
+        /// <summary>
+        /// Black box capture for the missions a vessel deletion cancels (step VesselDeleted), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxCapture? BlackBox { get; set; } = null;
+
         private readonly DatabaseDriver _database;
         private readonly VesselReadinessService _readiness;
         private readonly LandingPreviewService _landingPreview;
@@ -35,6 +40,11 @@ namespace Armada.Server.Routes
         private readonly VesselHostResolver? _Hosts;
         private readonly IAdmiralService? _Admiral;
         private readonly VesselGitStatusCache _GitStatusCache = new VesselGitStatusCache();
+
+        /// <summary>
+        /// Black box lifecycle hooks (retention cascades and expiry recomputes after deletes and updates), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxLifecycleHooks? BlackBoxHooks { get; set; } = null;
 
         /// <summary>
         /// Instantiate.
@@ -261,6 +271,7 @@ namespace Armada.Server.Routes
                 updated = EntityUpdateMerger.MergeVessel(existing, updated);
                 await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_database, updated).ConfigureAwait(false);
                 updated = await _database.Vessels.UpdateAsync(updated).ConfigureAwait(false);
+                if (BlackBoxHooks != null && existing.BlackBoxRetentionDays != updated.BlackBoxRetentionDays) await BlackBoxHooks.OnVesselUpdatedAsync(updated.Id).ConfigureAwait(false);
                 return (object)updated;
             },
             api => api
@@ -851,6 +862,7 @@ namespace Armada.Server.Routes
                     await _database.Vessels.DeleteAsync(ctx.TenantId!, id).ConfigureAwait(false);
                 else
                     await _database.Vessels.DeleteAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (BlackBoxHooks != null) await BlackBoxHooks.OnVesselDeletedAsync(id).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 204;
                 return null;
             },
@@ -903,6 +915,7 @@ namespace Armada.Server.Routes
                         await _database.Vessels.DeleteAsync(ctx.TenantId!, id).ConfigureAwait(false);
                     else
                         await _database.Vessels.DeleteAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                    if (BlackBoxHooks != null) await BlackBoxHooks.OnVesselDeletedAsync(id).ConfigureAwait(false);
                     result.Deleted++;
                 }
 
@@ -944,6 +957,9 @@ namespace Armada.Server.Routes
                     || mission.Status == Armada.Core.Enums.MissionStatusEnum.Review
                     || mission.Status == Armada.Core.Enums.MissionStatusEnum.Testing)
                 {
+                    // Read before the cancel: CancelMissionAsync records its own OperatorTransition entry and sets Cancelled;
+                    // the VesselDeleted entry below supersedes it as the mission's current entry.
+                    Armada.Core.Enums.MissionStatusEnum statusBefore = mission.Status;
                     if (_Admiral != null)
                     {
                         // Stop the agent before the mission row goes away; a failed stop blocks the delete.
@@ -956,6 +972,7 @@ namespace Armada.Server.Routes
                     mission.CompletedUtc = DateTime.UtcNow;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    await BlackBoxOperatorCapture.RecordVesselDeletedAsync(BlackBox, mission, statusBefore, vessel, "REST").ConfigureAwait(false);
                 }
                 try { await _database.Missions.DeleteAsync(mission.Id).ConfigureAwait(false); }
                 catch (Exception ex) { errors.Add("Mission " + mission.Id + ": " + ex.Message); }

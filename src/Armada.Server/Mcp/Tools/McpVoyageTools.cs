@@ -183,14 +183,14 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "voyage_status",
-                "Get status of a specific voyage: the voyage with its mission counts (TotalMissions, MissionCountsByStatus). Missions are never embedded; read them one page at a time with enumerate (entityType missions, voyageId).",
+                "Get status of a specific voyage: the voyage with its mission counts (TotalMissions, MissionCountsByStatus) and LastBlackBoxEntryId (its current black box entry, read it with get_blackbox). Missions are never embedded; read them one page at a time with enumerate (entityType missions, voyageId).",
                 new
                 {
                     type = "object",
                     properties = new
                     {
                         voyageId = new { type = "string", description = "Voyage ID (vyg_ prefix)" },
-                        summary = new { type = "boolean", description = "Return a trimmed voyage (id, title, description, status, timestamps, approval options, evaluation flag) with the counts (default true). Set false for the full voyage object with the counts." }
+                        summary = new { type = "boolean", description = "Return a trimmed voyage (id, title, description, status, timestamps, approval options, evaluation flag, LastBlackBoxEntryId) with the counts (default true). Set false for the full voyage object with the counts." }
                     },
                     required = new[] { "voyageId" }
                 },
@@ -209,7 +209,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         return (object)new
                         {
-                            Voyage = new { voyage.Id, voyage.Title, voyage.Description, voyage.Status, voyage.CreatedUtc, voyage.LastUpdateUtc, voyage.ApprovalOptions, voyage.IsEvaluation },
+                            Voyage = new { voyage.Id, voyage.Title, voyage.Description, voyage.Status, voyage.CreatedUtc, voyage.LastUpdateUtc, voyage.ApprovalOptions, voyage.IsEvaluation, voyage.LastBlackBoxEntryId },
                             TotalMissions = progress.TotalMissions,
                             MissionCountsByStatus = progress.MissionCountsByStatus
                         };

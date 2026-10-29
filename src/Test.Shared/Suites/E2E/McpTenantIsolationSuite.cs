@@ -111,7 +111,14 @@ namespace Test.Shared.Suites.E2E
             "list_stage_outcomes",
             "reclassify_stage_outcomes",
             "list_model_probe_runs",
-            "discover_vessels"
+            "discover_vessels",
+            "list_blackbox_entries",
+            "search_blackbox",
+            "get_blackbox_bundle",
+            "list_blackbox_hotspots",
+            "list_blackbox_fingerprints",
+            "purge_blackbox",
+            "export_blackbox_fixture"
         };
 
         // Every entity type the enumerate tool accepts (fleet_action_run_target needs a run id and is checked by id).
@@ -121,7 +128,7 @@ namespace Test.Shared.Suites.E2E
             "voyages", "docks", "signals", "events", "releases", "deployments", "incidents", "runbooks", "runbook_executions",
             "merge_queue", "personas", "memories", "prompt_templates", "pipelines", "playbooks", "workflow_profiles",
             "project_profiles", "skills", "check_runs", "vessel_import_batch", "fleet_action", "fleet_action_run",
-            "inbox", "cli_permission_rules", "cli_permission_requests"
+            "inbox", "cli_permission_rules", "cli_permission_requests", "blackbox"
         };
 
         private SecurityTestServer? _Server;
@@ -157,6 +164,7 @@ namespace Test.Shared.Suites.E2E
                 }
 
                 await SeedTenantAAsync().ConfigureAwait(false);
+                await SeedBlackBoxAsync().ConfigureAwait(false);
                 AssertTrue(_Ids.Count >= 15, "expected the tenant A seed to cover the core entity types, got " + _Ids.Count);
             }));
 
@@ -667,6 +675,34 @@ namespace Test.Shared.Suites.E2E
         }
 
         /// <summary>
+        /// Capture a black box entry for tenant A's failed mission through the server's own runtime (its reason carries the
+        /// marker), so every black box tool is checked with a real entry id.
+        /// </summary>
+        private async Task SeedBlackBoxAsync()
+        {
+            Armada.Core.BlackBox.BlackBoxRuntime runtime = _Server!.Server.BlackBox ?? throw new InvalidOperationException("the server has no black box runtime");
+            Mission mission;
+            using (DatabaseDriver db = await OpenDatabaseAsync().ConfigureAwait(false))
+            {
+                mission = (await db.Missions.ReadAsync(_Ids["mission"]).ConfigureAwait(false))!;
+            }
+
+            mission.FailureReason = "black box " + _Marker;
+            Armada.Core.BlackBox.BlackBoxCaptureContext context = new Armada.Core.BlackBox.BlackBoxCaptureContext
+            {
+                Mission = mission,
+                StatusBefore = MissionStatusEnum.InProgress,
+                Step = BlackBoxStepEnum.ScopeViolation,
+                Note = _Marker
+            };
+            context.OutOfScopeFiles.Add("iso/" + _Marker + ".cs");
+            string? entryId = await runtime.Capture.CaptureMissionFailureAsync(context).ConfigureAwait(false);
+            AssertNotNull(entryId, "tenant A black box entry");
+            await runtime.Queue.DrainAsync().ConfigureAwait(false);
+            _Ids["blackbox"] = entryId!;
+        }
+
+        /// <summary>
         /// Build arguments for a tool from its input schema: id-like properties get tenant A's ids, other required
         /// properties get harmless values. Returns null when the schema cannot be read.
         /// </summary>
@@ -745,7 +781,12 @@ namespace Test.Shared.Suites.E2E
                 case "dockId":
                     single = _Ids["dock"]; break;
                 case "entryId":
-                    single = _Ids["merge"]; break;
+                    single = tool.Contains("blackbox", StringComparison.Ordinal) ? _Ids["blackbox"] : _Ids["merge"]; break;
+                case "pathId":
+                case "recommendationId":
+                    // Recovery path and recommendation ids are local to the entry; the entry id carries the tenant.
+                    if (tool.Contains("blackbox", StringComparison.Ordinal)) single = property == "pathId" ? "rp1" : "rc1";
+                    break;
                 case "checkRunId":
                     single = _Ids["checkrun"]; break;
                 case "objectiveId":
@@ -798,7 +839,7 @@ namespace Test.Shared.Suites.E2E
                 case "planningSessionIds": listKey = "planning"; break;
                 case "refinementSessionIds": listKey = "refinement"; break;
                 case "blockedByObjectiveIds": listKey = "objective"; break;
-                case "entryIds": listKey = "merge"; break;
+                case "entryIds": listKey = tool.Contains("blackbox", StringComparison.Ordinal) ? "blackbox" : "merge"; break;
                 case "ids":
                     if (tool == "delete_vessels") listKey = "vessel";
                     else if (tool == "delete_fleets") listKey = "fleet";
@@ -839,6 +880,8 @@ namespace Test.Shared.Suites.E2E
                 case "type": return "\"Build\"";
                 case "deliveryMode": return "\"InlineFullContent\"";
                 case "entityType": return "\"missions\"";
+                case "section": return "\"Status\"";
+                case "resolution": return "\"Resolved\"";
             }
 
             switch (type)

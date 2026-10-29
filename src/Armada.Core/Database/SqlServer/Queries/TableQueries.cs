@@ -2157,6 +2157,27 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF COL_LENGTH('voyages', 'last_blackbox_entry_id') IS NULL ALTER TABLE voyages ADD last_blackbox_entry_id NVARCHAR(64) NULL;",
                     @"IF COL_LENGTH('vessels', 'blackbox_retention_days') IS NULL ALTER TABLE vessels ADD blackbox_retention_days INT NULL;"),
 
+                new SchemaMigration(104, "Add blackbox_migrations: one row per black box storage migration job (copy, verify, switch, delete between storage targets) so a job is resumable after a restart and its progress can be read back",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'blackbox_migrations') CREATE TABLE blackbox_migrations (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        state NVARCHAR(64) NOT NULL,
+                        from_target NVARCHAR(64),
+                        to_target NVARCHAR(64) NOT NULL,
+                        delete_source BIT NOT NULL DEFAULT 1,
+                        batch_size INT NOT NULL DEFAULT 50,
+                        total_entries BIGINT NOT NULL DEFAULT 0,
+                        migrated_entries BIGINT NOT NULL DEFAULT 0,
+                        failed_entries BIGINT NOT NULL DEFAULT 0,
+                        bytes_copied BIGINT NOT NULL DEFAULT 0,
+                        last_entry_id NVARCHAR(64),
+                        last_error NVARCHAR(MAX),
+                        created_utc DATETIME2 NOT NULL,
+                        started_utc DATETIME2,
+                        finished_utc DATETIME2,
+                        last_update_utc DATETIME2 NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_migrations_state_created') CREATE INDEX idx_blackbox_migrations_state_created ON blackbox_migrations(state, created_utc);"),
+
                 new SchemaMigration(105, "Add vessels.serialize_overlapping_missions: when true, a mission dispatched to the vessel that overlaps an active mission's files or a reserved hotspot directory is chained after it with DependsOnMissionId",
                     @"IF COL_LENGTH('vessels', 'serialize_overlapping_missions') IS NULL ALTER TABLE vessels ADD serialize_overlapping_missions BIT NOT NULL CONSTRAINT DF_vessels_serialize_overlapping_missions DEFAULT 0;"),
 

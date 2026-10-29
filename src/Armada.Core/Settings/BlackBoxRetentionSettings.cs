@@ -117,5 +117,26 @@ namespace Armada.Core.Settings
         }
 
         #endregion
+
+        /// <summary>
+        /// A copy of these settings.
+        /// </summary>
+        /// <returns>The copy.</returns>
+        public BlackBoxRetentionSettings Clone()
+        {
+            return new BlackBoxRetentionSettings
+            {
+                RetentionDays = RetentionDays,
+                ResolvedRetentionDays = ResolvedRetentionDays,
+                KeepLatestPerMission = KeepLatestPerMission,
+                MaxEntriesPerVessel = MaxEntriesPerVessel,
+                MaxTotalBytes = MaxTotalBytes,
+                DeleteWithMission = DeleteWithMission,
+                DeleteWithVessel = DeleteWithVessel,
+                GcIntervalMinutes = GcIntervalMinutes,
+                GcBatchSize = GcBatchSize,
+                OrphanGraceHours = OrphanGraceHours
+            };
+        }
     }
 }

@@ -55,8 +55,19 @@ namespace Armada.Server.Routes
         /// </summary>
         public Func<string, RuntimeActivity?>? MissionActivityLookup { get; set; } = null;
 
+        /// <summary>
+        /// Black box capture for manual transitions to Failed, LandingFailed, Cancelled or Blocked (step
+        /// OperatorTransition), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxCapture? BlackBox { get; set; } = null;
+
         /// <summary>Resolve file and git operations on the dock's owning host.</summary>
         public DockHostResolver? DockHosts { get; set; } = null;
+
+        /// <summary>
+        /// Black box lifecycle hooks (retention cascades and expiry recomputes after deletes and updates), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxLifecycleHooks? BlackBoxHooks { get; set; } = null;
 
         /// <summary>
         /// Instantiate.
@@ -761,6 +772,7 @@ namespace Armada.Server.Routes
                 }
 
                 await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                await BlackBoxOperatorCapture.RecordTransitionAsync(BlackBox, mission, previousStatus, "REST").ConfigureAwait(false);
 
                 // Audit event: manual Complete without an active dock bypasses the landing pipeline.
                 // This is allowed (operators may need it after restarts/cleanup) but should be visible.
@@ -956,6 +968,7 @@ namespace Armada.Server.Routes
 
                 // Remove telemetry events that referenced this mission so they do not dangle.
                 await CascadeCleanup.RemoveEventsForMissionAsync(_database, id).ConfigureAwait(false);
+                if (BlackBoxHooks != null) await BlackBoxHooks.OnMissionDeletedAsync(id).ConfigureAwait(false);
 
                 await _emitEvent("mission.deleted", "Mission " + id + " permanently deleted",
                     "mission", id, null, null, null, null).ConfigureAwait(false);
@@ -1009,6 +1022,7 @@ namespace Armada.Server.Routes
                         await _database.Missions.DeleteAsync(ctx.TenantId!, id).ConfigureAwait(false);
                     else
                         await _database.Missions.DeleteAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                    if (BlackBoxHooks != null) await BlackBoxHooks.OnMissionDeletedAsync(id).ConfigureAwait(false);
                     result.Deleted++;
                 }
 

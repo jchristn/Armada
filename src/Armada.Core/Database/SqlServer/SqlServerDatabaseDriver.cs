@@ -86,6 +86,7 @@ namespace Armada.Core.Database.SqlServer
             BlackBoxFiles = new BlackBoxFileMethods(this);
             BlackBoxLinks = new BlackBoxLinkMethods(this);
             BlackBoxNotes = new BlackBoxNoteMethods(this);
+            BlackBoxMigrations = new BlackBoxMigrationMethods(this);
             BlackBoxSuccesses = new BlackBoxSuccessMethods(this);
             BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(this);
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);

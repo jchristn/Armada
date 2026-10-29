@@ -1,6 +1,7 @@
 namespace Armada.Core.BlackBox
 {
     using System;
+    using System.Threading.Tasks;
     using Armada.Core.BlackBox.Enrichment;
     using Armada.Core.BlackBox.Storage;
     using Armada.Core.Database;
@@ -58,6 +59,12 @@ namespace Armada.Core.BlackBox
         /// <summary>Garbage collector.</summary>
         public BlackBoxGarbageCollector GarbageCollector { get; }
 
+        /// <summary>Storage migration jobs.</summary>
+        public BlackBoxStorageMigrator Migrator { get; }
+
+        /// <summary>Lifecycle hooks for the mission, vessel and tenant delete paths and vessel updates.</summary>
+        public IBlackBoxLifecycleHooks Hooks => GarbageCollector;
+
         /// <summary>The facade every surface calls.</summary>
         public BlackBoxService Service { get; }
 
@@ -78,16 +85,22 @@ namespace Armada.Core.BlackBox
 
         #endregion
 
+        #region Private-Members
+
+        private readonly ArmadaSettings _Settings;
+
+        #endregion
+
         #region Constructors-and-Factories
 
         private BlackBoxRuntime(DatabaseDriver database, ArmadaSettings settings, LoggingModule logging, IBlackBoxVersionProvider version, IBlackBoxEventSink events)
         {
             Redactor = new BlackBoxRedactor();
             Redactor.RegisterSecrets(SecretValues(settings.BlackBox));
-            Stores = new BlackBoxStoreFactory(database, settings.BlackBox);
+            Stores = new BlackBoxStoreFactory(database, settings.BlackBox, settings.DataDirectory);
             Objects = new BlackBoxObjectRepository(database, Stores);
             Renderer = new BlackBoxBriefRenderer(Redactor);
-            Events = events;
+            Events = new MeteringBlackBoxEventSink(events, database);
             Writer = new BlackBoxEntryWriter(database, settings.BlackBox, Objects, Renderer, Redactor, Events, logging);
             Capture = new BlackBoxCapture(database, settings, Writer, Events, version, Redactor, logging);
             Pipeline = new BlackBoxPipeline(database, settings.BlackBox, Objects, Writer, Events, logging);
@@ -102,10 +115,13 @@ namespace Armada.Core.BlackBox
             Capture.Enrichment = Queue;
             Sweeper = new BlackBoxSweeper(database, settings, Capture, Queue, logging);
             GarbageCollector = new BlackBoxGarbageCollector(database, settings.BlackBox, Stores, Events, logging);
-            Service = new BlackBoxService(database, settings, Objects, Renderer, Pipeline, GarbageCollector, Sweeper, Stores, Events, logging);
+            Migrator = new BlackBoxStorageMigrator(database, settings.BlackBox, Stores, logging);
+            Service = new BlackBoxService(database, settings, Objects, Renderer, Pipeline, GarbageCollector, Sweeper, Stores, Migrator, Events, logging);
             Service.Redactor = Redactor;
             Background = new BlackBoxBackgroundService(settings, Queue, Sweeper, GarbageCollector, logging);
+            Background.Migrator = Migrator;
             Background.Reanalyzer = Reanalyzer;
+            _Settings = settings;
             Insights = new BlackBoxInsights(database, settings, Pipeline, Advisor, Service, Inspector, logging);
         }
 
@@ -142,6 +158,24 @@ namespace Armada.Core.BlackBox
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             BlackBoxStorageSettings s = settings.Storage;
             return new string?[] { s.S3.AccessKey, s.S3.SecretKey, s.AzureBlob.AccessKey, s.AzureBlob.ConnectionString, s.Cifs.Password };
+        }
+
+        /// <summary>
+        /// Apply a black box settings change made in place on the live settings: drop cached stores (so the next write
+        /// uses the new storage settings), register new secret values with the redactor, and, when the retention policy
+        /// changed, start the background expires_utc recompute.
+        /// </summary>
+        /// <param name="previousRetention">A copy of the retention settings before the change, or null to always recompute.</param>
+        /// <returns>The recompute task, or a completed task when the policy did not change.</returns>
+        public Task ApplySettingsChanged(BlackBoxRetentionSettings? previousRetention)
+        {
+            Stores.Reset();
+            Redactor.RegisterSecrets(SecretValues(_Settings.BlackBox));
+            BlackBoxRetentionSettings current = _Settings.BlackBox.Retention;
+            bool changed = previousRetention == null
+                || previousRetention.RetentionDays != current.RetentionDays
+                || previousRetention.ResolvedRetentionDays != current.ResolvedRetentionDays;
+            return changed ? GarbageCollector.StartRecompute() : Task.CompletedTask;
         }
 
         /// <inheritdoc />

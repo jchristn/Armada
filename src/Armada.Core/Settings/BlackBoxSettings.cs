@@ -130,5 +130,27 @@ namespace Armada.Core.Settings
         }
 
         #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Copy every value of another settings object into this one, keeping this instance (the black box runtime holds
+        /// it, so a settings update must change it in place rather than replace it).
+        /// </summary>
+        /// <param name="source">Settings to copy.</param>
+        /// <exception cref="ArgumentNullException">Thrown when source is null.</exception>
+        public void CopyFrom(BlackBoxSettings source)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (ReferenceEquals(source, this)) return;
+            Enabled = source.Enabled;
+            CaptureTimeoutMs = source.CaptureTimeoutMs;
+            Storage = source.Storage;
+            Retention = source.Retention;
+            Sweeper = source.Sweeper;
+            SummaryEndpointId = source.SummaryEndpointId;
+        }
+
+        #endregion
     }
 }

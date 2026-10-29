@@ -37,7 +37,7 @@ namespace Armada.Core.Database.BlackBox
         private static readonly string[] _MutableColumns = new string[]
         {
             "user_id", "vessel_id", "fleet_id", "captain_id", "harbor_id", "dock_id", "merge_entry_id", "incident_id",
-            "stage_outcome_id", "parent_mission_id", "mission_title", "vessel_name", "attempt", "is_current", "supersedes_id",
+            "stage_outcome_id", "parent_mission_id", "mission_title", "vessel_name", "attempt",
             "phase", "step", "failure_kind", "status_before", "status_after", "triage", "fingerprint", "capture_mode", "state",
             "resolution", "resolution_note", "resolution_link", "pinned", "storage_target", "storage_prefix", "total_bytes",
             "object_count", "schema_version", "rules_version", "armada_version", "armada_commit", "reason_excerpt", "summary",
@@ -299,16 +299,110 @@ namespace Armada.Core.Database.BlackBox
         {
             if (query == null) throw new ArgumentNullException(nameof(query));
             string where = " WHERE e.expires_utc IS NOT NULL AND e.expires_utc < @now_utc AND e.pinned = " + _Sql.False + " AND e.state <> 'Deleting'";
-            if (keepLatestPerMission)
-            {
-                where += " AND NOT (e.is_current = " + _Sql.True + " AND ("
-                    + "(e.subject_type = 'Mission' AND EXISTS (SELECT 1 FROM missions m WHERE m.id = e.mission_id))"
-                    + " OR (e.subject_type = 'Voyage' AND EXISTS (SELECT 1 FROM voyages v WHERE v.id = e.voyage_id))))";
-            }
+            if (keepLatestPerMission) where += KeepLatestClause();
             Action<DbCommand> bind = cmd => _Sql.AddDate(cmd, "@now_utc", nowUtc);
             return await PageAsync("SELECT COUNT(*) FROM blackbox_entries e" + where,
                 "SELECT e.* FROM blackbox_entries e" + where + " ORDER BY e.expires_utc ASC, e.id ASC",
                 bind, query.PageNumber, query.PageSize, FromReader, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<BlackBoxEntry>> EnumerateEvictionCandidatesAsync(BlackBoxEvictionQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string where = " WHERE e.pinned = " + _Sql.False + " AND e.state <> 'Deleting'";
+            if (query.VesselId != null) where += " AND e.vessel_id = @vessel_id";
+            if (query.ResolvedOnly) where += " AND e.resolution NOT IN ('Open', 'Unknown')";
+            if (query.ExcludeCurrent) where += " AND e.is_current = " + _Sql.False;
+            else if (query.KeepLatestPerMission) where += KeepLatestClause();
+            Action<DbCommand> bind = cmd => { if (query.VesselId != null) _Sql.Add(cmd, "@vessel_id", query.VesselId); };
+            return await PageAsync("SELECT COUNT(*) FROM blackbox_entries e" + where,
+                "SELECT e.* FROM blackbox_entries e" + where + " ORDER BY e.created_utc ASC, e.id ASC",
+                bind, query.PageNumber, query.PageSize, FromReader, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<string>> EnumerateVesselsOverQuotaAsync(int maxEntries, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string grouped = "SELECT e.vessel_id AS vessel_id, COUNT(*) AS entry_count FROM blackbox_entries e WHERE e.vessel_id IS NOT NULL AND e.state <> 'Deleting' GROUP BY e.vessel_id HAVING COUNT(*) > @max_entries";
+            Action<DbCommand> bind = cmd => _Sql.Add(cmd, "@max_entries", Math.Max(0, maxEntries));
+            BlackBoxSqlDialect.NormalizePage(query.PageNumber, query.PageSize, out int number, out int size, out int offset);
+            using (DbConnection conn = _Sql.CreateConnection())
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                long total = await _Sql.ScalarLongAsync(conn, null, "SELECT COUNT(*) FROM (" + grouped + ") t;", bind, token).ConfigureAwait(false);
+                List<string> rows = await _Sql.QueryAsync(conn, null, grouped + " ORDER BY COUNT(*) DESC, e.vessel_id ASC" + _Sql.Page(offset, size) + ";",
+                    bind, r => r["vessel_id"].ToString()!, token).ConfigureAwait(false);
+                return Result(number, size, total, rows);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<BlackBoxEntry>> EnumerateCascadeCandidatesAsync(BlackBoxCascadeReasonEnum reason, string? subjectId, EnumerationQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string where;
+            switch (reason)
+            {
+                case BlackBoxCascadeReasonEnum.MissionDeleted:
+                    where = " WHERE e.subject_type = 'Mission' AND e.mission_id IS NOT NULL AND e.pinned = " + _Sql.False
+                        + " AND NOT EXISTS (SELECT 1 FROM missions m WHERE m.id = e.mission_id)" + (subjectId != null ? " AND e.mission_id = @subject_id" : String.Empty);
+                    break;
+                case BlackBoxCascadeReasonEnum.VesselDeleted:
+                    where = " WHERE e.vessel_id IS NOT NULL AND e.pinned = " + _Sql.False
+                        + " AND NOT EXISTS (SELECT 1 FROM vessels v WHERE v.id = e.vessel_id)" + (subjectId != null ? " AND e.vessel_id = @subject_id" : String.Empty);
+                    break;
+                case BlackBoxCascadeReasonEnum.TenantDeleted:
+                    if (String.IsNullOrEmpty(subjectId)) throw new ArgumentNullException(nameof(subjectId));
+                    where = " WHERE e.tenant_id = @subject_id";
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(reason), "Unknown cascade " + reason + ".");
+            }
+            where += " AND e.state <> 'Deleting'";
+            Action<DbCommand> bind = cmd => { if (subjectId != null) _Sql.Add(cmd, "@subject_id", subjectId); };
+            return await PageAsync("SELECT COUNT(*) FROM blackbox_entries e" + where,
+                "SELECT e.* FROM blackbox_entries e" + where + " ORDER BY e.created_utc ASC, e.id ASC",
+                bind, query.PageNumber, query.PageSize, FromReader, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<BlackBoxEntry>> ScanAsync(BlackBoxScanQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            string where = " WHERE e.state <> 'Deleting'";
+            if (query.AfterId != null) where += " AND e.id > @after_id";
+            if (query.StorageTarget.HasValue) where += query.ExcludeStorageTarget ? " AND e.storage_target <> @storage_target" : " AND e.storage_target = @storage_target";
+            if (query.VesselId != null) where += " AND e.vessel_id = @vessel_id";
+            if (query.NeedsMigrationTo.HasValue)
+            {
+                where += query.NeedsMigrationTo.Value == BlackBoxStorageTargetEnum.Database
+                    ? " AND e.storage_target <> @migrate_to"
+                    : " AND (e.storage_target <> @migrate_to OR EXISTS (SELECT 1 FROM blackbox_objects o WHERE o.entry_id = e.id AND o.storage_key IS NULL AND o.missing = " + _Sql.False + "))";
+            }
+            Action<DbCommand> bind = cmd =>
+            {
+                if (query.NeedsMigrationTo.HasValue) _Sql.Add(cmd, "@migrate_to", query.NeedsMigrationTo.Value.ToString());
+                if (query.AfterId != null) _Sql.Add(cmd, "@after_id", query.AfterId);
+                if (query.StorageTarget.HasValue) _Sql.Add(cmd, "@storage_target", query.StorageTarget.Value.ToString());
+                if (query.VesselId != null) _Sql.Add(cmd, "@vessel_id", query.VesselId);
+            };
+            return await PageAsync("SELECT COUNT(*) FROM blackbox_entries e" + where,
+                "SELECT e.* FROM blackbox_entries e" + where + " ORDER BY e.id ASC",
+                bind, 1, query.PageSize, FromReader, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public Task<bool> UpdateStorageAsync(string id, BlackBoxStorageTargetEnum target, string? storagePrefix, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+            return ExecuteOneAsync("UPDATE blackbox_entries SET storage_target = @storage_target, storage_prefix = @storage_prefix WHERE id = @id;", cmd =>
+            {
+                _Sql.Add(cmd, "@id", id);
+                _Sql.Add(cmd, "@storage_target", target.ToString());
+                _Sql.Add(cmd, "@storage_prefix", storagePrefix);
+            }, token);
         }
 
         /// <inheritdoc />
@@ -561,6 +655,13 @@ namespace Armada.Core.Database.BlackBox
                 if (q.CreatedBefore.HasValue) _Sql.AddDate(cmd, "@created_before", q.CreatedBefore.Value);
                 if (!String.IsNullOrEmpty(q.SearchText)) _Sql.Add(cmd, "@search", "%" + BlackBoxSqlDialect.EscapeLike(q.SearchText!.ToLowerInvariant()) + "%");
             };
+        }
+
+        private string KeepLatestClause()
+        {
+            return " AND NOT (e.is_current = " + _Sql.True + " AND ("
+                + "(e.subject_type = 'Mission' AND EXISTS (SELECT 1 FROM missions m WHERE m.id = e.mission_id))"
+                + " OR (e.subject_type = 'Voyage' AND EXISTS (SELECT 1 FROM voyages v WHERE v.id = e.voyage_id))))";
         }
 
         private async Task<EnumerationResult<T>> PageAsync<T>(string countSql, string selectSql, Action<DbCommand>? bind, int pageNumber, int pageSize, Func<DbDataReader, T> map, CancellationToken token)

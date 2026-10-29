@@ -39,7 +39,7 @@ describe('BlackBoxDecorationProvider', () => {
     const p = await provider();
     const decoration = decorate(p, Uri.file(path.join(FOLDER, 'src')));
     assert.strictEqual(decoration?.badge, HOTSPOT_BADGE);
-    assert.strictEqual(decoration?.tooltip, 'Armada hotspot: 3 conflicts in black box entries');
+    assert.strictEqual(decoration?.tooltip, 'Armada hotspot: in 3 black box entries (2 files)');
   });
 
   it('leaves other files, other folders and non-file URIs alone', async () => {

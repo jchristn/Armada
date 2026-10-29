@@ -475,6 +475,15 @@ namespace Armada.Core.Database
         }
 
         /// <summary>
+        /// Black box storage migration jobs (blackbox_migrations).
+        /// </summary>
+        public IBlackBoxMigrationMethods BlackBoxMigrations
+        {
+            get => _BlackBoxMigrations;
+            protected set => _BlackBoxMigrations = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
         /// Black box success flight recorder rows (blackbox_successes).
         /// </summary>
         public IBlackBoxSuccessMethods BlackBoxSuccesses
@@ -729,6 +738,7 @@ namespace Armada.Core.Database
         private IBlackBoxFileMethods _BlackBoxFiles = null!;
         private IBlackBoxLinkMethods _BlackBoxLinks = null!;
         private IBlackBoxNoteMethods _BlackBoxNotes = null!;
+        private IBlackBoxMigrationMethods _BlackBoxMigrations = null!;
         private IBlackBoxSuccessMethods _BlackBoxSuccesses = null!;
         private IBlackBoxRecoveryOutcomeMethods _BlackBoxRecoveryOutcomes = null!;
         private IFailureCauseRuleMethods _FailureCauseRules = null!;

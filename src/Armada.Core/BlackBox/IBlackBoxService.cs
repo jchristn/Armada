@@ -229,8 +229,11 @@ namespace Armada.Core.BlackBox
         /// <param name="caller">Caller.</param>
         /// <param name="request">Target and options.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The job.</returns>
-        /// <exception cref="NotImplementedException">Thrown until external targets land (TODO(blackbox-wave2: storage)).</exception>
+        /// <returns>The job (a background job; poll GetStorageMigrationAsync for progress).</returns>
+        /// <exception cref="UnauthorizedAccessException">Thrown when the caller is not a global admin.</exception>
+        /// <exception cref="ArgumentException">Thrown when the target is Unknown, equals From, or is misconfigured.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when a different migration is still running.</exception>
+        /// <exception cref="BlackBoxStoreUnavailableException">Thrown when the target store fails its health check.</exception>
         Task<BlackBoxStorageMigrationJob> StartStorageMigrationAsync(AuthContext caller, BlackBoxStorageMigrationRequest request, CancellationToken token = default);
 
         /// <summary>A storage migration job.</summary>
@@ -238,7 +241,8 @@ namespace Armada.Core.BlackBox
         /// <param name="migrationId">Job id (bbm_ prefix).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The job.</returns>
-        /// <exception cref="NotImplementedException">Thrown until external targets land (TODO(blackbox-wave2: storage)).</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown when the caller is not a global admin.</exception>
+        /// <exception cref="BlackBoxNotFoundException">Thrown when the job does not exist.</exception>
         Task<BlackBoxStorageMigrationJob> GetStorageMigrationAsync(AuthContext caller, string migrationId, CancellationToken token = default);
 
         /// <summary>Backfill historical failures (synchronous, bounded by MaxSubjects).</summary>

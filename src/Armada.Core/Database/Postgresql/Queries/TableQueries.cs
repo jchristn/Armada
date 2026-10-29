@@ -2194,6 +2194,27 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"ALTER TABLE voyages ADD COLUMN IF NOT EXISTS last_blackbox_entry_id TEXT NULL;",
                     @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS blackbox_retention_days INTEGER NULL;"),
 
+                new SchemaMigration(104, "Add blackbox_migrations: one row per black box storage migration job (copy, verify, switch, delete between storage targets) so a job is resumable after a restart and its progress can be read back",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_migrations (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        state TEXT NOT NULL,
+                        from_target TEXT,
+                        to_target TEXT NOT NULL,
+                        delete_source BOOLEAN NOT NULL DEFAULT TRUE,
+                        batch_size INTEGER NOT NULL DEFAULT 50,
+                        total_entries BIGINT NOT NULL DEFAULT 0,
+                        migrated_entries BIGINT NOT NULL DEFAULT 0,
+                        failed_entries BIGINT NOT NULL DEFAULT 0,
+                        bytes_copied BIGINT NOT NULL DEFAULT 0,
+                        last_entry_id TEXT,
+                        last_error TEXT,
+                        created_utc TIMESTAMP NOT NULL,
+                        started_utc TIMESTAMP,
+                        finished_utc TIMESTAMP,
+                        last_update_utc TIMESTAMP NOT NULL
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_blackbox_migrations_state_created ON blackbox_migrations(state, created_utc);"),
+
                 new SchemaMigration(105, "Add vessels.serialize_overlapping_missions: when true, a mission dispatched to the vessel that overlaps an active mission's files or a reserved hotspot directory is chained after it with DependsOnMissionId",
                     @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS serialize_overlapping_missions BOOLEAN NOT NULL DEFAULT FALSE;"),
 

@@ -87,11 +87,11 @@ export function renderEntryHtml(entry: BlackBoxEntry, notes: BlackBoxNote[], non
 
   if (conflict.IsConflict || (conflict.ConflictedFiles?.length ?? 0) > 0 || (conflict.ConflictingMissions?.length ?? 0) > 0) {
     const files = (conflict.ConflictedFiles ?? []).map(filePath).filter((p): p is string => !!p);
-    const dirs = (conflict.ConflictedDirectories ?? []).map((d) => ({ path: directoryPath(d), count: d.Count }));
+    const dirs = (conflict.ConflictedDirectories ?? []).map((d) => ({ path: directoryPath(d), count: d.FileCount }));
     const missions = conflict.ConflictingMissions ?? [];
     const parts: string[] = [];
-    if (missions.length) parts.push(`<h3>Conflicting missions</h3><ul>${missions.map((m) => `<li><code>${escapeHtml(m.MissionId ?? m.Id ?? '')}</code> ${escapeHtml(m.Title ?? '')}${m.LandedUtc ? ` <span class="muted">landed ${escapeHtml(formatDate(m.LandedUtc))}</span>` : ''}</li>`).join('')}</ul>`);
-    if (files.length) parts.push(`<h3>Files (${conflict.ConflictedFilesTotalCount ?? files.length})</h3><ul>${files.map((f) => `<li><code>${escapeHtml(f)}</code></li>`).join('')}</ul>`);
+    if (missions.length) parts.push(`<h3>Conflicting missions</h3><ul>${missions.map((m) => `<li><code>${escapeHtml(m.MissionId ?? (m.IsOutsideArmada ? 'outside Armada' : ''))}</code> ${escapeHtml(m.Title ?? '')}${m.CommitHash ? ` <code>${escapeHtml(m.CommitHash.slice(0, 12))}</code>` : ''}${m.LandedUtc ? ` <span class="muted">landed ${escapeHtml(formatDate(m.LandedUtc))}</span>` : ''}${(m.OverlappingFiles ?? []).length ? `<br><span class="muted">overlapping: ${escapeHtml((m.OverlappingFiles ?? []).join(', '))}${(m.OverlappingFileTotal ?? 0) > (m.OverlappingFiles ?? []).length ? ` and ${escapeHtml((m.OverlappingFileTotal ?? 0) - (m.OverlappingFiles ?? []).length)} more` : ''}</span>` : ''}</li>`).join('')}</ul>`);
+    if (files.length) parts.push(`<h3>Files (${conflict.ConflictedFileTotal ?? files.length})</h3><ul>${files.map((f) => `<li><code>${escapeHtml(f)}</code></li>`).join('')}</ul>`);
     if (dirs.length) parts.push(`<h3>Directories</h3><ul>${dirs.map((d) => `<li><code>${escapeHtml(d.path ?? '')}</code>${d.count !== undefined ? ` (${escapeHtml(d.count)})` : ''}</li>`).join('')}</ul>`);
     sections.push(section('Conflict', parts));
   }
@@ -108,7 +108,7 @@ export function renderEntryHtml(entry: BlackBoxEntry, notes: BlackBoxNote[], non
 
   const paths = analysis.RecoveryPaths ?? [];
   sections.push(section('Recovery', [paths.length
-    ? `<ol>${paths.map((p) => `<li><strong>${escapeHtml(p.Title)}</strong> <code>${escapeHtml(p.Id)}</code>${p.Risk ? ` <span class="muted">risk ${escapeHtml(p.Risk)}</span>` : ''}${p.DataLossRisk ? ' <span class="danger">data loss risk</span>' : ''}${p.ExpectedOutcome ? `<br>${escapeHtml(p.ExpectedOutcome)}` : ''}${(p.Steps ?? []).length ? `<ul>${(p.Steps ?? []).map((s) => `<li>${escapeHtml(s.Description ?? s.Cli ?? s.Mcp ?? s.Rest ?? '')}</li>`).join('')}</ul>` : ''}<br><button data-action="runRecovery" data-path="${escapeHtml(p.Id)}">Dry run ${escapeHtml(p.Id)}</button></li>`).join('')}</ol>`
+    ? `<ol>${paths.map((p) => `<li><strong>${escapeHtml(p.Title)}</strong> <code>${escapeHtml(p.Id)}</code>${p.Risk ? ` <span class="muted">risk ${escapeHtml(p.Risk)}</span>` : ''}${p.DataLossRisk ? ' <span class="danger">data loss risk</span>' : ''}${p.ExpectedOutcome ? `<br>${escapeHtml(p.ExpectedOutcome)}` : ''}${(p.Steps ?? []).length ? `<ul>${(p.Steps ?? []).map((s) => `<li>${escapeHtml(s.Description ?? s.CliCommand ?? s.McpCommand ?? s.RestCommand ?? '')}</li>`).join('')}</ul>` : ''}<br><button data-action="runRecovery" data-path="${escapeHtml(p.Id)}">Dry run ${escapeHtml(p.Id)}</button></li>`).join('')}</ol>`
     : '<p class="muted">No recovery paths recorded.</p>']));
 
   const attempts = record.Attempts ?? [];

@@ -77,9 +77,15 @@ namespace Armada.Server.Mcp
         /// <param name="stageOutcomes">Optional stage outcome access service; without it the stage outcome and failure-cause rule tools answer Unavailable.</param>
         /// <param name="modelProbes">Optional model probe (Evaluate) access service; without it evaluate_captain, get_model_probe_run and list_model_probe_runs answer Unavailable.</param>
         /// <param name="battery">Optional fixture battery access service; without it list_battery_packs, run_battery and get_battery_run answer Unavailable.</param>
-        /// <param name="blackBoxInsights">Optional black box insight service; without it the black box prevention and forensics tools answer Unavailable.</param>
         /// <param name="cliPermissionService">Optional CLI permission service; without it the CLI permission tools are
         /// registered and answer a typed Unavailable error.</param>
+        /// <param name="blackBox">Optional black box service; without it the black box tools are registered and answer a
+        /// typed Unavailable error, and enumerate entityType blackbox answers Unavailable.</param>
+        /// <param name="blackBoxCapture">Optional black box capture for the operator actions of delete_vessel and
+        /// transition_mission_status (steps VesselDeleted and OperatorTransition).</param>
+        /// <param name="blackBoxHooks">Optional black box lifecycle hooks; mission and vessel deletes and vessel updates call
+        /// them so retention cascades and expiry recomputes happen at once.</param>
+        /// <param name="blackBoxInsights">Optional black box insight service; without it the black box prevention and forensics tools answer Unavailable.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -119,17 +125,20 @@ namespace Armada.Server.Mcp
             StageOutcomeAccessService? stageOutcomes = null,
             ModelProbeAccessService? modelProbes = null,
             BatteryAccessService? battery = null,
+            Armada.Core.BlackBox.IBlackBoxService? blackBox = null,
+            Armada.Core.BlackBox.IBlackBoxCapture? blackBoxCapture = null,
+            Armada.Core.BlackBox.IBlackBoxLifecycleHooks? blackBoxHooks = null,
             Armada.Core.BlackBox.BlackBoxInsightService? blackBoxInsights = null)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
             register = MapToolExceptions(MarkExperimental(register));
             McpStatusTools.Register(register, admiral, onStop, stopServerUnavailableMessage);
-            McpEnumerateTools.Register(register, database, mergeQueue, logging != null ? new InboxService(database, logging, settings) : null, cliPermissionService);
+            McpEnumerateTools.Register(register, database, mergeQueue, logging != null ? new InboxService(database, logging, settings) : null, cliPermissionService, blackBox);
             McpFleetTools.Register(register, database);
-            McpVesselTools.Register(register, database, dockService, vesselService, settings, admiral);
+            McpVesselTools.Register(register, database, dockService, vesselService, settings, admiral, blackBoxCapture, blackBoxHooks);
             if (vesselImportService != null) McpVesselImportTools.Register(register, vesselImportService, fleetCategorizationService);
             McpVoyageTools.Register(register, database, admiral, settings);
-            McpMissionTools.Register(register, database, admiral, settings, git, landingService, missionService);
+            McpMissionTools.Register(register, database, admiral, settings, git, landingService, missionService, blackBoxCapture, blackBoxHooks);
             McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, agentLifecycle, captainToolService);
             McpSignalTools.Register(register, database);
             McpEventTools.Register(register, database);
@@ -161,6 +170,7 @@ namespace Armada.Server.Mcp
             McpHandoffArtifactTools.Register(register, new HandoffArtifactAccessService(database));
             McpModelProbeTools.Register(register, modelProbes);
             McpBatteryTools.Register(register, battery);
+            McpBlackBoxTools.Register(register, blackBox);
             McpBlackBoxInsightTools.Register(register, blackBoxInsights);
         }
 
@@ -252,6 +262,7 @@ namespace Armada.Server.Mcp
             RegisterCatalogGroup("Armada MCP / Handoff Artifacts", register => McpHandoffArtifactTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Evaluate", register => McpModelProbeTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Battery", register => McpBatteryTools.Register(register, null));
+            RegisterCatalogGroup("Armada MCP / Black Box", register => McpBlackBoxTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Black Box Insights", register => McpBlackBoxInsightTools.Register(register, null));
 
             return tools
