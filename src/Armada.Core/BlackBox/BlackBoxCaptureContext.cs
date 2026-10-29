@@ -145,6 +145,12 @@ namespace Armada.Core.BlackBox
         public Captain? Captain { get; set; } = null;
 
         /// <summary>
+        /// The captain's id when the site cleared Mission.CaptainId before the failure write and holds no Captain row,
+        /// or null.
+        /// </summary>
+        public string? CaptainId { get; set; } = null;
+
+        /// <summary>
         /// The voyage when the site holds it, or null.
         /// </summary>
         public Voyage? Voyage { get; set; } = null;
