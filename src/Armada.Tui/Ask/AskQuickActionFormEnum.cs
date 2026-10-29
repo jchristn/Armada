@@ -26,6 +26,11 @@ namespace Armada.Tui.Ask
         /// <summary>
         /// The Import wizard.
         /// </summary>
-        Import = 3
+        Import = 3,
+
+        /// <summary>
+        /// /blackbox: typed with its arguments (a mission id, then an optional question).
+        /// </summary>
+        BlackBox = 4
     }
 }

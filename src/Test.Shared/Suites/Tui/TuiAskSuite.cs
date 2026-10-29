@@ -576,6 +576,55 @@ namespace Test.Shared.Suites.Tui
                 TuiCase.Contains(loading, "Loading live status...", "loading state");
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "black_box_card", "A black box card shows its chips, where and why, conflicting missions (rows that open the mission), recovery paths and follow-ups, and opens the entry", () =>
+            {
+                AskWorkSnapshot bb = new AskWorkSnapshot();
+                bb.EntityType = AskTrackedEntityTypeEnum.BlackBox;
+                bb.EntityId = "bbx_1";
+                bb.Title = "Add retry";
+                bb.Status = "LandingFailed";
+                bb.State = AskTrackedWorkStateEnum.Failed;
+                bb.ErrorText = "merge conflict in src/Sync/Runner.cs";
+                AskBlackBoxCard card = new AskBlackBoxCard();
+                card.Digest.EntryId = "bbx_1";
+                card.Digest.MissionId = "msn_1";
+                card.Digest.Phase = BlackBoxPhaseEnum.Landing;
+                card.Digest.Step = BlackBoxStepEnum.TargetIntegration;
+                card.Digest.Triage = BlackBoxTriageEnum.UserConfig;
+                card.Digest.CaptureMode = BlackBoxCaptureModeEnum.Sweeper;
+                card.Digest.SourceFile = "src/Armada.Core/Services/MissionLandingHandler.cs";
+                card.Digest.Reason = "merge conflict in src/Sync/Runner.cs";
+                card.Digest.Why.Add(new BlackBoxFinding { RuleId = "bbx-land-003", Statement = "Two missions edited the same file.", Confidence = BlackBoxConfidenceEnum.High });
+                card.Digest.RecoveryPaths.Add(new BlackBoxRecoveryPath { Id = "bbx-land-003.rebase-retry", Rank = 1, Title = "Rebase and retry" });
+                card.ConflictingMissions.Add(new BlackBoxConflictingMission { MissionId = "msn_2", Title = "Rename Sync.Run", CommitHash = "9b8e7d6c5a4f3e2d" });
+                card.FollowUps.Add(new AskBlackBoxFollowUp { Name = "fix", Label = "Fix it", ToolName = "run_blackbox_recovery" });
+                bb.BlackBox = card;
+                AskBlock block = new AskBlock();
+                string text = String.Join("\n", AskCardRenderer.WorkCard(block, null, bb, null, false, 0, Armada.Tui.Theming.ThemePalettes.Dark(), new LocalizationService(), DateTime.UtcNow, 100).Select(l => l.ToPlainString()));
+                TuiCase.Contains(text, "Black box  Add retry", "heading");
+                TuiCase.Contains(text, "Triage UserConfig", "triage chip");
+                TuiCase.Contains(text, "Captured by Sweeper", "a sweeper capture says so");
+                TuiCase.Contains(text, "MissionLandingHandler.cs", "where");
+                TuiCase.Contains(text, "bbx-land-003", "why");
+                TuiCase.Contains(text, "Rename Sync.Run 9b8e7d6c5a", "conflicting mission");
+                TuiCase.Contains(text, "1. Rebase and retry (bbx-land-003.rebase-retry)", "recovery path");
+                TuiCase.Contains(text, "Follow-ups: Fix it", "follow-ups");
+                AssertEqual(1, block.RowRoutes.Count, "the conflicting mission is a selectable row");
+                AssertEqual("/missions/msn_2", block.RowRoutes[0]);
+                AssertEqual("/blackbox/bbx_1", AskWorkLogic.Route(AskTrackedEntityTypeEnum.BlackBox, "bbx_1"), "Enter opens the entry");
+                AssertEqual("Black box", AskWorkLogic.EntityLabel(AskTrackedEntityTypeEnum.BlackBox));
+
+                AskQuickAction blackBox = new AskQuickAction { Name = "blackbox", Command = "/blackbox", ToolName = "get_blackbox" };
+                AssertEqual(AskQuickActionFormEnum.BlackBox, AskQuickActions.FormFor(blackBox));
+                AssertTrue(AskQuickActions.TryParseBlackBox(" msn_1ab_C why did it fail? ", out string missionId, out string question), "mission id and question");
+                AssertEqual("msn_1ab_C", missionId);
+                AssertEqual("why did it fail?", question);
+                AssertTrue(AskQuickActions.TryParseBlackBox("msn_only", out missionId, out question), "mission id only");
+                AssertEqual("", question);
+                AssertFalse(AskQuickActions.TryParseBlackBox("why did msn_1 fail", out missionId, out question), "the mission id comes first");
+                AssertEqual("<missionId> [question]", AskCommands.Catalog(new List<AskQuickAction> { blackBox }).First(i => i.Action != null).Usage);
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "quick_action_forms", "Dispatch and Fleet action forms build the MCP arguments; Status runs at once; Import opens the import route", () =>
             {
                 AskFixtures fx = new AskFixtures();
