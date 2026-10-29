@@ -64,7 +64,7 @@ namespace Armada.Core.Services
                     missionsInMergeQueue ??= await MergeQueueMissionActivity.GetMissionIdsWithActiveEntriesAsync(_Database, token).ConfigureAwait(false)).ConfigureAwait(false);
                 if (settled == null) continue;
 
-                await VoyageSettlement.ApplyAsync(_Database, voyage, settled.Value, missions, token).ConfigureAwait(false);
+                await VoyageSettlement.ApplyAsync(_Database, voyage, settled.Value, missions, token, _Logging.Warn).ConfigureAwait(false);
                 _Logging.Info(_Header + "voyage " + voyage.Id + " reached terminal status " + voyage.Status);
                 completedVoyages.Add(voyage);
             }

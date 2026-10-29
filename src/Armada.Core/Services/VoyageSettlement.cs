@@ -77,16 +77,59 @@ namespace Armada.Core.Services
         /// <param name="token">Cancellation token.</param>
         /// <returns>A task.</returns>
         /// <exception cref="ArgumentNullException">Thrown when database, voyage or missions is null.</exception>
-        public static async Task ApplyAsync(DatabaseDriver database, Voyage voyage, VoyageStatusEnum status, List<Mission> missions, CancellationToken token = default)
+        public static Task ApplyAsync(DatabaseDriver database, Voyage voyage, VoyageStatusEnum status, List<Mission> missions, CancellationToken token = default)
+        {
+            return ApplyCoreAsync(database, voyage, status, missions, null, token);
+        }
+
+        /// <summary>Record a voyage's terminal status and provide a warning callback for completion-event failures.</summary>
+        /// <param name="database">Database driver.</param>
+        /// <param name="voyage">The voyage.</param>
+        /// <param name="status">Terminal status from <see cref="DecideAsync"/>.</param>
+        /// <param name="missions">The voyage's missions.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <param name="warn">Logs a completion-event failure.</param>
+        /// <returns>A task.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public static Task ApplyAsync(DatabaseDriver database, Voyage voyage, VoyageStatusEnum status, List<Mission> missions, CancellationToken token, Action<string> warn)
+        {
+            if (warn == null) throw new ArgumentNullException(nameof(warn));
+            return ApplyCoreAsync(database, voyage, status, missions, warn, token);
+        }
+
+        private static async Task ApplyCoreAsync(DatabaseDriver database, Voyage voyage, VoyageStatusEnum status, List<Mission> missions, Action<string>? warn, CancellationToken token)
         {
             if (database == null) throw new ArgumentNullException(nameof(database));
             if (voyage == null) throw new ArgumentNullException(nameof(voyage));
             if (missions == null) throw new ArgumentNullException(nameof(missions));
 
+            VoyageStatusEnum previousStatus = voyage.Status;
             voyage.Status = status;
             voyage.CompletedUtc = DateTime.UtcNow;
             voyage.LastUpdateUtc = DateTime.UtcNow;
             await database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+
+            if (status == VoyageStatusEnum.Complete && previousStatus != VoyageStatusEnum.Complete)
+            {
+                ArmadaEvent evt = new ArmadaEvent("voyage.completed", "Voyage " + voyage.Id + " completed")
+                {
+                    TenantId = voyage.TenantId,
+                    UserId = voyage.UserId,
+                    EntityType = "voyage",
+                    EntityId = voyage.Id,
+                    VoyageId = voyage.Id
+                };
+
+                try
+                {
+                    await database.Events.CreateAsync(evt, token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    warn?.Invoke("[VoyageSettlement] could not record voyage.completed for voyage " + voyage.Id + ": " + ex.Message);
+                }
+            }
+
             if (status == VoyageStatusEnum.Complete) await PipelineStageSettler.SettleAsync(database, missions, token).ConfigureAwait(false);
         }
     }

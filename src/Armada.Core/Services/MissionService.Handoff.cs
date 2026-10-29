@@ -330,7 +330,7 @@ namespace Armada.Core.Services
                 () => MergeQueueMissionActivity.GetMissionIdsWithActiveEntriesAsync(_Database, token)).ConfigureAwait(false);
             if (settled == null) return;
 
-            await VoyageSettlement.ApplyAsync(_Database, voyage, settled.Value, missions, token).ConfigureAwait(false);
+            await VoyageSettlement.ApplyAsync(_Database, voyage, settled.Value, missions, token, _Logging.Warn).ConfigureAwait(false);
             _Logging.Info(_Header + "voyage " + voyage.Id + " reached terminal status " + voyage.Status + " during mission completion");
         }
 
