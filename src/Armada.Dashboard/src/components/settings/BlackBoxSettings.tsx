@@ -196,6 +196,8 @@ export default function BlackBoxSettings({ blackBox, locked, onSaved, notify }: 
     const id = `blackbox-${section}-${key}`;
     if (SECRET_FIELDS.has(key)) {
       const stored = value === REDACTED_SECRET;
+      // A secret the server holds (read back masked): clearing the field again keeps it.
+      const savedSecret = ((blackBox?.storage?.[section as string] as BlackBoxTargetSettings | undefined) ?? {})[key] === REDACTED_SECRET;
       return (
         <div className="form-group" key={key}>
           <label htmlFor={id}>{label}</label>
@@ -206,7 +208,7 @@ export default function BlackBoxSettings({ blackBox, locked, onSaved, notify }: 
             data-secret="true"
             value={stored ? '' : String(value ?? '')}
             placeholder={stored ? t('Stored (leave blank to keep)') : t('Not set')}
-            onChange={(e) => setTargetField(key, e.target.value === '' && stored ? REDACTED_SECRET : e.target.value || null)}
+            onChange={(e) => setTargetField(key, e.target.value === '' && (stored || savedSecret) ? REDACTED_SECRET : e.target.value || null)}
           />
           <span className="text-dim form-help">{t('Write-only: the stored value is never shown.')}</span>
         </div>
