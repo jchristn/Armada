@@ -289,5 +289,37 @@ namespace Test.Shared.Infrastructure
 
         public Task<GitCommitLogPage> GetCommitLogAsync(string repoPath, string tipSha, long? untilUnixSeconds, int skip, int limit, CancellationToken token = default)
             => Task.FromResult(new GitCommitLogPage());
+
+        /// <summary>
+        /// Answer for GetMergeBaseAsync (null by default: no common ancestor).
+        /// </summary>
+        public string? MergeBaseResult { get; set; }
+
+        /// <summary>
+        /// Forensic reads (merge-base and commit-range calls), kept apart from OperationCalls.
+        /// </summary>
+        public List<string> ForensicCalls { get; } = new List<string>();
+
+        public Task<string?> GetMergeBaseAsync(string repoPath, string a, string b, CancellationToken token = default)
+        {
+            lock (ForensicCalls) ForensicCalls.Add("merge-base:" + a + "|" + b);
+            return Task.FromResult(MergeBaseResult);
+        }
+
+        /// <summary>
+        /// When set, answers GetCommitRangeAsync per (fromRef, toRef); otherwise <see cref="CommitRangeResult"/>.
+        /// </summary>
+        public Func<string, string, GitCommitRange?>? CommitRangeHandler { get; set; }
+
+        /// <summary>
+        /// Answer for GetCommitRangeAsync (null by default: a revision does not resolve).
+        /// </summary>
+        public GitCommitRange? CommitRangeResult { get; set; }
+
+        public Task<GitCommitRange?> GetCommitRangeAsync(string repoPath, string fromRef, string toRef, int limit, CancellationToken token = default)
+        {
+            lock (ForensicCalls) ForensicCalls.Add("commit-range:" + fromRef + ".." + toRef);
+            return Task.FromResult(CommitRangeHandler != null ? CommitRangeHandler(fromRef, toRef) : CommitRangeResult);
+        }
     }
 }
