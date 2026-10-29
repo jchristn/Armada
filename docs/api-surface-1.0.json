@@ -19013,6 +19013,76 @@
       ]
     },
     {
+      "command": "blackbox cascade",
+      "description": "Show a voyage's cascade graph (alias of voyage cascade)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "voyageId",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "blackbox cat",
       "description": "Print an evidence object (or a byte range) to stdout",
       "parameters": [
@@ -19116,6 +19186,84 @@
           "short": null,
           "valueKind": "vector",
           "type": "String[]",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox diff",
+      "description": "Show what changed between two entries",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "argument",
+          "name": "otherId",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
           "required": true
         },
         {
@@ -19572,6 +19720,76 @@
           "short": null,
           "valueKind": "scalar",
           "type": "String",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox nearby",
+      "description": "List the successful landings near a failure that touched the same files",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
           "required": false
         }
       ]
@@ -20095,6 +20313,84 @@
       ]
     },
     {
+      "command": "blackbox recovery-stats",
+      "description": "Show recovery path success rates",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "rule",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "blackbox resolve",
       "description": "Resolve an entry",
       "parameters": [
@@ -20515,6 +20811,84 @@
         {
           "kind": "option",
           "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox timeline",
+      "description": "Show an entry's combined timeline (oldest first)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "newest-first",
           "short": null,
           "valueKind": "flag",
           "type": "Boolean",
@@ -22609,6 +22983,116 @@
       ]
     },
     {
+      "command": "mission lint-brief",
+      "description": "Lint a mission brief (warnings only)",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "brief",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "brief-file",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "depends-on",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "title",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "voyage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "mission list",
       "description": "List missions",
       "parameters": [
@@ -23841,6 +24325,84 @@
       ]
     },
     {
+      "command": "vessel doctor",
+      "description": "List a vessel's recurring black box configuration recommendations",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "window-days",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "vessel history",
       "description": "Show a vessel's commit history or activity heatmap (accepts name or ID)",
       "parameters": [
@@ -24179,6 +24741,116 @@
       ]
     },
     {
+      "command": "vessel overlap-preview",
+      "description": "Preview a mission's overlaps and brief lint on a vessel (nothing is dispatched)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "brief",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "brief-file",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "depends-on",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "exclude-mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "title",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "vessel remove",
       "description": "Decommission a vessel (accepts name or ID)",
       "parameters": [
@@ -24249,12 +24921,230 @@
       ]
     },
     {
+      "command": "vessel reservations",
+      "description": "List a vessel's soft directory reservations",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "vessel update",
+      "description": "Update a vessel's settings (accepts name or ID)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "serialize-overlapping-missions",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "voyage cancel",
       "description": "Cancel a voyage",
       "parameters": [
         {
           "kind": "argument",
           "name": "voyage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "voyage cascade",
+      "description": "Show which failure in a voyage took the others down",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "voyageId",
           "short": null,
           "valueKind": "scalar",
           "type": "String",

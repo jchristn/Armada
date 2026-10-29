@@ -29,7 +29,7 @@ administrator).
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 76 | 0 |
-| CLI commands | 85 | 0 |
+| CLI commands | 96 | 0 |
 | Settings keys | 285 | 12 |
 
 ## REST API
@@ -903,23 +903,28 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada backlog update` | `<backlog>*` | `--acceptance`, `--backlog-state`, `--blocked-by`, `--category`, `--constraint`, `--description\|-d`, `--due-utc`, `--effort`, `--evidence`, `--fleet`, `--json`, `--kind`, `--non-goal`, `--owner`, `--page`, `--page-size`, `--parent`, `--pipeline`, `--priority`, `--profile`, `--rank`, `--server`, `--status`, `--summary`, `--tag`, `--target-version`, `--title\|-t`, `--token`, `--verbose`, `--vessel` |
 | `armada blackbox backfill` |  | `--json`, `--max`, `--page`, `--page-size`, `--profile`, `--server`, `--since`, `--token`, `--verbose` |
 | `armada blackbox bundle` |  | `--before`, `--captain`, `--fingerprint`, `--format`, `--json`, `--kind`, `--max`, `--mission`, `--output\|-o`, `--page`, `--page-size`, `--phase`, `--pinned`, `--profile`, `--redact-hosts`, `--resolution`, `--server`, `--since`, `--step`, `--token`, `--triage`, `--verbose`, `--vessel`, `--voyage` |
+| `armada blackbox cascade` | `<voyageId>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox cat` | `<id>*` `<name>*` | `--json`, `--length`, `--offset`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox delete` | `<ids>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox diff` | `<id>*` `<otherId>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox download` | `<id>*` | `--json`, `--output\|-o`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox export-fixture` | `<id>*` | `--json`, `--name`, `--output\|-o`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox gc` |  | `--dry-run`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox list` |  | `--before`, `--captain`, `--fingerprint`, `--json`, `--kind`, `--mission`, `--page`, `--page-size`, `--phase`, `--pinned`, `--profile`, `--resolution`, `--server`, `--since`, `--step`, `--token`, `--triage`, `--verbose`, `--vessel`, `--voyage` |
+| `armada blackbox nearby` | `<id>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox note` | `<id>*` `<text>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox objects` | `<id>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox pin` | `<ids>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox purge` |  | `--before`, `--captain`, `--execute`, `--fingerprint`, `--include-pinned`, `--json`, `--kind`, `--max`, `--mission`, `--page`, `--page-size`, `--phase`, `--pinned`, `--profile`, `--resolution`, `--server`, `--since`, `--step`, `--token`, `--triage`, `--verbose`, `--vessel`, `--voyage`, `--yes\|-y` |
 | `armada blackbox recover` | `<id>*` `<pathId>*` | `--acknowledge-data-loss`, `--execute`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose`, `--yes\|-y` |
+| `armada blackbox recovery-stats` |  | `--json`, `--page`, `--page-size`, `--profile`, `--rule`, `--server`, `--token`, `--verbose`, `--vessel` |
 | `armada blackbox resolve` | `<id>*` | `--json`, `--link`, `--note`, `--page`, `--page-size`, `--profile`, `--resolution`, `--server`, `--token`, `--verbose` |
 | `armada blackbox retention` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox show` | `<id>*` | `--audience`, `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
 | `armada blackbox storage migrate` |  | `--batch-size`, `--delete-source`, `--from`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--to`, `--token`, `--verbose` |
 | `armada blackbox storage migration` | `<id>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox storage status` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox timeline` | `<id>*` | `--json`, `--newest-first`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox unpin` | `<ids>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada captain add` | `<name>*` | `--json`, `--model\|-m`, `--model-endpoint`, `--mux-adapter-type`, `--mux-approval-policy`, `--mux-base-url`, `--mux-config-dir`, `--mux-endpoint`, `--mux-max-tokens`, `--mux-system-prompt-path`, `--mux-temperature`, `--page`, `--page-size`, `--profile`, `--runtime\|-r`, `--server`, `--token`, `--verbose` |
 | `armada captain list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
@@ -945,6 +950,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada mission cancel` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada mission create` | `<title>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--priority\|-p`, `--profile`, `--server`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
 | `armada mission failure` | `<id>*` | `--audience`, `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
+| `armada mission lint-brief` |  | `--brief`, `--brief-file`, `--depends-on`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--title`, `--token`, `--verbose`, `--vessel`, `--voyage` |
 | `armada mission list` |  | `--captain\|-c`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
 | `armada mission restart` | `<mission>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--title\|-t`, `--token`, `--verbose` |
 | `armada mission retry` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
@@ -965,11 +971,16 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada status` |  | `--all\|-a`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada tui` |  | `--profile`, `--route`, `--server`, `--token` |
 | `armada vessel add` | `<name>*` `<repoUrl>*` | `--branch\|-b`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada vessel doctor` | `<vessel>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose`, `--window-days` |
 | `armada vessel history` | `<vessel>*` | `--all`, `--before`, `--branch\|-b`, `--from`, `--heatmap`, `--json`, `--limit\|-n`, `--page`, `--page-size`, `--profile`, `--server`, `--to`, `--token`, `--verbose` |
 | `armada vessel import` | `<paths>` | `--apply`, `--captain`, `--categorize`, `--depth`, `--dry-run`, `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--prompt-file`, `--root\|-r`, `--server`, `--token`, `--verbose`, `--yes\|-y` |
 | `armada vessel list` |  | `--fleet\|-f`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada vessel overlap-preview` | `<vessel>*` | `--brief`, `--brief-file`, `--depends-on`, `--exclude-mission`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--title`, `--token`, `--verbose` |
 | `armada vessel remove` | `<vessel>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada vessel reservations` | `<vessel>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada vessel update` | `<vessel>*` | `--json`, `--page`, `--page-size`, `--profile`, `--serialize-overlapping-missions`, `--server`, `--token`, `--verbose` |
 | `armada voyage cancel` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada voyage cascade` | `<voyageId>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada voyage create` | `<title>*` | `--json`, `--mission\|-m`, `--page`, `--page-size`, `--playbook\|-p`, `--profile`, `--server`, `--token`, `--verbose`, `--vessel\|-v` |
 | `armada voyage failure` | `<id>*` | `--audience`, `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
 | `armada voyage list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose` |
