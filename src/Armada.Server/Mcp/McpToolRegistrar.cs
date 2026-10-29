@@ -79,6 +79,8 @@ namespace Armada.Server.Mcp
         /// <param name="battery">Optional fixture battery access service; without it list_battery_packs, run_battery and get_battery_run answer Unavailable.</param>
         /// <param name="cliPermissionService">Optional CLI permission service; without it the CLI permission tools are
         /// registered and answer a typed Unavailable error.</param>
+        /// <param name="emitEvent">Event sink shared with the REST delete routes. Dock and event MCP deletes emit
+        /// through it after a successful delete. Null records nothing.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -117,7 +119,8 @@ namespace Armada.Server.Mcp
             HarborJobControlService? harborJobs = null,
             StageOutcomeAccessService? stageOutcomes = null,
             ModelProbeAccessService? modelProbes = null,
-            BatteryAccessService? battery = null)
+            BatteryAccessService? battery = null,
+            Func<string, string, string?, string?, string?, string?, string?, string?, Task>? emitEvent = null)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
             register = MapToolExceptions(MarkExperimental(register));
@@ -130,10 +133,10 @@ namespace Armada.Server.Mcp
             McpMissionTools.Register(register, database, admiral, settings, git, landingService, missionService);
             McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, agentLifecycle, captainToolService);
             McpSignalTools.Register(register, database);
-            McpEventTools.Register(register, database);
+            McpEventTools.Register(register, database, emitEvent);
             McpPapercutTools.Register(register, database);
             McpTokenUsageTools.Register(register, database);
-            McpDockTools.Register(register, database, dockService);
+            McpDockTools.Register(register, database, dockService, emitEvent);
             if (logging != null) McpPlaybookTools.Register(register, database, logging);
             if (mergeQueue != null) McpMergeQueueTools.Register(register, mergeQueue, database);
             if (checkRunService != null) McpCheckRunTools.Register(register, database, checkRunService);

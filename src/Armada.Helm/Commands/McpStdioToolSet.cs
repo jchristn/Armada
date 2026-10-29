@@ -4,6 +4,7 @@ namespace Armada.Helm.Commands
     using System.Threading.Tasks;
     using SyslogLogging;
     using Armada.Core.Database;
+    using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
@@ -170,7 +171,26 @@ namespace Armada.Helm.Commands
                 fleetActionService: null,
                 vesselHealthService: _VesselHealthService,
                 fleetCategorizationService: _FleetCategorization,
-                stopServerUnavailableMessage: StopServerUnavailableMessage);
+                stopServerUnavailableMessage: StopServerUnavailableMessage,
+                emitEvent: EmitDeleteAuditAsync);
+        }
+
+        /// <summary>
+        /// Persist a delete audit record with the same fields the Admiral event sink stores.
+        /// </summary>
+        private async Task EmitDeleteAuditAsync(string eventType, string message,
+            string? entityType, string? entityId,
+            string? captainId, string? missionId,
+            string? vesselId, string? voyageId)
+        {
+            ArmadaEvent evt = new ArmadaEvent(eventType, message);
+            evt.EntityType = entityType;
+            evt.EntityId = entityId;
+            evt.CaptainId = captainId;
+            evt.MissionId = missionId;
+            evt.VesselId = vesselId;
+            evt.VoyageId = voyageId;
+            await _Database.Events.CreateAsync(evt).ConfigureAwait(false);
         }
 
         /// <summary>

@@ -27,7 +27,12 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="register">Delegate to register each tool.</param>
         /// <param name="database">Database driver for dock data access.</param>
         /// <param name="dockService">Optional dock service for worktree operations.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null)
+        /// <param name="emitEvent">Event sink used by the REST delete route. Null leaves the tool without an audit record.</param>
+        public static void Register(
+            RegisterToolDelegate register,
+            DatabaseDriver database,
+            IDockService? dockService = null,
+            Func<string, string, string?, string?, string?, string?, string?, string?, Task>? emitEvent = null)
         {
             register(
                 "get_dock",
@@ -72,6 +77,11 @@ namespace Armada.Server.Mcp.Tools
 
                     bool deleted = await dockService.DeleteAsync(request.DockId).ConfigureAwait(false);
                     if (!deleted) return (object)McpToolError.Conflict("Cannot delete dock while it is actively in use by a captain");
+                    if (emitEvent != null)
+                    {
+                        await emitEvent("dock.deleted", "Dock " + request.DockId + " deleted",
+                            "dock", request.DockId, null, null, null, null).ConfigureAwait(false);
+                    }
                     return (object)new { Status = "deleted", DockId = request.DockId };
                 });
 
