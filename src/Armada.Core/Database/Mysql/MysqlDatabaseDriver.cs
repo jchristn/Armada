@@ -80,6 +80,7 @@ namespace Armada.Core.Database.Mysql
             BlackBoxFiles = new BlackBoxFileMethods(_ConnectionString);
             BlackBoxLinks = new BlackBoxLinkMethods(_ConnectionString);
             BlackBoxNotes = new BlackBoxNoteMethods(_ConnectionString);
+            BlackBoxMigrations = new BlackBoxMigrationMethods(_ConnectionString);
             HandoffArtifacts = new HandoffArtifactMethods(_ConnectionString);
             FailureCauseRules = new FailureCauseRuleMethods(_ConnectionString);
             ModelProbeRuns = new ModelProbeRunMethods(_ConnectionString);
@@ -1187,7 +1188,28 @@ namespace Armada.Core.Database.Mysql
                     @"ALTER TABLE missions ADD COLUMN last_blackbox_entry_id VARCHAR(64) NULL;",
                     @"ALTER TABLE missions ADD COLUMN start_commit VARCHAR(64) NULL;",
                     @"ALTER TABLE voyages ADD COLUMN last_blackbox_entry_id VARCHAR(64) NULL;",
-                    @"ALTER TABLE vessels ADD COLUMN blackbox_retention_days INT NULL;")
+                    @"ALTER TABLE vessels ADD COLUMN blackbox_retention_days INT NULL;"),
+
+                new SchemaMigration(104, "Add blackbox_migrations: one row per black box storage migration job (copy, verify, switch, delete between storage targets) so a job is resumable after a restart and its progress can be read back",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_migrations (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        state VARCHAR(64) NOT NULL,
+                        from_target VARCHAR(64),
+                        to_target VARCHAR(64) NOT NULL,
+                        delete_source TINYINT(1) NOT NULL DEFAULT 1,
+                        batch_size INT NOT NULL DEFAULT 50,
+                        total_entries BIGINT NOT NULL DEFAULT 0,
+                        migrated_entries BIGINT NOT NULL DEFAULT 0,
+                        failed_entries BIGINT NOT NULL DEFAULT 0,
+                        bytes_copied BIGINT NOT NULL DEFAULT 0,
+                        last_entry_id VARCHAR(64),
+                        last_error LONGTEXT,
+                        created_utc DATETIME(6) NOT NULL,
+                        started_utc DATETIME(6),
+                        finished_utc DATETIME(6),
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE INDEX idx_blackbox_migrations_state_created ON blackbox_migrations(state, created_utc);")
 
 
             };

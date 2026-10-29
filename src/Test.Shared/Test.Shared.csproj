@@ -8,6 +8,9 @@
 
   <ItemGroup>
     <PackageReference Include="Touchstone.Core" Version="0.2.1" />
+    <!-- In-process SMB and NFSv3 servers for the black box CIFS and NFS storage target contract suites. -->
+    <PackageReference Include="OpenCIFS.Server" Version="0.1.1" />
+    <PackageReference Include="OpenNFS.Server" Version="0.2.1" />
     <!-- ADO providers for creating/dropping per-test databases when running the suite against a server. -->
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
     <PackageReference Include="MySqlConnector" Version="2.6.2" />

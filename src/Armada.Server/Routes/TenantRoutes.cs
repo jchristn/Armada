@@ -24,6 +24,11 @@ namespace Armada.Server.Routes
         private readonly JsonSerializerOptions _jsonOptions;
 
         /// <summary>
+        /// Black box lifecycle hooks (retention cascades and expiry recomputes after deletes and updates), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxLifecycleHooks? BlackBoxHooks { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         /// <param name="database">Database driver.</param>
@@ -600,6 +605,8 @@ namespace Armada.Server.Routes
 
         private async Task DeleteTenantCascadeAsync(string tenantId)
         {
+            // Black box entries and their objects (external stores included) go first, pinned ones too.
+            if (BlackBoxHooks != null) await BlackBoxHooks.OnTenantDeletedAsync(tenantId).ConfigureAwait(false);
             foreach (Signal signal in await _database.Signals.EnumerateAsync(tenantId).ConfigureAwait(false))
                 await _database.Signals.DeleteAsync(tenantId, signal.Id).ConfigureAwait(false);
             foreach (ArmadaEvent evt in await _database.Events.EnumerateAsync(tenantId).ConfigureAwait(false))

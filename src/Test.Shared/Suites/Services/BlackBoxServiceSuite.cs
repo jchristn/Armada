@@ -184,7 +184,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, bundle.EntryCount); AssertContains("maintainer bundle", bundle.Content);
                 await AssertThrowsAsync<BlackBoxNotFoundException>(() => svc.RunRecoveryAsync(user, "bbx_x", "rp1", new BlackBoxRecoveryRunRequest()), "recovery on an unknown entry (Services.BlackBoxRecovery covers runs)").ConfigureAwait(false);
                 await AssertThrowsAsync<BlackBoxNotFoundException>(() => svc.ApplyRecommendationAsync(user, "bbx_x", "cr1", new BlackBoxRecommendationApplyRequest()), "recommendation on an unknown entry").ConfigureAwait(false);
-                await AssertThrowsAsync<NotImplementedException>(() => svc.StartStorageMigrationAsync(user, new BlackBoxStorageMigrationRequest()), "migration").ConfigureAwait(false);
+                await AssertThrowsAsync<UnauthorizedAccessException>(() => svc.StartStorageMigrationAsync(user, new BlackBoxStorageMigrationRequest()), "migration needs a global admin").ConfigureAwait(false);
+                await AssertThrowsAsync<UnauthorizedAccessException>(() => svc.GetStorageMigrationAsync(user, "bbm_x"), "migration status needs a global admin").ConfigureAwait(false);
                 BlackBoxSettings masked = BlackBoxSettingsSecrets.Mask(new BlackBoxSettings { Storage = new BlackBoxStorageSettings { S3 = new BlackBoxS3Settings { SecretKey = "realsecret", AccessKey = "AKIAREAL" } } }, "********");
                 AssertEqual("********", masked.Storage.S3.SecretKey); AssertNull(masked.Storage.Cifs.Password, "unset stays null");
                 BlackBoxSettings current = new BlackBoxSettings(); current.Storage.S3.SecretKey = "realsecret";
