@@ -80,9 +80,10 @@ namespace Armada.Core.BlackBox.Storage
             obj.Data = null;
             if (!isDatabase)
             {
-                IBlackBoxStore store = _Stores.Get(entry.StorageTarget);
                 try
                 {
+                    // Getting the store is inside the try: a misconfigured target throws here and must mark the row missing too.
+                    IBlackBoxStore store = _Stores.Get(entry.StorageTarget);
                     await store.WriteAsync(new BlackBoxObjectWrite
                     {
                         Reference = RefOf(entry, obj),

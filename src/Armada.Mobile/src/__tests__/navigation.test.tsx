@@ -54,6 +54,17 @@ describe('navigation model mirrors the dashboard', () => {
     }
   });
 
+  it('lists Black Box once, under OPERATIONS on the Work tab, and it opens a screen', () => {
+    const items = NAV_SECTIONS.flatMap((s) => s.items).filter((x) => x.to === '/blackbox');
+    expect(items).toHaveLength(1);
+    expect(sectionsForTab('work').flatMap((s) => s.items.map((x) => x.to))).toContain('/blackbox');
+    expect(matchRoute('/blackbox')?.route.file).toBe('(app)/(work)/blackbox/index.tsx');
+    expect(matchRoute('/blackbox/bbx_1')?.params).toEqual({ id: 'bbx_1' });
+    // It comes from the shared nav model, directly after Activity.
+    const ops = NAV_SECTIONS.find((s) => s.key === 'operations')!.items.map((x) => x.to);
+    expect(ops.indexOf('/blackbox')).toBe(ops.indexOf('/activity') + 1);
+  });
+
   it('follows the v1.2.0 consolidation: Activity on Work, no ACTIVITY or DELIVERY section, hub tabs are not items', () => {
     expect(NAV_SECTIONS.map((s) => s.key)).not.toContain('activity');
     expect(NAV_SECTIONS.map((s) => s.key)).not.toContain('delivery');

@@ -578,6 +578,17 @@ describe('Ask Armada', () => {
     expect(api.getAskThread).toHaveBeenCalledWith('thr_1');
   });
 
+  it('a prefilled /ask (?prompt=) starts a new conversation with the prompt in the composer, not the last one', async () => {
+    await AsyncStorage.setItem(ASK_PREF_KEYS.lastThread, '"thr_1"');
+    const prompt = 'Show me the pertinent details from the black box for mission msn_1 and give me your opinion on why it failed and what could have been done differently.';
+    await renderAsk(`/ask?prompt=${encodeURIComponent(prompt)}`);
+    await waitFor(() => expect(screen.getByTestId('ask-input').props.value).toBe(prompt));
+    expect(screen.getByTestId('ask-empty')).toBeTruthy();
+    expect(api.getAskThread).not.toHaveBeenCalledWith('thr_1');
+    // Nothing is sent until the user does.
+    expect(api.sendAskMessage).not.toHaveBeenCalled();
+  });
+
   it('deleting the open conversation asks first and returns to a new conversation', async () => {
     api.deleteAskThread.mockResolvedValue(undefined);
     await renderAsk('/ask/thr_1');

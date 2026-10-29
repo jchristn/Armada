@@ -1,6 +1,7 @@
 namespace Armada.Core.Database.Interfaces
 {
     using System;
+    using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Models;
@@ -93,5 +94,27 @@ namespace Armada.Core.Database.Interfaces
         /// <returns>Rows deleted.</returns>
         /// <exception cref="ArgumentNullException">Thrown when entryId is null or empty.</exception>
         Task<int> DeleteByEntryAsync(string entryId, CancellationToken token = default);
+
+        /// <summary>
+        /// The keys among storageKeys that some object row references (the orphan sweep keeps those).
+        /// </summary>
+        /// <param name="storageKeys">Keys (at most 1000).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The referenced keys.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when storageKeys is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when more than 1000 keys are given.</exception>
+        Task<List<string>> FilterReferencedStorageKeysAsync(List<string> storageKeys, CancellationToken token = default);
+
+        /// <summary>
+        /// Move an object's bytes between the database and an external key (storage migration): sets storage_key and data
+        /// and clears the missing flag.
+        /// </summary>
+        /// <param name="id">Object id.</param>
+        /// <param name="storageKey">External key, or null when the bytes are in data.</param>
+        /// <param name="data">Bytes for the database, or null for an external object.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the row was updated.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when id is null or empty.</exception>
+        Task<bool> SetLocationAsync(string id, string? storageKey, byte[]? data, CancellationToken token = default);
     }
 }

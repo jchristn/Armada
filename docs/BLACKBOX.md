@@ -35,18 +35,25 @@ targets plug in through `IBlackBoxStore` and `BlackBoxStoreFactory`.
 
 - `BlackBoxRuntime.Create(DatabaseDriver database, ArmadaSettings settings, LoggingModule logging, IBlackBoxVersionProvider? version = null, IBlackBoxEventSink? events = null)`
   builds every component once and exposes them: `Redactor`, `Stores`, `Objects`, `Renderer`, `Writer`, `Events`,
-  `Capture`, `Pipeline`, `Advisor`, `Reanalyzer`, `Queue`, `Sweeper`, `GarbageCollector`, `Service`, `Background`. It sets
-  `Pipeline.Advisor` to a `BlackBoxAdvisor` over `BlackBoxRuleCatalog.Default`, `Pipeline.SummaryWriter` to a
-  `ModelEndpointBlackBoxSummaryWriter`, registers `BlackBoxConfigurationEnricher` as the first enricher, and gives
-  `Background` the `Reanalyzer`.
+  `Capture`, `Pipeline`, `Advisor`, `Reanalyzer`, `Queue`, `Sweeper`, `GarbageCollector`, `Migrator`, `Hooks`, `Service`,
+  `Background`. It sets `Pipeline.Advisor` to a `BlackBoxAdvisor` over `BlackBoxRuleCatalog.Default`,
+  `Pipeline.SummaryWriter` to a `ModelEndpointBlackBoxSummaryWriter`, registers `BlackBoxConfigurationEnricher` as the
+  first enricher, and gives `Background` the `Reanalyzer` and the `Migrator`. `Events` wraps the given sink in a
+  `MeteringBlackBoxEventSink` (section 3.19). `ApplySettingsChanged(previousRetention)` drops cached stores,
+  registers new secrets with the redactor and, when `retentionDays` or `resolvedRetentionDays` changed, starts the
+  background expiry recompute; `PUT /api/v1/settings` copies `blackBox` into the live settings object
+  (`BlackBoxSettings.CopyFrom`, so every component sees the change) and then calls it.
 - The Admiral (`src/Armada.Server/ArmadaServer.cs`) builds one runtime right after `MissionService`, with
   `BuildIdentityBlackBoxVersionProvider` (BuildIdentity version and commit) and a `DatabaseBlackBoxEventSink` whose
   `OnEmitted` broadcasts each event to the tenant's WebSocket clients. It sets `MissionService.BlackBox`, starts
   `Background` (enrichment worker, sweeper every `blackBox.sweeper.intervalSeconds`, garbage collection every
   `blackBox.retention.gcIntervalMinutes`; both check `blackBox.enabled` on every tick) and stops it before the database
-  is disposed. `ArmadaServer.BlackBox` exposes the runtime to routes and tests. After registering the MCP tools the
-  Admiral sets `Service.ActionExecutor` to a `BlackBoxMcpActionExecutor` (recovery runs and recommendation applies run
-  through the registered MCP tool handlers, as the caller).
+  is disposed; `Background.Start()` also resumes unfinished storage migrations. `ArmadaServer.BlackBox` exposes the
+  runtime to routes and tests. After registering the MCP tools the Admiral sets `Service.ActionExecutor` to a
+  `BlackBoxMcpActionExecutor` (recovery runs and recommendation applies run through the registered MCP tool handlers,
+  as the caller). The Admiral passes `runtime.Hooks` (`IBlackBoxLifecycleHooks`) to `MissionRoutes`, `VesselRoutes`,
+  `TenantRoutes` (`BlackBoxHooks` property) and `McpToolRegistrar.RegisterAll(..., blackBoxHooks)`, and the runtime to
+  `StatusRoutes.BlackBox` (doctor check and settings changes).
 - Namespaces: services in `Armada.Core.BlackBox`, storage in `Armada.Core.BlackBox.Storage`, models in
   `Armada.Core.Models`, enums in `Armada.Core.Enums`, settings in `Armada.Core.Settings`, database interfaces in
   `Armada.Core.Database.Interfaces`, shared SQL in `Armada.Core.Database.BlackBox`.
@@ -240,7 +247,13 @@ Service rules: a caller that is not authenticated, or not a global admin and wit
 Deleting state reads as `BlackBoxDeletingException`. Request validation errors are `ArgumentException` or
 `ArgumentOutOfRangeException` (bounds: notes 1 to 8000 characters, search query 1 to 200, REST reads at most 1 MB,
 MCP chunks at most 64 KB, delete at most 1000 ids as `CollectionLimitExceededException`). Briefs are rendered live from
-the record (so renderer improvements apply to old entries) and include the ten newest notes.
+the record (so renderer improvements apply to old entries) and include the ten newest notes. Storage migration
+(`StartStorageMigrationAsync`, `GetStorageMigrationAsync`) needs a global admin (`UnauthorizedAccessException`
+otherwise); Start throws `ArgumentException` for an Unknown, equal-to-From or misconfigured target (REST 400),
+`InvalidOperationException` while a different migration is unfinished (409) and `BlackBoxStoreUnavailableException` when
+the target fails its health check (503); Get throws `BlackBoxNotFoundException` for an unknown job (404). Starting the
+move that is already unfinished returns that job. `GetStorageStatusAsync` fills `ActiveMigrationId` and reports a
+misconfigured target as unhealthy with the reason.
 
 Other public classes:
 
@@ -303,10 +316,56 @@ Task<BlackBoxStoreHealth> CheckHealthAsync(CancellationToken token = default);
 
 - `DatabaseBlackBoxStore` (default): bytes in `blackbox_objects.data` (SQLite BLOB, PostgreSQL bytea, SQL Server
   varbinary(max), MySQL LONGBLOB); ranged reads are cut in SQL; the metadata row must exist before its bytes are written.
-- `BlackBoxStoreFactory(DatabaseDriver, BlackBoxSettings)`: `Get(target)`, `GetConfigured()`, `Register(target, builder)`
-  (test doubles and external targets), `Reset()`. Adding a target is one `case` in `CreateBuiltIn`; unimplemented
-  targets throw `NotSupportedException("The black box <Target> storage target is not yet implemented; use Database.")`,
-  which the writer treats like a store failure (fallback to the database).
+- `BlobjectBlackBoxStore(target, BlobClientBase client, diskRoot)` (`IDisposable`): every external target over its
+  Blobject 6.1.2 client (`Blobject.Disk`, `Blobject.AmazonS3` for S3 and S3-compatible stores such as MinIO and Less3,
+  `Blobject.AzureBlob`, `Blobject.GoogleCloud`, `Blobject.CIFS`, `Blobject.NFS`). Objects live at their `StorageKey`.
+  Reads fetch the whole object (`GetAsync`) and slice it (objects are bounded by `maxEvidenceObjectBytes`); the Disk
+  target reads ranges straight from the file. Not-found errors of every SDK (FileNotFound, KeyNotFound, S3 404, Azure
+  404, Google 404) become `BlackBoxObjectMissingException`; other failures become `BlackBoxStoreUnavailableException`
+  (no secrets in messages). Deleting a missing key succeeds; `DeleteManyAsync` maps Blobject's per-key results back to
+  object names. `EnumerateAsync(prefix)` skips folder entries and reports `LastUpdateUtc` in UTC (the Disk target walks
+  the file system itself and skips reparse points). `CheckHealthAsync` is Blobject `ValidateConnectivity`. The Disk
+  target (`ResolveDiskPath(key)`) refuses keys with `.`/`..` segments, rooted keys, keys with `:` and keys that resolve
+  outside its root, and refuses any path below the root that crosses a symbolic link or other reparse point (write,
+  read, exists, delete); the root itself may sit under a link (for example macOS `/var`).
+- `BlackBoxStoreFactory(DatabaseDriver, BlackBoxSettings, string? dataDirectory = null)`: `Get(target)`,
+  `GetConfigured()`, `Register(target, builder)` (test doubles and other stores), `Reset()` (disposes cached built-in
+  stores), `DiskDirectory`. `CreateBuiltIn` has one `case` per target (Database, Disk, S3, AzureBlob, GoogleCloud, Cifs,
+  Nfs); a target whose settings are invalid or whose client cannot be built throws `BlackBoxStoreUnavailableException`
+  ("The black box S3 storage target is misconfigured: blackBox.storage.s3.bucket is required ..."), which the writer
+  treats like a store failure (fallback to the database); `Unknown` throws `NotSupportedException`.
+- `BlackBoxBlobClientFactory`: `Create(target, storageSettings, dataDirectory)` builds the Blobject client from validated
+  settings; `ResolveDiskDirectory(settings, dataDirectory)` is the configured directory (relative paths resolve against
+  the data directory) or `{DataDirectory}/blackbox`. S3 with a custom endpoint uses path-style requests (Blobject forces
+  them; `usePathStyle` only shapes generated URLs); without an endpoint it is AWS S3 (no keys means the SDK's default
+  credential chain). Azure takes account name and key, or a connection string (AccountName, AccountKey, optional
+  BlobEndpoint), and `endpoint` (default `https://{account}.blob.core.windows.net/`). Google Cloud reads the service
+  account JSON from `credentialsPath` and takes an optional `endpoint` (an emulator). CIFS resolves the host name when
+  the client is built, so an unknown host is reported as misconfigured.
+- `BlackBoxStorageSettingsValidator`: `Validate(storageSettings, target = null)` returns errors that name the setting
+  (`blackBox.storage.s3.bucket is required for the S3 target.`) and never contain a secret: S3 bucket, region, both or
+  neither keys, http/https endpoint with a host whose scheme agrees with `useSsl` (keys required with an endpoint);
+  Azure container and account name plus key or a connection string with AccountName and AccountKey, http/https
+  endpoint; Google project, bucket and an existing credentials file, http/https endpoint; CIFS host (a valid host name
+  or address), share, user and password; NFS host and an absolute export path; Disk a valid path; Unknown is refused.
+  `Require` throws `ArgumentException` with every error. `PUT /api/v1/settings` validates `blackBox.storage` before
+  applying anything (400 "Invalid black box storage settings: ...").
+- `BlackBoxStorageDoctor.CheckAsync(settings, stores)` returns `BlackBoxStorageDoctorResult` (Status, Message): Pass when
+  the configured target validates and its health check passes, Fail with the validation errors or the health message
+  (plus what fallback will do), Warn when the black box is disabled or the runtime is not running. It is the twelfth
+  `GET /api/v1/doctor` check, named "Black Box Storage".
+- `BlackBoxStorageMigrator`: see section 3.20.
+- Storage inventory: `StorageInventoryService` adds one `StorageLocation` per target that holds entries to the
+  Admiral's host report (Category `BlackBox`, EntityId the target, Path `database:blackbox_objects`, the Disk directory,
+  `s3://bucket/prefix`, `azure://account/container/prefix`, `gs://bucket/prefix`, `smb://host/share/prefix` or
+  `nfs://host/export/prefix`, Bytes from the index, FileCount the entry count; the Database figure is also inside the
+  database files).
+- `BlackBoxBackupInventoryBuilder.BuildAsync(database, maxListed)` returns `BlackBoxBackupInventory` (DatabaseEntries,
+  DatabaseBytes, ExternalEntries, ExternalTargets, ExternalEntryRefs (EntryId, Target, StoragePrefix, ObjectCount,
+  TotalBytes; at most 10000), ExternalEntryRefsTruncated, Message). Backups (SQLite) contain Database-target entries
+  inside `armada.db`; `manifest.json` gains a `blackBox` section with this inventory, the backup result a `BlackBox`
+  summary, and the restore result a `BlackBox` section (counts, targets, up to 100 external entry ids) plus a sentence
+  in its message when restored entries point at objects outside the database.
 - `BlackBoxObjectRepository`: `WriteAsync(entry, name, contentType, raw, compress, forceDatabase)` and
   `ReadAsync(entry, name, offset, length)`; `static RefOf(entry, obj)`. An object whose `StorageKey` is null lives in the
   database whatever the entry's target (record.json is forced there when an external store fails).
@@ -358,7 +417,21 @@ Task<EnumerationResult<string>> EnumerateUncapturedMissionIdsAsync(DateTime? upd
 Task<EnumerationResult<string>> EnumerateUncapturedVoyageIdsAsync(DateTime? updatedSince, EnumerationQuery query, CancellationToken token = default);
 Task<bool> SetMissionLastEntryAsync(string missionId, string? entryId, CancellationToken token = default);
 Task<bool> SetVoyageLastEntryAsync(string voyageId, string? entryId, CancellationToken token = default);
+Task<EnumerationResult<BlackBoxEntry>> EnumerateEvictionCandidatesAsync(BlackBoxEvictionQuery query, CancellationToken token = default);
+Task<EnumerationResult<string>> EnumerateVesselsOverQuotaAsync(int maxEntries, EnumerationQuery query, CancellationToken token = default);
+Task<EnumerationResult<BlackBoxEntry>> EnumerateCascadeCandidatesAsync(BlackBoxCascadeReasonEnum reason, string? subjectId, EnumerationQuery query, CancellationToken token = default);
+Task<EnumerationResult<BlackBoxEntry>> ScanAsync(BlackBoxScanQuery query, CancellationToken token = default);
+Task<bool> UpdateStorageAsync(string id, BlackBoxStorageTargetEnum target, string? storagePrefix, CancellationToken token = default);
 ```
+
+Eviction candidates are unpinned and not Deleting, oldest first, filtered by `BlackBoxEvictionQuery` (VesselId,
+ResolvedOnly, ExcludeCurrent, KeepLatestPerMission, PageNumber, PageSize). Vessels over quota count non-Deleting
+entries. Cascade candidates: MissionDeleted (Mission entries whose mission row is gone), VesselDeleted (entries whose
+vessel row is gone), both without pinned entries, and TenantDeleted (every entry of the tenant, pinned included).
+`ScanAsync` is a keyset scan in id order (`BlackBoxScanQuery`: AfterId, StorageTarget, ExcludeStorageTarget, VesselId,
+NeedsMigrationTo, PageSize; TotalRecords counts what remains after the cursor); `NeedsMigrationTo` selects entries
+whose target differs or, for an external target, that still hold a database-resident object that is not missing.
+`UpdateStorageAsync` changes only `storage_target` and `storage_prefix`.
 
 ### IBlackBoxObjectMethods (DatabaseDriver.BlackBoxObjects)
 
@@ -373,7 +446,12 @@ Task<bool> WriteDataAsync(string id, byte[]? data, CancellationToken token = def
 Task<bool> SetMissingAsync(string id, bool missing, CancellationToken token = default);
 Task<EnumerationResult<BlackBoxObject>> EnumerateAsync(string entryId, EnumerationQuery query, CancellationToken token = default);
 Task<int> DeleteByEntryAsync(string entryId, CancellationToken token = default);
+Task<List<string>> FilterReferencedStorageKeysAsync(List<string> storageKeys, CancellationToken token = default);
+Task<bool> SetLocationAsync(string id, string? storageKey, byte[]? data, CancellationToken token = default);
 ```
+
+`FilterReferencedStorageKeysAsync` (at most 1000 keys, queried 100 at a time) returns the keys an object row
+references; `SetLocationAsync` sets `storage_key` and `data` together and clears `missing` (storage migration).
 
 ### IBlackBoxFileMethods (DatabaseDriver.BlackBoxFiles)
 
@@ -410,6 +488,18 @@ Task<bool> DeleteAsync(string id, CancellationToken token = default);
 Task<int> DeleteByEntryAsync(string entryId, CancellationToken token = default);
 ```
 
+### IBlackBoxMigrationMethods (DatabaseDriver.BlackBoxMigrations)
+
+`src/Armada.Core/Database/Interfaces/IBlackBoxMigrationMethods.cs`
+
+```csharp
+Task<BlackBoxStorageMigrationJob> CreateAsync(BlackBoxStorageMigrationJob job, CancellationToken token = default);
+Task<BlackBoxStorageMigrationJob?> ReadAsync(string id, CancellationToken token = default);
+Task<bool> UpdateAsync(BlackBoxStorageMigrationJob job, CancellationToken token = default);
+Task<EnumerationResult<BlackBoxStorageMigrationJob>> EnumerateActiveAsync(EnumerationQuery query, CancellationToken token = default);
+Task<EnumerationResult<BlackBoxStorageMigrationJob>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default);
+```
+
 Implementation: the SQL is shared in `Armada.Core.Database.BlackBox` (`BlackBoxEntryMethodsBase`,
 `BlackBoxObjectMethodsBase`, `BlackBoxFileMethodsBase`, `BlackBoxLinkMethodsBase`, `BlackBoxNoteMethodsBase`,
 `BlackBoxSqlPaging`) over a per-provider `BlackBoxSqlDialect` (`SqliteBlackBoxSqlDialect`, `PostgresqlBlackBoxSqlDialect`,
@@ -419,6 +509,11 @@ classes in its `Implementations` folder. Every list pages in SQL with a COUNT ov
 id as the tie-break. A null `tenantId` means any tenant. Entries in the Deleting state are hidden unless
 `includeDeleting` or `State = Deleting` is asked for. A full-row mission or voyage update never clears
 `last_blackbox_entry_id` (COALESCE); `DeleteCascadeAsync` clears it.
+
+Migration 104 (all four providers) adds `blackbox_migrations` (id `bbm_...`, state, from_target, to_target,
+delete_source, batch_size, total_entries, migrated_entries, failed_entries, bytes_copied, last_entry_id, last_error,
+created_utc, started_utc, finished_utc, last_update_utc; index on state and created_utc), shared SQL in
+`BlackBoxMigrationMethodsBase`. Active jobs are Pending or Running, oldest first.
 
 Schema (migration 103, all four providers): `blackbox_entries`, `blackbox_objects` (unique `entry_id, name`; `data`
 BLOB), `blackbox_files`, `blackbox_links`, `blackbox_notes`; indexes from the plan (tenant and mission and current,
@@ -463,6 +558,8 @@ values from a newer Armada to it):
 - `BlackBoxSubjectTypeEnum`: Mission, Voyage, Unknown
 - `BlackBoxTriageEnum`: Unknown, UserConfig, MissionBrief, Transient, ArmadaDefect, External
 
+- `BlackBoxCascadeReasonEnum`: MissionDeleted, VesselDeleted, TenantDeleted, Unknown
+
 Each `BlackBoxStepEnum` value belongs to one phase (`BlackBoxTaxonomy.PhaseOf`); the table is in the plan, section 5.1.
 
 ### 3.8 Settings
@@ -470,7 +567,11 @@ Each `BlackBoxStepEnum` value belongs to one phase (`BlackBoxTaxonomy.PhaseOf`);
 `ArmadaSettings.BlackBox` (`BlackBoxSettings`, JSON `blackBox`): `Enabled` (true), `CaptureTimeoutMs` (2000, 100 to
 30000), `Storage` (`BlackBoxStorageSettings`: `Target` (Database), `KeyPrefix` (armada/blackbox), `Compress` (true),
 `MaxEvidenceObjectBytes` (1 MB, 64 KB to 16 MB), `MaxEntryBytes` (8 MB, 1 MB to 64 MB), `FallbackToDatabase` (true),
-`Disk`, `S3`, `AzureBlob`, `GoogleCloud`, `Cifs`, `Nfs`), `Retention` (`BlackBoxRetentionSettings`: `RetentionDays` 180
+`Disk` (Directory, null for `{DataDirectory}/blackbox`), `S3` (Endpoint, Region us-east-1, Bucket, AccessKey,
+SecretKey, UsePathStyle true, UseSsl true), `AzureBlob` (AccountName, Container, AccessKey, ConnectionString, Endpoint),
+`GoogleCloud` (ProjectId, Bucket, CredentialsPath, Endpoint), `Cifs` (Hostname, Port 445, Share, Domain, Username,
+Password, PreferEncryption true), `Nfs` (Hostname, ExportPath, Version 3 (2 to 4), Port and MountPort (null: the
+portmapper), UserId 0, GroupId 0)), `Retention` (`BlackBoxRetentionSettings`: `RetentionDays` 180
 (0 to 3650, 0 keeps forever), `ResolvedRetentionDays` 30, `KeepLatestPerMission` true, `MaxEntriesPerVessel` 1000,
 `MaxTotalBytes` 1 GB, `DeleteWithMission` false, `DeleteWithVessel` true, `GcIntervalMinutes` 60, `GcBatchSize` 200,
 `OrphanGraceHours` 24), `Sweeper` (`BlackBoxSweeperSettings`: `IntervalSeconds` 60, `PageSize` 100,
@@ -489,8 +590,8 @@ Each `BlackBoxStepEnum` value belongs to one phase (`BlackBoxTaxonomy.PhaseOf`);
 | `brief.maintainer.md` | text/markdown | maintainer audience |
 | `evidence/agent-output.txt` | text/plain | capture (Mission.AgentOutput) |
 | `evidence/diff.patch` | text/x-diff | capture (Mission.DiffSnapshot) |
-| `evidence/mission.log`, `evidence/diffstat.txt`, `evidence/check-<n>.txt`, `evidence/verification-<n>.txt`, `evidence/merge-entry.txt`, `evidence/git-status.txt`, `evidence/target-commits.txt` | text/plain | enrichers (3.13) |
-| `evidence/events.json` | application/json | enrichers (3.13) |
+| `evidence/mission.log`, `evidence/diffstat.txt`, `evidence/check-<n>.txt`, `evidence/verification-<n>.txt`, `evidence/merge-entry.txt`, `evidence/git-status.txt`, `evidence/target-commits.txt` | text/plain | enrichers (3.17) |
+| `evidence/events.json` | application/json | enrichers (3.17) |
 | `manifest.json` | application/json | only inside a `.zip` download (`BlackBoxDownloadManifest`) |
 
 Names are constants in `BlackBoxObjectNames`. Text evidence is redacted and capped at `maxEvidenceObjectBytes` with the
@@ -665,7 +766,7 @@ DefaultCaptainId, the global thresholds and attempt limits, and BlackBoxRetentio
 values. Capture resolves from the rows it holds; `BlackBoxConfigurationEnricher` adds the persona and workflow profile
 values without replacing what capture recorded.
 
-### 3.13 Enrichment (built-in enrichers)
+### 3.17 Enrichment (built-in enrichers)
 
 `BlackBoxRuntime.Create` registers the built-in enrichers (`Armada.Core.BlackBox.Enrichment`,
 `BlackBoxEnricherCatalog.CreateDefaults`) on the pipeline, in this order. Each derives from `BlackBoxEnricherBase`,
@@ -701,7 +802,82 @@ Bounds: tails keep the last 256 KB (`BlackBoxForensics.TailBytes`) starting at a
 every cut is a `truncation.fields` entry; the writer then redacts every text object and caps it at
 `maxEvidenceObjectBytes`. Suites: `Services.BlackBoxEnrichment`, `Services.GitForensics`.
 
-### 3.17 Ask Armada
+Storage and retention suites: `Database.BlackBoxStorageQueries` and `Database.BlackBoxStoreContract` (the shared
+contract on the Database target, all four providers, migrating to Disk), `Services.BlackBoxStoreContract.Disk`,
+`.S3` (a throwaway MinIO container), `.AzureBlob` (Azurite), `.GoogleCloud` (fake-gcs-server), `.Cifs` (in-process
+OpenCIFS.Server 0.1.1) and `.Nfs` (in-process OpenNFS.Server 0.2.1, NFSv3), all built from
+`BlackBoxStoreContractSuiteBase`; `Services.BlackBoxStorageTargets` (validation, masking, Disk guards, unreachable and
+misconfigured stores with and without fallback, oversized evidence, doctor, migration validation, failure and restart,
+backup inventory, metrics, settings changes) and `Services.BlackBoxRetention` (plan section 16.5).
+`BlackBoxStorageEmulators` (`Test.Shared/Infrastructure/BlackBoxStorage`) starts each target once per process
+(containers labeled `armada.test=blackbox-storage`, removed at exit) and reports a skip reason when Docker or an
+image is missing, so those suites skip instead of failing; `ARMADA_TEST_NO_DOCKER=1` skips them on purpose and
+`ARMADA_TEST_MINIO_IMAGE`, `ARMADA_TEST_AZURITE_IMAGE` and `ARMADA_TEST_FAKEGCS_IMAGE` pick images (defaults:
+`minio/minio:latest` or `pgsty/minio`, `mcr.microsoft.com/azure-storage/azurite:3.35.0`, `fsouza/fake-gcs-server:1.56.1`).
+Against fake-gcs-server the enumerate and orphan-sweep cases are skipped: the emulator writes timestamps with
+trailing-zero microseconds trimmed, which Google.Apis cannot always parse, so listing fails intermittently there.
+
+### 3.18 Retention and garbage collection
+
+`BlackBoxRetentionPolicy.ComputeExpiry(entry, policy, vesselRetentionDays)` sets `expires_utc` at capture, on resolve
+and on pin and unpin (service), on a retention policy change (`ApplySettingsChanged` starts
+`GarbageCollector.StartRecompute()`), and for one vessel's entries when the vessel changes
+(`IBlackBoxLifecycleHooks.OnVesselUpdatedAsync`; `PUT /api/v1/vessels/{id}` calls it when `blackBoxRetentionDays`
+changed, MCP `update_vessel` on every update). `RecomputeExpiryAsync(vesselId)` scans in id order and writes only
+changed expiries (idempotent).
+
+`BlackBoxGarbageCollector.RunAsync(dryRun)` (every `gcIntervalMinutes` and on demand) runs, in order:
+
+1. Finish deletes left Deleting (`RetriedDeletes`).
+2. Expire: `expires_utc` before `Clock()`, unpinned, not the current entry of a mission or voyage that still exists when
+   `keepLatestPerMission` (`Expired`).
+3. Quotas (`Evicted`): for each vessel above `maxEntriesPerVessel`, the oldest unpinned non-current entries down to the
+   limit; then, while the sum of `total_bytes` is above `maxTotalBytes`, the oldest unpinned resolved entries, then the
+   oldest unpinned (current entries of live subjects stay with `keepLatestPerMission`).
+4. Cascades (`Cascaded`): entries whose vessel row is gone (`deleteWithVessel`, default true) and Mission entries whose
+   mission row is gone (`deleteWithMission`, default false). Pinned entries are kept.
+5. Orphan sweep (`OrphansRemoved`): for the configured external target and every external target that holds entries,
+   keys under `{keyPrefix}/` with no object row and a modification time older than `orphanGraceHours` are deleted
+   (keys of unknown age and keys outside the prefix are never touched; at most `MaxOrphanKeysPerRun`, 100000).
+6. Missing check (`ObjectsMissing`): a rotating page of `gcBatchSize` entries; every object whose bytes are gone from
+   its store is marked missing and the entry becomes ObjectMissing.
+7. Report: `LastReport`, the bytes metric, and `blackbox.gc_completed` with the counts, `BytesFreed`, `Failures`,
+   `Errors` and up to 100 `CandidateEntryIds`.
+
+Deletes are two-phase (`DeleteEntryAsync`): mark Deleting (hidden), delete external bytes with `DeleteManyAsync` in
+batches of 1000, then the rows; a store failure leaves the entry Deleting for the next run. A dry run counts and samples
+candidates and deletes nothing (no event). `CascadeAsync(reason, subjectId)` and the hooks run a cascade at once:
+`OnMissionDeletedAsync` (REST purge and delete-multiple, MCP `purge_mission` and `delete_missions`; follows
+`deleteWithMission`), `OnVesselDeletedAsync` (REST and MCP vessel deletes; follows `deleteWithVessel`, then the mission
+cascade for the vessel's deleted missions), `OnTenantDeletedAsync` (tenant deletion: every entry and object, pinned
+ones too). Hooks never throw; the next run catches anything they miss (WebSocket deletes, voyage purges, data expiry).
+`RetentionService` and `DataExpiryService` do not touch black box tables. `MissionArchive` snapshots record the
+mission's current entry as `BlackBoxEntryId`.
+
+### 3.19 Metrics
+
+`BlackBoxMetrics` instruments on Armada's meter, exported by the Admiral's telemetry host (Prometheus names):
+`armada_blackbox_entries_total{phase,step,kind,triage}` (each capture; triage as captured),
+`armada_blackbox_bytes{target}` (stored bytes per target, refreshed after each garbage collection run and each admin
+storage status read), `armada_blackbox_gc_deleted_total{reason}` (expired, evicted, cascaded, retried, orphan) and
+`armada_blackbox_capture_failures_total`. `MeteringBlackBoxEventSink` records them from the events it forwards.
+
+### 3.20 Storage migration
+
+`BlackBoxStorageMigrator` (`runtime.Migrator`): `StartAsync(request, runInBackground)`, `RunAsync(jobId)`,
+`ResumePendingAsync()`, `GetAsync(id)`, `StopAsync()`, `ActiveJobId`, `OnEntryProcessedAsync` (test hook). A job
+(`BlackBoxStorageMigrationJob`, `bbm_` id, persisted in `blackbox_migrations`) pages through
+`ScanAsync(NeedsMigrationTo = To, StorageTarget = From)` in id order, `BatchSize` (1 to 1000) at a time, and saves its
+progress and cursor (`LastEntryId`) after every entry, so it resumes after a restart (`Background.Start()`) and running
+it again skips entries already moved; a job with nothing to move is created Completed. Per entry: every external
+object is read, checked against its SHA-256, written to the same key on the target and read back and checked again;
+database-resident objects are read, checked, copied to `{prefix}/{name}` and checked; only then is the entry switched
+(`UpdateStorageAsync`), the database rows pointed at their keys (`SetLocationAsync`; their bytes cleared, or kept when
+`DeleteSource` is false) and the source copies deleted. Moving to Database writes each verified object into its row
+before switching the entry. A corrupt or unreadable object fails only its entry (`FailedEntries`, `LastError`), which
+stays where it was; the job ends Completed, or Failed when any entry failed. Every step leaves every object readable.
+
+### 3.21 Ask Armada
 
 Plan section 10. The pieces, in `Armada.Core.Services.Ask` unless noted:
 
@@ -742,6 +918,5 @@ Grep for `TODO(blackbox-wave2` to find each placeholder in code.
 | advisor and recovery | Done: rule catalog, advisor, triage, recovery runs and recommendation applies (see 3.13 to 3.16) | `BlackBoxService` |
 | CLI | `armada blackbox export-fixture <id>`: call `ExportFixtureAsync` and write it with `BlackBoxFixtureExporter.WriteAsync` into `src/Test.Shared/Fixtures/BlackBox` | Helm |
 | surfaces | `GetFingerprintTrendAsync` (REST/MCP route), the recovery and recommendation tools (`run_blackbox_recovery`, `apply_blackbox_recommendation`); pass `authorKind` Operator from human UIs | REST, MCP, dashboard |
-| storage | Blobject targets (Disk, S3, AzureBlob, GoogleCloud, Cifs, Nfs), storage migration job, doctor check, storage inventory | `BlackBoxStoreFactory.CreateBuiltIn`, `BlackBoxService.StartStorageMigrationAsync`, `GetStorageMigrationAsync` |
-| gc | Quotas, vessel and mission cascades, orphan sweep, expiry recompute on policy change | `BlackBoxGarbageCollector.EnforceQuotasAsync`, `CascadeAsync`, `SweepOrphansAsync` |
+| storage and gc | Done: Blobject targets, storage migration, doctor check, storage inventory, backups, quotas, cascades, orphan sweep, expiry recompute, metrics (see 3.4 and 3.18 to 3.20) | `BlackBoxStoreFactory`, `BlackBoxStorageMigrator`, `BlackBoxGarbageCollector` |
 | surfaces | REST routes, MCP tools, WebSocket commands, clients, dashboard, TUI, Helm, VS Code, mobile | call `IBlackBoxService` |

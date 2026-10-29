@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { blackBoxAskPrompt, blackBoxChips, cardFollowUps, followUpArguments, parseBlackBoxCommand, shortCommit } from './askBlackBox';
+import { blackBoxChips, cardFollowUps, followUpArguments, parseBlackBoxCommand, shortCommit } from './askBlackBox';
 import { ASK_PREFILL_QUERY_PARAM, askPrefillPath, readAskPrefill } from './askNavigation';
 import { quickActionForm } from './askQuickActions';
 import { buildCommandCatalog } from './askCommands';
+import { blackBoxAskHref, blackBoxAskPrompt } from './blackbox';
 
 describe('Ask black box helpers', () => {
-  it('uses the canonical question of the black box entry points', () => {
+  it('uses the canonical question of the black box entry points, and their link is the prefill path', () => {
     expect(blackBoxAskPrompt('msn_abc')).toBe('Show me the pertinent details from the black box for mission msn_abc and give me your opinion on why it failed and what could have been done differently');
+    expect(blackBoxAskHref(blackBoxAskPrompt('msn_abc'))).toBe(askPrefillPath(blackBoxAskPrompt('msn_abc')));
   });
 
   it('parses /blackbox arguments: a mission id and an optional question', () => {

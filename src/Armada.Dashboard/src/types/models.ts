@@ -357,6 +357,8 @@ export interface Mission {
   processId: number | null;
   prUrl: string | null;
   commitHash: string | null;
+  /** Current black box entry (bbx_...) when the mission failed; null otherwise. Absent on older servers. */
+  lastBlackBoxEntryId?: string | null;
   failureReason: string | null;
   /** Category of the failure (MissionFailureKindEnum), for example 'Infra' when the host blocked landing. */
   failureKind?: string | null;
@@ -540,6 +542,8 @@ export interface Voyage {
   selectedPlaybooks?: SelectedPlaybook[];
   captainOverridesJson?: string | null;
   /** True for evaluation work (fixture battery, model evaluation); its stage outcomes never count as production data. */
+  /** Current black box entry when the voyage failed. Absent on older servers. */
+  lastBlackBoxEntryId?: string | null;
   isEvaluation?: boolean;
 }
 

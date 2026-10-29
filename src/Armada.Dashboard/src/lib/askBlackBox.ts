@@ -2,14 +2,9 @@ import type { AskBlackBoxCard, AskBlackBoxDigest, AskBlackBoxFollowUp } from '..
 
 /**
  * Ask Armada black box helpers (MISSION_BLACKBOX_PLAN.md 10.3), shared by the dashboard and the mobile app: the
- * canonical question the entry points pre-fill, the /blackbox command arguments, the card's status chips, and
- * follow-up arguments. Host-agnostic (no DOM).
+ * /blackbox command arguments, the card's status chips, and follow-up arguments (the canonical question the entry
+ * points pre-fill is blackBoxAskPrompt in lib/blackbox). Host-agnostic (no DOM).
  */
-
-/** The question every "Ask Armada about this failure" entry point pre-fills (server AskBlackBoxGuidance.CanonicalPrompt). */
-export function blackBoxAskPrompt(missionId: string): string {
-  return `Show me the pertinent details from the black box for mission ${missionId} and give me your opinion on why it failed and what could have been done differently`;
-}
 
 /** `/blackbox <missionId> [question]` typed in the composer: the mission id and the optional question. */
 export function parseBlackBoxCommand(args: string): { missionId: string; question: string } | null {

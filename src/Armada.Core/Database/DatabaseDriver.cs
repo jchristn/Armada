@@ -475,6 +475,15 @@ namespace Armada.Core.Database
         }
 
         /// <summary>
+        /// Black box storage migration jobs (blackbox_migrations).
+        /// </summary>
+        public IBlackBoxMigrationMethods BlackBoxMigrations
+        {
+            get => _BlackBoxMigrations;
+            protected set => _BlackBoxMigrations = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
         /// Handoff artifact methods (one row per stage attempt that handed work on).
         /// </summary>
         public IHandoffArtifactMethods HandoffArtifacts
@@ -711,6 +720,7 @@ namespace Armada.Core.Database
         private IBlackBoxFileMethods _BlackBoxFiles = null!;
         private IBlackBoxLinkMethods _BlackBoxLinks = null!;
         private IBlackBoxNoteMethods _BlackBoxNotes = null!;
+        private IBlackBoxMigrationMethods _BlackBoxMigrations = null!;
         private IFailureCauseRuleMethods _FailureCauseRules = null!;
         private IModelProbeRunMethods _ModelProbeRuns = null!;
         private IModelProbeResultMethods _ModelProbeResults = null!;

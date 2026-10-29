@@ -52,7 +52,7 @@ export const navModelSections: NavModelSection[] = [
     label: 'OPERATIONS',
     matchers: [
       '/inbox', '/dispatch', '/fleet-actions', '/planning', '/backlog', '/objectives', '/voyages', '/missions', '/merge-queue',
-      '/activity', '/history', '/requests', '/events', '/signals', '/jobs',
+      '/activity', '/history', '/requests', '/events', '/signals', '/jobs', '/blackbox',
     ],
     items: [
       { to: '/inbox', label: 'Needs You', tooltip: 'Reviews, failures, and stalls awaiting your attention', icon: 'needsYou' },
@@ -60,6 +60,7 @@ export const navModelSections: NavModelSection[] = [
       { to: '/fleet-actions', label: 'Fleet Actions', tooltip: 'Run a command or mission across many vessels and watch each run', icon: 'fleetActions' },
       { to: '/missions', label: 'Missions', tooltip: 'Work units, plus Voyages and the full Merge Queue as tabs', icon: 'missions' },
       { to: '/activity', label: 'Activity', tooltip: 'One log across requests, events, signals, and history, plus background jobs on the Jobs tab', icon: 'activity' },
+      { to: '/blackbox', label: 'Black Box', tooltip: 'Failure records for missions and voyages: where, how and why each failed, and how to recover', icon: 'blackbox' },
     ],
   },
   {

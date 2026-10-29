@@ -147,7 +147,7 @@ without telemetry.
   captain or a card) is the user's confirmation: the server runs the dry run, then the confirmed run with
   the dry run's token. A proposal with `dryRun: true` runs only the dry run; one that already carries a
   `confirmToken` runs as written. Notes written from Ask (`annotate_blackbox`, recovery annotations) are
-  `authorKind` AskArmada. See `docs/BLACKBOX.md` section 3.17.
+  `authorKind` AskArmada. See `docs/BLACKBOX.md` section 3.21.
 - **Work linking** is by tool, in one mapping table (`AskWorkLinker`): `dispatch` -> Voyage id,
   `create_mission` / `restart_mission` -> Mission id, `run_fleet_action` -> FleetActionRun
   id, `evaluate_vessel_health` -> Job id, `import_vessels` / `discover_vessels` -> VesselImportBatch (and
