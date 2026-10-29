@@ -276,6 +276,15 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
+        /// Provide the black box service for the blackbox.get, blackbox.brief and blackbox.list WebSocket commands.
+        /// </summary>
+        /// <param name="service">Service, or null.</param>
+        public void SetBlackBoxService(Armada.Core.BlackBox.IBlackBoxService? service)
+        {
+            _CommandHandler.BlackBox = service;
+        }
+
+        /// <summary>
         /// Deliver a CLI permission event (cli_permission.requested or cli_permission.resolved) to the request's
         /// approvers and owner: global admins (of this tenant, or opted in to all tenants), the tenant's tenant admins,
         /// and the owning user. Each recipient's copy carries its own canDecide and canRemember.

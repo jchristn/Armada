@@ -83,7 +83,8 @@ namespace Armada.Server.WebSocket
             "get_persona", "create_persona", "update_persona", "delete_persona",
             "get_prompt_template", "update_prompt_template",
             "get_pipeline", "create_pipeline", "update_pipeline", "delete_pipeline",
-            "list_cli_permission_requests", "decide_cli_permission_request"
+            "list_cli_permission_requests", "decide_cli_permission_request",
+            "blackbox.get", "blackbox.brief", "blackbox.list"
         };
 
         /// <summary>
