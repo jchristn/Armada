@@ -92,6 +92,16 @@ namespace Test.Shared.Infrastructure
         }
 
         /// <summary>
+        /// Delete a branch ref from the vessel repository. The authoring clone is left unchanged.
+        /// </summary>
+        /// <param name="branch">Branch name.</param>
+        public void RemoveVesselBranch(string branch)
+        {
+            if (String.IsNullOrEmpty(branch)) throw new ArgumentNullException(nameof(branch));
+            Git(VesselRepo, "update-ref", "-d", "refs/heads/" + branch);
+        }
+
+        /// <summary>
         /// Commit id of a branch on origin.
         /// </summary>
         /// <param name="branch">Branch name.</param>

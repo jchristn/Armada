@@ -553,18 +553,32 @@ namespace Armada.Core.Services
                     await _Git.CreateWorktreeAsync(repoPath, integrationPath, integrationBranch, entry.TargetBranch, token).ConfigureAwait(false);
                 }
 
-                // Merge the entry's branch
-                bool mergeOk = await MergeBranchAsync(host, integrationPath, entry.BranchName, token).ConfigureAwait(false);
-                if (!mergeOk)
+                // Merge the entry's branch. A content conflict is the only failure that uses the conflict label.
+                MergeCommandOutcome merge = await MergeBranchAsync(host, integrationPath, entry.BranchName, token).ConfigureAwait(false);
+                if (!merge.Succeeded)
                 {
-                    _Logging.Warn(_Header + "merge conflict for " + entryTag);
+                    string output;
+                    string reason;
+                    if (merge.ContentConflict)
+                    {
+                        _Logging.Warn(_Header + "merge conflict for " + entryTag);
+                        output = "Merge conflict with " + entry.TargetBranch;
+                        reason = "Merge queue entry " + entry.Id + ": merge conflict with " + entry.TargetBranch;
+                    }
+                    else
+                    {
+                        _Logging.Warn(_Header + "merge failed for " + entryTag + ": " + merge.Detail);
+                        output = merge.Detail;
+                        reason = "Merge queue entry " + entry.Id + ": " + merge.Detail;
+                    }
+
                     entry.Status = MergeStatusEnum.Failed;
-                    entry.TestOutput = "Merge conflict with " + entry.TargetBranch;
+                    entry.TestOutput = output;
                     entry.CompletedUtc = DateTime.UtcNow;
                     if (!await _Database.MergeEntries.TryUpdateIfUnchangedAsync(entry, entry.LastUpdateUtc, token).ConfigureAwait(false)) return;
                     await CleanupWorktreeAsync(host, repoPath, integrationPath, integrationBranch, token).ConfigureAwait(false);
                     await ReconcileMissionStatusAsync(entry.MissionId, MissionStatusEnum.LandingFailed,
-                        "Merge queue entry " + entry.Id + ": merge conflict with " + entry.TargetBranch, token, entry.TenantId).ConfigureAwait(false);
+                        reason, token, entry.TenantId).ConfigureAwait(false);
                     return;
                 }
 
@@ -757,40 +771,180 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task<bool> MergeBranchAsync(MergeQueueHost host, string worktreePath, string branchName, CancellationToken token)
+        private async Task<MergeCommandOutcome> MergeBranchAsync(MergeQueueHost host, string worktreePath, string branchName, CancellationToken token)
+        {
+            MergeCommandOutcome first = await MergeRefAsync(host, worktreePath, branchName, token).ConfigureAwait(false);
+            if (first.Succeeded) return first;
+
+            // The branch was pushed and then removed locally: merge the pushed copy.
+            if (host.IsHarbor && first.MissingRef)
+                return await MergeRefAsync(host, worktreePath, "origin/" + branchName, token).ConfigureAwait(false);
+
+            return first;
+        }
+
+        /// <summary>
+        /// Merge one ref with <c>--no-ff</c>. A content conflict is reported only when that merge leaves unmerged
+        /// paths. A changelog-only conflict is resolved and counts as success. Unmerged paths are read before
+        /// <c>merge --abort</c>.
+        /// </summary>
+        /// <exception cref="TimeoutException">Thrown when git does not finish in time.</exception>
+        private async Task<MergeCommandOutcome> MergeRefAsync(MergeQueueHost host, string worktreePath, string refName, CancellationToken token)
+        {
+            HostCommandResult merge = await RunGitCaptureAsync(host, worktreePath, token, "merge", "--no-ff", refName).ConfigureAwait(false);
+            if (merge.ExitCode == 0) return MergeCommandOutcome.Success();
+
+            bool contentConflict = false;
+            bool resolved = false;
+            try
+            {
+                contentConflict = await HasUnmergedPathsAsync(host, worktreePath, token).ConfigureAwait(false);
+                if (contentConflict)
+                {
+                    try
+                    {
+                        resolved = await ChangelogLandingConflict.TryResolveAsync(
+                            host.Commands ?? new LocalHostCommandExecutor(), worktreePath, host.IsWindows, token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException && ex is not TimeoutException)
+                    {
+                        _Logging.Warn(_Header + "changelog conflict resolution failed: " + ex.Message);
+                    }
+                }
+            }
+            finally
+            {
+                if (!resolved)
+                    await AbortMergeAsync(host, worktreePath, token).ConfigureAwait(false);
+            }
+
+            if (resolved) return MergeCommandOutcome.Success();
+            if (contentConflict) return MergeCommandOutcome.Conflict();
+
+            bool missingRef = TextContainsMissingRef(merge.StandardError) || TextContainsMissingRef(merge.StandardOutput);
+            return MergeCommandOutcome.GitFailure(GitMergeFailureLine(merge), missingRef);
+        }
+
+        private async Task<bool> HasUnmergedPathsAsync(MergeQueueHost host, string worktreePath, CancellationToken token)
+        {
+            HostCommandResult listed = await RunGitCaptureAsync(host, worktreePath, token, "diff", "--name-only", "--diff-filter=U").ConfigureAwait(false);
+            if (listed.ExitCode != 0) return false;
+            return !String.IsNullOrWhiteSpace(listed.StandardOutput);
+        }
+
+        private async Task AbortMergeAsync(MergeQueueHost host, string worktreePath, CancellationToken token)
         {
             try
             {
-                await RunGitAsync(host, worktreePath, token, "merge", "--no-ff", branchName).ConfigureAwait(false);
-                return true;
+                HostCommandResult abort = await RunGitCaptureAsync(host, worktreePath, token, "merge", "--abort").ConfigureAwait(false);
+                if (!abort.Success)
+                    _Logging.Debug(_Header + "merge --abort exited " + abort.ExitCode.ToString(CultureInfo.InvariantCulture));
             }
-            catch (TimeoutException)
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
                 throw;
             }
-            catch (InvalidOperationException ex) when (host.IsHarbor && ex.Message.Contains("not something we can merge", StringComparison.OrdinalIgnoreCase))
+            catch (TimeoutException)
             {
-                // The branch was pushed and then removed locally: merge the pushed copy.
-                try
-                {
-                    await RunGitAsync(host, worktreePath, token, "merge", "--no-ff", "origin/" + branchName).ConfigureAwait(false);
-                    return true;
-                }
-                catch (Exception ex2) when (ex2 is not OperationCanceledException)
-                {
-                    if (await ChangelogLandingConflict.TryResolveAsync(host.Commands ?? new LocalHostCommandExecutor(), worktreePath, host.IsWindows, token).ConfigureAwait(false)) return true;
-                    try { await RunGitAsync(host, worktreePath, token, "merge", "--abort").ConfigureAwait(false); }
-                    catch { }
-                    return false;
-                }
+                _Logging.Warn(_Header + "merge --abort timed out");
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex)
             {
-                if (await ChangelogLandingConflict.TryResolveAsync(host.Commands ?? new LocalHostCommandExecutor(), worktreePath, host.IsWindows, token).ConfigureAwait(false)) return true;
-                // Abort the failed merge
-                try { await RunGitAsync(host, worktreePath, token, "merge", "--abort").ConfigureAwait(false); }
-                catch { }
-                return false;
+                _Logging.Debug(_Header + "merge --abort did not complete: " + ex.Message);
+            }
+        }
+
+        private static bool TextContainsMissingRef(string? text)
+        {
+            return !String.IsNullOrEmpty(text) && text.Contains("not something we can merge", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GitMergeFailureLine(HostCommandResult result)
+        {
+            string detail = FirstUsefulGitLine(result.StandardError);
+            if (detail.Length == 0) detail = FirstUsefulGitLine(result.StandardOutput);
+            if (detail.Length == 0) detail = "git merge --no-ff failed";
+            return "Git merge failed (exit " + result.ExitCode.ToString(CultureInfo.InvariantCulture) + "): " + detail;
+        }
+
+        private static string FirstUsefulGitLine(string? text)
+        {
+            if (String.IsNullOrEmpty(text)) return "";
+            string[] lines = text.Replace('\r', '\n').Split('\n');
+            foreach (string raw in lines)
+            {
+                string line = raw.Trim();
+                if (line.Length == 0) continue;
+                if (line.StartsWith("hint:", StringComparison.OrdinalIgnoreCase)) continue;
+                if (line.Length > 300) return line.Substring(0, 300);
+                return line;
+            }
+            return "";
+        }
+
+        /// <summary>
+        /// Result of one merge-queue <c>git merge --no-ff</c> attempt.
+        /// </summary>
+        private sealed class MergeCommandOutcome
+        {
+            /// <summary>
+            /// True when git exited 0.
+            /// </summary>
+            public bool Succeeded { get; private set; }
+
+            /// <summary>
+            /// True when the merge left unmerged paths.
+            /// </summary>
+            public bool ContentConflict { get; private set; }
+
+            /// <summary>
+            /// True when git reported that the ref is not something it can merge.
+            /// </summary>
+            public bool MissingRef { get; private set; }
+
+            /// <summary>
+            /// Single-line Git failure, including the exit code. Empty on success and on a content conflict.
+            /// </summary>
+            public string Detail { get; private set; } = "";
+
+            private MergeCommandOutcome()
+            {
+            }
+
+            /// <summary>
+            /// A merge that exited 0.
+            /// </summary>
+            /// <returns>The success result.</returns>
+            public static MergeCommandOutcome Success()
+            {
+                MergeCommandOutcome outcome = new MergeCommandOutcome();
+                outcome.Succeeded = true;
+                return outcome;
+            }
+
+            /// <summary>
+            /// A merge that left unmerged paths.
+            /// </summary>
+            /// <returns>The content-conflict result.</returns>
+            public static MergeCommandOutcome Conflict()
+            {
+                MergeCommandOutcome outcome = new MergeCommandOutcome();
+                outcome.ContentConflict = true;
+                return outcome;
+            }
+
+            /// <summary>
+            /// A non-zero merge that left no unmerged paths.
+            /// </summary>
+            /// <param name="detail">Single-line failure, including the exit code.</param>
+            /// <param name="missingRef">Whether git reported a ref it cannot merge.</param>
+            /// <returns>The Git-failure result.</returns>
+            public static MergeCommandOutcome GitFailure(string detail, bool missingRef)
+            {
+                MergeCommandOutcome outcome = new MergeCommandOutcome();
+                outcome.Detail = detail ?? "";
+                outcome.MissingRef = missingRef;
+                return outcome;
             }
         }
 

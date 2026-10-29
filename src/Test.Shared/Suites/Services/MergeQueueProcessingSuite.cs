@@ -19,7 +19,8 @@ namespace Test.Shared.Suites.Services
     /// End-to-end merge queue processing against real git repositories: an "origin" bare repository, the vessel's bare
     /// repository (cloned from origin, as Armada keeps it), and branches pushed into the vessel repository the way a
     /// captain's dock does. Covers a clean land (origin's main advances, linked mission Complete), a merge conflict, a
-    /// failing test command, and that a failure marks the linked mission LandingFailed instead of leaving it WorkProduced.
+    /// missing source ref, a failing test command, and that a failure marks the linked mission LandingFailed instead of
+    /// leaving it WorkProduced.
     /// </summary>
     public sealed class MergeQueueProcessingSuite : IArmadaTestSuite
     {
@@ -79,6 +80,37 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.LandingFailed, updated!.Status, "mission must not stay WorkProduced");
                     AssertContains("merge conflict", updated.FailureReason ?? "");
                     AssertEqual(MissionFailureKindEnum.LandingConflict, updated.FailureKind, "failure kind is recorded where the failure happens");
+                }
+            }));
+
+            cases.Add(CaseAsync("missing_source_ref_fails_without_conflict_label", "A missing source ref fails the entry without a merge-conflict label", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    repos.PushBranch("feature/missing", "missing.txt", "change\n");
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/missing", mission.Id, null).ConfigureAwait(false);
+                    string mainBefore = repos.OriginHead("main");
+                    repos.RemoveVesselBranch("feature/missing");
+
+                    MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                    AssertEqual(MergeStatusEnum.Failed, processed!.Status);
+                    AssertEqual(mainBefore, repos.OriginHead("main"), "origin main unchanged");
+                    AssertFalse(repos.OriginHasFile("main", "missing.txt"), "the missing branch did not land");
+                    string output = processed.TestOutput ?? "";
+                    AssertFalse(ContainsMergeConflictLabel(output), "entry output calls a missing ref a merge conflict: " + output);
+                    AssertContains("not something we can merge", output);
+                    AssertTrue(HasGitExitStatus(output), "entry output includes the git exit status: " + output);
+                    Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.LandingFailed, updated!.Status);
+                    string reason = updated.FailureReason ?? "";
+                    AssertFalse(ContainsMergeConflictLabel(reason), "mission reason calls a missing ref a merge conflict: " + reason);
+                    AssertContains("not something we can merge", reason);
+                    AssertTrue(HasGitExitStatus(reason), "mission reason includes the git exit status: " + reason);
+                    AssertEqual(MissionFailureKindEnum.LandingConflict, updated.FailureKind);
                 }
             }));
 
@@ -252,6 +284,18 @@ namespace Test.Shared.Suites.Services
             vessel = await db.Vessels.CreateAsync(vessel).ConfigureAwait(false);
             repos.VesselId = vessel.Id;
             return vessel;
+        }
+
+        private static bool ContainsMergeConflictLabel(string text)
+        {
+            return text.Contains("merge conflict", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool HasGitExitStatus(string text)
+        {
+            int at = text.IndexOf("exit ", StringComparison.Ordinal);
+            if (at < 0 || at + 5 >= text.Length) return false;
+            return Char.IsDigit(text[at + 5]);
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

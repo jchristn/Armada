@@ -22,7 +22,7 @@ Cancelled  Failed
 - **Queued** -- waiting to be picked up by a processing run.
 - **Testing** -- merged into a temporary integration branch; tests are running.
 - **Landed** -- tests passed and the merge was pushed to the target branch.
-- **Failed** -- merge conflict or test failure.
+- **Failed** -- content conflict, other git merge failure, or test failure.
 - **Cancelled** -- manually removed from the queue.
 
 The `MergeStatusEnum` also defines **Passed**, which is reserved. The queue service lands an entry as soon as its tests pass, so it does not currently leave entries in `Passed`; it is treated as an active (non-terminal) status wherever entries are counted.
@@ -44,7 +44,7 @@ Terminal states: `Landed`, `Failed`, `Cancelled`.
    2. Fetch latest refs from the remote (`git fetch`).
    3. Create a temporary worktree from the current target branch.
    4. Merge the entry's branch into the worktree (`git merge --no-ff`).
-   5. If the merge conflicts, mark the entry `Failed` and move on.
+   5. If the merge leaves unmerged paths, mark the entry `Failed` as a merge conflict and move on. Any other non-zero merge marks the entry `Failed` with the Git exit code and the first error line, then moves on. The merge is aborted either way, and the target branch is left unchanged.
    6. Run the configured test command (if any) through the platform shell (`/bin/sh -c` or `cmd.exe /c`). If tests fail, mark `Failed`.
    7. Push the integration branch to update the target (`git push origin integration:target`).
    8. Mark the entry `Landed`.
@@ -71,7 +71,8 @@ Because each entry is landed immediately, the next entry in the same group alway
 
 | Scenario | Behavior |
 |---|---|
-| **Merge conflict** | Entry marked `Failed` with message. Worktree cleaned up. Linked mission moves to `LandingFailed`. Next entry in the same group continues. |
+| **Merge conflict** | Entry marked `Failed` with a merge-conflict message. This is only a merge that left unmerged paths. Worktree cleaned up. Linked mission moves to `LandingFailed`. Next entry in the same group continues. |
+| **Other git merge failure** | Entry marked `Failed` with the Git exit code and the first error line. The mission failure kind stays `LandingConflict`. Worktree cleaned up. Linked mission moves to `LandingFailed`. Next entry continues. |
 | **Test failure** | Entry marked `Failed` with exit code and output truncated to 4096 characters. Worktree cleaned up. Linked mission moves to `LandingFailed`. Next entry continues. |
 | **Push failure** | Entry marked `Failed` with error message. Linked mission moves to `LandingFailed`. Typically means the remote rejected the push (force-push protection, etc.). |
 | **Timeout** | A git or test subprocess that runs longer than 10 minutes is killed; the entry is marked `Failed`. |
