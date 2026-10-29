@@ -124,13 +124,9 @@ namespace Armada.Core.BlackBox
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             RequireCaller(caller);
+            Vessel? vessel = String.IsNullOrWhiteSpace(request.VesselId) ? null : await ReadVesselAsync(caller, request.VesselId!, token).ConfigureAwait(false);
             if (String.IsNullOrWhiteSpace(request.Title) && String.IsNullOrWhiteSpace(request.Description)) throw new ArgumentException("Give the mission's title or description.");
-            VesselTrackedFiles? tracked = null;
-            if (!String.IsNullOrWhiteSpace(request.VesselId))
-            {
-                Vessel vessel = await ReadVesselAsync(caller, request.VesselId!, token).ConfigureAwait(false);
-                tracked = await _Analyzer.TrackedFilesAsync(vessel, token).ConfigureAwait(false);
-            }
+            VesselTrackedFiles? tracked = vessel != null ? await _Analyzer.TrackedFilesAsync(vessel, token).ConfigureAwait(false) : null;
             return MissionBriefLinter.Lint(request.Title, request.Description, Blank(request.DependsOnMissionId), tracked);
         }
 
