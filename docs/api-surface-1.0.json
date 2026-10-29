@@ -737,6 +737,553 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxEntrySummary>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List black box entries",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/backfill",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Execute",
+      "requestType": "BlackBoxBackfillRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxBackfillResult",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Backfill black box entries",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/bundle",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxBundleRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxBundleResult",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Build a maintainer bundle",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/delete",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Delete",
+      "requestType": "BlackBoxDeleteManyRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BlackBoxDeleteResult",
+        "400": "ApiErrorResponse",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Delete black box entries",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxEnumerateRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxEntrySummary>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate black box entries",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/fingerprints/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxFingerprintEnumerateRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxFingerprintSummary>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate black box fingerprints",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/gc",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Execute",
+      "requestType": "BlackBoxGcRunRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxGcReport",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Run black box garbage collection now",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/hotspots/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxHotspotEnumerateRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxHotspot>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate black box hotspots",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/purge",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Delete",
+      "requestType": "BlackBoxPurgeRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxPurgeResult",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Purge black box entries by filter",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/retention",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxRetentionStatus",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get black box retention status",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/search",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxSearchRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxEntrySummary>",
+        "400": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Search black box entries",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/storage",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxStorageStatus",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get black box storage status",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/storage/migrate",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Execute",
+      "requestType": "BlackBoxStorageMigrationRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BlackBoxStorageMigrationJob",
+        "403": "ApiErrorResponse",
+        "501": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Start a black box storage migration",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/storage/migrations/{id}",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxStorageMigrationJob",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "501": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get a black box storage migration job",
+      "experimental": false
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v1/blackbox/{id}",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Delete",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxDeleteResult",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Delete a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/brief",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "string",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get the FIX THIS brief of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/download",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "string",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Download a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/notes",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxNote>",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List the notes on a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/notes",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Create",
+      "requestType": "BlackBoxNoteAddRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BlackBoxNote",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Add a note to a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/notes/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxNote>",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate the notes on a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/objects",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxObjectSummary>",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List the objects of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/objects/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxObjectSummary>",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate the objects of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/objects/{name}",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "string",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "410": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Read a black box object",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/pin",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Update",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Pin a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/reanalyze",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Execute",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Re-run enrichment and analysis of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/recommendations/{recommendationId}/apply",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Execute",
+      "requestType": "BlackBoxRecommendationApplyRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxRecommendationApplyResult",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "501": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Apply a configuration recommendation of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/recovery/{pathId}",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Execute",
+      "requestType": "BlackBoxRecoveryRunRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxRecoveryRunResult",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "501": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Run a recovery path of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/resolve",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Update",
+      "requestType": "BlackBoxResolveRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Resolve a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/sections/{section}",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxSectionResult",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get one section of a black box record",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/unpin",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Update",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Unpin a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/captains",
       "auth": "Authenticated",
       "resource": "Captain:Read",
@@ -3160,6 +3707,76 @@
         "Missions"
       ],
       "summary": "Update a mission",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/missions/{id}/blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get a mission's current black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/missions/{id}/blackbox/brief",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "string",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get the FIX THIS brief of a mission's current black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/missions/{id}/blackbox/entries",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxEntrySummary>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List a mission's black box entries",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/missions/{id}/blackbox/entries/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxEntrySummary>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate a mission's black box entries",
       "experimental": false
     },
     {
@@ -6955,6 +7572,42 @@
       "experimental": false
     },
     {
+      "method": "GET",
+      "route": "/api/v1/voyages/{id}/blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get a voyage's current black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/voyages/{id}/blackbox/brief",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "string",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get the FIX THIS brief of a voyage's current black box entry",
+      "experimental": false
+    },
+    {
       "method": "DELETE",
       "route": "/api/v1/voyages/{id}/purge",
       "auth": "TenantAdmin",
@@ -7507,6 +8160,35 @@
       "experimental": false
     },
     {
+      "name": "annotate_blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Create",
+      "arguments": [
+        {
+          "name": "body",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Add a note to a black box entry (body 1-8000 characters; recorded with authorKind Agent). Annotate what you found and what you did, so the next reader does not repeat it. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
       "name": "apply_backlog_refinement_summary",
       "auth": "TenantAdmin",
       "resource": "ObjectiveRefinementSession:Execute",
@@ -7538,6 +8220,45 @@
         }
       ],
       "description": "Apply a refinement summary back to the linked backlog item and optionally promote its backlog state. Ends the session and releases its captain unless endSession is false.",
+      "experimental": false
+    },
+    {
+      "name": "apply_blackbox_recommendation",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Execute",
+      "arguments": [
+        {
+          "name": "confirmToken",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "recommendationId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Apply one configuration recommendation recorded in a black box entry's analysis (recommendationId) to prevent the failure next time; it runs only the recorded applyAction (for example an update_vessel patch), authorized as that tool. Same flow as run_blackbox_recovery: dry run first (dryRun defaults to true) to get the action and a confirmToken, tell the user what will change, then apply with dryRun false and the token. Read the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
       "experimental": false
     },
     {
@@ -9263,6 +9984,20 @@
       "experimental": false
     },
     {
+      "name": "delete_blackbox_entries",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Delete",
+      "arguments": [
+        {
+          "name": "entryIds",
+          "type": "array<string>",
+          "required": true
+        }
+      ],
+      "description": "Delete black box entries by id (entryIds, at most 1000; more is InvalidArgument with Code CollectionLimitExceeded before anything is deleted). Ids that are missing or not visible are skipped. Tenant admins and global admins only. This cannot be undone: pin entries you want to keep instead.",
+      "experimental": false
+    },
+    {
       "name": "delete_captain",
       "auth": "TenantAdmin",
       "resource": "Captain:Delete",
@@ -9985,7 +10720,7 @@
           "required": false
         }
       ],
-      "description": "Find and browse entities with paginated, filtered, sorted access to: inbox (the needs-you items, most urgent first), cli_permission_rules, cli_permission_requests, objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, and vessel_health. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
+      "description": "Find and browse entities with paginated, filtered, sorted access to: inbox (the needs-you items, most urgent first), cli_permission_rules, cli_permission_requests, objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, and blackbox (black box entry summaries, newest first). Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
       "experimental": false
     },
     {
@@ -10151,6 +10886,175 @@
         }
       ],
       "description": "Get one fixture battery run visible to the caller: its provenance (seed, sampling settings, battery version, configuration revision) and outcome counts. The per-task results are not embedded: page them with list_battery_results.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "audience",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "redactHosts",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Get the black box of a failed mission or voyage: start here when asked why something failed. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry. format summary (default, about 2 KB) returns where it failed (phase, step, host, source file and method), how (mechanism), status before and after, why (top findings), the triage verdict and confidence, and the top recovery paths; brief returns the Markdown FIX THIS brief for an audience (agent, user or maintainer); json returns the full record. Then read only the sections the question needs with read_blackbox_section and page evidence with read_blackbox_object. NotFound (Code BlackBoxNotFound) when there is no entry.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox_bundle",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fingerprint",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fleetId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "isCurrent",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "max",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "phase",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "redactHosts",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "step",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "subjectType",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "triage",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Build a maintainer bundle: up to max (1-50, default 50) of the newest matching black box entries grouped by fingerprint, as one Markdown document of maintainer briefs (format Markdown, default) or JSON summaries. Use it to rank Armada improvements and write them as mission briefs on the Armada vessel. redactHosts strips absolute paths, host names and user names before sharing outside the installation.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox_retention",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Read",
+      "arguments": [],
+      "description": "Get the black box retention status: the policy, entry counts (total, pinned, deleting, expired), bytes, the next garbage collection run and the last run's report. Tenant admins see their tenant; global admins every tenant.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox_storage",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Read",
+      "arguments": [],
+      "description": "Get the black box storage status: the configured target, its health, whether writes fall back to the database, and bytes per target. Global admins only.",
       "experimental": false
     },
     {
@@ -11117,6 +12021,286 @@
       "experimental": false
     },
     {
+      "name": "list_blackbox_entries",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fingerprint",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fleetId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "isCurrent",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "phase",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "step",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "subjectType",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "triage",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of black box entries visible to the caller, newest first, filtered by vesselId, voyageId, missionId, captainId, fleetId, phase, step, kind, triage, resolution, state, fingerprint (compare failures of the same mode), pinned, isCurrent, path (any file role) and createdAfter/createdBefore. Returns an enumeration result of entry summaries.",
+      "experimental": false
+    },
+    {
+      "name": "list_blackbox_fingerprints",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of black box failure modes (entries grouped by fingerprint) with count, open count, first and last seen, the newest entry and its phase, step and kind. Filter by vesselId, resolution and createdAfter/createdBefore. Compare one mode's entries with list_blackbox_entries {fingerprint}.",
+      "experimental": false
+    },
+    {
+      "name": "list_blackbox_hotspots",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "role",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of black box hotspots: directories that recur in failures (conflicted, dirty, out of scope), most entries first, with file and entry counts and when last seen. Filter by vesselId, role and createdAfter/createdBefore.",
+      "experimental": false
+    },
+    {
+      "name": "list_blackbox_notes",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of the notes on a black box entry (operator, agent, Ask Armada and system annotations, including what every recovery run did), newest first. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
+      "name": "list_blackbox_objects",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of a black box entry's objects (record.json, the briefs and evidence such as evidence/git-status.txt or evidence/diff.patch) with content type, sizes and SHA-256. Read one with read_blackbox_object. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
       "name": "list_failure_cause_rules",
       "auth": "Authenticated",
       "resource": "FailureCauseRule:Read",
@@ -11487,7 +12671,7 @@
           "required": true
         }
       ],
-      "description": "Get status of a specific mission",
+      "description": "Get status of a specific mission. LastBlackBoxEntryId names its current black box entry when it failed (read it with get_blackbox).",
       "experimental": false
     },
     {
@@ -11535,6 +12719,35 @@
       "experimental": false
     },
     {
+      "name": "pin_blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Update",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Pin (pinned true, the default) or unpin (pinned false) a black box entry. Garbage collection never deletes a pinned entry. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
       "name": "preview_workflow_profile",
       "auth": "Authenticated",
       "resource": "WorkflowProfile:Read",
@@ -11573,6 +12786,120 @@
       "resource": "MergeQueue:Execute",
       "arguments": [],
       "description": "Process the merge queue: creates integration branches, runs tests, and lands passing batches",
+      "experimental": false
+    },
+    {
+      "name": "purge_blackbox",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Delete",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "fingerprint",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fleetId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "includePinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "isCurrent",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "maxEntries",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "phase",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "step",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "subjectType",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "triage",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Purge black box entries by filter (the list_blackbox_entries filters), oldest first, up to maxEntries (1-100000, default 10000). dryRun defaults to true and reports what would go (matched, a sample of ids, bytes) without deleting; pinned entries are skipped unless includePinned. Run the dry run, show the user the counts, and only then purge with dryRun false. Global admins only.",
       "experimental": false
     },
     {
@@ -11662,6 +12989,98 @@
         }
       ],
       "description": "Permanently delete a voyage and all its missions from the database. This cannot be undone.",
+      "experimental": false
+    },
+    {
+      "name": "read_blackbox_object",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "length",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Read a chunk of one black box object without flooding context: at most 64 KB per call (length 1 to 65536, default 65536) from offset (default 0). Returns content (UTF-8 text for text objects, base64 otherwise, cut at a character boundary), totalBytes, and nextOffset while more remains; call again with offset = nextOffset to page through a large log. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
+      "name": "read_blackbox_section",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "section",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Read one section of a black box record: Subject, Status, Site, Mechanism, Classification, Workspace (dirty paths, checkout), Conflict (conflicted files and the missions that landed them), Scope, Configuration (each setting and where it came from), Attempts, Evidence (the object index), Analysis (findings, triage, recovery paths, recommendations), Related, Voyage, Redaction or Truncation. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
+      "name": "reanalyze_blackbox",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Execute",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Re-run enrichment and analysis of a black box entry with the current rules (rewrites record.json and the briefs). Tenant admins and global admins only. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
       "experimental": false
     },
     {
@@ -11838,6 +13257,45 @@
       "experimental": false
     },
     {
+      "name": "resolve_blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Update",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "link",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Set a black box entry's resolution (Open, Resolved, Duplicate, WontFix or ArmadaFixed) with an optional note (up to 2000 characters) and link (for example the landed commit or a pull request, up to 1000). Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
       "name": "resolve_workflow_profile",
       "auth": "Authenticated",
       "resource": "WorkflowProfile:Read",
@@ -12000,6 +13458,64 @@
       "experimental": false
     },
     {
+      "name": "run_blackbox_gc",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Execute",
+      "arguments": [
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "description": "Run one black box garbage collection pass now (expiry, quotas, cascades, retried deletes, orphan sweep) and return its report; dryRun true lists the candidates without deleting. Global admins only.",
+      "experimental": false
+    },
+    {
+      "name": "run_blackbox_recovery",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Execute",
+      "arguments": [
+        {
+          "name": "acknowledgeDataLoss",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "confirmToken",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pathId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Run one recovery path recorded in a black box entry's analysis (pathId, for example rp1). It never takes a free-form command: only the steps recorded in the entry run, each authorized as if you had called that tool directly. Always dry run first (dryRun defaults to true): the dry run returns the plan and a confirmToken (10 minutes, bound to the entry, the path and the mission's current version, so a mission that changed must be re-checked). Tell the user what will happen, then run with dryRun false and that confirmToken. A path marked dataLossRisk (deleting a branch, forcing a dock reclaim) is refused without acknowledgeDataLoss true; confirm with the user before setting it. Every run is annotated on the entry. Conflict with Code BlackBoxConfirmationRequired without a valid token or acknowledgement. Read the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
       "name": "run_check",
       "auth": "TenantAdmin",
       "resource": "CheckRun:Execute",
@@ -12155,6 +13671,125 @@
         }
       ],
       "description": "Start a fleet action run over vessels. Pass actionId to run a saved action, or the inline definition fields (name, kind, commandText or promptTemplate) for an ad hoc run. Every vessel must be in the caller's tenant or the whole request is rejected. Returns the run id; poll fleet_action_run_status.",
+      "experimental": false
+    },
+    {
+      "name": "search_blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fingerprint",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fleetId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "isCurrent",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "phase",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "step",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "subjectType",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "triage",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Full-text search over the reason, summary and notes of the black box entries visible to the caller (query 1 to 200 characters), with the same filters and paging as list_blackbox_entries. Returns an enumeration result of entry summaries.",
       "experimental": false
     },
     {
@@ -14178,7 +15813,7 @@
           "required": true
         }
       ],
-      "description": "Get status of a specific voyage: the voyage with its mission counts (TotalMissions, MissionCountsByStatus). Missions are never embedded; read them one page at a time with enumerate (entityType missions, voyageId).",
+      "description": "Get status of a specific voyage: the voyage with its mission counts (TotalMissions, MissionCountsByStatus) and LastBlackBoxEntryId (its current black box entry, read it with get_blackbox). Missions are never embedded; read them one page at a time with enumerate (entityType missions, voyageId).",
       "experimental": false
     }
   ],
@@ -14229,6 +15864,9 @@
     ],
     "commands": [
       "backup",
+      "blackbox.brief",
+      "blackbox.get",
+      "blackbox.list",
       "cancel_merge",
       "cancel_mission",
       "cancel_voyage",
