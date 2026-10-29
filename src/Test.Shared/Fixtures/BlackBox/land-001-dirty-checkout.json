@@ -1,0 +1,142 @@
+{
+  "name": "land-001-dirty-checkout",
+  "description": "msn_mvskboi0_vJGaqsNlGqU: LandingFailed because the vessel's working directory (the operator's own checkout) had 52 staged paths, so the landing refused to overwrite them.",
+  "source": "msn_mvskboi0_vJGaqsNlGqU (reconstructed from MISSION_BLACKBOX_PLAN.md 16.10; the mission was deleted on 2026-10-29)",
+  "rulesVersion": 1,
+  "expectedRuleIds": [
+    "BBX-LAND-001"
+  ],
+  "expectedTriage": "UserConfig",
+  "record": {
+    "entryId": "bbx_fixture_land001",
+    "schemaVersion": 1,
+    "captureMode": "Inline",
+    "state": "Captured",
+    "createdUtc": "2026-10-28T21:14:03Z",
+    "subject": {
+      "subjectType": "Mission",
+      "missionId": "msn_mvskboi0_vJGaqsNlGqU",
+      "voyageId": "vyg_fixture_rescue",
+      "title": "Rescue: land the bounded enumeration helpers",
+      "vesselId": "vsl_fixture_armada",
+      "vesselName": "Armada",
+      "vesselRepoUrl": "https://example.invalid/armada.git",
+      "vesselDefaultBranch": "main",
+      "captainId": "cpt_fixture_claude",
+      "captainName": "claude-1",
+      "captainRuntime": "ClaudeCode",
+      "dockId": "dck_fixture_land001",
+      "attempt": 1,
+      "isRescue": true,
+      "parentMissionId": "msn_mvsjeweh_tmCfX52gt3z",
+      "branchName": "armada/msn_mvskboi0_vJGaqsNlGqU"
+    },
+    "status": {
+      "before": "WorkProduced",
+      "after": "LandingFailed",
+      "changedUtc": "2026-10-28T21:14:03Z"
+    },
+    "site": {
+      "phase": "Landing",
+      "step": "DirtyCheckout",
+      "hostKind": "Admiral",
+      "host": "Admiral",
+      "component": "MissionLandingHandler",
+      "method": "HandleMissionCompleteAsync",
+      "sourceFile": "src/Armada.Server/MissionLandingHandler.cs",
+      "sourceLine": 308,
+      "armadaVersion": "1.1.0"
+    },
+    "mechanism": {
+      "exceptionType": "Armada.Core.Services.GitDirtyCheckoutException",
+      "exceptionMessage": "The working directory /sanitized/Code/Armada has uncommitted changes to 52 tracked files; refusing to merge over them.",
+      "gitOperation": "merge"
+    },
+    "classification": {
+      "kind": "Infra",
+      "rawReason": "Landing refused: the working directory /sanitized/Code/Armada has uncommitted changes to 52 tracked files (staged). Commit or stash them, then retry the landing.",
+      "suspectedCause": "None"
+    },
+    "workspace": {
+      "dockId": "dck_fixture_land001",
+      "worktreePath": "/sanitized/docks/msn_mvskboi0_vJGaqsNlGqU",
+      "worktreeExists": true,
+      "checkoutPath": "/sanitized/Code/Armada",
+      "branchName": "armada/msn_mvskboi0_vJGaqsNlGqU",
+      "missionCommit": "9c1e2f4",
+      "startCommit": "51aa0c7",
+      "startCommitSource": "Mission",
+      "targetBranch": "main",
+      "checkoutDirty": true,
+      "dirtyPaths": [
+        "src/Armada.Core/Services/MissionService.cs",
+        "src/Armada.Core/Services/LandingService.cs",
+        "src/Armada.Core/Services/MergeQueueService.cs",
+        "src/Armada.Core/Services/DockService.cs",
+        "src/Armada.Core/Services/GitService.cs",
+        "src/Armada.Core/Services/AdmiralService.cs",
+        "src/Armada.Core/Services/CaptainService.cs",
+        "src/Armada.Core/Services/VoyageService.cs",
+        "src/Armada.Server/Routes/MissionRoutes.cs",
+        "src/Armada.Server/Routes/VesselRoutes.cs",
+        "src/Armada.Server/Routes/VoyageRoutes.cs",
+        "src/Armada.Server/Routes/DockRoutes.cs",
+        "src/Armada.Server/Routes/CaptainRoutes.cs",
+        "src/Armada.Server/Routes/FleetRoutes.cs",
+        "src/Armada.Server/Routes/EventRoutes.cs",
+        "src/Armada.Server/Routes/SignalRoutes.cs",
+        "src/Armada.Server/Routes/MergeRoutes.cs",
+        "src/Armada.Server/Routes/PersonaRoutes.cs",
+        "src/Armada.Server/Routes/PipelineRoutes.cs",
+        "src/Armada.Server/Routes/PlaybookRoutes.cs",
+        "src/Armada.Dashboard/src/pages/Missions.tsx",
+        "src/Armada.Dashboard/src/pages/Vessels.tsx",
+        "src/Armada.Dashboard/src/pages/Voyages.tsx",
+        "src/Armada.Dashboard/src/pages/Docks.tsx",
+        "src/Armada.Dashboard/src/pages/Captains.tsx",
+        "src/Armada.Dashboard/src/pages/Fleets.tsx",
+        "src/Armada.Dashboard/src/pages/Events.tsx",
+        "src/Armada.Dashboard/src/pages/Signals.tsx",
+        "src/Armada.Dashboard/src/pages/MergeQueue.tsx",
+        "src/Armada.Dashboard/src/pages/Personas.tsx",
+        "src/Armada.Dashboard/src/pages/Pipelines.tsx",
+        "src/Armada.Dashboard/src/pages/Playbooks.tsx",
+        "src/Test.Shared/Suites/Services/MissionServiceSuite.cs",
+        "src/Test.Shared/Suites/Services/LandingServiceSuite.cs",
+        "src/Test.Shared/Suites/Services/MergeQueueSuite.cs",
+        "src/Test.Shared/Suites/Services/DockServiceSuite.cs",
+        "src/Test.Shared/Suites/Services/GitServiceSuite.cs",
+        "src/Test.Shared/Suites/Services/AdmiralSuite.cs",
+        "src/Test.Shared/Suites/Services/CaptainServiceSuite.cs",
+        "src/Test.Shared/Suites/Services/VoyageServiceSuite.cs",
+        "src/Test.Shared/Suites/Services/EnumerationSuite.cs",
+        "src/Test.Shared/Suites/Services/PaginationSuite.cs",
+        "docs/REST_API.md",
+        "docs/MCP_API.md",
+        "CHANGELOG.md",
+        "README.md",
+        "Armada.postman_collection.json",
+        "docs/api-surface-1.0.json",
+        "src/Armada.Core/Models/EnumerationQuery.cs",
+        "src/Armada.Core/Models/EnumerationResult.cs",
+        "src/Armada.Core/Services/CollectionLimits.cs",
+        "src/Armada.Core/Services/CollectionBounds.cs"
+      ],
+      "dirtyPathTotal": 52
+    },
+    "configuration": {
+      "values": [
+        {
+          "setting": "LandingMode",
+          "value": "MergeAndPush",
+          "source": "Global"
+        },
+        {
+          "setting": "AllowConcurrentMissions",
+          "value": "True",
+          "source": "Vessel"
+        }
+      ]
+    }
+  }
+}
