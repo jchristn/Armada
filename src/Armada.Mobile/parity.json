@@ -97,6 +97,22 @@
     },
     {
       "kind": "route",
+      "key": "/blackbox",
+      "status": "implemented",
+      "mobile": "src/app/(app)/(work)/blackbox/index.tsx",
+      "workstream": "W2.2",
+      "notes": "BlackBoxListScreen"
+    },
+    {
+      "kind": "route",
+      "key": "/blackbox/:id",
+      "status": "implemented",
+      "mobile": "src/app/(app)/(work)/blackbox/[id].tsx",
+      "workstream": "W2.2",
+      "notes": "BlackBoxEntryScreen"
+    },
+    {
+      "kind": "route",
       "key": "/captains",
       "status": "implemented",
       "mobile": "src/app/(app)/(work)/captains/index.tsx",
@@ -4838,6 +4854,14 @@
       "mobile": "src/screens/system/ServerPolicySections.tsx",
       "workstream": "W4.4",
       "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.blackBox",
+      "status": "not-applicable",
+      "mobile": "ServerSettingsScreen",
+      "workstream": "W4.4",
+      "notes": "Black box storage targets, credentials and retention are admin settings edited on the dashboard Settings page"
     },
     {
       "kind": "setting",
