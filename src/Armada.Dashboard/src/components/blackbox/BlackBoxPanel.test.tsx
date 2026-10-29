@@ -15,6 +15,9 @@ import {
   pinBlackBox,
   readBlackBoxObject,
   runBlackBoxRecovery,
+  getBlackBoxTimeline,
+  diffBlackBoxEntries,
+  listBlackBoxNearbySuccesses,
 } from '../../api/client';
 import { browserPlatform } from '../../platform/browserPlatform';
 import { translateTemplate } from '../../i18n/runtime';
@@ -38,6 +41,9 @@ vi.mock('../../api/client', () => ({
   readBlackBoxObject: vi.fn(),
   resolveBlackBox: vi.fn(),
   runBlackBoxRecovery: vi.fn(),
+  getBlackBoxTimeline: vi.fn(),
+  diffBlackBoxEntries: vi.fn(),
+  listBlackBoxNearbySuccesses: vi.fn(),
 }));
 
 const localeValue = {
@@ -403,5 +409,33 @@ describe('BlackBoxPanel evidence and notes', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add note' }));
     await waitFor(() => expect(addBlackBoxNote).toHaveBeenCalledWith('bbx_2', 'Fixed by hand.'));
     expect(await screen.findByText('Fixed by hand.')).toBeInTheDocument();
+  });
+});
+
+describe('BlackBoxPanel insight sections', () => {
+  it('shows the runbook a path starts and its success rate', async () => {
+    const entry = blackBoxEntryFixture();
+    const paths = entry.record!.analysis!.recoveryPaths!.map((p) => p.id === 'rp1' ? { ...p, runbookId: 'rbk_1', runbookTitle: 'Landing conflict runbook', successRate: 0.8, trackedRuns: 5 } : p);
+    vi.mocked(getMissionBlackBox).mockResolvedValue({ ...entry, record: { ...entry.record!, analysis: { ...entry.record!.analysis!, recoveryPaths: paths } } });
+    renderPanel();
+    const recovery = await screen.findByTestId('blackbox-recovery');
+    expect(within(recovery).getByRole('link', { name: 'Landing conflict runbook' })).toHaveAttribute('href', '/runbooks/rbk_1');
+    expect(within(recovery).getByText('Success rate 80% over 5 tracked runs')).toBeInTheDocument();
+    expect(within(recovery).getAllByText(/Runs runbook/)).toHaveLength(1);
+  });
+
+  it('loads the timeline, attempt diff and nearby successes only when opened', async () => {
+    vi.mocked(getBlackBoxTimeline).mockResolvedValue({ ...page([{ timestampUtc: '2026-10-28T10:00:00Z', source: 'Entry', kind: 'captured', message: 'Black box captured' }]), entryId: 'bbx_2', sources: [], truncated: false } as never);
+    vi.mocked(diffBlackBoxEntries).mockResolvedValue({ entryId: 'bbx_2', otherEntryId: 'bbx_1', sameMission: true, attempt: 2, otherAttempt: 1, sameFingerprint: false, differences: [{ section: 'Subject', field: 'Model', value: 'b', otherValue: 'a' }], differenceCount: 1, filesOnlyInEntry: [], filesOnlyInEntryCount: 0, filesOnlyInOther: [], filesOnlyInOtherCount: 0, filesInBothCount: 0, changedFilesKnown: true });
+    vi.mocked(listBlackBoxNearbySuccesses).mockResolvedValue(page([]) as never);
+    renderPanel();
+    await screen.findByTestId('blackbox-recovery');
+    expect(getBlackBoxTimeline).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Timeline'));
+    expect(await screen.findByText('Black box captured')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Attempt diff'));
+    expect(await screen.findByRole('table', { name: 'Differences' })).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Nearby successes'));
+    expect(await screen.findByText('No nearby successes')).toBeInTheDocument();
   });
 });
