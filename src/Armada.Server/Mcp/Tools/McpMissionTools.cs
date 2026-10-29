@@ -37,7 +37,8 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="landingService">Optional landing service for mission landing operations.</param>
         /// <param name="missionService">Optional mission service for pipeline-aware restart_mission; without it restart answers Unavailable.</param>
         /// <param name="blackBox">Optional black box capture for transition_mission_status to Failed, LandingFailed, Cancelled or Blocked (step OperatorTransition).</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, IGitService? git, ILandingService? landingService = null, IMissionService? missionService = null, Armada.Core.BlackBox.IBlackBoxCapture? blackBox = null)
+        /// <param name="blackBoxHooks">Optional black box lifecycle hooks, called after deletes and updates (retention cascades, expiry recompute).</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, IGitService? git, ILandingService? landingService = null, IMissionService? missionService = null, Armada.Core.BlackBox.IBlackBoxCapture? blackBox = null, Armada.Core.BlackBox.IBlackBoxLifecycleHooks? blackBoxHooks = null)
         {
             register(
                 "mission_status",
@@ -301,6 +302,7 @@ namespace Armada.Server.Mcp.Tools
                     }
 
                     await database.Missions.DeleteAsync(missionId).ConfigureAwait(false);
+                    if (blackBoxHooks != null) await blackBoxHooks.OnMissionDeletedAsync(missionId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", MissionId = missionId };
                 });
 
@@ -375,6 +377,7 @@ namespace Armada.Server.Mcp.Tools
                         }
 
                         await database.Missions.DeleteAsync(id).ConfigureAwait(false);
+                        if (blackBoxHooks != null) await blackBoxHooks.OnMissionDeletedAsync(id).ConfigureAwait(false);
                         result.Deleted++;
                     }
                     result.ResolveStatus();

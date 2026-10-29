@@ -155,6 +155,43 @@ namespace Armada.Core.Database.BlackBox
         }
 
         /// <inheritdoc />
+        public async Task<List<string>> FilterReferencedStorageKeysAsync(List<string> storageKeys, CancellationToken token = default)
+        {
+            if (storageKeys == null) throw new ArgumentNullException(nameof(storageKeys));
+            if (storageKeys.Count > Armada.Core.Services.CollectionLimits.MaxRequestItems) throw new ArgumentOutOfRangeException(nameof(storageKeys), "At most " + Armada.Core.Services.CollectionLimits.MaxRequestItems + " keys per call.");
+            List<string> distinct = storageKeys.Where(k => !String.IsNullOrEmpty(k)).Distinct(StringComparer.Ordinal).ToList();
+            List<string> found = new List<string>();
+            for (int start = 0; start < distinct.Count; start += 100)
+            {
+                List<string> batch = distinct.Skip(start).Take(100).ToList();
+                string names = String.Join(", ", batch.Select((k, i) => "@k" + i));
+                List<string> rows = await _Sql.QueryAsync("SELECT DISTINCT storage_key FROM blackbox_objects WHERE storage_key IN (" + names + ");",
+                    cmd => { for (int i = 0; i < batch.Count; i++) _Sql.Add(cmd, "@k" + i, batch[i]); },
+                    r => r["storage_key"].ToString()!, token).ConfigureAwait(false);
+                found.AddRange(rows);
+            }
+            return found;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> SetLocationAsync(string id, string? storageKey, byte[]? data, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+            int changed = 0;
+            await _Sql.WriteAsync(async (DbConnection conn, DbTransaction tx) =>
+            {
+                changed = await _Sql.ExecuteAsync(conn, tx, "UPDATE blackbox_objects SET storage_key = @storage_key, data = @data, missing = @missing WHERE id = @id;", cmd =>
+                {
+                    _Sql.Add(cmd, "@id", id);
+                    _Sql.Add(cmd, "@storage_key", storageKey);
+                    _Sql.AddBlob(cmd, "@data", data);
+                    _Sql.Add(cmd, "@missing", false);
+                }, token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return changed > 0;
+        }
+
+        /// <inheritdoc />
         public async Task<int> DeleteByEntryAsync(string entryId, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(entryId)) throw new ArgumentNullException(nameof(entryId));

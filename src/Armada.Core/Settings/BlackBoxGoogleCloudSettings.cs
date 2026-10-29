@@ -34,9 +34,20 @@ namespace Armada.Core.Settings
             set => _CredentialsPath = String.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 
+        /// <summary>
+        /// Custom storage endpoint (for example a fake-gcs-server emulator at http://127.0.0.1:4443/storage/v1/), or null
+        /// for Google Cloud Storage.
+        /// </summary>
+        public string? Endpoint
+        {
+            get => _Endpoint;
+            set => _Endpoint = String.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
         private string? _ProjectId = null;
         private string? _Bucket = null;
         private string? _CredentialsPath = null;
+        private string? _Endpoint = null;
 
         /// <summary>
         /// Instantiate with defaults.
