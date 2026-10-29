@@ -175,7 +175,7 @@ share outside the installation.
 
 Three ways to get a brief:
 
-1. The dashboard black box panel: **Copy FIX THIS** (section 4).
+1. The dashboard black box panel on the mission page: **Copy FIX THIS** (also on Inbox failure rows).
 2. A terminal: `curl -s -H "Authorization: Bearer $TOKEN" http://localhost:7890/api/v1/missions/msn_x/blackbox/brief | pbcopy`
    (or `armada blackbox show msn_x --brief | pbcopy` once the Helm commands land, section 4).
 3. MCP: `get_blackbox {"missionId": "msn_x", "format": "brief"}`.
@@ -184,7 +184,7 @@ Three ways to get a brief:
 
 | Surface | Where | Status |
 |---|---|---|
-| Dashboard | Mission and voyage detail black box panel; Black Box page under Operations; entry page `/blackbox/{id}` | Pending (dashboard work) |
+| Dashboard | Mission and voyage detail black box panel; Black Box page under Operations; entry page `/blackbox/{id}`; settings | Available |
 | TUI | Mission and voyage Failure tab; Black Box screen | Pending (TUI work) |
 | Helm CLI | `armada blackbox ...`, `armada mission failure <id>`, `armada voyage failure <id>` | Pending (Helm work) |
 | VS Code | The Armada extension (`src/Armada.VSCode`) | Available |
@@ -196,19 +196,24 @@ Three ways to get a brief:
 
 ### Dashboard
 
-<!-- TODO(blackbox-docs): bb-dash. Replace with the shipped panel, page and settings description. -->
+**Mission and voyage pages.** A **Black box** panel replaces the bare failure text (Retry Landing stays). Its
+sections follow the brief: Summary (triage verdict, capture state, a notice for sweeper or backfill captures and for
+missing objects), Where, How, Why, Conflict (files, directories and conflicting missions), What would have prevented
+it (with **Dry run...** then confirm to apply a recommendation), What Armada could change, Recovery (each path dry runs
+first and runs only after you confirm; data-loss paths are flagged), Configuration (each value with its source),
+Attempts (switch between attempts), Evidence, Similar failures and Notes. Actions: **Copy FIX THIS** (for the
+selected brief audience: User, Agent or Maintainer), **Download .md**, **Download .zip**, **View JSON**, **Ask Armada
+about this failure** (opens Ask with the prompt filled in; nothing is sent until you press Send), Resolve (with a
+note and link), Pin or Unpin, Reanalyze, Add note and **Open full page**. The panel updates live from the
+`blackbox.*` events, including while analysis is still running.
 
-**Pending (dashboard work).** Planned behavior (plan section 11.1): a black box panel on the mission and voyage detail
-pages (replacing the bare failure text and keeping Retry Landing) with sections that follow the brief (Summary,
-Where, How, Why, Conflict, Configuration, What would have prevented it, What Armada could change, Recovery, Attempts,
-Evidence, Notes); **Copy FIX THIS**, **Download .md**, **Download .zip** and **View JSON**; an audience toggle (User,
-Agent, Maintainer); recovery buttons that dry run, show what will happen and confirm; **Ask Armada about this
-failure**, Resolve, Pin and Add note; links to conflicting missions, the dock, the merge entry, the incident and
-similar entries; and an attempt switcher. A **Black Box** page under Operations lists entries with every filter and
-has Entries, Fingerprints, Hotspots and Retention tabs; `/blackbox/{id}` is a full-page entry view with range-loaded
-object viewers; the server settings page gains Black Box storage and retention; Inbox failure rows gain Copy FIX THIS
-and Ask Armada; the Storage page shows black box usage. The dashboard's TypeScript client and types for every route
-already exist (`src/Armada.Dashboard/src/api/client.ts`, `src/types/blackbox.ts`).
+**Black Box page** (Operations, `/blackbox`): tabs **Entries** (every filter, saved filters), **Fingerprints**,
+**Hotspots** and **Retention** (policy, usage, last and next garbage collection run, **Preview garbage collection**,
+and for administrators **Purge by filter** with a dry run first). `/blackbox/{id}` shows one entry on its own page.
+
+**Settings.** The server settings page has a Black Box section: storage target and its credentials (masked), compress,
+key prefix, fallback to the database, a store health check, **Migrate stored entries** with progress, and the retention
+policy. **Inbox** failure rows have Copy FIX THIS and Ask Armada actions, and the Storage page counts black box usage.
 
 ### TUI
 
@@ -1591,7 +1596,6 @@ Grep for `TODO(blackbox-docs)` in this document and `TODO(blackbox-wave2` in cod
 
 | Owner | Item | Where |
 |---|---|---|
-| dashboard | Black box panel, Black Box page and entry page, settings and Inbox actions (section 4) | `src/Armada.Dashboard` |
 | TUI and Helm | Failure tab, Black Box screen, `armada blackbox ...` commands including `export-fixture` (section 4) | `src/Armada.Tui`, `src/Armada.Helm` |
 | Ask Armada | `/blackbox` quick action, prompt guidance, card and entry points (section 7) | `src/Armada.Core/Services/Ask` |
 | extensions | Overlap warning, reservations, brief linter, configuration doctor, attempt diff, success records, timeline, cascade graph, runbook linkage, recovery outcome tracking (section 12) | `BlackBoxInsightRoutes.cs`, `McpBlackBoxInsightTools.cs` |
