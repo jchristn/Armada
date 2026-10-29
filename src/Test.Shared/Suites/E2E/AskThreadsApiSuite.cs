@@ -361,8 +361,11 @@ namespace Test.Shared.Suites.E2E
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
                 List<AskQuickAction> actions = await JsonHelper.DeserializeAsync<List<AskQuickAction>>(await fx.AuthClient.GetAsync("/api/v1/ask/quick-actions").ConfigureAwait(false)).ConfigureAwait(false);
-                AssertEqual("dispatch,fleet-action,status,health,import", String.Join(",", actions.Select(a => a.Name)));
+                AssertEqual("dispatch,fleet-action,status,health,import,blackbox", String.Join(",", actions.Select(a => a.Name)));
                 AssertTrue(actions.All(a => a.ArgumentsSchema != null), "schemas");
+                AskQuickAction blackBox = actions.Single(a => a.Name == "blackbox");
+                AssertEqual("get_blackbox", blackBox.ToolName);
+                AssertTrue(blackBox.ReadOnly, "/blackbox reads only");
             }));
 
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Ask Threads API", cases: cases);
