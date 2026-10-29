@@ -24569,6 +24569,12 @@
       "experimental": false
     },
     {
+      "key": "blackBox.storage.azureBlob.endpoint",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
       "key": "blackBox.storage.cifs",
       "type": "object",
       "default": null,
@@ -24590,6 +24596,18 @@
       "key": "blackBox.storage.cifs.password",
       "type": "string",
       "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.port",
+      "type": "int",
+      "default": "445",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.preferEncryption",
+      "type": "bool",
+      "default": "true",
       "experimental": false
     },
     {
@@ -24647,6 +24665,12 @@
       "experimental": false
     },
     {
+      "key": "blackBox.storage.googleCloud.endpoint",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
       "key": "blackBox.storage.googleCloud.projectId",
       "type": "string",
       "default": "null",
@@ -24683,9 +24707,39 @@
       "experimental": false
     },
     {
+      "key": "blackBox.storage.nfs.groupId",
+      "type": "int",
+      "default": "0",
+      "experimental": false
+    },
+    {
       "key": "blackBox.storage.nfs.hostname",
       "type": "string",
       "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.mountPort",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.port",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.userId",
+      "type": "int",
+      "default": "0",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.version",
+      "type": "int",
+      "default": "3",
       "experimental": false
     },
     {
