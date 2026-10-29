@@ -118,10 +118,26 @@ namespace Armada.Core.Services
             if (vessel == null || !vessel.DefinitionOfDoneEnabled) return false;
 
             DockHost? harborHost = HarborHostFor(dock);
-            DefinitionOfDoneResult result = harborHost != null
-                ? await _DefinitionOfDone.EvaluateOnHostAsync(vessel, dock.WorktreePath!, harborHost.Commands, token).ConfigureAwait(false)
-                : await _DefinitionOfDone.EvaluateAsync(vessel, dock.WorktreePath!, token).ConfigureAwait(false);
+            DefinitionOfDoneResult result;
+            try
+            {
+                result = harborHost != null
+                    ? await _DefinitionOfDone.EvaluateOnHostAsync(vessel, dock.WorktreePath!, harborHost.Commands, token, mission.Id).ConfigureAwait(false)
+                    : await _DefinitionOfDone.EvaluateAsync(vessel, dock.WorktreePath!, token, mission.Id).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            {
+                Mission? cancelled = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+                if (cancelled != null && cancelled.Status == MissionStatusEnum.Cancelled)
+                    return true;
+                throw;
+            }
+
             if (result.Passed) return false;
+
+            Mission? current = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+            if (current != null && current.Status == MissionStatusEnum.Cancelled)
+                return true;
 
             mission.Status = MissionStatusEnum.Failed;
             mission.FailureReason = "Definition-of-Done gate failed (" + result.Outcome + "): " + result.Detail;

@@ -156,6 +156,7 @@ namespace Armada.Server
         private LandingService _LandingService = null!;
         private IMessageTemplateService _TemplateService = null!;
         private IPromptTemplateService _PromptTemplateService = null!;
+        private DefinitionOfDoneGate? _DefinitionOfDoneGate;
         private PersonaSeedService _PersonaSeedService = null!;
         private LogRotationService _LogRotation = null!;
         private DataExpiryService? _DataExpiry = null;
@@ -300,8 +301,8 @@ namespace Armada.Server
             // Prompt template service must be created before MissionService so it can resolve templates
             _PromptTemplateService = new PromptTemplateService(_Database, _Logging);
 
-            IDefinitionOfDoneGate definitionOfDoneGate = new DefinitionOfDoneGate(_Logging);
-            MissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService, _Git, definitionOfDoneGate);
+            _DefinitionOfDoneGate = new DefinitionOfDoneGate(_Logging);
+            MissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService, _Git, _DefinitionOfDoneGate);
             _MissionService = missionService;
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);
@@ -971,6 +972,14 @@ namespace Armada.Server
 
             _VesselHealthService?.Dispose();
             _TokenSource.Cancel();
+            try
+            {
+                _DefinitionOfDoneGate?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "error stopping definition-of-done commands on shutdown: " + ex.Message);
+            }
             _AskTracker?.Stop();
             _PushNotifications?.Dispose();
             _FleetActionRunner?.Stop();

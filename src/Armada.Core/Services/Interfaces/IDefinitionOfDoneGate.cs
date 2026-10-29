@@ -16,9 +16,10 @@ namespace Armada.Core.Services.Interfaces
         /// </summary>
         /// <param name="vessel">The vessel whose Definition-of-Done configuration governs the gate.</param>
         /// <param name="worktreePath">Path to the mission's checkout in which to run the commands.</param>
-        /// <param name="token">Cancellation token.</param>
+        /// <param name="token">Cancellation token. Cancelling it stops the process this call started.</param>
+        /// <param name="missionId">Mission whose cancellation also stops that process, or null when the call is not for a mission.</param>
         /// <returns>The classified gate result.</returns>
-        Task<DefinitionOfDoneResult> EvaluateAsync(Vessel vessel, string worktreePath, CancellationToken token = default);
+        Task<DefinitionOfDoneResult> EvaluateAsync(Vessel vessel, string worktreePath, CancellationToken token = default, string? missionId = null);
 
         /// <summary>
         /// Run the vessel's build and unit-test commands inside a mission's checkout on another host (a Harbor-hosted
@@ -27,8 +28,15 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="vessel">The vessel whose Definition-of-Done configuration governs the gate.</param>
         /// <param name="worktreePath">Path to the mission's checkout on that host.</param>
         /// <param name="commands">Executor that runs commands on that host.</param>
-        /// <param name="token">Cancellation token.</param>
+        /// <param name="token">Cancellation token. Cancelling it stops the command this call started.</param>
+        /// <param name="missionId">Mission whose cancellation also stops that command, or null when the call is not for a mission.</param>
         /// <returns>The classified gate result.</returns>
-        Task<DefinitionOfDoneResult> EvaluateOnHostAsync(Vessel vessel, string worktreePath, Armada.Core.Services.IHostCommandExecutor commands, CancellationToken token = default);
+        Task<DefinitionOfDoneResult> EvaluateOnHostAsync(Vessel vessel, string worktreePath, Armada.Core.Services.IHostCommandExecutor commands, CancellationToken token = default, string? missionId = null);
+
+        /// <summary>
+        /// Cancel the gate command registered for a mission. Does nothing when that mission has no active gate.
+        /// </summary>
+        /// <param name="missionId">Mission identifier.</param>
+        void CancelMission(string missionId);
     }
 }

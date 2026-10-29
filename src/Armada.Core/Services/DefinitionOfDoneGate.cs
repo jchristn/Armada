@@ -1,6 +1,7 @@
 namespace Armada.Core.Services
 {
     using System;
+    using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
     using System.Threading;
@@ -16,7 +17,7 @@ namespace Armada.Core.Services
     /// so concurrent captains cannot thrash CPU, memory, or shared build servers, and classifies any failure
     /// as Compile, TestFail, Timeout, or Infra.
     /// </summary>
-    public class DefinitionOfDoneGate : IDefinitionOfDoneGate
+    public class DefinitionOfDoneGate : IDefinitionOfDoneGate, IDisposable
     {
         #region Private-Members
 
@@ -25,6 +26,11 @@ namespace Armada.Core.Services
 
         // Host-wide serialization: only one Definition-of-Done gate runs at a time across the process.
         private static readonly SemaphoreSlim _HostGate = new SemaphoreSlim(1, 1);
+
+        private readonly object _RunLock = new object();
+        private readonly Dictionary<string, CancellationTokenSource> _MissionRuns =
+            new Dictionary<string, CancellationTokenSource>(StringComparer.Ordinal);
+        private bool _Disposed;
 
         private const int MaxDetailChars = 2000;
 
@@ -46,10 +52,60 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task<DefinitionOfDoneResult> EvaluateAsync(Vessel vessel, string worktreePath, CancellationToken token = default)
+        public Task<DefinitionOfDoneResult> EvaluateAsync(Vessel vessel, string worktreePath, CancellationToken token = default, string? missionId = null)
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            return RunForMissionAsync(missionId, token, runToken => EvaluateLocalAsync(vessel, worktreePath, runToken));
+        }
 
+        /// <inheritdoc />
+        public Task<DefinitionOfDoneResult> EvaluateOnHostAsync(Vessel vessel, string worktreePath, IHostCommandExecutor commands, CancellationToken token = default, string? missionId = null)
+        {
+            if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            if (commands == null) throw new ArgumentNullException(nameof(commands));
+            return RunForMissionAsync(missionId, token, runToken => EvaluateOnHostCoreAsync(vessel, worktreePath, commands, runToken));
+        }
+
+        /// <inheritdoc />
+        public void CancelMission(string missionId)
+        {
+            if (String.IsNullOrEmpty(missionId)) return;
+
+            CancellationTokenSource? run = null;
+            lock (_RunLock)
+            {
+                if (_MissionRuns.TryGetValue(missionId, out CancellationTokenSource? current))
+                    run = current;
+            }
+
+            if (run == null) return;
+            TryCancel(run);
+        }
+
+        /// <summary>
+        /// Cancel every active gate command. Each run removes its registration when it unwinds.
+        /// </summary>
+        public void Dispose()
+        {
+            List<CancellationTokenSource> runs = new List<CancellationTokenSource>();
+            lock (_RunLock)
+            {
+                if (_Disposed) return;
+                _Disposed = true;
+                runs.AddRange(_MissionRuns.Values);
+                _MissionRuns.Clear();
+            }
+
+            foreach (CancellationTokenSource run in runs)
+                TryCancel(run);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<DefinitionOfDoneResult> EvaluateLocalAsync(Vessel vessel, string worktreePath, CancellationToken token)
+        {
             if (!vessel.DefinitionOfDoneEnabled)
                 return DefinitionOfDoneResult.SkippedResult("Definition-of-Done gate disabled for vessel");
 
@@ -88,12 +144,8 @@ namespace Armada.Core.Services
             }
         }
 
-        /// <inheritdoc />
-        public async Task<DefinitionOfDoneResult> EvaluateOnHostAsync(Vessel vessel, string worktreePath, IHostCommandExecutor commands, CancellationToken token = default)
+        private async Task<DefinitionOfDoneResult> EvaluateOnHostCoreAsync(Vessel vessel, string worktreePath, IHostCommandExecutor commands, CancellationToken token)
         {
-            if (vessel == null) throw new ArgumentNullException(nameof(vessel));
-            if (commands == null) throw new ArgumentNullException(nameof(commands));
-
             if (!vessel.DefinitionOfDoneEnabled)
                 return DefinitionOfDoneResult.SkippedResult("Definition-of-Done gate disabled for vessel");
 
@@ -123,9 +175,46 @@ namespace Armada.Core.Services
             return new DefinitionOfDoneResult(DefinitionOfDoneOutcomeEnum.Pass, "Definition-of-Done gate passed");
         }
 
-        #endregion
+        private async Task<DefinitionOfDoneResult> RunForMissionAsync(string? missionId, CancellationToken token, Func<CancellationToken, Task<DefinitionOfDoneResult>> body)
+        {
+            using (CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(token))
+            {
+                if (!String.IsNullOrEmpty(missionId)) RegisterMissionRun(missionId, linked);
+                try
+                {
+                    return await body(linked.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (!String.IsNullOrEmpty(missionId)) UnregisterMissionRun(missionId, linked);
+                }
+            }
+        }
 
-        #region Private-Methods
+        private void RegisterMissionRun(string missionId, CancellationTokenSource run)
+        {
+            CancellationTokenSource? previous = null;
+            bool disposed;
+            lock (_RunLock)
+            {
+                disposed = _Disposed;
+                if (_MissionRuns.TryGetValue(missionId, out CancellationTokenSource? current))
+                    previous = current;
+                _MissionRuns[missionId] = run;
+            }
+
+            if (previous != null) TryCancel(previous);
+            if (disposed) TryCancel(run);
+        }
+
+        private void UnregisterMissionRun(string missionId, CancellationTokenSource run)
+        {
+            lock (_RunLock)
+            {
+                if (_MissionRuns.TryGetValue(missionId, out CancellationTokenSource? current) && ReferenceEquals(current, run))
+                    _MissionRuns.Remove(missionId);
+            }
+        }
 
         private async Task<DefinitionOfDoneResult> RunHostPhaseAsync(IHostCommandExecutor commands, string command, string worktreePath, TimeSpan timeout, bool isBuildPhase, CancellationToken token)
         {
@@ -201,7 +290,7 @@ namespace Armada.Core.Services
                 {
                     started = process.Start();
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     _Logging.Warn(_Header + phase + " command failed to start in " + worktreePath + ": " + ex.ToString());
                     return new DefinitionOfDoneResult(DefinitionOfDoneOutcomeEnum.Infra, phase + " command failed to start: " + ex.Message);
@@ -220,11 +309,23 @@ namespace Armada.Core.Services
                 {
                     await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
                 }
-                catch (OperationCanceledException) when (!token.IsCancellationRequested)
+                catch (OperationCanceledException)
                 {
-                    timedOut = true;
-                    try { if (!process.HasExited) process.Kill(true); }
-                    catch { }
+                    TryKill(process);
+                    try
+                    {
+                        await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
+                    }
+                    catch (Exception drainEx)
+                    {
+                        _Logging.Debug(_Header + "gate output closed after the command stopped: " + drainEx.Message);
+                    }
+
+                    // A timeout cancels only the linked timer. Caller cancellation and mission cancellation cancel this token.
+                    if (!token.IsCancellationRequested)
+                        timedOut = true;
+                    else
+                        throw;
                 }
 
                 string stdout = await stdoutTask.ConfigureAwait(false);
@@ -232,7 +333,7 @@ namespace Armada.Core.Services
                 output = (stdout + "\n" + stderr).Trim();
                 if (!timedOut) exitCode = process.ExitCode;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _Logging.Warn(_Header + phase + " command errored in " + worktreePath + ": " + ex.ToString());
                 return new DefinitionOfDoneResult(DefinitionOfDoneOutcomeEnum.Infra, phase + " command errored: " + ex.Message);
@@ -247,6 +348,30 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + phase + " phase classified " + outcome + " in " + worktreePath);
 
             return new DefinitionOfDoneResult(outcome, detail);
+        }
+
+        private void TryCancel(CancellationTokenSource run)
+        {
+            try
+            {
+                run.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                _Logging.Debug(_Header + "gate registration was already released");
+            }
+        }
+
+        private void TryKill(Process process)
+        {
+            try
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not stop the gate process: " + ex.Message);
+            }
         }
 
         private static string BuildDetail(string phase, DefinitionOfDoneOutcomeEnum outcome, int exitCode, bool timedOut, string output)

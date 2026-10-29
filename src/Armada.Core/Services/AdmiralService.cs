@@ -607,7 +607,9 @@ namespace Armada.Core.Services
             mission.ProcessId = null;
             mission.CompletedUtc = DateTime.UtcNow;
             mission.LastUpdateUtc = DateTime.UtcNow;
-            return await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            Mission cancelled = await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            (_Missions as MissionService)?.CancelActiveDefinitionOfDone(cancelled.Id);
+            return cancelled;
         }
 
         /// <inheritdoc />
