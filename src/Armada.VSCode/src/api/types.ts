@@ -346,6 +346,8 @@ export interface BlackBoxRecoveryRequest {
   DryRun: boolean;
   ConfirmToken?: string;
   AcknowledgeDataLoss?: boolean;
+  /** Who the recovery note is attributed to; the extension is a human UI, so Operator. */
+  AuthorKind?: 'Operator' | 'Agent' | 'AskArmada' | 'System';
 }
 
 /** What one step of a real recovery run did (BlackBoxRecoveryStepResult). */

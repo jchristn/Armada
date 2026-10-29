@@ -46,7 +46,7 @@ describe('black box through the shared client', () => {
     fetchMock.mockResolvedValueOnce(response({ EntryId: 'bbx_1', PathId: 'rp1', DryRun: true, ConfirmToken: 'ct', Succeeded: true }));
     const dry = await runBlackBoxRecovery('bbx_1', 'rp1');
     expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/blackbox/bbx_1/recovery/rp1');
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ DryRun: true });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ DryRun: true, AuthorKind: 'Operator' });
     expect(dry.confirmToken).toBe('ct');
   });
 

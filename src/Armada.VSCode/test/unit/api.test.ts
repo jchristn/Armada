@@ -142,9 +142,9 @@ describe('ArmadaBlackBoxClient requests', () => {
     assert.strictEqual((await c.dryRunRecovery('bbx_1', 'rp1')).ConfirmToken, 'tok');
     await c.runRecovery('bbx_1', 'rp1', 'tok', false);
     await c.runRecovery('bbx_1', 'rp1', 'tok', true);
-    assert.deepStrictEqual(mock.requests[0].body, { DryRun: true });
-    assert.deepStrictEqual(mock.requests[1].body, { DryRun: false, ConfirmToken: 'tok' });
-    assert.deepStrictEqual(mock.requests[2].body, { DryRun: false, ConfirmToken: 'tok', AcknowledgeDataLoss: true });
+    assert.deepStrictEqual(mock.requests[0].body, { DryRun: true, AuthorKind: 'Operator' });
+    assert.deepStrictEqual(mock.requests[1].body, { DryRun: false, ConfirmToken: 'tok', AuthorKind: 'Operator' });
+    assert.deepStrictEqual(mock.requests[2].body, { DryRun: false, ConfirmToken: 'tok', AcknowledgeDataLoss: true, AuthorKind: 'Operator' });
   });
 
   it('refuses a real recovery run without a confirm token, without calling the server', async () => {

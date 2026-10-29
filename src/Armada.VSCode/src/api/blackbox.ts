@@ -340,7 +340,7 @@ export class ArmadaBlackBoxClient {
 
   /** Dry run of a recovery path; returns the plan and a confirm token. */
   public dryRunRecovery(entryId: string, pathId: string): Promise<BlackBoxRecoveryResult> {
-    const body: BlackBoxRecoveryRequest = { DryRun: true };
+    const body: BlackBoxRecoveryRequest = { DryRun: true, AuthorKind: 'Operator' };
     return this.requestJson<BlackBoxRecoveryResult>('POST', Routes.recovery(entryId, pathId), body);
   }
 
@@ -350,7 +350,7 @@ export class ArmadaBlackBoxClient {
    */
   public runRecovery(entryId: string, pathId: string, confirmToken: string, acknowledgeDataLoss: boolean): Promise<BlackBoxRecoveryResult> {
     if (!confirmToken) return Promise.reject(new ArmadaApiError('badRequest', 'A confirm token from a dry run is required.'));
-    const body: BlackBoxRecoveryRequest = { DryRun: false, ConfirmToken: confirmToken };
+    const body: BlackBoxRecoveryRequest = { DryRun: false, ConfirmToken: confirmToken, AuthorKind: 'Operator' };
     if (acknowledgeDataLoss) body.AcknowledgeDataLoss = true;
     return this.requestJson<BlackBoxRecoveryResult>('POST', Routes.recovery(entryId, pathId), body);
   }

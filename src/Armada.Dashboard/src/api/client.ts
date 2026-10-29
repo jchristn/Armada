@@ -242,6 +242,8 @@ import type {
   BlackBoxStorageMigrationJob,
   BlackBoxStorageMigrationRequest,
   BlackBoxStorageStatus,
+  BlackBoxFingerprintTrend,
+  BlackBoxFixture,
 } from '../types/blackbox';
 import { MAX_PAGE_SIZE, MAX_PAGES } from './paging';
 
@@ -1574,6 +1576,14 @@ export const enumerateBlackBoxFingerprints = (query?: BlackBoxFingerprintQuery) 
     ...(query?.createdBefore ? { CreatedBefore: query.createdBefore } : {}),
   });
 
+/** Occurrences of one failure mode per Armada version (to see whether a release fixed it). */
+export const getBlackBoxFingerprintTrend = (fingerprint: string) =>
+  get<BlackBoxFingerprintTrend>(`${BLACKBOX}/fingerprints/${encodeURIComponent(fingerprint)}/trend`);
+
+/** Export an entry as a sanitized regression fixture (global admin). */
+export const exportBlackBoxFixture = (entryId: string, name?: string) =>
+  post<BlackBoxFixture>(`${BLACKBOX}/${encodeURIComponent(entryId)}/export-fixture`, name ? { Name: name } : {}, BLACKBOX_READ);
+
 /** Set the resolution (Open, Resolved, Duplicate, WontFix or ArmadaFixed) with an optional note and link. */
 export const resolveBlackBox = (entryId: string, request: BlackBoxResolveRequest) =>
   post<BlackBoxEntry>(`${BLACKBOX}/${encodeURIComponent(entryId)}/resolve`, { Resolution: request.resolution, Note: request.note ?? null, Link: request.link ?? null }, BLACKBOX_READ);
@@ -1593,12 +1603,14 @@ export const runBlackBoxRecovery = (entryId: string, pathId: string, request?: B
     DryRun: request?.dryRun ?? true,
     ...(request?.confirmToken ? { ConfirmToken: request.confirmToken } : {}),
     ...(request?.acknowledgeDataLoss ? { AcknowledgeDataLoss: true } : {}),
+    AuthorKind: request?.authorKind ?? 'Operator',
   }, BLACKBOX_READ);
 /** Apply a configuration recommendation's recorded action, with the same dry-run and confirm-token flow. */
 export const applyBlackBoxRecommendation = (entryId: string, recommendationId: string, request?: BlackBoxRecommendationApplyRequest) =>
   post<BlackBoxRecommendationApplyResult>(`${BLACKBOX}/${encodeURIComponent(entryId)}/recommendations/${encodeURIComponent(recommendationId)}/apply`, {
     DryRun: request?.dryRun ?? true,
     ...(request?.confirmToken ? { ConfirmToken: request.confirmToken } : {}),
+    AuthorKind: request?.authorKind ?? 'Operator',
   }, BLACKBOX_READ);
 /** Re-run enrichment and analysis (tenant admin). */
 export const reanalyzeBlackBox = (entryId: string) =>

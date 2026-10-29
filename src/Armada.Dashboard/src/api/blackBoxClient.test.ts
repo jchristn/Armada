@@ -105,12 +105,12 @@ describe('black box client', () => {
     const fetchMock = stub(jsonResponse(200, { EntryId: 'bbx_1', PathId: 'rp1', DryRun: true, ConfirmToken: 'tok', Succeeded: true }));
     const dry = await runBlackBoxRecovery('bbx_1', 'rp1');
     expect(dry.confirmToken).toBe('tok');
-    expect(JSON.parse(onlyCallArgs(fetchMock)[1].body)).toEqual({ DryRun: true });
+    expect(JSON.parse(onlyCallArgs(fetchMock)[1].body)).toEqual({ DryRun: true, AuthorKind: 'Operator' });
     const realMock = stub(jsonResponse(200, { EntryId: 'bbx_1', PathId: 'rp1', DryRun: false, Succeeded: true, StepResults: [{ Order: 1, Tool: 'retry_landing', Succeeded: true }] }));
     const real = await runBlackBoxRecovery('bbx_1', 'rp1', { dryRun: false, confirmToken: 'tok', acknowledgeDataLoss: true });
     const [url, init] = onlyCallArgs(realMock);
     expect(url).toMatch(/\/api\/v1\/blackbox\/bbx_1\/recovery\/rp1$/);
-    expect(JSON.parse(init.body)).toEqual({ DryRun: false, ConfirmToken: 'tok', AcknowledgeDataLoss: true });
+    expect(JSON.parse(init.body)).toEqual({ DryRun: false, ConfirmToken: 'tok', AcknowledgeDataLoss: true, AuthorKind: 'Operator' });
     expect(real.stepResults?.[0].succeeded).toBe(true);
   });
 

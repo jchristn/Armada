@@ -70,7 +70,7 @@ describe('Run Recovery Path', () => {
     const outcome = await commands(mock).runRecoveryPath(NODE, 'rp1');
     assert.strictEqual(outcome, 'ran');
     const calls = mock.calls('POST', '/api/v1/blackbox/bbx_1/recovery/rp1').map((r) => r.body);
-    assert.deepStrictEqual(calls, [{ DryRun: true }, { DryRun: false, ConfirmToken: 'tok-1' }]);
+    assert.deepStrictEqual(calls, [{ DryRun: true, AuthorKind: 'Operator' }, { DryRun: false, ConfirmToken: 'tok-1', AuthorKind: 'Operator' }]);
     assert.ok(fake.messages.some((m) => m.level === 'info' && /ran\. landed/.test(m.text)));
   });
 
@@ -133,7 +133,7 @@ describe('Run Recovery Path', () => {
       return 'Run';
     });
     assert.strictEqual(await commands(mock).runRecoveryPath(NODE, 'rp2'), 'ran');
-    assert.deepStrictEqual(realRuns(mock, 'rp2'), [{ DryRun: false, ConfirmToken: 'tok', AcknowledgeDataLoss: true }]);
+    assert.deepStrictEqual(realRuns(mock, 'rp2'), [{ DryRun: false, ConfirmToken: 'tok', AcknowledgeDataLoss: true, AuthorKind: 'Operator' }]);
   });
 
   it('refuses when the dry run returns no confirm token', async () => {

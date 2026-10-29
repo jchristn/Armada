@@ -426,7 +426,7 @@ export interface BlackBoxFingerprintSummary {
 export interface BlackBoxResolveRequest { resolution: BlackBoxResolution; note?: string | null; link?: string | null }
 
 /** Body of the recovery route. dryRun defaults to true on the server. */
-export interface BlackBoxRecoveryRunRequest { dryRun?: boolean; confirmToken?: string | null; acknowledgeDataLoss?: boolean }
+export interface BlackBoxRecoveryRunRequest { dryRun?: boolean; confirmToken?: string | null; acknowledgeDataLoss?: boolean; authorKind?: BlackBoxNoteAuthorKind }
 
 export interface BlackBoxRecoveryStepResult { order: number; tool?: string | null; succeeded: boolean; message?: string | null }
 
@@ -442,7 +442,7 @@ export interface BlackBoxRecoveryRunResult {
   message?: string | null;
 }
 
-export interface BlackBoxRecommendationApplyRequest { dryRun?: boolean; confirmToken?: string | null }
+export interface BlackBoxRecommendationApplyRequest { dryRun?: boolean; confirmToken?: string | null; authorKind?: BlackBoxNoteAuthorKind }
 
 export interface BlackBoxRecommendationApplyResult {
   entryId: string;
@@ -556,3 +556,34 @@ export interface BlackBoxBackfillResult {
 
 /** Data of a black box REST error (BlackBoxErrorDetail): read it with apiErrorCode. */
 export interface BlackBoxErrorDetail { code: string; field?: string | null }
+
+/** Occurrences of one failure mode in one Armada version (BlackBoxVersionCount). */
+export interface BlackBoxVersionCount {
+  armadaVersion: string;
+  count: number;
+  openCount: number;
+  armadaFixedCount: number;
+  firstSeenUtc: string;
+  lastSeenUtc: string;
+}
+
+/** GET /api/v1/blackbox/fingerprints/{fingerprint}/trend (BlackBoxFingerprintTrend). */
+export interface BlackBoxFingerprintTrend {
+  fingerprint: string;
+  phase: string;
+  step: string;
+  total: number;
+  truncated: boolean;
+  versions: BlackBoxVersionCount[];
+}
+
+/** POST /api/v1/blackbox/{id}/export-fixture (BlackBoxFixture): a sanitized record with the expected rules and triage. */
+export interface BlackBoxFixture {
+  name: string;
+  description?: string | null;
+  source?: string | null;
+  rulesVersion: number;
+  expectedRuleIds: string[];
+  expectedTriage: BlackBoxTriage;
+  record: BlackBoxRecord;
+}
