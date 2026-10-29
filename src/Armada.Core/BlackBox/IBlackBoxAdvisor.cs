@@ -5,8 +5,8 @@ namespace Armada.Core.BlackBox
     /// <summary>
     /// Interprets a black box record: why findings, configuration recommendations, Armada improvement hypotheses, ranked
     /// recovery paths and the triage verdict. Pure and deterministic (no I/O), so every rule has golden tests. Every claim
-    /// carries a rule id. Implementations must be thread-safe.
-    /// TODO(blackbox-wave2: advisor) BlackBoxRuleCatalog and BlackBoxAdvisor with the starter rules.
+    /// carries a rule id. Implementations must be thread-safe. Armada's implementation is <see cref="BlackBoxAdvisor"/> over
+    /// <see cref="BlackBoxRuleCatalog"/>.
     /// </summary>
     public interface IBlackBoxAdvisor
     {

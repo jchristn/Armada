@@ -13,7 +13,7 @@ namespace Armada.Core.Models
     public class BlackBoxRecoveryPath
     {
         /// <summary>
-        /// Path id within the entry (for example rp1).
+        /// Stable path id: the rule id in lower case, a dot and a key (for example bbx-land-001.stash-retry).
         /// </summary>
         public string Id { get; set; } = "";
 

@@ -261,8 +261,15 @@ namespace Armada.Core.BlackBox
         /// <param name="pathId">Recovery path id.</param>
         /// <param name="request">Dry run, confirm token, acknowledgeDataLoss.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The result.</returns>
-        /// <exception cref="NotImplementedException">Thrown until recovery actions land (TODO(blackbox-wave2: recovery)).</exception>
+        /// <returns>The result: for a dry run the plan, a confirm token and its expiry; for a confirmed run the per-step
+        /// results.</returns>
+        /// <exception cref="BlackBoxNotFoundException">Thrown when the entry or the path is not found.</exception>
+        /// <exception cref="BlackBoxConfirmationException">Thrown when a confirmed run has no valid token (missing,
+        /// unknown, used, expired, for another path or caller), the mission changed since the dry run, or the path has
+        /// data-loss risk without acknowledgeDataLoss.</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown when the caller could not call a step's tool directly.</exception>
+        /// <exception cref="ArgumentException">Thrown when the request is invalid or a recorded action is not runnable.</exception>
+        /// <exception cref="NotImplementedException">Thrown for a confirmed run when no action executor is wired.</exception>
         Task<BlackBoxRecoveryRunResult> RunRecoveryAsync(AuthContext caller, string entryId, string pathId, BlackBoxRecoveryRunRequest request, CancellationToken token = default);
 
         /// <summary>Apply (or dry run) a configuration recommendation recorded on the entry.</summary>
@@ -271,11 +278,18 @@ namespace Armada.Core.BlackBox
         /// <param name="recommendationId">Recommendation id.</param>
         /// <param name="request">Dry run and confirm token.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The result.</returns>
-        /// <exception cref="NotImplementedException">Thrown until recovery actions land (TODO(blackbox-wave2: recovery)).</exception>
+        /// <returns>The result: for a dry run the action, a confirm token and its expiry; for a confirmed apply the outcome.</returns>
+        /// <exception cref="BlackBoxNotFoundException">Thrown when the entry or the recommendation is not found.</exception>
+        /// <exception cref="BlackBoxConfirmationException">Thrown when a confirmed apply has no valid token, or the
+        /// mission or vessel changed since the dry run.</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown when the caller could not call the apply tool directly.</exception>
+        /// <exception cref="ArgumentException">Thrown when the recommendation is advice only (no applyAction) or invalid.</exception>
+        /// <exception cref="NotImplementedException">Thrown for a confirmed apply when no action executor is wired.</exception>
         Task<BlackBoxRecommendationApplyResult> ApplyRecommendationAsync(AuthContext caller, string entryId, string recommendationId, BlackBoxRecommendationApplyRequest request, CancellationToken token = default);
 
-        /// <summary>Maintainer bundle of up to 50 entries grouped by fingerprint.</summary>
+        /// <summary>Maintainer bundle of up to 50 entries grouped by fingerprint (count, first and last seen, Armada
+        /// versions, one full maintainer brief for the newest entry and one-liners for the rest), as Markdown with a
+        /// preamble asking the agent to rank Armada improvements and write each as an Armada mission brief, or as JSON.</summary>
         /// <param name="caller">Caller.</param>
         /// <param name="request">Filters, maximum, format.</param>
         /// <param name="token">Cancellation token.</param>
@@ -288,6 +302,25 @@ namespace Armada.Core.BlackBox
         /// <param name="token">Cancellation token.</param>
         /// <returns>The page.</returns>
         Task<EnumerationResult<BlackBoxHotspot>> EnumerateHotspotsAsync(AuthContext caller, BlackBoxHotspotEnumerateRequest? request, CancellationToken token = default);
+
+        /// <summary>Occurrences of one failure mode per Armada version (plan 13.2 item 9), to see whether a release fixed
+        /// it. Counts at most 1000 entries of the fingerprint, newest first, scoped to what the caller can see.</summary>
+        /// <param name="caller">Caller.</param>
+        /// <param name="fingerprint">Fingerprint.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The trend.</returns>
+        /// <exception cref="ArgumentException">Thrown when fingerprint is empty.</exception>
+        Task<BlackBoxFingerprintTrend> GetFingerprintTrendAsync(AuthContext caller, string fingerprint, CancellationToken token = default);
+
+        /// <summary>Export an entry as a sanitized regression fixture (plan 13.2 item 8; armada blackbox export-fixture):
+        /// the record with secrets, tenant and user ids, host paths and the repository URL removed, plus the rule ids
+        /// and triage the advisor produces for it now. The caller writes it with BlackBoxFixtureExporter.WriteAsync.</summary>
+        /// <param name="caller">Caller.</param>
+        /// <param name="entryId">Entry id.</param>
+        /// <param name="name">Fixture name, or null for the mission id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The fixture.</returns>
+        Task<BlackBoxFixture> ExportFixtureAsync(AuthContext caller, string entryId, string? name = null, CancellationToken token = default);
 
         /// <summary>Failure-mode fingerprints, paged.</summary>
         /// <param name="caller">Caller.</param>

@@ -900,6 +900,9 @@ namespace Armada.Server
             RegisterMcpTools();
             // Black box resources and prompts (Voltaic resource templates and prompts; plan 8.2).
             if (_BlackBox != null) Armada.Server.Mcp.Tools.McpBlackBoxResources.Register(_McpServer, _BlackBox.Service);
+            // Black box recovery runs and recommendation applies execute their recorded action through the registered
+            // MCP tool handlers, as the caller.
+            if (_BlackBox != null) _BlackBox.Service.ActionExecutor = new BlackBoxMcpActionExecutor(_AskActions);
 
             StartMcpListener();
             _Logging.Info(_Header + "MCP server started on port " + _Settings.McpPort);

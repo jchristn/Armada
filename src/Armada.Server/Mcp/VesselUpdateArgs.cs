@@ -135,5 +135,11 @@ namespace Armada.Server.Mcp
         /// Per-vessel override for the Audit intent (beats a repo script and the ecosystem default).
         /// </summary>
         public string? AuditCommand { get; set; }
+
+        /// <summary>
+        /// Landing mode override for this vessel (MergeAndPush, LocalMerge, PullRequest, MergeQueue, None), or Default to
+        /// clear it so the global setting applies.
+        /// </summary>
+        public string? LandingMode { get; set; }
     }
 }

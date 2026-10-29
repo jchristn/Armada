@@ -23,6 +23,12 @@ namespace Armada.Core.Models
         public string? ConfirmToken { get; set; } = null;
 
         /// <summary>
+        /// Author kind of the note the run adds to the entry: Agent (default, an MCP client or captain) or Operator (a
+        /// person in the dashboard, TUI or CLI).
+        /// </summary>
+        public BlackBoxNoteAuthorKindEnum? AuthorKind { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         public BlackBoxRecommendationApplyRequest()
