@@ -1908,8 +1908,8 @@
       "key": "diffBlackBoxEntries",
       "status": "implemented",
       "tui": "ArmadaClient.DiffBlackBoxEntriesAsync",
-      "workstream": "W0.2",
-      "notes": "Missions"
+      "workstream": "BB",
+      "notes": "Black box entry screen Diff tab (D picks another attempt or entry)"
     },
     {
       "kind": "api",
@@ -2404,8 +2404,8 @@
       "key": "getBlackBoxRecoveryStats",
       "status": "implemented",
       "tui": "ArmadaClient.GetBlackBoxRecoveryStatsAsync",
-      "workstream": "W0.2",
-      "notes": "Missions"
+      "workstream": "BB",
+      "notes": "Black Box list R (recovery stats view)"
     },
     {
       "kind": "api",
@@ -2444,8 +2444,8 @@
       "key": "getBlackBoxTimeline",
       "status": "implemented",
       "tui": "ArmadaClient.GetBlackBoxTimelineAsync",
-      "workstream": "W0.2",
-      "notes": "Missions"
+      "workstream": "BB",
+      "notes": "Black box entry screen Timeline tab (server paged)"
     },
     {
       "kind": "api",
@@ -2956,8 +2956,8 @@
       "key": "getVesselBlackBoxDoctor",
       "status": "implemented",
       "tui": "ArmadaClient.GetVesselBlackBoxDoctorAsync",
-      "workstream": "W0.2",
-      "notes": "Missions"
+      "workstream": "BB",
+      "notes": "Vessel screen Black Box Doctor tab (A applies through the dry run and confirm flow)"
     },
     {
       "kind": "api",
@@ -3076,8 +3076,8 @@
       "key": "getVoyageBlackBoxCascade",
       "status": "implemented",
       "tui": "ArmadaClient.GetVoyageBlackBoxCascadeAsync",
-      "workstream": "W0.2",
-      "notes": "Missions"
+      "workstream": "BB",
+      "notes": "Voyage screen Cascade tab"
     },
     {
       "kind": "api",
@@ -3180,8 +3180,8 @@
       "key": "lintMissionBrief",
       "status": "implemented",
       "tui": "ArmadaClient.LintMissionBriefAsync",
-      "workstream": "W0.2",
-      "notes": "Missions"
+      "workstream": "BB",
+      "notes": "Alt+P dispatch preview on Dispatch, Create Voyage and Create Mission (no vessel chosen)"
     },
     {
       "kind": "api",
@@ -3244,8 +3244,8 @@
       "key": "listBlackBoxNearbySuccesses",
       "status": "implemented",
       "tui": "ArmadaClient.ListBlackBoxNearbySuccessesAsync",
-      "workstream": "W0.2",
-      "notes": "Missions"
+      "workstream": "BB",
+      "notes": "Black box entry screen Nearby Successes tab (server paged)"
     },
     {
       "kind": "api",
@@ -3636,8 +3636,8 @@
       "key": "listVesselReservations",
       "status": "implemented",
       "tui": "ArmadaClient.ListVesselReservationsAsync",
-      "workstream": "W0.2",
-      "notes": "Missions"
+      "workstream": "BB",
+      "notes": "Vessel screen Reservations tab (server paged)"
     },
     {
       "kind": "api",
@@ -3756,8 +3756,8 @@
       "key": "previewMissionOverlap",
       "status": "implemented",
       "tui": "ArmadaClient.PreviewMissionOverlapAsync",
-      "workstream": "W0.2",
-      "notes": "Missions"
+      "workstream": "BB",
+      "notes": "Alt+P dispatch preview on Dispatch, Create Voyage and Create Mission"
     },
     {
       "kind": "api",

@@ -23,8 +23,8 @@ namespace Armada.Tui.Screens.Operations
     /// playbooks with delivery modes, captain assignments per pipeline step (preferred captain and fallback tier,
     /// seeded from each persona's default captain; a single "All steps" row when the pipeline is inherited), the
     /// compact Vessel Readiness panel (<c>Alt+R</c> for the full panel), and the pre-fill banner for handoffs from
-    /// Planning, Workspace, an incident, or a backlog item (<see cref="OpsHandoff"/>). <c>Ctrl+S</c> dispatches the
-    /// voyage, toasts the dashboard's message, and opens the voyage 1.5 s later. Not thread-safe.
+    /// Planning, Workspace, an incident, or a backlog item (<see cref="OpsHandoff"/>). <c>Alt+P</c> previews the black box overlap warnings and brief lint, <c>Ctrl+S</c> dispatches the
+    /// voyage (any warnings the response carries open in a viewer), toasts the dashboard's message, and opens the voyage 1.5 s later. Not thread-safe.
     /// </summary>
     public class DispatchScreen : OpsScreen
     {
@@ -132,6 +132,7 @@ namespace Armada.Tui.Screens.Operations
                 List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>();
                 hints.Add(new KeyValuePair<string, string>("Ctrl+S", "Dispatch"));
                 hints.Add(new KeyValuePair<string, string>("Ctrl+E", "Editor"));
+                hints.Add(new KeyValuePair<string, string>("Alt+P", "Preview overlaps"));
                 if (!String.IsNullOrEmpty(Vessel.Value)) hints.Add(new KeyValuePair<string, string>("Alt+R", "Vessel Readiness"));
                 if (ObjectiveId != null) hints.Add(new KeyValuePair<string, string>("Alt+B", "Open Backlog Item"));
                 return hints;
@@ -288,6 +289,7 @@ namespace Armada.Tui.Screens.Operations
                 VoyageTitle.Value = "";
                 Description.Text = "";
                 LastVoyageId = voyage?.Id;
+                if (voyage != null) BlackBoxDispatchPreview.ShowWarnings(this, voyage.OverlapWarnings, voyage.BriefLintWarnings);
                 if (voyage != null && !String.IsNullOrEmpty(voyage.Id))
                 {
                     string target = "/voyages/" + Uri.EscapeDataString(voyage.Id);
@@ -302,6 +304,17 @@ namespace Armada.Tui.Screens.Operations
                 Result = Tr("Failed: {{message}}", LocalizationArgs.Of("message", String.IsNullOrEmpty(ex.Message) ? Tr("Unknown error") : ex.Message));
                 ResultOk = false;
             });
+        }
+
+        /// <summary>
+        /// The black box dispatch preview of the current draft (overlaps on the chosen vessel and the brief lint);
+        /// nothing is dispatched.
+        /// </summary>
+        public void Preview()
+        {
+            string prompt = Description.Text.Trim();
+            string title = VoyageTitle.Value.Trim().Length > 0 ? VoyageTitle.Value.Trim() : Truncate(prompt, 80);
+            BlackBoxDispatchPreview.Run(this, Vessel.Value, new List<KeyValuePair<string, string>> { new KeyValuePair<string, string>(title, prompt) });
         }
 
         /// <inheritdoc />
@@ -332,6 +345,7 @@ namespace Armada.Tui.Screens.Operations
             backlog.IsEnabled = () => ObjectiveId != null;
             list.Add(backlog);
             list.Add(Cmd("edit-description", "Edit description in $EDITOR", () => Description.EditExternally(), "ctrl+e"));
+            list.Add(Cmd("preview", "Preview overlaps and brief lint", Preview, "alt+p"));
             list.Add(Cmd("manage-pipelines", "Manage pipelines", () => Context.Navigate("/configuration?tab=pipelines"), null));
             list.Add(Cmd("manage-personas", "Manage persona defaults", () => Context.Navigate("/configuration?tab=personas"), null));
             list.Add(Cmd("manage-playbooks", "Manage playbooks", () => Context.Navigate("/configuration?tab=playbooks"), null));
@@ -347,6 +361,12 @@ namespace Armada.Tui.Screens.Operations
                 if (c == 'r' && !String.IsNullOrEmpty(Vessel.Value))
                 {
                     OpsReadiness.ShowDetails(this, Readiness, LoadingReadiness);
+                    return true;
+                }
+
+                if (c == 'p')
+                {
+                    Preview();
                     return true;
                 }
 

@@ -226,9 +226,11 @@ as JSON, `s` resolves, `p` pins or unpins, `n` adds a note and `o` opens the ent
 menu and the palette. Without an entry the tab says so and the screen's own keys (for example `r` Restart) apply.
 
 **Black Box screen** (`/blackbox`, `g b`): server-paged entries filtered by vessel, triage, resolution, phase and
-fingerprint; `F` opens the fingerprints view (choosing one filters the list, `X` clears it); Enter opens an entry.
-**Entry screen** (`/blackbox/{id}`): the Brief tab (the same keys), the Objects tab (Enter opens a paged viewer that
-reads 64 KB at a time; `]` and `[` move between chunks) and Notes; `w` downloads the .zip, `f` lists similar failures.
+fingerprint; `F` opens the fingerprints view (choosing one filters the list, `X` clears it), `R` the recovery stats;
+Enter opens an entry. **Entry screen** (`/blackbox/{id}`): the Brief tab (the same keys), the Objects tab (Enter opens a
+paged viewer that reads 64 KB at a time; `]` and `[` move between chunks), Notes, Timeline, Diff and Nearby Successes
+(section 12); `w` downloads the .zip, `f` lists similar failures. The voyage screen's Cascade tab and the vessel
+screen's Reservations and Black Box Doctor tabs are described in section 12.
 
 **Settings and Storage.** Settings has a **Black Box Retention** section (retention days, resolved retention, max
 entries per vessel, max total size, GC interval, keep latest, delete with mission or vessel). The Storage tab lists the
@@ -258,6 +260,9 @@ armada blackbox export-fixture <entryId> [--name] [-o dir]
 armada mission failure <id>        (alias of blackbox show for a mission)
 armada voyage failure <id>         (alias of blackbox show for a voyage)
 ```
+
+The prevention and forensics commands (`timeline`, `diff`, `nearby`, `recovery-stats`, `cascade`, `vessel
+overlap-preview|reservations|doctor|update`, `mission lint-brief`) are listed in section 12.
 
 `armada blackbox show msn_x --brief | pbcopy` is the terminal path to "paste into an agent and say FIX THIS": with
 `--brief` (and `--json`, `cat` and `bundle` without `-o`) stdout holds only the payload and every status line goes to
@@ -793,7 +798,51 @@ regression fixtures (`export-fixture`) and the Prometheus metrics come from the 
 | Runbook linkage | Recovery paths show **Runs runbook: {title}** linked to the runbook | Entry view: the linked runbook on each path | Entry screen: **Runbook: {name}** on each path |
 | Recovery statistics | Black Box page **Recovery stats** tab (paged by rule and path, filter by vessel and rule, success rate bars); each recovery path shows its success rate | Entry view: each path's success rate | Entry screen: each path's success rate |
 
-The TUI and Helm CLI pieces are pending (section 14).
+The TUI and the Helm CLI are described below.
+
+### In the TUI
+
+- **Dispatch preview and warnings.** Dispatch, Create Voyage and the Create Mission dialog take `Alt+P` (listed in the
+  status bar or the dialog footer): with a vessel chosen it calls the overlap preview (which carries the brief lint),
+  without one the brief lint alone, and shows the result; nothing is dispatched. After a create, the `OverlapWarnings`
+  and `BriefLintWarnings` of the response open in a **Dispatch Warnings** viewer with a warning toast.
+- **Vessel screen.** `L` toggles **Serialize Overlapping Missions** (also a checkbox in the edit form, and shown on the
+  Overview). The **Reservations** tab pages the soft directory reservations (Enter opens the mission). The **Black Box
+  Doctor** tab pages the recurring recommendations; on an actionable one `A` applies it through the same dry run and
+  confirm flow as recovery (the example entry's recommendation, written as Operator), `i` shows the details and Enter
+  opens the example entry. Advice-only findings show no `A`.
+- **Entry screen.** **Timeline** pages the combined timeline oldest first (Enter opens the row's mission, voyage, dock,
+  merge entry or captain; `<` `>` page). **Diff** compares the entry with the mission's previous attempt; `D` picks
+  another attempt or any entry id. **Nearby Successes** pages the landings around the failure that touched the same
+  files (Enter opens the mission).
+- **Voyage screen.** The **Cascade** tab shows the cascade graph as a tree from the root failure (`*`), each mission
+  with its status, failure kind, the edges that link it and its entry; Enter opens the entry, `m` the mission.
+- **Black Box list.** `R` shows the recovery stats (runs, outcomes and success rate per path, for the vessel filter).
+- **Runbooks.** A recovery path linked to a runbook shows `Runbook: <title> (<id>)` and its tracked success rate on the
+  Failure tab, `[runbook: <title>]` in the `r` menu, and the dry run plan says the runbook runs instead of the steps.
+
+Each tab's keys come first in the status bar while it is current, and every action is in the `.` menu and the palette.
+
+### In Helm
+
+```
+armada blackbox timeline <entryId> [--newest-first] [--page] [--page-size]
+armada blackbox diff <entryId> <otherId>
+armada blackbox nearby <entryId> [--page] [--page-size]
+armada blackbox recovery-stats [--rule BBX-LAND-001] [--vessel vsl_...]
+armada voyage cascade <voyageId>              (also: armada blackbox cascade <voyageId>)
+armada vessel overlap-preview <vessel> --brief "<text>" | --brief-file <path|-> [--title] [--depends-on] [--exclude-mission]
+armada vessel reservations <vessel>
+armada vessel doctor <vessel> [--window-days 30]
+armada vessel update <vessel> --serialize-overlapping-missions true|false
+armada mission lint-brief --brief "<text>" | --brief-file <path|-> [--title] [--vessel] [--depends-on] [--voyage]
+```
+
+`<vessel>` is a name or an id. Every command takes `--json` (the payload alone on stdout) and uses the black box exit
+codes: 0 success (overlap warnings and lint findings are advice and never change it), 1 failure or bad option (no
+brief, both `--brief` and `--brief-file`, an unreadable file, `--window-days` outside 1 to 365, `vessel update` with
+nothing to change, the same entry twice for `diff`), 2 credential or target error, 3 not found (an unknown entry,
+voyage or vessel). `vessel update` reads the vessel and writes it back whole, so only the named setting changes.
 
 # Part 2: developer contract
 
@@ -1877,8 +1926,4 @@ Plan section 10. The pieces, in `Armada.Core.Services.Ask` unless noted:
 
 ## 14. Open items
 
-Work not done yet:
-
-| Owner | Item | Where |
-|---|---|---|
-| Insight UIs | TUI and Helm views and commands for the section 12 extensions (overlap preview, reservations, doctor, timeline, attempt diff, nearby successes, cascade graph, recovery statistics) | `src/Armada.Tui`, `src/Armada.Helm` |
+None. The TUI and Helm views and commands for the section 12 extensions are in section 12.

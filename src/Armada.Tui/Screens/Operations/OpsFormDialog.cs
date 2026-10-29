@@ -67,6 +67,11 @@ namespace Armada.Tui.Screens.Operations
         public Action? AfterProgrammaticClose { get; set; } = null;
 
         /// <summary>
+        /// The <c>Alt+P</c> preview action (listed in the footer), or null. Set it with <see cref="EnablePreview"/>.
+        /// </summary>
+        public Action? Preview { get; private set; } = null;
+
+        /// <summary>
         /// Width ratio of the screen (0.4 to 1.0). Default 0.7.
         /// </summary>
         public double WidthRatio
@@ -136,6 +141,18 @@ namespace Armada.Tui.Screens.Operations
             }
 
             return Form.AddField(label, widget, hint, height);
+        }
+
+        /// <summary>
+        /// Offer an <c>Alt+P</c> preview action (for example the black box dispatch preview) and list it in the footer.
+        /// </summary>
+        /// <param name="label">English label.</param>
+        /// <param name="preview">Handler.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="preview"/> is null.</exception>
+        public void EnablePreview(string label, Action preview)
+        {
+            Preview = preview ?? throw new ArgumentNullException(nameof(preview));
+            FooterHint = " Tab " + T("Next field") + "  Alt+P " + T(label ?? "Preview") + "  Ctrl+S " + T(_SubmitLabel) + "  Esc " + T("Cancel") + " ";
         }
 
         /// <summary>
@@ -223,6 +240,12 @@ namespace Armada.Tui.Screens.Operations
             }
 
             if (Busy) return true;
+            if (Preview != null && key.Code == KeyCode.Character && key.Modifiers == KeyModifiers.Alt && Char.ToLowerInvariant((char)key.Rune) == 'p')
+            {
+                Preview();
+                return true;
+            }
+
             if (key.Code == KeyCode.Tab)
             {
                 if (!Form.Scope.HandleKey(key))

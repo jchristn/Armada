@@ -306,7 +306,8 @@ namespace Armada.Tui.Screens.Operations
             foreach (BlackBoxRecoveryPath p in paths)
             {
                 BlackBoxRecoveryPath path = p;
-                string label = path.Rank.ToString(CultureInfo.InvariantCulture) + ". " + path.Title + (path.DataLossRisk ? "  (" + _Screen.Tr("data loss risk") + ")" : "");
+                string label = path.Rank.ToString(CultureInfo.InvariantCulture) + ". " + path.Title + (path.DataLossRisk ? "  (" + _Screen.Tr("data loss risk") + ")" : "")
+                    + (String.IsNullOrEmpty(path.RunbookId) ? "" : "  [" + _Screen.Tr("runbook") + ": " + RunbookName(path) + "]");
                 ActionMenuItem item = new ActionMenuItem(label, () => DryRun(path), "");
                 item.Destructive = path.DataLossRisk;
                 items.Add(item);
@@ -521,6 +522,12 @@ namespace Armada.Tui.Screens.Operations
             List<string> lines = new List<string>();
             lines.Add(_Screen.Tr("Dry run of \"{{title}}\": nothing has run yet.", LocalizationArgs.Of("title", path.Title)));
             lines.Add("");
+            if (!String.IsNullOrEmpty(path.RunbookId))
+            {
+                lines.Add(_Screen.Tr("Runs runbook {{runbook}} ({{id}}) instead of the steps below.", LocalizationArgs.Of("runbook", RunbookName(path), "id", path.RunbookId)));
+                lines.Add("");
+            }
+
             List<BlackBoxRecoveryStep> steps = result.Plan.Count > 0 ? result.Plan : path.Steps;
             foreach (BlackBoxRecoveryStep s in steps.OrderBy(s => s.Order))
             {
@@ -555,6 +562,11 @@ namespace Armada.Tui.Screens.Operations
             }
 
             return String.Join("\n", lines);
+        }
+
+        private static string RunbookName(BlackBoxRecoveryPath path)
+        {
+            return String.IsNullOrEmpty(path.RunbookTitle) ? (path.RunbookId ?? "") : path.RunbookTitle!;
         }
 
         private void AfterChange()
@@ -607,7 +619,9 @@ namespace Armada.Tui.Screens.Operations
             if (paths.Count == 0) doc.Note("No recovery paths are recorded for this failure.");
             foreach (BlackBoxRecoveryPath p in paths)
             {
-                doc.Text(p.Rank.ToString(CultureInfo.InvariantCulture) + ". " + p.Title + "  [" + p.Risk + "]" + (p.DataLossRisk ? "  " + _Screen.Tr("data loss risk") : ""), p.DataLossRisk ? doc.Theme.Warning : doc.Theme.Text);
+                string rate = p.SuccessRate.HasValue ? "  " + _Screen.Tr("{{rate}}% of {{runs}} tracked runs succeeded", LocalizationArgs.Of("rate", Math.Round(p.SuccessRate.Value * 100).ToString(CultureInfo.InvariantCulture), "runs", p.TrackedRuns)) : "";
+                doc.Text(p.Rank.ToString(CultureInfo.InvariantCulture) + ". " + p.Title + "  [" + p.Risk + "]" + (p.DataLossRisk ? "  " + _Screen.Tr("data loss risk") : "") + rate, p.DataLossRisk ? doc.Theme.Warning : doc.Theme.Text);
+                if (!String.IsNullOrEmpty(p.RunbookId)) doc.Text("   " + _Screen.Tr("Runbook") + ": " + RunbookName(p) + "  (" + p.RunbookId + ")", doc.Theme.Info);
             }
 
             doc.Section("Brief");
