@@ -1,0 +1,167 @@
+/* Black box panel, page and dialogs. Colors come from the theme tokens in index.css, so light and dark both work. */
+
+.blackbox-panel {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--red);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.blackbox-panel.blackbox-panel-resolved { border-left-color: var(--green); }
+.blackbox-panel.blackbox-panel-pending { border-left-color: var(--yellow); }
+
+.blackbox-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.blackbox-panel-head h3 { margin: 0; font-size: 1rem; }
+
+.blackbox-chips { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; margin-top: 0.3rem; }
+
+.blackbox-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-hover);
+  white-space: nowrap;
+}
+
+.blackbox-chip.blackbox-chip-danger { background: var(--tag-failed-bg); color: var(--tag-failed-fg); border-color: transparent; }
+.blackbox-chip.blackbox-chip-warning { background: var(--tag-review-bg); color: var(--tag-review-fg); border-color: transparent; }
+.blackbox-chip.blackbox-chip-ok { background: var(--tag-complete-bg); color: var(--tag-complete-fg); border-color: transparent; }
+
+.blackbox-toolbar { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+
+.blackbox-audience { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.blackbox-audience button {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.blackbox-audience button[aria-pressed="true"] { background: var(--accent-solid); color: #fff; }
+
+.blackbox-notice {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  background: var(--tag-review-bg);
+  color: var(--tag-review-fg);
+}
+.blackbox-notice.blackbox-notice-info { background: var(--tag-working-bg); color: var(--tag-working-fg); }
+.blackbox-notice.blackbox-notice-error { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
+
+.blackbox-section { border-top: 1px solid var(--border); padding-top: 0.6rem; min-width: 0; }
+.blackbox-section > h4 { margin: 0 0 0.45rem; font-size: 0.92rem; }
+.blackbox-section > summary { cursor: pointer; font-weight: 600; font-size: 0.92rem; margin-bottom: 0.4rem; }
+
+.blackbox-kv {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) minmax(0, 1fr);
+  gap: 0.25rem 0.9rem;
+  font-size: 0.86rem;
+}
+.blackbox-kv dt { color: var(--text-dim); }
+.blackbox-kv dd { margin: 0; overflow-wrap: anywhere; }
+
+.blackbox-pre {
+  margin: 0.3rem 0 0;
+  padding: 0.6rem 0.75rem;
+  background: var(--diff-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 22rem;
+  overflow: auto;
+}
+
+.blackbox-list { margin: 0; padding-left: 1.2rem; font-size: 0.86rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.blackbox-list li { overflow-wrap: anywhere; }
+
+.blackbox-rule { font-family: var(--mono); font-size: 0.75rem; color: var(--text-dim); }
+
+.blackbox-paths { display: flex; flex-direction: column; gap: 0.5rem; }
+.blackbox-path {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.blackbox-path-body { min-width: 0; flex: 1 1 18rem; }
+
+.blackbox-attempts { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.blackbox-attempts button[aria-pressed="true"] { background: var(--accent-solid); color: #fff; border-color: var(--accent-solid); }
+
+.blackbox-notes { display: flex; flex-direction: column; gap: 0.45rem; }
+.blackbox-note { border: 1px solid var(--border); border-radius: 6px; padding: 0.45rem 0.65rem; font-size: 0.86rem; }
+.blackbox-note-meta { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.2rem; }
+.blackbox-note-form { display: flex; flex-direction: column; gap: 0.4rem; }
+.blackbox-note-form textarea { min-height: 4rem; width: 100%; box-sizing: border-box; }
+
+.blackbox-dialog.dialog-shell-modal {
+  width: 95vw;
+  max-width: 95vw;
+  height: 95vh;
+  max-height: 95vh;
+}
+
+.blackbox-viewer-body {
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--diff-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+
+.blackbox-progress { height: 8px; background: var(--bg-hover); border-radius: 4px; overflow: hidden; }
+.blackbox-progress > div { height: 100%; background: var(--accent-solid); }
+
+.blackbox-sparkline { display: inline-block; vertical-align: middle; color: var(--accent); }
+
+.blackbox-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.blackbox-filters label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; color: var(--text-dim); }
+.blackbox-filters input, .blackbox-filters select { width: 100%; box-sizing: border-box; }
+
+.blackbox-saved { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.75rem; }
+
+.blackbox-stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.6rem; margin-bottom: 0.9rem; }
+
+@media (max-width: 640px) {
+  .blackbox-kv { grid-template-columns: minmax(0, 1fr); }
+  .blackbox-kv dt { margin-top: 0.3rem; }
+}

@@ -16,6 +16,7 @@ import {
 import { listAll } from '../api/paging';
 import type { Voyage, VoyageProgress, Mission, Vessel, Captain, MissionPlaybookSnapshot, SelectedPlaybook, CaptainAssignmentOverride } from '../types/models';
 import CaptainRef from '../components/shared/CaptainRef';
+import BlackBoxPanel from '../components/blackbox/BlackBoxPanel';
 import StatusBadge from '../components/shared/StatusBadge';
 import EvaluationBadge from '../components/shared/EvaluationBadge';
 import ErrorModal from '../components/shared/ErrorModal';
@@ -338,6 +339,12 @@ export default function VoyageDetail() {
           </div>
         </div>
       </div>
+
+      {(voyage.lastBlackBoxEntryId || voyage.status === 'Failed') && (
+        <div style={{ marginBottom: 20 }}>
+          <BlackBoxPanel voyageId={voyage.id} onChanged={() => { void loadVoyage(); }} />
+        </div>
+      )}
 
       {/* Progress bar */}
       {totalMissions > 0 && (
