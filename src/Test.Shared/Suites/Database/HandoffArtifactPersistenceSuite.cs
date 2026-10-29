@@ -165,6 +165,8 @@ namespace Test.Shared.Suites.Database
 
             cases.Add(CaseAsync("expiry_removes_orphaned_artifacts", "Data expiry removes the artifacts of missions that no longer exist and keeps the others", TestTags.Positive, async () =>
             {
+                // DataExpiryService takes a SQLite connection string; the Admiral runs it only on SQLite.
+                if (!TestDatabaseConfig.IsSqlite) return;
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 DatabaseDriver db = testDb.Driver;
                 Mission live = await db.Missions.CreateAsync(new Mission("Live", "Still here")).ConfigureAwait(false);
