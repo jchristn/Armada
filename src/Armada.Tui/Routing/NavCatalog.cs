@@ -136,6 +136,7 @@ namespace Armada.Tui.Routing
             return new List<NavShortcut>
             {
                 new NavShortcut("planning", "OPERATIONS", new NavItem(TabLinks.PlanningPath, "Planning", "Plan with a captain, preserve the transcript, and dispatch directly from the session", "P")),
+                new NavShortcut("blackbox", "OPERATIONS", new NavItem("/blackbox", "Black Box", "Recorded failures: where, how, and why each happened, with recovery paths", "B", "b")),
                 new NavShortcut("jobs", "OPERATIONS", new NavItem(TabLinks.JobsPath, "Jobs", "Background jobs and their status", "J", "j")),
                 new NavShortcut("storage", "SYSTEM", new NavItem(TabLinks.StoragePath, "Storage", "Inspect managed files, database allocation, host capacity and record counts", "S")),
                 new NavShortcut("clipermissions", "SYSTEM", new NavItem(TabLinks.CliPermissionsPath, "CLI Tool Permissions", "Approve CLI tool requests from captains and manage allow and deny rules", "K", "k")),

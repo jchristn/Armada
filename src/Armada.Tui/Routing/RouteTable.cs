@@ -196,6 +196,8 @@ namespace Armada.Tui.Routing
             // TUI extensions beyond the dashboard.
             r.Add(new RouteDefinition("/approvals", "Approvals", "ApprovalsScreen", "W3.3", null, null, true));
             r.Add(new RouteDefinition("/setup", "Setup Wizard", "SetupWizard", "W7.10", null, null, true));
+            r.Add(new RouteDefinition("/blackbox", "Black Box", "BlackBoxScreen", "BB", null, null, true));
+            r.Add(new RouteDefinition("/blackbox/:id", "Black Box Entry", "BlackBoxEntryScreen", "BB", null, null, true));
             return r.AsReadOnly();
         }
 

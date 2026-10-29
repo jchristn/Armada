@@ -97,6 +97,22 @@
     },
     {
       "kind": "route",
+      "key": "/blackbox",
+      "status": "extension",
+      "tui": "BlackBoxScreen",
+      "workstream": "BB",
+      "notes": "TUI black box screen (plan 11.2); becomes a dashboard route entry once the dashboard ships the same page"
+    },
+    {
+      "kind": "route",
+      "key": "/blackbox/:id",
+      "status": "extension",
+      "tui": "BlackBoxEntryScreen",
+      "workstream": "BB",
+      "notes": "TUI black box screen (plan 11.2); becomes a dashboard route entry once the dashboard ships the same page"
+    },
+    {
+      "kind": "route",
       "key": "/captains",
       "status": "implemented",
       "tui": "HubScreen",
