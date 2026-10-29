@@ -557,6 +557,31 @@ namespace Armada.Core.Services
                 bool mergeOk = await MergeBranchAsync(host, integrationPath, entry.BranchName, token).ConfigureAwait(false);
                 if (!mergeOk)
                 {
+                    Mission? mission = await ReadMissionAsync(entry.MissionId, entry.TenantId, token).ConfigureAwait(false);
+                    string? commitHash = mission?.CommitHash;
+                    HostCommandResult localBranch = await RunGitCaptureAsync(host, repoPath, token,
+                        "show-ref", "--verify", "--quiet", "refs/heads/" + entry.BranchName).ConfigureAwait(false);
+                    HostCommandResult remoteBranch = await RunGitCaptureAsync(host, repoPath, token,
+                        "show-ref", "--verify", "--quiet", "refs/remotes/origin/" + entry.BranchName).ConfigureAwait(false);
+                    bool branchMissing = localBranch.ExitCode == 1 && remoteBranch.ExitCode == 1;
+                    if (branchMissing && !String.IsNullOrWhiteSpace(commitHash))
+                    {
+                        HostCommandResult alreadyLanded = await RunGitCaptureAsync(host, integrationPath, token,
+                            "merge-base", "--is-ancestor", commitHash, "HEAD").ConfigureAwait(false);
+                        if (alreadyLanded.ExitCode == 0)
+                        {
+                            _Logging.Info(_Header + "cancelling " + entryTag + ": branch is missing and mission commit is already on " + entry.TargetBranch);
+                            entry.Status = MergeStatusEnum.Cancelled;
+                            entry.TestOutput = "Branch " + entry.BranchName + " is missing, but mission commit " + commitHash
+                                + " is already on " + entry.TargetBranch + "; nothing to merge.";
+                            entry.CompletedUtc = DateTime.UtcNow;
+                            entry.LastUpdateUtc = DateTime.UtcNow;
+                            await _Database.MergeEntries.UpdateAsync(entry, token).ConfigureAwait(false);
+                            await CleanupWorktreeAsync(host, repoPath, integrationPath, integrationBranch, token).ConfigureAwait(false);
+                            return;
+                        }
+                    }
+
                     _Logging.Warn(_Header + "merge conflict for " + entryTag);
                     entry.Status = MergeStatusEnum.Failed;
                     entry.TestOutput = "Merge conflict with " + entry.TargetBranch;
