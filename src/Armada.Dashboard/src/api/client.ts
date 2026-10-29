@@ -502,6 +502,7 @@ function isAbortError(err: unknown): boolean {
 function get<T>(path: string, opts?: RequestOptions) { return request<T>('GET', path, undefined, opts); }
 function post<T>(path: string, body?: unknown, opts?: RequestOptions) { return request<T>('POST', path, body, opts); }
 function put<T>(path: string, body?: unknown, opts?: RequestOptions) { return request<T>('PUT', path, body, opts); }
+function patch<T>(path: string, body?: unknown, opts?: RequestOptions) { return request<T>('PATCH', path, body, opts); }
 function del<T>(path: string, opts?: RequestOptions) { return request<T>('DELETE', path, undefined, opts); }
 
 async function proxyRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -852,6 +853,8 @@ export const listVessels = (params?: { pageNumber?: number; pageSize?: number; f
 export const getVessel = (id: string) => get<Vessel>(`/api/v1/vessels/${id}`);
 export const createVessel = (data: Partial<Vessel>) => post<Vessel>('/api/v1/vessels', data);
 export const updateVessel = (id: string, data: Partial<Vessel>) => put<Vessel>(`/api/v1/vessels/${id}`, data);
+export const updateVesselContext = (id: string, data: Pick<Vessel, 'projectContext' | 'styleGuide' | 'modelContext'>) =>
+  patch<Vessel>(`/api/v1/vessels/${id}/context`, data);
 export const deleteVessel = (id: string) => del<void>(`/api/v1/vessels/${id}`);
 // Building a Model Context launches a captain to analyze the repository and can take minutes; allow a long
 // timeout so the request does not abort before the captain finishes.

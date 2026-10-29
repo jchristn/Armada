@@ -194,6 +194,11 @@ namespace Armada.Client
             return SendJsonAsync<T>(HttpMethod.Put, path, body, true, options, token);
         }
 
+        internal Task<T?> PatchAsync<T>(string path, object? body, ArmadaRequestOptions? options, CancellationToken token)
+        {
+            return SendJsonAsync<T>(HttpMethod.Patch, path, body, true, options, token);
+        }
+
         internal Task<T?> DeleteAsync<T>(string path, ArmadaRequestOptions? options, CancellationToken token)
         {
             return SendJsonAsync<T>(HttpMethod.Delete, path, null, false, options, token);

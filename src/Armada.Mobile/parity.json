@@ -4009,6 +4009,14 @@
     },
     {
       "kind": "api",
+      "key": "updateVesselContext",
+      "status": "implemented",
+      "mobile": "src/screens/workspace/WorkspaceContextSheet.tsx",
+      "workstream": "W3.1",
+      "notes": "Vessels"
+    },
+    {
+      "kind": "api",
       "key": "updateWorkflowProfile",
       "status": "implemented",
       "mobile": "src/screens/configuration/WorkflowProfilesTab, WorkflowProfileDetail",

@@ -9,6 +9,7 @@ All notable changes to Armada are documented in this file.
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
+- Workspace context editors save project context, style guide, and model context through PATCH /api/v1/vessels/{id}/context. This keeps the vessel name, repository URL, landing settings, auto-land settings, and Definition-of-Done values. Full vessel form saves use PUT.
 
 ### Landing failure prevention
 

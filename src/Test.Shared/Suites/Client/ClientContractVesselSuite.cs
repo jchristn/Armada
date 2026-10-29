@@ -16,7 +16,7 @@ namespace Test.Shared.Suites.Client
 
     /// <summary>
     /// Armada.Client contract against a live server with a scripted stub captain (<see cref="StubCaptainRuntime"/>):
-    /// vessels (get, update, git status, branches, landing preview, push and merge, build context), fleet actions and
+    /// vessels (get, update, context patch, git status, branches, landing preview, push and merge, build context), fleet actions and
     /// their runs, vessel health with overrides, vessel import through fleet recommendations, and the workspace.
     /// </summary>
     public sealed class ClientContractVesselSuite : IArmadaTestSuite
@@ -65,7 +65,7 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(400, empty.StatusCode, "empty selection is a 400");
             }));
 
-            cases.Add(Case("vessels_and_branches", "Vessel get, list, update, git status, branches, landing preview, push and merge a branch, build context", async (c, fx) =>
+            cases.Add(Case("vessels_and_branches", "Vessel get, list, update, context patch, git status, branches, landing preview, push and merge a branch, build context", async (c, fx) =>
             {
                 VesselSetup setup = await LiveServerSetup.CreateVesselAsync(c, "vessel");
                 string id = setup.Vessel.Id;
@@ -74,6 +74,11 @@ namespace Test.Shared.Suites.Client
                 Vessel edit = (await c.GetVesselAsync(id))!;
                 edit.ProjectContext = "Contract context";
                 AssertEqual("Contract context", (await c.UpdateVesselAsync(id, edit))?.ProjectContext, "update vessel");
+                Vessel contextPatch = new Vessel();
+                contextPatch.StyleGuide = "Contract style";
+                Vessel? patched = await c.UpdateVesselContextAsync(id, contextPatch);
+                AssertEqual("Contract style", patched?.StyleGuide, "update vessel context");
+                AssertEqual("Contract context", patched?.ProjectContext, "the context patch keeps the project context");
                 AssertEqual(id, (await c.GetVesselGitStatusAsync(id))?.VesselId, "git status");
 
                 string branch = "contract/branch-" + ClientContract.Suffix();

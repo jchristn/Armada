@@ -4129,6 +4129,14 @@
     },
     {
       "kind": "api",
+      "key": "updateVesselContext",
+      "status": "implemented",
+      "tui": "ArmadaClient.UpdateVesselContextAsync",
+      "workstream": "W0.2",
+      "notes": "Vessels"
+    },
+    {
+      "kind": "api",
       "key": "updateWorkflowProfile",
       "status": "implemented",
       "tui": "ArmadaClient.UpdateWorkflowProfileAsync",
