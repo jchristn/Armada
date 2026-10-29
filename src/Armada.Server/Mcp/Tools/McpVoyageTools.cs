@@ -14,6 +14,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using SyslogLogging;
 
     /// <summary>
     /// Registers MCP tools for voyage operations (dispatch, status, cancel, purge).
@@ -33,8 +34,14 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="database">Database driver for voyage data access.</param>
         /// <param name="admiral">Admiral service for voyage orchestration.</param>
         /// <param name="settings">Optional settings for log/diff cleanup during purge.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings = null)
+        /// <param name="logging">Logging module for playbook validation.</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, LoggingModule logging)
         {
+            if (register == null) throw new ArgumentNullException(nameof(register));
+            if (database == null) throw new ArgumentNullException(nameof(database));
+            if (admiral == null) throw new ArgumentNullException(nameof(admiral));
+            if (logging == null) throw new ArgumentNullException(nameof(logging));
+
             register(
                 "dispatch",
                 "Dispatch a new voyage with missions to a vessel",
@@ -142,6 +149,14 @@ namespace Armada.Server.Mcp.Tools
                     if (validation.IsBareVoyage)
                     {
                         // Bare voyage (missions added separately) -- parity with the REST bare-voyage path.
+                        if (selectedPlaybooks.Count > 0)
+                        {
+                            PlaybookService playbookService = new PlaybookService(database, logging);
+                            await playbookService.ResolveSelectionsAsync(
+                                String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId,
+                                selectedPlaybooks).ConfigureAwait(false);
+                        }
+
                         voyage = new Voyage(title, description);
                         voyage.TenantId = String.IsNullOrEmpty(caller.TenantId) ? ArmadaConstants.DefaultTenantId : caller.TenantId;
                         voyage.UserId = caller.UserId;

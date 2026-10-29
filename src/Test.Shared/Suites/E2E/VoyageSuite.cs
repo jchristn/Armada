@@ -299,6 +299,64 @@ namespace Test.Shared.Suites.E2E
                 AssertStartsWith("vyg_", voyage.Id);
             }));
 
+            cases.Add(CaseAsync("create_bare_voyage_resolves_playbooks_before_persisting", "Create Bare Voyage Resolves Playbooks Before Persisting", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                string suffix = Guid.NewGuid().ToString("N");
+                Playbook activePlaybook = new Playbook("active-" + suffix + ".md", "Active playbook content");
+                HttpResponseMessage activePlaybookResponse = await authClient.PostAsync("/api/v1/playbooks", JsonHelper.ToJsonContent(activePlaybook));
+                AssertEqual(HttpStatusCode.Created, activePlaybookResponse.StatusCode);
+                activePlaybook = await JsonHelper.DeserializeAsync<Playbook>(activePlaybookResponse);
+
+                Playbook inactivePlaybook = new Playbook("inactive-" + suffix + ".md", "Inactive playbook content") { Active = false };
+                HttpResponseMessage inactivePlaybookResponse = await authClient.PostAsync("/api/v1/playbooks", JsonHelper.ToJsonContent(inactivePlaybook));
+                AssertEqual(HttpStatusCode.Created, inactivePlaybookResponse.StatusCode);
+                inactivePlaybook = await JsonHelper.DeserializeAsync<Playbook>(inactivePlaybookResponse);
+
+                long voyagesBefore = await GetVoyageCountAsync(authClient);
+                HttpResponseMessage missingPlaybookResponse = await authClient.PostAsync(
+                    "/api/v1/voyages",
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Title = "Missing playbook " + suffix,
+                        Missions = Array.Empty<object>(),
+                        SelectedPlaybooks = new[] { new SelectedPlaybook { PlaybookId = "plb_missing_" + suffix } }
+                    }));
+                long voyagesAfterMissingPlaybook = await GetVoyageCountAsync(authClient);
+
+                AssertEqual(voyagesBefore, voyagesAfterMissingPlaybook, "A missing selected playbook must not leave a voyage row.");
+                AssertEqual(HttpStatusCode.NotFound, missingPlaybookResponse.StatusCode);
+
+                HttpResponseMessage inactivePlaybookRequest = await authClient.PostAsync(
+                    "/api/v1/voyages",
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Title = "Inactive playbook " + suffix,
+                        Missions = Array.Empty<object>(),
+                        SelectedPlaybooks = new[] { new SelectedPlaybook { PlaybookId = inactivePlaybook.Id } }
+                    }));
+                long voyagesAfterInactivePlaybook = await GetVoyageCountAsync(authClient);
+
+                AssertEqual(voyagesAfterMissingPlaybook, voyagesAfterInactivePlaybook, "An inactive selected playbook must not leave a voyage row.");
+                AssertEqual(HttpStatusCode.BadRequest, inactivePlaybookRequest.StatusCode);
+
+                HttpResponseMessage activePlaybookRequest = await authClient.PostAsync(
+                    "/api/v1/voyages",
+                    JsonHelper.ToJsonContent(new
+                    {
+                        Title = "Active playbook " + suffix,
+                        Missions = Array.Empty<object>(),
+                        SelectedPlaybooks = new[] { new SelectedPlaybook { PlaybookId = activePlaybook.Id } }
+                    }));
+                AssertEqual(HttpStatusCode.Created, activePlaybookRequest.StatusCode);
+                Voyage createdVoyage = await JsonHelper.DeserializeAsync<Voyage>(activePlaybookRequest);
+                HttpResponseMessage detailResponse = await authClient.GetAsync("/api/v1/voyages/" + createdVoyage.Id);
+                AssertEqual(HttpStatusCode.OK, detailResponse.StatusCode);
+                VoyageDetailResponse detail = await JsonHelper.DeserializeAsync<VoyageDetailResponse>(detailResponse);
+                AssertEqual(activePlaybook.Id, detail.Voyage!.SelectedPlaybooks!.Single().PlaybookId);
+            }));
+
             cases.Add(CaseAsync("create_voyage_multiple_voyages_get_unique_ids", "Create Voyage Multiple Voyages Get Unique Ids", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
@@ -1741,6 +1799,14 @@ namespace Test.Shared.Suites.E2E
             string fleetId = await CreateFleetAsync(client, createdFleetIds);
             string vesselId = await CreateVesselAsync(client, createdVesselIds, fleetId);
             return new PrerequisiteResult(fleetId, vesselId);
+        }
+
+        private static async Task<long> GetVoyageCountAsync(HttpClient client)
+        {
+            HttpResponseMessage response = await client.PostAsync("/api/v1/voyages/enumerate", JsonHelper.ToJsonContent(new { PageSize = 1000 }));
+            AssertEqual(HttpStatusCode.OK, response.StatusCode);
+            EnumerationResult<Voyage> result = await JsonHelper.DeserializeAsync<EnumerationResult<Voyage>>(response);
+            return result.TotalRecords;
         }
 
         /// <summary>
