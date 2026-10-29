@@ -32,6 +32,8 @@ import type { OperationsDetailProps } from './listTypes';
 import { MissionOutputSheet, type MissionOutputRequest } from '../../components/app/MissionOutputSheet';
 import { BlackBoxPanel } from '../blackbox/BlackBoxPanel';
 import { voyageMayHaveBlackBox } from '../blackbox/blackBoxModel';
+import { VoyageCascadeSection } from '../blackbox/VoyageCascadeSection';
+import { dispatchWarningsOf, firstWarningMessage, mergeWarnings, warningCount } from '../blackbox/insightModel';
 
 interface VoyageData {
   voyage: Voyage;
@@ -164,8 +166,11 @@ export function VoyageDetail({ id, embedded }: OperationsDetailProps) {
       try {
         // Every failed mission, read explicitly in bounded pages (not only the missions loaded on screen).
         const failed = (await listAll(listMissions, { filters: { voyageId: voyage.id, status: 'Failed' } })).objects ?? [];
-        for (const m of failed) await createMission(retryMissionPayload(m));
+        const created = [];
+        for (const m of failed) created.push(dispatchWarningsOf(await createMission(retryMissionPayload(m))));
         pushToast('success', t('Retried {{count}} failed mission(s).', { count: failed.length }));
+        const dispatchWarnings = mergeWarnings(created);
+        if (warningCount(dispatchWarnings) > 0) pushToast('warning', t('Dispatched with {{count}} warning(s): {{message}}', { count: warningCount(dispatchWarnings), message: firstWarningMessage(dispatchWarnings) }));
         void query.reload();
       } catch (e) {
         setError(t('Retry failed: {{message}}', { message: message(e) }));
@@ -224,6 +229,7 @@ export function VoyageDetail({ id, embedded }: OperationsDetailProps) {
       ) : null}
 
       {voyageMayHaveBlackBox(voyage.status) ? <BlackBoxPanel source={{ kind: 'voyage', id: voyage.id }} /> : null}
+      {voyageMayHaveBlackBox(voyage.status) || failedCount > 0 ? <VoyageCascadeSection voyageId={voyage.id} /> : null}
 
       <Section title={t('Details')}>
         <KeyValueRow label={t('ID')} value={voyage.id} mono />

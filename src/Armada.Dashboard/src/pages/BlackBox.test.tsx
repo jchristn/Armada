@@ -14,6 +14,7 @@ import {
   purgeBlackBox,
   runBlackBoxGc,
   searchBlackBox,
+  getBlackBoxRecoveryStats,
 } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import { BLACKBOX_SAVED_FILTERS_KEY } from '../components/blackbox/savedFilters';
@@ -35,6 +36,7 @@ vi.mock('../api/client', () => ({
   purgeBlackBox: vi.fn(),
   runBlackBoxGc: vi.fn(),
   searchBlackBox: vi.fn(),
+  getBlackBoxRecoveryStats: vi.fn(),
 }));
 
 const localeValue = {
@@ -299,5 +301,16 @@ describe('Black box entry page', () => {
     renderAt('/blackbox/bbx_nope');
     expect(await screen.findByText(/Black box entry not found/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Black Box' })).toHaveAttribute('href', '/blackbox');
+  });
+});
+
+describe('Black Box page: Recovery stats tab', () => {
+  it('opens the recovery stats tab from the URL and lists the paths', async () => {
+    vi.mocked(listVessels).mockResolvedValue(page([{ id: 'vsl_1', name: 'api-server' }]) as never);
+    vi.mocked(getBlackBoxRecoveryStats).mockResolvedValue(page([{ ruleId: 'BBX-LAND-001', pathId: 'bbx-land-001.retry', runs: 3, succeeded: 3, failed: 0, pending: 0, expired: 0, successRate: 1 }]) as never);
+    renderAt('/blackbox?tab=recovery');
+    expect(await screen.findByText('bbx-land-001.retry')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Recovery stats' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('100% success')).toBeInTheDocument();
   });
 });

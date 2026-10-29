@@ -1,6 +1,6 @@
 import ActionMenu from '../components/shared/ActionMenu';
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import {
   getVoyage,
   getMission,
@@ -17,6 +17,9 @@ import { listAll } from '../api/paging';
 import type { Voyage, VoyageProgress, Mission, Vessel, Captain, MissionPlaybookSnapshot, SelectedPlaybook, CaptainAssignmentOverride } from '../types/models';
 import CaptainRef from '../components/shared/CaptainRef';
 import BlackBoxPanel from '../components/blackbox/BlackBoxPanel';
+import VoyageCascadeGraph from '../components/blackbox/VoyageCascadeGraph';
+import { DispatchWarningsBanner } from '../components/blackbox/DispatchWarnings';
+import { dispatchWarningsFromState } from '../lib/dispatchPreview';
 import StatusBadge from '../components/shared/StatusBadge';
 import EvaluationBadge from '../components/shared/EvaluationBadge';
 import ErrorModal from '../components/shared/ErrorModal';
@@ -41,6 +44,9 @@ export default function VoyageDetail() {
   const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
+  const location = useLocation();
+  // Warnings the create response carried (Dispatch and Create Voyage pass them in the navigation state).
+  const [dispatchWarnings, setDispatchWarnings] = useState(() => dispatchWarningsFromState(location.state));
 
   const [voyage, setVoyage] = useState<Voyage | null>(null);
   const [detail, setDetail] = useState<VoyageProgress | null>(null);
@@ -243,6 +249,10 @@ export default function VoyageDetail() {
         <h2>{voyage.title || voyage.id} <EvaluationBadge isEvaluation={voyage.isEvaluation} /></h2>
       </div>
 
+      {dispatchWarnings && (
+        <DispatchWarningsBanner overlapWarnings={dispatchWarnings.overlapWarnings} briefLintWarnings={dispatchWarnings.briefLintWarnings} onDismiss={() => setDispatchWarnings(null)} />
+      )}
+
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
         <button className="btn-sm" onClick={() => nav('/checks', { state: { prefill: { vesselId: detail?.vesselId || missions[0]?.vesselId || '', voyageId: voyage.id, branchName: missions[0]?.branchName || null, label: voyage.title } } })} title={t('Open Checks with this voyage and its first mission\'s vessel and branch filled in, to run a build, test or other check.')}>{t('Run Check')}</button>
@@ -344,6 +354,13 @@ export default function VoyageDetail() {
         <div style={{ marginBottom: 20 }}>
           <BlackBoxPanel voyageId={voyage.id} onChanged={() => { void loadVoyage(); }} />
         </div>
+      )}
+
+      {(voyage.lastBlackBoxEntryId || voyage.status === 'Failed' || failedCount > 0) && (
+        <details className="card" style={{ marginBottom: 20 }} data-testid="voyage-cascade-card" open={voyage.status === 'Failed' || undefined}>
+          <summary title={t('Which failure took the others down: the voyage\'s missions and the dependency, cancellation, blocking and sibling edges between them.')}><strong>{t('Cascade graph')}</strong></summary>
+          <div style={{ marginTop: '0.6rem' }}><VoyageCascadeGraph voyageId={voyage.id} /></div>
+        </details>
       )}
 
       {/* Progress bar */}

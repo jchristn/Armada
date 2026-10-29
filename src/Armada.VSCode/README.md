@@ -16,7 +16,16 @@ brief to your coding agent, and runs recovery paths with a dry run and a confirm
 - **Resolve** entries and **add notes**.
 - **Ask Armada about this failure**: opens the dashboard Ask page with the canonical prompt.
 - **Entry view**: Summary, Where, How, Status, Why, Conflict, What would have prevented it, What Armada could change,
-  Recovery, Attempts and Notes, with buttons for every action.
+  Recovery (with each path's tracked success rate and, when a runbook is linked, the runbook name linking to the
+  dashboard), Attempts, Recurring on this vessel (the vessel's configuration doctor: recommendations that keep
+  recurring, with a link to an example entry) and Notes, with buttons for every action, including Timeline and Compare
+  Attempts.
+- **Black box timeline**: one ordered timeline across the entry and its notes, the mission, the dock, the merge queue
+  entry, the captain and the Harbor link, as a Markdown table, page by page.
+- **Attempt diff**: what changed between two attempts of a mission (or any two entries) side by side: captain, model,
+  base commit, configuration, step, and the files only each attempt changed.
+- **Mission overlap preview**: before dispatching, enter a brief for the open repository's vessel and see the overlap
+  warnings (active missions, reserved and hotspot directories) and brief lint warnings dispatch would return.
 - **File decorations**: files that conflicted in an open entry's landing get a `BX` badge and the hover text
   "conflicted in msn_x landing, 2026-10-28"; the vessel's hotspot directories get an `H` badge.
 - **Live updates** over the Armada WebSocket, with a polling fallback when the socket is unavailable.
@@ -83,6 +92,9 @@ Build the package (see [Development](#development)) or take `armada-vscode-<vers
 | Armada: Resolve Black Box Entry | Set Resolved, Duplicate, WontFix or ArmadaFixed, with an optional note and link |
 | Armada: Add Note | Add a note to the entry |
 | Armada: Ask Armada about this failure | Open the dashboard Ask page with the canonical prompt pre-filled |
+| Armada: Show Black Box Timeline | Open the entry's combined timeline as Markdown (100 events per page, with Next Page and Previous Page) |
+| Armada: Compare Black Box Attempts | Pick another attempt of the mission (or enter any entry id) and open the side-by-side diff |
+| Armada: Preview Mission Overlap | For the open repository's vessel (or one you pick), enter a title and brief and see the overlap and brief lint warnings; nothing is dispatched |
 
 Every entry command works from the tree view's context menu, from the entry view, or from the Command Palette (where
 it asks which entry).
@@ -115,6 +127,11 @@ REST routes:
 - `POST /api/v1/blackbox/{id}/recovery/{pathId}`
 - `POST /api/v1/blackbox/hotspots/enumerate`
 - `GET /api/v1/missions/{id}/blackbox`, `GET /api/v1/voyages/{id}/blackbox`
+- `POST /api/v1/vessels/{id}/overlap-preview`, `POST /api/v1/missions/lint-brief`
+- `POST /api/v1/vessels/{id}/reservations/enumerate`, `POST /api/v1/vessels/{id}/blackbox-doctor/enumerate`
+- `GET /api/v1/blackbox/{id}/diff/{otherId}`, `POST /api/v1/blackbox/{id}/timeline/enumerate`,
+  `POST /api/v1/blackbox/{id}/nearby-successes/enumerate`
+- `POST /api/v1/blackbox/recovery-stats/enumerate`, `GET /api/v1/voyages/{id}/blackbox/cascade`
 
 WebSocket (`/ws?token=`): `blackbox.captured`, `blackbox.analyzed`, `blackbox.resolved`, `blackbox.deleted`.
 

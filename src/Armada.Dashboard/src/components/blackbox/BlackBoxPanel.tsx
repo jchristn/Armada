@@ -33,9 +33,12 @@ import JsonViewer from '../shared/JsonViewer';
 import LoadingIndicator from '../shared/LoadingIndicator';
 import Markdown from '../shared/Markdown';
 import BlackBoxActionDialog, { type BlackBoxActionTarget } from './BlackBoxActionDialog';
+import BlackBoxAttemptDiff from './BlackBoxAttemptDiff';
 import BlackBoxEvidence from './BlackBoxEvidence';
+import BlackBoxNearbySuccesses from './BlackBoxNearbySuccesses';
 import BlackBoxNotes from './BlackBoxNotes';
 import BlackBoxResolveDialog from './BlackBoxResolveDialog';
+import BlackBoxTimeline from './BlackBoxTimeline';
 import './BlackBox.css';
 
 const ATTEMPT_PAGE_SIZE = 20;
@@ -515,6 +518,8 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
                   {p.expectedOutcome && <div className="text-dim">{p.expectedOutcome}</div>}
                   {!!p.preconditions?.length && <div style={{ fontSize: '0.82rem' }}>{t('Preconditions')}: {p.preconditions.join('; ')}</div>}
                   {!!p.steps?.length && <div className="text-dim" style={{ fontSize: '0.82rem' }}>{t('{{count}} steps', { count: p.steps.length })}</div>}
+                  {p.runbookId && <div style={{ fontSize: '0.82rem' }}>{t('Runs runbook')}: <Link to={`/runbooks/${encodeURIComponent(p.runbookId)}`} title={t('This path starts the linked runbook instead of its own steps. Open the runbook.')}>{p.runbookTitle || p.runbookId}</Link></div>}
+                  {p.successRate != null && <div className="text-dim" style={{ fontSize: '0.82rem' }} title={t('Share of settled confirmed runs of this path that recovered the mission.')}>{t('Success rate {{rate}}% over {{runs}} tracked runs', { rate: Math.round(p.successRate * 100), runs: p.trackedRuns ?? 0 })}</div>}
                 </div>
                 <button type="button" className="btn btn-sm btn-primary" onClick={() => setAction({ kind: 'recovery', id: p.id, title: p.title, dataLossRisk: !!p.dataLossRisk })} title={t('Show what this path would do (dry run); nothing runs until you confirm.')}>{t('Dry run...')}</button>
               </div>
@@ -560,6 +565,15 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
         </Section>
       )}
 
+      <Lazy title={t('Timeline')} defaultOpen={variant === 'page'}>
+        {() => <BlackBoxTimeline entryId={entry.id} />}
+      </Lazy>
+      <Lazy title={t('Attempt diff')}>
+        {() => <BlackBoxAttemptDiff entryId={entry.id} attempts={attempts} />}
+      </Lazy>
+      <Lazy title={t('Nearby successes')}>
+        {() => <BlackBoxNearbySuccesses entryId={entry.id} />}
+      </Lazy>
       <Lazy title={t('Brief preview')}>
         {() => brief ? <Markdown>{brief.text}</Markdown> : <LoadingIndicator label={t('Loading...')} />}
       </Lazy>

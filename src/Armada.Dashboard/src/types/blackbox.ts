@@ -278,6 +278,12 @@ export interface BlackBoxRecoveryPath {
   dataLossRisk?: boolean;
   expectedOutcome?: string | null;
   ruleId?: string | null;
+  /** The active runbook this path starts instead of its own steps (black box runbook linkage). */
+  runbookId?: string | null;
+  runbookTitle?: string | null;
+  /** Share of settled confirmed runs of this path that recovered the mission; null until three have settled. */
+  successRate?: number | null;
+  trackedRuns?: number;
 }
 
 export interface BlackBoxTriageVote { ruleId: string; verdict: BlackBoxTriage; weight: number }
@@ -324,6 +330,9 @@ export interface BlackBoxRelated {
   occurrencesLast30Days?: number;
   cascadeRootEntryId?: string | null;
   downstreamMissionIds?: string[];
+  /** The first ten successful landings near the failure that touched the same files. */
+  nearbySuccesses?: BlackBoxNearbySuccess[];
+  nearbySuccessTotal?: number;
 }
 
 /** The versioned record (record.json); a section that was not captured is null. */
@@ -635,3 +644,232 @@ export interface BlackBoxSettingsData {
   retention: BlackBoxRetentionPolicy;
   [key: string]: unknown;
 }
+
+// ==================== Prevention, forensics and operations (BLACKBOX.md section 12, routes in BlackBoxInsightRoutes.cs)
+
+export type MissionOverlapKind = 'ActiveMission' | 'Hotspot' | 'Reservation' | 'Unknown';
+export type BriefLintSeverity = 'Info' | 'Warning' | 'Unknown';
+export type BlackBoxTimelineSource = 'Entry' | 'Note' | 'Mission' | 'Voyage' | 'Dock' | 'MergeEntry' | 'Captain' | 'Harbor' | 'Unknown';
+export type BlackBoxCascadeEdgeKind = 'DependsOn' | 'CancelledBecause' | 'BlockedBy' | 'Sibling' | 'Unknown';
+
+/** One overlap a mission has with the vessel's active work (MissionOverlapWarning). */
+export interface MissionOverlapWarning {
+  kind: MissionOverlapKind;
+  missionId?: string | null;
+  overlappingMissionId?: string | null;
+  overlappingMissionTitle?: string | null;
+  overlappingMissionStatus?: string | null;
+  directory?: string | null;
+  hotspotEntryCount?: number;
+  files?: string[];
+  fileCount?: number;
+  /** True when dispatch chained the mission after the overlapping one (vessel serializeOverlappingMissions). */
+  serialized?: boolean;
+  message: string;
+}
+
+/** One brief lint finding (BriefLintFinding): BRIEF-DEP-001, BRIEF-NOOP-001, BRIEF-PATH-001, BRIEF-PATH-002. */
+export interface BriefLintFinding {
+  ruleId: string;
+  severity: BriefLintSeverity;
+  message: string;
+  excerpt?: string | null;
+  path?: string | null;
+  suggestion?: string | null;
+}
+
+export interface BriefLintRequest {
+  title?: string | null;
+  description?: string | null;
+  vesselId?: string | null;
+  dependsOnMissionId?: string | null;
+  voyageId?: string | null;
+}
+
+export interface BriefLintResult {
+  findings: BriefLintFinding[];
+  findingCount: number;
+  clean: boolean;
+  pathsChecked: boolean;
+}
+
+export interface MissionOverlapPreviewRequest {
+  title?: string | null;
+  description?: string | null;
+  dependsOnMissionId?: string | null;
+  excludeMissionId?: string | null;
+}
+
+export interface MissionOverlapPreview {
+  vesselId: string;
+  serializeOverlappingMissions: boolean;
+  likelyFiles: string[];
+  likelyFileCount: number;
+  scopedFileCount: number;
+  briefPathCount: number;
+  trackedFilesKnown: boolean;
+  warnings: MissionOverlapWarning[];
+  warningCount: number;
+  suggestedDependsOnMissionId?: string | null;
+  activeMissionsCompared: number;
+  activeMissionsTruncated: boolean;
+  briefLint?: BriefLintResult | null;
+}
+
+/** A soft directory reservation: an active mission working in a conflict hotspot directory. */
+export interface VesselReservation {
+  vesselId: string;
+  directory: string;
+  missionId: string;
+  missionTitle?: string | null;
+  missionStatus?: string | null;
+  hotspotEntryCount: number;
+  fileCount: number;
+  sinceUtc: string;
+}
+
+export interface VesselReservationPage {
+  pageNumber: number;
+  pageSize: number;
+  totalPages: number;
+  totalRecords: number;
+  objects: VesselReservation[];
+  vesselId: string;
+  threshold: number;
+  hotDirectoryCount: number;
+  activeMissionsScanned: number;
+  scanTruncated: boolean;
+}
+
+/** A configuration recommendation that recurs across a vessel's entries (BlackBoxDoctorFinding). */
+export interface BlackBoxDoctorFinding {
+  key: string;
+  ruleId?: string | null;
+  recommendationId?: string | null;
+  setting: string;
+  scope?: string;
+  currentValue?: string | null;
+  suggestedValue?: string | null;
+  rationale?: string | null;
+  count: number;
+  firstSeenUtc: string;
+  lastSeenUtc: string;
+  exampleEntryId: string;
+  exampleMissionId?: string | null;
+  /** True when the example entry's recommendation has an apply action. */
+  applicable: boolean;
+}
+
+export interface BlackBoxDoctorPage {
+  pageNumber: number;
+  pageSize: number;
+  totalPages: number;
+  totalRecords: number;
+  objects: BlackBoxDoctorFinding[];
+  vesselId: string;
+  windowDays: number;
+  entriesInWindow: number;
+  entriesScanned: number;
+  scanTruncated: boolean;
+}
+
+export interface BlackBoxDoctorQuery { windowDays?: number; pageNumber?: number; pageSize?: number }
+
+/** One value that differs between two entries (BlackBoxDiffField). */
+export interface BlackBoxDiffField { section: string; field: string; value?: string | null; otherValue?: string | null }
+
+export interface BlackBoxAttemptDiff {
+  entryId: string;
+  otherEntryId: string;
+  sameMission: boolean;
+  attempt: number;
+  otherAttempt: number;
+  sameFingerprint: boolean;
+  differences: BlackBoxDiffField[];
+  differenceCount: number;
+  filesOnlyInEntry: string[];
+  filesOnlyInEntryCount: number;
+  filesOnlyInOther: string[];
+  filesOnlyInOtherCount: number;
+  filesInBothCount: number;
+  changedFilesKnown: boolean;
+}
+
+/** A successful landing near a failure that touched the same files (BlackBoxNearbySuccess). */
+export interface BlackBoxNearbySuccess {
+  successId: string;
+  missionId: string;
+  missionTitle?: string | null;
+  landedUtc: string;
+  hoursFromFailure: number;
+  baseCommit?: string | null;
+  targetCommit?: string | null;
+  runMs?: number | null;
+  overlappingFiles: string[];
+  overlappingFileCount: number;
+}
+
+export interface BlackBoxTimelineItem {
+  timestampUtc: string;
+  source: BlackBoxTimelineSource;
+  kind: string;
+  message: string;
+  entityId?: string | null;
+}
+
+export interface BlackBoxTimelineSourceCount { source: BlackBoxTimelineSource; count: number; truncated: boolean }
+
+export interface BlackBoxTimelinePage {
+  pageNumber: number;
+  pageSize: number;
+  totalPages: number;
+  totalRecords: number;
+  objects: BlackBoxTimelineItem[];
+  entryId: string;
+  windowStartUtc?: string | null;
+  windowEndUtc?: string | null;
+  sources: BlackBoxTimelineSourceCount[];
+  truncated: boolean;
+}
+
+export interface BlackBoxTimelineQuery { pageNumber?: number; pageSize?: number; order?: 'CreatedAscending' | 'CreatedDescending' }
+
+export interface BlackBoxCascadeNode {
+  missionId: string;
+  title?: string | null;
+  status: string;
+  failureKind?: string | null;
+  entryId?: string | null;
+  dependsOnMissionId?: string | null;
+  isRoot: boolean;
+}
+
+export interface BlackBoxCascadeEdge { fromMissionId: string; toMissionId: string; kind: BlackBoxCascadeEdgeKind }
+
+export interface BlackBoxCascadeGraph {
+  voyageId: string;
+  voyageTitle?: string | null;
+  voyageStatus: string;
+  entryId?: string | null;
+  rootMissionId?: string | null;
+  rootEntryId?: string | null;
+  nodes: BlackBoxCascadeNode[];
+  edges: BlackBoxCascadeEdge[];
+  missionCount: number;
+  truncated: boolean;
+}
+
+/** Outcomes of one recovery path's confirmed runs (BlackBoxRecoveryStat). */
+export interface BlackBoxRecoveryStat {
+  ruleId?: string | null;
+  pathId: string;
+  runs: number;
+  succeeded: number;
+  failed: number;
+  pending: number;
+  expired: number;
+  successRate?: number | null;
+  lastRunUtc?: string | null;
+}
+
+export interface BlackBoxRecoveryStatsQuery { ruleId?: string; vesselId?: string; pageNumber?: number; pageSize?: number }

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { BlackBoxEvents } from './api/blackbox';
 import { BlackBoxSocketEventData } from './api/types';
 import { BlackBoxCommands } from './commands/blackBoxCommands';
+import { InsightCommands } from './commands/insightCommands';
 import { readSettings } from './config';
 import { ArmadaConnection } from './connection';
 import { BlackBoxDecorationProvider } from './decorations/blackBoxDecorationProvider';
@@ -46,7 +47,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   const decorations = new BlackBoxDecorationProvider(store);
   context.subscriptions.push(decorations, vscode.window.registerFileDecorationProvider(decorations));
 
-  const entryViews = new EntryViewManager(() => connection.requireClient());
+  const entryViews = new EntryViewManager(() => connection.requireClient(), () => readSettings().dashboardUrl);
   context.subscriptions.push(entryViews);
 
   const commands = new BlackBoxCommands({
@@ -55,6 +56,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
     getSettings: () => readSettings(),
     storageUri: context.globalStorageUri,
     openEntryView: (entry) => entryViews.open(entry),
+  });
+  const insights = new InsightCommands({
+    getClient: () => connection.requireClient(),
+    store,
+    pickEntry: (arg, title) => commands.pickEntry(arg, title),
   });
 
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -131,6 +137,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   register('armada.resolveEntry', (arg) => commands.resolveEntry(arg));
   register('armada.addNote', (arg) => commands.addNote(arg));
   register('armada.askArmada', (arg) => commands.askArmada(arg));
+  register('armada.showBlackBoxTimeline', (arg) => insights.showTimeline(arg));
+  register('armada.compareBlackBoxAttempts', (arg, otherId) => insights.compareAttempts(arg, typeof otherId === 'string' ? otherId : undefined));
+  register('armada.previewMissionOverlap', (arg) => insights.previewOverlap(arg));
 
   context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void store.refresh()));
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {

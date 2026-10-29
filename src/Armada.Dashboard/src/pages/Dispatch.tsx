@@ -9,6 +9,8 @@ import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import PlaybookSelector from '../components/shared/PlaybookSelector';
 import ReadinessPanel from '../components/shared/ReadinessPanel';
+import DispatchPreview from '../components/blackbox/DispatchWarnings';
+import { dispatchWarningsFrom } from '../lib/dispatchPreview';
 import PageHeader from '../components/shared/PageHeader';
 import CaptainPicker from '../components/shared/CaptainPicker';
 import FallbackTierSelect from '../components/shared/FallbackTierSelect';
@@ -153,13 +155,16 @@ export default function Dispatch() {
       const missionCount = isMultiStage
         ? t('{{count}} pipeline stages', { count: selectedPipelineObj!.stages.length })
         : t('{{count}} mission(s)', { count: missions.length });
-      const successMessage = t('Dispatched voyage with {{missionCount}}', { missionCount });
+      const warnings = dispatchWarningsFrom(voyage);
+      const successMessage = warnings
+        ? t('Dispatched voyage with {{missionCount}}, with {{count}} warning(s)', { missionCount, count: warnings.overlapWarnings.length + warnings.briefLintWarnings.length })
+        : t('Dispatched voyage with {{missionCount}}', { missionCount });
       setResult({ ok: true, message: successMessage });
       pushToast('success', successMessage);
       setVoyageTitle('');
       setPrompt('');
       setTimeout(() => {
-        navigate(`/voyages/${voyage.id}`);
+        navigate(`/voyages/${voyage.id}`, { state: { dispatchWarnings: warnings } });
       }, 1500);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('Unknown error');
@@ -270,6 +275,7 @@ export default function Dispatch() {
 Armada will dispatch this request as a voyage on the selected vessel.`)}
             />
           </div>
+          <DispatchPreview vesselId={vesselId} title={voyageTitle} description={prompt} enabled={!dispatching} />
 
           <RunApprovalFields value={approvalOptions} onChange={setApprovalOptions} />
           <PlaybookSelector value={selectedPlaybooks} onChange={setSelectedPlaybooks} disabled={dispatching} />

@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { ArmadaBlackBoxClient, describeError } from '../api/blackbox';
-import { BlackBoxEntrySummary, BlackBoxNote } from '../api/types';
+import { BlackBoxDoctorPage, BlackBoxEntrySummary, BlackBoxNote } from '../api/types';
 import { entryLabel } from '../util/format';
 import { escapeHtml, isEntryViewMessage, renderEntryHtml } from './entryHtml';
 
@@ -14,19 +14,23 @@ const ACTION_COMMANDS: Record<string, string> = {
   resolve: 'armada.resolveEntry',
   addNote: 'armada.addNote',
   askArmada: 'armada.askArmada',
+  timeline: 'armada.showBlackBoxTimeline',
+  compareAttempts: 'armada.compareBlackBoxAttempts',
 };
 
 /** Shows black box entries in webview panels, one panel per entry. */
 export class EntryViewManager implements vscode.Disposable {
   private readonly _GetClient: () => ArmadaBlackBoxClient;
+  private readonly _GetDashboardUrl: () => string;
   private readonly _Panels = new Map<string, vscode.WebviewPanel>();
 
   /**
    * @throws Error when getClient is missing.
    */
-  public constructor(getClient: () => ArmadaBlackBoxClient) {
+  public constructor(getClient: () => ArmadaBlackBoxClient, getDashboardUrl: () => string = () => '') {
     if (!getClient) throw new Error('getClient is required');
     this._GetClient = getClient;
+    this._GetDashboardUrl = getDashboardUrl;
   }
 
   /** Opens (or reveals) the panel for an entry and renders it. */
@@ -74,8 +78,16 @@ export class EntryViewManager implements vscode.Disposable {
       } catch {
         notes = [];
       }
+      let doctor: BlackBoxDoctorPage | null = null;
+      if (entry.VesselId) {
+        try {
+          doctor = await client.getDoctor(entry.VesselId, undefined, 1, 5);
+        } catch {
+          doctor = null;
+        }
+      }
       panel.title = `Black Box: ${entry.MissionId ?? entry.VoyageId ?? entry.Id}`;
-      panel.webview.html = renderEntryHtml(entry, notes, nonce, panel.webview.cspSource);
+      panel.webview.html = renderEntryHtml(entry, notes, nonce, panel.webview.cspSource, { dashboardUrl: this._GetDashboardUrl(), doctor });
     } catch (err) {
       panel.webview.html = `<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';"></head><body style="font-family: var(--vscode-font-family); padding: 16px;"><h2>${escapeHtml(entryLabel(summary))}</h2><p>${escapeHtml(describeError(err))}</p></body></html>`;
     }

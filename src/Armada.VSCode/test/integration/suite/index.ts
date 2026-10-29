@@ -17,6 +17,9 @@ const EXPECTED_COMMANDS = [
   'armada.resolveEntry',
   'armada.addNote',
   'armada.askArmada',
+  'armada.showBlackBoxTimeline',
+  'armada.compareBlackBoxAttempts',
+  'armada.previewMissionOverlap',
 ];
 
 export async function run(): Promise<void> {

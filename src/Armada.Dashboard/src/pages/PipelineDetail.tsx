@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { dispatchWarningsFrom } from '../lib/dispatchPreview';
+import DispatchPreview from '../components/blackbox/DispatchWarnings';
 import { createPipeline, getPipeline, updatePipeline, deletePipeline, listPersonas, listVessels, createVoyage, apiErrorMessage } from '../api/client';
 import { listAll } from '../api/paging';
 import type { Pipeline, PipelineStage, Vessel } from '../types/models';
@@ -227,7 +229,7 @@ export default function PipelineDetail() {
       });
       setShowRun(false);
       pushToast('success', t('Voyage launched.'));
-      navigate(`/voyages/${voyage.id}`);
+      navigate(`/voyages/${voyage.id}`, { state: { dispatchWarnings: dispatchWarningsFrom(voyage) } });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Run failed.'));
     } finally {
@@ -343,6 +345,7 @@ export default function PipelineDetail() {
             </label>
             <label title={t(RUN_TITLE_TIP)}>{t('Title')}<input type="text" title={t(RUN_TITLE_TIP)} value={runTitle} onChange={e => setRunTitle(e.target.value)} required /></label>
             <label title={t(RUN_DESCRIPTION_TIP)}>{t('Objective / Description')}<textarea rows={4} title={t(RUN_DESCRIPTION_TIP)} value={runDescription} onChange={e => setRunDescription(e.target.value)} /></label>
+            <DispatchPreview compact vesselId={runVesselId} title={runTitle} description={runDescription} enabled={!running} />
             <div className="modal-actions">
               <button type="submit" className="btn btn-primary" disabled={running || !runVesselId} title={t('Create the voyage now. Its first stage mission is queued for a captain right away; this starts real agent work.')}>{running ? t('Launching...') : t('Launch Voyage')}</button>
               <button type="button" className="btn" onClick={() => setShowRun(false)}>{t('Cancel')}</button>

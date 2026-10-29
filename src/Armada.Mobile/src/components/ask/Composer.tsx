@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import type { AskQuickAction } from '@dashboard/types/models';
+import { parseBlackBoxCommand } from '@dashboard/lib/askBlackBox';
 import { quickActionForm } from '@dashboard/lib/askQuickActions';
 import {
   buildCommandCatalog,
@@ -18,6 +19,7 @@ import { MIN_TOUCH, radius, spacing, typography } from '../../theme/typography';
 import { AppText } from '../ui/AppText';
 import { BottomSheet } from '../ui/BottomSheet';
 import { Button } from '../ui/Button';
+import { BlackBoxForm } from './BlackBoxForm';
 import { DispatchForm } from './DispatchForm';
 import { FleetActionForm } from './FleetActionForm';
 
@@ -115,6 +117,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }
 
   async function runItem(item: AskCommandItem, args: string) {
+    // `/blackbox msn_... [question]` typed in full runs at once; without a mission id it opens the form.
+    if (item.action && quickActionForm(item.action) === 'blackbox') {
+      const parsed = parseBlackBoxCommand(args);
+      if (parsed) {
+        setText('');
+        setHint(null);
+        const blackBoxArgs: Record<string, unknown> = { missionId: parsed.missionId };
+        if (parsed.question) blackBoxArgs.question = parsed.question;
+        await onQuickAction(item.action, blackBoxArgs);
+        return;
+      }
+    }
     if (item.action) { await choose(item.action); return; }
     const local = item.local;
     if (!local) return;
@@ -291,6 +305,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         testID="ask-fleet-action-sheet"
       >
         <FleetActionForm busy={actionBusy} onSubmit={(args) => void submitForm(args)} onCancel={() => setOpenForm(null)} />
+      </BottomSheet>
+      <BottomSheet
+        open={!!openForm && formKind === 'blackbox'}
+        title={t('Black box of a failure')}
+        onClose={() => { if (!actionBusy) setOpenForm(null); }}
+        closeLabel={t('Cancel')}
+        testID="ask-blackbox-sheet"
+      >
+        <BlackBoxForm busy={actionBusy} onSubmit={(args) => void submitForm(args)} onCancel={() => setOpenForm(null)} />
       </BottomSheet>
     </View>
   );

@@ -29,6 +29,8 @@ import { MISSION_LIST_STATUSES, canRetryLanding, matchesMissionColumnFilters } f
 import { canRestartFromHome } from '../lib/dashboardStatus';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
+import DispatchPreview, { DispatchWarningsBanner } from '../components/blackbox/DispatchWarnings';
+import { dispatchWarningsFrom, type DispatchWarnings } from '../lib/dispatchPreview';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'title' | 'status' | 'priority' | 'createdUtc';
@@ -169,6 +171,8 @@ export default function Missions() {
   function clearSelection() { setSelected([]); }
 
   const [duplicateSource, setDuplicateSource] = useState<Mission | null>(null);
+  // Warnings the last create response carried (overlaps and brief lint); dispatch went ahead regardless.
+  const [createdWarnings, setCreatedWarnings] = useState<DispatchWarnings | null>(null);
 
   // Create
   function openCreate() {
@@ -193,8 +197,9 @@ export default function Missions() {
     if (saving) return;
     setSaving(true);
     try {
-      await createMission({ ...(duplicateSource ? buildMissionDuplicatePayload(duplicateSource) : {}), ...formData });
+      const created = await createMission({ ...(duplicateSource ? buildMissionDuplicatePayload(duplicateSource) : {}), ...formData });
       setShowForm(false);
+      setCreatedWarnings(dispatchWarningsFrom(created));
       pushToast('success', t('Mission "{{title}}" created.', { title: formData.title }));
       load();
     } catch (err: unknown) { setError(apiErrorMessage(err, t('Create failed.'))); }
@@ -411,6 +416,7 @@ export default function Missions() {
       />
 
       <ErrorModal error={error} onClose={() => setError('')} />
+      {createdWarnings && <DispatchWarningsBanner overlapWarnings={createdWarnings.overlapWarnings} briefLintWarnings={createdWarnings.briefLintWarnings} onDismiss={() => setCreatedWarnings(null)} />}
 
       {/* Create Modal */}
       {showForm && (
@@ -425,6 +431,7 @@ export default function Missions() {
                 {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
               </select>
             </label>
+            <DispatchPreview compact vesselId={formData.vesselId} title={formData.title} description={formData.description} enabled={!saving} />
             <label title={t('Implementation changes code and lands a diff (an empty diff fails). Audit and Research are read-only and produce a written report instead.')}>{t('Mode')}
               <select value={formData.mode} onChange={e => setFormData({ ...formData, mode: e.target.value as MissionMode })} title={t('Implementation changes code and lands a diff (an empty diff fails). Audit and Research are read-only and produce a written report instead.')}>
                 <option value="Implementation">{t('Implementation')}</option>
