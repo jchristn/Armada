@@ -1569,6 +1569,10 @@ namespace Armada.Server
                 { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager) }
                 .Register(_App, authenticate, _AuthorizationService);
 
+            // Mission and voyage black box
+            new BlackBoxRoutes(_BlackBox?.Service, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
             // Captains
             new CaptainRoutes(_Database, _Admiral, _Settings, _AgentLifecycle, _CaptainTools, EmitEventAsync, _JsonOptions, _PlanningSessions, _ObjectiveRefinementSessions)
                 .Register(_App, authenticate, _AuthorizationService);

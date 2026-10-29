@@ -272,6 +272,47 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/missions/{id}/github/pull-request/comments/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/missions/{id}/github/pull-request/checks/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/missions/{id}/landing-preview", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+
+            // BlackBoxRoutes (entry visibility is checked per request by IBlackBoxService: an invisible entry is 404;
+            // recovery and recommendation steps are authorized as the underlying tool)
+            Add("GET", "/api/v1/missions/{id}/blackbox", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/missions/{id}/blackbox/brief", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/missions/{id}/blackbox/entries", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/blackbox/entries/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/voyages/{id}/blackbox", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/voyages/{id}/blackbox/brief", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/search", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/bundle", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/hotspots/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/fingerprints/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/retention", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
+            Add("GET", "/api/v1/blackbox/storage", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/blackbox/storage/migrate", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.AdminOnly);
+            Add("GET", "/api/v1/blackbox/storage/migrations/{id}", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/blackbox/purge", "BlackBox", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/blackbox/gc", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/blackbox/backfill", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/blackbox/delete", "BlackBox", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
+            Add("GET", "/api/v1/blackbox/{id}", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("DELETE", "/api/v1/blackbox/{id}", "BlackBox", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
+            Add("GET", "/api/v1/blackbox/{id}/brief", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/sections/{section}", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/objects", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/objects/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/objects/{name}", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/download", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/notes", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/notes/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/notes", "BlackBox", ResourceOperationEnum.Create, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/resolve", "BlackBox", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/pin", "BlackBox", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/unpin", "BlackBox", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/recovery/{pathId}", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/recommendations/{recommendationId}/apply", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/reanalyze", "BlackBox", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
+
             Add("GET", "/api/v1/missions/{id}/evaluate-autoland", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("PUT", "/api/v1/missions/{id}", "Mission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("PUT", "/api/v1/missions/{id}/status", "Mission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
