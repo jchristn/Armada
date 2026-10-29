@@ -255,6 +255,12 @@ export interface BlackBoxRecoveryPath {
   DataLossRisk?: boolean;
   ExpectedOutcome?: string;
   RuleId?: string;
+  /** The active runbook this path starts instead of its own steps (black box runbook linkage). */
+  RunbookId?: string | null;
+  RunbookTitle?: string | null;
+  /** Share of settled confirmed runs of this path that recovered the mission (0 to 1); null until enough settled. */
+  SuccessRate?: number | null;
+  TrackedRuns?: number;
 }
 
 export interface BlackBoxTriage {
@@ -435,4 +441,217 @@ export interface SocketEnvelope {
   message?: string;
   data?: unknown;
   timestamp?: string;
+}
+
+// ==================== Prevention, forensics and operations (docs/BLACKBOX.md section 12; BlackBoxInsightRoutes.cs)
+
+/** A paged insight result with extra fields (VesselReservationPage, BlackBoxDoctorPage, BlackBoxTimelinePage). */
+export type InsightPage<T, Extra> = EnumerationResult<T> & Extra;
+
+/** One overlap a mission would have with the vessel's active work (MissionOverlapWarning). */
+export interface MissionOverlapWarning {
+  Kind: 'ActiveMission' | 'Hotspot' | 'Reservation' | 'Unknown' | string;
+  MissionId?: string | null;
+  OverlappingMissionId?: string | null;
+  OverlappingMissionTitle?: string | null;
+  OverlappingMissionStatus?: string | null;
+  Directory?: string | null;
+  HotspotEntryCount?: number;
+  Files?: string[];
+  FileCount?: number;
+  Serialized?: boolean;
+  Message: string;
+}
+
+/** One brief lint finding (BRIEF-DEP-001, BRIEF-NOOP-001, BRIEF-PATH-001, BRIEF-PATH-002). */
+export interface BriefLintFinding {
+  RuleId: string;
+  Severity?: string;
+  Message: string;
+  Excerpt?: string | null;
+  Path?: string | null;
+  Suggestion?: string | null;
+}
+
+export interface BriefLintResult {
+  Findings?: BriefLintFinding[];
+  FindingCount?: number;
+  Clean?: boolean;
+  PathsChecked?: boolean;
+}
+
+export interface BriefLintRequest {
+  Title?: string | null;
+  Description?: string | null;
+  VesselId?: string | null;
+  DependsOnMissionId?: string | null;
+  VoyageId?: string | null;
+}
+
+export interface MissionOverlapPreviewRequest {
+  Title?: string | null;
+  Description?: string | null;
+  DependsOnMissionId?: string | null;
+  ExcludeMissionId?: string | null;
+}
+
+export interface MissionOverlapPreview {
+  VesselId: string;
+  SerializeOverlappingMissions?: boolean;
+  LikelyFiles?: string[];
+  LikelyFileCount?: number;
+  ScopedFileCount?: number;
+  BriefPathCount?: number;
+  TrackedFilesKnown?: boolean;
+  Warnings?: MissionOverlapWarning[];
+  WarningCount?: number;
+  SuggestedDependsOnMissionId?: string | null;
+  ActiveMissionsCompared?: number;
+  ActiveMissionsTruncated?: boolean;
+  BriefLint?: BriefLintResult | null;
+}
+
+/** A recurring configuration recommendation on a vessel (BlackBoxDoctorFinding). */
+export interface BlackBoxDoctorFinding {
+  Key: string;
+  RuleId?: string | null;
+  RecommendationId?: string | null;
+  Setting: string;
+  Scope?: string;
+  CurrentValue?: string | null;
+  SuggestedValue?: string | null;
+  Rationale?: string | null;
+  Count: number;
+  FirstSeenUtc?: string;
+  LastSeenUtc?: string;
+  ExampleEntryId: string;
+  ExampleMissionId?: string | null;
+  Applicable?: boolean;
+}
+
+export type BlackBoxDoctorPage = InsightPage<BlackBoxDoctorFinding, {
+  VesselId?: string;
+  WindowDays?: number;
+  EntriesInWindow?: number;
+  EntriesScanned?: number;
+  ScanTruncated?: boolean;
+}>;
+
+export interface VesselReservation {
+  VesselId?: string;
+  Directory: string;
+  MissionId: string;
+  MissionTitle?: string | null;
+  MissionStatus?: string | null;
+  HotspotEntryCount?: number;
+  FileCount?: number;
+  SinceUtc?: string;
+}
+
+export type VesselReservationPage = InsightPage<VesselReservation, {
+  VesselId?: string;
+  Threshold?: number;
+  HotDirectoryCount?: number;
+  ActiveMissionsScanned?: number;
+  ScanTruncated?: boolean;
+}>;
+
+export interface BlackBoxDiffField {
+  Section: string;
+  Field: string;
+  Value?: string | null;
+  OtherValue?: string | null;
+}
+
+export interface BlackBoxAttemptDiff {
+  EntryId: string;
+  OtherEntryId: string;
+  SameMission?: boolean;
+  Attempt?: number;
+  OtherAttempt?: number;
+  SameFingerprint?: boolean;
+  Differences?: BlackBoxDiffField[];
+  DifferenceCount?: number;
+  FilesOnlyInEntry?: string[];
+  FilesOnlyInEntryCount?: number;
+  FilesOnlyInOther?: string[];
+  FilesOnlyInOtherCount?: number;
+  FilesInBothCount?: number;
+  ChangedFilesKnown?: boolean;
+}
+
+export interface BlackBoxNearbySuccess {
+  SuccessId: string;
+  MissionId: string;
+  MissionTitle?: string | null;
+  LandedUtc?: string;
+  HoursFromFailure?: number;
+  BaseCommit?: string | null;
+  TargetCommit?: string | null;
+  RunMs?: number | null;
+  OverlappingFiles?: string[];
+  OverlappingFileCount?: number;
+}
+
+export interface BlackBoxTimelineItem {
+  TimestampUtc: string;
+  Source: string;
+  Kind: string;
+  Message: string;
+  EntityId?: string | null;
+}
+
+export interface BlackBoxTimelineSourceCount {
+  Source: string;
+  Count: number;
+  Truncated?: boolean;
+}
+
+export type BlackBoxTimelinePage = InsightPage<BlackBoxTimelineItem, {
+  EntryId?: string;
+  WindowStartUtc?: string | null;
+  WindowEndUtc?: string | null;
+  Sources?: BlackBoxTimelineSourceCount[];
+  Truncated?: boolean;
+}>;
+
+export interface BlackBoxCascadeNode {
+  MissionId: string;
+  Title?: string | null;
+  Status: string;
+  FailureKind?: string | null;
+  EntryId?: string | null;
+  DependsOnMissionId?: string | null;
+  IsRoot?: boolean;
+}
+
+export interface BlackBoxCascadeEdge {
+  FromMissionId: string;
+  ToMissionId: string;
+  Kind: string;
+}
+
+export interface BlackBoxCascadeGraph {
+  VoyageId: string;
+  VoyageTitle?: string | null;
+  VoyageStatus?: string;
+  EntryId?: string | null;
+  RootMissionId?: string | null;
+  RootEntryId?: string | null;
+  Nodes?: BlackBoxCascadeNode[];
+  Edges?: BlackBoxCascadeEdge[];
+  MissionCount?: number;
+  Truncated?: boolean;
+}
+
+export interface BlackBoxRecoveryStat {
+  RuleId?: string | null;
+  PathId: string;
+  Runs: number;
+  Succeeded?: number;
+  Failed?: number;
+  Pending?: number;
+  Expired?: number;
+  SuccessRate?: number | null;
+  LastRunUtc?: string | null;
 }
