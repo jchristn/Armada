@@ -72,6 +72,11 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public MissionOps Ops { get; }
 
+        /// <summary>
+        /// Failure panel: the voyage's black box entry (user brief, recovery paths) with its own keys.
+        /// </summary>
+        public BlackBoxFailurePanel Failure { get; }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -115,10 +120,19 @@ namespace Armada.Tui.Screens.Operations
             Action("mission-log", "Log", () => { Mission m = MissionGrid.Current!; Ops.ViewLog(m.Id, Tr("Log: {{title}}", LocalizationArgs.Of("title", m.Title))); }, "l", OnMission);
             Action("mission-detail", "Detail", () => Context.Navigate("/missions/" + Uri.EscapeDataString(MissionGrid.Current!.Id)), "o", OnMission);
             Action("copy-id", "Copy ID", () => Copy(VoyageId, "Voyage ID"), "y");
+            Failure = new BlackBoxFailurePanel(this, BlackBoxPanelSourceEnum.Voyage, () => VoyageId);
+            Failure.Changed = Load;
+            MissionScreen.AddFailureActions(this, Failure);
 
             Overview.Builder = BuildOverview;
             AddPanel("overview", "Overview", Overview);
             AddPanel("missions", "Missions", MissionGrid);
+            AddPanel("failure", "Failure", Failure);
+            Tabs.SelectedChanged += (s, e) =>
+            {
+                if (ReferenceEquals(CurrentPanel, Failure)) Failure.Ensure();
+            };
+            SubscribeCoalesced("blackbox.", () => { if (Failure.Loaded) Failure.Reload(); });
 
             SubscribeCoalesced("voyage.changed", Load);
             SubscribeCoalesced("mission.changed", Load);
@@ -168,6 +182,7 @@ namespace Armada.Tui.Screens.Operations
                 Voyage = d.Voyage;
                 Progress = d;
                 MissionGrid.Reload();
+                if (!String.IsNullOrEmpty(Voyage.LastBlackBoxEntryId) && (Failure.Entry == null || Failure.Entry.Id != Voyage.LastBlackBoxEntryId)) Failure.Reload();
                 Loaded = true;
                 LoadError = null;
                 Heading = String.IsNullOrEmpty(Voyage.Title) ? Voyage.Id : Voyage.Title;
