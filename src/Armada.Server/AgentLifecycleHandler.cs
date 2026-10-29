@@ -1201,9 +1201,10 @@ namespace Armada.Server
             MissionActivity.Clear(mission.Id);
             string missionId = mission.Id;
             string? tenantId = mission.TenantId;
+            string? userId = mission.UserId;
             string? voyageId = mission.VoyageId;
             LatestValueThrottle<RuntimeActivity> broadcast = new LatestValueThrottle<RuntimeActivity>(_ActivityBroadcastInterval, _Time,
-                activity => _WebSocketHub?.BroadcastMissionActivity(tenantId, missionId, voyageId, activity));
+                activity => _WebSocketHub?.BroadcastMissionActivity(tenantId, missionId, voyageId, activity, userId));
             _ActivityBroadcasts[missionId] = broadcast;
             return broadcast;
         }

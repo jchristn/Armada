@@ -55,8 +55,9 @@ Every REST route and every MCP tool declares an explicit requirement: a resource
   context, or the Ask Armada caller an approved proposal runs as.
 - **Fail closed:** a route or tool without a declaration is treated as `AdminOnly`, logged at startup and at use,
   and fails `E2E.AuthorizationCoverage` (which also fails on declarations the server no longer registers).
-- **WebSocket `/ws`:** the upgrade requires a credential; every command requires a global admin; events reach only
-  sockets of the entity's tenant (global admins can opt in to all tenants).
+- **WebSocket `/ws`:** the upgrade requires a credential; every command requires a global admin. Mission, voyage,
+  captain, check-run, mission-activity, and approval events reach the sockets that can read that record. Other events
+  reach sockets of the entity's tenant (global admins can opt in to all tenants).
 - **Bypass rules:** global admins pass every level; tenant admins pass `TenantAdmin` within their tenant; tenant
   admins cannot modify, delete, or mint credentials for a global admin account.
 
@@ -919,7 +920,7 @@ request logs (F-15).
 | Route / command | Requirement | Tenant scoping | Input | Findings |
 |-----------------|-------------|----------------|-------|----------|
 | upgrade `/ws` | Authenticated | n/a | token in query, subprotocol, or headers | F-15 Fixed |
-| route `subscribe` (optional `allTenants`) | Authenticated; `allTenants` honored for global admins only | Events: entity's tenant only; status snapshot is tenant-scoped | typed message | O-03 Closed |
+| route `subscribe` (optional `allTenants`) | Authenticated; `allTenants` honored for global admins only | Record events follow the record read; other events stay in the entity's tenant; status snapshot is tenant-scoped | typed message | O-03 Closed |
 | route `command` | Global admin (every command) | None (global admin acts on any tenant by id) | typed message, `action` + `data` | - |
 | commands `status`, `stop_captain`, `stop_all`, `stop_server` | Global admin | server-wide | typed | - |
 | commands `list_fleets`, `get_fleet`, `create_fleet`, `update_fleet`, `delete_fleet` | Global admin | any tenant by id | typed | - |
@@ -933,7 +934,7 @@ request logs (F-15).
 | commands `backup`, `restore` | Global admin | server-wide; arbitrary host paths | typed | O-12 Accepted |
 | commands `get_persona`, `create_persona`, `update_persona`, `delete_persona`, `get_prompt_template`, `update_prompt_template`, `get_pipeline`, `create_pipeline`, `update_pipeline`, `delete_pipeline` | Global admin | any tenant by name | typed | - |
 | commands `list_cli_permission_requests` (one page, `query.pageNumber` and `query.pageSize`), `decide_cli_permission_request` | Global admin (decisions also go through `CliPermissionAccess` as the socket's identity) | any tenant | typed | - |
-| server broadcasts (mission, voyage, captain, check-run, objective, deployment, incident, runbook-execution, approval-needed, Ask `ask.*`) | n/a | entity's tenant; `ask.*` to the owning user only | n/a | O-13 Open (unscrubbed output) |
+| server broadcasts (mission, voyage, captain, check-run, approval-needed, objective, deployment, incident, runbook-execution, Ask `ask.*`) | n/a | mission, voyage, captain, check-run, mission activity, and approval follow the record read; other entity events stay in the entity's tenant; `ask.*` to the owning user only | n/a | O-13 Open (unscrubbed output) |
 | server broadcasts `cli_permission.requested`, `cli_permission.resolved` | n/a | the request's approvers and owner: global admins of its tenant or opted in to all tenants, its tenant admins, the owning user; `canDecide` / `canRemember` computed per socket | n/a | - |
 
 ## Other entry points

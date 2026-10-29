@@ -10,6 +10,10 @@ All notable changes to Armada are documented in this file.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
 
+### Record WebSocket events follow the record read
+
+- **Mission, voyage, captain, and check-run events reach the sockets that can read the record.** `mission.changed`, `mission.activity`, `approval-needed`, `voyage.changed`, `captain.changed`, and `check-run.changed` go to the owning user, a tenant administrator of that tenant, and a global administrator who already receives that tenant. A record with no user id still reaches that tenant's tenant administrators and those global administrators. A record with no tenant id reaches global administrators only. Objective, incident, deployment, runbook, and environment events stay on the tenant broadcast. Ask events stay with that user. CLI permission events stay with the viewers `CliPermissionAccess.CanView` admits.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.

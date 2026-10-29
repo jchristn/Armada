@@ -556,9 +556,10 @@ These refine the contract above; the dashboard's "UI assumptions" (on `feature/a
 - **WebSocket commands are global-admin only** (deviation from "writes TenantAdmin, reads tenant-scoped"): the command
   handler reads and writes by id across tenants, so tenant-scoping it would mean re-implementing every command; tenant
   users use the tenant-scoped REST API. The dashboard does not use commands.
-- **Delivery.** Entity events go to the entity's tenant (tenant resolved from the entity; unresolved events go to global
-  admins only); admins opt in to all tenants with `AllTenants: true` on subscribe. `ask.*` events go only to the owner;
-  the all-tenants opt-in does not apply to them.
+- **Delivery.** Mission, voyage, captain, check-run, mission-activity, and approval events go to the sockets that can
+  read the record. Other entity events go to the entity's tenant (tenant resolved from the entity; unresolved events go
+  to global admins only); admins opt in to all tenants with `AllTenants: true` on subscribe. `ask.*` events go only to
+  the owner; the all-tenants opt-in does not apply to them.
 - **Additive fields** (not in the original table, requested by the UI): `AskThread.ActiveWorkCount` and
   `AskThread.ActiveTurnId` (computed), `AskActionProposal.ExpiresUtc` (computed while pending),
   `AskTrackedWork.Snapshot` (embedded in thread detail and in messages), `AskQuickAction.Name` and `ArgumentsSchema`.

@@ -23,9 +23,11 @@ namespace Armada.Server.WebSocket
     /// <summary>
     /// WebSocket hub for real-time event delivery on the main Watson REST server at /ws. Every upgrade must be
     /// authenticated (see <see cref="AuthorizeUpgradeAsync"/>); each connected socket carries its identity and
-    /// receives only the events it is entitled to: entity changes of its own tenant (global admins may opt in to every
-    /// tenant with <c>{ "Route": "subscribe", "AllTenants": true }</c>) and user-scoped events (Ask Armada threads)
-    /// addressed to its own user. Commands are authorized by <see cref="WebSocketCommandHandler.IsAuthorized"/>.
+    /// receives only the events it is entitled to. Mission, voyage, captain, check-run, mission-activity, and
+    /// approval events go to sockets that can read that record. Other entity changes go to the entity's tenant
+    /// (global admins may opt in to every tenant with <c>{ "Route": "subscribe", "AllTenants": true }</c>).
+    /// User-scoped events (Ask Armada threads) go to that user. Commands are authorized by
+    /// <see cref="WebSocketCommandHandler.IsAuthorized"/>.
     /// </summary>
     /// <remarks>Thread safety: the session registry is a concurrent dictionary; broadcast methods may be called from any
     /// thread.</remarks>
@@ -365,14 +367,35 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
-        /// Broadcast a mission state change to the mission's tenant.
+        /// Whether a socket may receive a record event for a mission, voyage, captain, or check run. A global
+        /// administrator receives it when <see cref="IsTenantRecipient"/> already admits that socket. A tenant
+        /// administrator of the record's tenant receives it, including when the user id is empty. The owning user
+        /// receives it when the tenant and user id match. An empty tenant reaches only those global administrators.
+        /// </summary>
+        /// <param name="client">Socket identity.</param>
+        /// <param name="tenantId">Tenant of the record, or empty when the record has none.</param>
+        /// <param name="userId">Owning user, or empty when the record has none.</param>
+        /// <returns>True when the event may be delivered.</returns>
+        public static bool IsRecordRecipient(WebSocketClientState client, string? tenantId, string? userId)
+        {
+            if (client == null) return false;
+            if (client.IsAdmin && IsTenantRecipient(client, tenantId)) return true;
+            if (String.IsNullOrEmpty(tenantId)) return false;
+            if (!String.Equals(client.TenantId, tenantId, StringComparison.Ordinal)) return false;
+            if (client.Auth.IsTenantAdmin) return true;
+            if (String.IsNullOrEmpty(userId)) return false;
+            return String.Equals(client.UserId, userId, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Broadcast a mission state change to the sockets that can read the mission.
         /// </summary>
         /// <param name="mission">Changed mission.</param>
         /// <param name="statusOverride">Status to report instead of the mission's current status, or null.</param>
         public void BroadcastMissionChange(Mission mission, string? statusOverride = null)
         {
             if (mission == null) return;
-            BroadcastToTenant(mission.TenantId, "mission.changed", new
+            BroadcastToRecordReaders(mission.TenantId, mission.UserId, "mission.changed", new
             {
                 id = mission.Id,
                 title = mission.Title,
@@ -388,16 +411,17 @@ namespace Armada.Server.WebSocket
 
         /// <summary>
         /// Broadcast a running mission's latest captain activity (a tool call, text, or reasoning from its runtime's
-        /// structured output) to the mission's tenant as <c>mission.activity</c>. The caller throttles it.
+        /// structured output) to the sockets that can read the mission, as <c>mission.activity</c>. The caller throttles it.
         /// </summary>
         /// <param name="tenantId">The mission's tenant.</param>
         /// <param name="missionId">Mission identifier.</param>
         /// <param name="voyageId">The mission's voyage, or null.</param>
         /// <param name="activity">The activity.</param>
-        public void BroadcastMissionActivity(string? tenantId, string missionId, string? voyageId, RuntimeActivity activity)
+        /// <param name="userId">The mission's owning user, or empty when the mission has none.</param>
+        public void BroadcastMissionActivity(string? tenantId, string missionId, string? voyageId, RuntimeActivity activity, string? userId)
         {
             if (String.IsNullOrEmpty(missionId) || activity == null) return;
-            BroadcastToTenant(tenantId, "mission.activity", new
+            BroadcastToRecordReaders(tenantId, userId, "mission.activity", new
             {
                 id = missionId,
                 voyageId = voyageId,
@@ -406,14 +430,14 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
-        /// Broadcast a voyage state change to the voyage's tenant.
+        /// Broadcast a voyage state change to the sockets that can read the voyage.
         /// </summary>
         /// <param name="voyage">Changed voyage.</param>
         /// <param name="statusOverride">Status to report instead of the voyage's current status, or null.</param>
         public void BroadcastVoyageChange(Voyage voyage, string? statusOverride = null)
         {
             if (voyage == null) return;
-            BroadcastToTenant(voyage.TenantId, "voyage.changed", new
+            BroadcastToRecordReaders(voyage.TenantId, voyage.UserId, "voyage.changed", new
             {
                 id = voyage.Id,
                 title = voyage.Title,
@@ -426,13 +450,13 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
-        /// Broadcast a captain state change to the captain's tenant.
+        /// Broadcast a captain state change to the sockets that can read the captain.
         /// </summary>
         /// <param name="captain">Changed captain.</param>
         public void BroadcastCaptainChange(Captain captain)
         {
             if (captain == null) return;
-            BroadcastToTenant(captain.TenantId, "captain.changed", new
+            BroadcastToRecordReaders(captain.TenantId, captain.UserId, "captain.changed", new
             {
                 id = captain.Id,
                 name = captain.Name,
@@ -443,13 +467,13 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
-        /// Broadcast a structured check-run change to the run's tenant.
+        /// Broadcast a structured check-run change to the sockets that can read the run.
         /// </summary>
         /// <param name="run">Changed check run.</param>
         public void BroadcastCheckRunChange(CheckRun run)
         {
             if (run == null) return;
-            BroadcastToTenant(run.TenantId, "check-run.changed", run);
+            BroadcastToRecordReaders(run.TenantId, run.UserId, "check-run.changed", run);
             RaiseEntityChanged("check-run", run.Id);
         }
 
@@ -525,13 +549,13 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
-        /// Broadcast an approval-needed notification to the mission's tenant when a mission enters review.
+        /// Broadcast an approval-needed notification to the sockets that can read the mission when a mission enters review.
         /// </summary>
         /// <param name="mission">Mission awaiting approval.</param>
         public void BroadcastApprovalNeeded(Mission mission)
         {
             if (mission == null) return;
-            BroadcastToTenant(mission.TenantId, "approval-needed", new
+            BroadcastToRecordReaders(mission.TenantId, mission.UserId, "approval-needed", new
             {
                 entityType = "mission",
                 entityId = mission.Id,
@@ -559,6 +583,13 @@ namespace Armada.Server.WebSocket
         #endregion
 
         #region Private-Methods
+
+        private void BroadcastToRecordReaders(string? tenantId, string? userId, string eventType, object? data)
+        {
+            if (String.IsNullOrEmpty(eventType)) throw new ArgumentNullException(nameof(eventType));
+            object payload = BuildPayload(eventType, null, data);
+            Deliver(payload, client => IsRecordRecipient(client, tenantId, userId));
+        }
 
         private void FeedPush(Action<PushNotificationService> feed)
         {
