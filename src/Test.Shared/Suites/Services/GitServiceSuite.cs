@@ -544,8 +544,12 @@ namespace Test.Shared.Suites.Services
                     await File.WriteAllTextAsync(Path.Combine(targetDir, "CHANGELOG.md"), "target change\n").ConfigureAwait(false);
                     await RunGitAsync(targetDir, "commit", "-am", "Target change").ConfigureAwait(false);
 
-                    bool changed = await LandingTargetSynchronization.SynchronizeAsync(service, sourceDir, "main", targetDir).ConfigureAwait(false);
-                    AssertTrue(changed, "the mission dock head advances when target moved");
+                    string? headBefore = await service.GetHeadCommitHashAsync(sourceDir).ConfigureAwait(false);
+                    LandingTargetSynchronizationResult changed = await LandingTargetSynchronization.SynchronizeAsync(service, sourceDir, "main", targetDir).ConfigureAwait(false);
+                    AssertTrue(changed.Advanced, "the mission dock head advances when target moved");
+                    AssertEqual(headBefore, changed.Before, "Before is the dock head before integrating");
+                    AssertEqual(await service.GetHeadCommitHashAsync(sourceDir).ConfigureAwait(false), changed.After, "After is the dock head after integrating");
+                    AssertEqual((await RunGitAsync(targetDir, "rev-parse", "main").ConfigureAwait(false)).Trim(), changed.LocalTargetTip, "the local target tip integrated against is recorded");
                     string content = await File.ReadAllTextAsync(Path.Combine(sourceDir, "CHANGELOG.md")).ConfigureAwait(false);
                     AssertContains("branch change", content);
                     AssertContains("target change", content);
@@ -1252,6 +1256,87 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(ScratchFileMatcher.IsScratchFile("backup/Program.cs"), "a directory name does not count");
                 AssertFalse(ScratchFileMatcher.IsScratchFile(""));
                 AssertFalse(ScratchFileMatcher.IsScratchFile(null));
+            }));
+
+            cases.Add(CaseAsync("fast_forward_dirty_checkout_reports_exact_paths", "Fast-forwarding a verified commit into a dirty checkout reports exactly the modified and untracked paths", TestTags.Negative, async () =>
+            {
+                GitService service = CreateService();
+                string source = TestGitRepoHelper.CreateWorkingRepoCopy();
+                string parent = TestTemp.NewDirectory("ff_dirty");
+                string target = Path.Combine(parent, "target");
+                await RunGitAsync(parent, "clone", "-q", source, target).ConfigureAwait(false);
+                string verified = await CommitOnNewBranchAsync(source, "verified", "main", "landed.txt", "landed\n").ConfigureAwait(false);
+                string targetHead = (await RunGitAsync(target, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();
+                await File.WriteAllTextAsync(Path.Combine(target, "README.md"), "locally edited\n").ConfigureAwait(false);
+                Directory.CreateDirectory(Path.Combine(target, "notes"));
+                await File.WriteAllTextAsync(Path.Combine(target, "notes", "scratch.txt"), "untracked\n").ConfigureAwait(false);
+
+                GitDirtyCheckoutException? dirty = null;
+                try { await service.FastForwardVerifiedCommitAsync(target, source, verified, "main").ConfigureAwait(false); }
+                catch (GitDirtyCheckoutException ex) { dirty = ex; }
+
+                AssertNotNull(dirty, "a dirty checkout is refused");
+                AssertEqual(target, dirty!.CheckoutPath);
+                List<string> paths = new List<string>(dirty.ModifiedPaths);
+                paths.Sort(StringComparer.Ordinal);
+                AssertEqual("README.md|notes/scratch.txt", String.Join("|", paths), "ModifiedPaths are the real porcelain paths, not prose");
+                AssertEqual(targetHead, (await RunGitAsync(target, "rev-parse", "HEAD").ConfigureAwait(false)).Trim(), "the checkout is not moved");
+                AssertEqual("locally edited\n", await File.ReadAllTextAsync(Path.Combine(target, "README.md")).ConfigureAwait(false), "local edits are preserved");
+            }));
+
+            cases.Add(CaseAsync("fast_forward_clean_checkout_lands_verified_commit", "Fast-forwarding a verified commit into a clean checkout moves it to exactly that commit", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string source = TestGitRepoHelper.CreateWorkingRepoCopy();
+                string parent = TestTemp.NewDirectory("ff_clean");
+                string target = Path.Combine(parent, "target");
+                await RunGitAsync(parent, "clone", "-q", source, target).ConfigureAwait(false);
+                await RunGitAsync(source, "checkout", "-q", "main").ConfigureAwait(false);
+                await File.WriteAllTextAsync(Path.Combine(source, "landed.txt"), "landed\n").ConfigureAwait(false);
+                await RunGitAsync(source, "add", "-A").ConfigureAwait(false);
+                await RunGitAsync(source, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "verified").ConfigureAwait(false);
+                string verified = (await RunGitAsync(source, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();
+
+                await service.FastForwardVerifiedCommitAsync(target, source, verified, "main").ConfigureAwait(false);
+
+                AssertEqual(verified, (await RunGitAsync(target, "rev-parse", "HEAD").ConfigureAwait(false)).Trim());
+                AssertTrue(File.Exists(Path.Combine(target, "landed.txt")), "the verified change is in the checkout");
+            }));
+
+            cases.Add(Case("landing_target_advanced_payload_carries_before_and_after", "The mission.landing_target_advanced payload carries the dock head before and after and the integrated target tips", TestTags.Positive, () =>
+            {
+                LandingTargetSynchronizationResult result = new LandingTargetSynchronizationResult
+                {
+                    Before = "aaa111", After = "bbb222", RemoteTargetTip = "ccc333", LocalTargetTip = "ddd444"
+                };
+                AssertTrue(result.Advanced);
+                LandingTargetAdvancedPayload payload = LandingTargetSynchronization.ToAdvancedPayload(result, "main");
+                string json = System.Text.Json.JsonSerializer.Serialize(payload);
+                LandingTargetAdvancedPayload read = System.Text.Json.JsonSerializer.Deserialize<LandingTargetAdvancedPayload>(json)!;
+                AssertEqual("main", read.TargetBranch);
+                AssertEqual("aaa111", read.Before);
+                AssertEqual("bbb222", read.After);
+                AssertEqual("ccc333", read.RemoteTargetTip);
+                AssertEqual("ddd444", read.LocalTargetTip);
+                AssertFalse(new LandingTargetSynchronizationResult { Before = "same", After = "same" }.Advanced, "an unchanged head is not an advance");
+            }));
+
+            cases.Add(CaseAsync("landing_sync_unchanged_target_reports_same_head", "Landing synchronization against a target the dock already contains reports Before equal to After", TestTags.Negative, async () =>
+            {
+                GitService service = CreateService();
+                string origin = TestGitRepoHelper.CreateBareRepoCopy();
+                string parent = TestTemp.NewDirectory("sync_same");
+                string dock = Path.Combine(parent, "dock");
+                await RunGitAsync(parent, "clone", "-q", origin, dock).ConfigureAwait(false);
+                string head = (await RunGitAsync(dock, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();
+
+                LandingTargetSynchronizationResult result = await LandingTargetSynchronization.SynchronizeAsync(service, dock, "main", null).ConfigureAwait(false);
+
+                AssertFalse(result.Advanced, "nothing to integrate");
+                AssertEqual(head, result.Before);
+                AssertEqual(head, result.After);
+                AssertEqual(head, result.RemoteTargetTip, "the remote tip integrated against is recorded");
+                AssertNull(result.LocalTargetTip, "no local checkout was given");
             }));
 
             return new TestSuiteDescriptor(

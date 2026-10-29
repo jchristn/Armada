@@ -106,6 +106,7 @@ namespace Armada.Core.Services
                         Mission? held = await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
                         if (held != null)
                         {
+                            held.FailureKind = MissionFailureKindEnum.Infra;
                             held.FailureReason = reason;
                             held.LastUpdateUtc = DateTime.UtcNow;
                             await _Database.Missions.UpdateAsync(held, token).ConfigureAwait(false);

@@ -821,6 +821,7 @@ namespace Armada.Core.Services
                     {
                         DateTime version = stranded.LastUpdateUtc;
                         stranded.Status = MissionStatusEnum.LandingFailed;
+                        stranded.FailureKind = LandingFailureClassifier.Classify(ex);
                         stranded.FailureReason = "Landing handoff failed: " + ex.Message;
                         stranded.LastUpdateUtc = DateTime.UtcNow;
                         if (await _Database.Missions.TryUpdateIfUnchangedAsync(stranded, version,

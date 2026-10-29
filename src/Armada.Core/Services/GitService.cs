@@ -97,8 +97,11 @@ namespace Armada.Core.Services
         /// <inheritdoc />
         public async Task FastForwardVerifiedCommitAsync(string targetWorkDir, string sourceRepoPath, string commitHash, string targetBranch, CancellationToken token = default)
         {
-            if (!(await GetWorkingTreeStatusAsync(targetWorkDir, token).ConfigureAwait(false)).IsClean)
-                throw new GitDirtyCheckoutException(targetWorkDir, "Checkout has changes; verified work is preserved.");
+            // Untracked files also block the fast-forward, so the porcelain listing includes them. Keep the leading
+            // status columns (" M path"): only trailing whitespace is trimmed so ModifiedPaths parses exactly.
+            string porcelain = (await RunGitAsync(targetWorkDir, token, "status", "--porcelain", "--untracked-files=all").ConfigureAwait(false)).TrimEnd();
+            if (!String.IsNullOrWhiteSpace(porcelain))
+                throw new GitDirtyCheckoutException(targetWorkDir, porcelain);
             string? original = await GetCurrentBranchAsync(targetWorkDir, token).ConfigureAwait(false);
             if (String.IsNullOrEmpty(original)) throw new InvalidOperationException("Cannot land into a detached target checkout.");
             await RunGitAsync(targetWorkDir, token, "fetch", sourceRepoPath, commitHash).ConfigureAwait(false);

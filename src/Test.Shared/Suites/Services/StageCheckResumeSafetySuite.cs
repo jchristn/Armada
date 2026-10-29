@@ -172,7 +172,7 @@ namespace Test.Shared.Suites.Services
                 finally { TestTemp.TryDelete(worktree); TestTemp.TryDelete(settings.LogDirectory); }
             }));
 
-            foreach (string handoff in new[] { "enqueue", "throw", "silent" })
+            foreach (string handoff in new[] { "enqueue", "throw", "silent", "conflict" })
             {
                 cases.Add(Case("passed_check_completion_" + handoff, async () =>
                 {
@@ -204,6 +204,7 @@ namespace Test.Shared.Suites.Services
                         {
                             calls++;
                             if (handoff == "throw") throw new InvalidOperationException("enqueue unavailable");
+                            if (handoff == "conflict") throw new GitMergeConflictException("conflict integrating the target", new[] { "work.txt" });
                             if (handoff == "silent") return;
                             await queue.EnqueueAsync(new MergeEntry { MissionId = m.Id, VesselId = vessel.Id, BranchName = "work", TargetBranch = "main" }).ConfigureAwait(false);
                         };
@@ -214,6 +215,9 @@ namespace Test.Shared.Suites.Services
                         AssertEqual(handoff != "enqueue" ? MissionStatusEnum.LandingFailed : MissionStatusEnum.WorkProduced, stored.Status);
                         AssertEqual(handoff != "enqueue" ? 0 : 1, (await db.MergeEntries.EnumerateAsync(new EnumerationQuery { MissionId = mission.Id })).Objects.Count);
                         if (handoff == "throw") AssertContains("enqueue unavailable", stored.FailureReason ?? "");
+                        // A stranded handoff records what failed: a real merge conflict, otherwise an environment failure.
+                        if (handoff != "enqueue")
+                            AssertEqual(handoff == "conflict" ? MissionFailureKindEnum.LandingConflict : MissionFailureKindEnum.Infra, stored.FailureKind, handoff);
                     }
                     finally { TestTemp.TryDelete(worktree); }
                 }));
@@ -275,6 +279,8 @@ namespace Test.Shared.Suites.Services
                     bool flagged = scenario == "missing" || scenario == "default" || scenario == "skipped" || scenario == "full";
                     Mission stored = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
                     AssertEqual(flagged ? MissionStatusEnum.LandingFailed : MissionStatusEnum.WorkProduced, stored.Status, scenario);
+                    // A lost handoff is Infra: left kindless it would classify as LandingConflict and be auto-rescued.
+                    if (flagged) AssertEqual(MissionFailureKindEnum.Infra, stored.FailureKind, scenario);
                     AssertEqual(flagged ? 1 : 0, (await db.Events.EnumerateByMissionAsync(mission.Id).ConfigureAwait(false))
                         .Count(e => e.EventType == "mission.landing_handoff_missing"), "one persistent flag, no repeated notifications");
                 }));
@@ -303,6 +309,7 @@ namespace Test.Shared.Suites.Services
                     AssertNull(after.CompletedUtc, "not completed");
                     AssertNull(after.CommitHash, "no landing evidence");
                     if (processId == Int32.MaxValue) AssertContains("not verified", after.FailureReason!);
+                    if (processId == Int32.MaxValue) AssertEqual(MissionFailureKindEnum.Infra, after.FailureKind, "an unverified orphan exit records a kind");
                     Mission stale = after;
                     if (processId == Int32.MaxValue)
                     {

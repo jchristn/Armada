@@ -140,6 +140,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(MissionStatusEnum.WorkProduced, after.Status, "held for operator recovery, not completed");
                 AssertNull(after.ProcessId, "the dead process was released");
                 AssertContains("not verified", after.FailureReason ?? "");
+                AssertEqual(MissionFailureKindEnum.Infra, after.FailureKind, "the orphan hold records a kind");
                 List<ArmadaEvent> events = await db.Events.EnumerateByMissionAsync(mission.Id).ConfigureAwait(false);
                 AssertTrue(events.Any(e => e.EventType == "mission.orphan_recovered"), "the recovery is recorded");
 

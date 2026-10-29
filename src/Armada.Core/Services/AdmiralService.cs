@@ -1806,6 +1806,8 @@ namespace Armada.Core.Services
             _Logging.Warn(_Header + reason + " Captain: " + captain.Id);
             if (mission != null)
             {
+                // The owning host has not confirmed the job stopped: an environment problem, not the work.
+                mission.FailureKind = MissionFailureKindEnum.Infra;
                 mission.FailureReason = reason;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -2014,6 +2016,8 @@ namespace Armada.Core.Services
                 if (check == null || check.IsBlocking) continue;
                 DateTime version = mission.LastUpdateUtc;
                 mission.Status = MissionStatusEnum.LandingFailed;
+                // A lost landing callback is an Armada handoff failure, not a merge conflict an autonomous rescue can fix.
+                mission.FailureKind = MissionFailureKindEnum.Infra;
                 mission.FailureReason = "Stage check was nonblocking, but no merge queue entry was recorded within five minutes. Inspect the preserved branch and enqueue landing manually.";
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 if (await _Database.Missions.TryUpdateIfUnchangedAsync(mission, version, new[] { MissionStatusEnum.WorkProduced }, token).ConfigureAwait(false))
@@ -2212,6 +2216,7 @@ namespace Armada.Core.Services
                         Mission? recovered = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
                         if (recovered == null || recovered.Status != mission.Status || recovered.ProcessId.HasValue) return;
                         recovered.Status = MissionStatusEnum.WorkProduced;
+                        recovered.FailureKind = MissionFailureKindEnum.Infra;
                         recovered.FailureReason = "Orphaned agent exit was not verified; stage checks and landing remain outstanding.";
                         recovered.CompletedUtc = null;
                         recovered.LastUpdateUtc = DateTime.UtcNow;

@@ -61,6 +61,8 @@ namespace Test.Shared.Suites.E2E
             ["RepositoryLayout"] = "Repository file list used by provisioning on the server",
             ["GitAnchorsSnapshot"] = "Git evidence collected for prompt rendering",
             ["GitCommitMergeResult"] = "Result of the git integration barrier, consumed by the landing pipeline",
+            ["MergeQueueMergeResult"] = "Result of merging a merge queue entry's branch, consumed by the merge queue",
+            ["MergeQueueFailure"] = "Merge queue failure facts, stored as mission.landing_failed event Payload JSON (an event string field)",
             ["RemoteTunnelHandshakePayload"] = "Remote tunnel protocol frame (proxy link), not a REST or MCP response",
             ["RemoteTunnelHandshakeResponse"] = "Remote tunnel protocol frame (proxy link), not a REST or MCP response",
             ["RemoteTunnelHttpRelayRequest"] = "Remote tunnel protocol frame (proxy link), not a REST or MCP response",

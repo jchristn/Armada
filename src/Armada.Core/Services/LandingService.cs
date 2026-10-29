@@ -131,6 +131,7 @@ namespace Armada.Core.Services
             string? owningRepository = DockHostResolver.IsHarborDock(dock) ? dock!.RepositoryPath : vessel.LocalPath;
             if (String.IsNullOrEmpty(owningRepository))
             {
+                mission.FailureKind = MissionFailureKindEnum.Infra;
                 mission.FailureReason = "Landing retry cannot resolve the repository on the dock's owning host.";
                 if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
                 return false;
@@ -247,19 +248,19 @@ namespace Armada.Core.Services
             {
                 _Logging.Warn(_Header + "landing retry failed for mission " + missionId + ": " + ex.ToString());
 
-                // Capture any merge-conflict file list so the operator sees exactly what to fix.
+                // Capture any merge-conflict file list so the operator sees exactly what to fix. A merge git reported as
+                // conflicted carries its files (read before the merge was aborted); otherwise the list is read from the
+                // worktree where the merge ran, never from the owning repository, which is not where landing merges.
                 string failureReason = "Landing retry failed: " + ex.Message;
                 MissionFailureKindEnum failureKind = LandingFailureClassifier.Classify(ex);
-                try
+                IReadOnlyList<string> conflicts = ConflictedFilesFrom(ex);
+                if (conflicts.Count == 0)
+                    conflicts = await ReadMergeWorktreeConflictsAsync(git, dock, vessel).ConfigureAwait(false);
+                if (conflicts.Count > 0)
                 {
-                    IReadOnlyList<string> conflicts = await git.GetConflictedFilesAsync(repoPath, token).ConfigureAwait(false);
-                    if (conflicts.Count > 0)
-                    {
-                        failureReason = "Landing retry failed with merge conflicts in: " + String.Join(", ", conflicts);
-                        failureKind = MissionFailureKindEnum.LandingConflict;
-                    }
+                    failureReason = "Landing retry failed with merge conflicts in: " + String.Join(", ", conflicts);
+                    failureKind = MissionFailureKindEnum.LandingConflict;
                 }
-                catch { }
 
                 // Ensure mission goes back to LandingFailed with the captured reason
                 try
@@ -282,6 +283,40 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static IReadOnlyList<string> ConflictedFilesFrom(Exception exception)
+        {
+            for (Exception? current = exception; current != null; current = current.InnerException)
+            {
+                if (current is GitMergeConflictException conflict && conflict.ConflictedFiles.Count > 0) return conflict.ConflictedFiles;
+            }
+            return new List<string>();
+        }
+
+        private async Task<IReadOnlyList<string>> ReadMergeWorktreeConflictsAsync(IGitService git, Dock? dock, Vessel vessel)
+        {
+            // Landing merges in the dock worktree (target integration) and, for a local merge, in the target checkout.
+            List<string> candidates = new List<string>();
+            bool harborDock = DockHostResolver.IsHarborDock(dock);
+            if (!String.IsNullOrEmpty(dock?.WorktreePath)) candidates.Add(dock!.WorktreePath!);
+            string? targetCheckout = harborDock ? dock!.CheckoutPath : vessel.WorkingDirectory;
+            if (!String.IsNullOrEmpty(targetCheckout) && !candidates.Contains(targetCheckout)) candidates.Add(targetCheckout);
+
+            foreach (string candidate in candidates)
+            {
+                try
+                {
+                    // Not cancellable: the failure is being recorded even when the retry was cancelled.
+                    IReadOnlyList<string> conflicts = await git.GetConflictedFilesAsync(candidate, CancellationToken.None).ConfigureAwait(false);
+                    if (conflicts.Count > 0) return conflicts;
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Debug(_Header + "unable to list conflicted files in " + candidate + ": " + ex.Message);
+                }
+            }
+            return new List<string>();
+        }
 
         private async Task<bool> DockWorktreeExistsAsync(Dock dock, CancellationToken token)
         {
