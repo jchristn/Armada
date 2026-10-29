@@ -21,7 +21,7 @@
           "maxLength": 2000
         },
         "arguments": {
-          "description": "Tool arguments as text.",
+          "description": "Tool arguments as text; when the action runs, true, false and whole numbers become JSON booleans and numbers.",
           "type": [
             "object"
           ],
@@ -728,7 +728,7 @@
       ],
       "properties": {
         "id": {
-          "description": "Recommendation id within the entry (for example cr1).",
+          "description": "Stable recommendation id: the rule id in lower case, a dot and a key (for example bbx-land-001.landing-mode).",
           "type": [
             "string"
           ],
@@ -2874,7 +2874,7 @@
           "maxLength": 2000
         },
         "sourcePointers": {
-          "description": "Source pointers (file, method).",
+          "description": "Source pointers (repository-relative file:method).",
           "type": [
             "array"
           ],
@@ -3511,7 +3511,7 @@
       ],
       "properties": {
         "id": {
-          "description": "Path id within the entry (for example rp1).",
+          "description": "Stable path id: the rule id in lower case, a dot and a key (for example bbx-land-001.stash-retry).",
           "type": [
             "string"
           ],
@@ -3642,13 +3642,41 @@
           "type": [
             "boolean"
           ]
+        },
+        "recommendationId": {
+          "description": "Recommendation applied, when the run applied a configuration recommendation (PathId then holds the same id).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stepsRun": {
+          "description": "Steps the run executed (0 for a dry run).",
+          "type": [
+            "integer"
+          ]
+        },
+        "stepsFailed": {
+          "description": "Steps that failed.",
+          "type": [
+            "integer"
+          ]
+        },
+        "userId": {
+          "description": "User who ran it, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
         "entryId",
         "pathId",
         "dryRun",
-        "succeeded"
+        "succeeded",
+        "stepsRun",
+        "stepsFailed"
       ]
     },
     "BlackBoxRecoveryStep": {

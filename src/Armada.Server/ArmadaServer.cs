@@ -880,6 +880,9 @@ namespace Armada.Server
             _McpServer.RateLimits.ToolCallsPerSecond = _Settings.Mcp.ToolCallsPerSecond;
             _McpServer.AuthenticationHandler = AuthenticateMcpRequestAsync;
             RegisterMcpTools();
+            // Black box recovery runs and recommendation applies execute their recorded action through the registered
+            // MCP tool handlers, as the caller.
+            if (_BlackBox != null) _BlackBox.Service.ActionExecutor = new BlackBoxMcpActionExecutor(_AskActions);
 
             StartMcpListener();
             _Logging.Info(_Header + "MCP server started on port " + _Settings.McpPort);

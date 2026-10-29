@@ -86,6 +86,7 @@ namespace Armada.Core.BlackBox
             Sweeper = new BlackBoxSweeper(database, settings, Capture, Queue, logging);
             GarbageCollector = new BlackBoxGarbageCollector(database, settings.BlackBox, Stores, Events, logging);
             Service = new BlackBoxService(database, settings, Objects, Renderer, Pipeline, GarbageCollector, Sweeper, Stores, Events, logging);
+            Service.Redactor = Redactor;
             Background = new BlackBoxBackgroundService(settings, Queue, Sweeper, GarbageCollector, logging);
             Background.Reanalyzer = Reanalyzer;
         }

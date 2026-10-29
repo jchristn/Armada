@@ -28,6 +28,12 @@ namespace Armada.Core.Models
         public bool AcknowledgeDataLoss { get; set; } = false;
 
         /// <summary>
+        /// Author kind of the note the run adds to the entry: Agent (default, an MCP client or captain) or Operator (a
+        /// person in the dashboard, TUI or CLI).
+        /// </summary>
+        public BlackBoxNoteAuthorKindEnum? AuthorKind { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         public BlackBoxRecoveryRunRequest()
