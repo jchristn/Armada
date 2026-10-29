@@ -4,6 +4,7 @@ namespace Armada.Server
     using System.IO;
     using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -29,6 +30,11 @@ namespace Armada.Server
 
         /// <summary>Optional executor override for local landing checks.</summary>
         public IHostCommandExecutor? LocalVerificationCommands { get; set; }
+
+        /// <summary>
+        /// Black box capture for landing failures, or null.
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; } = null;
 
         #region Private-Members
 
@@ -215,6 +221,11 @@ namespace Armada.Server
             // Only a merge conflict git reports is a LandingConflict (LandingFailureClassifier); everything else is Infra.
             MissionFailureKindEnum landingFailureKind = MissionFailureKindEnum.Infra;
             GitDirtyCheckoutException? dirtyCheckout = null;
+            // Black box facts of the failing step, read while the merge lock is held (the target can move after it).
+            BlackBoxStepEnum landingStep = BlackBoxStepEnum.Unknown;
+            Exception? landingException = null;
+            BlackBoxGitFacts landingFacts = new BlackBoxGitFacts { CheckoutPath = targetWorkDir };
+            LandingTargetSynchronizationResult syncFacts = new LandingTargetSynchronizationResult();
 
             try
             {
@@ -231,13 +242,14 @@ namespace Armada.Server
                 // of a process-start error being reported as a merge conflict.
                 if (!landingModeIsNone)
                 {
-                    string? dockProblem = await EnsureLandingDockAsync(mission, dock).ConfigureAwait(false);
+                    string? dockProblem = await EnsureLandingDockAsync(mission, dock, landingFacts).ConfigureAwait(false);
                     if (dockProblem != null)
                     {
                         synchronizationFailed = true;
                         landingAttempted = true;
                         landingFailureKind = MissionFailureKindEnum.Infra;
                         landingFailureReason = dockProblem;
+                        landingStep = BlackBoxStepEnum.DockMissing;
                     }
                 }
 
@@ -254,6 +266,8 @@ namespace Armada.Server
                         landingAttempted = true;
                         landingFailureKind = LandingFailureClassifier.Classify(ex);
                         landingFailureReason = "Current-target integration failed: " + ex.Message;
+                        landingStep = BlackBoxStepEnum.TargetIntegration;
+                        landingException = ex;
                     }
                 }
 
@@ -261,7 +275,7 @@ namespace Armada.Server
                 {
                     try
                     {
-                        LandingTargetSynchronizationResult synchronized = await LandingTargetSynchronization.SynchronizeAsync(git, dock.WorktreePath, vessel.DefaultBranch, effectivePush ? null : targetWorkDir).ConfigureAwait(false);
+                        LandingTargetSynchronizationResult synchronized = await LandingTargetSynchronization.SynchronizeAsync(git, dock.WorktreePath, vessel.DefaultBranch, effectivePush ? null : targetWorkDir, syncFacts).ConfigureAwait(false);
                         mission.CommitHash = await git.GetHeadCommitHashAsync(dock.WorktreePath).ConfigureAwait(false);
                         if (effectivePush && !String.IsNullOrEmpty(targetWorkDir))
                             await git.ValidatePublishedAncestryAsync(dock.WorktreePath!, targetWorkDir, vessel.DefaultBranch, mission.CommitHash!).ConfigureAwait(false);
@@ -285,6 +299,8 @@ namespace Armada.Server
                         landingAttempted = true;
                         landingFailureReason = "Current-target integration failed: " + ex.Message;
                         landingFailureKind = LandingFailureClassifier.Classify(ex);
+                        landingStep = BlackBoxSiteFacts.LandingStepOf(ex, BlackBoxStepEnum.TargetIntegration);
+                        landingException = ex;
                     }
                 }
 
@@ -307,6 +323,8 @@ namespace Armada.Server
                         landingAttempted = true;
                         landingFailureKind = MissionFailureKindEnum.Infra;
                         landingFailureReason = "Landing verification refused publication: " + ex.Message;
+                        landingStep = BlackBoxStepEnum.Verification;
+                        landingException = ex;
                     }
                 }
 
@@ -319,10 +337,12 @@ namespace Armada.Server
                 {
                     // Push + PR flow
                     landingAttempted = true;
+                    BlackBoxStepEnum prStep = BlackBoxStepEnum.Push;
                     try
                     {
                         await git.PushBranchAsync(dock.WorktreePath).ConfigureAwait(false);
                         _Logging.Debug(_Header + "pushed branch " + dock.BranchName);
+                        prStep = BlackBoxStepEnum.PullRequest;
 
                         string prBody;
                         if (_PromptTemplateService != null)
@@ -422,6 +442,8 @@ namespace Armada.Server
                         landingSucceeded = false;
                         landingFailureReason = "Error pushing/creating PR: " + ex.Message;
                         landingFailureKind = LandingFailureClassifier.Classify(ex);
+                        landingStep = prStep;
+                        landingException = ex;
                     }
                 }
                 else if (!landingModeIsNone
@@ -472,11 +494,20 @@ namespace Armada.Server
                         mission.LastUpdateUtc = DateTime.UtcNow;
                         await _Database.Missions.UpdateAsync(mission).ConfigureAwait(false);
                         _Logging.Warn(_Header + "mission " + mission.Id + " remains WorkProduced: " + mission.FailureReason);
+                        // Non-terminal: the mission stays WorkProduced with its branch kept.
+                        await BlackBox.RecordMissionFailureAsync(mission, MissionStatusEnum.WorkProduced, BlackBoxStepEnum.LocalMerge, context =>
+                        {
+                            context.Vessel = vessel;
+                            context.Voyage = voyage;
+                            context.Dock = dock;
+                            context.GitFacts = new BlackBoxGitFacts { CheckoutPath = targetWorkDir, GitOperation = "rev-parse --verify " + dock.BranchName, WorktreeExisted = landingFacts.WorktreeExisted };
+                        }).ConfigureAwait(false);
                     }
                     else
                     {
                     // Local merge flow: fetch captain's branch from bare repo and merge into user's working directory
                     landingAttempted = true;
+                    BlackBoxStepEnum mergeStep = effectivePush ? BlackBoxStepEnum.Push : BlackBoxStepEnum.FastForward;
                     try
                     {
                         if (effectivePush)
@@ -524,6 +555,8 @@ namespace Armada.Server
                         // A dirty checkout or unpushed target commits are the operator's to resolve; a rescue mission cannot
                         // fix them, so record them as an environment failure rather than a landing conflict.
                         landingFailureKind = LandingFailureClassifier.Classify(ex);
+                        landingStep = BlackBoxSiteFacts.LandingStepOf(ex, mergeStep);
+                        landingException = ex;
                         if (ex is GitDirtyCheckoutException dirty)
                         {
                             dirtyCheckout = dirty;
@@ -652,6 +685,18 @@ namespace Armada.Server
 
                     if (dirtyCheckout != null)
                         await RecordLandingDeferralAsync(mission, dock, dirtyCheckout).ConfigureAwait(false);
+
+                    landingFacts.BranchTip ??= syncFacts.Before ?? mission.CommitHash;
+                    landingFacts.TargetTipAfter ??= syncFacts.RemoteTargetTip ?? syncFacts.LocalTargetTip;
+                    await BlackBox.RecordMissionFailureAsync(mission, MissionStatusEnum.WorkProduced, landingStep, context =>
+                    {
+                        context.Vessel = vessel;
+                        context.Voyage = voyage;
+                        context.Dock = dock;
+                        context.GitFacts = landingFacts;
+                        BlackBoxSiteFacts.ApplyException(context, landingException);
+                        context.Note = "Landing mode " + resolvedLandingMode + (harborDock ? " on Harbor " + dock.HarborId : "") + ".";
+                    }).ConfigureAwait(false);
                 }
             }
 
@@ -968,10 +1013,14 @@ namespace Armada.Server
         /// Make sure the dock's worktree exists before landing runs git in it. Returns null when landing can go on, or the
         /// Infra failure reason when the worktree is gone and cannot be recreated from the mission branch.
         /// </summary>
-        private async Task<string?> EnsureLandingDockAsync(Mission mission, Dock dock)
+        private async Task<string?> EnsureLandingDockAsync(Mission mission, Dock dock, BlackBoxGitFacts facts)
         {
             bool? exists = await _Docks.WorktreeExistsAsync(dock).ConfigureAwait(false);
+            if (exists == true) facts.WorktreeExisted = true;
             if (exists != false) return null;
+
+            // The worktree was gone: whether it is recreated below or not, landing did not find it where it was left.
+            facts.WorktreeExisted = false;
 
             string where = DockHostResolver.IsHarborDock(dock) ? " on Harbor " + dock.HarborId : "";
             _Logging.Warn(_Header + "dock " + dock.Id + " worktree " + dock.WorktreePath + where + " is missing at landing of mission " + mission.Id

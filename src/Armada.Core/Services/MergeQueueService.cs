@@ -753,7 +753,7 @@ namespace Armada.Core.Services
                             context.GitFacts ??= new BlackBoxGitFacts();
                             foreach (string file in failure.ConflictedFiles)
                                 if (!context.GitFacts.ConflictedFiles.Contains(file)) context.GitFacts.ConflictedFiles.Add(file);
-                            context.GitFacts.TargetTipBefore ??= failure.TargetCommit;
+                            context.GitFacts.TargetTipAfter ??= failure.TargetCommit;
                             if (failure.Step == MergeQueueFailureStepEnum.Merge) context.GitFacts.GitOperation ??= "merge --no-ff " + failure.BranchName;
                             context.Note = "Merge queue entry " + failure.MergeEntryId + " (" + failure.BranchName + " into " + failure.TargetBranch + ") failed at " + failure.Step + ".";
                         }
