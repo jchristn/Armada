@@ -474,6 +474,11 @@ namespace Armada.Core.Services
                         await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                         _Logging.Info(_Header + "mission " + mission.Id + " belongs to terminal voyage " + voyage.Id +
                             " (" + voyage.Status + ") -- cancelling instead of assigning");
+                        await RecordFailureAsync(mission, MissionStatusEnum.Pending, BlackBoxStepEnum.VoyageParentNotRunnable, null, context =>
+                        {
+                            context.Voyage = voyage;
+                            context.Vessel = vessel;
+                        }, token).ConfigureAwait(false);
                         return false;
                     }
                 }
@@ -681,6 +686,7 @@ namespace Armada.Core.Services
                     _Logging.Warn(_Header + "dock provisioning threw for mission " + mission.Id + " vessel " + vessel.Id + " captain " + captain.Id + ": "
                         + (ex is DockProvisioningException ? ex.Message : ex.ToString()));
                     await RollbackAssignmentAsync(mission, captain, null, preserveExistingBranch).ConfigureAwait(false);
+                    await RecordProvisionFailureAsync(mission, captain, placement.HarborId, ex, CancellationToken.None).ConfigureAwait(false);
                     return false;
                 }
 
@@ -688,11 +694,15 @@ namespace Armada.Core.Services
                 {
                     _Logging.Warn(_Header + "dock provisioning failed for captain " + captain.Id + " vessel " + vessel.Id + " mission " + mission.Id + " -- reverting to Pending");
                     await RollbackAssignmentAsync(mission, captain, null, preserveExistingBranch).ConfigureAwait(false);
+                    await RecordProvisionFailureAsync(mission, captain, placement.HarborId, null, CancellationToken.None).ConfigureAwait(false);
                     return false;
                 }
 
-                // Track the dock on the mission and the captain, each only while they still describe this assignment.
+                // Track the dock on the mission and the captain, each only while they still describe this assignment. The
+                // mission keeps the commit its dock started from (durable evidence for scope checks and the black box).
+                _ProvisionFailureCaptures.TryRemove(mission.Id, out string? _);
                 mission.DockId = dock.Id;
+                mission.StartCommit = DockStartCommit.FromDock(dock) ?? mission.StartCommit;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 bool dockRecorded = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, token).ConfigureAwait(false);
                 bool captainHasDock = dockRecorded && await _Database.Captains.TrySetDockAsync(captain.Id, mission.Id, dock.Id, token).ConfigureAwait(false);
@@ -712,7 +722,7 @@ namespace Armada.Core.Services
                 if (continuityFailure != null)
                 {
                     _Logging.Warn(_Header + "mission " + mission.Id + " refused: " + continuityFailure);
-                    await FailAssignmentAsync(mission, captain, dock, continuityFailure).ConfigureAwait(false);
+                    await FailAssignmentAsync(mission, captain, dock, continuityFailure, BlackBoxStepEnum.BranchCreate).ConfigureAwait(false);
                     return false;
                 }
 
@@ -721,7 +731,7 @@ namespace Armada.Core.Services
                 if (integrationFailure != null)
                 {
                     _Logging.Warn(_Header + "mission " + mission.Id + " refused: " + integrationFailure);
-                    await FailAssignmentAsync(mission, captain, dock, integrationFailure).ConfigureAwait(false);
+                    await FailAssignmentAsync(mission, captain, dock, integrationFailure, BlackBoxStepEnum.IntegrationBarrier).ConfigureAwait(false);
                     return false;
                 }
 
@@ -767,7 +777,7 @@ namespace Armada.Core.Services
                 // A deterministic policy/configuration problem cannot be repaired by repeatedly launching.
                 // Keep it visible as a terminal operational failure, without a provider call or rescue loop.
                 _LaunchFailures.TryRemove(mission.Id, out MissionLaunchFailure? _);
-                await FailAssignmentAsync(mission, captain, dock, configuration.Message).ConfigureAwait(false);
+                await FailAssignmentAsync(mission, captain, dock, configuration.Message, BlackBoxStepEnum.AssignmentFailed, configuration).ConfigureAwait(false);
 
                 // The same configuration fails every mission this captain is given; take it out of the pool for the
                 // quarantine window instead of letting it be picked first again.
@@ -781,7 +791,7 @@ namespace Armada.Core.Services
                 // on every dispatch cycle, so the mission fails with the actionable reason instead, and its dependents
                 // and voyage settle like any other terminal failure.
                 _Logging.Warn(_Header + "mission " + mission.Id + " failed at launch: " + dockMissing.Message);
-                await FailAssignmentAsync(mission, captain, dock, dockMissing.Message).ConfigureAwait(false);
+                await FailAssignmentAsync(mission, captain, dock, dockMissing.Message, BlackBoxStepEnum.HarborUnavailable, dockMissing).ConfigureAwait(false);
                 return false;
             }
             catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
@@ -797,7 +807,8 @@ namespace Armada.Core.Services
                     _LaunchFailures.TryRemove(mission.Id, out MissionLaunchFailure? _);
                     await FailAssignmentAsync(mission, captain, dock,
                         "Captain " + captain.Name + " could not be started " + failure.Count + " times: " + failure.Reason
-                        + " If this mission should run on your Harbor, connect it and turn on Require Harbor for launch (Server settings), then restart the mission.").ConfigureAwait(false);
+                        + " If this mission should run on your Harbor, connect it and turn on Require Harbor for launch (Server settings), then restart the mission.",
+                        BlackBoxStepEnum.AssignmentFailed, ex).ConfigureAwait(false);
                     return false;
                 }
 
@@ -1338,8 +1349,9 @@ namespace Armada.Core.Services
             await ReclaimAssignmentDockAsync(mission, dock).ConfigureAwait(false);
         }
 
-        private async Task FailAssignmentAsync(Mission mission, Captain captain, Dock dock, string reason)
+        private async Task FailAssignmentAsync(Mission mission, Captain captain, Dock dock, string reason, BlackBoxStepEnum step, Exception? exception = null)
         {
+            bool failed = false;
             try
             {
                 mission.Status = MissionStatusEnum.Failed;
@@ -1350,7 +1362,7 @@ namespace Armada.Core.Services
                 mission.ProcessId = null;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
-                bool failed = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, CancellationToken.None).ConfigureAwait(false);
+                failed = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, CancellationToken.None).ConfigureAwait(false);
                 if (failed)
                     ArmadaMetrics.MissionsFailed.Add(1);
                 else
@@ -1359,6 +1371,15 @@ namespace Armada.Core.Services
             catch (Exception ex)
             {
                 _Logging.Warn(_Header + "could not mark mission " + mission.Id + " failed: " + ex.Message);
+            }
+
+            if (failed)
+            {
+                await RecordFailureAsync(mission, MissionStatusEnum.Assigned, step, dock, context =>
+                {
+                    context.Captain = captain;
+                    BlackBoxSiteFacts.ApplyException(context, exception);
+                }, CancellationToken.None).ConfigureAwait(false);
             }
 
             await ReleaseClaimedCaptainAsync(mission, captain).ConfigureAwait(false);
@@ -1554,7 +1575,7 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            string? startCommit = TryReadDockStartCommit(dock.Id);
+            string? startCommit = TryReadDockStartCommit(dock, mission);
             if (String.IsNullOrEmpty(startCommit))
             {
                 _Logging.Warn(_Header + "scope validation skipped for mission " + mission.Id +
@@ -1627,23 +1648,28 @@ namespace Armada.Core.Services
             return files;
         }
 
-        private string? TryReadDockStartCommit(string dockId)
+        private string? TryReadDockStartCommit(Dock dock, Mission? mission = null)
         {
+            // The .start file is written at provision on the Admiral; the dock's anchors snapshot and the mission row hold
+            // the same commit durably (they survive a lost log directory, and exist for Harbor-hosted docks).
+            string? fromFile = null;
             try
             {
-                string metadataPath = Path.Combine(_Settings.LogDirectory, "docks", dockId + ".start");
-                if (!File.Exists(metadataPath))
-                {
-                    return null;
-                }
-
-                return File.ReadAllText(metadataPath).Trim();
+                string metadataPath = Path.Combine(_Settings.LogDirectory, "docks", dock.Id + ".start");
+                if (File.Exists(metadataPath)) fromFile = File.ReadAllText(metadataPath).Trim();
             }
             catch (Exception ex)
             {
-                _Logging.Warn(_Header + "could not read dock start commit metadata for " + dockId + ": " + ex.ToString());
-                return null;
+                _Logging.Warn(_Header + "could not read dock start commit metadata for " + dock.Id + ": " + ex.ToString());
             }
+
+            if (!String.IsNullOrEmpty(fromFile)) return fromFile;
+            string? durable = DockStartCommit.FromDock(dock);
+            if (!String.IsNullOrEmpty(durable)) return durable;
+            if (mission != null && !String.IsNullOrEmpty(mission.StartCommit)
+                && (String.IsNullOrEmpty(mission.DockId) || String.Equals(mission.DockId, dock.Id, StringComparison.Ordinal)))
+                return mission.StartCommit;
+            return null;
         }
 
         /// <summary>

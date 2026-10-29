@@ -551,6 +551,22 @@ namespace Armada.Server
             };
             admiralService.OnLandingIntegritySweep = landingIntegrity.SweepAsync;
 
+            // Every service that writes a mission or voyage failure records it in the black box.
+            Armada.Core.BlackBox.IBlackBoxCapture blackBoxCapture = _BlackBox.Capture;
+            if (blackBoxCapture is Armada.Core.BlackBox.BlackBoxCapture concreteCapture)
+            {
+                concreteCapture.Harbors = _HarborConnectionManager;
+                concreteCapture.MissionStatusChanged = EmitMissionStatusChangedAsync;
+            }
+            admiralService.BlackBox = blackBoxCapture;
+            if (captainService is CaptainService concreteCaptains) concreteCaptains.BlackBox = blackBoxCapture;
+            if (voyageService is VoyageService concreteVoyages) concreteVoyages.BlackBox = blackBoxCapture;
+            if (_MergeQueue is MergeQueueService concreteQueue) concreteQueue.BlackBox = blackBoxCapture;
+            _LandingService.BlackBox = blackBoxCapture;
+            _MissionRecovery.BlackBox = blackBoxCapture;
+            _MissionLanding.BlackBox = blackBoxCapture;
+            landingIntegrity.BlackBox = blackBoxCapture;
+
             // Evaluate (probe-only model probes): each probe runs through the captain's own runtime as a Harbor job,
             // under the evaluation budget and concurrency limits. Nothing it records changes routing or captain settings.
             ModelProbeExecutor modelProbeExecutor = new ModelProbeExecutor(_RuntimeFactory, _Logging)

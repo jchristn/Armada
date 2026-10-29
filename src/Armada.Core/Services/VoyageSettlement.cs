@@ -5,6 +5,7 @@ namespace Armada.Core.Services
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -75,19 +76,40 @@ namespace Armada.Core.Services
         /// <param name="status">Terminal status from <see cref="DecideAsync"/>.</param>
         /// <param name="missions">The voyage's missions.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="blackBox">Black box capture, or null. A Failed voyage is recorded with its roll-up and the mission
+        /// at the root of the cascade (the earliest failed mission).</param>
         /// <returns>A task.</returns>
         /// <exception cref="ArgumentNullException">Thrown when database, voyage or missions is null.</exception>
-        public static async Task ApplyAsync(DatabaseDriver database, Voyage voyage, VoyageStatusEnum status, List<Mission> missions, CancellationToken token = default)
+        public static async Task ApplyAsync(DatabaseDriver database, Voyage voyage, VoyageStatusEnum status, List<Mission> missions, CancellationToken token = default, IBlackBoxCapture? blackBox = null)
         {
             if (database == null) throw new ArgumentNullException(nameof(database));
             if (voyage == null) throw new ArgumentNullException(nameof(voyage));
             if (missions == null) throw new ArgumentNullException(nameof(missions));
 
+            VoyageStatusEnum statusBefore = voyage.Status;
             voyage.Status = status;
             voyage.CompletedUtc = DateTime.UtcNow;
             voyage.LastUpdateUtc = DateTime.UtcNow;
             await database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
             if (status == VoyageStatusEnum.Complete) await PipelineStageSettler.SettleAsync(database, missions, token).ConfigureAwait(false);
+
+            if (status == VoyageStatusEnum.Failed && blackBox != null)
+            {
+                List<Mission> failed = missions
+                    .Where(m => m.Status == MissionStatusEnum.Failed || m.Status == MissionStatusEnum.LandingFailed)
+                    .OrderBy(m => m.CompletedUtc ?? m.LastUpdateUtc)
+                    .ThenBy(m => m.Id, StringComparer.Ordinal)
+                    .ToList();
+                Mission? root = failed.FirstOrDefault();
+                string reason = root != null
+                    ? failed.Count + " of " + missions.Count + " mission(s) failed; the first was " + root.Id + " (" + root.Status + "): " + root.FailureReason
+                    : "The voyage settled as Failed.";
+                await blackBox.RecordVoyageFailureAsync(voyage, statusBefore, BlackBoxStepEnum.SettlementFailed, reason, context =>
+                {
+                    context.RootMissionId = root?.Id;
+                    context.SettlementRule = "No mission is active and at least one mission ended Failed or LandingFailed.";
+                }, token).ConfigureAwait(false);
+            }
         }
     }
 }

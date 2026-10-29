@@ -71,8 +71,9 @@ Services that fail missions expose `public IBlackBoxCapture? BlackBox { get; set
 `runtime.Capture`. Voyages use `RecordVoyageFailureAsync(voyage, statusBefore, step, reason, configure, token)`.
 `BlackBoxCaptureContext` fields: Mission (required), StatusBefore, Step, CaptureMode, Exception, ExitCode,
 RuntimeFailureKind, FailingCommand, CommandExitCode, CommandOutput, GitFacts, ScopedFiles, OutOfScopeFiles,
-BoundaryFindings, CheckResults, MergeEntryId, IncidentId, StageOutcomeId, SuspectedCause, CauseRuleId, Note, Vessel,
-Captain, Voyage, Dock, CallerMember, CallerFile, CallerLine, Component. `BlackBoxGitFacts`: ConflictedFiles, DirtyPaths,
+BoundaryFindings, CheckResults, MergeEntryId, IncidentId, StageOutcomeId, SuspectedCause, CauseRuleId, Reason (used when
+the site writes no Mission.FailureReason, such as a non-terminal entry), Note, Vessel, Captain, CaptainId (when the site
+cleared Mission.CaptainId before its write), Voyage, Dock, CallerMember, CallerFile, CallerLine, Component. `BlackBoxGitFacts`: ConflictedFiles, DirtyPaths,
 TargetTipBefore, TargetTipAfter, WorktreeExisted, CheckoutPath, BranchTip, GitOperation, GitStderr.
 `BlackBoxVoyageCaptureContext`: Voyage (required), StatusBefore, Step, CaptureMode, Reason, Exception, RootMissionId,
 SettlementRule, HaltReason, Note, CallerMember, CallerFile, CallerLine, Component.
@@ -86,6 +87,32 @@ rows (Conflicted, DirtyInCheckout, OutOfScope), sets `missions.last_blackbox_ent
 `last_update_utc` change), emits `blackbox.captured` and queues enrichment. Everything beyond the index insert runs
 under `blackBox.captureTimeoutMs` (default 2000); on timeout record.json is rewritten with `truncation.timedOut` and
 the rest is left to enrichment.
+
+Site conventions (every failure write in plan 5.1 is wired; `Services.BlackBoxCaptureSites` checks each step):
+
+- Read `StatusBefore` before the mutation; capture only after the row update succeeded (for a compare-and-set write, only
+  when it wrote). Pass the rows you hold (`Dock`, `Captain`, `Vessel`, `Voyage`) so the entry keeps ids the site cleared.
+- `BlackBoxSiteFacts.ApplyException(context, ex)` records the exception and the git facts it carries
+  (`GitMergeConflictException.ConflictedFiles`, `GitDirtyCheckoutException.ModifiedPaths` and checkout, `GitCommandException`
+  command and stderr, `LandingVerificationException` command and exit code). `LandingStepOf`, `ExecutionStepOf` and
+  `MergeQueueStepOf` map an exception, a `RuntimeFailureKindEnum` or a `MergeQueueFailure` to a step.
+- Non-terminal entries: a provisioning failure that returns the mission to Pending (once per mission and cause), a
+  dependent held as Blocked, an unconfirmed stop (once per episode), an orphaned exit held as WorkProduced, a landing not
+  attempted, an expired landing deferral, a used-up rescue budget. `StatusAfter` is the status the mission kept.
+- Triage: operator stops and cancellations (`OperatorStop`, the External phase, kind `OperatorAction`, a voyage
+  `Cancelled`) are `External`.
+- Every mission capture whose status changed emits `mission.status_changed` with `MissionStatusChangedPayload`
+  (`PreviousStatus`), through `BlackBoxCapture.MissionStatusChanged` (the Admiral's `EmitMissionStatusChangedAsync`) or as
+  an event row, whether or not the black box is enabled.
+- Volatile facts: `DockService` writes the start commit into `Dock.GitAnchorsJson` on every provision (`DockStartCommit`)
+  and `Mission.StartCommit` is set when the dock is recorded; checks read the `.start` file, then the anchors, then the
+  mission. `BlackBoxCapture.Harbors` records `HarborConnectionManager.GetLinkState(harborId)` for Harbor-hosted docks.
+  `MissionLandingHandler` passes `WorktreeExisted=false` when it had to recreate, or could not recreate, the worktree,
+  and the dock head and target tip read by `LandingTargetSynchronization`. A memory-pressure deferral records one typed
+  `mission.dispatch_deferred` event (`MissionDispatchDeferredPayload`) per Pending mission and reason.
+- Not captured inline: `NoEligibleCaptain` and `MemoryPressure` (waits, not failure writes) and `VesselDeleted` (written by
+  the vessel routes and MCP tools; their missions are recorded as `OperatorTransition` by `CancelMissionAsync`, and the
+  sweeper covers the rest).
 
 ### 3.3 Services
 ### IBlackBoxCapture
@@ -509,8 +536,8 @@ Grep for `TODO(blackbox-wave2` to find each placeholder in code.
 
 | Owner | Item | Where |
 |---|---|---|
-| capture sites | Wire the remaining failure writes in plan section 5.1 with `RecordMissionFailureAsync` / `RecordVoyageFailureAsync` | services listed in plan 5.3 |
-| enrichment | Optional model-written summary (`blackBox.summaryEndpointId`) | `BlackBoxPipeline` |
+| capture sites | Done: every failure write in plan 5.1 is wired (see 3.2); `VesselDeleted` waits on the vessel routes and MCP tools | `VesselRoutes`, `McpVesselTools` |
+| enrichment | Done: git forensics, conflict attribution, attempts, evidence objects (see 3.13). Open: optional model-written summary (`blackBox.summaryEndpointId`) | `BlackBoxPipeline` |
 | advisor | `BlackBoxRuleCatalog` and `BlackBoxAdvisor` (starter rules, triage) | `IBlackBoxAdvisor`, `BlackBoxPipeline.Advisor` |
 | recovery | `RunRecoveryAsync` and `ApplyRecommendationAsync` (dry run, confirm token, data-loss acknowledgement, annotation, `blackbox.recovery_run`) | `BlackBoxService` |
 | storage | Blobject targets (Disk, S3, AzureBlob, GoogleCloud, Cifs, Nfs), storage migration job, doctor check, storage inventory | `BlackBoxStoreFactory.CreateBuiltIn`, `BlackBoxService.StartStorageMigrationAsync`, `GetStorageMigrationAsync` |

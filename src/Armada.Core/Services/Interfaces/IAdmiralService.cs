@@ -1,5 +1,6 @@
 namespace Armada.Core.Services.Interfaces
 {
+    using Armada.Core.BlackBox;
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
@@ -8,6 +9,11 @@ namespace Armada.Core.Services.Interfaces
     /// </summary>
     public interface IAdmiralService
     {
+        /// <summary>
+        /// Black box capture for the failures the Admiral writes (and operator cancellations through it), or null.
+        /// </summary>
+        IBlackBoxCapture? BlackBox => null;
+
         /// <summary>
         /// Delegate invoked when a captain needs an agent process started.
         /// The handler receives (captain, mission, dock) and should return the process ID.
