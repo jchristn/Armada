@@ -84,6 +84,7 @@ namespace Armada.Helm
             HelpRow("mission restart <id>", "Restart a failed mission (edit instructions)");
             HelpRow("mission retry <id>", "Retry a failed mission (new copy)");
             HelpRow("mission failure <id>", "Show the mission's black box entry (--brief)");
+            HelpRow("mission lint-brief --brief-file f", "Lint a mission brief before dispatch (--vessel)");
 
             HelpHeading("Voyages (armada voyage ...)");
             HelpRow("voyage list", "List all voyages");
@@ -92,6 +93,7 @@ namespace Armada.Helm
             HelpRow("voyage cancel <id>", "Cancel a voyage and its pending missions");
             HelpRow("voyage retry <id>", "Retry failed missions in a voyage");
             HelpRow("voyage failure <id>", "Show the voyage's black box entry");
+            HelpRow("voyage cascade <id>", "Which failure took the voyage's other missions down");
 
             HelpHeading("Black box (armada blackbox ...)");
             HelpRow("blackbox show <id> [--brief]", "Failure record of a mission, voyage, or entry (--brief | pbcopy)");
@@ -110,6 +112,11 @@ namespace Armada.Helm
             HelpRow("blackbox bundle [-o bundle.md]", "Maintainer bundle of entries by fingerprint");
             HelpRow("blackbox backfill [--since 30d]", "Record entries for past failures");
             HelpRow("blackbox export-fixture <id>", "Write a sanitized regression fixture");
+            HelpRow("blackbox timeline <id>", "Combined timeline of an entry (--newest-first)");
+            HelpRow("blackbox diff <id> <otherId>", "What changed between two attempts");
+            HelpRow("blackbox nearby <id>", "Successful landings near a failure on the same files");
+            HelpRow("blackbox cascade <voyageId>", "Voyage cascade graph (alias of voyage cascade)");
+            HelpRow("blackbox recovery-stats", "Recovery path success rates (--rule, --vessel)");
 
             HelpHeading("Fleet actions (armada action ...)");
             HelpRow("action list [--runs]", "List fleet actions (or their runs)");
@@ -138,6 +145,10 @@ namespace Armada.Helm
             HelpRow("vessel import <paths...> [--root <dir>]", "Discover repositories and import them as vessels");
             HelpRow("vessel history <id|name>", "Commit history by day (--before, --all, --verbose)");
             HelpRow("vessel history <id|name> --heatmap", "Commit activity heatmap for the last year (--from/--to)");
+            HelpRow("vessel update <id|name>", "Change settings (--serialize-overlapping-missions)");
+            HelpRow("vessel overlap-preview <id|name>", "Preview a brief's overlaps and lint (--brief-file)");
+            HelpRow("vessel reservations <id|name>", "Soft directory reservations of active missions");
+            HelpRow("vessel doctor <id|name>", "Recurring black box configuration recommendations");
 
             HelpHeading("Captains (armada captain ...)");
             HelpRow("captain list", "List all captains (agents)");
@@ -270,6 +281,9 @@ namespace Armada.Helm
                 mission.AddCommand<MissionFailureCommand>("failure")
                     .WithDescription("Show the mission's black box entry (alias of blackbox show)")
                     .WithExample("mission", "failure", "msn_abc123", "--brief");
+                mission.AddCommand<MissionLintBriefCommand>("lint-brief")
+                    .WithDescription("Lint a mission brief (warnings only)")
+                    .WithExample("mission", "lint-brief", "--brief-file", "brief.md", "--vessel", "my-repo");
             });
 
             config.AddBranch("voyage", voyage =>
@@ -288,6 +302,9 @@ namespace Armada.Helm
                 voyage.AddCommand<VoyageFailureCommand>("failure")
                     .WithDescription("Show the voyage's black box entry (alias of blackbox show)")
                     .WithExample("voyage", "failure", "vyg_abc123");
+                voyage.AddCommand<BlackBoxCascadeCommand>("cascade")
+                    .WithDescription("Show which failure in a voyage took the others down")
+                    .WithExample("voyage", "cascade", "vyg_abc123");
             });
 
             config.AddBranch("blackbox", blackbox =>
@@ -354,6 +371,20 @@ namespace Armada.Helm
                 blackbox.AddCommand<BlackBoxExportFixtureCommand>("export-fixture")
                     .WithDescription("Export an entry as a sanitized regression fixture")
                     .WithExample("blackbox", "export-fixture", "bbx_abc123", "--name", "land-003-example");
+                blackbox.AddCommand<BlackBoxTimelineCommand>("timeline")
+                    .WithDescription("Show an entry's combined timeline (oldest first)")
+                    .WithExample("blackbox", "timeline", "bbx_abc123", "--page-size", "50");
+                blackbox.AddCommand<BlackBoxDiffCommand>("diff")
+                    .WithDescription("Show what changed between two entries")
+                    .WithExample("blackbox", "diff", "bbx_abc123", "bbx_def456");
+                blackbox.AddCommand<BlackBoxNearbyCommand>("nearby")
+                    .WithDescription("List the successful landings near a failure that touched the same files");
+                blackbox.AddCommand<BlackBoxCascadeCommand>("cascade")
+                    .WithDescription("Show a voyage's cascade graph (alias of voyage cascade)")
+                    .WithExample("blackbox", "cascade", "vyg_abc123");
+                blackbox.AddCommand<BlackBoxRecoveryStatsCommand>("recovery-stats")
+                    .WithDescription("Show recovery path success rates")
+                    .WithExample("blackbox", "recovery-stats", "--rule", "BBX-LAND-001");
             });
 
             config.AddBranch("action", action =>
@@ -419,6 +450,17 @@ namespace Armada.Helm
                     .WithExample("vessel", "import", "~/Code/my-repo", "--root", "~/Code", "--dry-run");
                 vessel.AddCommand<VesselRemoveCommand>("remove")
                     .WithDescription("Decommission a vessel (accepts name or ID)");
+                vessel.AddCommand<VesselUpdateCommand>("update")
+                    .WithDescription("Update a vessel's settings (accepts name or ID)")
+                    .WithExample("vessel", "update", "my-repo", "--serialize-overlapping-missions", "true");
+                vessel.AddCommand<VesselOverlapPreviewCommand>("overlap-preview")
+                    .WithDescription("Preview a mission's overlaps and brief lint on a vessel (nothing is dispatched)")
+                    .WithExample("vessel", "overlap-preview", "my-repo", "--brief-file", "brief.md");
+                vessel.AddCommand<VesselReservationsCommand>("reservations")
+                    .WithDescription("List a vessel's soft directory reservations");
+                vessel.AddCommand<VesselDoctorCommand>("doctor")
+                    .WithDescription("List a vessel's recurring black box configuration recommendations")
+                    .WithExample("vessel", "doctor", "my-repo", "--window-days", "30");
                 vessel.AddCommand<VesselHistoryCommand>("history")
                     .WithDescription("Show a vessel's commit history or activity heatmap (accepts name or ID)")
                     .WithExample("vessel", "history", "my-repo", "--before", "2026-01-01")

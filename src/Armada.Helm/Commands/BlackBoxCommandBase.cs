@@ -1,11 +1,16 @@
 namespace Armada.Helm.Commands
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using System.Text.Json;
     using System.Text.Json.Serialization;
+    using System.Threading;
     using System.Threading.Tasks;
     using Armada.Client;
+    using Armada.Client.Models;
+    using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Helm.Infrastructure;
     using Spectre.Console.Cli;
     using Spectre.Console;
@@ -20,6 +25,18 @@ namespace Armada.Helm.Commands
     /// <typeparam name="TSettings">Settings.</typeparam>
     public abstract class BlackBoxCommandBase<TSettings> : BaseCommand<TSettings> where TSettings : CommandSettings
     {
+        #region Protected-Members
+
+        /// <summary>
+        /// The hint printed on stderr after a 404 (what to list to find a valid id).
+        /// </summary>
+        protected virtual string NotFoundHint
+        {
+            get { return "No black box entry was found. List entries with: armada blackbox list"; }
+        }
+
+        #endregion
+
         #region Private-Members
 
         private static readonly JsonSerializerOptions _Json = new JsonSerializerOptions
@@ -117,18 +134,78 @@ namespace Armada.Helm.Commands
             return AnsiConsole.Confirm(question, false);
         }
 
+        /// <summary>
+        /// Resolve a vessel name or id to its id: an id (vsl_ prefix) is read directly, anything else is matched against
+        /// the vessel list by name or id.
+        /// </summary>
+        /// <param name="client">Client.</param>
+        /// <param name="nameOrId">Vessel name or id.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The vessel, or null when none matches (a message is on stderr).</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="client"/> is null.</exception>
+        /// <exception cref="ArmadaApiException">Thrown when the Admiral call fails (a 404 for an unknown id).</exception>
+        protected static async Task<Vessel?> ResolveVesselAsync(ArmadaClient client, string nameOrId, CancellationToken token)
+        {
+            if (client == null) throw new ArgumentNullException(nameof(client));
+            string wanted = (nameOrId ?? "").Trim();
+            if (wanted.Length == 0)
+            {
+                Status("Error: a vessel name or id is required.");
+                return null;
+            }
+
+            if (wanted.StartsWith("vsl_", StringComparison.Ordinal)) return await client.GetVesselAsync(wanted, token).ConfigureAwait(false);
+            EnumerationResult<Vessel>? list = await client.ListVesselsAsync(new ArmadaPageQuery(1, 9999), token).ConfigureAwait(false);
+            Vessel? match = EntityResolver.ResolveVessel(list?.Objects ?? new List<Vessel>(), wanted);
+            if (match == null) Status("Error: no vessel named or with id '" + wanted + "'. List vessels with: armada vessel list");
+            return match;
+        }
+
+        /// <summary>
+        /// Read a mission brief from <c>--brief</c> text or a <c>--brief-file</c> path (<c>-</c> reads stdin).
+        /// </summary>
+        /// <param name="text">The --brief value, or null.</param>
+        /// <param name="file">The --brief-file value, or null.</param>
+        /// <returns>The brief, or null when neither was given or the file could not be read (a message is on stderr).</returns>
+        protected static string? ReadBrief(string? text, string? file)
+        {
+            if (!String.IsNullOrEmpty(text) && !String.IsNullOrEmpty(file))
+            {
+                Status("Error: pass --brief or --brief-file, not both.");
+                return null;
+            }
+
+            if (!String.IsNullOrEmpty(text)) return text;
+            if (String.IsNullOrEmpty(file))
+            {
+                Status("Error: a brief is required: --brief \"<text>\" or --brief-file <path> (- reads stdin).");
+                return null;
+            }
+
+            try
+            {
+                if (file == "-") return Console.In.ReadToEnd();
+                return File.ReadAllText(file);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException)
+            {
+                Status("Error: the brief file could not be read: " + ex.Message);
+                return null;
+            }
+        }
+
         #endregion
 
         #region Private-Methods
 
-        private static int Fail(ArmadaApiException ex)
+        private int Fail(ArmadaApiException ex)
         {
             string code = String.IsNullOrEmpty(ex.Code) ? "" : " " + ex.Code;
             string status = ex.StatusCode > 0 ? "HTTP " + ex.StatusCode + code : "Request failed" + code;
             Console.Error.WriteLine("Error: " + status + ": " + ex.Message);
             if (ex.StatusCode == 404)
             {
-                Console.Error.WriteLine("No black box entry was found. List entries with: armada blackbox list");
+                Console.Error.WriteLine(NotFoundHint);
                 return BlackBoxCli.NotFoundExitCode;
             }
 
