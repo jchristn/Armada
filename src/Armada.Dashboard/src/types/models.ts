@@ -1,3 +1,4 @@
+import type { BlackBoxConflictingMission, BlackBoxFinding, BlackBoxRecoveryPath } from './blackbox';
 export interface RunApprovalOptions {
   approveAll: boolean;
   timeoutSeconds: number;
@@ -3526,7 +3527,7 @@ export type AskMessageRole = 'User' | 'Assistant' | 'System';
 export type AskMessageKind = 'Text' | 'ActionProposal' | 'ActionResult' | 'WorkUpdate' | 'Summary' | 'Error' | 'CliPermission' | 'WorkReport';
 export type AskProposalStatus = 'Pending' | 'Approved' | 'Rejected' | 'Expired' | 'Executed' | 'Failed';
 export type AskProposalSource = 'Captain' | 'QuickAction';
-export type AskTrackedEntityType = 'Voyage' | 'Mission' | 'FleetActionRun' | 'Job' | 'VesselImportBatch';
+export type AskTrackedEntityType = 'Voyage' | 'Mission' | 'FleetActionRun' | 'Job' | 'VesselImportBatch' | 'BlackBox';
 export type AskWorkState = 'Active' | 'Succeeded' | 'Failed' | 'Cancelled';
 export type AskTurnState = 'started' | 'completed' | 'failed' | 'cancelled';
 
@@ -3652,6 +3653,79 @@ export interface AskWorkSnapshot {
   startedUtc?: string | null;
   completedUtc?: string | null;
   capturedUtc?: string | null;
+  /** The black box card of BlackBox work; null for every other kind. */
+  blackBox?: AskBlackBoxCard | null;
+}
+
+/** The black box summary on an Ask card (server BlackBoxDigest, MCP get_blackbox format summary). */
+export interface AskBlackBoxDigest {
+  entryId: string;
+  subjectType?: string;
+  missionId?: string | null;
+  voyageId?: string | null;
+  title?: string | null;
+  vesselName?: string | null;
+  attempt?: number;
+  captureMode?: string;
+  state?: string;
+  phase?: string;
+  step?: string;
+  host?: string | null;
+  sourceFile?: string | null;
+  sourceLine?: number | null;
+  method?: string | null;
+  kind?: string | null;
+  reason?: string | null;
+  mechanism?: string | null;
+  statusBefore?: string | null;
+  statusAfter?: string | null;
+  triage?: string;
+  triageConfidence?: string | null;
+  summary?: string | null;
+  why?: BlackBoxFinding[];
+  recoveryPaths?: BlackBoxRecoveryPath[];
+  conflictedFileTotal?: number;
+  objectCount?: number;
+  resolution?: string;
+  createdUtc?: string;
+}
+
+/** One configuration recommendation on the Ask black box card. */
+export interface AskBlackBoxRecommendation {
+  id: string;
+  setting: string;
+  scope?: string;
+  currentValue?: string | null;
+  suggestedValue?: string | null;
+  rationale?: string | null;
+  ruleId?: string | null;
+  /** Armada can apply it (proposed as apply_blackbox_recommendation); otherwise howToApply says how. */
+  canApply?: boolean;
+  howToApply?: string | null;
+}
+
+/** A follow-up the card offers: a tool becomes a proposal the user approves; a prompt is sent to the captain. */
+export interface AskBlackBoxFollowUp {
+  /** fix, apply, armada-fix or compare. */
+  name: string;
+  /** English key rendered through t. */
+  label: string;
+  description?: string | null;
+  toolName?: string | null;
+  /** The tool's arguments as JSON object text. */
+  argumentsText?: string | null;
+  prompt?: string | null;
+}
+
+/** The Ask black box card (MISSION_BLACKBOX_PLAN.md 10.3). */
+export interface AskBlackBoxCard {
+  digest: AskBlackBoxDigest;
+  fingerprint?: string | null;
+  conflictingMissions?: BlackBoxConflictingMission[];
+  conflictedFiles?: string[];
+  recommendations?: AskBlackBoxRecommendation[];
+  followUps?: AskBlackBoxFollowUp[];
+  noteCount?: number;
 }
 
 export interface AskTrackedWork {

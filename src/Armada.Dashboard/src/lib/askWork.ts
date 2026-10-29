@@ -114,6 +114,7 @@ export function workRoute(entityType: string | null | undefined, entityId: strin
     case 'FleetActionRun': return `/fleet-actions/runs/${id}`;
     case 'VesselImportBatch': return `/vessels/import?batch=${id}`;
     case 'Job': return JOBS_PATH;
+    case 'BlackBox': return `/blackbox/${id}`;
     default: return '/activity';
   }
 }
@@ -139,6 +140,7 @@ export function entityTypeLabel(t: Translate, entityType: string | null | undefi
     case 'FleetActionRun': return t('Fleet action run');
     case 'Job': return t('Background job');
     case 'VesselImportBatch': return t('Vessel import');
+    case 'BlackBox': return t('Black box');
     default: return entityType ?? '';
   }
 }
