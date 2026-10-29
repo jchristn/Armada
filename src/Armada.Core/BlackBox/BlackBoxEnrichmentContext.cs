@@ -68,6 +68,12 @@ namespace Armada.Core.BlackBox
             set => _Objects = value ?? new List<BlackBoxPendingObject>();
         }
 
+        /// <summary>
+        /// Facts the git forensics enrichers share for this entry (dock, host, target commits, changed paths).
+        /// </summary>
+        [JsonIgnore]
+        public BlackBoxForensicState Forensics { get; } = new BlackBoxForensicState();
+
         private List<BlackBoxFile> _Files = new List<BlackBoxFile>();
         private List<BlackBoxLink> _Links = new List<BlackBoxLink>();
         private List<BlackBoxPendingObject> _Objects = new List<BlackBoxPendingObject>();

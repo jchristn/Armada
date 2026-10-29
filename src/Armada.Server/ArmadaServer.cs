@@ -533,6 +533,7 @@ namespace Armada.Server
             // Split mode: a mission's dock goes on the Harbor routing picks for it (when that Harbor can serve the vessel),
             // and every later operation on a Harbor-hosted dock (instruction files, git, landing, reclaim) runs there.
             DockHostResolver dockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager);
+            if (_BlackBox != null) _BlackBox.Inspector.Hosts = dockHosts;
             if (dockService is DockService dockServiceImpl) dockServiceImpl.Hosts = dockHosts;
             if (captainService is CaptainService captainServiceImpl) captainServiceImpl.DockHosts = dockHosts;
             missionService.DockHosts = dockHosts;

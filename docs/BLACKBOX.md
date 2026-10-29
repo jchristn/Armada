@@ -427,8 +427,8 @@ Each `BlackBoxStepEnum` value belongs to one phase (`BlackBoxTaxonomy.PhaseOf`);
 | `brief.maintainer.md` | text/markdown | maintainer audience |
 | `evidence/agent-output.txt` | text/plain | capture (Mission.AgentOutput) |
 | `evidence/diff.patch` | text/x-diff | capture (Mission.DiffSnapshot) |
-| `evidence/mission.log`, `evidence/diffstat.txt`, `evidence/check-<n>.txt`, `evidence/verification-<n>.txt`, `evidence/merge-entry.txt`, `evidence/git-status.txt`, `evidence/target-commits.txt` | text/plain | enrichers (wave two) |
-| `evidence/events.json` | application/json | enrichers (wave two) |
+| `evidence/mission.log`, `evidence/diffstat.txt`, `evidence/check-<n>.txt`, `evidence/verification-<n>.txt`, `evidence/merge-entry.txt`, `evidence/git-status.txt`, `evidence/target-commits.txt` | text/plain | enrichers (3.13) |
+| `evidence/events.json` | application/json | enrichers (3.13) |
 | `manifest.json` | application/json | only inside a `.zip` download (`BlackBoxDownloadManifest`) |
 
 Names are constants in `BlackBoxObjectNames`. Text evidence is redacted and capped at `maxEvidenceObjectBytes` with the
@@ -467,6 +467,42 @@ four providers through `scripts/common/run-db-parity-tests.sh`), `Services.Black
 validation). Test helpers: `BlackBoxTestKit`, `ScriptedBlackBoxStore`, `RecordingBlackBoxEventSink`,
 `BlackBoxSchemaValidator`. After changing a model, run `scripts/common/generate-blackbox-schema.sh`.
 
+### 3.13 Enrichment (built-in enrichers)
+
+`BlackBoxRuntime.Create` registers the built-in enrichers (`Armada.Core.BlackBox.Enrichment`,
+`BlackBoxEnricherCatalog.CreateDefaults`) on the pipeline, in this order. Each derives from `BlackBoxEnricherBase`,
+which catches everything but cancellation and records `"<Name> enrichment did not complete (...)"` in
+`truncation.notes`, so a failing host or git command never marks the entry EnrichmentFailed.
+
+| Enricher | Records |
+|---|---|
+| `Workspace` | Worktree existence, `branchExists`, branch tip, ahead and behind the target (`GetDivergenceAsync`), commits ahead of start, porcelain of the worktree and of the target checkout (`evidence/git-status.txt`, dirty paths when capture had none), conflicted files of an unfinished merge, Harbor link state and last seen, `inspectedHost`, `inspectionNote`; ChangedByMission file rows (from the diff snapshot, the worktree, or start..tip) |
+| `TargetMovement` | Commits on the target between the start commit and the target tip at the failure (or the current tip, noted), up to 500 read, newest 50 in `conflict.targetCommitsSinceStart` with `targetCommitTotal` and a truncation entry; `evidence/target-commits.txt`; `workspace.targetMovementNote` says why it was omitted (no start commit, unreachable host, start commit not in the repository) |
+| `ConflictAttribution` | Per target commit: `Armada-Mission-Id` trailer, changed paths intersected with the conflicted files and the mission's changed paths; `conflict.conflictingMissions` (missions first, then commits outside Armada with their author), LandedOnTargetSinceStart links, ChangedByConflictingMission rows |
+| `ConcurrentOverlap` | Other missions on the vessel active during the run window that touched the same files (diff snapshot, or their branch on the owning host, at most 10 branch reads), `conflict.concurrentMissions`, OverlappingFiles links |
+| `DirectoryRollup` | `conflictedDirectories` (depth 1 to 3), `conflictedParentDirectories`, `deepestConflictedDirectory` (at least two files) |
+| `Attempts` | Earlier entries, stage outcomes and handoff artifacts as `attempts` (bounded 20, oldest first); subject counters (redispatch, output repair, no-op); `subject.rescueChain`; RescueOf and ParentOfRescue (`Incident.RescueMissionIds`) links |
+| `Evidence` | `evidence/agent-output.txt` (tail, when capture did not store it), `evidence/mission.log` (tail), `evidence/check-<n>.txt`, `evidence/verification-<n>.txt`, `evidence/merge-entry.txt`, `evidence/diff.patch` (worktree diff when no snapshot), `evidence/diffstat.txt` and `evidence.diffStat`, `evidence/events.json` and `evidence.relevantEvents` |
+| `Related` | DependencyOf and CascadeRoot links up `DependsOnMissionId`, `related.cascadeRootEntryId`, `related.downstreamMissionIds`, SiblingInVoyage and SharedDock links (fingerprint matches and similar entries are added by the pipeline) |
+| `Voyage` | Voyage entries: roll-up by status, failed missions and their entries, cascade root, downstream missions, CascadeRoot and SiblingInVoyage links |
+| `FileRows` | Last: re-emits the captured roles (Conflicted, DirtyInCheckout, OutOfScope, BoundaryViolation for findings that name a path) with the rows above and removes duplicates; the pipeline replaces the entry's file and link rows with these sets, so reanalyze never duplicates rows |
+
+Host routing: enrichers inspect docks through `VesselGitInspector` (`src/Armada.Core/Services/VesselGitInspector.cs`,
+shared with `VesselCleanupService`): a Harbor-hosted dock is read on its Harbor through the Harbor git request path
+(`GitService` over `RemoteHostCommandExecutor`); a Harbor that is not connected resolves to no host and its facts are
+recorded as unknown. `BlackBoxRuntime.Inspector` starts with the Admiral host only; the Admiral sets
+`Inspector.Hosts` to its Harbor-aware `DockHostResolver`. Tests use `Inspector.HarborHostOverride` with a stand-in
+host (`RecordingHostCommandExecutor`).
+
+Git reads added for forensics (`IGitService`, default implementations answer null): `GetMergeBaseAsync(repo, a, b)`
+and `GetCommitRangeAsync(repo, from, to, limit)` (`GitCommitRange`: commits newest first with author, dates, subject,
+`GitTrailer` list, `MissionId` from the `Armada-Mission-Id` trailer, changed paths capped at 200 per commit,
+`TotalCount`, `Truncated`; limit 1 to 500). Trailers are parsed by `GitTrailerParser`.
+
+Bounds: tails keep the last 256 KB (`BlackBoxForensics.TailBytes`) starting at a line; per-role file rows at most 200;
+every cut is a `truncation.fields` entry; the writer then redacts every text object and caps it at
+`maxEvidenceObjectBytes`. Suites: `Services.BlackBoxEnrichment`, `Services.GitForensics`.
+
 ## 4. TODO(blackbox-wave2) list
 
 Grep for `TODO(blackbox-wave2` to find each placeholder in code.
@@ -474,7 +510,7 @@ Grep for `TODO(blackbox-wave2` to find each placeholder in code.
 | Owner | Item | Where |
 |---|---|---|
 | capture sites | Wire the remaining failure writes in plan section 5.1 with `RecordMissionFailureAsync` / `RecordVoyageFailureAsync` | services listed in plan 5.3 |
-| enrichment | Git forensics, conflict attribution, attempts, evidence objects (`IBlackBoxEnricher` implementations) | `IBlackBoxEnricher`, `BlackBoxPipeline.AddEnricher` |
+| enrichment | Optional model-written summary (`blackBox.summaryEndpointId`) | `BlackBoxPipeline` |
 | advisor | `BlackBoxRuleCatalog` and `BlackBoxAdvisor` (starter rules, triage) | `IBlackBoxAdvisor`, `BlackBoxPipeline.Advisor` |
 | recovery | `RunRecoveryAsync` and `ApplyRecommendationAsync` (dry run, confirm token, data-loss acknowledgement, annotation, `blackbox.recovery_run`) | `BlackBoxService` |
 | storage | Blobject targets (Disk, S3, AzureBlob, GoogleCloud, Cifs, Nfs), storage migration job, doctor check, storage inventory | `BlackBoxStoreFactory.CreateBuiltIn`, `BlackBoxService.StartStorageMigrationAsync`, `GetStorageMigrationAsync` |

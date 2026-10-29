@@ -269,7 +269,7 @@ namespace Armada.Core.BlackBox
 
             // Conflict
             BlackBoxConflict? c = r.Conflict;
-            if (c != null && (c.IsConflict || c.ConflictedFiles.Count > 0 || c.ConflictingMissions.Count > 0))
+            if (c != null && (c.IsConflict || c.ConflictedFiles.Count > 0 || c.ConflictingMissions.Count > 0 || (c.ConcurrentMissions != null && c.ConcurrentMissions.Count > 0)))
             {
                 sb.Append("## Conflict\n\n");
                 if (c.ConflictedFiles.Count > 0)
@@ -282,6 +282,7 @@ namespace Armada.Core.BlackBox
                 {
                     sb.Append("\nConflicted directories:\n\n");
                     foreach (BlackBoxDirectoryCount d in c.ConflictedDirectories.Take(listLimit)) sb.Append("- `").Append(Inline(d.Directory.Length == 0 ? "/" : d.Directory)).Append("`: ").Append(d.FileCount.ToString(CultureInfo.InvariantCulture)).Append('\n');
+                    if (c.DeepestConflictedDirectory != null) sb.Append("\nDeepest directory with several conflicts: `").Append(Inline(c.DeepestConflictedDirectory)).Append("` (").Append((c.DeepestConflictedDirectoryFileCount ?? 0).ToString(CultureInfo.InvariantCulture)).Append(" files)\n");
                 }
                 if (c.ConflictingMissions.Count > 0)
                 {
@@ -293,6 +294,12 @@ namespace Armada.Core.BlackBox
                         if (cm.LandedUtc.HasValue) sb.Append(", landed ").Append(Utc(cm.LandedUtc.Value));
                         sb.Append(", ").Append(Math.Max(cm.OverlappingFileTotal, cm.OverlappingFiles.Count).ToString(CultureInfo.InvariantCulture)).Append(" overlapping files\n");
                     }
+                }
+                if (c.ConcurrentMissions != null && c.ConcurrentMissions.Count > 0)
+                {
+                    sb.Append("\nConcurrent missions that touched the same files:\n\n");
+                    foreach (BlackBoxConflictingMission cm in c.ConcurrentMissions.Take(listLimit))
+                        sb.Append("- ").Append(cm.MissionId ?? "?").Append(cm.Title != null ? " (" + Inline(cm.Title) + ")" : String.Empty).Append(", ").Append(Math.Max(cm.OverlappingFileTotal, cm.OverlappingFiles.Count).ToString(CultureInfo.InvariantCulture)).Append(" overlapping files").Append(cm.LandedUtc.HasValue ? ", landed " + Utc(cm.LandedUtc.Value) : ", not landed").Append('\n');
                 }
                 if (!user && c.TargetCommitsSinceStart.Count > 0)
                 {
@@ -315,7 +322,12 @@ namespace Armada.Core.BlackBox
                 Line(sb, "Start commit", w.StartCommit == null ? null : w.StartCommit + (w.StartCommitSource != null ? " (from " + w.StartCommitSource + ")" : String.Empty));
                 Line(sb, "Target", w.TargetBranch == null ? null : w.TargetBranch + Join(", ", w.TargetTipAtStart != null ? "tip at start " + w.TargetTipAtStart : null, w.TargetTipAtFailure != null ? "tip at failure " + w.TargetTipAtFailure : null));
                 Line(sb, "Behind target", w.CommitsBehindTarget?.ToString(CultureInfo.InvariantCulture));
+                Line(sb, "Ahead of target", w.CommitsAheadOfTarget?.ToString(CultureInfo.InvariantCulture));
+                Line(sb, "Branch exists", w.BranchExists.HasValue ? (w.BranchExists.Value ? "yes" : "no") : null);
                 Line(sb, "Harbor link", w.HarborLinkState);
+                Line(sb, "Inspected on", w.InspectedHost);
+                Line(sb, "Note", w.InspectionNote);
+                Line(sb, "Target movement", w.TargetMovementNote);
                 if (w.DirtyPaths.Count > 0)
                 {
                     sb.Append("\nDirty paths (").Append(Math.Max(w.DirtyPathTotal, w.DirtyPaths.Count).ToString(CultureInfo.InvariantCulture)).Append("):\n\n");

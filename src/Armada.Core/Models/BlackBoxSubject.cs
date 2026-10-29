@@ -158,6 +158,27 @@ namespace Armada.Core.Models
         public string? BranchName { get; set; } = null;
 
         /// <summary>
+        /// Redispatch attempts the mission used, or null when unknown.
+        /// </summary>
+        public int? RedispatchAttempts { get; set; } = null;
+
+        /// <summary>
+        /// Output repair attempts the mission used, or null when unknown.
+        /// </summary>
+        public int? OutputRepairAttempts { get; set; } = null;
+
+        /// <summary>
+        /// No-op redispatch attempts the mission used, or null when unknown.
+        /// </summary>
+        public int? NoOpRedispatchAttempts { get; set; } = null;
+
+        /// <summary>
+        /// Rescue chain: the mission's ancestors by ParentMissionId, nearest first; null when not analyzed.
+        /// </summary>
+        [CollectionBound(BlackBoxLimits.MaxAttempts, Reason = "Walked at most MaxAttempts parents")]
+        public List<string>? RescueChain { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         public BlackBoxSubject()

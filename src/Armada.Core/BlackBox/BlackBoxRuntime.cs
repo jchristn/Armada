@@ -1,14 +1,17 @@
 namespace Armada.Core.BlackBox
 {
     using System;
+    using Armada.Core.BlackBox.Enrichment;
     using Armada.Core.BlackBox.Storage;
     using Armada.Core.Database;
+    using Armada.Core.Services;
     using Armada.Core.Settings;
     using SyslogLogging;
 
     /// <summary>
     /// Composition root of the black box: builds and holds every black box component for one Admiral (or test) so they
-    /// share one store factory, redactor, writer and queue. Construct with <see cref="Create"/>, wire
+    /// share one store factory, redactor, writer and queue. <see cref="Create"/> registers the built-in enrichers
+    /// (<see cref="BlackBoxEnricherCatalog"/>) on the pipeline. Construct with <see cref="Create"/>, wire
     /// <see cref="Capture"/> into the failure sites, call <see cref="Background"/>.Start(), and route every surface to
     /// <see cref="Service"/>. Thread-safe.
     /// </summary>
@@ -55,6 +58,12 @@ namespace Armada.Core.BlackBox
         /// <summary>Background loops (queue worker, sweeper, garbage collection).</summary>
         public BlackBoxBackgroundService Background { get; }
 
+        /// <summary>
+        /// Host-aware git inspector the built-in enrichers read docks with. It starts with the Admiral's host only; the
+        /// Admiral sets <see cref="VesselGitInspector.Hosts"/> to its Harbor-aware resolver once Harbor delegation exists.
+        /// </summary>
+        public VesselGitInspector Inspector { get; }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -70,6 +79,8 @@ namespace Armada.Core.BlackBox
             Writer = new BlackBoxEntryWriter(database, settings.BlackBox, Objects, Renderer, Redactor, Events, logging);
             Capture = new BlackBoxCapture(database, settings, Writer, Events, version, Redactor, logging);
             Pipeline = new BlackBoxPipeline(database, settings.BlackBox, Objects, Writer, Events, logging);
+            Inspector = new VesselGitInspector(database, new DockHostResolver(new GitService(logging), logging, null), logging);
+            BlackBoxEnricherCatalog.Register(Pipeline, database, settings, Inspector, logging);
             Queue = new BlackBoxEnrichmentQueue(Pipeline, logging);
             Capture.Enrichment = Queue;
             Sweeper = new BlackBoxSweeper(database, settings, Capture, Queue, logging);
