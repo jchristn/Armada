@@ -503,6 +503,16 @@ namespace Armada.Core
         public static readonly string BlackBoxStorageMigrationIdPrefix = "bbm_";
 
         /// <summary>
+        /// Black box success record ID prefix (blackbox_successes).
+        /// </summary>
+        public static readonly string BlackBoxSuccessIdPrefix = "bbs_";
+
+        /// <summary>
+        /// Black box recovery outcome ID prefix (blackbox_recovery_outcomes).
+        /// </summary>
+        public static readonly string BlackBoxRecoveryOutcomeIdPrefix = "bro_";
+
+        /// <summary>
         /// Default data retention period in days for completed records.
         /// </summary>
         public static readonly int DefaultDataRetentionDays = 30;

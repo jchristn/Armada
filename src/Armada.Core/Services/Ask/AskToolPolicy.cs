@@ -120,7 +120,18 @@ namespace Armada.Core.Services.Ask
             "list_blackbox_fingerprints",
             "get_blackbox_fingerprint_trend",
             "get_blackbox_retention",
-            "get_blackbox_storage"
+            "get_blackbox_storage",
+
+            // Black box prevention, forensics and operations readers
+            "preview_mission_overlap",
+            "list_vessel_reservations",
+            "lint_mission_brief",
+            "get_vessel_blackbox_doctor",
+            "diff_blackbox_entries",
+            "list_blackbox_nearby_successes",
+            "get_blackbox_timeline",
+            "get_voyage_blackbox_cascade",
+            "get_blackbox_recovery_stats"
         };
 
         private static readonly HashSet<string> _GateExempt = new HashSet<string>(StringComparer.Ordinal)

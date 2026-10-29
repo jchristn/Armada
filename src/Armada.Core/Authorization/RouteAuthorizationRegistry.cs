@@ -521,6 +521,22 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/token-usage/enumerate", "TokenUsage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/token-usage/delete/by-filter", "TokenUsage", ResourceOperationEnum.Delete, PermissionLevel.Authenticated);
 
+            // BlackBoxInsightRoutes (read-only; BlackBoxInsightService scopes to the caller)
+            Add("POST", "/api/v1/vessels/{id}/overlap-preview", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/vessels/{id}/reservations", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/vessels/{id}/reservations/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/lint-brief", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/vessels/{id}/blackbox-doctor", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/vessels/{id}/blackbox-doctor/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/recovery-stats", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/recovery-stats/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/diff/{otherId}", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/nearby-successes", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/nearby-successes/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/blackbox/{id}/timeline", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/{id}/timeline/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/voyages/{id}/blackbox/cascade", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+
             // VesselHealthRoutes
             Add("POST", "/api/v1/vessel-health/enumerate", "VesselHealth", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/vessel-health/summary", "VesselHealth", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

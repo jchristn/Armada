@@ -2176,7 +2176,58 @@ namespace Armada.Core.Database.SqlServer.Queries
                         finished_utc DATETIME2,
                         last_update_utc DATETIME2 NOT NULL
                     );",
-                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_migrations_state_created') CREATE INDEX idx_blackbox_migrations_state_created ON blackbox_migrations(state, created_utc);")
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_migrations_state_created') CREATE INDEX idx_blackbox_migrations_state_created ON blackbox_migrations(state, created_utc);"),
+
+                new SchemaMigration(105, "Add vessels.serialize_overlapping_missions: when true, a mission dispatched to the vessel that overlaps an active mission's files or a reserved hotspot directory is chained after it with DependsOnMissionId",
+                    @"IF COL_LENGTH('vessels', 'serialize_overlapping_missions') IS NULL ALTER TABLE vessels ADD serialize_overlapping_missions BIT NOT NULL CONSTRAINT DF_vessels_serialize_overlapping_missions DEFAULT 0;"),
+
+                new SchemaMigration(106, "Add the black box success flight recorder (blackbox_successes: minimal records of successful landings kept for blackBox.successRetentionDays) and recovery outcome tracking (blackbox_recovery_outcomes: one row per confirmed recovery run with the mission's next terminal status)",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'blackbox_successes') CREATE TABLE blackbox_successes (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64),
+                        user_id NVARCHAR(64),
+                        vessel_id NVARCHAR(64),
+                        mission_id NVARCHAR(64) NOT NULL,
+                        voyage_id NVARCHAR(64),
+                        captain_id NVARCHAR(64),
+                        mission_title NVARCHAR(MAX),
+                        base_commit NVARCHAR(64),
+                        target_commit NVARCHAR(64),
+                        target_branch NVARCHAR(256),
+                        files_changed NVARCHAR(MAX),
+                        file_count INT NOT NULL DEFAULT 0,
+                        mission_created_utc DATETIME2,
+                        started_utc DATETIME2,
+                        landed_utc DATETIME2 NOT NULL,
+                        queue_ms BIGINT,
+                        run_ms BIGINT,
+                        total_ms BIGINT,
+                        created_utc DATETIME2 NOT NULL,
+                        expires_utc DATETIME2
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'blackbox_recovery_outcomes') CREATE TABLE blackbox_recovery_outcomes (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64),
+                        user_id NVARCHAR(64),
+                        entry_id NVARCHAR(64) NOT NULL,
+                        mission_id NVARCHAR(64),
+                        voyage_id NVARCHAR(64),
+                        vessel_id NVARCHAR(64),
+                        rule_id NVARCHAR(64),
+                        path_id NVARCHAR(256) NOT NULL,
+                        runbook_id NVARCHAR(64),
+                        run_succeeded BIT NOT NULL DEFAULT 0,
+                        outcome NVARCHAR(64) NOT NULL,
+                        outcome_status NVARCHAR(64),
+                        created_utc DATETIME2 NOT NULL,
+                        resolved_utc DATETIME2
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_successes_tenant_vessel_landed') CREATE INDEX idx_blackbox_successes_tenant_vessel_landed ON blackbox_successes(tenant_id, vessel_id, landed_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_successes_mission') CREATE INDEX idx_blackbox_successes_mission ON blackbox_successes(mission_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_successes_expires') CREATE INDEX idx_blackbox_successes_expires ON blackbox_successes(expires_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_recovery_outcomes_outcome_created') CREATE INDEX idx_blackbox_recovery_outcomes_outcome_created ON blackbox_recovery_outcomes(outcome, created_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_recovery_outcomes_tenant_rule_path') CREATE INDEX idx_blackbox_recovery_outcomes_tenant_rule_path ON blackbox_recovery_outcomes(tenant_id, rule_id, path_id);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_recovery_outcomes_entry') CREATE INDEX idx_blackbox_recovery_outcomes_entry ON blackbox_recovery_outcomes(entry_id);")
 
 
             };

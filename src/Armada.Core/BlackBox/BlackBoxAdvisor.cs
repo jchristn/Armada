@@ -27,6 +27,12 @@ namespace Armada.Core.BlackBox
         /// </summary>
         public BlackBoxRuleCatalog Catalog => _Catalog;
 
+        /// <summary>
+        /// Observed recovery path success rates, or null. Used only to break ties between paths of equally weighted rules
+        /// (and recorded on each path as SuccessRate and TrackedRuns); without it the ranking is the catalog's.
+        /// </summary>
+        public IBlackBoxPathStats? PathStats { get; set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -59,7 +65,7 @@ namespace Armada.Core.BlackBox
         {
             if (record == null) return null;
             List<string> diagnostics = new List<string>();
-            BlackBoxAnalysis analysis = Analyze(record, _Catalog, diagnostics);
+            BlackBoxAnalysis analysis = Analyze(record, _Catalog, diagnostics, PathStats);
             if (_Logging != null)
             {
                 foreach (string d in diagnostics) _Logging.Debug(_Header + (record.EntryId ?? "?") + ": " + d);
@@ -73,9 +79,10 @@ namespace Armada.Core.BlackBox
         /// <param name="record">Record (not modified).</param>
         /// <param name="catalog">Catalog.</param>
         /// <param name="diagnostics">Receives one line per skipped rule or component (may be null).</param>
+        /// <param name="pathStats">Observed path success rates used to break ties between equally weighted rules, or null.</param>
         /// <returns>The analysis (never null).</returns>
         /// <exception cref="ArgumentNullException">Thrown when record or catalog is null.</exception>
-        public static BlackBoxAnalysis Analyze(BlackBoxRecord record, BlackBoxRuleCatalog catalog, ICollection<string>? diagnostics = null)
+        public static BlackBoxAnalysis Analyze(BlackBoxRecord record, BlackBoxRuleCatalog catalog, ICollection<string>? diagnostics = null, IBlackBoxPathStats? pathStats = null)
         {
             if (record == null) throw new ArgumentNullException(nameof(record));
             if (catalog == null) throw new ArgumentNullException(nameof(catalog));
@@ -111,7 +118,7 @@ namespace Armada.Core.BlackBox
             analysis.Why = ordered.Select(o => o.Finding).Take(BlackBoxLimits.MaxFindings).ToList();
             analysis.ConfigRecommendations = ordered.SelectMany(o => o.Recommendations).GroupBy(r => r.Id, StringComparer.Ordinal).Select(g => g.First()).Take(BlackBoxLimits.MaxRecommendations).ToList();
             analysis.ArmadaImprovements = ordered.SelectMany(o => o.Improvements).Take(BlackBoxLimits.MaxImprovements).ToList();
-            analysis.RecoveryPaths = RankPaths(ordered);
+            analysis.RecoveryPaths = RankPaths(ordered, pathStats);
             analysis.Triage = Triage(ordered);
             analysis.Summary = Summarize(record, analysis);
             analysis.SummaryIsModelWritten = false;
@@ -327,11 +334,18 @@ namespace Armada.Core.BlackBox
             };
         }
 
-        private static List<BlackBoxRecoveryPath> RankPaths(List<BlackBoxRuleOutput> ordered)
+        private static List<BlackBoxRecoveryPath> RankPaths(List<BlackBoxRuleOutput> ordered, IBlackBoxPathStats? pathStats)
         {
             List<BlackBoxRecoveryPath> ranked = new List<BlackBoxRecoveryPath>();
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (BlackBoxRecoveryPath path in ordered.SelectMany(o => o.Paths))
+            // Strongest rule first (the outputs are ordered by weight, then catalog order); among paths of equally weighted
+            // rules a known success rate breaks the tie (a path without one counts as 0.5), keeping the order otherwise.
+            List<BlackBoxRecoveryPath> candidates = ordered
+                .SelectMany(o => o.Paths.Select(p => new { Path = p, o.Rule.Weight }))
+                .Select((x, i) => new { x.Path, x.Weight, Index = i, Rate = RateOf(x.Path, pathStats) })
+                .OrderByDescending(x => x.Weight).ThenByDescending(x => x.Rate).ThenBy(x => x.Index)
+                .Select(x => x.Path).ToList();
+            foreach (BlackBoxRecoveryPath path in candidates)
             {
                 string signature = String.Join(" | ", path.Steps.Select(s => s.Action != null ? BlackBoxRuleTemplate.McpCommand(s.Action) : "manual:" + s.Description));
                 if (!seen.Add(signature)) continue;
@@ -340,6 +354,14 @@ namespace Armada.Core.BlackBox
                 if (ranked.Count >= BlackBoxLimits.MaxRecoveryPaths) break;
             }
             return ranked;
+        }
+
+        private static double RateOf(BlackBoxRecoveryPath path, IBlackBoxPathStats? pathStats)
+        {
+            if (pathStats == null || !pathStats.TryGetRate(path.Id, out double rate, out int settled)) return 0.5;
+            path.SuccessRate = Math.Round(rate, 4);
+            path.TrackedRuns = settled;
+            return rate;
         }
 
         private static BlackBoxTriageVerdict Triage(List<BlackBoxRuleOutput> ordered)

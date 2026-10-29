@@ -77,6 +77,7 @@ namespace Armada.Server.Mcp.Tools
                         workingDirectory = new { type = "string", description = "Optional local directory where completed mission changes will be pulled after merge. When repoUrl is a local clone (a file:// URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada)." },
                         gitHubTokenOverride = new { type = "string", description = "Optional per-vessel GitHub token override. Leave unset to use the global configured token." },
                         allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel (default false)" },
+                        serializeOverlappingMissions = new { type = "boolean", description = "Chain a dispatched mission after an active mission whose files it overlaps (or whose reserved hotspot directory it touches) with dependsOnMissionId instead of running both in parallel (default false: overlaps are only reported as dispatch warnings)" },
                         autoApprove = new { type = "boolean", description = "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting" },
                         enableModelContext = new { type = "boolean", description = "Enable model context accumulation -- agents will update context with key information discovered during missions (default true)" },
                         defaultPipelineId = new { type = "string", description = "Default pipeline ID for dispatches to this vessel (ppl_ prefix)" },
@@ -104,6 +105,7 @@ namespace Armada.Server.Mcp.Tools
                     vessel.WorkingDirectory = request.WorkingDirectory;
                     vessel.GitHubTokenOverride = request.GitHubTokenOverride;
                     vessel.AllowConcurrentMissions = request.AllowConcurrentMissions ?? false;
+                    vessel.SerializeOverlappingMissions = request.SerializeOverlappingMissions ?? false;
                     vessel.AutoApprove = request.AutoApprove;
                     vessel.EnableModelContext = request.EnableModelContext ?? true;
                     vessel.DefaultPipelineId = request.DefaultPipelineId;
@@ -140,6 +142,7 @@ namespace Armada.Server.Mcp.Tools
                         workingDirectory = new { type = "string", description = "New local directory where completed mission changes will be pulled after merge" },
                         gitHubTokenOverride = new { type = "string", description = "Optional per-vessel GitHub token override. Empty string clears the existing override." },
                         allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel" },
+                        serializeOverlappingMissions = new { type = "boolean", description = "Chain a dispatched mission after an active mission whose files it overlaps (or whose reserved hotspot directory it touches) with dependsOnMissionId instead of running both in parallel; false only reports overlaps as dispatch warnings" },
                         autoApprove = new { type = "boolean", description = "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting" },
                         clearAutoApprove = new { type = "boolean", description = "Remove the per-vessel auto-approve override so the captain's own setting applies" },
                         enableModelContext = new { type = "boolean", description = "Enable or disable model context accumulation" },
@@ -187,6 +190,8 @@ namespace Armada.Server.Mcp.Tools
                     }
                     if (request.AllowConcurrentMissions.HasValue)
                         vessel.AllowConcurrentMissions = request.AllowConcurrentMissions.Value;
+                    if (request.SerializeOverlappingMissions.HasValue)
+                        vessel.SerializeOverlappingMissions = request.SerializeOverlappingMissions.Value;
                     if (request.ClearAutoApprove == true)
                         vessel.AutoApprove = null;
                     else if (request.AutoApprove.HasValue)

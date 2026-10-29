@@ -112,6 +112,8 @@ namespace Test.Shared.Suites.E2E
             "reclassify_stage_outcomes",
             "list_model_probe_runs",
             "discover_vessels",
+            // vesselId only filters the caller's own recovery runs
+            "get_blackbox_recovery_stats",
             "list_blackbox_entries",
             "search_blackbox",
             "get_blackbox_bundle",
@@ -782,6 +784,8 @@ namespace Test.Shared.Suites.E2E
                     single = _Ids["dock"]; break;
                 case "entryId":
                     single = tool.Contains("blackbox", StringComparison.Ordinal) ? _Ids["blackbox"] : _Ids["merge"]; break;
+                case "otherEntryId":
+                    single = _Ids["blackbox"]; break;
                 case "pathId":
                 case "recommendationId":
                     // Recovery path and recommendation ids are local to the entry; the entry id carries the tenant.

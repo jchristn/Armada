@@ -96,6 +96,17 @@ namespace Armada.Core.Authorization
             Add("evaluate_autoland", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_cli_permission_request", "CliPermission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
 
+            // Black box prevention, forensics and operations (read-only; BlackBoxInsightService scopes to the caller).
+            Add("preview_mission_overlap", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_vessel_reservations", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("lint_mission_brief", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_vessel_blackbox_doctor", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("diff_blackbox_entries", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_nearby_successes", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_blackbox_timeline", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_voyage_blackbox_cascade", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_blackbox_recovery_stats", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+
             // CLI tool permissions. The prompt tool is callable only by a captain's scoped session and deciding only by a
             // person (checked in the handlers); rule and policy changes need an admin.
             Add("cli_permission_prompt", "CliPermission", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);

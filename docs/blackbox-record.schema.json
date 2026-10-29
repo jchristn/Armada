@@ -3079,6 +3079,100 @@
         "stackFrames"
       ]
     },
+    "BlackBoxNearbySuccess": {
+      "title": "BlackBoxNearbySuccess",
+      "description": "A successful landing on the same vessel near a failure that touched some of the same files (Related section and GET /api/v1/blackbox/{id}/nearby-successes).",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "successId": {
+          "description": "Success record (bbs_ prefix).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "missionId": {
+          "description": "Mission that landed.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "missionTitle": {
+          "description": "Its title.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "landedUtc": {
+          "description": "When it landed.",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "hoursFromFailure": {
+          "description": "Hours between the landing and the failure (negative when it landed before the failure).",
+          "type": [
+            "number"
+          ]
+        },
+        "baseCommit": {
+          "description": "Its start commit, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "targetCommit": {
+          "description": "Its landed commit, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "runMs": {
+          "description": "Its run time in milliseconds, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "overlappingFiles": {
+          "description": "Files it changed that the failure also touched, first 20.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 20
+        },
+        "overlappingFileCount": {
+          "description": "How many files overlap.",
+          "type": [
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "successId",
+        "missionId",
+        "landedUtc",
+        "hoursFromFailure",
+        "overlappingFiles",
+        "overlappingFileCount"
+      ]
+    },
     "BlackBoxNote": {
       "title": "BlackBoxNote",
       "description": "A note on a black box entry by an operator, an agent, Ask Armada or Armada (blackbox_notes).",
@@ -3653,6 +3747,35 @@
             "null"
           ],
           "maxLength": 2000
+        },
+        "runbookId": {
+          "description": "Runbook (pbk_ prefix) this path maps to, or null. Set after analysis when a runbook of the entry's tenant names the path, its rule, the failure step or the failure kind (see docs/BLACKBOX.md, runbook linkage). A confirmed run then starts the runbook (start_runbook_execution) instead of the path's tool steps.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "runbookTitle": {
+          "description": "Title of the linked runbook, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "successRate": {
+          "description": "Observed success rate of this path (missions that completed after a confirmed run, over settled runs), or null when fewer than three runs have settled. The advisor uses it to break ties between equally weighted paths.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "trackedRuns": {
+          "description": "Settled runs behind SuccessRate.",
+          "type": [
+            "integer"
+          ]
         }
       },
       "required": [
@@ -3662,7 +3785,8 @@
         "preconditions",
         "steps",
         "risk",
-        "dataLossRisk"
+        "dataLossRisk",
+        "trackedRuns"
       ]
     },
     "BlackBoxRecoveryRunPayload": {
@@ -3908,12 +4032,30 @@
             "maxLength": 1024
           },
           "maxItems": 100
+        },
+        "nearbySuccesses": {
+          "description": "Successful landings on the same vessel within blackBox.nearbySuccessWindowHours of the failure that changed some of the same files (success flight recorder), most overlap first.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxNearbySuccess"
+          },
+          "maxItems": 10
+        },
+        "nearbySuccessTotal": {
+          "description": "Nearby successes found (NearbySuccesses holds the first ten).",
+          "type": [
+            "integer"
+          ]
         }
       },
       "required": [
         "similarEntries",
         "occurrencesLast30Days",
-        "downstreamMissionIds"
+        "downstreamMissionIds",
+        "nearbySuccesses",
+        "nearbySuccessTotal"
       ]
     },
     "BlackBoxResolvedPayload": {

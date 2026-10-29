@@ -75,6 +75,7 @@ namespace Test.Shared.Suites.E2E
             ["GET /api/v1/vessels/import/categorization/default-prompt"] = "One prompt",
             ["GET /api/v1/vessels/{id}/cleanup"] = "One vessel's cleanup inventory summary (counts); resources page through GET .../cleanup/resources",
             ["GET /api/v1/vessels/{id}/git-status"] = "One working tree status",
+            ["GET /api/v1/voyages/{id}/blackbox/cascade"] = "One voyage's cascade graph, fixed at 200 nodes and 1000 edges with MissionCount and Truncated; the missions page through POST /api/v1/missions/enumerate",
             ["GET /api/v1/vessels/{id}/health"] = "One vessel's health with DependencyCount; dependencies page through GET .../health/dependencies",
             ["GET /api/v1/vessels/{id}/history/activity"] = "Aggregated commit activity buckets",
             ["GET /api/v1/vessels/{id}/history/commits"] = "Paged commit history (VesselCommitPage)",

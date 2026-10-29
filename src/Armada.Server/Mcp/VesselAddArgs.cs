@@ -46,6 +46,11 @@ namespace Armada.Server.Mcp
         public bool? AllowConcurrentMissions { get; set; }
 
         /// <summary>
+        /// Whether to chain a dispatched mission after an overlapping active mission (DependsOnMissionId). Default false.
+        /// </summary>
+        public bool? SerializeOverlappingMissions { get; set; }
+
+        /// <summary>
         /// Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting;
         /// omit to leave the captain's setting in effect.
         /// </summary>

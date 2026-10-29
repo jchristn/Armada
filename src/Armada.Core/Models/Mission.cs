@@ -235,6 +235,22 @@ namespace Armada.Core.Models
         public string? LastBlackBoxEntryId { get; set; } = null;
 
         /// <summary>
+        /// Overlap warnings found when this mission was dispatched (black box prevention, at most 50), or null. Returned by
+        /// the dispatch responses only; never stored.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(Armada.Core.BlackBox.BlackBoxInsightLimits.MaxOverlapWarnings, Reason = "Dispatch keeps the strongest 50")]
+        public List<MissionOverlapWarning>? OverlapWarnings { get; set; } = null;
+
+        /// <summary>
+        /// Brief lint findings found when this mission was dispatched (at most 50), or null. Returned by the dispatch
+        /// responses only; never stored. Lint never blocks a dispatch.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(Armada.Core.BlackBox.BlackBoxInsightLimits.MaxLintFindings, Reason = "Lint stops at 50")]
+        public List<BriefLintFinding>? BriefLintWarnings { get; set; } = null;
+
+        /// <summary>
         /// The target-branch commit the mission's dock started from (recorded at assignment), or null when unknown.
         /// The base for "what moved on the target since this mission started".
         /// </summary>
