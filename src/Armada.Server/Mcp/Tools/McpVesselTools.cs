@@ -32,7 +32,8 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="vesselService">Optional shared vessel creation service. Defaults to a new <see cref="VesselService"/>.</param>
         /// <param name="settings">Settings (managed docks and repos directories for safe vessel cleanup).</param>
         /// <param name="admiral">Admiral service; deleting a vessel cancels its active missions through it so their agents stop.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null, IVesselService? vesselService = null, Armada.Core.Settings.ArmadaSettings? settings = null, IAdmiralService? admiral = null)
+        /// <param name="blackBoxHooks">Optional black box lifecycle hooks, called after deletes and updates (retention cascades, expiry recompute).</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null, IVesselService? vesselService = null, Armada.Core.Settings.ArmadaSettings? settings = null, IAdmiralService? admiral = null, Armada.Core.BlackBox.IBlackBoxLifecycleHooks? blackBoxHooks = null)
         {
             IVesselService creator = vesselService ?? new VesselService(database);
 
@@ -220,6 +221,7 @@ namespace Armada.Server.Mcp.Tools
                         vessel.AuditCommand = String.IsNullOrWhiteSpace(request.AuditCommand) ? null : request.AuditCommand;
                     await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(database, vessel).ConfigureAwait(false);
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
+                    if (blackBoxHooks != null) await blackBoxHooks.OnVesselUpdatedAsync(vessel.Id).ConfigureAwait(false);
                     return (object)vessel;
                 });
 
@@ -246,6 +248,7 @@ namespace Armada.Server.Mcp.Tools
                     List<string> warnings = await CleanupVesselResourcesAsync(vessel, database, dockService, settings, admiral).ConfigureAwait(false);
 
                     await database.Vessels.DeleteAsync(vesselId).ConfigureAwait(false);
+                    if (blackBoxHooks != null) await blackBoxHooks.OnVesselDeletedAsync(vesselId).ConfigureAwait(false);
                     return (object)VesselDeleteResult.Create(vesselId, warnings);
                 });
 
@@ -286,6 +289,7 @@ namespace Armada.Server.Mcp.Tools
 
                         await CleanupVesselResourcesAsync(vessel, database, dockService, settings, admiral).ConfigureAwait(false);
                         await database.Vessels.DeleteAsync(id).ConfigureAwait(false);
+                        if (blackBoxHooks != null) await blackBoxHooks.OnVesselDeletedAsync(id).ConfigureAwait(false);
                         result.Deleted++;
                     }
                     result.ResolveStatus();

@@ -13,6 +13,15 @@ namespace Armada.Core.BlackBox
     /// </summary>
     public class BlackBoxBackgroundService : IDisposable
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Storage migrator whose unfinished jobs resume on <see cref="Start"/> and stop on <see cref="StopAsync"/>, or null.
+        /// </summary>
+        public Armada.Core.BlackBox.Storage.BlackBoxStorageMigrator? Migrator { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private readonly string _Header = "[BlackBoxBackgroundService] ";
@@ -62,6 +71,7 @@ namespace Armada.Core.BlackBox
             _Queue.Start();
             _SweepLoop = Task.Run(() => SweepLoopAsync(token));
             _GcLoop = Task.Run(() => GcLoopAsync(token));
+            Migrator?.ResumePendingAsync();
             _Logging.Info(_Header + "started");
         }
 
@@ -81,6 +91,7 @@ namespace Armada.Core.BlackBox
             catch (OperationCanceledException)
             {
             }
+            if (Migrator != null) await Migrator.StopAsync().ConfigureAwait(false);
             await _Queue.StopAsync().ConfigureAwait(false);
             _Cts.Dispose();
             _Cts = null;

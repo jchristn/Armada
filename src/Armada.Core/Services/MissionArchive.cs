@@ -4,7 +4,8 @@ namespace Armada.Core.Services
     using Armada.Core.Database.Interfaces;
     using Armada.Core.Models;
 
-    /// <summary>Preserve diagnostic evidence before cancellation or deletion removes the original mission/attempts.</summary>
+    /// <summary>Preserve diagnostic evidence before cancellation or deletion removes the original mission/attempts. The
+    /// snapshot records the mission's current black box entry id (BlackBoxEntryId) so an archive links to its black box.</summary>
     public static class MissionArchive
     {
         /// <summary>Write a tenant-scoped snapshot first; if storage fails, the destructive operation must not proceed.</summary>
@@ -31,6 +32,7 @@ namespace Armada.Core.Services
                     mission.Id, mission.Title, mission.Status, mission.FailureKind, mission.FailureReason,
                     mission.BranchName, mission.CommitHash, mission.DockId, mission.AssignedHarborId,
                     mission.CaptainId, mission.VoyageId, mission.VesselId, mission.CreatedUtc, mission.StartedUtc, mission.CompletedUtc,
+                    BlackBoxEntryId = mission.LastBlackBoxEntryId,
                     StageOutcomes = attempts,
                     Diagnostics = diagnostics.Where(e => e.EventType != "mission.archive").ToList(),
                     DiagnosticsTruncated = diagnostics.Count >= 500

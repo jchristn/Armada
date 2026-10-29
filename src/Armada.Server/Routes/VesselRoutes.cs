@@ -37,6 +37,11 @@ namespace Armada.Server.Routes
         private readonly VesselGitStatusCache _GitStatusCache = new VesselGitStatusCache();
 
         /// <summary>
+        /// Black box lifecycle hooks (retention cascades and expiry recomputes after deletes and updates), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxLifecycleHooks? BlackBoxHooks { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         /// <param name="database">Database driver.</param>
@@ -261,6 +266,7 @@ namespace Armada.Server.Routes
                 updated = EntityUpdateMerger.MergeVessel(existing, updated);
                 await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_database, updated).ConfigureAwait(false);
                 updated = await _database.Vessels.UpdateAsync(updated).ConfigureAwait(false);
+                if (BlackBoxHooks != null && existing.BlackBoxRetentionDays != updated.BlackBoxRetentionDays) await BlackBoxHooks.OnVesselUpdatedAsync(updated.Id).ConfigureAwait(false);
                 return (object)updated;
             },
             api => api
@@ -851,6 +857,7 @@ namespace Armada.Server.Routes
                     await _database.Vessels.DeleteAsync(ctx.TenantId!, id).ConfigureAwait(false);
                 else
                     await _database.Vessels.DeleteAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                if (BlackBoxHooks != null) await BlackBoxHooks.OnVesselDeletedAsync(id).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 204;
                 return null;
             },
@@ -903,6 +910,7 @@ namespace Armada.Server.Routes
                         await _database.Vessels.DeleteAsync(ctx.TenantId!, id).ConfigureAwait(false);
                     else
                         await _database.Vessels.DeleteAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                    if (BlackBoxHooks != null) await BlackBoxHooks.OnVesselDeletedAsync(id).ConfigureAwait(false);
                     result.Deleted++;
                 }
 

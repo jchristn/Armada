@@ -59,6 +59,11 @@ namespace Armada.Server.Routes
         public DockHostResolver? DockHosts { get; set; } = null;
 
         /// <summary>
+        /// Black box lifecycle hooks (retention cascades and expiry recomputes after deletes and updates), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxLifecycleHooks? BlackBoxHooks { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         /// <param name="database">Database driver.</param>
@@ -956,6 +961,7 @@ namespace Armada.Server.Routes
 
                 // Remove telemetry events that referenced this mission so they do not dangle.
                 await CascadeCleanup.RemoveEventsForMissionAsync(_database, id).ConfigureAwait(false);
+                if (BlackBoxHooks != null) await BlackBoxHooks.OnMissionDeletedAsync(id).ConfigureAwait(false);
 
                 await _emitEvent("mission.deleted", "Mission " + id + " permanently deleted",
                     "mission", id, null, null, null, null).ConfigureAwait(false);
@@ -1009,6 +1015,7 @@ namespace Armada.Server.Routes
                         await _database.Missions.DeleteAsync(ctx.TenantId!, id).ConfigureAwait(false);
                     else
                         await _database.Missions.DeleteAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                    if (BlackBoxHooks != null) await BlackBoxHooks.OnMissionDeletedAsync(id).ConfigureAwait(false);
                     result.Deleted++;
                 }
 
