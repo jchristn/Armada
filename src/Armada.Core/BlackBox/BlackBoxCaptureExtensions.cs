@@ -54,8 +54,9 @@ namespace Armada.Core.BlackBox
                 configure?.Invoke(context);
                 return await capture.CaptureMissionFailureAsync(context, token).ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                Report(capture, mission.Id, e);
                 return null;
             }
         }
@@ -102,9 +103,22 @@ namespace Armada.Core.BlackBox
                 configure?.Invoke(context);
                 return await capture.CaptureVoyageFailureAsync(context, token).ConfigureAwait(false);
             }
+            catch (Exception e)
+            {
+                Report(capture, voyage.Id, e);
+                return null;
+            }
+        }
+
+        private static void Report(IBlackBoxCapture capture, string? subjectId, Exception error)
+        {
+            try
+            {
+                capture.ReportCaptureError(subjectId, error);
+            }
             catch (Exception)
             {
-                return null;
+                // Reporting must not throw from a failure site; the capture contract is never to throw.
             }
         }
     }

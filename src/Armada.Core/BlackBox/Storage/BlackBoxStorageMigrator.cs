@@ -404,9 +404,10 @@ namespace Armada.Core.BlackBox.Storage
                                 await _Database.BlackBoxMigrations.UpdateAsync(job).ConfigureAwait(false);
                             }
                         }
-                        catch (Exception)
+                        catch (Exception inner)
                         {
                             // The job row keeps its last saved progress.
+                            _Logging.Warn(_Header + "migration " + jobId + " could not be marked Failed: " + inner.Message);
                         }
                     }
                 });

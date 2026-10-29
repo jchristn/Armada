@@ -159,6 +159,14 @@ namespace Armada.Core.BlackBox
         }
 
         /// <inheritdoc />
+        public void ReportCaptureError(string? subjectId, Exception error)
+        {
+            if (error == null) return;
+            _Logging.Warn(_Header + "capture for " + (subjectId ?? "(unknown)") + " failed outside the capture: " + error.GetType().Name + ": " + error.Message);
+            BlackBoxMetrics.RecordCaptureFailure();
+        }
+
+        /// <inheritdoc />
         public async Task<string?> CaptureVoyageFailureAsync(BlackBoxVoyageCaptureContext context, CancellationToken token = default)
         {
             if (context == null || context.Voyage == null) return null;
