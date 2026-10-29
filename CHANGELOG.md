@@ -15,22 +15,9 @@ digest, escalation record) and a suspected cause; Quick probes give a captain or
 **Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
 are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
 mobile interfaces for the new surfaces. Since v1.1.0 was cut it also includes the `ExcludeReviewAuthorsFromJudge`
-setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 to 104 apply automatically at
+setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 to 106 apply automatically at
 startup; see [UPGRADING.md](docs/UPGRADING.md#v110-to-v120).
 
-### Black box prevention, forensics and operations
-
-- Dispatch warns about overlapping work: a mission's likely files (its scoped-files directive and the repository paths its brief names that exist in the vessel) are compared with the vessel's active missions, black box conflict hotspots and reserved directories, and the warnings come back as `OverlapWarnings` on REST `POST /api/v1/missions` and `POST /api/v1/voyages` and MCP `create_mission` and `dispatch`. `POST /api/v1/vessels/{id}/overlap-preview` (MCP `preview_mission_overlap`) shows the same before dispatching.
-- `Vessel.SerializeOverlappingMissions` (default false; REST, `add_vessel`, `update_vessel`) chains a dispatched mission after the overlapping active mission with `DependsOnMissionId`; an explicit dependency is never replaced.
-- Soft directory reservations: an active mission's scoped files in a directory the black box marks hot (`blackBox.hotspotReservationThreshold`, default 3, 0 off) reserve it; a second mission there is warned or chained. `GET /api/v1/vessels/{id}/reservations`, MCP `list_vessel_reservations`.
-- The brief linter flags dependency language without `dependsOnMissionId`, verification-only briefs likely to fail as NoOp, host and parent-relative paths, and paths outside the vessel; dispatch returns the findings as `BriefLintWarnings` and never blocks. `POST /api/v1/missions/lint-brief`, MCP `lint_mission_brief`.
-- The configuration doctor lists the recommendations that recur across a vessel's black box entries (count, first and last seen, an example entry): `GET /api/v1/vessels/{id}/blackbox-doctor`, MCP `get_vessel_blackbox_doctor`.
-- Attempt diff (`GET /api/v1/blackbox/{id}/diff/{otherId}`, MCP `diff_blackbox_entries`), combined timeline across the entry, mission, dock, merge entry, captain and Harbor link (`GET /api/v1/blackbox/{id}/timeline`, MCP `get_blackbox_timeline`) and the voyage cascade graph (`GET /api/v1/voyages/{id}/blackbox/cascade`, MCP `get_voyage_blackbox_cascade`).
-- The success flight recorder keeps a minimal record of each successful landing for `blackBox.successRetentionDays` (default 7, 0 off); a failure's record lists nearby successes on the same vessel that touched the same files (`Related.NearbySuccesses`, `GET /api/v1/blackbox/{id}/nearby-successes`, MCP `list_blackbox_nearby_successes`).
-- Recovery paths link to runbooks tagged `blackbox: <path, rule, step or kind>` and a confirmed run starts the runbook instead of the tool steps. Every confirmed recovery run is tracked until the mission's next terminal status; per-path success rates (`GET /api/v1/blackbox/recovery-stats`, MCP `get_blackbox_recovery_stats`) break ties between equally weighted paths.
-- New tables `blackbox_successes` and `blackbox_recovery_outcomes` and the column `vessels.serialize_overlapping_missions` (migrations 105 and 106, every provider); `Armada.Client` gains the matching methods.
-
-### Black box advisor, triage and recovery actions
 ### Mission and voyage black box
 
 Every mission or voyage failure, of any kind and including landing failures, now writes a black box entry at the
@@ -66,6 +53,18 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - Mobile app: the black box on mission and voyage detail (summary, recovery with confirmation, resolve, notes, copy, share sheet, Ask Armada), and Black Box list and entry screens.
 - Postman: a Black Box folder with a request, tests and saved examples per route, and a mock in `postman/mocks/blackbox`.
 - Breaking changes: none. New fields and routes are additive.
+
+### Black box prevention, forensics and operations
+
+- Dispatch warns about overlapping work: a mission's likely files (its scoped-files directive and the repository paths its brief names that exist in the vessel) are compared with the vessel's active missions, black box conflict hotspots and reserved directories, and the warnings come back as `OverlapWarnings` on REST `POST /api/v1/missions` and `POST /api/v1/voyages` and MCP `create_mission` and `dispatch`. `POST /api/v1/vessels/{id}/overlap-preview` (MCP `preview_mission_overlap`) shows the same before dispatching.
+- `Vessel.SerializeOverlappingMissions` (default false; REST, `add_vessel`, `update_vessel`) chains a dispatched mission after the overlapping active mission with `DependsOnMissionId`; an explicit dependency is never replaced.
+- Soft directory reservations: an active mission's scoped files in a directory the black box marks hot (`blackBox.hotspotReservationThreshold`, default 3, 0 off) reserve it; a second mission there is warned or chained. `GET /api/v1/vessels/{id}/reservations`, MCP `list_vessel_reservations`.
+- The brief linter flags dependency language without `dependsOnMissionId`, verification-only briefs likely to fail as NoOp, host and parent-relative paths, and paths outside the vessel; dispatch returns the findings as `BriefLintWarnings` and never blocks. `POST /api/v1/missions/lint-brief`, MCP `lint_mission_brief`.
+- The configuration doctor lists the recommendations that recur across a vessel's black box entries (count, first and last seen, an example entry): `GET /api/v1/vessels/{id}/blackbox-doctor`, MCP `get_vessel_blackbox_doctor`.
+- Attempt diff (`GET /api/v1/blackbox/{id}/diff/{otherId}`, MCP `diff_blackbox_entries`), combined timeline across the entry, mission, dock, merge entry, captain and Harbor link (`GET /api/v1/blackbox/{id}/timeline`, MCP `get_blackbox_timeline`) and the voyage cascade graph (`GET /api/v1/voyages/{id}/blackbox/cascade`, MCP `get_voyage_blackbox_cascade`).
+- The success flight recorder keeps a minimal record of each successful landing for `blackBox.successRetentionDays` (default 7, 0 off); a failure's record lists nearby successes on the same vessel that touched the same files (`Related.NearbySuccesses`, `GET /api/v1/blackbox/{id}/nearby-successes`, MCP `list_blackbox_nearby_successes`).
+- Recovery paths link to runbooks tagged `blackbox: <path, rule, step or kind>` and a confirmed run starts the runbook instead of the tool steps. Every confirmed recovery run is tracked until the mission's next terminal status; per-path success rates (`GET /api/v1/blackbox/recovery-stats`, MCP `get_blackbox_recovery_stats`) break ties between equally weighted paths.
+- New tables `blackbox_successes` and `blackbox_recovery_outcomes` and the column `vessels.serialize_overlapping_missions` (migrations 105 and 106, every provider); `Armada.Client` gains the matching methods.
 
 ### Black box evidence fixes
 
