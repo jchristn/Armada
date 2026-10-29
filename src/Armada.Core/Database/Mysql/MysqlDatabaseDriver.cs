@@ -80,6 +80,8 @@ namespace Armada.Core.Database.Mysql
             BlackBoxFiles = new BlackBoxFileMethods(_ConnectionString);
             BlackBoxLinks = new BlackBoxLinkMethods(_ConnectionString);
             BlackBoxNotes = new BlackBoxNoteMethods(_ConnectionString);
+            BlackBoxSuccesses = new BlackBoxSuccessMethods(_ConnectionString);
+            BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(_ConnectionString);
             HandoffArtifacts = new HandoffArtifactMethods(_ConnectionString);
             FailureCauseRules = new FailureCauseRuleMethods(_ConnectionString);
             ModelProbeRuns = new ModelProbeRunMethods(_ConnectionString);
@@ -1187,7 +1189,58 @@ namespace Armada.Core.Database.Mysql
                     @"ALTER TABLE missions ADD COLUMN last_blackbox_entry_id VARCHAR(64) NULL;",
                     @"ALTER TABLE missions ADD COLUMN start_commit VARCHAR(64) NULL;",
                     @"ALTER TABLE voyages ADD COLUMN last_blackbox_entry_id VARCHAR(64) NULL;",
-                    @"ALTER TABLE vessels ADD COLUMN blackbox_retention_days INT NULL;")
+                    @"ALTER TABLE vessels ADD COLUMN blackbox_retention_days INT NULL;"),
+
+                new SchemaMigration(105, "Add vessels.serialize_overlapping_missions: when true, a mission dispatched to the vessel that overlaps an active mission's files or a reserved hotspot directory is chained after it with DependsOnMissionId",
+                    @"ALTER TABLE vessels ADD COLUMN serialize_overlapping_missions TINYINT(1) NOT NULL DEFAULT 0;"),
+
+                new SchemaMigration(106, "Add the black box success flight recorder (blackbox_successes: minimal records of successful landings kept for blackBox.successRetentionDays) and recovery outcome tracking (blackbox_recovery_outcomes: one row per confirmed recovery run with the mission's next terminal status)",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_successes (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        user_id VARCHAR(64),
+                        vessel_id VARCHAR(64),
+                        mission_id VARCHAR(64) NOT NULL,
+                        voyage_id VARCHAR(64),
+                        captain_id VARCHAR(64),
+                        mission_title LONGTEXT,
+                        base_commit VARCHAR(64),
+                        target_commit VARCHAR(64),
+                        target_branch VARCHAR(256),
+                        files_changed LONGTEXT,
+                        file_count INT NOT NULL DEFAULT 0,
+                        mission_created_utc DATETIME(6),
+                        started_utc DATETIME(6),
+                        landed_utc DATETIME(6) NOT NULL,
+                        queue_ms BIGINT,
+                        run_ms BIGINT,
+                        total_ms BIGINT,
+                        created_utc DATETIME(6) NOT NULL,
+                        expires_utc DATETIME(6)
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_recovery_outcomes (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        user_id VARCHAR(64),
+                        entry_id VARCHAR(64) NOT NULL,
+                        mission_id VARCHAR(64),
+                        voyage_id VARCHAR(64),
+                        vessel_id VARCHAR(64),
+                        rule_id VARCHAR(64),
+                        path_id VARCHAR(256) NOT NULL,
+                        runbook_id VARCHAR(64),
+                        run_succeeded TINYINT(1) NOT NULL DEFAULT 0,
+                        outcome VARCHAR(64) NOT NULL,
+                        outcome_status VARCHAR(64),
+                        created_utc DATETIME(6) NOT NULL,
+                        resolved_utc DATETIME(6)
+                    );",
+                    @"CREATE INDEX idx_blackbox_successes_tenant_vessel_landed ON blackbox_successes(tenant_id, vessel_id, landed_utc);",
+                    @"CREATE INDEX idx_blackbox_successes_mission ON blackbox_successes(mission_id);",
+                    @"CREATE INDEX idx_blackbox_successes_expires ON blackbox_successes(expires_utc);",
+                    @"CREATE INDEX idx_blackbox_recovery_outcomes_outcome_created ON blackbox_recovery_outcomes(outcome, created_utc);",
+                    @"CREATE INDEX idx_blackbox_recovery_outcomes_tenant_rule_path ON blackbox_recovery_outcomes(tenant_id, rule_id, path_id);",
+                    @"CREATE INDEX idx_blackbox_recovery_outcomes_entry ON blackbox_recovery_outcomes(entry_id);")
 
 
             };

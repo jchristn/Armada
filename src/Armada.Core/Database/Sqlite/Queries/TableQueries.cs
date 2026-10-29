@@ -2484,7 +2484,58 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"ALTER TABLE missions ADD COLUMN last_blackbox_entry_id TEXT NULL;",
                     @"ALTER TABLE missions ADD COLUMN start_commit TEXT NULL;",
                     @"ALTER TABLE voyages ADD COLUMN last_blackbox_entry_id TEXT NULL;",
-                    @"ALTER TABLE vessels ADD COLUMN blackbox_retention_days INTEGER NULL;")
+                    @"ALTER TABLE vessels ADD COLUMN blackbox_retention_days INTEGER NULL;"),
+
+                new SchemaMigration(105, "Add vessels.serialize_overlapping_missions: when true, a mission dispatched to the vessel that overlaps an active mission's files or a reserved hotspot directory is chained after it with DependsOnMissionId",
+                    @"ALTER TABLE vessels ADD COLUMN serialize_overlapping_missions INTEGER NOT NULL DEFAULT 0;"),
+
+                new SchemaMigration(106, "Add the black box success flight recorder (blackbox_successes: minimal records of successful landings kept for blackBox.successRetentionDays) and recovery outcome tracking (blackbox_recovery_outcomes: one row per confirmed recovery run with the mission's next terminal status)",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_successes (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        tenant_id TEXT,
+                        user_id TEXT,
+                        vessel_id TEXT,
+                        mission_id TEXT NOT NULL,
+                        voyage_id TEXT,
+                        captain_id TEXT,
+                        mission_title TEXT,
+                        base_commit TEXT,
+                        target_commit TEXT,
+                        target_branch TEXT,
+                        files_changed TEXT,
+                        file_count INTEGER NOT NULL DEFAULT 0,
+                        mission_created_utc TEXT,
+                        started_utc TEXT,
+                        landed_utc TEXT NOT NULL,
+                        queue_ms INTEGER,
+                        run_ms INTEGER,
+                        total_ms INTEGER,
+                        created_utc TEXT NOT NULL,
+                        expires_utc TEXT
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_recovery_outcomes (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        tenant_id TEXT,
+                        user_id TEXT,
+                        entry_id TEXT NOT NULL,
+                        mission_id TEXT,
+                        voyage_id TEXT,
+                        vessel_id TEXT,
+                        rule_id TEXT,
+                        path_id TEXT NOT NULL,
+                        runbook_id TEXT,
+                        run_succeeded INTEGER NOT NULL DEFAULT 0,
+                        outcome TEXT NOT NULL,
+                        outcome_status TEXT,
+                        created_utc TEXT NOT NULL,
+                        resolved_utc TEXT
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_blackbox_successes_tenant_vessel_landed ON blackbox_successes(tenant_id, vessel_id, landed_utc);",
+                    @"CREATE INDEX IF NOT EXISTS idx_blackbox_successes_mission ON blackbox_successes(mission_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_blackbox_successes_expires ON blackbox_successes(expires_utc);",
+                    @"CREATE INDEX IF NOT EXISTS idx_blackbox_recovery_outcomes_outcome_created ON blackbox_recovery_outcomes(outcome, created_utc);",
+                    @"CREATE INDEX IF NOT EXISTS idx_blackbox_recovery_outcomes_tenant_rule_path ON blackbox_recovery_outcomes(tenant_id, rule_id, path_id);",
+                    @"CREATE INDEX IF NOT EXISTS idx_blackbox_recovery_outcomes_entry ON blackbox_recovery_outcomes(entry_id);")
 
 
 

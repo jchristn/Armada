@@ -86,6 +86,8 @@ namespace Armada.Core.Database.SqlServer
             BlackBoxFiles = new BlackBoxFileMethods(this);
             BlackBoxLinks = new BlackBoxLinkMethods(this);
             BlackBoxNotes = new BlackBoxNoteMethods(this);
+            BlackBoxSuccesses = new BlackBoxSuccessMethods(this);
+            BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(this);
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);
             FailureCauseRules = new FailureCauseRuleMethods(this, _Settings, _Logging);
             ModelProbeRuns = new ModelProbeRunMethods(this, _Settings, _Logging);
@@ -552,6 +554,7 @@ namespace Armada.Core.Database.SqlServer
             try { vessel.AuditCommand = NullableString(reader["audit_command"]); }
             catch { vessel.AuditCommand = null; }
             try { vessel.BlackBoxRetentionDays = reader["blackbox_retention_days"] == DBNull.Value ? null : Convert.ToInt32(reader["blackbox_retention_days"]); } catch { }
+            try { vessel.SerializeOverlappingMissions = Convert.ToBoolean(reader["serialize_overlapping_missions"]); } catch { vessel.SerializeOverlappingMissions = false; }
             try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); }
             catch { vessel.DefinitionOfDoneTimeoutSeconds = 1800; }
             vessel.DefaultBranch = reader["default_branch"].ToString()!;

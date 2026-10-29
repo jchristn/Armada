@@ -336,6 +336,8 @@ namespace Armada.Core.Database.Postgresql
             BlackBoxFiles = new BlackBoxFileMethods(this);
             BlackBoxLinks = new BlackBoxLinkMethods(this);
             BlackBoxNotes = new BlackBoxNoteMethods(this);
+            BlackBoxSuccesses = new BlackBoxSuccessMethods(this);
+            BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(this);
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);
             FailureCauseRules = new FailureCauseRuleMethods(this, _Settings, _Logging);
             ModelProbeRuns = new ModelProbeRunMethods(this, _Settings, _Logging);

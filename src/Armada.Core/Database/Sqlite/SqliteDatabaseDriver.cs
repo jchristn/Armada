@@ -130,6 +130,8 @@ namespace Armada.Core.Database.Sqlite
             BlackBoxFiles = new BlackBoxFileMethods(this);
             BlackBoxLinks = new BlackBoxLinkMethods(this);
             BlackBoxNotes = new BlackBoxNoteMethods(this);
+            BlackBoxSuccesses = new BlackBoxSuccessMethods(this);
+            BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(this);
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);
             FailureCauseRules = new FailureCauseRuleMethods(this, _Settings, _Logging);
             ModelProbeRuns = new ModelProbeRunMethods(this, _Settings, _Logging);
@@ -217,6 +219,8 @@ namespace Armada.Core.Database.Sqlite
             BlackBoxFiles = new BlackBoxFileMethods(this);
             BlackBoxLinks = new BlackBoxLinkMethods(this);
             BlackBoxNotes = new BlackBoxNoteMethods(this);
+            BlackBoxSuccesses = new BlackBoxSuccessMethods(this);
+            BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(this);
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);
             FailureCauseRules = new FailureCauseRuleMethods(this, _Settings, _Logging);
             ModelProbeRuns = new ModelProbeRunMethods(this, _Settings, _Logging);
@@ -655,6 +659,7 @@ namespace Armada.Core.Database.Sqlite
             try { vessel.LintCommand = NullableString(reader["lint_command"]); } catch { }
             try { vessel.AuditCommand = NullableString(reader["audit_command"]); } catch { }
             try { vessel.BlackBoxRetentionDays = reader["blackbox_retention_days"] == DBNull.Value ? null : Convert.ToInt32(reader["blackbox_retention_days"]); } catch { }
+            try { vessel.SerializeOverlappingMissions = Convert.ToInt64(reader["serialize_overlapping_missions"]) == 1; } catch { vessel.SerializeOverlappingMissions = false; }
             try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); } catch { }
             try { vessel.ReleaseBranchPrefix = NullableString(reader["release_branch_prefix"]) ?? "release/"; } catch { vessel.ReleaseBranchPrefix = "release/"; }
             try { vessel.HotfixBranchPrefix = NullableString(reader["hotfix_branch_prefix"]) ?? "hotfix/"; } catch { vessel.HotfixBranchPrefix = "hotfix/"; }

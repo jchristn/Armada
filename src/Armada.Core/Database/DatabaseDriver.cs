@@ -475,6 +475,24 @@ namespace Armada.Core.Database
         }
 
         /// <summary>
+        /// Black box success flight recorder rows (blackbox_successes).
+        /// </summary>
+        public IBlackBoxSuccessMethods BlackBoxSuccesses
+        {
+            get => _BlackBoxSuccesses;
+            protected set => _BlackBoxSuccesses = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box recovery outcome rows (blackbox_recovery_outcomes).
+        /// </summary>
+        public IBlackBoxRecoveryOutcomeMethods BlackBoxRecoveryOutcomes
+        {
+            get => _BlackBoxRecoveryOutcomes;
+            protected set => _BlackBoxRecoveryOutcomes = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
         /// Handoff artifact methods (one row per stage attempt that handed work on).
         /// </summary>
         public IHandoffArtifactMethods HandoffArtifacts
@@ -711,6 +729,8 @@ namespace Armada.Core.Database
         private IBlackBoxFileMethods _BlackBoxFiles = null!;
         private IBlackBoxLinkMethods _BlackBoxLinks = null!;
         private IBlackBoxNoteMethods _BlackBoxNotes = null!;
+        private IBlackBoxSuccessMethods _BlackBoxSuccesses = null!;
+        private IBlackBoxRecoveryOutcomeMethods _BlackBoxRecoveryOutcomes = null!;
         private IFailureCauseRuleMethods _FailureCauseRules = null!;
         private IModelProbeRunMethods _ModelProbeRuns = null!;
         private IModelProbeResultMethods _ModelProbeResults = null!;
