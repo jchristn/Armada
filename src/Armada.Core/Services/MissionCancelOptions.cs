@@ -1,4 +1,4 @@
-namespace Armada.Core.Models
+namespace Armada.Core.Services
 {
     using System;
     using Armada.Core.BlackBox;

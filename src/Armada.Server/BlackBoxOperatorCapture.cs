@@ -7,6 +7,7 @@ namespace Armada.Server
     using Armada.Core.BlackBox;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Black box capture for the operator actions the REST, MCP and WebSocket surfaces perform on missions: a manual
