@@ -315,6 +315,7 @@ namespace Armada.Core.BlackBox
                 Task previous = _Recompute;
                 _Recompute = Task.Run(async () =>
                 {
+                    // The previous recompute logs its own failure below; only wait for it here.
                     try { await previous.ConfigureAwait(false); } catch (Exception) { }
                     try
                     {

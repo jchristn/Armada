@@ -12,7 +12,7 @@ namespace Armada.Core.Services
 
     /// <summary>
     /// Cancels a voyage the same way on every surface (REST, MCP, WebSocket): the voyage is marked Cancelled, then each
-    /// Pending, Assigned, or Blocked mission is cancelled through <see cref="IAdmiralService.CancelMissionAsync"/>.
+    /// Pending, Assigned, or Blocked mission is cancelled through <see cref="IAdmiralService.CancelMissionAsync(Mission, CancellationToken)"/>.
     /// In-progress work is left running. The result carries counts only. Thread safe: stateless.
     /// </summary>
     public static class VoyageCancellation

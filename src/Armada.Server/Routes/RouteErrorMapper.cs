@@ -147,9 +147,8 @@ namespace Armada.Server.Routes
 
         /// <summary>
         /// True when <paramref name="ex"/> is one the black box routes translate to a client or service error: every
-        /// <see cref="Armada.Core.BlackBox.BlackBoxException"/>, <see cref="NotImplementedException"/> (a wave-two
-        /// operation that is not merged yet), <see cref="NotSupportedException"/> (a storage target that is not
-        /// implemented), and everything <see cref="IsMapped"/> accepts.
+        /// <see cref="Armada.Core.BlackBox.BlackBoxException"/>, <see cref="NotSupportedException"/> (a storage target
+        /// that is not implemented), and everything <see cref="IsMapped"/> accepts.
         /// </summary>
         /// <param name="ex">Exception.</param>
         /// <returns>True when mapped.</returns>
@@ -157,7 +156,6 @@ namespace Armada.Server.Routes
         {
             if (ex == null) return false;
             return ex is Armada.Core.BlackBox.BlackBoxException
-                || ex is NotImplementedException
                 || ex is NotSupportedException
                 || IsMapped(ex);
         }
@@ -166,13 +164,13 @@ namespace Armada.Server.Routes
         /// Set the response status for a black box error and build the body. Codes (in <c>Data.Code</c>, a
         /// <see cref="BlackBoxErrorDetail"/>): 404 BlackBoxNotFound (missing or not visible, never 403, so nothing leaks
         /// whether another tenant's entry exists), 409 BlackBoxDeleting, 409 BlackBoxObjectCorrupt, 409
-        /// BlackBoxConfirmationRequired, 410 BlackBoxObjectMissing, 503 BlackBoxStoreUnavailable, 501 NotImplemented,
-        /// 400 InvalidArgument (with the field) and 400 CollectionLimitExceeded (a <see cref="CollectionLimitErrorDetail"/>).
+        /// BlackBoxConfirmationRequired, 410 BlackBoxObjectMissing, 503 BlackBoxStoreUnavailable, 503
+        /// BlackBoxActionsUnavailable, 400 InvalidArgument (with the field) and 400 CollectionLimitExceeded (a <see cref="CollectionLimitErrorDetail"/>).
         /// Anything else follows <see cref="ToResponse"/>.
         /// </summary>
         /// <param name="req">Request.</param>
         /// <param name="ex">Exception.</param>
-        /// <returns>Error body (an <see cref="ApiErrorResponse"/>, or an <see cref="Armada.Server.ApiStatusErrorResponse"/> for 501 and 503).</returns>
+        /// <returns>Error body (an <see cref="ApiErrorResponse"/>, or an <see cref="Armada.Server.ApiStatusErrorResponse"/> for 503).</returns>
         /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
         public static object ToBlackBoxResponse(ApiRequest req, Exception ex)
         {
@@ -180,18 +178,14 @@ namespace Armada.Server.Routes
             if (ex == null) throw new ArgumentNullException(nameof(ex));
             if (ex is Armada.Core.BlackBox.BlackBoxNotFoundException notFound) return BlackBoxError(req, 404, ApiResultEnum.NotFound, notFound.Code, notFound.Message);
             if (ex is Armada.Core.BlackBox.BlackBoxObjectMissingException missing) return BlackBoxError(req, 410, ApiResultEnum.NotFound, missing.Code, missing.Message);
-            if (ex is Armada.Core.BlackBox.BlackBoxStoreUnavailableException unavailable)
+            if (ex is Armada.Core.BlackBox.BlackBoxStoreUnavailableException || ex is Armada.Core.BlackBox.BlackBoxActionsUnavailableException)
             {
+                Armada.Core.BlackBox.BlackBoxException unavailable = (Armada.Core.BlackBox.BlackBoxException)ex;
                 req.Http.Response.StatusCode = 503;
                 return new Armada.Server.ApiStatusErrorResponse(Armada.Core.Enums.ApiStatusErrorCodeEnum.ServiceUnavailable, unavailable.Message) { Data = new BlackBoxErrorDetail(unavailable.Code) };
             }
 
             if (ex is Armada.Core.BlackBox.BlackBoxException conflict) return BlackBoxError(req, 409, ApiResultEnum.Conflict, conflict.Code, conflict.Message);
-            if (ex is NotImplementedException notImplemented)
-            {
-                req.Http.Response.StatusCode = 501;
-                return new Armada.Server.ApiStatusErrorResponse(Armada.Core.Enums.ApiStatusErrorCodeEnum.NotImplemented, notImplemented.Message) { Data = new BlackBoxErrorDetail("NotImplemented") };
-            }
 
             if (ex is NotSupportedException notSupported)
             {

@@ -33,9 +33,12 @@ import JsonViewer from '../shared/JsonViewer';
 import LoadingIndicator from '../shared/LoadingIndicator';
 import Markdown from '../shared/Markdown';
 import BlackBoxActionDialog, { type BlackBoxActionTarget } from './BlackBoxActionDialog';
+import BlackBoxAttemptDiff from './BlackBoxAttemptDiff';
 import BlackBoxEvidence from './BlackBoxEvidence';
+import BlackBoxNearbySuccesses from './BlackBoxNearbySuccesses';
 import BlackBoxNotes from './BlackBoxNotes';
 import BlackBoxResolveDialog from './BlackBoxResolveDialog';
+import BlackBoxTimeline from './BlackBoxTimeline';
 import './BlackBox.css';
 
 const ATTEMPT_PAGE_SIZE = 20;
@@ -291,6 +294,11 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
   const site = record?.site;
   const mechanism = record?.mechanism;
   const classification = record?.classification;
+  const hasSuspectedCause = !!classification?.suspectedCause && classification.suspectedCause !== 'Unknown' && classification.suspectedCause !== 'None';
+  const hasMechanismFields = !!(mechanism?.exceptionType || mechanism?.failingCommand || mechanism?.gitOperation || mechanism?.runtimeFailureKind)
+    || mechanism?.exitCode != null || hasSuspectedCause;
+  const hasMechanism = hasMechanismFields || !!classification?.rawReason || !!mechanism?.gitStderrTail || !!mechanism?.commandOutputTail
+    || (!!mechanism?.stackFrames?.length && audience !== 'user');
   const workspace = record?.workspace;
   const conflict = record?.conflict;
   const configValues = record?.configuration?.values ?? [];
@@ -392,14 +400,15 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
       </Section>
 
       <Section title={t('How')} tooltip={t('The mechanism: the exception, the failing command or git operation, and the recorded reason.')} testId="blackbox-how">
-        <dl className="blackbox-kv">
+        {!hasMechanism && <p className="text-dim" style={{ margin: 0 }}>{t('No mechanism was recorded for this failure.')}</p>}
+        {hasMechanismFields && <dl className="blackbox-kv">
           {mechanism?.exceptionType && <><dt>{t('Exception')}</dt><dd className="mono">{mechanism.exceptionType}{mechanism.exceptionMessage ? `: ${mechanism.exceptionMessage}` : ''}</dd></>}
           {mechanism?.failingCommand && <><dt>{t('Failing command')}</dt><dd className="mono">{mechanism.failingCommand}{mechanism.commandExitCode != null ? ` (${t('exit {{code}}', { code: mechanism.commandExitCode })})` : ''}</dd></>}
           {mechanism?.gitOperation && <><dt>{t('Git operation')}</dt><dd className="mono">{mechanism.gitOperation}</dd></>}
           {mechanism?.runtimeFailureKind && <><dt>{t('Runtime failure')}</dt><dd>{mechanism.runtimeFailureKind}</dd></>}
           {mechanism?.exitCode != null && <><dt>{t('Exit code')}</dt><dd>{mechanism.exitCode}</dd></>}
-          {classification?.suspectedCause && classification.suspectedCause !== 'Unknown' && classification.suspectedCause !== 'None' && <><dt>{t('Suspected cause')}</dt><dd>{t(classification.suspectedCause)}{classification.causeRuleId ? <span className="blackbox-rule"> {classification.causeRuleId}</span> : null}</dd></>}
-        </dl>
+          {hasSuspectedCause && <><dt>{t('Suspected cause')}</dt><dd>{t(classification!.suspectedCause!)}{classification!.causeRuleId ? <span className="blackbox-rule"> {classification!.causeRuleId}</span> : null}</dd></>}
+        </dl>}
         {classification?.rawReason && <pre className="blackbox-pre mission-failure-reason" data-failure-kind={entry.failureKind ?? fallbackKind ?? undefined} data-i18n-skip="true">{classification.rawReason}</pre>}
         {mechanism?.gitStderrTail && <pre className="blackbox-pre" data-i18n-skip="true" aria-label={t('Git output')}>{mechanism.gitStderrTail}</pre>}
         {mechanism?.commandOutputTail && <pre className="blackbox-pre" data-i18n-skip="true" aria-label={t('Command output')}>{mechanism.commandOutputTail}</pre>}
@@ -515,6 +524,8 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
                   {p.expectedOutcome && <div className="text-dim">{p.expectedOutcome}</div>}
                   {!!p.preconditions?.length && <div style={{ fontSize: '0.82rem' }}>{t('Preconditions')}: {p.preconditions.join('; ')}</div>}
                   {!!p.steps?.length && <div className="text-dim" style={{ fontSize: '0.82rem' }}>{t('{{count}} steps', { count: p.steps.length })}</div>}
+                  {p.runbookId && <div style={{ fontSize: '0.82rem' }}>{t('Runs runbook')}: <Link to={`/runbooks/${encodeURIComponent(p.runbookId)}`} title={t('This path starts the linked runbook instead of its own steps. Open the runbook.')}>{p.runbookTitle || p.runbookId}</Link></div>}
+                  {p.successRate != null && <div className="text-dim" style={{ fontSize: '0.82rem' }} title={t('Share of settled confirmed runs of this path that recovered the mission.')}>{t('Success rate {{rate}}% over {{runs}} tracked runs', { rate: Math.round(p.successRate * 100), runs: p.trackedRuns ?? 0 })}</div>}
                 </div>
                 <button type="button" className="btn btn-sm btn-primary" onClick={() => setAction({ kind: 'recovery', id: p.id, title: p.title, dataLossRisk: !!p.dataLossRisk })} title={t('Show what this path would do (dry run); nothing runs until you confirm.')}>{t('Dry run...')}</button>
               </div>
@@ -560,6 +571,15 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
         </Section>
       )}
 
+      <Lazy title={t('Timeline')} defaultOpen={variant === 'page'}>
+        {() => <BlackBoxTimeline entryId={entry.id} />}
+      </Lazy>
+      <Lazy title={t('Attempt diff')}>
+        {() => <BlackBoxAttemptDiff entryId={entry.id} attempts={attempts} />}
+      </Lazy>
+      <Lazy title={t('Nearby successes')}>
+        {() => <BlackBoxNearbySuccesses entryId={entry.id} />}
+      </Lazy>
       <Lazy title={t('Brief preview')}>
         {() => brief ? <Markdown>{brief.text}</Markdown> : <LoadingIndicator label={t('Loading...')} />}
       </Lazy>

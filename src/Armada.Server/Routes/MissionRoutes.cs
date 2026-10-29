@@ -788,7 +788,9 @@ namespace Armada.Server.Routes
                 if (!String.IsNullOrEmpty(mission.CaptainId)) signal.FromCaptainId = mission.CaptainId;
                 await _database.Signals.CreateAsync(signal).ConfigureAwait(false);
 
-                await _emitMissionStatusChanged(mission, previousStatus, "Mission " + id + " transitioned to " + newStatus).ConfigureAwait(false);
+                // The black box capture already emitted mission.status_changed for a transition it captured.
+                if (!BlackBoxOperatorCapture.EmitsStatusChanged(BlackBox, mission.Status))
+                    await _emitMissionStatusChanged(mission, previousStatus, "Mission " + id + " transitioned to " + newStatus).ConfigureAwait(false);
 
                 // Broadcast specific mission change for dashboard toast notifications
                 if (_webSocketHub != null)

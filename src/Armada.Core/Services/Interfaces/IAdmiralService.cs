@@ -180,6 +180,21 @@ namespace Armada.Core.Services.Interfaces
         Task<Mission> CancelMissionAsync(Mission mission, CancellationToken token = default);
 
         /// <summary>
+        /// Cancel a mission like <see cref="CancelMissionAsync(Mission, CancellationToken)"/>, recording the cancellation
+        /// the caller's way: the black box step, failure kind and reason, and capture context in
+        /// <paramref name="options"/>, so the cancel records one entry (for example VesselDeleted) instead of an
+        /// OperatorTransition the caller then supersedes.
+        /// </summary>
+        /// <param name="mission">Mission to cancel, already read with the caller's scope.</param>
+        /// <param name="options">How to record the cancellation, or null for the default.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated mission.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when mission is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the agent process could not be stopped or its exit was not
+        /// confirmed.</exception>
+        Task<Mission> CancelMissionAsync(Mission mission, MissionCancelOptions? options, CancellationToken token = default);
+
+        /// <summary>
         /// Stop a specific captain gracefully.
         /// </summary>
         /// <param name="captainId">Captain identifier.</param>

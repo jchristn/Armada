@@ -22,7 +22,7 @@ namespace Test.Shared.Suites.Services
 
     /// <summary>
     /// IBlackBoxService: tenant and owner scoping, reads (entry, record, section, digest, brief), objects and chunked reads,
-    /// downloads, notes, resolve, pin, delete, purge, status and aggregates, and the wave-two placeholders.
+    /// downloads, notes, resolve, pin, delete, purge, status and aggregates, and the admin-only storage migration calls.
     /// </summary>
     public sealed class BlackBoxServiceSuite : IArmadaTestSuite
     {
@@ -163,7 +163,7 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<CollectionLimitExceededException>(() => svc.DeleteManyAsync(user, tooMany), "1001 ids").ConfigureAwait(false);
             }));
 
-            cases.Add(Case("status_aggregates_and_wave2", "Retention and storage status, fingerprints and hot spots are tenant-scoped; storage migration says it is not implemented; recovery on an unknown entry is not found", TestTags.Negative, async () =>
+            cases.Add(Case("status_aggregates_and_admin_calls", "Retention and storage status, fingerprints and hot spots are tenant-scoped; storage migration needs a global admin; recovery on an unknown entry is not found", TestTags.Negative, async () =>
             {
                 using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver);

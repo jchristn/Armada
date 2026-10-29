@@ -618,7 +618,7 @@ Every REST error is an `ApiErrorResponse` with a stable `Error` code that matche
   `GET /api/v1/vessels/{id}/history/commits`) report a git failure in an `Error` field of a `200` result.
 - The black box routes add `410` (an object whose bytes the store lost; `Error` `NotFound`) and put a black box code
   in `Data.Code` (`BlackBoxNotFound`, `BlackBoxDeleting`, `BlackBoxObjectCorrupt`, `BlackBoxConfirmationRequired`,
-  `BlackBoxObjectMissing`, `BlackBoxStoreUnavailable`, `InvalidArgument` with `Data.Field`, `NotImplemented`); see
+  `BlackBoxObjectMissing`, `BlackBoxStoreUnavailable`, `BlackBoxActionsUnavailable`, `InvalidArgument` with `Data.Field`); see
   [Black box errors](#black-box-errors).
 - Clients should check the HTTP status code first, then read `Error`.
 
@@ -4721,8 +4721,8 @@ the black box code and `Field` names the offending parameter for `InvalidArgumen
 | 409 | `Conflict` | `BlackBoxObjectCorrupt` | The object's bytes do not match its stored SHA-256 |
 | 409 | `Conflict` | `BlackBoxConfirmationRequired` | A confirmed recovery or recommendation run without a valid `ConfirmToken`, or a path marked `DataLossRisk` without `AcknowledgeDataLoss` |
 | 410 | `NotFound` | `BlackBoxObjectMissing` | The object's row exists but the store lost its bytes |
-| 501 | `NotImplemented` | `NotImplemented` | A confirmed recovery or recommendation run on a server with no action executor wired |
 | 503 | `ServiceUnavailable` | `BlackBoxStoreUnavailable` | The storage target is unreachable, the target is not implemented, or the black box is not wired on this server (every route then answers `503`) |
+| 503 | `ServiceUnavailable` | `BlackBoxActionsUnavailable` | A confirmed recovery or recommendation run on a host with no action executor wired |
 
 ```json
 {
@@ -5325,7 +5325,8 @@ segment: `evidence%2Fgit-status.txt`, not `evidence/git-status.txt`.
 
 | Response header | Meaning |
 |---|---|
-| `ETag` | The stored object's SHA-256 (quoted). It is computed over the stored (gzip-encoded) bytes, so it identifies the object but is not a checksum of the decoded body; `If-None-Match` with it answers `304 Not Modified` |
+| `ETag` | The SHA-256 of the bytes in this response (quoted): the decoded object, or the range `offset` and `length` selected, so each range has its own ETag and it is a checksum of the body you received; `If-None-Match` with it answers `304 Not Modified` |
+| `X-BlackBox-Stored-Sha256` | The stored object's SHA-256, computed over the stored (gzip-encoded when `blackBox.storage.compress` is on) bytes; the Admiral verifies it on every read (`409` `BlackBoxObjectCorrupt` on a mismatch). It identifies the object, not the body |
 | `X-BlackBox-Total-Bytes` | The object's decoded size |
 | `X-BlackBox-Offset` | Where this read started |
 | `X-BlackBox-Next-Offset` | Present while more remains: the `offset` of the next read |
@@ -5502,6 +5503,13 @@ A confirmed call without a token, with an unknown, used or expired token, a toke
 after the mission or the plan changed (for example a re-analysis) is `409` `BlackBoxConfirmationRequired`: run a new
 dry run. Every dry run and run is noted on the entry and emits `blackbox.recovery_run`.
 
+Each step's preconditions are checked on the dry run and again on the confirm: `restart_mission` needs a Failed,
+LandingFailed or Cancelled mission (a Pending mission was already restarted), `retry_landing` a LandingFailed or
+WorkProduced one, `cancel_mission` one that is not already Cancelled or Complete, and the other steps need their
+mission, vessel or dock to still exist. When one is not met the response is `200` with `Refused` `true`, `Succeeded`
+`false` and `UnmetPreconditions` naming each step; a refused dry run issues no `ConfirmToken`, and a refused confirm
+runs nothing (every step reports "Not run") and notes the refusal on the entry.
+
 Dry run response:
 
 ```json
@@ -5524,6 +5532,8 @@ Dry run response:
   ],
   "StepResults": [],
   "Succeeded": true,
+  "Refused": false,
+  "UnmetPreconditions": [],
   "Message": "Would run: restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}. Confirm with confirmToken before 2026-10-29 21:21:39Z."
 }
 ```
@@ -5548,6 +5558,8 @@ Confirmed run response (`Plan` as above, trimmed):
     }
   ],
   "Succeeded": true,
+  "Refused": false,
+  "UnmetPreconditions": [],
   "Message": "Recovery path bbx-exec-006.restart ran. 1 of 1 Armada steps ran."
 }
 ```
@@ -5559,7 +5571,7 @@ A confirmed call without a token, and a reused token:
   "Error": "Conflict",
   "StatusCode": 409,
   "Description": "The request conflicts with the current state of the resource.",
-  "Message": "A confirmToken is required: run run_blackbox_recovery with dryRun=true first and confirm with the token it returns.",
+  "Message": "A confirmToken is required: do a dry run of this recovery path first (dryRun true) and confirm with the token it returns.",
   "Data": { "Code": "BlackBoxConfirmationRequired" }
 }
 ```
@@ -5575,8 +5587,8 @@ A confirmed call without a token, and a reused token:
 ```
 
 **Errors:** `400` `InvalidArgument` when a step names an unsupported tool or another subject; `403` when the caller may
-not call a step's tool; `404` `BlackBoxNotFound` for an unknown entry or path; `409` `BlackBoxConfirmationRequired`; `501`
-`NotImplemented` when no action executor is wired. Entry visibility is checked first, so an invisible entry is `404`
+not call a step's tool; `404` `BlackBoxNotFound` for an unknown entry or path; `409` `BlackBoxConfirmationRequired`; `503`
+`BlackBoxActionsUnavailable` when no action executor is wired. Entry visibility is checked first, so an invisible entry is `404`
 whatever the state of the runner.
 
 ```bash
@@ -5613,7 +5625,8 @@ Body: `DryRun`, `ConfirmToken`, `AuthorKind` (default `Operator`).
 
 **Errors:** `400` `InvalidArgument` for an advice-only recommendation (no `ApplyAction`); `403`; `404`
 `BlackBoxNotFound` for an unknown recommendation (`Recommendation nope is not recorded on black box entry ...`); `409`
-`BlackBoxConfirmationRequired` without a valid token; `501` `NotImplemented`.
+`BlackBoxConfirmationRequired` without a valid token; `503` `BlackBoxActionsUnavailable` when no action executor is
+wired.
 
 #### POST /api/v1/blackbox/{id}/reanalyze
 
@@ -5820,8 +5833,7 @@ already unfinished returns that job.
 ```
 
 **Errors:** `400` for an unknown, equal-to-`From` or misconfigured target; `403` not a global admin; `409` `Conflict`
-while a different migration is unfinished; `503` `BlackBoxStoreUnavailable` when the target fails its health check;
-`501` `NotImplemented` on a server without storage migration.
+while a different migration is unfinished; `503` `BlackBoxStoreUnavailable` when the target fails its health check.
 
 #### GET /api/v1/blackbox/storage/migrations/{id}
 
@@ -5849,7 +5861,7 @@ One storage migration job (`bbm_` id) with its progress. `State` is `Pending`, `
 }
 ```
 
-**Errors:** `403`; `404` `BlackBoxNotFound` for an unknown job; `501` `NotImplemented`.
+**Errors:** `403`; `404` `BlackBoxNotFound` for an unknown job.
 
 #### POST /api/v1/blackbox/backfill
 

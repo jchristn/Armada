@@ -4,6 +4,7 @@ import type { MissionMode, Vessel } from '@dashboard/types/models';
 import { BottomSheet, Button, SegmentedControl, SelectField, TextField } from '../../../components/ui';
 import { useLocale } from '../../../i18n/LocaleContext';
 import { spacing } from '../../../theme/typography';
+import { OverlapPreviewPanel, useOverlapPreview } from '../../blackbox/DispatchWarnings';
 
 export interface MissionFormValues {
   title: string;
@@ -52,6 +53,8 @@ function MissionForm({ kind, initial, vessels, busy, onClose, onSubmit }: {
   const [priorityText, setPriorityText] = useState(String(initial.priority));
   const set = (patch: Partial<MissionFormValues>) => setValues((v) => ({ ...v, ...patch }));
   const valid = missionFormValid(values, kind === 'create');
+  // Create only: the live overlap and brief check (edit has no vessel to compare against).
+  const preview = useOverlapPreview(kind === 'create' ? values.vesselId : '', values.title, values.description);
   return (
     <View>
       <TextField label={t('Title')} value={values.title} onChangeText={(title) => set({ title })} testID={`mission-${kind}-title`} />
@@ -86,6 +89,7 @@ function MissionForm({ kind, initial, vessels, busy, onClose, onSubmit }: {
               { value: 'Research', label: t('Research (read-only)') },
             ]}
           />
+          <OverlapPreviewPanel state={preview} testID="mission-create-preview" />
         </>
       ) : null}
       <TextField

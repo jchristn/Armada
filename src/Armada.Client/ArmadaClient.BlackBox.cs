@@ -15,8 +15,8 @@ namespace Armada.Client
     /// Mission and voyage black box calls (<c>/api/v1/blackbox</c>, <c>/api/v1/missions/{id}/blackbox</c>,
     /// <c>/api/v1/voyages/{id}/blackbox</c>) (dashboard <c>api/client.ts</c> parity). Errors carry the black box code in
     /// <see cref="ArmadaApiException"/>: 404 BlackBoxNotFound, 409 BlackBoxDeleting, BlackBoxObjectCorrupt or
-    /// BlackBoxConfirmationRequired, 410 BlackBoxObjectMissing, 503 BlackBoxStoreUnavailable, 501 NotImplemented, 400
-    /// InvalidArgument or CollectionLimitExceeded.
+    /// BlackBoxConfirmationRequired, 410 BlackBoxObjectMissing, 503 BlackBoxStoreUnavailable or
+    /// BlackBoxActionsUnavailable, 400 InvalidArgument or CollectionLimitExceeded.
     /// </summary>
     public partial class ArmadaClient
     {
@@ -204,6 +204,7 @@ namespace Armada.Client
                 content.Name = name;
                 content.ContentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
                 content.ETag = response.Headers.ETag?.Tag?.Trim('"');
+                content.StoredSha256 = response.Headers.TryGetValues("X-BlackBox-Stored-Sha256", out IEnumerable<string>? stored) ? stored.FirstOrDefault() : null;
                 content.Content = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                 content.Offset = HeaderLong(response, "X-BlackBox-Offset") ?? (offset ?? 0);
                 content.TotalBytes = HeaderLong(response, "X-BlackBox-Total-Bytes") ?? content.Content.LongLength;

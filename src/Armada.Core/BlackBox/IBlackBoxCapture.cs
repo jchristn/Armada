@@ -1,5 +1,6 @@
 namespace Armada.Core.BlackBox
 {
+    using System;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -28,5 +29,15 @@ namespace Armada.Core.BlackBox
         /// <param name="token">Cancellation token.</param>
         /// <returns>The entry id, or null when disabled or the capture failed.</returns>
         Task<string?> CaptureVoyageFailureAsync(BlackBoxVoyageCaptureContext context, CancellationToken token = default);
+
+        /// <summary>
+        /// Report an error a capture helper caught and did not let escape (for example a failure site's configure
+        /// callback that threw), so it is logged instead of swallowed. The default does nothing.
+        /// </summary>
+        /// <param name="subjectId">Mission or voyage id.</param>
+        /// <param name="error">The error.</param>
+        void ReportCaptureError(string? subjectId, Exception error)
+        {
+        }
     }
 }

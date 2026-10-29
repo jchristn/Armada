@@ -67,10 +67,9 @@ namespace Armada.Server.Mcp.Tools
 
         /// <summary>
         /// Map a black box error to a typed tool error, or null when the exception is not a black box error:
-        /// BlackBoxNotFound and BlackBoxObjectMissing are NotFound, BlackBoxStoreUnavailable is Unavailable, every other
-        /// black box code (BlackBoxDeleting, BlackBoxObjectCorrupt, BlackBoxConfirmationRequired) is Conflict, and a
-        /// wave-two operation that is not merged yet (<see cref="NotImplementedException"/>) is Unavailable with Code
-        /// NotImplemented. Each carries its code in Code.
+        /// BlackBoxNotFound and BlackBoxObjectMissing are NotFound, BlackBoxStoreUnavailable and BlackBoxActionsUnavailable
+        /// are Unavailable, and every other black box code (BlackBoxDeleting, BlackBoxObjectCorrupt,
+        /// BlackBoxConfirmationRequired) is Conflict. Each carries its code in Code.
         /// </summary>
         /// <param name="ex">Exception.</param>
         /// <returns>The error, or null.</returns>
@@ -78,9 +77,8 @@ namespace Armada.Server.Mcp.Tools
         {
             if (ex == null) return null;
             if (ex is BlackBoxNotFoundException || ex is BlackBoxObjectMissingException) return McpToolError.NotFound(ex.Message, ((BlackBoxException)ex).Code);
-            if (ex is BlackBoxStoreUnavailableException unavailable) return McpToolError.Unavailable(unavailable.Message, unavailable.Code);
+            if (ex is BlackBoxStoreUnavailableException || ex is BlackBoxActionsUnavailableException) return McpToolError.Unavailable(ex.Message, ((BlackBoxException)ex).Code);
             if (ex is BlackBoxException other) return McpToolError.Conflict(other.Message, other.Code);
-            if (ex is NotImplementedException) return McpToolError.Unavailable(ex.Message, "NotImplemented");
             return null;
         }
 
@@ -337,7 +335,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "run_blackbox_recovery",
-                "Run one recovery path recorded in a black box entry's analysis (pathId, for example bbx-land-001.stash-retry). It never takes a free-form command: only the steps recorded in the entry run, each authorized as if you had called that tool directly. Always dry run first (dryRun defaults to true): the dry run returns the plan and a confirmToken (10 minutes, bound to the entry, the path and the mission's current version, so a mission that changed must be re-checked). Tell the user what will happen, then run with dryRun false and that confirmToken. A path marked dataLossRisk (deleting a branch, forcing a dock reclaim) is refused without acknowledgeDataLoss true; confirm with the user before setting it. Every dry run and run is annotated on the entry (authorKind Agent). A token is single use; a missing, expired, used or foreign token, a mission that changed, or a re-analyzed plan is Conflict with Code BlackBoxConfirmationRequired: dry run again. " + SafetyGuidance + " " + TargetHint,
+                "Run one recovery path recorded in a black box entry's analysis (pathId, for example bbx-land-001.stash-retry). It never takes a free-form command: only the steps recorded in the entry run, each authorized as if you had called that tool directly. Always dry run first (dryRun defaults to true): the dry run returns the plan and a confirmToken (10 minutes, bound to the entry, the path and the mission's current version, so a mission that changed must be re-checked). Tell the user what will happen, then run with dryRun false and that confirmToken. A path marked dataLossRisk (deleting a branch, forcing a dock reclaim) is refused without acknowledgeDataLoss true; confirm with the user before setting it. Every dry run and run is annotated on the entry (authorKind Agent). A token is single use; a missing, expired, used or foreign token, a mission that changed, or a re-analyzed plan is Conflict with Code BlackBoxConfirmationRequired: dry run again. A step whose precondition is not met (restart_mission on a mission that is already Pending, retry_landing on one that is not LandingFailed, a deleted dock) is refused: refused true and unmetPreconditions name it, a refused dry run has no confirmToken and a refused confirmed run runs nothing. " + SafetyGuidance + " " + TargetHint,
                 Schema(TargetProperties(new Dictionary<string, object>
                 {
                     ["pathId"] = new { type = "string", description = "Recovery path id from the entry's analysis" },

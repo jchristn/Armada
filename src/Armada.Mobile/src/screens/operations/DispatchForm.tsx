@@ -18,6 +18,8 @@ import { SwitchField } from '../../components/ui/SwitchField';
 import { CaptainPickerField, FallbackTierField } from './w24/CaptainFields';
 import { PlaybookPicker } from '../../components/app/PlaybookPicker';
 import { ReadinessCard } from './w24/ReadinessCard';
+import { DispatchWarningsSheet, OverlapPreviewPanel, useOverlapPreview } from '../blackbox/DispatchWarnings';
+import { dispatchWarningsOf, warningCount, type DispatchWarnings } from '../blackbox/insightModel';
 
 /** How long the success message shows before opening the new voyage (the dashboard waits 1.5 s). */
 export const DISPATCH_NAVIGATE_DELAY_MS = 1500;
@@ -59,6 +61,9 @@ export function DispatchForm({ prefill, header, testID = 'dispatch-screen', sche
   const [approvalOptions, setApprovalOptions] = useState({ ...DEFAULT_RUN_APPROVALS });
   const [dispatching, setDispatching] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  // Warnings the dispatch returned: shown in a sheet before the new voyage opens.
+  const [created, setCreated] = useState<{ voyageId: string; warnings: DispatchWarnings } | null>(null);
+  const overlapPreview = useOverlapPreview(vesselId, '', prompt);
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
 
@@ -118,7 +123,9 @@ export function DispatchForm({ prefill, header, testID = 'dispatch-screen', sche
       pushToast('success', message, `/voyages/${voyage.id}`);
       setVoyageTitle('');
       setPrompt('');
-      schedule(() => { if (mounted.current) router.push(`/voyages/${voyage.id}` as Href); }, DISPATCH_NAVIGATE_DELAY_MS);
+      const warnings = dispatchWarningsOf(voyage);
+      if (warningCount(warnings) > 0) setCreated({ voyageId: voyage.id, warnings });
+      else schedule(() => { if (mounted.current) router.push(`/voyages/${voyage.id}` as Href); }, DISPATCH_NAVIGATE_DELAY_MS);
     } catch (e) {
       setResult({ ok: false, message: t('Failed: {{message}}', { message: errorMessage(e, t('Unknown error')) }) });
     } finally {
@@ -206,6 +213,7 @@ export function DispatchForm({ prefill, header, testID = 'dispatch-screen', sche
             placeholder={t('Describe what you need done.\n\nArmada will dispatch this request as a voyage on the selected vessel.')}
             testID="dispatch-prompt"
           />
+          <OverlapPreviewPanel state={overlapPreview} testID="dispatch-overlap-preview" />
           <PlaybookPicker value={selectedPlaybooks} onChange={setSelectedPlaybooks} disabled={dispatching} testID="dispatch-playbooks" />
           <Button label={t('Manage playbooks')} variant="ghost" icon="book-outline" onPress={() => router.push('/playbooks' as Href)} testID="dispatch-manage-playbooks" />
         </View>
@@ -249,6 +257,13 @@ export function DispatchForm({ prefill, header, testID = 'dispatch-screen', sche
           </View>
         </Section>
       </View>
+      <DispatchWarningsSheet
+        warnings={created?.warnings ?? null}
+        continueLabel={t('Open Voyage')}
+        onContinue={() => { const id = created?.voyageId; setCreated(null); if (id) router.push(`/voyages/${id}` as Href); }}
+        onClose={() => setCreated(null)}
+        testID="dispatch-warnings-sheet"
+      />
     </Screen>
   );
 }

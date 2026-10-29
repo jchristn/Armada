@@ -27,8 +27,8 @@ namespace Test.Shared.Suites.Client
     /// ArmadaClient.BlackBox.cs (reads, briefs, sections, objects in ranges, download, lists, search, notes, resolve, pin,
     /// delete, purge, garbage collection, retention, storage, backfill, bundle, hotspots and fingerprints), and the typed
     /// error codes the client carries: 404 BlackBoxNotFound, 400 InvalidArgument, 409 BlackBoxDeleting, 410
-    /// BlackBoxObjectMissing, 501 NotImplemented, and 503 BlackBoxStoreUnavailable (from a stub, since a healthy live
-    /// store never answers it).
+    /// BlackBoxObjectMissing, 404 for an unknown storage migration job, and 503 BlackBoxStoreUnavailable (from a stub,
+    /// since a healthy live store never answers it).
     /// </summary>
     public sealed class ClientContractBlackBoxSuite : IArmadaTestSuite
     {
@@ -82,6 +82,9 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(1000L, first.NextOffset, "next offset header");
                 AssertEqual("text/plain", first.ContentType, "content type");
                 AssertNotNull(first.ETag, "ETag");
+                AssertEqual(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(first.Content)).ToLowerInvariant(), first.ETag, "ETag is the SHA-256 of the range returned");
+                AssertNotNull(first.StoredSha256, "stored SHA-256 header");
+                AssertNotEqual(first.ETag, (await c.ReadBlackBoxObjectAsync(seeded.EntryId, "evidence/contract.log", first.NextOffset)).ETag, "each range has its own ETag");
                 BlackBoxObjectContent rest = await c.ReadBlackBoxObjectAsync(seeded.EntryId, "evidence/contract.log", first.NextOffset);
                 AssertEqual(1500, rest.Content.Length, "rest");
                 AssertNull(rest.NextOffset, "end reached");
@@ -149,7 +152,7 @@ namespace Test.Shared.Suites.Client
                 AssertEqual("CollectionLimitExceeded", limit.Code, "limit code");
             }));
 
-            cases.Add(Case("typed_errors", "404, 400, 409, 410 and 501 replies carry the black box code (recovery: unknown path 404, confirmed without a token 409)", async (c, fx) =>
+            cases.Add(Case("typed_errors", "404, 400, 409 and 410 replies carry the black box code (recovery: unknown path 404, confirmed without a token 409; storage migration: same source and target 400, unknown job 404)", async (c, fx) =>
             {
                 BlackBoxSeed seeded = await SeedAsync(fx).ConfigureAwait(false);
                 ArmadaApiException notFound = await ClientContract.ExpectErrorAsync(() => c.GetMissionBlackBoxAsync("msn_missing_" + ClientContract.Suffix()), "unknown mission", 404, 404);
@@ -169,9 +172,10 @@ namespace Test.Shared.Suites.Client
                 AssertTrue(dry.DryRun && !String.IsNullOrEmpty(dry.ConfirmToken), "dry run by default with a token");
                 ArmadaApiException noToken = await ClientContract.ExpectErrorAsync(() => c.RunBlackBoxRecoveryAsync(seeded.EntryId, path.Id, new BlackBoxRecoveryRunRequest { DryRun = false, AuthorKind = BlackBoxNoteAuthorKindEnum.Operator }), "confirmed without a token", 409, 409);
                 AssertEqual(BlackBoxConfirmationException.ErrorCode, noToken.Code, "409 code");
-                // TODO(blackbox-wave2: storage): flip to the job assertions when bb-storage merges storage migration.
-                await ClientContract.ExpectErrorAsync(() => c.MigrateBlackBoxStorageAsync(new BlackBoxStorageMigrationRequest { To = BlackBoxStorageTargetEnum.Disk }), "migrate", 501, 501);
-                await ClientContract.ExpectErrorAsync(() => c.GetBlackBoxStorageMigrationAsync("bbm_missing"), "migration job", 501, 501);
+                ArmadaApiException sameTarget = await ClientContract.ExpectErrorAsync(() => c.MigrateBlackBoxStorageAsync(new BlackBoxStorageMigrationRequest { From = BlackBoxStorageTargetEnum.Database, To = BlackBoxStorageTargetEnum.Database }), "migrate to the same target", 400, 400);
+                AssertEqual("InvalidArgument", sameTarget.Code, "400 code");
+                ArmadaApiException noJob = await ClientContract.ExpectErrorAsync(() => c.GetBlackBoxStorageMigrationAsync("bbm_missing"), "unknown migration job", 404, 404);
+                AssertEqual(BlackBoxNotFoundException.ErrorCode, noJob.Code, "404 code");
 
                 using (DatabaseDriver db = await OpenDatabaseAsync(fx).ConfigureAwait(false))
                     AssertTrue(await db.BlackBoxEntries.UpdateStateAsync(seeded.VoyageEntryId, BlackBoxStateEnum.Deleting).ConfigureAwait(false), "Deleting");

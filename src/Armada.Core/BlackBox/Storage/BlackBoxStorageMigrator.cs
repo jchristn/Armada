@@ -32,6 +32,17 @@ namespace Armada.Core.BlackBox.Storage
         public Func<string, CancellationToken, Task>? OnEntryProcessedAsync { get; set; } = null;
 
         /// <summary>
+        /// Per-entry locks shared with the entry writer (default <see cref="BlackBoxEntryLocks.Default"/>), so a write and a
+        /// storage migration of the same entry never interleave.
+        /// </summary>
+        public BlackBoxEntryLocks EntryLocks
+        {
+            get => _EntryLocks;
+            set => _EntryLocks = value ?? throw new ArgumentNullException(nameof(value));
+        }
+
+
+        /// <summary>
         /// The id of the job running now, or null.
         /// </summary>
         public string? ActiveJobId
@@ -50,6 +61,7 @@ namespace Armada.Core.BlackBox.Storage
         private readonly LoggingModule _Logging;
         private readonly object _Lock = new object();
         private readonly SemaphoreSlim _RunGate = new SemaphoreSlim(1, 1);
+        private BlackBoxEntryLocks _EntryLocks = BlackBoxEntryLocks.Default;
         private string? _ActiveJobId = null;
         private Task _Active = Task.CompletedTask;
         private CancellationTokenSource _Stop = new CancellationTokenSource();
@@ -274,6 +286,23 @@ namespace Armada.Core.BlackBox.Storage
         {
             if (entry == null) throw new ArgumentNullException(nameof(entry));
             if (job == null) throw new ArgumentNullException(nameof(job));
+            // Hold the entry's lock for the whole move: the entry writer (capture, enrichment, re-analysis) waits, so no
+            // object is written to the source after it was listed, and the writer then reads the switched location.
+            using (await _EntryLocks.AcquireAsync(entry.Id, token).ConfigureAwait(false))
+            {
+                // Re-read under the lock: the scanned row may predate a write or an earlier switch.
+                BlackBoxEntry current = await _Database.BlackBoxEntries.ReadAsync(entry.Id, null, true, token).ConfigureAwait(false) ?? entry;
+                if (current.State == BlackBoxStateEnum.Deleting) return 0;
+                return await MigrateLockedAsync(current, job, token).ConfigureAwait(false);
+            }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<long> MigrateLockedAsync(BlackBoxEntry entry, BlackBoxStorageMigrationJob job, CancellationToken token)
+        {
             BlackBoxStorageTargetEnum to = job.To;
             List<BlackBoxObject> objects = await ObjectsAsync(entry.Id, token).ConfigureAwait(false);
             long copied = 0;
@@ -346,10 +375,6 @@ namespace Armada.Core.BlackBox.Storage
             return copied;
         }
 
-        #endregion
-
-        #region Private-Methods
-
         private void EnsureRunning(string jobId)
         {
             lock (_Lock)
@@ -379,9 +404,10 @@ namespace Armada.Core.BlackBox.Storage
                                 await _Database.BlackBoxMigrations.UpdateAsync(job).ConfigureAwait(false);
                             }
                         }
-                        catch (Exception)
+                        catch (Exception inner)
                         {
                             // The job row keeps its last saved progress.
+                            _Logging.Warn(_Header + "migration " + jobId + " could not be marked Failed: " + inner.Message);
                         }
                     }
                 });

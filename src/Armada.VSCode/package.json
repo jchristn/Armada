@@ -1,7 +1,7 @@
 {
   "name": "armada-vscode",
   "displayName": "Armada",
-  "description": "Armada mission and voyage black box in VS Code: recent failures, FIX THIS briefs, recovery paths, conflict decorations and live updates.",
+  "description": "Armada mission and voyage black box in VS Code: recent failures, FIX THIS briefs, recovery paths, timelines, attempt diffs, overlap previews, conflict decorations and live updates.",
   "version": "1.2.0",
   "publisher": "jchristn",
   "license": "MIT",
@@ -225,6 +225,24 @@
         "title": "Ask Armada about this failure",
         "category": "Armada",
         "icon": "$(question)"
+      },
+      {
+        "command": "armada.showBlackBoxTimeline",
+        "title": "Show Black Box Timeline",
+        "category": "Armada",
+        "icon": "$(history)"
+      },
+      {
+        "command": "armada.compareBlackBoxAttempts",
+        "title": "Compare Black Box Attempts",
+        "category": "Armada",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "armada.previewMissionOverlap",
+        "title": "Preview Mission Overlap",
+        "category": "Armada",
+        "icon": "$(warning)"
       }
     ],
     "menus": {
@@ -253,6 +271,11 @@
           "command": "armada.openBlackBox",
           "when": "view == armadaFailures && armada.connected",
           "group": "navigation@3"
+        },
+        {
+          "command": "armada.previewMissionOverlap",
+          "when": "view == armadaFailures && armada.connected",
+          "group": "navigation@4"
         },
         {
           "command": "armada.connect",
@@ -315,6 +338,16 @@
           "command": "armada.addNote",
           "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
           "group": "3_act@3"
+        },
+        {
+          "command": "armada.showBlackBoxTimeline",
+          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "group": "4_forensics@1"
+        },
+        {
+          "command": "armada.compareBlackBoxAttempts",
+          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "group": "4_forensics@2"
         }
       ]
     }

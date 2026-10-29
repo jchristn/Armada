@@ -1,8 +1,17 @@
-import { BlackBoxEntry, BlackBoxNote, BlackBoxRecord } from '../api/types';
+import { Routes } from '../api/blackbox';
+import { BlackBoxDoctorPage, BlackBoxEntry, BlackBoxNote, BlackBoxRecord, BlackBoxRecoveryPath } from '../api/types';
 import { directoryPath, entryKind, entryLabel, filePath, formatDate, isOpen } from '../util/format';
 
 /** Actions the entry view can post back to the extension. */
-export type EntryViewAction = 'copyFixThis' | 'openFixThis' | 'sendToChat' | 'runRecovery' | 'resolve' | 'addNote' | 'askArmada' | 'refresh';
+export type EntryViewAction = 'copyFixThis' | 'openFixThis' | 'sendToChat' | 'runRecovery' | 'resolve' | 'addNote' | 'askArmada' | 'timeline' | 'compareAttempts' | 'refresh';
+
+/** Optional extras for the entry page. */
+export interface EntryHtmlOptions {
+  /** Dashboard base URL, for runbook and example entry links. Empty hides the links. */
+  dashboardUrl?: string;
+  /** The vessel's configuration doctor (recurring recommendations); omitted or failed hides the section. */
+  doctor?: BlackBoxDoctorPage | null;
+}
 
 /** Message posted by the webview. */
 export interface EntryViewMessage {
@@ -25,7 +34,8 @@ export function escapeHtml(value: unknown): string {
  * Armada could change, Recovery, Attempts and Notes. Pure; all values are escaped. The nonce gates the inline script
  * under the page's Content-Security-Policy.
  */
-export function renderEntryHtml(entry: BlackBoxEntry, notes: BlackBoxNote[], nonce: string, cspSource: string): string {
+export function renderEntryHtml(entry: BlackBoxEntry, notes: BlackBoxNote[], nonce: string, cspSource: string, options: EntryHtmlOptions = {}): string {
+  const dashboard = (options.dashboardUrl ?? '').replace(/\/+$/, '');
   const record: BlackBoxRecord = entry.Record ?? {};
   const analysis = record.Analysis ?? {};
   const site = record.Site ?? {};
@@ -108,12 +118,24 @@ export function renderEntryHtml(entry: BlackBoxEntry, notes: BlackBoxNote[], non
 
   const paths = analysis.RecoveryPaths ?? [];
   sections.push(section('Recovery', [paths.length
-    ? `<ol>${paths.map((p) => `<li><strong>${escapeHtml(p.Title)}</strong> <code>${escapeHtml(p.Id)}</code>${p.Risk ? ` <span class="muted">risk ${escapeHtml(p.Risk)}</span>` : ''}${p.DataLossRisk ? ' <span class="danger">data loss risk</span>' : ''}${p.ExpectedOutcome ? `<br>${escapeHtml(p.ExpectedOutcome)}` : ''}${(p.Steps ?? []).length ? `<ul>${(p.Steps ?? []).map((s) => `<li>${escapeHtml(s.Description ?? s.CliCommand ?? s.McpCommand ?? s.RestCommand ?? '')}</li>`).join('')}</ul>` : ''}<br><button data-action="runRecovery" data-path="${escapeHtml(p.Id)}">Dry run ${escapeHtml(p.Id)}</button></li>`).join('')}</ol>`
+    ? `<ol>${paths.map((p) => `<li><strong>${escapeHtml(p.Title)}</strong> <code>${escapeHtml(p.Id)}</code>${p.Risk ? ` <span class="muted">risk ${escapeHtml(p.Risk)}</span>` : ''}${p.DataLossRisk ? ' <span class="danger">data loss risk</span>' : ''}${p.ExpectedOutcome ? `<br>${escapeHtml(p.ExpectedOutcome)}` : ''}${recoveryExtras(p, dashboard)}${(p.Steps ?? []).length ? `<ul>${(p.Steps ?? []).map((s) => `<li>${escapeHtml(s.Description ?? s.CliCommand ?? s.McpCommand ?? s.RestCommand ?? '')}</li>`).join('')}</ul>` : ''}<br><button data-action="runRecovery" data-path="${escapeHtml(p.Id)}">Dry run ${escapeHtml(p.Id)}</button></li>`).join('')}</ol>`
     : '<p class="muted">No recovery paths recorded.</p>']));
 
   const attempts = record.Attempts ?? [];
   if (attempts.length) {
     sections.push(section('Attempts', [`<ul>${attempts.map((a) => `<li>Attempt ${escapeHtml(a.Attempt ?? '?')}: ${escapeHtml(a.Kind ?? '')} ${escapeHtml(a.ReasonExcerpt ?? '')}${a.Runtime ? ` <span class="muted">${escapeHtml(a.Runtime)}${a.Model ? ` ${escapeHtml(a.Model)}` : ''}</span>` : ''}</li>`).join('')}</ul>`]));
+  }
+
+  const doctor = options.doctor;
+  if (doctor && doctor.Objects.length) {
+    const rows = doctor.Objects.map((f) => {
+      const example = dashboard
+        ? `<a href="${escapeHtml(dashboard + Routes.dashboardEntry(f.ExampleEntryId))}">${escapeHtml(f.ExampleEntryId)}</a>`
+        : `<code>${escapeHtml(f.ExampleEntryId)}</code>`;
+      return `<li><strong>${escapeHtml(f.Setting)}</strong>: ${escapeHtml(f.CurrentValue ?? '?')} to ${escapeHtml(f.SuggestedValue ?? '?')}, recommended ${escapeHtml(f.Count)} time${f.Count === 1 ? '' : 's'}${f.RuleId ? ` by <code>${escapeHtml(f.RuleId)}</code>` : ''}${f.LastSeenUtc ? ` <span class="muted">last ${escapeHtml(formatDate(f.LastSeenUtc))}</span>` : ''}<br><span class="muted">Example ${example}${f.Applicable ? ' (can be applied from that entry)' : ''}</span></li>`;
+    }).join('');
+    const more = doctor.TotalRecords > doctor.Objects.length ? `<p class="muted">${escapeHtml(doctor.TotalRecords - doctor.Objects.length)} more recurring recommendations on this vessel.</p>` : '';
+    sections.push(section(`Recurring on this vessel (last ${doctor.WindowDays ?? 30} days)`, [`<ul>${rows}</ul>`, more]));
   }
 
   sections.push(section('Notes', [notes.length
@@ -150,6 +172,8 @@ button.secondary { background: var(--vscode-button-secondaryBackground); color: 
 ${open ? '<button data-action="resolve" class="secondary">Resolve</button>' : ''}
 <button data-action="addNote" class="secondary">Add Note</button>
 <button data-action="askArmada" class="secondary">Ask Armada about this failure</button>
+<button data-action="timeline" class="secondary">Timeline</button>
+<button data-action="compareAttempts" class="secondary">Compare Attempts</button>
 <button data-action="refresh" class="secondary">Refresh</button>
 </div>
 ${sections.join('\n')}
@@ -163,6 +187,19 @@ document.addEventListener('click', (event) => {
 </script>
 </body>
 </html>`;
+}
+
+/** Success rate and runbook link of a recovery path. */
+export function recoveryExtras(p: BlackBoxRecoveryPath, dashboard: string): string {
+  const parts: string[] = [];
+  if (typeof p.SuccessRate === 'number') parts.push(`<span class="muted">recovered ${escapeHtml(Math.round(p.SuccessRate * 100))}% of ${escapeHtml(p.TrackedRuns ?? 0)} tracked runs</span>`);
+  if (p.RunbookId) {
+    const name = escapeHtml(p.RunbookTitle || p.RunbookId);
+    parts.push(dashboard
+      ? `Runbook: <a href="${escapeHtml(dashboard + Routes.dashboardRunbook(p.RunbookId))}">${name}</a>`
+      : `Runbook: ${name} <code>${escapeHtml(p.RunbookId)}</code>`);
+  }
+  return parts.length ? `<br>${parts.join(' ')}` : '';
 }
 
 function section(title: string, body: string[]): string {
@@ -179,7 +216,7 @@ function table(rows: Array<[string, unknown]>): string {
 export function isEntryViewMessage(value: unknown): value is EntryViewMessage {
   if (!value || typeof value !== 'object') return false;
   const action = (value as { action?: unknown }).action;
-  const allowed: EntryViewAction[] = ['copyFixThis', 'openFixThis', 'sendToChat', 'runRecovery', 'resolve', 'addNote', 'askArmada', 'refresh'];
+  const allowed: EntryViewAction[] = ['copyFixThis', 'openFixThis', 'sendToChat', 'runRecovery', 'resolve', 'addNote', 'askArmada', 'timeline', 'compareAttempts', 'refresh'];
   if (typeof action !== 'string' || !allowed.includes(action as EntryViewAction)) return false;
   const pathId = (value as { pathId?: unknown }).pathId;
   return pathId === undefined || pathId === null || typeof pathId === 'string';

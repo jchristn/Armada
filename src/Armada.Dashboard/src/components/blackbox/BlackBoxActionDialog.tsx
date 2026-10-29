@@ -56,7 +56,7 @@ export default function BlackBoxActionDialog({ open, entryId, target, onClose, o
     if (code === 'BlackBoxConfirmationRequired' || code === 'BlackBoxConfirmationInvalid') {
       return t('The confirmation expired, was already used, or the mission changed since the dry run. Run the dry run again to see the current plan.');
     }
-    if (blackBoxErrorStatus(err) === 501) return t('This server cannot run recovery actions yet. Follow the steps by hand.');
+    if (code === 'BlackBoxActionsUnavailable') return t('This server cannot run recovery actions yet. Follow the steps by hand.');
     if ((blackBoxErrorStatus(err) === 401 || blackBoxErrorStatus(err) === 403)) return t('You are not allowed to run this action: {{message}}', { message });
     if (blackBoxErrorStatus(err) === 404) return t('The entry or this action no longer exists. Reload the black box entry.');
     return t('The action failed: {{message}}', { message });

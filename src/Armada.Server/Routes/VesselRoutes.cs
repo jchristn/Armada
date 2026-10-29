@@ -957,22 +957,24 @@ namespace Armada.Server.Routes
                     || mission.Status == Armada.Core.Enums.MissionStatusEnum.Review
                     || mission.Status == Armada.Core.Enums.MissionStatusEnum.Testing)
                 {
-                    // Read before the cancel: CancelMissionAsync records its own OperatorTransition entry and sets Cancelled;
-                    // the VesselDeleted entry below supersedes it as the mission's current entry.
                     Armada.Core.Enums.MissionStatusEnum statusBefore = mission.Status;
                     if (_Admiral != null)
                     {
-                        // Stop the agent before the mission row goes away; a failed stop blocks the delete.
-                        try { await _Admiral.CancelMissionAsync(mission).ConfigureAwait(false); }
+                        // Stop the agent before the mission row goes away; a failed stop blocks the delete. The cancel
+                        // records the single VesselDeleted entry.
+                        try { await _Admiral.CancelMissionAsync(mission, BlackBoxOperatorCapture.VesselDeletedCancel(statusBefore, vessel, mission.VesselId, "REST")).ConfigureAwait(false); }
                         catch (InvalidOperationException ex) { errors.Add("Mission " + mission.Id + ": " + ex.Message); continue; }
                     }
-                    mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
-                    mission.FailureKind = Armada.Core.Enums.MissionFailureKindEnum.OperatorAction;
-                    mission.FailureReason = "Vessel deleted";
-                    mission.CompletedUtc = DateTime.UtcNow;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
-                    await BlackBoxOperatorCapture.RecordVesselDeletedAsync(BlackBox, mission, statusBefore, vessel, "REST").ConfigureAwait(false);
+                    else
+                    {
+                        mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
+                        mission.FailureKind = Armada.Core.Enums.MissionFailureKindEnum.OperatorAction;
+                        mission.FailureReason = "Vessel deleted";
+                        mission.CompletedUtc = DateTime.UtcNow;
+                        mission.LastUpdateUtc = DateTime.UtcNow;
+                        await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                        await BlackBoxOperatorCapture.RecordVesselDeletedAsync(BlackBox, mission, statusBefore, vessel, "REST").ConfigureAwait(false);
+                    }
                 }
                 try { await _database.Missions.DeleteAsync(mission.Id).ConfigureAwait(false); }
                 catch (Exception ex) { errors.Add("Mission " + mission.Id + ": " + ex.Message); }

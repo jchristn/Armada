@@ -23,6 +23,17 @@ import {
   BlackBoxSectionResult,
   EnumerationResult,
   Vessel,
+  BlackBoxAttemptDiff,
+  BlackBoxCascadeGraph,
+  BlackBoxDoctorPage,
+  BlackBoxNearbySuccess,
+  BlackBoxRecoveryStat,
+  BlackBoxTimelinePage,
+  BriefLintRequest,
+  BriefLintResult,
+  MissionOverlapPreview,
+  MissionOverlapPreviewRequest,
+  VesselReservationPage,
 } from './types';
 
 /** Every REST route the extension calls. */
@@ -55,6 +66,17 @@ export const Routes = {
   recovery: (entryId: string, pathId: string): string =>
     `/api/v1/blackbox/${enc(entryId)}/recovery/${enc(pathId)}`,
   hotspots: (): string => '/api/v1/blackbox/hotspots/enumerate',
+  overlapPreview: (vesselId: string): string => `/api/v1/vessels/${enc(vesselId)}/overlap-preview`,
+  reservations: (vesselId: string): string => `/api/v1/vessels/${enc(vesselId)}/reservations/enumerate`,
+  lintBrief: (): string => '/api/v1/missions/lint-brief',
+  doctor: (vesselId: string): string => `/api/v1/vessels/${enc(vesselId)}/blackbox-doctor/enumerate`,
+  recoveryStats: (): string => '/api/v1/blackbox/recovery-stats/enumerate',
+  diff: (entryId: string, otherEntryId: string): string => `/api/v1/blackbox/${enc(entryId)}/diff/${enc(otherEntryId)}`,
+  nearbySuccesses: (entryId: string): string => `/api/v1/blackbox/${enc(entryId)}/nearby-successes/enumerate`,
+  timeline: (entryId: string): string => `/api/v1/blackbox/${enc(entryId)}/timeline/enumerate`,
+  voyageCascade: (voyageId: string): string => `/api/v1/voyages/${enc(voyageId)}/blackbox/cascade`,
+  dashboardRunbook: (runbookId: string): string => `/runbooks/${enc(runbookId)}`,
+  dashboardEntry: (entryId: string): string => `/blackbox/${enc(entryId)}`,
   webSocket: (): string => '/ws',
   dashboardAsk: (): string => '/ask',
 } as const;
@@ -155,9 +177,11 @@ export function describeError(err: unknown): string {
       case 'badRequest':
         return `Armada rejected the request (${err.status ?? 400})${detail}.`;
       case 'unavailable':
-        return `The black box store is unavailable (503 ${err.code ?? 'BlackBoxStoreUnavailable'})${detail}. Try again later.`;
+        return err.code === 'BlackBoxActionsUnavailable'
+          ? `This Armada server cannot run black box recovery actions (503 BlackBoxActionsUnavailable)${detail}. Follow the steps by hand.`
+          : `The black box store is unavailable (503 ${err.code ?? 'BlackBoxStoreUnavailable'})${detail}. Try again later.`;
       case 'notImplemented':
-        return `This Armada server does not run that black box operation yet (501 ${err.code ?? 'NotImplemented'}): the recovery runner may not be merged on it${detail}.`;
+        return `This Armada server does not support that operation (501 ${err.code ?? 'NotImplemented'})${detail}. Upgrade the Admiral.`;
       case 'invalidResponse':
         return `Armada returned an unexpected response: ${err.message}`;
       default:
@@ -360,6 +384,83 @@ export class ArmadaBlackBoxClient {
     const body: Record<string, unknown> = { VesselId: vesselId, PageNumber: 1, PageSize: pageSize };
     if (this._Tenant) body.TenantId = this._Tenant;
     return this.requestEnumeration<BlackBoxHotspot>('POST', Routes.hotspots(), body);
+  }
+
+  /**
+   * Previews the overlaps a mission would have on a vessel and its brief lint findings. Nothing is dispatched.
+   * @throws ArmadaApiError (badRequest) when vesselId is empty or the brief has neither title nor description.
+   */
+  public previewOverlap(vesselId: string, request: MissionOverlapPreviewRequest): Promise<MissionOverlapPreview> {
+    if (!vesselId || !vesselId.trim()) return Promise.reject(new ArmadaApiError('badRequest', 'A vessel id is required.'));
+    const title = request.Title?.trim() ?? '';
+    const description = request.Description?.trim() ?? '';
+    if (!title && !description) return Promise.reject(new ArmadaApiError('badRequest', 'Enter a mission title or brief.'));
+    const body: MissionOverlapPreviewRequest = { Title: title || null, Description: description || null };
+    if (request.DependsOnMissionId) body.DependsOnMissionId = request.DependsOnMissionId;
+    if (request.ExcludeMissionId) body.ExcludeMissionId = request.ExcludeMissionId;
+    return this.requestJson<MissionOverlapPreview>('POST', Routes.overlapPreview(vesselId), body);
+  }
+
+  /** One page of a vessel's soft directory reservations. */
+  public listReservations(vesselId: string, pageNumber = 1, pageSize = 10): Promise<VesselReservationPage> {
+    return this.requestEnumeration('POST', Routes.reservations(vesselId), { PageNumber: pageNumber, PageSize: pageSize }) as Promise<VesselReservationPage>;
+  }
+
+  /**
+   * Lints a mission brief (warnings only).
+   * @throws ArmadaApiError (badRequest) when the brief has neither title nor description.
+   */
+  public lintBrief(request: BriefLintRequest): Promise<BriefLintResult> {
+    if (!request.Title?.trim() && !request.Description?.trim()) return Promise.reject(new ArmadaApiError('badRequest', 'Enter a mission title or brief.'));
+    const body: BriefLintRequest = { Title: request.Title ?? null, Description: request.Description ?? null };
+    if (request.VesselId) body.VesselId = request.VesselId;
+    if (request.DependsOnMissionId) body.DependsOnMissionId = request.DependsOnMissionId;
+    if (request.VoyageId) body.VoyageId = request.VoyageId;
+    return this.requestJson<BriefLintResult>('POST', Routes.lintBrief(), body);
+  }
+
+  /** One page of the configuration recommendations that recur on a vessel (windowDays 1 to 365, default 30). */
+  public getDoctor(vesselId: string, windowDays?: number, pageNumber = 1, pageSize = 10): Promise<BlackBoxDoctorPage> {
+    const body: Record<string, unknown> = { PageNumber: pageNumber, PageSize: pageSize };
+    if (windowDays !== undefined) body.WindowDays = windowDays;
+    return this.requestEnumeration('POST', Routes.doctor(vesselId), body) as Promise<BlackBoxDoctorPage>;
+  }
+
+  /** One page of recovery path statistics, optionally for one rule or vessel. */
+  public getRecoveryStats(filter: { ruleId?: string; vesselId?: string } = {}, pageNumber = 1, pageSize = 10): Promise<EnumerationResult<BlackBoxRecoveryStat>> {
+    const body: Record<string, unknown> = { PageNumber: pageNumber, PageSize: pageSize };
+    if (filter.ruleId) body.RuleId = filter.ruleId;
+    if (filter.vesselId) body.VesselId = filter.vesselId;
+    return this.requestEnumeration<BlackBoxRecoveryStat>('POST', Routes.recoveryStats(), body);
+  }
+
+  /**
+   * What changed between two entries.
+   * @throws ArmadaApiError (badRequest) when the two ids are empty or the same.
+   */
+  public diffEntries(entryId: string, otherEntryId: string): Promise<BlackBoxAttemptDiff> {
+    if (!entryId || !otherEntryId) return Promise.reject(new ArmadaApiError('badRequest', 'Two entry ids are required.'));
+    if (entryId === otherEntryId) return Promise.reject(new ArmadaApiError('badRequest', 'Pick two different entries to compare.'));
+    return this.requestJson<BlackBoxAttemptDiff>('GET', Routes.diff(entryId, otherEntryId));
+  }
+
+  /** One page of the successful landings near a failure that touched the same files. */
+  public listNearbySuccesses(entryId: string, pageNumber = 1, pageSize = 10): Promise<EnumerationResult<BlackBoxNearbySuccess>> {
+    return this.requestEnumeration<BlackBoxNearbySuccess>('POST', Routes.nearbySuccesses(entryId), { PageNumber: pageNumber, PageSize: pageSize });
+  }
+
+  /** One page of an entry's combined timeline, oldest first unless newestFirst. */
+  public getTimeline(entryId: string, pageNumber = 1, pageSize = 50, newestFirst = false): Promise<BlackBoxTimelinePage> {
+    return this.requestEnumeration('POST', Routes.timeline(entryId), {
+      PageNumber: pageNumber,
+      PageSize: pageSize,
+      Order: newestFirst ? 'CreatedDescending' : 'CreatedAscending',
+    }) as Promise<BlackBoxTimelinePage>;
+  }
+
+  /** A voyage's cascade graph (which failure took the others down). */
+  public getVoyageCascade(voyageId: string): Promise<BlackBoxCascadeGraph> {
+    return this.requestJson<BlackBoxCascadeGraph>('GET', Routes.voyageCascade(voyageId));
   }
 
   private async requestEnumeration<T>(method: string, path: string, body?: unknown): Promise<EnumerationResult<T>> {

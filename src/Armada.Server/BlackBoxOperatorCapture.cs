@@ -7,6 +7,7 @@ namespace Armada.Server
     using Armada.Core.BlackBox;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Black box capture for the operator actions the REST, MCP and WebSocket surfaces perform on missions: a manual
@@ -34,8 +35,22 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// Whether <see cref="RecordTransitionAsync"/> emits <c>mission.status_changed</c> for a transition to
+        /// <paramref name="status"/>: the capture emits it (with PreviousStatus) for every transition it captures, so a
+        /// surface that also emits the event must skip it when this is true, or one transition produces two events.
+        /// </summary>
+        /// <param name="capture">Capture service, or null.</param>
+        /// <param name="status">Target status.</param>
+        /// <returns>True when the capture emits the event.</returns>
+        public static bool EmitsStatusChanged(IBlackBoxCapture? capture, MissionStatusEnum status)
+        {
+            return capture != null && CapturesTransitionTo(status);
+        }
+
+        /// <summary>
         /// Capture a manual status transition (call after the mission row is written). Does nothing for a target status
-        /// <see cref="CapturesTransitionTo"/> does not capture.
+        /// <see cref="CapturesTransitionTo"/> does not capture. The capture emits <c>mission.status_changed</c>; see
+        /// <see cref="EmitsStatusChanged"/>.
         /// </summary>
         /// <param name="capture">Capture service, or null (no-op).</param>
         /// <param name="mission">Mission after the transition.</param>
@@ -99,6 +114,45 @@ namespace Armada.Server
                 context.Note = note;
                 SetSite(context, callerMember, callerFile, callerLine);
             }, token);
+        }
+
+        /// <summary>
+        /// The cancel options a vessel delete passes to <c>IAdmiralService.CancelMissionAsync</c> for each active
+        /// mission, so the cancel stops the agent and records a single VesselDeleted entry (kind OperatorAction, reason
+        /// "Vessel deleted", the vessel and the surface in the note, the caller as the failure site) instead of an
+        /// OperatorTransition entry this helper's <see cref="RecordVesselDeletedAsync"/> would then supersede.
+        /// </summary>
+        /// <param name="statusBefore">Status before the cancellation.</param>
+        /// <param name="vessel">The vessel being deleted, or null.</param>
+        /// <param name="missionVesselId">The mission's vessel id, named when the vessel is null.</param>
+        /// <param name="surface">Surface that deleted the vessel (REST, MCP or WebSocket).</param>
+        /// <param name="callerMember">Filled by the compiler.</param>
+        /// <param name="callerFile">Filled by the compiler.</param>
+        /// <param name="callerLine">Filled by the compiler.</param>
+        /// <returns>The options.</returns>
+        public static MissionCancelOptions VesselDeletedCancel(
+            MissionStatusEnum statusBefore,
+            Vessel? vessel,
+            string? missionVesselId,
+            string surface,
+            [CallerMemberName] string callerMember = "",
+            [CallerFilePath] string callerFile = "",
+            [CallerLineNumber] int callerLine = 0)
+        {
+            string note = "Vessel " + (vessel?.Name ?? missionVesselId ?? "(unknown)") + " was deleted through " + surface + " while the mission was " + statusBefore + ".";
+            return new MissionCancelOptions
+            {
+                BlackBoxStep = BlackBoxStepEnum.VesselDeleted,
+                FailureKind = MissionFailureKindEnum.OperatorAction,
+                FailureReason = "Vessel deleted",
+                ConfigureCapture = context =>
+                {
+                    context.Vessel = vessel;
+                    context.Reason = "Vessel deleted";
+                    context.Note = note;
+                    SetSite(context, callerMember, callerFile, callerLine);
+                }
+            };
         }
 
         #endregion

@@ -319,6 +319,55 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(Case("migration_and_writer_coordinate", "A migration waits for an entry write in flight and a write waits for a migration of the same entry; a write with an entry read before the move lands on the new target and never reverts the switch", TestTags.Negative, async () =>
+            {
+                using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                ArmadaSettings settings = BlackBoxTestKit.Settings();
+                settings.BlackBox.Storage.Disk.Directory = TestTemp.NewDirectory("bbmigrace");
+                using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver, settings);
+                BlackBoxEntryLocks locks = new BlackBoxEntryLocks();
+                bb.Writer.EntryLocks = locks;
+                bb.Migrator.EntryLocks = locks;
+                string id = await CaptureAsync(bb, t).ConfigureAwait(false);
+                await bb.Queue.DrainAsync().ConfigureAwait(false);
+                BlackBoxEntry stale = (await t.Driver.BlackBoxEntries.ReadAsync(id).ConfigureAwait(false))!;
+                AssertEqual(BlackBoxStorageTargetEnum.Database, stale.StorageTarget, "starts in the database");
+                BlackBoxRecord record = await bb.Pipeline.LoadRecordAsync(stale).ConfigureAwait(false);
+
+                // A write in flight (the entry's lock held) holds the migration of that entry back.
+                Task<BlackBoxStorageMigrationJob> run;
+                using (await locks.AcquireAsync(id).ConfigureAwait(false))
+                {
+                    BlackBoxStorageMigrationJob job = await bb.Migrator.StartAsync(new BlackBoxStorageMigrationRequest { To = BlackBoxStorageTargetEnum.Disk }, false).ConfigureAwait(false);
+                    run = bb.Migrator.RunAsync(job.Id);
+                    await Task.Delay(300).ConfigureAwait(false);
+                    AssertFalse(run.IsCompleted, "the migration waits for the write in flight");
+                }
+                BlackBoxStorageMigrationJob done = await run.ConfigureAwait(false);
+                AssertEqual(BlackBoxJobStateEnum.Completed, done.State, "migrated: " + done.LastError);
+                AssertEqual(BlackBoxStorageTargetEnum.Disk, (await t.Driver.BlackBoxEntries.ReadAsync(id).ConfigureAwait(false))!.StorageTarget, "switched to Disk");
+
+                // A migration in flight holds a write back.
+                Task write;
+                using (await locks.AcquireAsync(id).ConfigureAwait(false))
+                {
+                    write = bb.Writer.WriteAsync(stale, record, null, CancellationToken.None, CancellationToken.None);
+                    await Task.Delay(300).ConfigureAwait(false);
+                    AssertFalse(write.IsCompleted, "the write waits for the migration in flight");
+                }
+                await write.ConfigureAwait(false);
+
+                // The write used an entry read before the move: it lands on Disk and keeps the switch.
+                BlackBoxEntry after = (await t.Driver.BlackBoxEntries.ReadAsync(id).ConfigureAwait(false))!;
+                AssertEqual(BlackBoxStorageTargetEnum.Disk, after.StorageTarget, "the stale write did not revert the switch");
+                AssertNotNull(after.StoragePrefix, "prefix kept");
+                BlackBoxObject recordRow = (await t.Driver.BlackBoxObjects.ReadAsync(id, BlackBoxObjectNames.Record, false).ConfigureAwait(false))!;
+                AssertNotNull(recordRow.StorageKey, "record.json was rewritten to the Disk target, not the database");
+                BlackBoxRecord reread = await bb.Pipeline.LoadRecordAsync(after).ConfigureAwait(false);
+                AssertEqual(id, reread.EntryId, "record.json reads back from the new target");
+                AssertEqual(0, locks.Count, "no lock is left behind");
+            }));
+
             cases.Add(Case("backup_inventory", "The backup inventory counts database entries and lists external ones with their target and prefix", TestTags.Positive, async () =>
             {
                 using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

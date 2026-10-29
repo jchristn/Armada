@@ -32,7 +32,7 @@ namespace Test.Shared.Suites.E2E
     /// and another tenant's entry are 404 BlackBoxNotFound (no existence leak); invalid section, audience, offset and
     /// length are 400 with the field; page size 0 and 1001 are normalized; 1001 ids are 400 CollectionLimitExceeded; a
     /// regular user calling the admin routes is 403; an entry in the Deleting state is 409 BlackBoxDeleting; recovery and
-    /// recommendation runs answer 501 NotImplemented until the recovery runner merges.
+    /// recommendation runs need a dry run and its confirm token (409 BlackBoxConfirmationRequired without one).
     /// </summary>
     public sealed class BlackBoxApiSuite : IArmadaTestSuite
     {
@@ -157,6 +157,23 @@ namespace Test.Shared.Suites.E2E
                     AssertEqual("application/json", record.Content.Headers.ContentType?.MediaType, "object content type");
                     AssertTrue(record.Headers.ETag != null, "object ETag");
                     AssertContains(_EntryId, body, "record.json names the entry");
+                    byte[] bytes = await record.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                    string expected = "\"" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant() + "\"";
+                    AssertEqual(expected, record.Headers.ETag!.Tag, "the ETag is the SHA-256 of the bytes returned");
+                    string stored = record.Headers.GetValues("X-BlackBox-Stored-Sha256").Single();
+                    AssertNotEqual(expected.Trim('"'), stored, "the stored (gzip) SHA-256 differs from the returned bytes' and is not the ETag");
+                    using (HttpRequestMessage conditional = new HttpRequestMessage(HttpMethod.Get, "/api/v1/blackbox/" + _EntryId + "/objects/record.json"))
+                    {
+                        conditional.Headers.TryAddWithoutValidation("If-None-Match", expected);
+                        using HttpResponseMessage notModified = await ua.SendAsync(conditional).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.NotModified, notModified.StatusCode, "If-None-Match with the ETag");
+                    }
+                    using (HttpRequestMessage storedMatch = new HttpRequestMessage(HttpMethod.Get, "/api/v1/blackbox/" + _EntryId + "/objects/record.json"))
+                    {
+                        storedMatch.Headers.TryAddWithoutValidation("If-None-Match", "\"" + stored + "\"");
+                        using HttpResponseMessage full = await ua.SendAsync(storedMatch).ConfigureAwait(false);
+                        AssertEqual(HttpStatusCode.OK, full.StatusCode, "the stored SHA-256 is not the representation's validator");
+                    }
                 }
 
                 // A 3 MB object read at most 1 MB at a time, following X-BlackBox-Next-Offset to the end.
@@ -191,6 +208,7 @@ namespace Test.Shared.Suites.E2E
                     byte[] data = await ranged.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                     AssertEqual(5, data.Length, "explicit length");
                     AssertTrue(data.SequenceEqual(BigObject().Skip(10).Take(5)), "ranged bytes");
+                    AssertEqual("\"" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data)).ToLowerInvariant() + "\"", ranged.Headers.ETag?.Tag, "a range's ETag is the SHA-256 of the range returned");
                 }
 
                 await ExpectErrorAsync(ua, HttpMethod.Get, "/api/v1/blackbox/" + _EntryId + "/objects/record.json?offset=-1", null, HttpStatusCode.BadRequest, "InvalidArgument", "offset").ConfigureAwait(false);
@@ -423,7 +441,9 @@ namespace Test.Shared.Suites.E2E
                 AssertNotNull(dry.ConfirmTokenExpiresUtc, "token expiry");
 
                 string confirmation = BlackBoxConfirmationException.ErrorCode;
-                await ExpectErrorAsync(a, HttpMethod.Post, route, new { DryRun = false }, HttpStatusCode.Conflict, confirmation, null).ConfigureAwait(false);
+                string noToken = await ExpectErrorAsync(a, HttpMethod.Post, route, new { DryRun = false }, HttpStatusCode.Conflict, confirmation, null).ConfigureAwait(false);
+                AssertContains("dry run", noToken, "the 409 says to dry run first");
+                AssertFalse(noToken.Contains("run_blackbox_recovery", StringComparison.Ordinal), "the REST 409 does not name the MCP tool: " + noToken);
                 await ExpectErrorAsync(a, HttpMethod.Post, route, new { DryRun = false, ConfirmToken = "bbc_bogus" }, HttpStatusCode.Conflict, confirmation, null).ConfigureAwait(false);
                 await ExpectErrorAsync(a, HttpMethod.Post, "/api/v1/blackbox/" + target.EntryId + "/recovery/no-such-path", new { DryRun = true }, HttpStatusCode.NotFound, BlackBoxNotFoundException.ErrorCode, null).ConfigureAwait(false);
                 await ExpectErrorAsync(a, HttpMethod.Post, "/api/v1/blackbox/" + target.EntryId + "/recommendations/no-such-recommendation/apply", new { DryRun = true }, HttpStatusCode.NotFound, BlackBoxNotFoundException.ErrorCode, null).ConfigureAwait(false);
@@ -511,7 +531,7 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(_EntryId, status.LastBlackBoxEntryId, "mission_status carries LastBlackBoxEntryId");
             }));
 
-            cases.Add(CaseAsync("mcp_write_tools_and_errors", "annotate (Agent), resolve, pin; another tenant is NotFound; admin tools are Forbidden to a regular user; recovery answers NotImplemented until the runner merges", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("mcp_write_tools_and_errors", "annotate (Agent), resolve, pin; another tenant is NotFound; admin tools are Forbidden to a regular user; a confirmed recovery or recommendation without a token is Conflict BlackBoxConfirmationRequired", TestTags.Negative, async () =>
             {
                 RequireSetup();
                 using McpToolClient user = Mcp(_UserA!);
@@ -615,6 +635,29 @@ namespace Test.Shared.Suites.E2E
                 AssertContains("dry run", review, "review prompt carries the safety guidance");
             }));
 
+            cases.Add(CaseAsync("mcp_resource_not_found", "resources/read for a missing entry, a missing object or another tenant's entry is the MCP resource-not-found error (-32002) with the typed NotFound data, not -32603", TestTags.Negative, async () =>
+            {
+                RequireSetup();
+                string missing = await RawMcpAsync(_UserA!, "resources/read", new { uri = "armada://blackbox/bbx_missing/record.json" }).ConfigureAwait(false);
+                AssertContains("-32002", missing, "missing entry is resource not found");
+                AssertContains("BlackBoxNotFound", missing, "missing entry carries the black box code");
+                AssertContains("NotFound", missing, "missing entry carries the typed error code");
+                AssertFalse(missing.Contains("-32603", StringComparison.Ordinal), "missing entry is not an internal error");
+                string missingBrief = await RawMcpAsync(_UserA!, "resources/read", new { uri = "armada://blackbox/bbx_missing/brief.md" }).ConfigureAwait(false);
+                AssertContains("-32002", missingBrief, "missing brief is resource not found");
+                string missingMission = await RawMcpAsync(_UserA!, "resources/read", new { uri = "armada://missions/msn_missing/blackbox" }).ConfigureAwait(false);
+                AssertContains("-32002", missingMission, "a mission with no entry is resource not found");
+                string missingObject = await RawMcpAsync(_UserA!, "resources/read", new { uri = "armada://blackbox/" + _EntryId + "/objects/no-such-object.txt" }).ConfigureAwait(false);
+                AssertContains("-32002", missingObject, "missing object is resource not found");
+                AssertFalse(missingObject.Contains("-32603", StringComparison.Ordinal), "missing object is not an internal error");
+                string foreign = await RawMcpAsync(_AdminB!, "resources/read", new { uri = "armada://blackbox/" + _EntryId + "/record.json" }).ConfigureAwait(false);
+                AssertContains("-32002", foreign, "another tenant's entry is resource not found");
+                string present = await RawMcpAsync(_UserA!, "resources/read", new { uri = "armada://blackbox/" + _EntryId + "/record.json" }).ConfigureAwait(false);
+                AssertFalse(present.Contains("-32002", StringComparison.Ordinal), "a visible entry reads without an error");
+                AssertNull(Armada.Server.Mcp.Tools.McpBlackBoxResources.ToResourceError("armada://x", new InvalidOperationException("boom")), "a non black box error is not mapped");
+                AssertEqual(-32002, Armada.Server.Mcp.Tools.McpBlackBoxResources.ToResourceError("armada://x", new BlackBoxObjectMissingException("gone"))!.Code, "object missing maps to -32002");
+            }));
+
             cases.Add(CaseAsync("websocket_commands", "blackbox.get, blackbox.brief and blackbox.list over the WebSocket command route", TestTags.Positive, async () =>
             {
                 RequireSetup();
@@ -698,6 +741,7 @@ namespace Test.Shared.Suites.E2E
                 using (HttpResponseMessage response = await a.PutAsync("/api/v1/missions/" + rest.Id + "/status", JsonHelper.ToJsonContent(new { Status = "Failed" })).ConfigureAwait(false))
                     AssertStatusCode(HttpStatusCode.OK, response, "REST transition");
                 await ExpectOperatorEntryAsync(a, rest.Id, BlackBoxStepEnum.OperatorTransition, "REST", MissionStatusEnum.InProgress).ConfigureAwait(false);
+                await ExpectOneStatusChangedAsync(rest.Id, MissionStatusEnum.Failed, MissionStatusEnum.InProgress, "REST").ConfigureAwait(false);
 
                 Mission mcp = await CreateMissionAsync("transition-mcp", MissionStatusEnum.InProgress, null).ConfigureAwait(false);
                 using (McpToolClient client = Mcp(_AdminA!))
@@ -707,6 +751,7 @@ namespace Test.Shared.Suites.E2E
                 }
 
                 await ExpectOperatorEntryAsync(a, mcp.Id, BlackBoxStepEnum.OperatorTransition, "MCP", MissionStatusEnum.InProgress).ConfigureAwait(false);
+                await ExpectOneStatusChangedAsync(mcp.Id, MissionStatusEnum.Cancelled, MissionStatusEnum.InProgress, "MCP").ConfigureAwait(false);
 
                 Mission ws = await CreateMissionAsync("transition-ws", MissionStatusEnum.InProgress, null).ConfigureAwait(false);
                 using (ClientWebSocket socket = await E2EServerFixture.ConnectAuthenticatedWebSocketAsync(_Fx.RestPort).ConfigureAwait(false))
@@ -717,12 +762,14 @@ namespace Test.Shared.Suites.E2E
                 }
 
                 await ExpectOperatorEntryAsync(a, ws.Id, BlackBoxStepEnum.OperatorTransition, "WebSocket", MissionStatusEnum.InProgress).ConfigureAwait(false);
+                await ExpectOneStatusChangedAsync(ws.Id, MissionStatusEnum.Failed, MissionStatusEnum.InProgress, "WebSocket").ConfigureAwait(false);
 
                 Mission notCaptured = await CreateMissionAsync("transition-none", MissionStatusEnum.Assigned, null).ConfigureAwait(false);
                 using (HttpResponseMessage response = await a.PutAsync("/api/v1/missions/" + notCaptured.Id + "/status", JsonHelper.ToJsonContent(new { Status = "InProgress" })).ConfigureAwait(false))
                     AssertStatusCode(HttpStatusCode.OK, response, "REST transition to InProgress");
                 EnumerationResult<BlackBoxEntrySummary> none = await GetJsonAsync<EnumerationResult<BlackBoxEntrySummary>>(a, "/api/v1/blackbox?missionId=" + notCaptured.Id).ConfigureAwait(false);
                 AssertEqual(0L, none.TotalRecords, "a transition to InProgress is not captured");
+                await ExpectOneStatusChangedAsync(notCaptured.Id, MissionStatusEnum.InProgress, MissionStatusEnum.Assigned, "REST (not captured)").ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("vessel_deletion_captured", "Deleting a vessel over REST, MCP and WebSocket captures each active mission it cancels as External/VesselDeleted, and the entry outlives the mission row", TestTags.Positive, async () =>
@@ -768,6 +815,10 @@ namespace Test.Shared.Suites.E2E
                     }
 
                     await ExpectOperatorEntryAsync(a, mission.Id, BlackBoxStepEnum.VesselDeleted, surface, MissionStatusEnum.Pending).ConfigureAwait(false);
+                    EnumerationResult<BlackBoxEntrySummary> all = await GetJsonAsync<EnumerationResult<BlackBoxEntrySummary>>(a, "/api/v1/blackbox?missionId=" + mission.Id).ConfigureAwait(false);
+                    AssertEqual(1L, all.TotalRecords, surface + ": a vessel delete records exactly one entry per mission: " + String.Join(", ", all.Objects.Select(o => o.Step)));
+                    AssertEqual(BlackBoxStepEnum.VesselDeleted, all.Objects.Single().Step, surface + ": the one entry is VesselDeleted, not OperatorTransition");
+                    AssertEqual((MissionFailureKindEnum?)MissionFailureKindEnum.OperatorAction, all.Objects.Single().FailureKind, surface + ": kind OperatorAction");
                 }
                 }
                 finally
@@ -854,8 +905,8 @@ namespace Test.Shared.Suites.E2E
 
         private static async Task ExpectOperatorEntryAsync(HttpClient client, string missionId, BlackBoxStepEnum step, string surface, MissionStatusEnum statusBefore)
         {
-            // The current entry (a vessel delete through REST or MCP first cancels through the admiral, whose own
-            // OperatorTransition entry the VesselDeleted entry supersedes).
+            // The current entry (a vessel delete cancels through the admiral with VesselDeleted cancel options, so it
+            // is the only entry).
             EnumerationResult<BlackBoxEntrySummary> page = await GetJsonAsync<EnumerationResult<BlackBoxEntrySummary>>(client, "/api/v1/blackbox?isCurrent=true&missionId=" + missionId).ConfigureAwait(false);
             AssertEqual(1L, page.TotalRecords, surface + ": one current entry for " + missionId);
             BlackBoxEntrySummary entry = page.Objects.Single();
@@ -901,6 +952,16 @@ namespace Test.Shared.Suites.E2E
         private void RequireSetup()
         {
             if (_Fx == null || _Mission == null || String.IsNullOrEmpty(_EntryId)) throw new InvalidOperationException("setup_capture_entries did not run");
+        }
+
+        private async Task ExpectOneStatusChangedAsync(string missionId, MissionStatusEnum status, MissionStatusEnum previous, string label)
+        {
+            using DatabaseDriver db = await OpenDatabaseAsync().ConfigureAwait(false);
+            EnumerationResult<ArmadaEvent> page = await db.Events.EnumerateAsync(new EnumerationQuery { MissionId = missionId, EventType = "mission.status_changed", PageSize = 50 }).ConfigureAwait(false);
+            AssertEqual(1, page.Objects.Count, label + ": exactly one mission.status_changed per transition");
+            MissionStatusChangedPayload payload = JsonHelper.Deserialize<MissionStatusChangedPayload>(page.Objects[0].Payload!);
+            AssertEqual(status, payload.Status, label + ": Status");
+            AssertEqual(previous, payload.PreviousStatus, label + ": PreviousStatus");
         }
 
         private async Task<DatabaseDriver> OpenDatabaseAsync()

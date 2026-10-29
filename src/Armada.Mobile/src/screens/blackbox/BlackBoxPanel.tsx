@@ -58,6 +58,8 @@ export interface BlackBoxPanelProps {
   fallback?: ReactNode;
   /** The entry screen: full-page loading, not-found and error states, and no "Open entry" action. */
   standalone?: boolean;
+  /** Extra sections shown under the panel once the entry has loaded (the entry screen's timeline and nearby successes). */
+  after?: (entry: BlackBoxEntry) => ReactNode;
 }
 
 /**
@@ -67,7 +69,7 @@ export interface BlackBoxPanelProps {
  * Resolve, Add note, Share and Copy FIX THIS (the agent brief), and Ask Armada about this failure. Follows the entry
  * live over the socket (blackbox.* events).
  */
-export function BlackBoxPanel({ source, fallback = null, standalone = false }: BlackBoxPanelProps) {
+export function BlackBoxPanel({ source, fallback = null, standalone = false, after }: BlackBoxPanelProps) {
   const { t, formatDateTime } = useLocale();
   const router = useRouter();
   const { pushToast } = useNotifications();
@@ -311,7 +313,18 @@ export function BlackBoxPanel({ source, fallback = null, standalone = false }: B
               <View style={styles.badges}>
                 {path.risk && path.risk !== 'Unknown' ? <StatusBadge label={t('{{risk}} risk', { risk: t(path.risk) })} tone={path.risk === 'Low' ? 'info' : 'warning'} /> : null}
                 {pathLosesData(path) ? <StatusBadge label={t('Can lose work')} tone="failed" /> : null}
+                {path.successRate != null ? <StatusBadge label={t('{{percent}}% recovered ({{runs}} runs)', { percent: Math.round(path.successRate * 100), runs: path.trackedRuns ?? 0 })} tone="info" /> : null}
               </View>
+              {path.runbookId ? (
+                <Button
+                  label={t('Runbook: {{title}}', { title: path.runbookTitle || path.runbookId })}
+                  variant="ghost"
+                  icon="book-outline"
+                  accessibilityHint={t('This recovery starts the linked runbook')}
+                  onPress={() => open(`/runbooks/${path.runbookId}`)}
+                  testID={`bbx-runbook-${path.id}`}
+                />
+              ) : null}
               {(path.steps ?? []).map((step) => <AppText key={step.order} variant="caption" muted>{`${step.order}. ${step.description}`}</AppText>)}
               {pathIsRunnable(path) ? (
                 <Button
@@ -348,6 +361,7 @@ export function BlackBoxPanel({ source, fallback = null, standalone = false }: B
           {[entry.resolutionNote, entry.resolutionLink].filter(Boolean).join(' - ')}
         </AppText>
       ) : null}
+      {after ? after(entry) : null}
 
       <RecoverySheet
         state={recovery}
