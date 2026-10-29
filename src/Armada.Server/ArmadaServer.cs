@@ -786,6 +786,7 @@ namespace Armada.Server
             _AgentLifecycle.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetMissionService(_MissionService);
+            _WebSocketHub.SetMissionStatusCallbacks(EmitEventAsync, EmitMissionStatusChangedAsync, _WebSocketHub.BroadcastApprovalNeeded, _Logging);
             _AskThreads.SessionTokensAvailable = _SessionTokenService != null;
             _AskThreads.HarborPromptSupport = (tenantId, runtime) => _HarborConnectionManager != null && _HarborConnectionManager.AnyHarborCanPrompt(tenantId, runtime);
 
@@ -1998,6 +1999,17 @@ namespace Armada.Server
             };
         }
 
+        private MissionStatusTransitionCallbacks MissionStatusCallbacks()
+        {
+            MissionStatusTransitionCallbacks callbacks = new MissionStatusTransitionCallbacks();
+            callbacks.EmitEvent = EmitEventAsync;
+            callbacks.EmitMissionStatusChanged = EmitMissionStatusChangedAsync;
+            callbacks.BroadcastMissionChange = _WebSocketHub.BroadcastMissionChange;
+            callbacks.BroadcastApprovalNeeded = _WebSocketHub.BroadcastApprovalNeeded;
+            callbacks.Logging = _Logging;
+            return callbacks;
+        }
+
         private void RegisterMcpTools()
         {
             McpToolRegistrar.RegisterAll(
@@ -2043,7 +2055,9 @@ namespace Armada.Server
                 _HarborJobControl,
                 _StageOutcomeAccess,
                 _ModelProbeAccess,
-                _BatteryAccess);
+                _BatteryAccess,
+                MissionStatusCallbacks(),
+                _MissionService);
         }
 
         /// <summary>

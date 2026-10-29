@@ -276,6 +276,25 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
+        /// Provide the audit, status-event, approval broadcast, and log callbacks for transition_mission_status.
+        /// </summary>
+        /// <param name="emitEvent">Audit event callback. Null writes the event row only.</param>
+        /// <param name="emitMissionStatusChanged">mission.status_changed callback. Null writes the event row only.</param>
+        /// <param name="broadcastApprovalNeeded">approval-needed broadcast. Null skips it.</param>
+        /// <param name="logging">Log destination. Null skips the log lines.</param>
+        public void SetMissionStatusCallbacks(
+            Func<string, string, string?, string?, string?, string?, string?, string?, Task>? emitEvent,
+            Func<Mission, MissionStatusEnum?, string, Task>? emitMissionStatusChanged,
+            Action<Mission>? broadcastApprovalNeeded,
+            LoggingModule? logging)
+        {
+            _CommandHandler.EmitEvent = emitEvent;
+            _CommandHandler.EmitMissionStatusChanged = emitMissionStatusChanged;
+            _CommandHandler.BroadcastApprovalNeeded = broadcastApprovalNeeded;
+            _CommandHandler.Logging = logging;
+        }
+
+        /// <summary>
         /// Deliver a CLI permission event (cli_permission.requested or cli_permission.resolved) to the request's
         /// approvers and owner: global admins (of this tenant, or opted in to all tenants), the tenant's tenant admins,
         /// and the owning user. Each recipient's copy carries its own canDecide and canRemember.

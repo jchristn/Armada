@@ -12,6 +12,8 @@ namespace Armada.Server.WebSocket
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Server;
+    using SyslogLogging;
 
     /// <summary>
     /// Handles all WebSocket command actions, extracted from the ArmadaWebSocketHub command route.
@@ -35,9 +37,30 @@ namespace Armada.Server.WebSocket
         public CliPermissionService? CliPermissions { get; set; } = null;
 
         /// <summary>
-        /// Mission service for restart_mission (pipeline-aware restart), or null (the command then answers Unavailable).
+        /// Mission service for restart_mission and for handing a manual Complete to an existing dependent stage.
+        /// Null leaves restart_mission Unavailable and skips the dependent-stage handoff.
         /// </summary>
         public IMissionService? Missions { get; set; } = null;
+
+        /// <summary>
+        /// Writes and broadcasts an audit event for transition_mission_status. Null writes the event row only.
+        /// </summary>
+        public Func<string, string, string?, string?, string?, string?, string?, string?, Task>? EmitEvent { get; set; }
+
+        /// <summary>
+        /// Writes and broadcasts mission.status_changed for transition_mission_status. Null writes the event row only.
+        /// </summary>
+        public Func<Mission, MissionStatusEnum?, string, Task>? EmitMissionStatusChanged { get; set; }
+
+        /// <summary>
+        /// Broadcasts approval-needed when transition_mission_status enters Review. Null skips that broadcast.
+        /// </summary>
+        public Action<Mission>? BroadcastApprovalNeeded { get; set; }
+
+        /// <summary>
+        /// Log destination for transition_mission_status. Null skips the log lines.
+        /// </summary>
+        public LoggingModule? Logging { get; set; }
 
         /// <summary>
         /// Instantiate the command handler.
@@ -538,59 +561,33 @@ namespace Armada.Server.WebSocket
 
                 case "transition_mission_status":
                 {
-                    string tmId = command.Id ?? "";
-                    string tmStatus = command.Status ?? "";
-                    Mission? tmMission = await _Database.Missions.ReadAsync(tmId).ConfigureAwait(false);
-                    if (tmMission == null)
-                    {
-                        return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.NotFound, "Mission not found");
-                    }
-                    else if (!Enum.TryParse<MissionStatusEnum>(tmStatus, true, out MissionStatusEnum tmNewStatus))
-                    {
-                        return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.InvalidArgument, "Invalid status: " + tmStatus);
-                    }
-                    else if (!IsValidTransition(tmMission.Status, tmNewStatus))
-                    {
-                        return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.Conflict, "Invalid transition from " + tmMission.Status + " to " + tmNewStatus);
-                    }
-                    // Same gates as REST and MCP: a review gate is passed through approve/deny review, and a manual
-                    // WorkProduced/Complete must land the branch instead of writing the status.
-                    else if (tmMission.Status == MissionStatusEnum.Review && tmNewStatus != MissionStatusEnum.Cancelled)
-                    {
-                        return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.Conflict, "Mission " + tmId + " is waiting at a review gate; use approve_mission_review or deny_mission_review.");
-                    }
-                    else if (ManualMissionHandoff.Refusal(tmMission, tmNewStatus) is string tmRefusal)
-                    {
-                        return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.Conflict, tmRefusal);
-                    }
-                    else if ((tmNewStatus == MissionStatusEnum.WorkProduced || tmNewStatus == MissionStatusEnum.Complete)
-                        && !MissionModeContract.IsReadOnly(tmMission.Mode))
-                    {
-                        Mission tmLanded;
-                        try
-                        {
-                            tmLanded = await ManualMissionHandoff.LandAsync(_Database, _Admiral, tmMission).ConfigureAwait(false);
-                        }
-                        catch (InvalidOperationException ex)
-                        {
-                            return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.Conflict, ex.Message);
-                        }
-                        _BroadcastMissionChange(tmLanded, tmLanded.Status.ToString());
-                        return new { type = "command.result", action = "transition_mission_status", data = (object)tmLanded };
-                    }
-                    else
-                    {
-                        tmMission.Status = tmNewStatus;
-                        tmMission.LastUpdateUtc = DateTime.UtcNow;
-                        if (tmNewStatus == MissionStatusEnum.Complete || tmNewStatus == MissionStatusEnum.Failed || tmNewStatus == MissionStatusEnum.LandingFailed || tmNewStatus == MissionStatusEnum.Cancelled)
-                            tmMission.CompletedUtc = DateTime.UtcNow;
-                        await _Database.Missions.UpdateAsync(tmMission).ConfigureAwait(false);
-                        Signal tmSignal = new Signal(SignalTypeEnum.Progress, "Mission " + tmId + " transitioned to " + tmNewStatus);
-                        if (!String.IsNullOrEmpty(tmMission.CaptainId)) tmSignal.FromCaptainId = tmMission.CaptainId;
-                        await _Database.Signals.CreateAsync(tmSignal).ConfigureAwait(false);
-                        _BroadcastMissionChange(tmMission, tmNewStatus.ToString());
-                        return new { type = "command.result", action = "transition_mission_status", data = (object)tmMission };
-                    }
+                    MissionStatusTransitionCallbacks callbacks = new MissionStatusTransitionCallbacks();
+                    callbacks.EmitEvent = EmitEvent;
+                    callbacks.EmitMissionStatusChanged = EmitMissionStatusChanged;
+                    callbacks.BroadcastMissionChange = _BroadcastMissionChange;
+                    callbacks.BroadcastApprovalNeeded = BroadcastApprovalNeeded;
+                    callbacks.Logging = Logging;
+
+                    MissionStatusTransitionRequest statusRequest = new MissionStatusTransitionRequest();
+                    statusRequest.Database = _Database;
+                    statusRequest.Admiral = _Admiral;
+                    statusRequest.MissionService = Missions;
+                    statusRequest.Caller = caller;
+                    statusRequest.MissionId = command.Id ?? "";
+                    statusRequest.StatusText = command.Status ?? "";
+                    statusRequest.RefuseReviewExitExceptCancel = true;
+                    statusRequest.Git = _Git;
+                    statusRequest.Settings = _Settings;
+                    statusRequest.Callbacks = callbacks;
+
+                    MissionStatusTransitionResult result = await MissionStatusTransition.ApplyAsync(statusRequest).ConfigureAwait(false);
+                    if (result.Error == MissionStatusTransitionErrorEnum.NotFound)
+                        return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.NotFound, result.Message ?? "Mission not found");
+                    if (result.Error == MissionStatusTransitionErrorEnum.InvalidStatus)
+                        return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.InvalidArgument, result.Message ?? "Invalid status");
+                    if (result.Error == MissionStatusTransitionErrorEnum.InvalidTransition || result.Error == MissionStatusTransitionErrorEnum.Conflict)
+                        return WebSocketCommandError.Create("transition_mission_status", WebSocketCommandErrorCodeEnum.Conflict, result.Message ?? "Invalid transition");
+                    return new { type = "command.result", action = "transition_mission_status", data = (object)result.Mission! };
                 }
 
                 case "cancel_mission":
@@ -1177,11 +1174,6 @@ namespace Armada.Server.WebSocket
             }
         }
 
-        private bool IsValidTransition(MissionStatusEnum current, MissionStatusEnum target)
-        {
-            return MissionStateMachine.IsValidTransition(current, target);
-        }
-    
         private static WebSocketCommandError PersonaError(string action, PersonaWriteResult result)
         {
             WebSocketCommandErrorCodeEnum code = result.Status == PersonaWriteStatusEnum.NotFound ? WebSocketCommandErrorCodeEnum.NotFound

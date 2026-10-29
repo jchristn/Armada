@@ -14,6 +14,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Server;
 
     /// <summary>
     /// Registers MCP tools for mission operations (status, create, update, cancel, purge, restart, transition, diff, log).
@@ -36,7 +37,9 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="git">Git service for diff operations, or null if unavailable.</param>
         /// <param name="landingService">Optional landing service for mission landing operations.</param>
         /// <param name="missionService">Optional mission service for pipeline-aware restart_mission; without it restart answers Unavailable.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, IGitService? git, ILandingService? landingService = null, IMissionService? missionService = null)
+        /// <param name="statusCallbacks">Optional event and broadcast callbacks for transition_mission_status. Null writes the audit event row and skips broadcasts.</param>
+        /// <param name="statusMissionService">Optional mission service for the dependent-stage handoff of transition_mission_status. It does not enable restart_mission.</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, IGitService? git, ILandingService? landingService = null, IMissionService? missionService = null, MissionStatusTransitionCallbacks? statusCallbacks = null, IMissionService? statusMissionService = null)
         {
             register(
                 "mission_status",
@@ -464,44 +467,26 @@ namespace Armada.Server.Mcp.Tools
                     string missionId = request.MissionId;
                     string statusStr = request.Status;
 
-                    Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
-                    if (mission == null) return (object)McpToolError.NotFound("Mission not found");
+                    MissionStatusTransitionRequest statusRequest = new MissionStatusTransitionRequest();
+                    statusRequest.Database = database;
+                    statusRequest.Admiral = admiral;
+                    statusRequest.MissionService = statusMissionService;
+                    statusRequest.Caller = caller;
+                    statusRequest.MissionId = missionId;
+                    statusRequest.StatusText = statusStr;
+                    statusRequest.RefuseReviewExitExceptCancel = true;
+                    statusRequest.Git = git;
+                    statusRequest.Settings = settings;
+                    statusRequest.Callbacks = statusCallbacks;
 
-                    if (!Enum.TryParse<MissionStatusEnum>(statusStr, true, out MissionStatusEnum newStatus))
-                        return (object)McpToolError.InvalidArgument("Invalid status: " + statusStr);
-
-                    if (!McpToolHelpers.IsValidTransition(mission.Status, newStatus))
-                        return (object)McpToolError.Conflict("Invalid transition from " + mission.Status + " to " + newStatus);
-
-                    // A review gate is passed through approve_mission_review / deny_mission_review, which hand the
-                    // branch, diff, and output to the next stage. Writing the status directly would skip that.
-                    if (mission.Status == MissionStatusEnum.Review && newStatus != MissionStatusEnum.Cancelled)
-                        return (object)McpToolError.Conflict("Mission " + missionId + " is waiting at a review gate; use approve_mission_review or deny_mission_review.");
-
-                    string? handoffRefusal = ManualMissionHandoff.Refusal(mission, newStatus);
-                    if (handoffRefusal != null) return (object)McpToolError.Conflict(handoffRefusal);
-                    if ((newStatus == MissionStatusEnum.WorkProduced || newStatus == MissionStatusEnum.Complete)
-                        && !MissionModeContract.IsReadOnly(mission.Mode))
-                    {
-                        try { return (object)await ManualMissionHandoff.LandAsync(database, admiral, mission, newStatus, git, settings).ConfigureAwait(false); }
-                        catch (InvalidOperationException ex) { return (object)McpToolError.Conflict(ex.Message); }
-                    }
-
-                    mission.Status = newStatus;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-
-                    if (newStatus == MissionStatusEnum.Complete || newStatus == MissionStatusEnum.Failed || newStatus == MissionStatusEnum.Cancelled)
-                        mission.CompletedUtc = DateTime.UtcNow;
-
-                    mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
-
-                    Signal signal = new Signal(SignalTypeEnum.Progress, "Mission " + missionId + " transitioned to " + newStatus);
-                    signal.TenantId = mission.TenantId;
-                    signal.UserId = mission.UserId;
-                    if (!String.IsNullOrEmpty(mission.CaptainId)) signal.FromCaptainId = mission.CaptainId;
-                    await database.Signals.CreateAsync(signal).ConfigureAwait(false);
-
-                    return (object)mission;
+                    MissionStatusTransitionResult result = await MissionStatusTransition.ApplyAsync(statusRequest).ConfigureAwait(false);
+                    if (result.Error == MissionStatusTransitionErrorEnum.NotFound)
+                        return (object)McpToolError.NotFound(result.Message ?? "Mission not found");
+                    if (result.Error == MissionStatusTransitionErrorEnum.InvalidStatus)
+                        return (object)McpToolError.InvalidArgument(result.Message ?? "Invalid status");
+                    if (result.Error == MissionStatusTransitionErrorEnum.InvalidTransition || result.Error == MissionStatusTransitionErrorEnum.Conflict)
+                        return (object)McpToolError.Conflict(result.Message ?? "Invalid transition");
+                    return (object)result.Mission!;
                 });
 
             // Diff and log tools require settings and git service

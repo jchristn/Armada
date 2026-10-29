@@ -38,6 +38,7 @@ namespace Armada.Helm.Commands
         private readonly IGitService _Git;
         private readonly IDockService _Docks;
         private readonly IPromptTemplateService _PromptTemplates;
+        private readonly IMissionService _Missions;
         private readonly IAdmiralService _Admiral;
         private readonly AgentLifecycleHandler _AgentLifecycle;
         private readonly IMergeQueueService _MergeQueue;
@@ -77,9 +78,9 @@ namespace Armada.Helm.Commands
             ICaptainService captainService = new CaptainService(logging, database, settings, _Git, _Docks);
             _PromptTemplates = new PromptTemplateService(database, logging);
             IMessageTemplateService messageTemplateService = new MessageTemplateService(logging, _PromptTemplates);
-            IMissionService missionService = new MissionService(logging, database, settings, _Docks, captainService, _PromptTemplates, _Git);
+            _Missions = new MissionService(logging, database, settings, _Docks, captainService, _PromptTemplates, _Git);
             IVoyageService voyageService = new VoyageService(logging, database);
-            _Admiral = new AdmiralService(logging, database, settings, captainService, missionService, voyageService, _Docks);
+            _Admiral = new AdmiralService(logging, database, settings, captainService, _Missions, voyageService, _Docks);
             AgentRuntimeFactory runtimeFactory = new AgentRuntimeFactory(logging);
             _AgentLifecycle = new AgentLifecycleHandler(
                 logging,
@@ -170,7 +171,9 @@ namespace Armada.Helm.Commands
                 fleetActionService: null,
                 vesselHealthService: _VesselHealthService,
                 fleetCategorizationService: _FleetCategorization,
-                stopServerUnavailableMessage: StopServerUnavailableMessage);
+                stopServerUnavailableMessage: StopServerUnavailableMessage,
+                statusMissionService: _Missions,
+                statusCallbacks: new MissionStatusTransitionCallbacks { Logging = _Logging });
         }
 
         /// <summary>

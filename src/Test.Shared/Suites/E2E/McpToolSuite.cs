@@ -304,6 +304,17 @@ namespace Test.Shared.Suites.E2E
                     AssertEqual(McpToolErrorCodeEnum.Unavailable, stop.ErrorCode);
                     McpToolError run = (McpToolError)await stdioTools["run_fleet_action"](JsonDocument.Parse("{\"actionId\":\"fla_x\"}").RootElement.Clone()).ConfigureAwait(false);
                     AssertEqual(McpToolErrorCodeEnum.Unavailable, run.ErrorCode);
+
+                    // The status operation's mission service must not make restart or review-gate tools live over stdio.
+                    Mission restartable = new Mission("stdio-restart-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                    restartable.TenantId = Armada.Core.Constants.DefaultTenantId;
+                    restartable.UserId = Armada.Core.Constants.DefaultUserId;
+                    restartable.Status = MissionStatusEnum.Failed;
+                    await testDb.Driver.Missions.CreateAsync(restartable).ConfigureAwait(false);
+                    McpToolError restart = (McpToolError)await stdioTools["restart_mission"](JsonDocument.Parse("{\"missionId\":\"" + restartable.Id + "\"}").RootElement.Clone()).ConfigureAwait(false);
+                    AssertEqual(McpToolErrorCodeEnum.Unavailable, restart.ErrorCode);
+                    McpToolError approve = (McpToolError)await stdioTools["approve_mission_review"](JsonDocument.Parse("{\"missionId\":\"" + restartable.Id + "\"}").RootElement.Clone()).ConfigureAwait(false);
+                    AssertEqual(McpToolErrorCodeEnum.Unavailable, approve.ErrorCode);
                 }
             }));
 
