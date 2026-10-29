@@ -31,7 +31,7 @@ describe('BlackBoxStore', () => {
     assert.deepStrictEqual(Array.from(files.keys()).sort(), ['src/a.ts', 'src/b.ts']);
     assert.strictEqual(files.get('src/a.ts')?.missionId, 'msn_x');
     assert.strictEqual(files.get('src/a.ts')?.count, 2);
-    assert.strictEqual(store.hotspots.get('/work/alpha')?.get('src')?.ConflictCount, 3);
+    assert.strictEqual(store.hotspots.get('/work/alpha')?.get('src')?.EntryCount, 3);
   });
 
   it('shows every vessel when no workspace folder matches, and flags it', async () => {
@@ -87,7 +87,7 @@ describe('BlackBoxStore', () => {
 
   it('ignores a missing Conflict section (410) and a missing hotspots route (404)', async () => {
     const mock = standardMock()
-      .on('GET', '/api/v1/blackbox/bbx_1/sections/Conflict', { status: 410, json: { Error: 'BlackBoxObjectMissing' } })
+      .on('GET', '/api/v1/blackbox/bbx_1/sections/Conflict', { status: 410, json: { Error: 'NotFound', Data: { Code: 'BlackBoxObjectMissing' } } })
       .on('POST', '/api/v1/blackbox/hotspots/enumerate', { status: 404, text: 'Not Found' });
     const store = makeStore(mock);
     await store.refresh();

@@ -1,10 +1,10 @@
 /*
  * Armada black box REST client for the VS Code extension.
  *
- * The routes in this module were written against MISSION_BLACKBOX_PLAN.md section 8.1 (REST) and 8.3 (WebSocket)
- * before the server-side implementation existed. Every route path, query parameter, request body and WebSocket
- * event name the extension uses lives in this file (DTOs in types.ts), so reconciling with the final server is a
- * change in one place. This module does not import `vscode`, so it is unit tested with a mocked fetch.
+ * Every route path, query parameter, request body and WebSocket event name the extension uses lives in this file
+ * (DTOs in types.ts), matching src/Armada.Server/Routes/BlackBoxRoutes.cs and the WebSocket surface. Errors carry the
+ * server's stable code (Data.Code, for example BlackBoxNotFound). This module does not import `vscode`, so it is unit
+ * tested with a mocked fetch.
  */
 
 import {
@@ -20,6 +20,7 @@ import {
   BlackBoxRecoveryResult,
   BlackBoxResolveRequest,
   BlackBoxSectionName,
+  BlackBoxSectionResult,
   EnumerationResult,
   Vessel,
 } from './types';
@@ -45,7 +46,8 @@ export const Routes = {
     const query: string[] = [];
     if (offset !== undefined) query.push(`offset=${offset}`);
     if (length !== undefined) query.push(`length=${length}`);
-    return `/api/v1/blackbox/${enc(entryId)}/objects/${name.split('/').map(enc).join('/')}${query.length ? `?${query.join('&')}` : ''}`;
+    // The name is one path segment: a folder separator is sent encoded (evidence%2Fgit-status.txt).
+    return `/api/v1/blackbox/${enc(entryId)}/objects/${enc(name)}${query.length ? `?${query.join('&')}` : ''}`;
   },
   enumerate: (): string => '/api/v1/blackbox/enumerate',
   notes: (entryId: string): string => `/api/v1/blackbox/${enc(entryId)}/notes`,
@@ -57,12 +59,13 @@ export const Routes = {
   dashboardAsk: (): string => '/ask',
 } as const;
 
-/** WebSocket events the extension listens for (plan 8.3). */
+/** WebSocket events the extension listens for (declared in the server's WebSocketSurface). */
 export const BlackBoxEvents = {
   captured: 'blackbox.captured',
   analyzed: 'blackbox.analyzed',
   resolved: 'blackbox.resolved',
   deleted: 'blackbox.deleted',
+  recoveryRun: 'blackbox.recovery_run',
 } as const;
 
 /** All black box event names, for membership checks. */
@@ -92,6 +95,7 @@ export type ArmadaErrorKind =
   | 'gone'
   | 'badRequest'
   | 'unavailable'
+  | 'notImplemented'
   | 'server'
   | 'invalidResponse';
 
@@ -120,6 +124,7 @@ export function kindForStatus(status: number): ArmadaErrorKind {
   if (status === 409) return 'conflict';
   if (status === 410) return 'gone';
   if (status === 400 || status === 422) return 'badRequest';
+  if (status === 501) return 'notImplemented';
   if (status === 503) return 'unavailable';
   return 'server';
 }
@@ -151,6 +156,8 @@ export function describeError(err: unknown): string {
         return `Armada rejected the request (${err.status ?? 400})${detail}.`;
       case 'unavailable':
         return `The black box store is unavailable (503 ${err.code ?? 'BlackBoxStoreUnavailable'})${detail}. Try again later.`;
+      case 'notImplemented':
+        return `This Armada server does not run that black box operation yet (501 ${err.code ?? 'NotImplemented'}): the recovery runner may not be merged on it${detail}.`;
       case 'invalidResponse':
         return `Armada returned an unexpected response: ${err.message}`;
       default:
@@ -285,9 +292,9 @@ export class ArmadaBlackBoxClient {
     return this.requestText('GET', Routes.voyageBrief(voyageId, audience));
   }
 
-  /** One record section. */
-  public getSection<T>(entryId: string, section: BlackBoxSectionName): Promise<T> {
-    return this.requestJson<T>('GET', Routes.section(entryId, section));
+  /** One record section: a record carrying only that section (the others are omitted). */
+  public getSection(entryId: string, section: BlackBoxSectionName): Promise<BlackBoxSectionResult> {
+    return this.requestJson<BlackBoxSectionResult>('GET', Routes.section(entryId, section));
   }
 
   /** The objects in an entry. */
@@ -412,7 +419,7 @@ export class ArmadaBlackBoxClient {
     let serverMessage: string | null = null;
     try {
       const parsed = JSON.parse(text) as ApiErrorResponse;
-      code = parsed.Error ?? null;
+      code = parsed.Data?.Code ?? parsed.Error ?? null;
       serverMessage = parsed.Message ?? parsed.Description ?? null;
     } catch {
       serverMessage = text ? text.slice(0, 300) : null;

@@ -1,10 +1,10 @@
 /*
  * Armada black box DTOs used by the VS Code extension.
  *
- * Written against MISSION_BLACKBOX_PLAN.md sections 4.2, 4.3 and 8.1, before the server-side routes existed. REST
- * bodies are PascalCase (docs/REST_API.md); WebSocket payloads are camelCase (docs/WEBSOCKET_API.md). Every field
- * the extension does not strictly need is optional so a server that omits nulls (the Armada default) still parses.
- * Reconcile these shapes with the final server models in this file and in blackbox.ts only.
+ * Reconciled with the server models (src/Armada.Core/Models/BlackBox*.cs) and routes
+ * (src/Armada.Server/Routes/BlackBoxRoutes.cs). REST bodies are PascalCase (docs/REST_API.md); WebSocket payloads are
+ * camelCase (docs/WEBSOCKET_API.md). Every field the extension does not strictly need is optional so a server that
+ * omits nulls (the Armada default) still parses.
  */
 
 /** Paged result wrapper returned by every Armada enumerate route. */
@@ -17,13 +17,21 @@ export interface EnumerationResult<T> {
   Objects: T[];
 }
 
+/** Machine-readable detail in the Data of a black box error (BlackBoxErrorDetail, or CollectionLimitErrorDetail). */
+export interface BlackBoxErrorDetail {
+  /** BlackBoxNotFound, BlackBoxDeleting, BlackBoxObjectCorrupt, BlackBoxConfirmationRequired, BlackBoxObjectMissing, BlackBoxStoreUnavailable, InvalidArgument, NotImplemented or CollectionLimitExceeded. */
+  Code?: string;
+  /** The request field at fault for InvalidArgument (for example audience or section). */
+  Field?: string | null;
+}
+
 /** Standard Armada REST error body (docs/REST_API.md, Error Responses). */
 export interface ApiErrorResponse {
   Error?: string;
   StatusCode?: number;
   Description?: string;
   Message?: string;
-  Data?: unknown;
+  Data?: BlackBoxErrorDetail | null;
 }
 
 /** BlackBoxResolutionEnum. */
@@ -47,12 +55,10 @@ export interface Vessel {
 /** One row of `GET /api/v1/blackbox` and `POST /api/v1/blackbox/enumerate` (BlackBoxEntrySummary). */
 export interface BlackBoxEntrySummary {
   Id: string;
-  TenantId?: string;
   SubjectType?: 'Mission' | 'Voyage' | string;
   MissionId?: string | null;
   VoyageId?: string | null;
   VesselId?: string | null;
-  FleetId?: string | null;
   CaptainId?: string | null;
   MissionTitle?: string | null;
   VesselName?: string | null;
@@ -69,16 +75,21 @@ export interface BlackBoxEntrySummary {
   State?: string;
   Resolution?: BlackBoxResolution | string;
   Pinned?: boolean;
+  ReasonExcerpt?: string | null;
   TotalBytes?: number;
   ObjectCount?: number;
   CreatedUtc: string;
-  AnalyzedUtc?: string | null;
-  ResolvedUtc?: string | null;
-  LastUpdateUtc?: string | null;
+  ExpiresUtc?: string | null;
 }
 
 /** Full entry (`GET /api/v1/blackbox/{id}`, `GET /api/v1/missions/{id}/blackbox`). */
 export interface BlackBoxEntry extends BlackBoxEntrySummary {
+  TenantId?: string | null;
+  FleetId?: string | null;
+  Summary?: string | null;
+  AnalyzedUtc?: string | null;
+  ResolvedUtc?: string | null;
+  LastUpdateUtc?: string | null;
   ResolutionNote?: string | null;
   ResolutionLink?: string | null;
   ArmadaVersion?: string | null;
@@ -86,40 +97,50 @@ export interface BlackBoxEntry extends BlackBoxEntrySummary {
   Record?: BlackBoxRecord | null;
 }
 
-/** A file reference inside a record section; the server may send a bare path string instead. */
-export interface BlackBoxFileRef {
-  Path: string;
-  Role?: string;
-  ConflictingMissionId?: string | null;
-}
-
-/** A directory with a count (Conflict.ConflictedDirectories). */
+/** A directory roll-up of conflicted files (Conflict.ConflictedDirectories; depth 1 to 3). */
 export interface BlackBoxDirectoryCount {
-  Directory?: string;
-  Path?: string;
-  Count?: number;
+  Directory: string;
+  Depth?: number;
+  FileCount?: number;
 }
 
+/** A mission that landed on the target since this one started and touched the same files. */
 export interface BlackBoxConflictingMission {
-  MissionId?: string;
-  Id?: string;
-  Title?: string;
-  Commit?: string;
-  LandedUtc?: string;
-  OverlappingFiles?: Array<string | BlackBoxFileRef>;
+  MissionId?: string | null;
+  Title?: string | null;
+  CommitHash?: string | null;
+  LandedUtc?: string | null;
+  OverlappingFiles?: string[];
+  OverlappingFileTotal?: number;
+  IsOutsideArmada?: boolean;
+  Author?: string | null;
+}
+
+/** A commit on the target branch (Conflict.TargetCommitsSinceStart). */
+export interface BlackBoxCommitRef {
+  CommitHash: string;
+  Subject?: string | null;
+  Author?: string | null;
+  CommittedUtc?: string | null;
+  MissionId?: string | null;
 }
 
 export interface BlackBoxSubject {
-  Type?: string;
+  SubjectType?: 'Mission' | 'Voyage' | string;
   MissionId?: string | null;
   VoyageId?: string | null;
   Title?: string | null;
+  VoyageTitle?: string | null;
   VesselId?: string | null;
   VesselName?: string | null;
-  RepoUrl?: string | null;
+  VesselRepoUrl?: string | null;
+  VesselDefaultBranch?: string | null;
+  CaptainId?: string | null;
   CaptainName?: string | null;
-  Runtime?: string | null;
-  Model?: string | null;
+  CaptainRuntime?: string | null;
+  CaptainModel?: string | null;
+  Persona?: string | null;
+  BranchName?: string | null;
   Attempt?: number;
 }
 
@@ -132,6 +153,7 @@ export interface BlackBoxStatusChange {
 export interface BlackBoxSite {
   Phase?: string;
   Step?: string;
+  HostKind?: 'Admiral' | 'Harbor' | string;
   Host?: string;
   Component?: string;
   Method?: string;
@@ -144,6 +166,7 @@ export interface BlackBoxSite {
 export interface BlackBoxMechanism {
   ExceptionType?: string | null;
   ExceptionMessage?: string | null;
+  StackFrames?: string[];
   ExitCode?: number | null;
   RuntimeFailureKind?: string | null;
   FailingCommand?: string | null;
@@ -154,7 +177,7 @@ export interface BlackBoxMechanism {
 }
 
 export interface BlackBoxClassification {
-  Kind?: string;
+  Kind?: string | null;
   RawReason?: string | null;
   SuspectedCause?: string | null;
   CauseRuleId?: string | null;
@@ -164,20 +187,32 @@ export interface BlackBoxClassification {
 
 export interface BlackBoxConflict {
   IsConflict?: boolean;
-  ConflictedFiles?: Array<string | BlackBoxFileRef>;
-  ConflictedFilesTotalCount?: number;
+  /** Repository-relative paths (at most 500; ConflictedFileTotal is the true count). */
+  ConflictedFiles?: string[];
+  ConflictedFileTotal?: number;
+  ConflictedFilesTruncated?: boolean;
   ConflictedDirectories?: BlackBoxDirectoryCount[];
   ConflictingMissions?: BlackBoxConflictingMission[];
+  TargetCommitsSinceStart?: BlackBoxCommitRef[];
+  TargetCommitTotal?: number;
 }
 
+/** A finding (BlackBoxFinding). */
 export interface BlackBoxWhy {
   RuleId?: string;
   Statement: string;
-  Confidence?: string | number;
+  Confidence?: 'Low' | 'Medium' | 'High' | string;
   EvidenceRefs?: string[];
 }
 
+/** A tool call recorded in the entry (BlackBoxAction); recovery and recommendations run only these. */
+export interface BlackBoxRecoveryAction {
+  Tool: string;
+  Arguments?: Record<string, string>;
+}
+
 export interface BlackBoxConfigRecommendation {
+  Id?: string;
   Setting: string;
   Scope?: string;
   CurrentValue?: string | null;
@@ -185,31 +220,33 @@ export interface BlackBoxConfigRecommendation {
   Rationale?: string;
   RuleId?: string;
   HowToApply?: string;
+  ApplyAction?: BlackBoxRecoveryAction | null;
 }
 
 export interface BlackBoxArmadaImprovement {
   Area?: string;
   Hypothesis: string;
   Evidence?: string;
+  SourcePointers?: string[];
   Severity?: string;
   RuleId?: string;
   KnownIssue?: string | null;
 }
 
+/** One step of a recovery path (BlackBoxRecoveryStep). */
 export interface BlackBoxRecoveryStep {
+  Order?: number;
   Description?: string;
-  Mcp?: string;
-  Rest?: string;
-  Cli?: string;
-}
-
-export interface BlackBoxRecoveryAction {
-  Tool: string;
-  Arguments?: Record<string, unknown>;
+  McpCommand?: string | null;
+  RestCommand?: string | null;
+  CliCommand?: string | null;
+  Action?: BlackBoxRecoveryAction | null;
+  DataLossRisk?: boolean;
 }
 
 export interface BlackBoxRecoveryPath {
   Id: string;
+  Rank?: number;
   Title: string;
   Preconditions?: string[];
   Steps?: BlackBoxRecoveryStep[];
@@ -217,11 +254,12 @@ export interface BlackBoxRecoveryPath {
   Risk?: string;
   DataLossRisk?: boolean;
   ExpectedOutcome?: string;
+  RuleId?: string;
 }
 
 export interface BlackBoxTriage {
   Verdict?: string;
-  Confidence?: string | number;
+  Confidence?: 'Low' | 'Medium' | 'High' | string;
 }
 
 export interface BlackBoxAnalysis {
@@ -236,11 +274,13 @@ export interface BlackBoxAnalysis {
 export interface BlackBoxAttempt {
   Attempt?: number;
   EntryId?: string;
+  MissionId?: string;
   Kind?: string;
   ReasonExcerpt?: string;
   Runtime?: string;
   Model?: string;
   DurationMs?: number;
+  CreatedUtc?: string;
 }
 
 /** The parts of `record.json` (BlackBoxRecord, plan 4.3) the extension renders. */
@@ -263,15 +303,24 @@ export interface BlackBoxRecord {
 /** Record section names accepted by `GET /api/v1/blackbox/{id}/sections/{section}`. */
 export type BlackBoxSectionName =
   | 'Subject' | 'Status' | 'Site' | 'Mechanism' | 'Classification' | 'Workspace' | 'Conflict' | 'Scope'
-  | 'Configuration' | 'Attempts' | 'Evidence' | 'Analysis' | 'Related' | 'Voyage';
+  | 'Configuration' | 'Attempts' | 'Evidence' | 'Analysis' | 'Related' | 'Voyage' | 'Redaction' | 'Truncation';
+
+/** Response of the section route (BlackBoxSectionResult): a record carrying only the asked section. */
+export interface BlackBoxSectionResult {
+  EntryId?: string;
+  Section?: BlackBoxSectionName | string;
+  Record?: BlackBoxRecord;
+}
 
 /** One row of `GET /api/v1/blackbox/{id}/objects`. */
 export interface BlackBoxObjectSummary {
   Name: string;
   ContentType?: string;
+  ContentEncoding?: string;
   SizeBytes?: number;
   UncompressedBytes?: number;
   Sha256?: string;
+  IsMissing?: boolean;
   CreatedUtc?: string;
 }
 
@@ -299,40 +348,36 @@ export interface BlackBoxRecoveryRequest {
   AcknowledgeDataLoss?: boolean;
 }
 
-/** One step of a recovery run or dry run. */
+/** What one step of a real recovery run did (BlackBoxRecoveryStepResult). */
 export interface BlackBoxRecoveryStepResult {
   Order?: number;
-  Tool?: string;
-  Arguments?: Record<string, unknown>;
-  Description?: string;
-  Status?: string;
-  Success?: boolean;
-  Result?: string;
-  Error?: string | null;
+  Tool?: string | null;
+  Succeeded?: boolean;
+  Message?: string | null;
 }
 
-/** Response of `POST /api/v1/blackbox/{id}/recovery/{pathId}`. */
+/** Response of `POST /api/v1/blackbox/{id}/recovery/{pathId}` (BlackBoxRecoveryRunResult). */
 export interface BlackBoxRecoveryResult {
-  Success?: boolean;
   EntryId?: string;
   PathId?: string;
   DryRun?: boolean;
   ConfirmToken?: string | null;
   ConfirmTokenExpiresUtc?: string | null;
-  DataLossRisk?: boolean;
-  Summary?: string;
-  ExpectedOutcome?: string;
-  Steps?: BlackBoxRecoveryStepResult[];
+  /** The steps a dry run would run. */
+  Plan?: BlackBoxRecoveryStep[];
+  /** What each step of a real run did. */
+  StepResults?: BlackBoxRecoveryStepResult[];
+  Succeeded?: boolean;
+  Message?: string | null;
 }
 
-/** One row of `POST /api/v1/blackbox/hotspots/enumerate`. */
+/** One row of `POST /api/v1/blackbox/hotspots/enumerate` (BlackBoxHotspot). */
 export interface BlackBoxHotspot {
-  VesselId?: string;
+  VesselId?: string | null;
   Directory: string;
-  ConflictCount?: number;
-  EntryCount?: number;
   FileCount?: number;
-  LastSeenUtc?: string;
+  EntryCount?: number;
+  LastSeenUtc?: string | null;
 }
 
 /** Filters for the entry enumerate route (plan 8.1). */
@@ -343,6 +388,9 @@ export interface BlackBoxEnumerateQuery {
   VesselId?: string;
   VoyageId?: string;
   MissionId?: string;
+  CaptainId?: string;
+  Fingerprint?: string;
+  Triage?: string;
   Resolution?: string;
   IsCurrent?: boolean;
   Pinned?: boolean;
@@ -355,22 +403,34 @@ export interface BlackBoxEnumerateQuery {
   Order?: 'CreatedDescending' | 'CreatedAscending';
 }
 
-/** camelCase payload of the `blackbox.*` WebSocket events (plan 8.3). Only identifiers are relied on. */
+/**
+ * camelCase payload of the `blackbox.*` WebSocket events (union of BlackBoxCapturedPayload, BlackBoxAnalyzedPayload,
+ * BlackBoxResolvedPayload, BlackBoxDeletedPayload and BlackBoxRecoveryRunPayload). Only identifiers are relied on.
+ */
 export interface BlackBoxSocketEventData {
-  id?: string;
   entryId?: string;
   missionId?: string | null;
   voyageId?: string | null;
   vesselId?: string | null;
-  missionTitle?: string | null;
-  kind?: string | null;
+  phase?: string | null;
   step?: string | null;
+  kind?: string | null;
+  attempt?: number;
+  captureMode?: string | null;
+  state?: string | null;
+  triage?: string | null;
+  rulesVersion?: number;
   resolution?: string | null;
+  reason?: string | null;
+  pathId?: string | null;
+  dryRun?: boolean;
+  succeeded?: boolean;
 }
 
 /** WebSocket server message envelope. */
 export interface SocketEnvelope {
   type?: string;
+  message?: string;
   data?: unknown;
   timestamp?: string;
 }

@@ -146,11 +146,11 @@ export class BlackBoxCommands {
 
       const dry = await client.dryRunRecovery(entry.Id, path.Id);
       if (!dry.ConfirmToken) {
-        void vscode.window.showErrorMessage(`Armada: the dry run for ${path.Id} returned no confirm token, so nothing was run.${dry.Summary ? ` ${dry.Summary}` : ''}`);
+        void vscode.window.showErrorMessage(`Armada: the dry run for ${path.Id} returned no confirm token, so nothing was run.${dry.Message ? ` ${dry.Message}` : ''}`);
         return 'noToken';
       }
 
-      const dataLoss = path.DataLossRisk === true || dry.DataLossRisk === true;
+      const dataLoss = path.DataLossRisk === true || (dry.Plan ?? []).some((s) => s.DataLossRisk === true);
       if (dataLoss) {
         const ack = await vscode.window.showQuickPick([{ label: DATA_LOSS_ACK_LABEL, picked: false }], {
           title: `"${path.Title}" is marked dataLossRisk`,
@@ -182,13 +182,13 @@ export class BlackBoxCommands {
         throw err;
       }
 
-      const failedSteps = (result.Steps ?? []).filter((s) => s.Success === false || (s.Error !== undefined && s.Error !== null && s.Error !== ''));
+      const failedSteps = (result.StepResults ?? []).filter((s) => s.Succeeded === false);
       void this._Deps.store.refresh();
-      if (result.Success === false || failedSteps.length > 0) {
-        void vscode.window.showWarningMessage(`Armada: recovery path "${path.Title}" finished with errors. ${failedSteps.map((s) => s.Error ?? s.Description ?? s.Tool ?? '').filter(Boolean).join('; ') || result.Summary || ''}`.trim());
+      if (result.Succeeded === false || failedSteps.length > 0) {
+        void vscode.window.showWarningMessage(`Armada: recovery path "${path.Title}" finished with errors. ${failedSteps.map((s) => s.Message ?? s.Tool ?? '').filter(Boolean).join('; ') || result.Message || ''}`.trim());
         return 'ranWithErrors';
       }
-      void vscode.window.showInformationMessage(`Armada: recovery path "${path.Title}" ran. ${result.Summary ?? result.ExpectedOutcome ?? ''}`.trim());
+      void vscode.window.showInformationMessage(`Armada: recovery path "${path.Title}" ran. ${result.Message ?? path.ExpectedOutcome ?? ''}`.trim());
       return 'ran';
     }, 'failed');
   }
@@ -340,18 +340,19 @@ export function entryFromArg(arg: unknown): BlackBoxEntrySummary | undefined {
 /** Describes what a dry run says will happen. */
 export function describePlan(path: BlackBoxRecoveryPath, dry: BlackBoxRecoveryResult, dataLoss: boolean): string {
   const lines: string[] = [];
-  if (dry.Summary) lines.push(dry.Summary, '');
-  const steps = dry.Steps ?? [];
+  if (dry.Message) lines.push(dry.Message, '');
+  const steps = dry.Plan ?? [];
   if (steps.length) {
     lines.push('Will run:');
     steps.forEach((s, i) => {
-      const args = s.Arguments && Object.keys(s.Arguments).length ? ` ${JSON.stringify(s.Arguments)}` : '';
-      lines.push(`${i + 1}. ${s.Description ?? `${s.Tool ?? 'step'}${args}`}`);
+      const args = s.Action?.Arguments && Object.keys(s.Action.Arguments).length ? ` ${JSON.stringify(s.Action.Arguments)}` : '';
+      const call = s.Action ? `${s.Action.Tool}${args}` : (s.McpCommand ?? s.CliCommand ?? 'step');
+      lines.push(`${i + 1}. ${s.Description ? `${s.Description} (${call})` : call}${s.DataLossRisk ? ' [data loss risk]' : ''}`);
     });
   } else if (path.Action) {
     lines.push(`Will run: ${path.Action.Tool}${path.Action.Arguments ? ` ${JSON.stringify(path.Action.Arguments)}` : ''}`);
   }
-  const outcome = dry.ExpectedOutcome ?? path.ExpectedOutcome;
+  const outcome = path.ExpectedOutcome;
   if (outcome) lines.push('', `Expected outcome: ${outcome}`);
   if (dataLoss) lines.push('', 'WARNING: this path is marked dataLossRisk. You acknowledged that work can be lost.');
   if (dry.ConfirmTokenExpiresUtc) lines.push('', `The confirmation expires at ${dry.ConfirmTokenExpiresUtc}.`);

@@ -49,8 +49,9 @@ export class BlackBoxDecorationProvider implements vscode.FileDecorationProvider
       if (rel === null) continue;
       const hotspot = dirs.get(rel);
       if (hotspot) {
-        const count = hotspot.ConflictCount ?? hotspot.EntryCount;
-        const detail = count !== undefined ? `${count} conflict${count === 1 ? '' : 's'} in black box entries` : 'frequent conflicts in black box entries';
+        const count = hotspot.EntryCount;
+        const files = hotspot.FileCount !== undefined ? ` (${hotspot.FileCount} file${hotspot.FileCount === 1 ? '' : 's'})` : '';
+        const detail = count !== undefined ? `in ${count} black box entr${count === 1 ? 'y' : 'ies'}${files}` : 'frequent in black box entries';
         const last = hotspot.LastSeenUtc ? `, last ${formatDate(hotspot.LastSeenUtc)}` : '';
         const decoration = new vscode.FileDecoration(HOTSPOT_BADGE, `Armada hotspot: ${detail}${last}`, new vscode.ThemeColor('list.warningForeground'));
         decoration.propagate = false;

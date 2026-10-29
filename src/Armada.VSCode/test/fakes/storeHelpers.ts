@@ -18,9 +18,9 @@ export function standardMock(): MockFetch {
       const objects = body.VesselId ? all.filter((e) => e.VesselId === body.VesselId) : all;
       return { json: page(objects, objects.length + 10) };
     })
-    .on('GET', '/api/v1/blackbox/bbx_1/sections/Conflict', { json: { IsConflict: true, ConflictedFiles: ['src/a.ts', { Path: './src\\b.ts' }] } })
-    .on('GET', '/api/v1/blackbox/bbx_2/sections/Conflict', { json: { IsConflict: true, ConflictedFiles: ['src/a.ts'] } })
-    .on('POST', '/api/v1/blackbox/hotspots/enumerate', { json: page([{ Directory: 'src/', ConflictCount: 3 }]) });
+    .on('GET', '/api/v1/blackbox/bbx_1/sections/Conflict', { json: { EntryId: 'bbx_1', Section: 'Conflict', Record: { Conflict: { IsConflict: true, ConflictedFiles: ['src/a.ts', './src\\b.ts'], ConflictedFileTotal: 2 } } } })
+    .on('GET', '/api/v1/blackbox/bbx_2/sections/Conflict', { json: { EntryId: 'bbx_2', Section: 'Conflict', Record: { Conflict: { IsConflict: true, ConflictedFiles: ['src/a.ts'] } } } })
+    .on('POST', '/api/v1/blackbox/hotspots/enumerate', { json: page([{ Directory: 'src/', FileCount: 2, EntryCount: 3 }]) });
 }
 
 export function makeStore(mock: MockFetch | undefined, options: { folders?: string[]; remotes?: Record<string, string[]>; settings?: Partial<StoreSettings> } = {}): BlackBoxStore {

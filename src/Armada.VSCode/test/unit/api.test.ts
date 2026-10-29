@@ -103,15 +103,15 @@ describe('ArmadaBlackBoxClient requests', () => {
 
   it('reads sections, objects and notes', async () => {
     const mock = new MockFetch()
-      .on('GET', '/api/v1/blackbox/bbx_1/sections/Conflict', { json: { IsConflict: true, ConflictedFiles: ['a.ts'] } })
+      .on('GET', '/api/v1/blackbox/bbx_1/sections/Conflict', { json: { EntryId: 'bbx_1', Section: 'Conflict', Record: { Conflict: { IsConflict: true, ConflictedFiles: ['a.ts'] } } } })
       .on('GET', '/api/v1/blackbox/bbx_1/objects', { json: page([{ Name: 'brief.md' }]) })
-      .on('GET', '/api/v1/blackbox/bbx_1/objects/evidence/git-status.txt', { text: 'M a.ts' })
+      .on('GET', '/api/v1/blackbox/bbx_1/objects/evidence%2Fgit-status.txt', { text: 'M a.ts' })
       .on('GET', '/api/v1/blackbox/bbx_1/notes', { json: page([{ Body: 'n' }]) });
     const c = client(mock);
-    assert.deepStrictEqual(await c.getSection('bbx_1', 'Conflict'), { IsConflict: true, ConflictedFiles: ['a.ts'] });
+    assert.deepStrictEqual((await c.getSection('bbx_1', 'Conflict')).Record?.Conflict, { IsConflict: true, ConflictedFiles: ['a.ts'] });
     assert.strictEqual((await c.listObjects('bbx_1')).Objects[0].Name, 'brief.md');
     assert.strictEqual(await c.readObjectText('bbx_1', 'evidence/git-status.txt', 0, 100), 'M a.ts');
-    assert.ok(mock.requests[2].url.endsWith('/objects/evidence/git-status.txt?offset=0&length=100'));
+    assert.ok(mock.requests[2].url.endsWith('/objects/evidence%2Fgit-status.txt?offset=0&length=100'));
     assert.strictEqual((await c.listNotes('bbx_1')).Objects[0].Body, 'n');
   });
 
@@ -154,7 +154,7 @@ describe('ArmadaBlackBoxClient requests', () => {
   });
 
   it('enumerates hotspots for a vessel', async () => {
-    const mock = new MockFetch().on('POST', '/api/v1/blackbox/hotspots/enumerate', { json: page([{ Directory: 'src/auth', ConflictCount: 4 }]) });
+    const mock = new MockFetch().on('POST', '/api/v1/blackbox/hotspots/enumerate', { json: page([{ VesselId: 'vsl_a', Directory: 'src/auth', FileCount: 2, EntryCount: 4, LastSeenUtc: '2026-10-28T10:00:00Z' }]) });
     const result = await client(mock).listHotspots('vsl_a', 5);
     assert.strictEqual(result.Objects[0].Directory, 'src/auth');
     assert.deepStrictEqual(mock.requests[0].body, { VesselId: 'vsl_a', PageNumber: 1, PageSize: 5 });
@@ -162,7 +162,7 @@ describe('ArmadaBlackBoxClient requests', () => {
 
   it('encodes ids in route paths', () => {
     assert.strictEqual(Routes.entry('a/b c'), '/api/v1/blackbox/a%2Fb%20c');
-    assert.strictEqual(Routes.object('bbx_1', 'evidence/x y.txt'), '/api/v1/blackbox/bbx_1/objects/evidence/x%20y.txt');
+    assert.strictEqual(Routes.object('bbx_1', 'evidence/x y.txt'), '/api/v1/blackbox/bbx_1/objects/evidence%2Fx%20y.txt');
   });
 });
 
@@ -174,6 +174,7 @@ describe('ArmadaBlackBoxClient errors', () => {
     { status: 409, error: 'BlackBoxDeleting', kind: 'conflict', text: /conflicts/ },
     { status: 410, error: 'BlackBoxObjectMissing', kind: 'gone', text: /missing from storage/ },
     { status: 503, error: 'BlackBoxStoreUnavailable', kind: 'unavailable', text: /store is unavailable/ },
+    { status: 501, error: 'NotImplemented', kind: 'notImplemented', text: /recovery runner may not be merged/ },
     { status: 500, error: 'InternalError', kind: 'server', text: /server error/ },
     { status: 400, error: 'BadRequest', kind: 'badRequest', text: /rejected the request/ },
   ];
@@ -188,6 +189,16 @@ describe('ArmadaBlackBoxClient errors', () => {
       });
     });
   }
+
+  it('takes the code from Data.Code over Error (the server sends Error NotFound with Data.Code BlackBoxNotFound)', async () => {
+    const mock = new MockFetch().otherwise(() => ({ status: 404, json: { Error: 'NotFound', StatusCode: 404, Message: 'Black box entry bbx_1 not found.', Data: { Code: 'BlackBoxNotFound' } } }));
+    await rejectsWith(client(mock).getEntry('bbx_1'), 'notFound', (err) => {
+      assert.strictEqual(err.code, 'BlackBoxNotFound');
+      assert.match(describeError(err), /No black box entry/);
+    });
+    const field = new MockFetch().otherwise(() => ({ status: 400, json: { Error: 'BadRequest', Message: 'audience must be agent, user or maintainer.', Data: { Code: 'InvalidArgument', Field: 'audience' } } }));
+    await rejectsWith(client(field).getBrief('bbx_1', 'agent'), 'badRequest', (err) => assert.strictEqual(err.code, 'InvalidArgument'));
+  });
 
   it('maps a 404 without a black box code to a route hint', async () => {
     const mock = new MockFetch().otherwise(() => ({ status: 404, text: 'Not Found' }));
@@ -241,7 +252,7 @@ describe('Ask Armada helpers and events', () => {
     assert.deepStrictEqual(dashboardAskUrl('http://h:7890/dashboard/', 'p'), { url: 'http://h:7890/dashboard/ask', prefilled: false });
   });
 
-  it('lists the four black box WebSocket events', () => {
-    assert.deepStrictEqual([...BLACKBOX_EVENT_TYPES].sort(), ['blackbox.analyzed', 'blackbox.captured', 'blackbox.deleted', 'blackbox.resolved']);
+  it('lists the black box WebSocket events', () => {
+    assert.deepStrictEqual([...BLACKBOX_EVENT_TYPES].sort(), ['blackbox.analyzed', 'blackbox.captured', 'blackbox.deleted', 'blackbox.recovery_run', 'blackbox.resolved']);
   });
 });

@@ -174,7 +174,7 @@ export class BlackBoxStore {
     for (const entry of candidates) {
       let conflict: BlackBoxConflict | undefined;
       try {
-        conflict = await client.getSection<BlackBoxConflict>(entry.Id, 'Conflict');
+        conflict = (await client.getSection(entry.Id, 'Conflict')).Record?.Conflict ?? undefined;
       } catch {
         continue; // a missing section or object must not hide the other entries' decorations
       }
