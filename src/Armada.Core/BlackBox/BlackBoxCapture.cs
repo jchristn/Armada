@@ -626,6 +626,18 @@ namespace Armada.Core.BlackBox
 
         private async Task EmitCapturedAsync(BlackBoxEntry entry, CancellationToken token)
         {
+            try
+            {
+                await EmitCapturedCoreAsync(entry, token).ConfigureAwait(false);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                _Logging.Warn(_Header + "blackbox.captured for " + entry.Id + " could not be emitted: " + e.Message);
+            }
+        }
+
+        private async Task EmitCapturedCoreAsync(BlackBoxEntry entry, CancellationToken token)
+        {
             await _Events.EmitAsync(BlackBoxEventTypes.Captured, "Black box captured for " + (entry.MissionId ?? entry.VoyageId) + ": " + entry.Phase + "/" + entry.Step,
                 entry.TenantId, entry.Id, entry.MissionId, entry.VoyageId, entry.VesselId,
                 new BlackBoxCapturedPayload { EntryId = entry.Id, MissionId = entry.MissionId, VoyageId = entry.VoyageId, VesselId = entry.VesselId, Phase = entry.Phase, Step = entry.Step, Kind = entry.FailureKind, Attempt = entry.Attempt, CaptureMode = entry.CaptureMode },

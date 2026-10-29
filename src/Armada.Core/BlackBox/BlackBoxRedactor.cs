@@ -58,7 +58,7 @@ namespace Armada.Core.BlackBox
             {
                 Rule("PrivateKeyBlock", @"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z0-9 ]*PRIVATE KEY-----|$)"),
                 Rule("AuthorizationHeader", @"(?i)(?<keep>\bauthorization[""']?\s*[:=]\s*[""']?(?:bearer|basic|token|bot)?\s*)[^\s""',;]+"),
-                Rule("UrlCredentials", @"(?i)(?<keep>\b[a-z][a-z0-9+.\-]*://)[^\s/:@""']+:[^\s/@""']+@"),
+                Rule("UrlCredentials", @"(?i)(?<keep>\b[a-z][a-z0-9+.\-]*://)[^\s/:@""']+:[^\s/@""']+(?=@)"),
                 Rule("GitHubToken", @"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"),
                 Rule("AnthropicKey", @"\bsk-ant-[A-Za-z0-9_\-]{16,}"),
                 Rule("OpenAiKey", @"\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_\-]{20,}"),

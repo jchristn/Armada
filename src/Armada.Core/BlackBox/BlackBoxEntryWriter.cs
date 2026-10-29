@@ -164,8 +164,15 @@ namespace Armada.Core.BlackBox
                     entry.StorageTarget = BlackBoxStorageTargetEnum.Database;
                     entry.StoragePrefix = null;
                     BlackBoxRecordBounder.AddNote(record.Truncation, "The " + failed + " store failed; the entry was written to the database instead.");
-                    await _Events.EmitAsync(BlackBoxEventTypes.StorageFallback, "Black box storage fell back to the database for " + entry.Id, entry.TenantId, entry.Id, entry.MissionId, entry.VoyageId, entry.VesselId,
+                    try
+                    {
+                        await _Events.EmitAsync(BlackBoxEventTypes.StorageFallback, "Black box storage fell back to the database for " + entry.Id, entry.TenantId, entry.Id, entry.MissionId, entry.VoyageId, entry.VesselId,
                         new BlackBoxStorageFallbackPayload { EntryId = entry.Id, From = failed, To = BlackBoxStorageTargetEnum.Database, Error = _Redactor.Redact(e.Message) }, token).ConfigureAwait(false);
+                    }
+                    catch (Exception sinkError) when (sinkError is not OperationCanceledException)
+                    {
+                        _Logging.Warn(_Header + "blackbox.storage_fallback for " + entry.Id + " could not be emitted: " + sinkError.Message);
+                    }
                 }
                 else
                 {
