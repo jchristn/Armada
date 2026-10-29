@@ -38,6 +38,11 @@ namespace Armada.Server.Routes
         private const string _HeaderRestart = "[ArmadaServer] restart: ";
 
         /// <summary>
+        /// The black box runtime (the doctor's storage check and black box settings changes), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.BlackBoxRuntime? BlackBox { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         /// <param name="database">Database driver.</param>
@@ -302,12 +307,16 @@ namespace Armada.Server.Routes
                     }
                 }
 
+                // 12. Black box storage: the configured target's settings and reachability.
+                Armada.Core.BlackBox.Storage.BlackBoxStorageDoctorResult blackBoxStorage = await Armada.Core.BlackBox.Storage.BlackBoxStorageDoctor.CheckAsync(_settings.BlackBox, BlackBox?.Stores).ConfigureAwait(false);
+                results.Add(new { Name = Armada.Core.BlackBox.Storage.BlackBoxStorageDoctorResult.CheckName, Status = blackBoxStorage.Status, Message = blackBoxStorage.Message });
+
                 return results;
             },
             api => api
                 .WithTag("Status")
                 .WithSummary("Run system health diagnostics")
-                .WithDescription("Runs 7 system health checks and returns results as a JSON array.")
+                .WithDescription("Runs 12 system health checks (settings, git, database, server, stalled captains, failed missions, the five agent runtimes and black box storage) and returns results as a JSON array.")
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/server/stop", async (ApiRequest req) =>
@@ -505,6 +514,18 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "StageCheckTimeoutMinutes must be between 1 and 240." };
                 }
+                if (body.BlackBox != null)
+                {
+                    // Storage secrets come back from GET masked; a masked value keeps the stored secret. The target's settings
+                    // are validated before anything is applied (missing bucket, bad endpoint, unknown target).
+                    Armada.Core.BlackBox.BlackBoxSettingsSecrets.KeepMasked(body.BlackBox, _settings.BlackBox, _RedactedSecret);
+                    List<string> storageErrors = Armada.Core.BlackBox.Storage.BlackBoxStorageSettingsValidator.Validate(body.BlackBox.Storage);
+                    if (storageErrors.Count > 0)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid black box storage settings: " + String.Join(" ", storageErrors) };
+                    }
+                }
                 if (body.DataRetentionDays.HasValue) _settings.DataRetentionDays = body.DataRetentionDays.Value;
                 if (body.RequestHistoryRetentionDays.HasValue) _settings.RequestHistoryRetentionDays = body.RequestHistoryRetentionDays.Value;
 
@@ -560,11 +581,13 @@ namespace Armada.Server.Routes
                 if (body.RepositoryHealth != null)
                     _settings.RepositoryHealth = body.RepositoryHealth;
                 if (body.Storage != null) _settings.Storage = body.Storage;
+                Armada.Core.Settings.BlackBoxRetentionSettings? previousBlackBoxRetention = null;
                 if (body.BlackBox != null)
                 {
-                    // Storage secrets come back from GET masked; a masked value keeps the stored secret.
-                    Armada.Core.BlackBox.BlackBoxSettingsSecrets.KeepMasked(body.BlackBox, _settings.BlackBox, _RedactedSecret);
-                    _settings.BlackBox = body.BlackBox;
+                    // Applied in place: the black box runtime holds this settings object, so replacing it would leave the
+                    // stores, garbage collector and capture on the old values.
+                    previousBlackBoxRetention = _settings.BlackBox.Retention.Clone();
+                    _settings.BlackBox.CopyFrom(body.BlackBox);
                 }
                 if (body.Retention != null)
                     _settings.Retention = body.Retention;
@@ -596,6 +619,9 @@ namespace Armada.Server.Routes
                 }
 
                 await _settings.SaveAsync().ConfigureAwait(false);
+
+                if (body.BlackBox != null && BlackBox != null)
+                    _ = BlackBox.ApplySettingsChanged(previousBlackBoxRetention);
 
                 if (remoteControlChanged && _onRemoteControlSettingsChanged != null)
                     await _onRemoteControlSettingsChanged().ConfigureAwait(false);

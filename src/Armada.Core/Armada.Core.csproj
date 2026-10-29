@@ -19,6 +19,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Blobject.AmazonS3" Version="6.1.2" />
+    <PackageReference Include="Blobject.AzureBlob" Version="6.1.2" />
+    <PackageReference Include="Blobject.CIFS" Version="6.1.2" />
+    <PackageReference Include="Blobject.Core" Version="6.1.2" />
+    <PackageReference Include="Blobject.Disk" Version="6.1.2" />
+    <PackageReference Include="Blobject.GoogleCloud" Version="6.1.2" />
+    <PackageReference Include="Blobject.NFS" Version="6.1.2" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />

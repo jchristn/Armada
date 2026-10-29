@@ -53,7 +53,7 @@ const HIGHLIGHT_MS = 2000;
  * stream captain replies, show confirm cards for state-changing actions and CLI permission cards, and follow the
  * work they start with live cards and milestone messages, all from owner-scoped `ask.*` socket events.
  */
-export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
+export function AskScreen({ routeThreadId, prefill = null }: { routeThreadId: string | null; prefill?: string | null }) {
   const { t } = useLocale();
   const { colors } = useTheme();
   // Sidebar navigation (no header bell) vs. list and conversation side by side (pane width).
@@ -98,8 +98,17 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     if (routeThreadId) setThreadId(routeThreadId);
   }
 
-  // The bare /ask route reopens the last conversation once per app session.
-  if (!routeThreadId && lastThreadLoaded && claimLastThreadRestore() && lastThreadId && threadId === null) {
+  // A prefilled /ask (?prompt=) starts a new conversation with the text in the composer (applied below, once the
+  // composer shows the new conversation).
+  const [seenPrefill, setSeenPrefill] = useState<string | null>(null);
+  const appliedPrefillRef = useRef<string | null>(null);
+  if (prefill && prefill !== seenPrefill) {
+    setSeenPrefill(prefill);
+    if (threadId !== null) setThreadId(null);
+  }
+
+  // The bare /ask route reopens the last conversation once per app session (not when it carries a prompt).
+  if (!routeThreadId && !prefill && lastThreadLoaded && claimLastThreadRestore() && lastThreadId && threadId === null) {
     setThreadId(lastThreadId);
   }
 
@@ -136,6 +145,13 @@ export function AskScreen({ routeThreadId }: { routeThreadId: string | null }) {
     if (previous) draftsRef.current[previous] = composerRef.current?.getText() ?? '';
     composerRef.current?.reset({ text: threadId ? draftsRef.current[threadId] ?? '' : '', focus: threadId === null });
   }, [threadId]);
+
+  // Runs after the effect above, so the prompt replaces the cleared draft of the new conversation.
+  useEffect(() => {
+    if (!seenPrefill || threadId !== null || appliedPrefillRef.current === seenPrefill) return;
+    appliedPrefillRef.current = seenPrefill;
+    composerRef.current?.reset({ text: seenPrefill, focus: true });
+  }, [threadId, seenPrefill]);
 
   const { mcpMissing, ungated, noCaptain } = askCaptainAccess(activeCaptainId, tools);
   // The captain cannot change mid-turn, so the dropdown closes when a turn starts.

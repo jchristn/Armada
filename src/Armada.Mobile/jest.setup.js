@@ -63,6 +63,16 @@ jest.mock('expo-notifications', () => ({
   clearLastNotificationResponse: jest.fn(),
 }));
 
+// Clipboard: the last copied text, readable by tests through __text.
+jest.mock('expo-clipboard', () => {
+  const state = { text: '' };
+  return {
+    setStringAsync: jest.fn(async (text) => { state.text = text; return true; }),
+    getStringAsync: jest.fn(async () => state.text),
+    __state: state,
+  };
+});
+
 jest.mock('expo-device', () => ({ deviceName: 'Test iPhone', modelName: 'iPhone', isDevice: false }));
 
 // React Native's Jest setup reports a 750 x 1334 window (an iPhone 6 in pixels, not dp), which the adaptive layout
