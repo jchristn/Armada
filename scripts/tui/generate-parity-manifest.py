@@ -86,10 +86,6 @@ def main():
         add("setting", field, "planned", "ServerSettingsScreen", "W7.7", "")
     for route in ["/approvals", "/setup"]:
         add("route", route, "extension", "", "", "TUI-only route")
-    # TUI black box screens: extensions until the dashboard has the same routes (then the dashboard entry wins).
-    for route, screen in [("/blackbox", "BlackBoxScreen"), ("/blackbox/:id", "BlackBoxEntryScreen")]:
-        if route not in route_list:
-            add("route", route, "extension", screen, "BB", "TUI black box screen (plan 11.2); becomes a dashboard route entry once the dashboard ships the same page")
     for name in ["GetI18nCatalogAsync", "GetOpenApiDocumentAsync", "SendRawAsync"]:
         add("api", "tui:" + name, "extension", "ArmadaClient." + name, "W0.2", "TUI-only client call")
 

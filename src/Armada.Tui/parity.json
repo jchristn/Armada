@@ -98,18 +98,18 @@
     {
       "kind": "route",
       "key": "/blackbox",
-      "status": "extension",
+      "status": "implemented",
       "tui": "BlackBoxScreen",
       "workstream": "BB",
-      "notes": "TUI black box screen (plan 11.2); becomes a dashboard route entry once the dashboard ships the same page"
+      "notes": "Black Box list: server filters (vessel, triage, resolution, phase, fingerprint), paging, fingerprints view (F), row pin, JSON, delete; Go g b"
     },
     {
       "kind": "route",
       "key": "/blackbox/:id",
-      "status": "extension",
+      "status": "implemented",
       "tui": "BlackBoxEntryScreen",
       "workstream": "BB",
-      "notes": "TUI black box screen (plan 11.2); becomes a dashboard route entry once the dashboard ships the same page"
+      "notes": "Black box entry: brief with copy, export, recovery, Ask Armada, JSON, resolve, pin and note keys; objects with a paged 64 KB range viewer; notes; .zip download"
     },
     {
       "kind": "route",
@@ -4798,6 +4798,14 @@
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.blackBox",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": "Black Box Retention section edits the retention policy (saved with the whole black box object, masked secrets kept); storage target health, usage and a GC dry run are on the Storage tab; storage target credentials are edited in the dashboard or the settings file"
     },
     {
       "kind": "setting",

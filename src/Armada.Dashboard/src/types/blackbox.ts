@@ -11,7 +11,7 @@ export type BlackBoxConfidence = 'Low' | 'Medium' | 'High' | 'Unknown';
 export type BlackBoxSeverity = 'Low' | 'Medium' | 'High' | 'Critical' | 'Unknown';
 export type BlackBoxFileRole = 'Conflicted' | 'DirtyInCheckout' | 'OutOfScope' | 'ChangedByMission' | 'ChangedByConflictingMission' | 'BoundaryViolation' | 'Unknown';
 export type BlackBoxNoteAuthorKind = 'Operator' | 'Agent' | 'AskArmada' | 'System' | 'Unknown';
-export type BlackBoxStorageTarget = 'Database' | 'Disk' | 'AzureBlob' | 'GoogleCloud' | 'Cifs' | 'Nfs' | 'Unknown';
+export type BlackBoxStorageTarget = 'Database' | 'Disk' | 'S3' | 'AzureBlob' | 'GoogleCloud' | 'Cifs' | 'Nfs' | 'Unknown';
 export type BlackBoxJobState = 'Pending' | 'Running' | 'Completed' | 'Failed' | 'Cancelled' | 'Unknown';
 export type BlackBoxBundleFormat = 'Markdown' | 'Json';
 export type BlackBoxSection =
@@ -307,6 +307,25 @@ export interface BlackBoxTruncatedField { field: string; originalSize?: number; 
 
 export interface BlackBoxTruncation { fields?: BlackBoxTruncatedField[]; fieldTotal?: number; timedOut?: boolean; notes?: string[] }
 
+/** An earlier entry with the same fingerprint (BlackBoxSimilarEntry). */
+export interface BlackBoxSimilarEntry {
+  entryId: string;
+  missionId?: string | null;
+  missionTitle?: string | null;
+  createdUtc?: string;
+  resolution?: BlackBoxResolution;
+  resolutionNote?: string | null;
+}
+
+/** Related failures (BlackBoxRelated): the fingerprint, similar entries and the cascade. */
+export interface BlackBoxRelated {
+  fingerprint?: string | null;
+  similarEntries?: BlackBoxSimilarEntry[];
+  occurrencesLast30Days?: number;
+  cascadeRootEntryId?: string | null;
+  downstreamMissionIds?: string[];
+}
+
 /** The versioned record (record.json); a section that was not captured is null. */
 export interface BlackBoxRecord {
   entryId: string;
@@ -327,7 +346,7 @@ export interface BlackBoxRecord {
   attempts?: BlackBoxAttempt[];
   evidence?: BlackBoxEvidenceIndex | null;
   analysis?: BlackBoxAnalysis | null;
-  related?: Record<string, unknown> | null;
+  related?: BlackBoxRelated | null;
   voyage?: Record<string, unknown> | null;
   redaction?: BlackBoxRedaction;
   truncation?: BlackBoxTruncation;
@@ -586,4 +605,33 @@ export interface BlackBoxFixture {
   expectedRuleIds: string[];
   expectedTriage: BlackBoxTriage;
   record: BlackBoxRecord;
+}
+
+/** One storage target's settings (blackBox.storage.disk, .s3, ...): strings, numbers and flags; secrets read back masked. */
+export type BlackBoxTargetSettings = Record<string, string | number | boolean | null | undefined>;
+
+/** blackBox.storage in GET/PUT /api/v1/settings (BlackBoxStorageSettings). */
+export interface BlackBoxStorageSettingsData {
+  target: BlackBoxStorageTarget;
+  keyPrefix?: string;
+  compress?: boolean;
+  maxEvidenceObjectBytes?: number;
+  maxEntryBytes?: number;
+  fallbackToDatabase?: boolean;
+  disk?: BlackBoxTargetSettings;
+  s3?: BlackBoxTargetSettings;
+  azureBlob?: BlackBoxTargetSettings;
+  googleCloud?: BlackBoxTargetSettings;
+  cifs?: BlackBoxTargetSettings;
+  nfs?: BlackBoxTargetSettings;
+  [key: string]: unknown;
+}
+
+/** blackBox in GET/PUT /api/v1/settings (BlackBoxSettings); the PUT replaces the whole group. */
+export interface BlackBoxSettingsData {
+  enabled?: boolean;
+  captureTimeoutMs?: number;
+  storage: BlackBoxStorageSettingsData;
+  retention: BlackBoxRetentionPolicy;
+  [key: string]: unknown;
 }

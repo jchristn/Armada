@@ -41,6 +41,7 @@ export const icons: Record<string, ReactNode> = {
   vessels: svg(<><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></>),
   captains: svg(<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>),
   docks: svg(<><rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></>),
+  blackbox: svg(<><rect x="3" y="6" width="18" height="14" rx="2" /><path d="M8 6V4h8v2" /><path d="M12 10v4" /><path d="M12 17h.01" /></>),
   activity: svg(<><path d="M3 12h18" /><path d="M12 3v18" /><circle cx="12" cy="12" r="9" /></>),
   history: svg(<><path d="M3 12h18" /><path d="M12 3v18" /><circle cx="12" cy="12" r="9" /></>),
   signals: svg(<polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />),

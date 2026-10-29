@@ -60,6 +60,8 @@ export const DASHBOARD_ROUTES: DashboardRoute[] = [
   { pattern: "/ask", dashboard: "/ask/:threadId?", tab: "ask", title: "Ask Armada", workstream: "W1.1", redirect: null, file: "(app)/(ask)/ask/index.tsx" },
   { pattern: "/ask/:threadId", dashboard: "/ask/:threadId?", tab: "ask", title: "Ask Armada", workstream: "W1.1", redirect: null, file: "(app)/(ask)/ask/[threadId].tsx" },
   { pattern: "/inbox", dashboard: "/inbox", tab: "approvals", title: "Needs You", workstream: "W1.3", redirect: null, file: "(app)/(approvals)/inbox.tsx" },
+  { pattern: "/blackbox", dashboard: "/blackbox", tab: "work", title: "Black Box", workstream: "W2.2", redirect: null, file: "(app)/(work)/blackbox/index.tsx" },
+  { pattern: "/blackbox/:id", dashboard: "/blackbox/:id", tab: "work", title: "Blackbox Item", workstream: "W2.2", redirect: null, file: "(app)/(work)/blackbox/[id].tsx" },
   { pattern: "/cli-permissions", dashboard: "/cli-permissions", tab: "more", title: "CLI Tool Permissions", workstream: "W4.4", redirect: null, file: "(app)/(more)/cli-permissions.tsx" },
   { pattern: "/delivery", dashboard: "/delivery", tab: "work", title: "Delivery", workstream: "W4.1", redirect: null, file: "(app)/(work)/delivery.tsx" },
   { pattern: "/fleet-actions", dashboard: "/fleet-actions", tab: "work", title: "Fleet Actions", workstream: "W3.2", redirect: null, file: "(app)/(work)/fleet-actions/index.tsx" },
