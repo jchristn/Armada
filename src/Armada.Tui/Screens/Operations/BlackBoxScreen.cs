@@ -16,7 +16,8 @@ namespace Armada.Tui.Screens.Operations
     /// Black Box (<c>/blackbox</c>, a TUI extension until the dashboard page lands): the failure entries the black box
     /// recorded, server paged and filtered by vessel, triage, resolution, phase, and fingerprint (the route query
     /// <c>missionId</c>, <c>voyageId</c>, <c>vesselId</c>, and <c>fingerprint</c> pre-filter it). <c>g</c> opens the
-    /// fingerprints view (most frequent failure signatures; choosing one filters the list), Enter opens an entry, and
+    /// fingerprints view (most frequent failure signatures; choosing one filters the list), <c>R</c> the recovery
+    /// statistics view (each recovery path's tracked runs and success rate, for the vessel filter), Enter opens an entry, and
     /// the row menu pins, copies, opens the mission, and deletes. Refreshes on <c>blackbox.</c> events. Not thread-safe.
     /// </summary>
     public class BlackBoxScreen : OpsListScreen<BlackBoxEntrySummary>
@@ -63,6 +64,16 @@ namespace Armada.Tui.Screens.Operations
         /// Most fingerprints the fingerprints view reads.
         /// </summary>
         public const int FingerprintPageSize = 50;
+
+        /// <summary>
+        /// Most recovery statistics the recovery stats view reads.
+        /// </summary>
+        public const int RecoveryStatsPageSize = 100;
+
+        /// <summary>
+        /// Recovery statistics shown by the last recovery stats view.
+        /// </summary>
+        public List<BlackBoxRecoveryStat> RecoveryStats { get; private set; } = new List<BlackBoxRecoveryStat>();
 
         #endregion
 
@@ -117,6 +128,7 @@ namespace Armada.Tui.Screens.Operations
             id.DefaultVisible = false;
 
             ScreenActions.Add(new OpsScreenAction("fingerprints", "Fingerprints", ShowFingerprints, "F"));
+            ScreenActions.Add(new OpsScreenAction("recovery-stats", "Recovery stats", ShowRecoveryStats, "R"));
             ScreenActions.Add(new OpsScreenAction("clear-fingerprint", "Clear fingerprint", () => SetFingerprint(""), "X", () => FingerprintFilter.Value.Length > 0));
 
             RowActions.Add(new OpsAction<BlackBoxEntrySummary>("view", "View Entry", e => OpenRow(e), "o"));
@@ -191,6 +203,36 @@ namespace Armada.Tui.Screens.Operations
 
                 ShowMenu("Fingerprints", items);
             }, "Fingerprints could not be loaded");
+        }
+
+        /// <summary>
+        /// The recovery statistics view: each recovery path's confirmed runs followed to the mission's next terminal
+        /// status (succeeded, failed, pending, expired) and its success rate, for the vessel filter.
+        /// </summary>
+        public void ShowRecoveryStats()
+        {
+            BlackBoxRecoveryStatsRequest request = new BlackBoxRecoveryStatsRequest();
+            request.PageNumber = 1;
+            request.PageSize = RecoveryStatsPageSize;
+            if (!String.IsNullOrEmpty(VesselFilter.Value)) request.VesselId = VesselFilter.Value;
+            Call((c, t) => c.GetBlackBoxRecoveryStatsAsync(request, t), r =>
+            {
+                RecoveryStats = r?.Objects ?? new List<BlackBoxRecoveryStat>();
+                if (RecoveryStats.Count == 0)
+                {
+                    Toast(NotificationSeverityEnum.Info, Tr("No recovery runs have been tracked yet."));
+                    return;
+                }
+
+                List<string> lines = new List<string>();
+                lines.Add(Tr("Confirmed recovery runs, followed to the mission's next terminal status.") + (String.IsNullOrEmpty(VesselFilter.Value) ? "" : "  " + Tr("Vessel") + ": " + Reference.VesselName(VesselFilter.Value)));
+                long total = r?.TotalRecords ?? RecoveryStats.Count;
+                if (total > RecoveryStats.Count) lines.Add(Tr("Showing {{shown}} of {{total}} paths.", LocalizationArgs.Of("shown", RecoveryStats.Count, "total", total)));
+                lines.Add("");
+                lines.Add(Tr("Rule  Path  Success  Runs  Ok  Failed  Pending  Expired"));
+                foreach (BlackBoxRecoveryStat stat in RecoveryStats) lines.Add(BlackBoxInsightText.RecoveryStat(stat));
+                ShowText(Tr("Recovery Stats"), String.Join("\n", lines));
+            }, "Recovery stats could not be loaded");
         }
 
         /// <summary>

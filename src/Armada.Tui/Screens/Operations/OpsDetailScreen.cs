@@ -73,6 +73,14 @@ namespace Armada.Tui.Screens.Operations
             get { return Tabs.SelectedIndex >= 0 && Tabs.SelectedIndex < _Panels.Count ? _Panels[Tabs.SelectedIndex] : null; }
         }
 
+        /// <summary>
+        /// Key of the current panel, or null.
+        /// </summary>
+        public string? CurrentPanelKey
+        {
+            get { return Tabs.SelectedIndex >= 0 && Tabs.SelectedIndex < _Panels.Count ? Tabs.SelectedKey : null; }
+        }
+
         /// <inheritdoc />
         public override bool CanFocus { get; set; } = true;
 
@@ -82,9 +90,18 @@ namespace Armada.Tui.Screens.Operations
             get
             {
                 List<KeyValuePair<string, string>> hints = new List<KeyValuePair<string, string>>();
+                string? panel = CurrentPanelKey;
+                if (panel != null)
+                {
+                    // The current panel's own keys come first, so they are discoverable from that panel.
+                    if (_PanelHints.TryGetValue(panel, out List<KeyValuePair<string, string>>? extra)) hints.AddRange(extra);
+                    foreach (OpsScreenAction a in Actions.Where(a => a.Panel == panel && a.Key != null && a.Available))
+                        hints.Add(new KeyValuePair<string, string>(KeyLabelOf(a.Key!), a.DynamicLabel != null ? a.DynamicLabel() : a.Label));
+                }
+
                 hints.Add(new KeyValuePair<string, string>(".", "Actions"));
                 if (_Panels.Count > 1) hints.Add(new KeyValuePair<string, string>("[ ]", "Panels"));
-                foreach (OpsScreenAction a in Actions.Where(a => a.Key != null && a.Available).Take(4))
+                foreach (OpsScreenAction a in Actions.Where(a => a.Panel == null && a.Key != null && a.Available).Take(4))
                     hints.Add(new KeyValuePair<string, string>(KeyLabelOf(a.Key!), a.Label));
                 return hints;
             }
@@ -95,6 +112,7 @@ namespace Armada.Tui.Screens.Operations
         #region Private-Members
 
         private readonly List<IWidget> _Panels = new List<IWidget>();
+        private readonly Dictionary<string, List<KeyValuePair<string, string>>> _PanelHints = new Dictionary<string, List<KeyValuePair<string, string>>>(StringComparer.Ordinal);
         private bool _ActionsBuilt = false;
 
         #endregion
@@ -349,6 +367,41 @@ namespace Armada.Tui.Screens.Operations
             a.Danger = danger;
             Actions.Add(a);
             return a;
+        }
+
+        /// <summary>
+        /// Add an action that belongs to a panel: available only while that panel is current, and listed first in the
+        /// status bar hints there.
+        /// </summary>
+        /// <param name="panel">Panel key.</param>
+        /// <param name="id">Id.</param>
+        /// <param name="label">English label.</param>
+        /// <param name="run">Handler.</param>
+        /// <param name="key">Key, or null.</param>
+        /// <param name="when">Further availability, or null.</param>
+        /// <returns>The action.</returns>
+        protected OpsScreenAction PanelAction(string panel, string id, string label, Action run, string? key = null, Func<bool>? when = null)
+        {
+            OpsScreenAction a = Action(id, label, run, key, () => CurrentPanelKey == panel && (when == null || when()));
+            a.Panel = panel;
+            return a;
+        }
+
+        /// <summary>
+        /// Add a status bar hint shown while a panel is current (a key the panel widget itself handles, such as Enter).
+        /// </summary>
+        /// <param name="panel">Panel key.</param>
+        /// <param name="key">Key label.</param>
+        /// <param name="label">English label.</param>
+        protected void PanelHint(string panel, string key, string label)
+        {
+            if (!_PanelHints.TryGetValue(panel, out List<KeyValuePair<string, string>>? list))
+            {
+                list = new List<KeyValuePair<string, string>>();
+                _PanelHints[panel] = list;
+            }
+
+            list.Add(new KeyValuePair<string, string>(key, label));
         }
 
         #endregion

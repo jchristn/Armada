@@ -56,6 +56,12 @@ namespace Armada.Tui.Screens.Operations
         public object? Tag { get; set; } = null;
 
         /// <summary>
+        /// Key of the panel the action belongs to, or null for a screen-wide action. A detail screen lists the keys of
+        /// the current panel's actions first in its status bar hints, so they are discoverable from that panel.
+        /// </summary>
+        public string? Panel { get; set; } = null;
+
+        /// <summary>
         /// True when available now.
         /// </summary>
         public bool Available
