@@ -2484,7 +2484,28 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"ALTER TABLE missions ADD COLUMN last_blackbox_entry_id TEXT NULL;",
                     @"ALTER TABLE missions ADD COLUMN start_commit TEXT NULL;",
                     @"ALTER TABLE voyages ADD COLUMN last_blackbox_entry_id TEXT NULL;",
-                    @"ALTER TABLE vessels ADD COLUMN blackbox_retention_days INTEGER NULL;")
+                    @"ALTER TABLE vessels ADD COLUMN blackbox_retention_days INTEGER NULL;"),
+
+                new SchemaMigration(104, "Add blackbox_migrations: one row per black box storage migration job (copy, verify, switch, delete between storage targets) so a job is resumable after a restart and its progress can be read back",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_migrations (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        state TEXT NOT NULL,
+                        from_target TEXT,
+                        to_target TEXT NOT NULL,
+                        delete_source INTEGER NOT NULL DEFAULT 1,
+                        batch_size INTEGER NOT NULL DEFAULT 50,
+                        total_entries INTEGER NOT NULL DEFAULT 0,
+                        migrated_entries INTEGER NOT NULL DEFAULT 0,
+                        failed_entries INTEGER NOT NULL DEFAULT 0,
+                        bytes_copied INTEGER NOT NULL DEFAULT 0,
+                        last_entry_id TEXT,
+                        last_error TEXT,
+                        created_utc TEXT NOT NULL,
+                        started_utc TEXT,
+                        finished_utc TEXT,
+                        last_update_utc TEXT NOT NULL
+                    );",
+                    @"CREATE INDEX IF NOT EXISTS idx_blackbox_migrations_state_created ON blackbox_migrations(state, created_utc);")
 
 
 

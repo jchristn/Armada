@@ -43,10 +43,21 @@ namespace Armada.Core.Settings
             set => _ConnectionString = String.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 
+        /// <summary>
+        /// Blob service endpoint, for example http://127.0.0.1:10000/devstoreaccount1/ for Azurite. Null means
+        /// https://{AccountName}.blob.core.windows.net/ (or the BlobEndpoint of the connection string).
+        /// </summary>
+        public string? Endpoint
+        {
+            get => _Endpoint;
+            set => _Endpoint = String.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
         private string? _AccountName = null;
         private string? _Container = null;
         private string? _AccessKey = null;
         private string? _ConnectionString = null;
+        private string? _Endpoint = null;
 
         /// <summary>
         /// Instantiate with defaults.

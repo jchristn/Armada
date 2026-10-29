@@ -56,6 +56,8 @@ import { MissionDiffTab, MissionInstructionsTab, MissionLogTab } from './mission
 import { ReviewSheet } from './mission/ReviewSheet';
 import { TransitionSheet } from './mission/TransitionSheet';
 import { externalUrl, openExternalUrl } from '../../lib/externalLinks';
+import { BlackBoxPanel } from '../blackbox/BlackBoxPanel';
+import { missionMayHaveBlackBox } from '../blackbox/blackBoxModel';
 
 export const MISSION_DETAIL_TABS = ['overview', 'diff', 'log', 'instructions'] as const;
 export type MissionDetailTab = (typeof MISSION_DETAIL_TABS)[number];
@@ -78,7 +80,9 @@ export interface MissionDetailProps extends OperationsDetailProps {
  * landing preview, GitHub pull request evidence, every field and link, linked checks and deployments, description,
  * playbooks, and the diff, log, and instructions (as tabs, each with its own scroll). Actions: resolve review,
  * mark complete, land / retry landing, manual merge (Landing Mode None), run check, transition, edit, restart,
- * purge, delete, and View JSON. Follows the mission live over the socket.
+ * purge, delete, and View JSON. A failed, landing-failed or cancelled mission shows its black box (summary, recovery,
+ * Resolve, Share, Copy FIX THIS, Ask Armada) in place of the bare failure reason. Follows the mission live over the
+ * socket.
  */
 export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted }: MissionDetailProps) {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
@@ -279,6 +283,12 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
   );
   const preferredFellBack = !!mission.requestedCaptainId && !!mission.captainId && mission.captainId !== mission.requestedCaptainId;
 
+  const failureReason = mission.failureReason ? (
+    <Section title={t('Failure Reason')}>
+      <View style={styles.pad}><CodeBlock wrap text={mission.failureReason} testID="mission-failure-reason" /></View>
+    </Section>
+  ) : null;
+
   const overview = (
     <ScrollView
       testID="mission-overview"
@@ -363,11 +373,9 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
         <KeyValueRow label={t('Linked Deployments')} value={linked.deployments.length} />
       </Section>
 
-      {mission.failureReason ? (
-        <Section title={t('Failure Reason')}>
-          <View style={styles.pad}><CodeBlock wrap text={mission.failureReason} testID="mission-failure-reason" /></View>
-        </Section>
-      ) : null}
+      {missionMayHaveBlackBox(mission.status, mission.failureReason) ? (
+        <BlackBoxPanel source={{ kind: 'mission', id: mission.id }} fallback={failureReason} />
+      ) : failureReason}
       {mission.reviewComment ? (
         <Section title={t('Review Comment')}>
           <View style={styles.pad}><CodeBlock wrap text={mission.reviewComment} /></View>

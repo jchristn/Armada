@@ -83,6 +83,8 @@ namespace Armada.Server.Mcp
         /// typed Unavailable error, and enumerate entityType blackbox answers Unavailable.</param>
         /// <param name="blackBoxCapture">Optional black box capture for the operator actions of delete_vessel and
         /// transition_mission_status (steps VesselDeleted and OperatorTransition).</param>
+        /// <param name="blackBoxHooks">Optional black box lifecycle hooks; mission and vessel deletes and vessel updates call
+        /// them so retention cascades and expiry recomputes happen at once.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -123,17 +125,18 @@ namespace Armada.Server.Mcp
             ModelProbeAccessService? modelProbes = null,
             BatteryAccessService? battery = null,
             Armada.Core.BlackBox.IBlackBoxService? blackBox = null,
-            Armada.Core.BlackBox.IBlackBoxCapture? blackBoxCapture = null)
+            Armada.Core.BlackBox.IBlackBoxCapture? blackBoxCapture = null,
+            Armada.Core.BlackBox.IBlackBoxLifecycleHooks? blackBoxHooks = null)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
             register = MapToolExceptions(MarkExperimental(register));
             McpStatusTools.Register(register, admiral, onStop, stopServerUnavailableMessage);
             McpEnumerateTools.Register(register, database, mergeQueue, logging != null ? new InboxService(database, logging, settings) : null, cliPermissionService, blackBox);
             McpFleetTools.Register(register, database);
-            McpVesselTools.Register(register, database, dockService, vesselService, settings, admiral, blackBoxCapture);
+            McpVesselTools.Register(register, database, dockService, vesselService, settings, admiral, blackBoxCapture, blackBoxHooks);
             if (vesselImportService != null) McpVesselImportTools.Register(register, vesselImportService, fleetCategorizationService);
             McpVoyageTools.Register(register, database, admiral, settings);
-            McpMissionTools.Register(register, database, admiral, settings, git, landingService, missionService, blackBoxCapture);
+            McpMissionTools.Register(register, database, admiral, settings, git, landingService, missionService, blackBoxCapture, blackBoxHooks);
             McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, agentLifecycle, captainToolService);
             McpSignalTools.Register(register, database);
             McpEventTools.Register(register, database);

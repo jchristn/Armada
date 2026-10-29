@@ -70,6 +70,7 @@ namespace Armada.Core.BlackBox
         private readonly BlackBoxGarbageCollector _Gc;
         private readonly BlackBoxSweeper _Sweeper;
         private readonly BlackBoxStoreFactory _Stores;
+        private readonly BlackBoxStorageMigrator _Migrator;
         private readonly IBlackBoxEventSink _Events;
         private readonly LoggingModule _Logging;
         private IAuthorizationService _Authorization = new AuthorizationService();
@@ -90,11 +91,12 @@ namespace Armada.Core.BlackBox
         /// <param name="gc">Garbage collector.</param>
         /// <param name="sweeper">Sweeper.</param>
         /// <param name="stores">Store factory.</param>
+        /// <param name="migrator">Storage migrator.</param>
         /// <param name="events">Event sink.</param>
         /// <param name="logging">Logging module.</param>
         /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
         public BlackBoxService(DatabaseDriver database, ArmadaSettings settings, BlackBoxObjectRepository objects, BlackBoxBriefRenderer renderer, BlackBoxPipeline pipeline,
-            BlackBoxGarbageCollector gc, BlackBoxSweeper sweeper, BlackBoxStoreFactory stores, IBlackBoxEventSink events, LoggingModule logging)
+            BlackBoxGarbageCollector gc, BlackBoxSweeper sweeper, BlackBoxStoreFactory stores, BlackBoxStorageMigrator migrator, IBlackBoxEventSink events, LoggingModule logging)
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -104,6 +106,7 @@ namespace Armada.Core.BlackBox
             _Gc = gc ?? throw new ArgumentNullException(nameof(gc));
             _Sweeper = sweeper ?? throw new ArgumentNullException(nameof(sweeper));
             _Stores = stores ?? throw new ArgumentNullException(nameof(stores));
+            _Migrator = migrator ?? throw new ArgumentNullException(nameof(migrator));
             _Events = events ?? throw new ArgumentNullException(nameof(events));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
         }
@@ -548,26 +551,37 @@ namespace Armada.Core.BlackBox
             {
                 status.Health = await _Stores.GetConfigured().CheckHealthAsync(token).ConfigureAwait(false);
             }
-            catch (NotSupportedException e)
+            catch (Exception e) when (e is NotSupportedException || e is BlackBoxStoreUnavailableException)
             {
                 status.Health = new BlackBoxStoreHealth { Target = status.Target, Healthy = false, Message = e.Message, CheckedUtc = DateTime.UtcNow };
             }
-            status.Usage = (await _Database.BlackBoxEntries.SumBytesByTargetAsync(caller.IsAdmin ? null : caller.TenantId, token).ConfigureAwait(false)).Take(7).ToList();
+            List<BlackBoxStorageTargetUsage> usage = await _Database.BlackBoxEntries.SumBytesByTargetAsync(caller.IsAdmin ? null : caller.TenantId, token).ConfigureAwait(false);
+            if (caller.IsAdmin) BlackBoxMetrics.SetBytes(usage);
+            status.Usage = usage.Take(7).ToList();
+            status.ActiveMigrationId = _Migrator.ActiveJobId;
+            if (status.ActiveMigrationId == null && caller.IsAdmin)
+            {
+                EnumerationResult<BlackBoxStorageMigrationJob> active = await _Database.BlackBoxMigrations.EnumerateActiveAsync(new EnumerationQuery { PageSize = 1 }, token).ConfigureAwait(false);
+                status.ActiveMigrationId = active.Objects.FirstOrDefault()?.Id;
+            }
             return status;
         }
 
         /// <inheritdoc />
-        public Task<BlackBoxStorageMigrationJob> StartStorageMigrationAsync(AuthContext caller, BlackBoxStorageMigrationRequest request, CancellationToken token = default)
+        public async Task<BlackBoxStorageMigrationJob> StartStorageMigrationAsync(AuthContext caller, BlackBoxStorageMigrationRequest request, CancellationToken token = default)
         {
-            // TODO(blackbox-wave2: storage): resumable, paged copy-verify-switch-delete job (plan 4.5).
-            throw new NotImplementedException("Black box storage migration is not implemented yet. TODO(blackbox-wave2: storage)");
+            RequireAdmin(caller);
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return await _Migrator.StartAsync(request, true, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
-        public Task<BlackBoxStorageMigrationJob> GetStorageMigrationAsync(AuthContext caller, string migrationId, CancellationToken token = default)
+        public async Task<BlackBoxStorageMigrationJob> GetStorageMigrationAsync(AuthContext caller, string migrationId, CancellationToken token = default)
         {
-            // TODO(blackbox-wave2: storage): read the job by id.
-            throw new NotImplementedException("Black box storage migration is not implemented yet. TODO(blackbox-wave2: storage)");
+            RequireAdmin(caller);
+            if (String.IsNullOrWhiteSpace(migrationId)) throw new BlackBoxNotFoundException("Black box storage migration not found.");
+            return await _Migrator.GetAsync(migrationId.Trim(), token).ConfigureAwait(false)
+                ?? throw new BlackBoxNotFoundException("Black box storage migration " + migrationId + " not found.");
         }
 
         /// <inheritdoc />
@@ -1023,6 +1037,12 @@ namespace Armada.Core.BlackBox
         private static string OneLine(string value)
         {
             return (value ?? String.Empty).Replace("\r", " ").Replace("\n", " ");
+        }
+
+        private static void RequireAdmin(AuthContext caller)
+        {
+            RequireCaller(caller);
+            if (!caller.IsAdmin) throw new UnauthorizedAccessException("Black box storage migration requires a global admin.");
         }
 
         private static void RequireCaller(AuthContext caller)
