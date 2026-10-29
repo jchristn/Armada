@@ -618,7 +618,7 @@ Every REST error is an `ApiErrorResponse` with a stable `Error` code that matche
   `GET /api/v1/vessels/{id}/history/commits`) report a git failure in an `Error` field of a `200` result.
 - The black box routes add `410` (an object whose bytes the store lost; `Error` `NotFound`) and put a black box code
   in `Data.Code` (`BlackBoxNotFound`, `BlackBoxDeleting`, `BlackBoxObjectCorrupt`, `BlackBoxConfirmationRequired`,
-  `BlackBoxObjectMissing`, `BlackBoxStoreUnavailable`, `InvalidArgument` with `Data.Field`, `NotImplemented`); see
+  `BlackBoxObjectMissing`, `BlackBoxStoreUnavailable`, `BlackBoxActionsUnavailable`, `InvalidArgument` with `Data.Field`); see
   [Black box errors](#black-box-errors).
 - Clients should check the HTTP status code first, then read `Error`.
 
@@ -4721,8 +4721,8 @@ the black box code and `Field` names the offending parameter for `InvalidArgumen
 | 409 | `Conflict` | `BlackBoxObjectCorrupt` | The object's bytes do not match its stored SHA-256 |
 | 409 | `Conflict` | `BlackBoxConfirmationRequired` | A confirmed recovery or recommendation run without a valid `ConfirmToken`, or a path marked `DataLossRisk` without `AcknowledgeDataLoss` |
 | 410 | `NotFound` | `BlackBoxObjectMissing` | The object's row exists but the store lost its bytes |
-| 501 | `NotImplemented` | `NotImplemented` | A confirmed recovery or recommendation run on a server with no action executor wired |
 | 503 | `ServiceUnavailable` | `BlackBoxStoreUnavailable` | The storage target is unreachable, the target is not implemented, or the black box is not wired on this server (every route then answers `503`) |
+| 503 | `ServiceUnavailable` | `BlackBoxActionsUnavailable` | A confirmed recovery or recommendation run on a host with no action executor wired |
 
 ```json
 {
@@ -5587,8 +5587,8 @@ A confirmed call without a token, and a reused token:
 ```
 
 **Errors:** `400` `InvalidArgument` when a step names an unsupported tool or another subject; `403` when the caller may
-not call a step's tool; `404` `BlackBoxNotFound` for an unknown entry or path; `409` `BlackBoxConfirmationRequired`; `501`
-`NotImplemented` when no action executor is wired. Entry visibility is checked first, so an invisible entry is `404`
+not call a step's tool; `404` `BlackBoxNotFound` for an unknown entry or path; `409` `BlackBoxConfirmationRequired`; `503`
+`BlackBoxActionsUnavailable` when no action executor is wired. Entry visibility is checked first, so an invisible entry is `404`
 whatever the state of the runner.
 
 ```bash
@@ -5625,7 +5625,8 @@ Body: `DryRun`, `ConfirmToken`, `AuthorKind` (default `Operator`).
 
 **Errors:** `400` `InvalidArgument` for an advice-only recommendation (no `ApplyAction`); `403`; `404`
 `BlackBoxNotFound` for an unknown recommendation (`Recommendation nope is not recorded on black box entry ...`); `409`
-`BlackBoxConfirmationRequired` without a valid token; `501` `NotImplemented`.
+`BlackBoxConfirmationRequired` without a valid token; `503` `BlackBoxActionsUnavailable` when no action executor is
+wired.
 
 #### POST /api/v1/blackbox/{id}/reanalyze
 
@@ -5832,8 +5833,7 @@ already unfinished returns that job.
 ```
 
 **Errors:** `400` for an unknown, equal-to-`From` or misconfigured target; `403` not a global admin; `409` `Conflict`
-while a different migration is unfinished; `503` `BlackBoxStoreUnavailable` when the target fails its health check;
-`501` `NotImplemented` on a server without storage migration.
+while a different migration is unfinished; `503` `BlackBoxStoreUnavailable` when the target fails its health check.
 
 #### GET /api/v1/blackbox/storage/migrations/{id}
 
@@ -5861,7 +5861,7 @@ One storage migration job (`bbm_` id) with its progress. `State` is `Pending`, `
 }
 ```
 
-**Errors:** `403`; `404` `BlackBoxNotFound` for an unknown job; `501` `NotImplemented`.
+**Errors:** `403`; `404` `BlackBoxNotFound` for an unknown job.
 
 #### POST /api/v1/blackbox/backfill
 

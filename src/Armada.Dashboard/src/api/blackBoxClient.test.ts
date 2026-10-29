@@ -114,11 +114,11 @@ describe('black box client', () => {
     expect(real.stepResults?.[0].succeeded).toBe(true);
   });
 
-  it('reports a 501 from a server without the recovery runner', async () => {
-    stub(jsonResponse(501, { Error: 'NotImplemented', StatusCode: 501, Message: 'not yet', Data: { Code: 'NotImplemented' } }));
+  it('reports a 503 BlackBoxActionsUnavailable from a host that cannot run actions', async () => {
+    stub(jsonResponse(503, { Error: 'ServiceUnavailable', StatusCode: 503, Message: 'no executor', Data: { Code: 'BlackBoxActionsUnavailable' } }));
     const err = await runBlackBoxRecovery('bbx_1', 'rp1').catch((e: unknown) => e);
-    expect((err as ApiError).status).toBe(501);
-    expect(apiErrorCode(err)).toBe('NotImplemented');
+    expect((err as ApiError).status).toBe(503);
+    expect(apiErrorCode(err)).toBe('BlackBoxActionsUnavailable');
   });
 
   it('resolves and deletes by id', async () => {

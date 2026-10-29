@@ -426,7 +426,7 @@ namespace Armada.Server.Routes
                 .WithResponse(400, OpenApiJson.For<ApiErrorResponse>("InvalidArgument"))
                 .WithResponse(404, OpenApiJson.For<ApiErrorResponse>("BlackBoxNotFound"))
                 .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("BlackBoxConfirmationRequired"))
-                .WithResponse(501, OpenApiJson.For<ApiStatusErrorResponse>("NotImplemented"))
+                .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("BlackBoxActionsUnavailable: this host cannot run actions"))
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/blackbox/{id}/recommendations/{recommendationId}/apply", Handle(authenticate, authz, async (req, ctx, svc) =>
@@ -447,7 +447,7 @@ namespace Armada.Server.Routes
                 .WithResponse(200, OpenApiJson.For<BlackBoxRecommendationApplyResult>("Action (dry run) or result"))
                 .WithResponse(404, OpenApiJson.For<ApiErrorResponse>("BlackBoxNotFound"))
                 .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("BlackBoxConfirmationRequired"))
-                .WithResponse(501, OpenApiJson.For<ApiStatusErrorResponse>("NotImplemented"))
+                .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("BlackBoxActionsUnavailable: this host cannot run actions"))
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/blackbox/{id}/reanalyze", Handle(authenticate, authz, async (req, ctx, svc) =>
@@ -552,11 +552,13 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag(Tag)
                 .WithSummary("Start a black box storage migration")
-                .WithDescription("Starts a resumable job that copies every entry's objects to another storage target, verifies them, switches the entry and optionally deletes the source. Returns the job; poll GET /api/v1/blackbox/storage/migrations/{id}. Global admins only. 501 NotImplemented on a server where storage migration is not merged yet.")
+                .WithDescription("Starts a resumable job that copies every entry's objects to another storage target, verifies them, switches the entry and optionally deletes the source. Returns the job; poll GET /api/v1/blackbox/storage/migrations/{id}. Global admins only. 400 InvalidArgument for an unknown or misconfigured target or the same source and target; 409 while another migration is running; 503 BlackBoxStoreUnavailable when the target store is not healthy.")
                 .WithRequestBody(OpenApiJson.BodyFor<BlackBoxStorageMigrationRequest>("Target, source, deleteSource and batchSize", true))
                 .WithResponse(200, OpenApiJson.For<BlackBoxStorageMigrationJob>("The job"))
+                .WithResponse(400, OpenApiJson.For<ApiErrorResponse>("InvalidArgument"))
                 .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not a global admin"))
-                .WithResponse(501, OpenApiJson.For<ApiStatusErrorResponse>("NotImplemented"))
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Another migration is running"))
+                .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("BlackBoxStoreUnavailable"))
                 .WithSecurity("ApiKey"));
 
             app.Get("/api/v1/blackbox/storage/migrations/{id}", Handle(authenticate, authz, async (req, ctx, svc) =>
@@ -564,12 +566,11 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag(Tag)
                 .WithSummary("Get a black box storage migration job")
-                .WithDescription("One storage migration job with its progress. Global admins only. 501 NotImplemented on a server where storage migration is not merged yet.")
+                .WithDescription("One storage migration job with its progress. Global admins only. 404 BlackBoxNotFound for an unknown job.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Migration job ID"))
                 .WithResponse(200, OpenApiJson.For<BlackBoxStorageMigrationJob>("The job"))
                 .WithResponse(403, OpenApiJson.For<ApiErrorResponse>("Not a global admin"))
-                .WithResponse(404, OpenApiJson.For<ApiErrorResponse>("Not found"))
-                .WithResponse(501, OpenApiJson.For<ApiStatusErrorResponse>("NotImplemented"))
+                .WithResponse(404, OpenApiJson.For<ApiErrorResponse>("BlackBoxNotFound"))
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/blackbox/backfill", Handle(authenticate, authz, async (req, ctx, svc) =>

@@ -966,8 +966,10 @@
       "requestRequired": true,
       "responses": {
         "200": "BlackBoxStorageMigrationJob",
+        "400": "ApiErrorResponse",
         "403": "ApiErrorResponse",
-        "501": "ApiStatusErrorResponse"
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
       },
       "tags": [
         "BlackBox"
@@ -985,8 +987,7 @@
       "responses": {
         "200": "BlackBoxStorageMigrationJob",
         "403": "ApiErrorResponse",
-        "404": "ApiErrorResponse",
-        "501": "ApiStatusErrorResponse"
+        "404": "ApiErrorResponse"
       },
       "tags": [
         "BlackBox"
@@ -1236,7 +1237,7 @@
         "200": "BlackBoxRecommendationApplyResult",
         "404": "ApiErrorResponse",
         "409": "ApiErrorResponse",
-        "501": "ApiStatusErrorResponse"
+        "503": "ApiStatusErrorResponse"
       },
       "tags": [
         "BlackBox"
@@ -1256,7 +1257,7 @@
         "400": "ApiErrorResponse",
         "404": "ApiErrorResponse",
         "409": "ApiErrorResponse",
-        "501": "ApiStatusErrorResponse"
+        "503": "ApiStatusErrorResponse"
       },
       "tags": [
         "BlackBox"

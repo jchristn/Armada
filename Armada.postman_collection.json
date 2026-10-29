@@ -16120,7 +16120,7 @@
                                 "apply"
                             ]
                         },
-                        "description": "Dry run of a config recommendation recorded in the entry's analysis (ConfigRecommendations[].Id): returns the action and a bbc_ ConfirmToken; a second call with DryRun false and the token applies it. blackboxRecommendationId is set by Read the Analysis section when the analysis has a recommendation; otherwise the default value names no recommendation and the route answers 404 BlackBoxNotFound, which the test accepts. 501 when the action has no executor.",
+                        "description": "Dry run of a config recommendation recorded in the entry's analysis (ConfigRecommendations[].Id): returns the action and a bbc_ ConfirmToken; a second call with DryRun false and the token applies it. blackboxRecommendationId is set by Read the Analysis section when the analysis has a recommendation; otherwise the default value names no recommendation and the route answers 404 BlackBoxNotFound, which the test accepts. 503 BlackBoxActionsUnavailable when the host has no action executor.",
                         "body": {
                             "mode": "raw",
                             "raw": "{\n  \"DryRun\": true\n}",
@@ -16333,7 +16333,7 @@
                                 "{{blackboxPathId}}"
                             ]
                         },
-                        "description": "Runs the path with the token from the dry run. For bbx-exec-006.restart this restarts the mission (it returns to Pending; with no captain available it stays there). The token is single use: replaying it is 409 BlackBoxConfirmationRequired (second example). 501 when a step has no executor.",
+                        "description": "Runs the path with the token from the dry run. For bbx-exec-006.restart this restarts the mission (it returns to Pending; with no captain available it stays there). The token is single use: replaying it is 409 BlackBoxConfirmationRequired (second example). 503 BlackBoxActionsUnavailable when the host has no action executor.",
                         "body": {
                             "mode": "raw",
                             "raw": "{\n  \"DryRun\": false,\n  \"ConfirmToken\": \"{{blackboxConfirmToken}}\"\n}",
@@ -16836,7 +16836,7 @@
                                 "migrate"
                             ]
                         },
-                        "description": "Start a background copy of entry objects to another target (To Database or Disk, optional From, DeleteSource, BatchSize). Copying (DeleteSource false) leaves the source in place; entries already on the target are skipped. The test script stores the job id in blackboxMigrationId. 409 when a migration is already running; 501 when the target is not available.",
+                        "description": "Start a background copy of entry objects to another target (To Database or Disk, optional From, DeleteSource, BatchSize). Copying (DeleteSource false) leaves the source in place; entries already on the target are skipped. The test script stores the job id in blackboxMigrationId. 409 when a migration is already running; 400 for a bad target; 503 BlackBoxStoreUnavailable when the target is not healthy.",
                         "body": {
                             "mode": "raw",
                             "raw": "{\n  \"To\": \"Disk\",\n  \"DeleteSource\": false,\n  \"BatchSize\": 100\n}",

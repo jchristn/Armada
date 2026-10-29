@@ -67,10 +67,9 @@ namespace Armada.Server.Mcp.Tools
 
         /// <summary>
         /// Map a black box error to a typed tool error, or null when the exception is not a black box error:
-        /// BlackBoxNotFound and BlackBoxObjectMissing are NotFound, BlackBoxStoreUnavailable is Unavailable, every other
-        /// black box code (BlackBoxDeleting, BlackBoxObjectCorrupt, BlackBoxConfirmationRequired) is Conflict, and a
-        /// wave-two operation that is not merged yet (<see cref="NotImplementedException"/>) is Unavailable with Code
-        /// NotImplemented. Each carries its code in Code.
+        /// BlackBoxNotFound and BlackBoxObjectMissing are NotFound, BlackBoxStoreUnavailable and BlackBoxActionsUnavailable
+        /// are Unavailable, and every other black box code (BlackBoxDeleting, BlackBoxObjectCorrupt,
+        /// BlackBoxConfirmationRequired) is Conflict. Each carries its code in Code.
         /// </summary>
         /// <param name="ex">Exception.</param>
         /// <returns>The error, or null.</returns>
@@ -78,9 +77,8 @@ namespace Armada.Server.Mcp.Tools
         {
             if (ex == null) return null;
             if (ex is BlackBoxNotFoundException || ex is BlackBoxObjectMissingException) return McpToolError.NotFound(ex.Message, ((BlackBoxException)ex).Code);
-            if (ex is BlackBoxStoreUnavailableException unavailable) return McpToolError.Unavailable(unavailable.Message, unavailable.Code);
+            if (ex is BlackBoxStoreUnavailableException || ex is BlackBoxActionsUnavailableException) return McpToolError.Unavailable(ex.Message, ((BlackBoxException)ex).Code);
             if (ex is BlackBoxException other) return McpToolError.Conflict(other.Message, other.Code);
-            if (ex is NotImplementedException) return McpToolError.Unavailable(ex.Message, "NotImplemented");
             return null;
         }
 

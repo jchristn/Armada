@@ -1508,7 +1508,7 @@ or voyage's **current** entry. One of the three is required (`InvalidArgument` o
 | `Conflict` | `BlackBoxObjectCorrupt` | The object's bytes do not match its SHA-256 |
 | `Conflict` | `BlackBoxConfirmationRequired` | A confirmed recovery or recommendation run without a valid `confirmToken` (missing, expired, used, another caller's, or the mission or plan changed), or a `dataLossRisk` path without `acknowledgeDataLoss` |
 | `Unavailable` | `BlackBoxStoreUnavailable` | The storage target is unreachable |
-| `Unavailable` | `NotImplemented` | A confirmed run on a server with no action executor wired |
+| `Unavailable` | `BlackBoxActionsUnavailable` | A confirmed run on a host with no action executor wired |
 | `Unavailable` | null | The black box is not available on this server (every tool on the stdio server) |
 | `InvalidArgument` | null, or `CollectionLimitExceeded` | A missing or invalid argument (format, audience, section, resolution, order, offset, length, a note body outside 1 to 8000 characters, a search query outside 1 to 200); more than 1000 `entryIds` is `CollectionLimitExceeded` |
 | `Forbidden` | null | The tool's permission level, or a recovery step whose tool the caller could not call directly |
@@ -2122,8 +2122,8 @@ or foreign one):
 ```
 
 `InvalidArgument` without `pathId`, or when a step names an unsupported tool or another subject; `NotFound` for an
-unknown path; `Forbidden` when you could not call a step's tool directly; `Unavailable` (`NotImplemented`) without an
-action executor.
+unknown path; `Forbidden` when you could not call a step's tool directly; `Unavailable`
+(`BlackBoxActionsUnavailable`) without an action executor.
 
 ### apply_blackbox_recommendation
 

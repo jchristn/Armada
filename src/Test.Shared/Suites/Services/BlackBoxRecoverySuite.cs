@@ -17,7 +17,7 @@ namespace Test.Shared.Suites.Services
     /// IBlackBoxService.RunRecoveryAsync and ApplyRecommendationAsync (plan section 9 safety): dry run, then a confirmed
     /// run that executes exactly the recorded actions once, annotates the entry and emits blackbox.recovery_run; and every
     /// refusal (no dry run, expired, wrong path, reused, mission or vessel changed, data loss without acknowledgement,
-    /// another caller, unauthorized caller, advice-only recommendation, no executor).
+    /// another caller, unauthorized caller, advice-only recommendation, unmet step preconditions, no executor (BlackBoxActionsUnavailable)).
     /// </summary>
     public sealed class BlackBoxRecoverySuite : IArmadaTestSuite
     {
@@ -136,7 +136,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(2, f.Executor.Calls.Count, "refused callers ran nothing");
             }));
 
-            cases.Add(Case("failures_and_no_executor", "A failed step stops the run and the rest are not run; without an executor a confirmed run is not implemented", TestTags.Negative, async () =>
+            cases.Add(Case("failures_and_no_executor", "A failed step stops the run and the rest are not run; without an executor a confirmed run is BlackBoxActionsUnavailable", TestTags.Negative, async () =>
             {
                 using BlackBoxRecoveryFixture f = await BlackBoxRecoveryFixture.CreateAsync().ConfigureAwait(false);
                 f.Executor.FailTools.Add("update_vessel");
@@ -152,7 +152,11 @@ namespace Test.Shared.Suites.Services
 
                 f.Service.ActionExecutor = null;
                 BlackBoxRecoveryRunResult again = await DryAsync(f, PullRequestPath).ConfigureAwait(false);
-                await AssertThrowsAsync<NotImplementedException>(() => f.Service.RunRecoveryAsync(f.Admin, f.EntryId, PullRequestPath, Confirm(again.ConfirmToken)), "no executor").ConfigureAwait(false);
+                await AssertThrowsAsync<BlackBoxActionsUnavailableException>(() => f.Service.RunRecoveryAsync(f.Admin, f.EntryId, PullRequestPath, Confirm(again.ConfirmToken)), "no executor").ConfigureAwait(false);
+                McpToolError? unavailable = Armada.Server.Mcp.Tools.McpBlackBoxTools.ToToolError(new BlackBoxActionsUnavailableException("no executor"));
+                AssertEqual(McpToolErrorCodeEnum.Unavailable, unavailable?.ErrorCode, "MCP maps it to Unavailable");
+                AssertEqual(BlackBoxActionsUnavailableException.ErrorCode, unavailable?.Code, "with its code");
+                AssertNull(Armada.Server.Mcp.Tools.McpBlackBoxTools.ToToolError(new NotImplementedException("x")), "NotImplementedException is no longer a black box error");
             }));
 
             cases.Add(Case("preconditions", "A restart path on a mission that is already Pending is refused on the dry run (no token) and nothing runs; a precondition that fails between the dry run and the confirm (the dock was deleted) refuses the confirmed run instead of reporting success", TestTags.Negative, async () =>

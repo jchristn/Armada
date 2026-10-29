@@ -1448,7 +1448,9 @@ request)` run only what the entry recorded:
    "Not run". Tools that return a result with `success: false` (such as `retry_landing`) count as failed.
 7. The entry is annotated (`blackbox_notes`, `authorKind` from the request, default `Agent`; human UIs pass `Operator`)
    and `blackbox.recovery_run` is emitted for dry runs and runs. The result carries per-step results.
-8. Where no `IBlackBoxActionExecutor` is wired, confirmed calls throw `NotImplementedException`.
+8. Where no `IBlackBoxActionExecutor` is wired, confirmed calls throw `BlackBoxActionsUnavailableException` (REST `503`
+   `BlackBoxActionsUnavailable`, MCP `Unavailable`). A step whose precondition is not met is refused (`Refused`,
+   `UnmetPreconditions`) on the dry run and on the confirm instead of being run.
 
 ### 13.15 Maintainer loop: bundle, trends, fixtures
 

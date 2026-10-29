@@ -174,7 +174,7 @@ describe('ArmadaBlackBoxClient errors', () => {
     { status: 409, error: 'BlackBoxDeleting', kind: 'conflict', text: /conflicts/ },
     { status: 410, error: 'BlackBoxObjectMissing', kind: 'gone', text: /missing from storage/ },
     { status: 503, error: 'BlackBoxStoreUnavailable', kind: 'unavailable', text: /store is unavailable/ },
-    { status: 501, error: 'NotImplemented', kind: 'notImplemented', text: /recovery runner may not be merged/ },
+    { status: 501, error: 'NotImplemented', kind: 'notImplemented', text: /does not support that operation/ },
     { status: 500, error: 'InternalError', kind: 'server', text: /server error/ },
     { status: 400, error: 'BadRequest', kind: 'badRequest', text: /rejected the request/ },
   ];
@@ -198,6 +198,14 @@ describe('ArmadaBlackBoxClient errors', () => {
     });
     const field = new MockFetch().otherwise(() => ({ status: 400, json: { Error: 'BadRequest', Message: 'audience must be agent, user or maintainer.', Data: { Code: 'InvalidArgument', Field: 'audience' } } }));
     await rejectsWith(client(field).getBrief('bbx_1', 'agent'), 'badRequest', (err) => assert.strictEqual(err.code, 'InvalidArgument'));
+  });
+
+  it('explains a 503 BlackBoxActionsUnavailable as a host that cannot run actions', async () => {
+    const mock = new MockFetch().otherwise(() => ({ status: 503, json: { Error: 'ServiceUnavailable', StatusCode: 503, Message: 'no executor', Data: { Code: 'BlackBoxActionsUnavailable' } } }));
+    await rejectsWith(client(mock).getEntry('bbx_1'), 'unavailable', (err) => {
+      assert.strictEqual(err.code, 'BlackBoxActionsUnavailable');
+      assert.match(describeError(err), /cannot run black box recovery actions/);
+    });
   });
 
   it('maps a 404 without a black box code to a route hint', async () => {

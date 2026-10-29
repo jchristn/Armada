@@ -29,7 +29,7 @@ namespace Armada.Core.BlackBox
 
         /// <summary>
         /// Runs recorded recovery and recommendation actions as the caller (the Admiral wires one that invokes the MCP tool
-        /// handler), or null; confirmed runs then fail with NotImplementedException.
+        /// handler), or null; confirmed runs then fail with BlackBoxActionsUnavailableException.
         /// </summary>
         public IBlackBoxActionExecutor? ActionExecutor { get; set; } = null;
 
@@ -661,7 +661,7 @@ namespace Armada.Core.BlackBox
                 return result;
             }
 
-            IBlackBoxActionExecutor executor = ActionExecutor ?? throw new NotImplementedException("Running black box recovery actions is not available on this host (no action executor is wired).");
+            IBlackBoxActionExecutor executor = ActionExecutor ?? throw new BlackBoxActionsUnavailableException("Running black box recovery actions is not available on this host (no action executor is wired); follow the steps by hand.");
 
             bool failed = false;
             int ran = 0;
@@ -729,7 +729,7 @@ namespace Armada.Core.BlackBox
                 throw new BlackBoxConfirmationException("The mission or vessel changed since the dry run; check the current configuration and run a new dry run.");
             if (!String.Equals(confirmed.PlanHash, planHash, StringComparison.Ordinal))
                 throw new BlackBoxConfirmationException("Recommendation " + rec.Id + " changed since the dry run (the entry was re-analyzed); run a new dry run.");
-            IBlackBoxActionExecutor executor = ActionExecutor ?? throw new NotImplementedException("Applying black box recommendations is not available on this host (no action executor is wired).");
+            IBlackBoxActionExecutor executor = ActionExecutor ?? throw new BlackBoxActionsUnavailableException("Applying black box recommendations is not available on this host (no action executor is wired); apply it by hand.");
 
             BlackBoxRecoveryStepResult outcome = await ExecuteAsync(executor, caller, rec.ApplyAction, token).ConfigureAwait(false);
             result.Succeeded = outcome.Succeeded;

@@ -342,7 +342,7 @@ describe('BlackBoxPanel recovery', () => {
     const dialog = await openDryRun(/Retry the landing/);
     expect(await within(dialog).findByText(/not allowed to run this action/)).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Confirm and run' })).not.toBeInTheDocument();
-    vi.mocked(runBlackBoxRecovery).mockRejectedValueOnce(apiError(501));
+    vi.mocked(runBlackBoxRecovery).mockRejectedValueOnce(apiError(503, 'BlackBoxActionsUnavailable'));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Dry run again' }));
     expect(await within(dialog).findByText(/cannot run recovery actions yet/)).toBeInTheDocument();
   });

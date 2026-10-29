@@ -32,7 +32,7 @@ namespace Test.Shared.Suites.E2E
     /// and another tenant's entry are 404 BlackBoxNotFound (no existence leak); invalid section, audience, offset and
     /// length are 400 with the field; page size 0 and 1001 are normalized; 1001 ids are 400 CollectionLimitExceeded; a
     /// regular user calling the admin routes is 403; an entry in the Deleting state is 409 BlackBoxDeleting; recovery and
-    /// recommendation runs answer 501 NotImplemented until the recovery runner merges.
+    /// recommendation runs need a dry run and its confirm token (409 BlackBoxConfirmationRequired without one).
     /// </summary>
     public sealed class BlackBoxApiSuite : IArmadaTestSuite
     {
@@ -531,7 +531,7 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(_EntryId, status.LastBlackBoxEntryId, "mission_status carries LastBlackBoxEntryId");
             }));
 
-            cases.Add(CaseAsync("mcp_write_tools_and_errors", "annotate (Agent), resolve, pin; another tenant is NotFound; admin tools are Forbidden to a regular user; recovery answers NotImplemented until the runner merges", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("mcp_write_tools_and_errors", "annotate (Agent), resolve, pin; another tenant is NotFound; admin tools are Forbidden to a regular user; a confirmed recovery or recommendation without a token is Conflict BlackBoxConfirmationRequired", TestTags.Negative, async () =>
             {
                 RequireSetup();
                 using McpToolClient user = Mcp(_UserA!);

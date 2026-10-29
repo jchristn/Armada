@@ -95,8 +95,8 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/blackbox/retention` | TenantAdmin |  | 200 `BlackBoxRetentionStatus`, 403 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/search` | Authenticated | `BlackBoxSearchRequest` | 200 `EnumerationResult<BlackBoxEntrySummary>`, 400 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/storage` | AdminOnly |  | 200 `BlackBoxStorageStatus`, 403 `ApiErrorResponse` |  |
-| POST | `/api/v1/blackbox/storage/migrate` | AdminOnly | `BlackBoxStorageMigrationRequest` | 200 `BlackBoxStorageMigrationJob`, 403 `ApiErrorResponse`, 501 `ApiStatusErrorResponse` |  |
-| GET | `/api/v1/blackbox/storage/migrations/{id}` | AdminOnly |  | 200 `BlackBoxStorageMigrationJob`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 501 `ApiStatusErrorResponse` |  |
+| POST | `/api/v1/blackbox/storage/migrate` | AdminOnly | `BlackBoxStorageMigrationRequest` | 200 `BlackBoxStorageMigrationJob`, 400 `ApiErrorResponse`, 403 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| GET | `/api/v1/blackbox/storage/migrations/{id}` | AdminOnly |  | 200 `BlackBoxStorageMigrationJob`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | DELETE | `/api/v1/blackbox/{id}` | TenantAdmin |  | 200 `BlackBoxDeleteResult`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/{id}` | Authenticated |  | 200 `BlackBoxEntry`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/{id}/brief` | Authenticated |  | 200 `string`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
@@ -110,8 +110,8 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/blackbox/{id}/objects/{name}` | Authenticated |  | 200 `string`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 410 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/blackbox/{id}/pin` | Authenticated |  | 200 `BlackBoxEntry`, 404 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/{id}/reanalyze` | TenantAdmin |  | 200 `BlackBoxEntry`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
-| POST | `/api/v1/blackbox/{id}/recommendations/{recommendationId}/apply` | Authenticated | `BlackBoxRecommendationApplyRequest` (optional) | 200 `BlackBoxRecommendationApplyResult`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 501 `ApiStatusErrorResponse` |  |
-| POST | `/api/v1/blackbox/{id}/recovery/{pathId}` | Authenticated | `BlackBoxRecoveryRunRequest` (optional) | 200 `BlackBoxRecoveryRunResult`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 501 `ApiStatusErrorResponse` |  |
+| POST | `/api/v1/blackbox/{id}/recommendations/{recommendationId}/apply` | Authenticated | `BlackBoxRecommendationApplyRequest` (optional) | 200 `BlackBoxRecommendationApplyResult`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| POST | `/api/v1/blackbox/{id}/recovery/{pathId}` | Authenticated | `BlackBoxRecoveryRunRequest` (optional) | 200 `BlackBoxRecoveryRunResult`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/blackbox/{id}/resolve` | Authenticated | `BlackBoxResolveRequest` | 200 `BlackBoxEntry`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/{id}/sections/{section}` | Authenticated |  | 200 `BlackBoxSectionResult`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/{id}/unpin` | Authenticated |  | 200 `BlackBoxEntry`, 404 `ApiErrorResponse` |  |
