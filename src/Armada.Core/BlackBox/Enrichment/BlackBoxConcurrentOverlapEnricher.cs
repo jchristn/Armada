@@ -23,9 +23,9 @@ namespace Armada.Core.BlackBox.Enrichment
         #region Public-Members
 
         /// <summary>
-        /// Most candidate missions read for one entry.
+        /// Most candidate missions read for one entry (the vessel's newest).
         /// </summary>
-        public const int MaxCandidates = 500;
+        public const int MaxCandidates = 200;
 
         /// <summary>
         /// Most branch reads (missions without a diff snapshot) for one entry.
@@ -82,7 +82,7 @@ namespace Armada.Core.BlackBox.Enrichment
             if (windowEnd < windowStart) windowEnd = windowStart;
             HashSet<string> attributed = new HashSet<string>((record.Conflict?.ConflictingMissions ?? new List<BlackBoxConflictingMission>()).Where(m => m.MissionId != null).Select(m => m.MissionId!), StringComparer.Ordinal);
 
-            List<Mission> candidates = await ReadCandidatesAsync(mission, windowStart, token).ConfigureAwait(false);
+            List<Mission> candidates = await ReadCandidatesAsync(mission, token).ConfigureAwait(false);
             List<BlackBoxConflictingMission> found = new List<BlackBoxConflictingMission>();
             int gitLookups = 0;
             int skippedLookups = 0;
@@ -127,10 +127,10 @@ namespace Armada.Core.BlackBox.Enrichment
                 BlackBoxRecordBounder.AddNote(record.Truncation, "Concurrent overlap read the branches of " + MaxGitLookups + " missions without a diff snapshot; " + skippedLookups + " more were not compared.");
         }
 
-        private async Task<List<Mission>> ReadCandidatesAsync(Mission mission, DateTime windowStart, CancellationToken token)
+        private async Task<List<Mission>> ReadCandidatesAsync(Mission mission, CancellationToken token)
         {
             List<Mission> candidates = new List<Mission>();
-            EnumerationQuery query = new EnumerationQuery { VesselId = mission.VesselId, PageSize = 100, PageNumber = 1, Order = EnumerationOrderEnum.CreatedDescending };
+            EnumerationQuery query = new EnumerationQuery { VesselId = mission.VesselId, PageSize = 50, PageNumber = 1, Order = EnumerationOrderEnum.CreatedDescending };
             while (candidates.Count < MaxCandidates)
             {
                 EnumerationResult<Mission> page = await _Database.Missions.EnumerateAsync(query, token).ConfigureAwait(false);
