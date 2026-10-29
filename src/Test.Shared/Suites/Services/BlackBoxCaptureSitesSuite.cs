@@ -329,6 +329,35 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(BlackBoxStepEnum.OperatorTransition, (await CurrentAsync(t.Driver, queued.Id).ConfigureAwait(false)).Step, "its missions are operator transitions");
             }));
 
+            cases.Add(Case("cancel_with_options", "CancelMissionAsync with MissionCancelOptions records exactly one entry with the caller's step, kind, reason and note (a vessel delete is one VesselDeleted entry); without options it stays one OperatorTransition entry", TestTags.Positive, async () =>
+            {
+                using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                ArmadaSettings settings = Settings();
+                using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver, settings);
+                Services s = Services.Create(t.Driver, settings, bb.Capture, new StubGitService());
+                Mission doomed = await t.Driver.Missions.CreateAsync(new Mission("vessel going away") { Status = MissionStatusEnum.Pending }).ConfigureAwait(false);
+                MissionCancelOptions options = new MissionCancelOptions
+                {
+                    BlackBoxStep = BlackBoxStepEnum.VesselDeleted,
+                    FailureKind = MissionFailureKindEnum.OperatorAction,
+                    FailureReason = "Vessel deleted",
+                    ConfigureCapture = c => c.Note = "Vessel bb was deleted through REST."
+                };
+                Mission cancelled = await s.Admiral.CancelMissionAsync(doomed, options).ConfigureAwait(false);
+                AssertEqual(MissionStatusEnum.Cancelled, cancelled.Status);
+                AssertEqual("Vessel deleted", (await t.Driver.Missions.ReadAsync(doomed.Id).ConfigureAwait(false))!.FailureReason, "reason written with the cancel");
+                AssertEqual(1L, await CountAsync(t.Driver, doomed.Id).ConfigureAwait(false), "one entry");
+                BlackBoxEntry entry = await CurrentAsync(t.Driver, doomed.Id).ConfigureAwait(false);
+                AssertEntry(entry, BlackBoxPhaseEnum.External, BlackBoxStepEnum.VesselDeleted, MissionFailureKindEnum.OperatorAction, "Pending", "Cancelled");
+                AssertTrue((await bb.Pipeline.LoadRecordAsync(entry).ConfigureAwait(false)).Truncation.Notes.Any(n => n.Contains("deleted through REST", StringComparison.Ordinal)), "the note is recorded");
+
+                Mission plain = await t.Driver.Missions.CreateAsync(new Mission("plain cancel") { Status = MissionStatusEnum.Pending }).ConfigureAwait(false);
+                await s.Admiral.CancelMissionAsync(plain, null).ConfigureAwait(false);
+                AssertEqual(1L, await CountAsync(t.Driver, plain.Id).ConfigureAwait(false), "one entry without options");
+                AssertEqual(BlackBoxStepEnum.OperatorTransition, (await CurrentAsync(t.Driver, plain.Id).ConfigureAwait(false)).Step, "default step unchanged");
+                AssertNull((await t.Driver.Missions.ReadAsync(plain.Id).ConfigureAwait(false))!.FailureReason, "no reason written without options");
+            }));
+
             cases.Add(Case("landing_conflict_records_files", "A real target-integration conflict records TargetIntegration, the conflicted files and blackbox_files rows, the branch tip and the target tip", TestTags.Positive, async () =>
             {
                 using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -664,8 +693,9 @@ namespace Test.Shared.Suites.Services
         private static IEnumerable<BlackBoxStepEnum> SkippedSteps()
         {
             // NoEligibleCaptain and MemoryPressure are waits, not failure writes (MemoryPressure records the typed
-            // mission.dispatch_deferred event). VesselDeleted is written by the vessel routes and MCP tools, which are
-            // owned by the API wave; CancelMissionAsync records those missions as OperatorTransition.
+            // mission.dispatch_deferred event). VesselDeleted is recorded by the vessel routes and MCP tools through
+            // CancelMissionAsync with MissionCancelOptions (cancel_with_options below) and by the WebSocket command
+            // directly; E2E.BlackBox/vessel_deletion_captured covers every surface.
             return new[] { BlackBoxStepEnum.NoEligibleCaptain, BlackBoxStepEnum.MemoryPressure, BlackBoxStepEnum.VesselDeleted };
         }
 

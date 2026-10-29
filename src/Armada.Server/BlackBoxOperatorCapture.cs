@@ -115,6 +115,45 @@ namespace Armada.Server
             }, token);
         }
 
+        /// <summary>
+        /// The cancel options a vessel delete passes to <c>IAdmiralService.CancelMissionAsync</c> for each active
+        /// mission, so the cancel stops the agent and records a single VesselDeleted entry (kind OperatorAction, reason
+        /// "Vessel deleted", the vessel and the surface in the note, the caller as the failure site) instead of an
+        /// OperatorTransition entry this helper's <see cref="RecordVesselDeletedAsync"/> would then supersede.
+        /// </summary>
+        /// <param name="statusBefore">Status before the cancellation.</param>
+        /// <param name="vessel">The vessel being deleted, or null.</param>
+        /// <param name="missionVesselId">The mission's vessel id, named when the vessel is null.</param>
+        /// <param name="surface">Surface that deleted the vessel (REST, MCP or WebSocket).</param>
+        /// <param name="callerMember">Filled by the compiler.</param>
+        /// <param name="callerFile">Filled by the compiler.</param>
+        /// <param name="callerLine">Filled by the compiler.</param>
+        /// <returns>The options.</returns>
+        public static MissionCancelOptions VesselDeletedCancel(
+            MissionStatusEnum statusBefore,
+            Vessel? vessel,
+            string? missionVesselId,
+            string surface,
+            [CallerMemberName] string callerMember = "",
+            [CallerFilePath] string callerFile = "",
+            [CallerLineNumber] int callerLine = 0)
+        {
+            string note = "Vessel " + (vessel?.Name ?? missionVesselId ?? "(unknown)") + " was deleted through " + surface + " while the mission was " + statusBefore + ".";
+            return new MissionCancelOptions
+            {
+                BlackBoxStep = BlackBoxStepEnum.VesselDeleted,
+                FailureKind = MissionFailureKindEnum.OperatorAction,
+                FailureReason = "Vessel deleted",
+                ConfigureCapture = context =>
+                {
+                    context.Vessel = vessel;
+                    context.Reason = "Vessel deleted";
+                    context.Note = note;
+                    SetSite(context, callerMember, callerFile, callerLine);
+                }
+            };
+        }
+
         #endregion
 
         #region Private-Methods

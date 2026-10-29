@@ -840,9 +840,11 @@ Site conventions (every failure write in plan 5.1 is wired; `Services.BlackBoxCa
   `MissionLandingHandler` passes `WorktreeExisted=false` when it had to recreate, or could not recreate, the worktree,
   and the dock head and target tip read by `LandingTargetSynchronization`. A memory-pressure deferral records one typed
   `mission.dispatch_deferred` event (`MissionDispatchDeferredPayload`) per Pending mission and reason.
-- Not captured inline: `NoEligibleCaptain` and `MemoryPressure` (waits, not failure writes) and `VesselDeleted` (written by
-  the vessel routes and MCP tools; their missions are recorded as `OperatorTransition` by `CancelMissionAsync`, and the
-  sweeper covers the rest).
+- Not captured inline: `NoEligibleCaptain` and `MemoryPressure` (waits, not failure writes). `VesselDeleted` is named by
+  the vessel delete on REST and MCP, which cancel each active mission through `CancelMissionAsync` with
+  `MissionCancelOptions` (`BlackBoxOperatorCapture.VesselDeletedCancel`), so the cancel records exactly one
+  `VesselDeleted` entry per mission; the WebSocket command records it directly. Other cancels keep `OperatorTransition`
+  or `OperatorStop`.
 
 ### 13.3 Services
 ### IBlackBoxCapture

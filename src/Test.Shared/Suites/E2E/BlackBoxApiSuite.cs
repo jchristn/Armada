@@ -815,6 +815,10 @@ namespace Test.Shared.Suites.E2E
                     }
 
                     await ExpectOperatorEntryAsync(a, mission.Id, BlackBoxStepEnum.VesselDeleted, surface, MissionStatusEnum.Pending).ConfigureAwait(false);
+                    EnumerationResult<BlackBoxEntrySummary> all = await GetJsonAsync<EnumerationResult<BlackBoxEntrySummary>>(a, "/api/v1/blackbox?missionId=" + mission.Id).ConfigureAwait(false);
+                    AssertEqual(1L, all.TotalRecords, surface + ": a vessel delete records exactly one entry per mission: " + String.Join(", ", all.Objects.Select(o => o.Step)));
+                    AssertEqual(BlackBoxStepEnum.VesselDeleted, all.Objects.Single().Step, surface + ": the one entry is VesselDeleted, not OperatorTransition");
+                    AssertEqual((MissionFailureKindEnum?)MissionFailureKindEnum.OperatorAction, all.Objects.Single().FailureKind, surface + ": kind OperatorAction");
                 }
                 }
                 finally
@@ -901,8 +905,8 @@ namespace Test.Shared.Suites.E2E
 
         private static async Task ExpectOperatorEntryAsync(HttpClient client, string missionId, BlackBoxStepEnum step, string surface, MissionStatusEnum statusBefore)
         {
-            // The current entry (a vessel delete through REST or MCP first cancels through the admiral, whose own
-            // OperatorTransition entry the VesselDeleted entry supersedes).
+            // The current entry (a vessel delete cancels through the admiral with VesselDeleted cancel options, so it
+            // is the only entry).
             EnumerationResult<BlackBoxEntrySummary> page = await GetJsonAsync<EnumerationResult<BlackBoxEntrySummary>>(client, "/api/v1/blackbox?isCurrent=true&missionId=" + missionId).ConfigureAwait(false);
             AssertEqual(1L, page.TotalRecords, surface + ": one current entry for " + missionId);
             BlackBoxEntrySummary entry = page.Objects.Single();
