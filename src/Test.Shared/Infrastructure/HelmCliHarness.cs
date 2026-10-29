@@ -11,7 +11,7 @@ namespace Test.Shared.Infrastructure
 
     /// <summary>
     /// Runs the <c>armada</c> CLI in process with the real command model (<see cref="Program.ConfigureCommands"/>),
-    /// capturing the Spectre console (no colors, not interactive) and standard output. Host independent: the
+    /// capturing the Spectre console (no colors, not interactive), standard output, and standard error. Host independent: the
     /// ARMADA_SERVER_URL, ARMADA_URL, and ARMADA_TOKEN variables are cleared for the run. The runner executes cases
     /// one at a time, so swapping the process-wide console and environment for the call is safe.
     /// </summary>
@@ -36,8 +36,10 @@ namespace Test.Shared.Infrastructure
 
             IAnsiConsole previousConsole = AnsiConsole.Console;
             TextWriter previousOut = Console.Out;
+            TextWriter previousError = Console.Error;
             StringWriter console = new StringWriter();
             StringWriter stdout = new StringWriter();
+            StringWriter stderr = new StringWriter();
             AnsiConsole.Console = AnsiConsole.Create(new AnsiConsoleSettings
             {
                 Ansi = AnsiSupport.No,
@@ -46,6 +48,7 @@ namespace Test.Shared.Infrastructure
                 Out = new AnsiConsoleOutput(console)
             });
             Console.SetOut(stdout);
+            Console.SetError(stderr);
             try
             {
                 CommandApp app = new CommandApp(new TypeRegistrar());
@@ -59,11 +62,13 @@ namespace Test.Shared.Infrastructure
                 run.ExitCode = exit;
                 run.Output = console.ToString();
                 run.StandardOutput = stdout.ToString();
+                run.StandardError = stderr.ToString();
                 return run;
             }
             finally
             {
                 Console.SetOut(previousOut);
+                Console.SetError(previousError);
                 AnsiConsole.Console = previousConsole;
                 foreach (KeyValuePair<string, string?> pair in saved) Environment.SetEnvironmentVariable(pair.Key, pair.Value);
             }

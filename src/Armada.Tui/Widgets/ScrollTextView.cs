@@ -164,7 +164,7 @@ namespace Armada.Tui.Widgets
         }
 
         /// <inheritdoc />
-        public IReadOnlyList<KeyHint>? GetKeyHints()
+        public virtual IReadOnlyList<KeyHint>? GetKeyHints()
         {
             // While the search prompt is open, keys type into it; otherwise the screen's hints apply.
             if (!_Searching) return null;

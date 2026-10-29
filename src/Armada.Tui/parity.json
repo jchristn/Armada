@@ -98,18 +98,18 @@
     {
       "kind": "route",
       "key": "/blackbox",
-      "status": "not-applicable",
+      "status": "implemented",
       "tui": "BlackBoxScreen",
       "workstream": "BB",
-      "notes": "TUI BlackBoxScreen comes with the TUI black box work (MISSION_BLACKBOX_PLAN.md 11.2); the route opens a placeholder until then"
+      "notes": "Black Box list: server filters (vessel, triage, resolution, phase, fingerprint), paging, fingerprints view (F), row pin, JSON, delete; Go g b"
     },
     {
       "kind": "route",
       "key": "/blackbox/:id",
-      "status": "not-applicable",
-      "tui": "BlackBoxScreen",
+      "status": "implemented",
+      "tui": "BlackBoxEntryScreen",
       "workstream": "BB",
-      "notes": "TUI BlackBoxScreen comes with the TUI black box work (MISSION_BLACKBOX_PLAN.md 11.2); the route opens a placeholder until then"
+      "notes": "Black box entry: brief with copy, export, recovery, Ask Armada, JSON, resolve, pin and note keys; objects with a paged 64 KB range viewer; notes; .zip download"
     },
     {
       "kind": "route",
@@ -4874,10 +4874,10 @@
     {
       "kind": "setting",
       "key": "settings.blackBox",
-      "status": "not-applicable",
+      "status": "implemented",
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
-      "notes": "Black box storage and retention are edited on the dashboard Settings page; the TUI admin section comes with the TUI black box work"
+      "notes": "Black Box Retention section edits the retention policy (saved with the whole black box object, masked secrets kept); storage target health, usage and a GC dry run are on the Storage tab; storage target credentials are edited in the dashboard or the settings file"
     },
     {
       "kind": "setting",
