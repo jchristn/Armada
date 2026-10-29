@@ -26,7 +26,7 @@ TABS_DIR = os.path.join(APP_DIR, "(app)")
 WORKSTREAMS = {
     "": "W2.1", "dashboard": "W2.1",
     "ask": "W1.1", "inbox": "W1.3", "notifications": "W1.4",
-    "missions": "W2.2", "voyages": "W2.3",
+    "missions": "W2.2", "voyages": "W2.3", "blackbox": "W2.2",
     "dispatch": "W2.4", "merge-queue": "W2.4", "docks": "W2.4", "signals": "W2.4", "events": "W2.4",
     "vessels": "W3.1", "workspace": "W3.1",
     "fleets": "W3.2", "captains": "W3.2", "fleet-actions": "W3.2",

@@ -97,6 +97,22 @@
     },
     {
       "kind": "route",
+      "key": "/blackbox",
+      "status": "implemented",
+      "mobile": "src/app/(app)/(work)/blackbox/index.tsx",
+      "workstream": "W2.2",
+      "notes": "BlackBoxListScreen"
+    },
+    {
+      "kind": "route",
+      "key": "/blackbox/:id",
+      "status": "implemented",
+      "mobile": "src/app/(app)/(work)/blackbox/[id].tsx",
+      "workstream": "W2.2",
+      "notes": "BlackBoxEntryScreen"
+    },
+    {
+      "kind": "route",
       "key": "/captains",
       "status": "implemented",
       "mobile": "src/app/(app)/(work)/captains/index.tsx",
@@ -1114,10 +1130,10 @@
     {
       "kind": "api",
       "key": "addBlackBoxNote",
-      "status": "not-applicable",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx (NoteSheet)",
       "workstream": "W2.2",
-      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+      "notes": "Add note (1 to 8000 characters)"
     },
     {
       "kind": "api",
@@ -2395,17 +2411,17 @@
       "kind": "api",
       "key": "getBlackBox",
       "status": "implemented",
-      "mobile": "@dashboard/api/client (shared)",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx (/blackbox/:id)",
       "workstream": "W2.2",
-      "notes": "black box read, brief, resolve and recovery are available to the app through the shared client (MISSION_BLACKBOX_PLAN.md 8.4); the mission screen adds a Failure panel when the dashboard does"
+      "notes": "black box entry screen (MISSION_BLACKBOX_PLAN.md 11.5)"
     },
     {
       "kind": "api",
       "key": "getBlackBoxBrief",
       "status": "implemented",
-      "mobile": "@dashboard/api/client (shared)",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx",
       "workstream": "W2.2",
-      "notes": "black box read, brief, resolve and recovery are available to the app through the shared client (MISSION_BLACKBOX_PLAN.md 8.4); the mission screen adds a Failure panel when the dashboard does"
+      "notes": "Copy FIX THIS and Share (agent audience, platform share sheet) and Full report (user audience)"
     },
     {
       "kind": "api",
@@ -2683,9 +2699,9 @@
       "kind": "api",
       "key": "getMissionBlackBox",
       "status": "implemented",
-      "mobile": "@dashboard/api/client (shared)",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx",
       "workstream": "W2.2",
-      "notes": "black box read, brief, resolve and recovery are available to the app through the shared client (MISSION_BLACKBOX_PLAN.md 8.4); the mission screen adds a Failure panel when the dashboard does"
+      "notes": "mission detail Black Box section (MISSION_BLACKBOX_PLAN.md 11.5)"
     },
     {
       "kind": "api",
@@ -3059,9 +3075,9 @@
       "kind": "api",
       "key": "getVoyageBlackBox",
       "status": "implemented",
-      "mobile": "@dashboard/api/client (shared)",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx",
       "workstream": "W2.2",
-      "notes": "black box read, brief, resolve and recovery are available to the app through the shared client (MISSION_BLACKBOX_PLAN.md 8.4); the mission screen adds a Failure panel when the dashboard does"
+      "notes": "voyage detail Black Box section (MISSION_BLACKBOX_PLAN.md 11.5)"
     },
     {
       "kind": "api",
@@ -3218,10 +3234,10 @@
     {
       "kind": "api",
       "key": "listBlackBox",
-      "status": "not-applicable",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/blackbox/BlackBoxListScreen.tsx",
       "workstream": "W2.2",
-      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+      "notes": "Black Box list (/blackbox): recent entries filtered by vessel and failure kind, paged"
     },
     {
       "kind": "api",
@@ -3923,9 +3939,9 @@
       "kind": "api",
       "key": "resolveBlackBox",
       "status": "implemented",
-      "mobile": "@dashboard/api/client (shared)",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx (ResolveSheet)",
       "workstream": "W2.2",
-      "notes": "black box read, brief, resolve and recovery are available to the app through the shared client (MISSION_BLACKBOX_PLAN.md 8.4); the mission screen adds a Failure panel when the dashboard does"
+      "notes": "Resolve with resolution, note and link"
     },
     {
       "kind": "api",
@@ -4035,9 +4051,9 @@
       "kind": "api",
       "key": "runBlackBoxRecovery",
       "status": "implemented",
-      "mobile": "@dashboard/api/client (shared)",
+      "mobile": "src/screens/blackbox/BlackBoxPanel.tsx (RecoverySheet)",
       "workstream": "W2.2",
-      "notes": "black box read, brief, resolve and recovery are available to the app through the shared client (MISSION_BLACKBOX_PLAN.md 8.4); the mission screen adds a Failure panel when the dashboard does"
+      "notes": "recovery paths: dry run, confirmation with data-loss acknowledgement, run as Operator"
     },
     {
       "kind": "api",
@@ -4838,6 +4854,14 @@
       "mobile": "src/screens/system/ServerPolicySections.tsx",
       "workstream": "W4.4",
       "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.blackBox",
+      "status": "not-applicable",
+      "mobile": "ServerSettingsScreen",
+      "workstream": "W4.4",
+      "notes": "Black box storage targets, credentials and retention are admin settings edited on the dashboard Settings page"
     },
     {
       "kind": "setting",

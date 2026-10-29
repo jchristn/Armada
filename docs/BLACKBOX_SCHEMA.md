@@ -19,7 +19,11 @@ interfaces, storage, database) is in [BLACKBOX.md](BLACKBOX.md).
 
 ## 1. Conventions
 
-- JSON property names are camelCase. Enums are written by name (strings). Timestamps are ISO 8601 UTC strings.
+- JSON property names are camelCase in `record.json`, the other stored objects, `manifest.json`, the MCP resources
+  and the WebSocket (commands and events). REST bodies and MCP tool results use PascalCase, like the rest of those
+  APIs, including a `record` embedded in an entry (`Record.Subject.MissionId`). The field names are the same either
+  way; readers should match them case-insensitively. Enums are written by name (strings). Timestamps are ISO 8601
+  UTC strings.
 - Every field is written, including nulls. A section that was not captured is `null`; lists are never null (empty
   when there is nothing).
 - "Required" in the tables means the field is non-nullable and always present in output Armada writes. A consumer
@@ -662,6 +666,25 @@ per read, `offset` and `length`) and `BlackBoxObjectChunk` over MCP (at most 64 
 reads return `BlackBoxSectionResult` with only the requested section populated. `BlackBoxDigest` is the compact MCP
 summary.
 
+Other shapes, defined in `src/Armada.Core/Models` and shown with examples in [REST_API.md](REST_API.md) and
+[MCP_API.md](MCP_API.md) (they are not part of the record schema):
+
+| Shape | Returned by |
+|---|---|
+| `BlackBoxBriefResult` (`entryId`, `audience`, `contentType`, `brief`) | MCP `get_blackbox {format: "brief"}`, WebSocket `blackbox.brief`. REST brief routes return the Markdown itself (`text/markdown; charset=utf-8`, `ETag` the SHA-256). |
+| `BlackBoxRecoveryRunResult` (`entryId`, `pathId`, `dryRun`, `confirmToken`, `confirmTokenExpiresUtc`, `plan`, `stepResults`, `succeeded`, `message`) | Recovery dry runs and runs |
+| `BlackBoxRecommendationApplyResult` | Recommendation dry runs and applies |
+| `BlackBoxHotspot` (`vesselId`, `directory`, `fileCount`, `entryCount`, `lastSeenUtc`) | Hotspot pages |
+| `BlackBoxFingerprintSummary`, `BlackBoxFingerprintTrend` | Fingerprint pages and trends |
+| `BlackBoxBundleResult` (`format`, `entryCount`, `fingerprintCount`, `content`, `truncated`) | The maintainer bundle |
+| `BlackBoxFixture` | `export-fixture` |
+| `BlackBoxRetentionStatus`, `BlackBoxGcReport`, `BlackBoxPurgeResult`, `BlackBoxDeleteResult` | Retention and garbage collection |
+| `BlackBoxStorageStatus`, `BlackBoxStorageMigrationJob`, `BlackBoxBackfillResult` | Storage and backfill |
+| `BlackBoxErrorDetail` (`code`, `field`) | `Data` of every REST error: `BlackBoxNotFound` (404), `BlackBoxDeleting`, `BlackBoxObjectCorrupt`, `BlackBoxConfirmationRequired` (409), `BlackBoxObjectMissing` (410), `BlackBoxStoreUnavailable` (503), `NotImplemented` (501), `InvalidArgument` (400, with `field`), `CollectionLimitExceeded` (400) |
+
+REST object reads also return `X-BlackBox-Total-Bytes`, `X-BlackBox-Offset` and, when more remains,
+`X-BlackBox-Next-Offset`, with the object's own `Content-Type` and `ETag` (its SHA-256).
+
 ### BlackBoxEntry
 
 A black box entry: the index row (blackbox_entries) for one captured mission or voyage failure. The index is always in the database whatever the storage target; only object bytes move between targets. Record is populated only by reads that ask for it.
@@ -865,7 +888,7 @@ manifest.json inside a black box .zip download: the entry, its schema version an
 
 ## 6. Event payloads
 
-Event types and when they fire are listed in [BLACKBOX.md](BLACKBOX.md), section 3.10.
+Event types and when they fire are listed in [BLACKBOX.md](BLACKBOX.md), section 13.10.
 
 ### BlackBoxCapturedPayload
 

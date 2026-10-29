@@ -1,10 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import Inbox from './Inbox';
-import { decideCliPermissionRequest, getInbox, retryMissionLanding } from '../api/client';
+import { decideCliPermissionRequest, getInbox, getMissionBlackBoxBrief, retryMissionLanding } from '../api/client';
 import type { CliPermissionRequest, InboxItem, WebSocketMessage } from '../types/models';
 
-vi.mock('../api/client', () => ({ getInbox: vi.fn(), decideCliPermissionRequest: vi.fn(), retryMissionLanding: vi.fn(), apiErrorMessage: (_e: unknown, f: string) => f }));
+vi.mock('../api/client', () => ({ getInbox: vi.fn(), decideCliPermissionRequest: vi.fn(), retryMissionLanding: vi.fn(), getMissionBlackBoxBrief: vi.fn(), apiErrorMessage: (_e: unknown, f: string) => f }));
 const handlers = new Set<(msg: WebSocketMessage) => void>();
 vi.mock('../context/WebSocketContext', () => ({
   useWebSocket: () => ({
@@ -22,8 +22,9 @@ vi.mock('../context/LocaleContext', () => ({
   }),
 }));
 const notificationState: { notifications: Array<Record<string, unknown>>; unreadCount: number } = { notifications: [], unreadCount: 0 };
+const pushToast = vi.fn();
 vi.mock('../context/NotificationContext', () => ({
-  useNotifications: () => ({ ...notificationState, markRead: vi.fn(), markAllRead: vi.fn(), pushToast: vi.fn() }),
+  useNotifications: () => ({ ...notificationState, markRead: vi.fn(), markAllRead: vi.fn(), pushToast }),
 }));
 
 function item(kind: string, title: string, href: string, severity: 'Critical' | 'Warning' = 'Warning'): InboxItem {
@@ -180,5 +181,59 @@ describe('Needs You landing failures (A4)', () => {
     await waitFor(() => expect(retryMissionLanding).toHaveBeenCalledWith('msn_9'));
     // The button acts in place; it does not open the mission.
     expect(screen.getByTestId('location')).toHaveTextContent('/inbox');
+  });
+});
+
+describe('Needs You failure rows: black box actions', () => {
+  function renderInbox() {
+    render(
+      <MemoryRouter initialEntries={['/inbox']}>
+        <Routes>
+          <Route path="*" element={<><Inbox /><Probe /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  beforeEach(() => {
+    pushToast.mockClear();
+    vi.mocked(getInbox).mockResolvedValue([
+      { ...item('failed', 'Failed: Append line', '/missions/msn_1', 'Critical'), entityId: 'msn_1' },
+      item('review', 'Review: Docs', '/missions/msn_2'),
+    ]);
+  });
+
+  it('copies the FIX THIS brief of a failed mission', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    vi.mocked(getMissionBlackBoxBrief).mockResolvedValue('# FIX THIS');
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy FIX THIS' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('# FIX THIS'));
+    expect(getMissionBlackBoxBrief).toHaveBeenCalledWith('msn_1', { audience: 'agent' });
+    // The row itself was not opened.
+    expect(screen.getByTestId('location').textContent).toBe('/inbox');
+  });
+
+  it('says so when the mission has no black box entry', async () => {
+    vi.mocked(getMissionBlackBoxBrief).mockRejectedValue(Object.assign(new Error('nf'), { status: 404, data: { code: 'BlackBoxNotFound' } }));
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy FIX THIS' }));
+    await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', 'This mission has no black box entry yet.'));
+  });
+
+  it('opens Ask Armada with the black box prompt', async () => {
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Ask Armada' }));
+    expect(screen.getByTestId('location').textContent).toBe(`/ask?prompt=${encodeURIComponent('Show me the pertinent details from the black box for mission msn_1 and give me your opinion on why it failed and what could have been done differently')}`);
+  });
+
+  it('offers no black box actions on approval rows', async () => {
+    renderInbox();
+    const approvals = await screen.findByRole('region', { name: 'Waiting for your approval' });
+    expect(within(approvals).queryByRole('button', { name: 'Copy FIX THIS' })).toBeNull();
   });
 });

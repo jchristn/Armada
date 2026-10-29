@@ -56,6 +56,15 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
   - [Ask Armada thread events](#ask-armada-thread-events)
   - [CLI permission events](#cli-permission-events)
   - [Planning session events](#planning-session-events)
+  - [Black box events](#black-box-events)
+    - [blackbox.captured](#blackboxcaptured)
+    - [blackbox.capture_failed](#blackboxcapture_failed)
+    - [blackbox.analyzed](#blackboxanalyzed)
+    - [blackbox.resolved](#blackboxresolved)
+    - [blackbox.deleted](#blackboxdeleted)
+    - [blackbox.storage_fallback](#blackboxstorage_fallback)
+    - [blackbox.gc_completed](#blackboxgc_completed)
+    - [blackbox.recovery_run](#blackboxrecovery_run)
   - [Generic Events](#generic-events)
 - [Command Actions](#command-actions)
   - [Status & Control](#status--control)
@@ -70,6 +79,10 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
   - [Dock Actions](#dock-actions)
   - [Merge Queue Actions](#merge-queue-actions)
   - [Backup and Restore Actions](#backup-and-restore-actions)
+  - [Black Box Actions](#black-box-actions)
+    - [blackbox.get](#blackboxget)
+    - [blackbox.brief](#blackboxbrief)
+    - [blackbox.list](#blackboxlist)
   - [Enumerate](#enumerate)
 - [Pagination](#pagination)
 - [Mission Status Transitions](#mission-status-transitions)
@@ -111,6 +124,7 @@ entitled to:
 | Event family | Delivered to |
 |---|---|
 | Entity changes (`mission.changed`, `voyage.changed`, `captain.changed`, `check-run.changed`, `objective.changed`, `deployment.*`, `incident.changed`, `runbook-execution.changed`, `approval-needed`, planning and objective-refinement session events, generic events) | Sockets of the entity's tenant. Global admins may opt in to every tenant with `{ "Route": "subscribe", "AllTenants": true }`. Events whose tenant cannot be resolved go to global admins only. |
+| Black box events (`blackbox.*`) | Sockets of the entry's tenant, plus global admins opted in to all tenants (not narrowed to the entry's owner). `blackbox.gc_completed` has no tenant and goes to global admins only. |
 | Ask Armada events (`ask.*`) | Only the sockets of the thread owner (same tenant and user). The all-tenants opt-in does not apply. |
 | CLI permission events (`cli_permission.*`) | The request's approvers and owner: global admins of the request's tenant or opted in to all tenants, the tenant's tenant admins, and the owner of the Ask thread or mission. Each copy carries that recipient's own `canDecide` and `canRemember`. |
 
@@ -188,7 +202,7 @@ Messages sent from the client to the server must include a `Route` field to sele
 ### Server-to-Client
 
 Every server message includes a `type` field. Pushed events use the envelope `type`, `message`, `data`, `timestamp`
-(UTC), where `message` is present only on events that carry one (generic, planning, and refinement events);
+(UTC), where `message` is present only on events that carry one (generic, planning, refinement, and black box events);
 command replies use `type` (`command.result` or `command.error`), `action`, and `data` (results) or `error` and `code`
 (errors):
 
@@ -229,7 +243,7 @@ A global administrator may add `"AllTenants": true` to receive entity events of 
 
 **Server responds with:** a [`status.snapshot`](#statussnapshot) message.
 
-The client receives all broadcast events it is entitled to ([`mission.changed`](#missionchanged), [`voyage.changed`](#voyagechanged), [`captain.changed`](#captainchanged), [`objective.changed`](#objectivechanged), [`objective-refinement-session.changed`](#objective-refinement-sessionchanged), [`objective-refinement-session.message.created`](#objective-refinement-sessionmessagecreated), [`objective-refinement-session.message.updated`](#objective-refinement-sessionmessageupdated), [`objective-refinement-session.summary.created`](#objective-refinement-sessionsummarycreated), [`objective-refinement-session.applied`](#objective-refinement-sessionapplied), [`objective-refinement-session.deleted`](#objective-refinement-sessiondeleted), [`check-run.changed`](#check-runchanged), [`deployment.changed`](#deploymentchanged), [`deployment.progress`](#deploymentprogress), [`environment.health`](#environmenthealth), [`incident.changed`](#incidentchanged), [`runbook-execution.changed`](#runbook-executionchanged), [`approval-needed`](#approval-needed), [planning session events](#planning-session-events), and [generic events](#generic-events)) as they occur. [Ask Armada thread events](#ask-armada-thread-events) go only to the thread owner's sockets.
+The client receives all broadcast events it is entitled to ([`mission.changed`](#missionchanged), [`voyage.changed`](#voyagechanged), [`captain.changed`](#captainchanged), [`objective.changed`](#objectivechanged), [`objective-refinement-session.changed`](#objective-refinement-sessionchanged), [`objective-refinement-session.message.created`](#objective-refinement-sessionmessagecreated), [`objective-refinement-session.message.updated`](#objective-refinement-sessionmessageupdated), [`objective-refinement-session.summary.created`](#objective-refinement-sessionsummarycreated), [`objective-refinement-session.applied`](#objective-refinement-sessionapplied), [`objective-refinement-session.deleted`](#objective-refinement-sessiondeleted), [`check-run.changed`](#check-runchanged), [`deployment.changed`](#deploymentchanged), [`deployment.progress`](#deploymentprogress), [`environment.health`](#environmenthealth), [`incident.changed`](#incidentchanged), [`runbook-execution.changed`](#runbook-executionchanged), [`approval-needed`](#approval-needed), [planning session events](#planning-session-events), [black box events](#black-box-events), and [generic events](#generic-events)) as they occur. [Ask Armada thread events](#ask-armada-thread-events) go only to the thread owner's sockets.
 
 ---
 
@@ -950,6 +964,187 @@ events) are generic events (see below).
 
 ---
 
+### Black box events
+
+Sent when the [black box](REST_API.md#black-box) captures, analyzes, resolves or deletes an entry, falls back to the
+database store, finishes a garbage collection pass, or runs a recovery path. Each is also recorded as an event
+(`EntityType` `blackbox`, `EntityId` the entry id, `Payload` the same values) readable through REST and MCP events.
+The envelope carries a `message` (not stable; do not parse it). Delivery follows the entry's tenant: every socket of
+that tenant (and global admins opted in to all tenants) receives the event, even though REST and MCP reads of a regular
+user's entries are narrowed to their owner. `blackbox.gc_completed` has no tenant and reaches global admins only.
+Field names are camelCase; enum values are strings.
+
+| Type | Payload | When |
+|---|---|---|
+| [`blackbox.captured`](#blackboxcaptured) | `{ entryId, missionId, voyageId, vesselId, phase, step, kind, attempt, captureMode }` | An entry was captured (inline at the failure site, by the sweeper, or by a backfill) |
+| [`blackbox.capture_failed`](#blackboxcapture_failed) | `{ missionId, voyageId, step, error }` | A capture threw; the failure itself is unaffected |
+| [`blackbox.analyzed`](#blackboxanalyzed) | `{ entryId, missionId, voyageId, state, triage, rulesVersion }` | Enrichment and analysis finished (also after a re-analysis) |
+| [`blackbox.resolved`](#blackboxresolved) | `{ entryId, missionId, voyageId, resolution }` | The resolution was set or reopened |
+| [`blackbox.deleted`](#blackboxdeleted) | `{ entryId, missionId, voyageId, reason }` | An entry was deleted (`reason` `Manual`, `Purge`, `Expired`, `Evicted`, `Cascade`, `Retry` or `TenantDeleted`) |
+| [`blackbox.storage_fallback`](#blackboxstorage_fallback) | `{ entryId, from, to, error }` | The configured store failed and the entry was written to the database instead |
+| [`blackbox.gc_completed`](#blackboxgc_completed) | The `BlackBoxGcReport` (`dryRun`, `startedUtc`, `finishedUtc`, `durationMs`, `expired`, `evicted`, `cascaded`, `retriedDeletes`, `orphansRemoved`, `objectsMissing`, `bytesFreed`, `failures`, `candidateEntryIds`, `errors`) | A garbage collection pass finished |
+| [`blackbox.recovery_run`](#blackboxrecovery_run) | `{ entryId, pathId, recommendationId, dryRun, succeeded, stepsRun, stepsFailed, userId }` | Every recovery dry run and run, and every recommendation dry run and apply |
+
+#### blackbox.captured
+
+```json
+{
+  "type": "blackbox.captured",
+  "message": "Black box captured for msn_mvu1fjp0_9Wd6Uuyp262: External/OperatorTransition",
+  "data": {
+    "entryId": "bbx_mvu1ieiz_WMTEXGqlAJ5",
+    "missionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "vesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+    "phase": "External",
+    "step": "OperatorTransition",
+    "kind": null,
+    "attempt": 2,
+    "captureMode": "Inline"
+  },
+  "timestamp": "2026-10-29T21:13:06.061924Z"
+}
+```
+
+This entry was captured inline when an operator moved the mission to `Cancelled` (`PUT /api/v1/missions/{id}/status`).
+
+#### blackbox.capture_failed
+
+```json
+{
+  "type": "blackbox.capture_failed",
+  "message": "Black box capture failed for msn_mvu1fjp0_9Wd6Uuyp262: The database is locked.",
+  "data": {
+    "missionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "step": "ProcessCrash",
+    "error": "The database is locked."
+  },
+  "timestamp": "2026-10-29T21:13:06.061924Z"
+}
+```
+
+`error` is redacted. The sweeper captures a missed failure later (`captureMode` `Sweeper`).
+
+#### blackbox.analyzed
+
+```json
+{
+  "type": "blackbox.analyzed",
+  "message": "Black box analyzed: bbx_mvu1ieiz_WMTEXGqlAJ5",
+  "data": {
+    "entryId": "bbx_mvu1ieiz_WMTEXGqlAJ5",
+    "missionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "state": "Analyzed",
+    "triage": "External",
+    "rulesVersion": 1
+  },
+  "timestamp": "2026-10-29T21:13:06.070652Z"
+}
+```
+
+After `POST /api/v1/blackbox/{id}/reanalyze` the message reads `Black box re-analyzed: ...`.
+
+#### blackbox.resolved
+
+```json
+{
+  "type": "blackbox.resolved",
+  "message": "Black box entry bbx_mvu1ftcv_zcdofOBmjhY set to Resolved",
+  "data": {
+    "entryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "missionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "resolution": "Resolved"
+  },
+  "timestamp": "2026-10-29T21:11:39.835678Z"
+}
+```
+
+#### blackbox.deleted
+
+```json
+{
+  "type": "blackbox.deleted",
+  "message": "Black box entry deleted (Manual): bbx_mvu1ftep_b5OtDr4leub",
+  "data": {
+    "entryId": "bbx_mvu1ftep_b5OtDr4leub",
+    "missionId": "msn_mvu1fjpe_wAvcJzyllyF",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "reason": "Manual"
+  },
+  "timestamp": "2026-10-29T21:15:02.118204Z"
+}
+```
+
+#### blackbox.storage_fallback
+
+```json
+{
+  "type": "blackbox.storage_fallback",
+  "message": "Black box storage fell back to the database for bbx_mvu1ieiz_WMTEXGqlAJ5",
+  "data": {
+    "entryId": "bbx_mvu1ieiz_WMTEXGqlAJ5",
+    "from": "S3",
+    "to": "Database",
+    "error": "The remote name could not be resolved: 's3.devbox.internal'"
+  },
+  "timestamp": "2026-10-29T21:13:06.064310Z"
+}
+```
+
+#### blackbox.gc_completed
+
+```json
+{
+  "type": "blackbox.gc_completed",
+  "message": "Black box garbage collection: 2 expired, 0 evicted, 0 cascaded, 0 orphans removed, 0 objects missing, 0 failures",
+  "data": {
+    "dryRun": false,
+    "startedUtc": "2026-10-29T22:10:34.416490Z",
+    "finishedUtc": "2026-10-29T22:10:34.431002Z",
+    "durationMs": 14,
+    "expired": 2,
+    "evicted": 0,
+    "cascaded": 0,
+    "retriedDeletes": 0,
+    "orphansRemoved": 0,
+    "objectsMissing": 0,
+    "bytesFreed": 18734,
+    "failures": 0,
+    "candidateEntryIds": [],
+    "errors": []
+  },
+  "timestamp": "2026-10-29T22:10:34.431500Z"
+}
+```
+
+#### blackbox.recovery_run
+
+```json
+{
+  "type": "blackbox.recovery_run",
+  "message": "Recovery path bbx-exec-006.restart ran on black box entry bbx_mvu1ftcv_zcdofOBmjhY",
+  "data": {
+    "entryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "pathId": "bbx-exec-006.restart",
+    "recommendationId": null,
+    "dryRun": false,
+    "succeeded": true,
+    "stepsRun": 1,
+    "stepsFailed": 0,
+    "userId": "default"
+  },
+  "timestamp": "2026-10-29T21:11:39.804858Z"
+}
+```
+
+A dry run reads `Recovery path ... dry run on black box entry ...`, a failed run `... failed on ...`, and a
+recommendation `Recommendation <id> ...` (with `recommendationId` set).
+
+---
+
 ### Generic Events
 
 Broadcast when the Admiral records an entity event that has no dedicated payload (deletions, purges, review
@@ -1077,6 +1272,9 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | **Enumerate** | `enumerate` | Paginated enumeration of any entity type | `entityType`, optional `query` |
 | **Backup** | `backup` | Create a backup ZIP | optional `outputPath` |
 | | `restore` | Restore from a backup ZIP | `filePath` |
+| **Black Box** | `blackbox.get` | Get a black box entry (with its record by default) | `id` (`msn_`, `vyg_` or `bbx_`) or `data.entryId` / `data.missionId` / `data.voyageId`; optional `data.includeRecord` |
+| | `blackbox.brief` | Get the Markdown FIX THIS brief of an entry | as `blackbox.get`; optional `data.audience`, `data.redactHosts` |
+| | `blackbox.list` | One page of black box entries, newest first | optional `data` (BlackBoxEnumerateRequest filters), `query` |
 
 Any other `action` is rejected with `command.error` code `UnknownAction` (`Unknown action: <action>`).
 
@@ -2715,6 +2913,199 @@ Restore Armada from a previously created backup ZIP file.
 > `{DataDirectory}/backups`) is created before overwriting. Restart the server after restoring.
 
 ---
+
+### Black Box Actions
+
+Read-only mirrors of the black box read routes and tools ([REST_API.md](REST_API.md#black-box),
+[MCP_API.md](MCP_API.md#black-box)). Global administrators only, like every command; tenant admins and regular users
+read black box entries over REST or MCP, which scope them. Replies are camelCase. Errors: `NotFound` for a missing
+entry (or a mission or voyage without one), `InvalidArgument` for a bad audience, filter or body, `Conflict` while the
+entry is being deleted, and `Unavailable` when the black box is not running or its store is unreachable.
+
+#### blackbox.get
+
+Get one entry. Name it with `id` (a `msn_` id means that mission's current entry, a `vyg_` id that voyage's current
+entry, anything else an entry id) or with `data.entryId`, `data.missionId` or `data.voyageId`.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "blackbox.get",
+  "id": "msn_mvu1fjp0_9Wd6Uuyp262",
+  "data": { "includeRecord": false }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `"blackbox.get"` |
+| `id` | string | One of `id` or `data.*Id` | `msn_`, `vyg_` or `bbx_` id |
+| `data.entryId`, `data.missionId`, `data.voyageId` | string | One of `id` or `data.*Id` | The entry, or a mission's or voyage's current entry (used instead of `id` when present) |
+| `data.includeRecord` | boolean | No | Include the record (default `true`) |
+
+**Response:** `command.result` whose `data` is the `BlackBoxEntry` (trimmed):
+
+```json
+{
+  "type": "command.result",
+  "action": "blackbox.get",
+  "data": {
+    "id": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "tenantId": "default",
+    "userId": "default",
+    "subjectType": "Mission",
+    "missionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+    "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+    "vesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+    "missionTitle": "Retry landings deferred on a dirty checkout",
+    "attempt": 1,
+    "isCurrent": true,
+    "phase": "Execution",
+    "step": "ProcessCrash",
+    "failureKind": "Crash",
+    "statusAfter": "Failed",
+    "triage": "Transient",
+    "fingerprint": "9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead",
+    "captureMode": "Backfill",
+    "state": "Analyzed",
+    "resolution": "Resolved",
+    "pinned": false,
+    "storageTarget": "Disk",
+    "totalBytes": 9979,
+    "objectCount": 5,
+    "createdUtc": "2026-10-29T21:11:05.310433Z",
+    "record": null
+  }
+}
+```
+
+```json
+{
+  "type": "command.error",
+  "action": "blackbox.get",
+  "error": "Black box entry bbx_doesnotexist_0000000000 not found.",
+  "code": "NotFound"
+}
+```
+
+#### blackbox.brief
+
+Get the Markdown FIX THIS brief of one entry, rendered live. The entry is named as for `blackbox.get`.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "blackbox.brief",
+  "id": "bbx_mvu1ftcv_zcdofOBmjhY",
+  "data": { "audience": "user", "redactHosts": false }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | Yes | `"blackbox.brief"` |
+| `id` or `data.entryId` / `data.missionId` / `data.voyageId` | string | Yes | The entry |
+| `data.audience` | string | No | `agent` (default), `user` or `maintainer` |
+| `data.redactHosts` | boolean | No | Strip absolute paths, host names and user names (default `false`) |
+
+**Response:**
+
+```json
+{
+  "type": "command.result",
+  "action": "blackbox.brief",
+  "data": {
+    "entryId": "bbx_mvu1ftcv_zcdofOBmjhY",
+    "audience": "User",
+    "contentType": "text/markdown",
+    "brief": "# What went wrong: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nThis is what Armada recorded when the mission failed, and what you can do next.\n\n## Summary\n\n..."
+  }
+}
+```
+
+```json
+{
+  "type": "command.error",
+  "action": "blackbox.brief",
+  "error": "audience must be agent, user or maintainer.",
+  "code": "InvalidArgument"
+}
+```
+
+#### blackbox.list
+
+One page of entries, newest first. The filters are a `BlackBoxEnumerateRequest` in `data` (`vesselId`, `voyageId`,
+`missionId`, `captainId`, `fleetId`, `harborId`, `subjectType`, `phase`, `step`, `kind`, `triage`, `resolution`,
+`state`, `captureMode`, `fingerprint`, `pinned`, `isCurrent`, `path`, `createdAfter`, `createdBefore`); paging comes
+from `query` (`pageNumber`, `pageSize` 1 to 1000, `order`). When `query` is present it replaces the paging and order in
+`data`.
+
+**Request:**
+
+```json
+{
+  "Route": "command",
+  "action": "blackbox.list",
+  "data": { "vesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv", "isCurrent": true },
+  "query": { "pageNumber": 1, "pageSize": 5 }
+}
+```
+
+**Response:** `command.result` whose `data` is an enumeration result of `BlackBoxEntrySummary` (trimmed to one row):
+
+```json
+{
+  "type": "command.result",
+  "action": "blackbox.list",
+  "data": {
+    "success": true,
+    "pageNumber": 1,
+    "pageSize": 5,
+    "totalPages": 1,
+    "totalRecords": 3,
+    "objects": [
+      {
+        "id": "bbx_mvu1ftew_95PyT7WmtrV",
+        "subjectType": "Voyage",
+        "missionId": null,
+        "voyageId": "vyg_mvu1fjoz_xO6urNkcaHp",
+        "vesselId": "vsl_mvu1ffz5_4Vb0gY5fhKv",
+        "captainId": null,
+        "missionTitle": "Harden landing retries",
+        "vesselName": "demo-api",
+        "attempt": 1,
+        "isCurrent": true,
+        "phase": "Voyage",
+        "step": "SettlementFailed",
+        "failureKind": "Crash",
+        "statusBefore": null,
+        "statusAfter": "Failed",
+        "triage": "Transient",
+        "fingerprint": "bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329",
+        "captureMode": "Backfill",
+        "state": "Analyzed",
+        "resolution": "Open",
+        "pinned": false,
+        "reasonExcerpt": "Mission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test ...",
+        "totalBytes": 9199,
+        "objectCount": 5,
+        "createdUtc": "2026-10-29T21:11:05.382585Z",
+        "expiresUtc": "2027-04-27T21:11:05.382585Z"
+      }
+    ],
+    "totalMs": 0
+  }
+}
+```
+
+The `enumerate` command does not take `blackbox`; use `blackbox.list`.
+
+---
+
 
 ### Enumerate
 
