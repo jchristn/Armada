@@ -43,6 +43,15 @@ namespace Armada.Core.Models
         public bool DeleteSource { get; set; } = true;
 
         /// <summary>
+        /// Entries per batch (1 to 1000).
+        /// </summary>
+        public int BatchSize
+        {
+            get => _BatchSize;
+            set => _BatchSize = Math.Clamp(value, 1, 1000);
+        }
+
+        /// <summary>
         /// Entries to move.
         /// </summary>
         public long TotalEntries { get; set; } = 0;
@@ -87,6 +96,12 @@ namespace Armada.Core.Models
         /// </summary>
         public DateTime? FinishedUtc { get; set; } = null;
 
+        /// <summary>
+        /// Last progress update (UTC).
+        /// </summary>
+        public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
+
+        private int _BatchSize = 50;
         private string _Id = Constants.IdGenerator.GenerateKSortable(Constants.BlackBoxStorageMigrationIdPrefix, 24);
 
         /// <summary>
