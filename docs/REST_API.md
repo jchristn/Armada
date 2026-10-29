@@ -5502,6 +5502,13 @@ A confirmed call without a token, with an unknown, used or expired token, a toke
 after the mission or the plan changed (for example a re-analysis) is `409` `BlackBoxConfirmationRequired`: run a new
 dry run. Every dry run and run is noted on the entry and emits `blackbox.recovery_run`.
 
+Each step's preconditions are checked on the dry run and again on the confirm: `restart_mission` needs a Failed,
+LandingFailed or Cancelled mission (a Pending mission was already restarted), `retry_landing` a LandingFailed or
+WorkProduced one, `cancel_mission` one that is not already Cancelled or Complete, and the other steps need their
+mission, vessel or dock to still exist. When one is not met the response is `200` with `Refused` `true`, `Succeeded`
+`false` and `UnmetPreconditions` naming each step; a refused dry run issues no `ConfirmToken`, and a refused confirm
+runs nothing (every step reports "Not run") and notes the refusal on the entry.
+
 Dry run response:
 
 ```json
@@ -5524,6 +5531,8 @@ Dry run response:
   ],
   "StepResults": [],
   "Succeeded": true,
+  "Refused": false,
+  "UnmetPreconditions": [],
   "Message": "Would run: restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}. Confirm with confirmToken before 2026-10-29 21:21:39Z."
 }
 ```
@@ -5548,6 +5557,8 @@ Confirmed run response (`Plan` as above, trimmed):
     }
   ],
   "Succeeded": true,
+  "Refused": false,
+  "UnmetPreconditions": [],
   "Message": "Recovery path bbx-exec-006.restart ran. 1 of 1 Armada steps ran."
 }
 ```

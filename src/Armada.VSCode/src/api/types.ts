@@ -370,6 +370,9 @@ export interface BlackBoxRecoveryResult {
   /** What each step of a real run did. */
   StepResults?: BlackBoxRecoveryStepResult[];
   Succeeded?: boolean;
+  /** True when a step's precondition is not met (no token on a dry run; nothing ran on a confirm). */
+  Refused?: boolean;
+  UnmetPreconditions?: string[];
   Message?: string | null;
 }
 

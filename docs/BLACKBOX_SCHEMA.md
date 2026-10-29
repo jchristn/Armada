@@ -649,7 +649,7 @@ Other shapes, defined in `src/Armada.Core/Models` and shown with examples in [RE
 | Shape | Returned by |
 |---|---|
 | `BlackBoxBriefResult` (`entryId`, `audience`, `contentType`, `brief`) | MCP `get_blackbox {format: "brief"}`, WebSocket `blackbox.brief`. REST brief routes return the Markdown itself (`text/markdown; charset=utf-8`, `ETag` the SHA-256). |
-| `BlackBoxRecoveryRunResult` (`entryId`, `pathId`, `dryRun`, `confirmToken`, `confirmTokenExpiresUtc`, `plan`, `stepResults`, `succeeded`, `message`) | Recovery dry runs and runs |
+| `BlackBoxRecoveryRunResult` (`entryId`, `pathId`, `dryRun`, `confirmToken`, `confirmTokenExpiresUtc`, `plan`, `stepResults`, `succeeded`, `refused`, `unmetPreconditions`, `message`) | Recovery dry runs and runs |
 | `BlackBoxRecommendationApplyResult` | Recommendation dry runs and applies |
 | `BlackBoxHotspot` (`vesselId`, `directory`, `fileCount`, `entryCount`, `lastSeenUtc`) | Hotspot pages |
 | `BlackBoxFingerprintSummary`, `BlackBoxFingerprintTrend` | Fingerprint pages and trends |

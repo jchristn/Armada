@@ -146,6 +146,63 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<NotImplementedException>(() => f.Service.RunRecoveryAsync(f.Admin, f.EntryId, PullRequestPath, Confirm(again.ConfirmToken)), "no executor").ConfigureAwait(false);
             }));
 
+            cases.Add(Case("preconditions", "A restart path on a mission that is already Pending is refused on the dry run (no token) and nothing runs; a precondition that fails between the dry run and the confirm (the dock was deleted) refuses the confirmed run instead of reporting success", TestTags.Negative, async () =>
+            {
+                using BlackBoxRecoveryFixture f = await BlackBoxRecoveryFixture.CreateAsync(BlackBoxStepEnum.Stall, MissionFailureKindEnum.StallRecoveryExhausted).ConfigureAwait(false);
+                const string restart = "bbx-exec-002.restart";
+                const string unstick = "bbx-exec-002.unstick-restart";
+                Mission mission = (await f.Db.Missions.ReadAsync(f.MissionId).ConfigureAwait(false))!;
+                mission.Status = MissionStatusEnum.Pending;
+                await f.Db.Missions.UpdateAsync(mission).ConfigureAwait(false);
+
+                BlackBoxRecoveryRunResult pendingDry = await DryAsync(f, restart).ConfigureAwait(false);
+                AssertTrue(pendingDry.DryRun, "dry run");
+                AssertTrue(pendingDry.Refused, "refused: the mission is already Pending");
+                AssertFalse(pendingDry.Succeeded, "a refused dry run is not a success");
+                AssertNull(pendingDry.ConfirmToken, "no confirm token for a path that cannot run");
+                AssertContains("already Pending", String.Join(" ", pendingDry.UnmetPreconditions), "the dry run names the unmet precondition");
+                AssertContains("cannot run now", pendingDry.Message ?? "", "the dry run says it cannot run");
+                await AssertThrowsAsync<BlackBoxConfirmationException>(() => f.Service.RunRecoveryAsync(f.Admin, f.EntryId, restart, Confirm(pendingDry.ConfirmToken)), "no token to confirm").ConfigureAwait(false);
+                AssertEqual(0, f.Executor.Calls.Count, "nothing ran against the Pending mission");
+
+                mission = (await f.Db.Missions.ReadAsync(f.MissionId).ConfigureAwait(false))!;
+                mission.Status = MissionStatusEnum.Failed;
+                await Task.Delay(20).ConfigureAwait(false);
+                await f.Db.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                BlackBoxRecoveryRunResult failedDry = await DryAsync(f, restart).ConfigureAwait(false);
+                AssertFalse(failedDry.Refused, "a Failed mission can be restarted");
+                AssertTrue(failedDry.Succeeded); AssertNotNull(failedDry.ConfirmToken, "token issued");
+                AssertEqual(0, failedDry.UnmetPreconditions.Count, "no unmet preconditions");
+
+                BlackBoxRecoveryRunResult unstickDry = await DryAsync(f, unstick).ConfigureAwait(false);
+                AssertFalse(unstickDry.Refused, "the dock exists at the dry run");
+                await f.Db.Docks.DeleteAsync(f.DockId).ConfigureAwait(false);
+                BlackBoxRecoveryRunRequest ack = Confirm(unstickDry.ConfirmToken);
+                ack.AcknowledgeDataLoss = true;
+                BlackBoxRecoveryRunResult refused = await f.Service.RunRecoveryAsync(f.Admin, f.EntryId, unstick, ack).ConfigureAwait(false);
+                AssertFalse(refused.DryRun);
+                AssertTrue(refused.Refused, "refused at confirm time: " + refused.Message);
+                AssertFalse(refused.Succeeded, "a refused run is not a success");
+                AssertContains("dock no longer exists", String.Join(" ", refused.UnmetPreconditions));
+                AssertTrue(refused.StepResults.All(r => !r.Succeeded && (r.Message ?? "").Contains("Not run", StringComparison.Ordinal)), "every step reported as not run");
+                AssertEqual(0, f.Executor.Calls.Count, "nothing ran");
+                AssertContains("Refused", (await f.Service.EnumerateNotesAsync(f.Admin, f.EntryId, null).ConfigureAwait(false)).Objects.Single().Body, "the refusal is annotated");
+                BlackBoxRecoveryRunPayload payload = (BlackBoxRecoveryRunPayload)f.Sink.Events.Last(e => e.EventType == BlackBoxEventTypes.RecoveryRun).Payload!;
+                AssertFalse(payload.Succeeded, "the event reports the refusal");
+
+                BlackBoxAction restartAction = new BlackBoxAction { Tool = "restart_mission" };
+                BlackBoxAction retryAction = new BlackBoxAction { Tool = "retry_landing" };
+                BlackBoxAction cancelAction = new BlackBoxAction { Tool = "cancel_mission" };
+                AssertNull(BlackBoxActionPreconditions.Check(restartAction, MissionStatusEnum.Failed, false, true, true), "restart a Failed mission");
+                AssertNotNull(BlackBoxActionPreconditions.Check(restartAction, MissionStatusEnum.InProgress, false, true, true), "restart an InProgress mission");
+                AssertNotNull(BlackBoxActionPreconditions.Check(restartAction, null, false, true, true), "restart a deleted mission");
+                AssertNull(BlackBoxActionPreconditions.Check(retryAction, MissionStatusEnum.LandingFailed, false, true, true), "retry a LandingFailed landing");
+                AssertNotNull(BlackBoxActionPreconditions.Check(retryAction, MissionStatusEnum.Pending, false, true, true), "retry the landing of a Pending mission");
+                AssertNotNull(BlackBoxActionPreconditions.Check(cancelAction, MissionStatusEnum.Cancelled, false, true, true), "cancel a cancelled mission");
+                MissionStatusEnum? afterCancel = BlackBoxActionPreconditions.StatusAfter("cancel_mission", MissionStatusEnum.InProgress);
+                AssertNull(BlackBoxActionPreconditions.Check(restartAction, afterCancel, false, true, true), "a cancel followed by a restart is valid");
+            }));
+
             cases.Add(Case("recommendation_apply", "A recommendation applies through its recorded update_vessel patch after a dry run; refusals mirror recovery runs", TestTags.Positive, async () =>
             {
                 using BlackBoxRecoveryFixture f = await BlackBoxRecoveryFixture.CreateAsync().ConfigureAwait(false);

@@ -30,7 +30,7 @@ administrator).
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 76 | 0 |
 | CLI commands | 63 | 0 |
-| Settings keys | 272 | 12 |
+| Settings keys | 281 | 12 |
 
 ## REST API
 
@@ -980,10 +980,13 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `blackBox.storage.azureBlob.accountName` | string | `null` |  |
 | `blackBox.storage.azureBlob.connectionString` | string | `null` |  |
 | `blackBox.storage.azureBlob.container` | string | `null` |  |
+| `blackBox.storage.azureBlob.endpoint` | string | `null` |  |
 | `blackBox.storage.cifs` | object |  |  |
 | `blackBox.storage.cifs.domain` | string | `null` |  |
 | `blackBox.storage.cifs.hostname` | string | `null` |  |
 | `blackBox.storage.cifs.password` | string | `null` |  |
+| `blackBox.storage.cifs.port` | int | `445` |  |
+| `blackBox.storage.cifs.preferEncryption` | bool | `true` |  |
 | `blackBox.storage.cifs.share` | string | `null` |  |
 | `blackBox.storage.cifs.username` | string | `null` |  |
 | `blackBox.storage.compress` | bool | `true` |  |
@@ -993,13 +996,19 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `blackBox.storage.googleCloud` | object |  |  |
 | `blackBox.storage.googleCloud.bucket` | string | `null` |  |
 | `blackBox.storage.googleCloud.credentialsPath` | string | `null` |  |
+| `blackBox.storage.googleCloud.endpoint` | string | `null` |  |
 | `blackBox.storage.googleCloud.projectId` | string | `null` |  |
 | `blackBox.storage.keyPrefix` | string | `"armada/blackbox"` |  |
 | `blackBox.storage.maxEntryBytes` | int | `8388608` |  |
 | `blackBox.storage.maxEvidenceObjectBytes` | int | `1048576` |  |
 | `blackBox.storage.nfs` | object |  |  |
 | `blackBox.storage.nfs.exportPath` | string | `null` |  |
+| `blackBox.storage.nfs.groupId` | int | `0` |  |
 | `blackBox.storage.nfs.hostname` | string | `null` |  |
+| `blackBox.storage.nfs.mountPort` | int? | `null` |  |
+| `blackBox.storage.nfs.port` | int? | `null` |  |
+| `blackBox.storage.nfs.userId` | int | `0` |  |
+| `blackBox.storage.nfs.version` | int | `3` |  |
 | `blackBox.storage.s3` | object |  |  |
 | `blackBox.storage.s3.accessKey` | string | `null` |  |
 | `blackBox.storage.s3.bucket` | string | `null` |  |

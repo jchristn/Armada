@@ -2093,6 +2093,8 @@ Dry run:
   ],
   "StepResults": [],
   "Succeeded": true,
+  "Refused": false,
+  "UnmetPreconditions": [],
   "Message": "Would run: restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}. Confirm with confirmToken before 2026-10-29 21:22:14Z."
 }
 ```
@@ -2104,7 +2106,10 @@ Confirm:
 ```
 
 **Response:** `DryRun` false and `StepResults` (`Order`, `Tool`, `Succeeded`, `Message`); the first failed step stops
-the run and the rest report "Not run", and a manual step is reported, not run. Without a token (or with a used, expired
+the run and the rest report "Not run", and a manual step is reported, not run. Step preconditions (for example
+`restart_mission` needs a Failed, LandingFailed or Cancelled mission, not one already Pending) are checked on the dry
+run and on the confirm: when one is not met, `Refused` is `true`, `Succeeded` `false` and `UnmetPreconditions` names the
+step; a refused dry run has no `ConfirmToken` and a refused confirm runs nothing. Without a token (or with a used, expired
 or foreign one):
 
 ```json
