@@ -615,6 +615,29 @@ namespace Test.Shared.Suites.E2E
                 AssertContains("dry run", review, "review prompt carries the safety guidance");
             }));
 
+            cases.Add(CaseAsync("mcp_resource_not_found", "resources/read for a missing entry, a missing object or another tenant's entry is the MCP resource-not-found error (-32002) with the typed NotFound data, not -32603", TestTags.Negative, async () =>
+            {
+                RequireSetup();
+                string missing = await RawMcpAsync(_UserA!, "resources/read", new { uri = "armada://blackbox/bbx_missing/record.json" }).ConfigureAwait(false);
+                AssertContains("-32002", missing, "missing entry is resource not found");
+                AssertContains("BlackBoxNotFound", missing, "missing entry carries the black box code");
+                AssertContains("NotFound", missing, "missing entry carries the typed error code");
+                AssertFalse(missing.Contains("-32603", StringComparison.Ordinal), "missing entry is not an internal error");
+                string missingBrief = await RawMcpAsync(_UserA!, "resources/read", new { uri = "armada://blackbox/bbx_missing/brief.md" }).ConfigureAwait(false);
+                AssertContains("-32002", missingBrief, "missing brief is resource not found");
+                string missingMission = await RawMcpAsync(_UserA!, "resources/read", new { uri = "armada://missions/msn_missing/blackbox" }).ConfigureAwait(false);
+                AssertContains("-32002", missingMission, "a mission with no entry is resource not found");
+                string missingObject = await RawMcpAsync(_UserA!, "resources/read", new { uri = "armada://blackbox/" + _EntryId + "/objects/no-such-object.txt" }).ConfigureAwait(false);
+                AssertContains("-32002", missingObject, "missing object is resource not found");
+                AssertFalse(missingObject.Contains("-32603", StringComparison.Ordinal), "missing object is not an internal error");
+                string foreign = await RawMcpAsync(_AdminB!, "resources/read", new { uri = "armada://blackbox/" + _EntryId + "/record.json" }).ConfigureAwait(false);
+                AssertContains("-32002", foreign, "another tenant's entry is resource not found");
+                string present = await RawMcpAsync(_UserA!, "resources/read", new { uri = "armada://blackbox/" + _EntryId + "/record.json" }).ConfigureAwait(false);
+                AssertFalse(present.Contains("-32002", StringComparison.Ordinal), "a visible entry reads without an error");
+                AssertNull(Armada.Server.Mcp.Tools.McpBlackBoxResources.ToResourceError("armada://x", new InvalidOperationException("boom")), "a non black box error is not mapped");
+                AssertEqual(-32002, Armada.Server.Mcp.Tools.McpBlackBoxResources.ToResourceError("armada://x", new BlackBoxObjectMissingException("gone"))!.Code, "object missing maps to -32002");
+            }));
+
             cases.Add(CaseAsync("websocket_commands", "blackbox.get, blackbox.brief and blackbox.list over the WebSocket command route", TestTags.Positive, async () =>
             {
                 RequireSetup();

@@ -2261,6 +2261,15 @@ registered when the black box is running. Every read runs as the MCP caller thro
 | `armada://blackbox/{entryId}/objects/{name}` | the object's | The first 64 KB of one object. URL-encode a name with a folder (`evidence%2Fgit-status.txt`). A text object longer than 64 KB ends with a `[first N of M bytes; read the rest with read_blackbox_object offset N]` line; a binary object is returned as a base64 `blob` |
 | `armada://missions/{missionId}/blackbox` | `application/json` | The digest (what `get_blackbox` `format` `summary` returns) of the mission's current entry, camelCase |
 
+A read of an entry, object or mission the caller cannot see (missing, or in another tenant) is the MCP resource-not-found
+error, JSON-RPC code `-32002`, whose `data` carries the `uri` and the same typed error a black box tool returns
+(`errorCode` `NotFound`, `code` `BlackBoxNotFound` or `BlackBoxObjectMissing`). Any other black box error (an entry being
+deleted, a corrupt object, an unavailable store) is `-32602` with the same `data` shape:
+
+```json
+{ "jsonrpc": "2.0", "id": 33, "error": { "code": -32002, "message": "Black box entry bbx_missing not found.", "data": { "uri": "armada://blackbox/bbx_missing/record.json", "error": "Black box entry bbx_missing not found.", "errorCode": "NotFound", "code": "BlackBoxNotFound" } } }
+```
+
 `resources/list` is empty (there are no fixed resources); discover the templates with `resources/templates/list`:
 
 ```json

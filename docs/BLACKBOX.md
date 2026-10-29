@@ -374,6 +374,8 @@ Resources and prompts (on the HTTP MCP server, `/mcp`):
 | `armada://blackbox/{entryId}/objects/{name}` | The first 64 KB of an object (URL-encode a folder: `evidence%2Fgit-status.txt`); page the rest with `read_blackbox_object` |
 | `armada://missions/{missionId}/blackbox` | The digest of the mission's current entry |
 
+A missing or invisible entry or object is the MCP resource-not-found error (`-32002`) with the typed `NotFound` data.
+
 | Prompt | Arguments | Expands to |
 |---|---|---|
 | `review_blackbox` | `missionId` (required), `goal` (explain, fix, prevent, fix Armada, compare or clean up; default explain) | The flow above with the goal-to-tool map and the safety rules |

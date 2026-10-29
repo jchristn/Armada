@@ -81,12 +81,12 @@ namespace Armada.Server.Mcp.Tools
                     Description = "The FIX THIS brief (agent audience) of a black box entry, as Markdown.",
                     MimeType = "text/markdown"
                 },
-                async (uri, variables, token) =>
+                (uri, variables, token) => GuardAsync(uri, async () =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     string brief = await service.GetBriefAsync(caller, Variable(variables, "entryId"), BlackBoxAudienceEnum.Agent, false, token).ConfigureAwait(false);
                     return Text(uri, "text/markdown", brief);
-                });
+                }));
 
             server.RegisterResourceTemplate(
                 new McpResourceTemplate
@@ -97,12 +97,12 @@ namespace Armada.Server.Mcp.Tools
                     Description = "The versioned record (record.json) of a black box entry.",
                     MimeType = "application/json"
                 },
-                async (uri, variables, token) =>
+                (uri, variables, token) => GuardAsync(uri, async () =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     BlackBoxRecord record = await service.GetRecordAsync(caller, Variable(variables, "entryId"), token).ConfigureAwait(false);
                     return Text(uri, "application/json", JsonSerializer.Serialize(record, BlackBoxJson.Options));
-                });
+                }));
 
             server.RegisterResourceTemplate(
                 new McpResourceTemplate
@@ -113,7 +113,7 @@ namespace Armada.Server.Mcp.Tools
                     Description = "The first 64 KB of one object of a black box entry (URL-encode a name with a folder, for example evidence%2Fgit-status.txt). Page a larger object with the read_blackbox_object tool.",
                     MimeType = "text/plain"
                 },
-                async (uri, variables, token) =>
+                (uri, variables, token) => GuardAsync(uri, async () =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     BlackBoxObjectChunk chunk = await service.ReadObjectChunkAsync(caller, Variable(variables, "entryId"), Variable(variables, "name"), 0, null, token).ConfigureAwait(false);
@@ -128,7 +128,7 @@ namespace Armada.Server.Mcp.Tools
                         ? chunk.Content + "\n\n[first " + chunk.Length + " of " + chunk.TotalBytes + " bytes; read the rest with read_blackbox_object offset " + chunk.NextOffset.Value + "]\n"
                         : chunk.Content;
                     return Text(uri, chunk.ContentType, text);
-                });
+                }));
 
             server.RegisterResourceTemplate(
                 new McpResourceTemplate
@@ -139,13 +139,13 @@ namespace Armada.Server.Mcp.Tools
                     Description = "The summary (digest) of a mission's current black box entry: where, how and why it failed, triage and the top recovery paths.",
                     MimeType = "application/json"
                 },
-                async (uri, variables, token) =>
+                (uri, variables, token) => GuardAsync(uri, async () =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     string entryId = await service.ResolveEntryIdAsync(caller, Variable(variables, "missionId"), null, null, token).ConfigureAwait(false);
                     BlackBoxDigest digest = await service.GetDigestAsync(caller, entryId, token).ConfigureAwait(false);
                     return Text(uri, "application/json", JsonSerializer.Serialize(digest, _JsonOptions));
-                });
+                }));
 
             server.RegisterPrompt(
                 new McpPrompt
@@ -173,6 +173,35 @@ namespace Armada.Server.Mcp.Tools
                     }
                 },
                 (parameters, token) => Task.FromResult(Prompt("Explain the black box of mission " + Argument(parameters, "missionId"), ExplainText(Argument(parameters, "missionId")))));
+        }
+
+        /// <summary>
+        /// The JSON-RPC error code MCP defines for a resource that does not exist (<c>-32002</c>).
+        /// </summary>
+        public const int ResourceNotFoundCode = -32002;
+
+        /// <summary>
+        /// Map a black box error raised while reading a resource to a typed JSON-RPC error, or null when the exception is
+        /// not a black box error. A missing or invisible entry or object is <see cref="ResourceNotFoundCode"/> (the MCP
+        /// resource-not-found convention); any other black box error is invalid params (<c>-32602</c>). The data carries
+        /// the uri and the same typed error a tool returns (ErrorCode and Code), so a client handles both alike.
+        /// </summary>
+        /// <param name="uri">Resource uri.</param>
+        /// <param name="ex">Exception.</param>
+        /// <returns>Protocol error, or null.</returns>
+        public static McpProtocolException? ToResourceError(string? uri, Exception? ex)
+        {
+            McpToolError? error = McpBlackBoxTools.ToToolError(ex);
+            if (error == null) return null;
+            BlackBoxResourceErrorData data = new BlackBoxResourceErrorData
+            {
+                Uri = uri ?? String.Empty,
+                Error = error.Error,
+                ErrorCode = error.ErrorCode,
+                Code = error.Code
+            };
+            int code = error.ErrorCode == McpToolErrorCodeEnum.NotFound ? ResourceNotFoundCode : -32602;
+            return new McpProtocolException(code, error.Error, data);
         }
 
         /// <summary>
@@ -212,6 +241,20 @@ namespace Armada.Server.Mcp.Tools
         #endregion
 
         #region Private-Methods
+
+        private static async Task<McpReadResourceResult> GuardAsync(string uri, Func<Task<McpReadResourceResult>> read)
+        {
+            try
+            {
+                return await read().ConfigureAwait(false);
+            }
+            catch (BlackBoxException ex)
+            {
+                McpProtocolException? mapped = ToResourceError(uri, ex);
+                if (mapped == null) throw;
+                throw mapped;
+            }
+        }
 
         private static string Variable(IReadOnlyDictionary<string, string> variables, string name)
         {
