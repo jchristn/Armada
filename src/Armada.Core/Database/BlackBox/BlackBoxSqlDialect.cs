@@ -75,6 +75,17 @@ namespace Armada.Core.Database.BlackBox
         public abstract string Page(int offset, int limit);
 
         /// <summary>
+        /// SQL for the first <paramref name="length"/> characters of a text column.
+        /// </summary>
+        /// <param name="column">Column expression.</param>
+        /// <param name="length">Characters (at least 1).</param>
+        /// <returns>SQL expression.</returns>
+        public virtual string TextPrefix(string column, int length)
+        {
+            return "SUBSTRING(" + column + ", 1, " + Math.Max(1, length).ToString(System.Globalization.CultureInfo.InvariantCulture) + ")";
+        }
+
+        /// <summary>
         /// SQL expression for a slice of a BLOB column. The offset parameter is 1-based.
         /// </summary>
         /// <param name="column">Column.</param>

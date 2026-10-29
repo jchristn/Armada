@@ -108,7 +108,62 @@ namespace Test.Shared.Suites.Services
                 AssertNull(BlackBoxRecoveredFacts.ParseExitCode(null), "null");
             }));
 
+            cases.Add(Case("recapture_only_new_failures", "An edit to a captured failed mission (title, priority) is not a new failure and is not re-captured; a status change, a new attempt, or a changed FailureReason or FailureKind is", TestTags.Negative, async () =>
+            {
+                using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver);
+                Mission edited = await BlackBoxTestKit.FailedMissionAsync(t.Driver, null, null, MissionFailureKindEnum.Crash, "Agent process exited with code 1.").ConfigureAwait(false);
+                Mission reason = await BlackBoxTestKit.FailedMissionAsync(t.Driver, null, null, MissionFailureKindEnum.Crash, "Agent process exited with code 1.").ConfigureAwait(false);
+                Mission kind = await BlackBoxTestKit.FailedMissionAsync(t.Driver, null, null, MissionFailureKindEnum.Crash, "Agent process exited with code 1.").ConfigureAwait(false);
+                Mission status = await BlackBoxTestKit.FailedMissionAsync(t.Driver, null, null, MissionFailureKindEnum.Crash, "Agent process exited with code 1.").ConfigureAwait(false);
+                Mission again = await BlackBoxTestKit.FailedMissionAsync(t.Driver, null, null, MissionFailureKindEnum.Crash, "Agent process exited with code 1.").ConfigureAwait(false);
+                AssertEqual(5, (await bb.Sweeper.SweepAsync().ConfigureAwait(false)).Captured, "first sweep captures all five");
+                await Task.Delay(50).ConfigureAwait(false);
+
+                edited = (await t.Driver.Missions.ReadAsync(edited.Id).ConfigureAwait(false))!;
+                edited.Title = edited.Title + " (renamed)";
+                edited.Priority = edited.Priority + 1;
+                edited.LastUpdateUtc = DateTime.UtcNow;
+                await t.Driver.Missions.UpdateAsync(edited).ConfigureAwait(false);
+                BlackBoxBackfillResult afterEdit = await bb.Sweeper.SweepAsync().ConfigureAwait(false);
+                AssertEqual(0, afterEdit.Captured, "an edit that is not a new failure is not re-captured");
+                AssertEqual(1L, await EntryCountAsync(t, edited.Id).ConfigureAwait(false), "still one entry for the edited mission");
+
+                reason = (await t.Driver.Missions.ReadAsync(reason.Id).ConfigureAwait(false))!;
+                reason.FailureReason = "Agent process exited with code 137.";
+                reason.LastUpdateUtc = DateTime.UtcNow;
+                await t.Driver.Missions.UpdateAsync(reason).ConfigureAwait(false);
+                kind = (await t.Driver.Missions.ReadAsync(kind.Id).ConfigureAwait(false))!;
+                kind.FailureKind = MissionFailureKindEnum.MaxRuntimeExceeded;
+                kind.LastUpdateUtc = DateTime.UtcNow;
+                await t.Driver.Missions.UpdateAsync(kind).ConfigureAwait(false);
+                status = (await t.Driver.Missions.ReadAsync(status.Id).ConfigureAwait(false))!;
+                status.Status = MissionStatusEnum.LandingFailed;
+                status.LastUpdateUtc = DateTime.UtcNow;
+                await t.Driver.Missions.UpdateAsync(status).ConfigureAwait(false);
+                again = (await t.Driver.Missions.ReadAsync(again.Id).ConfigureAwait(false))!;
+                again.StartedUtc = DateTime.UtcNow;
+                again.CompletedUtc = DateTime.UtcNow;
+                again.LastUpdateUtc = DateTime.UtcNow;
+                await t.Driver.Missions.UpdateAsync(again).ConfigureAwait(false);
+
+                BlackBoxBackfillResult afterFailures = await bb.Sweeper.SweepAsync().ConfigureAwait(false);
+                AssertEqual(4, afterFailures.Captured, "a new reason, kind, status or attempt is a new failure");
+                AssertEqual(2L, await EntryCountAsync(t, reason.Id).ConfigureAwait(false), "reason change re-captured");
+                AssertEqual(2L, await EntryCountAsync(t, kind.Id).ConfigureAwait(false), "kind change re-captured");
+                AssertEqual(2L, await EntryCountAsync(t, status.Id).ConfigureAwait(false), "status change re-captured");
+                AssertEqual(2L, await EntryCountAsync(t, again.Id).ConfigureAwait(false), "a new attempt that failed again re-captured");
+                AssertEqual(0, (await bb.Sweeper.SweepAsync().ConfigureAwait(false)).Captured, "nothing captured twice");
+                AssertEqual(1L, await EntryCountAsync(t, edited.Id).ConfigureAwait(false), "the edited mission still has one entry");
+            }));
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Black box sweeper", cases: cases);
+        }
+
+        private static async Task<long> EntryCountAsync(TestDatabase t, string missionId)
+        {
+            EnumerationResult<BlackBoxEntry> page = await t.Driver.BlackBoxEntries.EnumerateByMissionAsync(missionId, null, new EnumerationQuery { PageSize = 50 }).ConfigureAwait(false);
+            return page.TotalRecords;
         }
 
         private static async Task<BlackBoxRecord> RecordAsync(TestDatabase t, BlackBoxRuntime bb, string missionId)

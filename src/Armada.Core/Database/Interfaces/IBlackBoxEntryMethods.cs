@@ -259,7 +259,9 @@ namespace Armada.Core.Database.Interfaces
 
         /// <summary>
         /// Enumerate ids of missions in a terminal failure state (Failed, LandingFailed, Blocked, or Cancelled with a
-        /// failure kind other than OperatorAction) whose last entry is missing or older than their last update. Oldest
+        /// failure kind other than OperatorAction) whose last entry is missing, or older than their last update and no
+        /// longer covering them: the mission re-entered a failure state (another status, an attempt started or finished
+        /// after the entry) or its FailureKind or FailureReason changed. Any other edit is not a new failure. Oldest
         /// update first, id as the tie-break.
         /// </summary>
         /// <param name="updatedSince">Only missions updated at or after this time, or null.</param>

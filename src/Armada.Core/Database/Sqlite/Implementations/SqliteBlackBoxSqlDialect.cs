@@ -37,6 +37,12 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
+        public override string TextPrefix(string column, int length)
+        {
+            return "substr(" + column + ", 1, " + Math.Max(1, length).ToString(System.Globalization.CultureInfo.InvariantCulture) + ")";
+        }
+
+        /// <inheritdoc />
         public override DbConnection CreateConnection()
         {
             return new SqliteProviderConnection(_ConnectionString);
