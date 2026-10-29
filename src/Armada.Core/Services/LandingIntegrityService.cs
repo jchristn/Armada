@@ -7,6 +7,7 @@ namespace Armada.Core.Services
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -86,6 +87,11 @@ namespace Armada.Core.Services
         /// checkouts on the Admiral's host are checked.
         /// </summary>
         public DockHostResolver? Hosts { get; set; } = null;
+
+        /// <summary>
+        /// Black box capture for deferred landings that expire or use up their automatic retries, or null.
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; } = null;
 
         #endregion
 
@@ -265,6 +271,8 @@ namespace Armada.Core.Services
                             + "; no more automatic landing retries");
                         await EmitAsync(DeferralExpiredEventType, "Stopped retrying the landing automatically: " + deferral.CheckoutPath
                             + " was not clean by " + deferral.DeadlineUtc.ToString("u") + ". Clean it and retry landing.", mission, "mission", mission.Id, null, token).ConfigureAwait(false);
+                        await RecordDeferralEndAsync(mission.Id, deferral, BlackBoxStepEnum.DeferralExpired,
+                            "Automatic landing retries stopped: " + deferral.CheckoutPath + " was not clean by " + deferral.DeadlineUtc.ToString("u") + ".", token).ConfigureAwait(false);
                     }
                     continue;
                 }
@@ -283,6 +291,8 @@ namespace Armada.Core.Services
                             + " automatic landing retries; no more automatic retries");
                         await EmitAsync(RetriesExhaustedEventType, "Stopped retrying the landing automatically after " + autoRetries + " of "
                             + _Settings.MaxLandingRetries + " retries (maxLandingRetries). Retry landing manually.", mission, "mission", mission.Id, null, token).ConfigureAwait(false);
+                        await RecordDeferralEndAsync(mission.Id, deferral, BlackBoxStepEnum.RetryLanding,
+                            "Automatic landing retries used up: " + autoRetries + " of " + _Settings.MaxLandingRetries + " (maxLandingRetries).", token).ConfigureAwait(false);
                     }
                     continue;
                 }
@@ -307,6 +317,19 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private async Task RecordDeferralEndAsync(string missionId, LandingDeferral deferral, BlackBoxStepEnum step, string note, CancellationToken token)
+        {
+            if (BlackBox == null) return;
+            Mission? mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+            if (mission == null) return;
+            // The mission stays LandingFailed; the entry records that waiting on the dirty checkout ended.
+            await BlackBox.RecordMissionFailureAsync(mission, mission.Status, step, context =>
+            {
+                context.GitFacts = new BlackBoxGitFacts { CheckoutPath = deferral.CheckoutPath, DirtyPaths = new List<string>(deferral.ModifiedPaths), GitOperation = "status --porcelain" };
+                context.Note = note + " Deferred since " + deferral.FirstDeferredUtc.ToString("u") + ".";
+            }, token).ConfigureAwait(false);
+        }
 
         private async Task<List<MissionSummary>> ReadMissionsAsync(MissionStatusEnum status, CancellationToken token)
         {

@@ -1,6 +1,7 @@
 namespace Armada.Core.Services
 {
     using SyslogLogging;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -31,6 +32,11 @@ namespace Armada.Core.Services
         /// missing worktree fails the retry as before.
         /// </summary>
         public IDockService? Docks { get; set; } = null;
+
+        /// <summary>
+        /// Black box capture for failed landing retries, or null.
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; } = null;
 
         #endregion
 
@@ -85,6 +91,7 @@ namespace Armada.Core.Services
 
             DateTime retryVersion = mission.LastUpdateUtc;
             MissionStatusEnum retryStatus = mission.Status;
+            MissionStatusEnum retryStatusBefore = mission.Status;
             async Task<bool> SaveRetryAsync()
             {
                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -134,6 +141,11 @@ namespace Armada.Core.Services
                 mission.FailureKind = MissionFailureKindEnum.Infra;
                 mission.FailureReason = "Landing retry cannot resolve the repository on the dock's owning host.";
                 if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxStepEnum.RetryLanding, context =>
+                {
+                    context.Vessel = vessel;
+                    context.Dock = dock;
+                }, token).ConfigureAwait(false);
                 return false;
             }
 
@@ -177,7 +189,15 @@ namespace Armada.Core.Services
                     mission.Status = MissionStatusEnum.LandingFailed;
                     mission.FailureKind = MissionFailureKindEnum.Infra;
                     mission.FailureReason = "Source branch '" + missionBranch + "' is missing in " + repoPath + ". Recover the preserved commit or branch before retrying landing.";
-                    await SaveRetryAsync().ConfigureAwait(false);
+                    if (await SaveRetryAsync().ConfigureAwait(false))
+                    {
+                        await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxStepEnum.RetryLanding, context =>
+                        {
+                            context.Vessel = vessel;
+                            context.Dock = dock;
+                            context.GitFacts = new BlackBoxGitFacts { GitOperation = "rev-parse --verify " + missionBranch, CheckoutPath = repoPath };
+                        }, token).ConfigureAwait(false);
+                    }
                     return false;
                 }
 
@@ -205,6 +225,12 @@ namespace Armada.Core.Services
                         + (restored != null && !String.IsNullOrEmpty(restored.Reason) ? " Recreating the worktree failed: " + restored.Reason + "." : "");
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                    await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxStepEnum.DockMissing, context =>
+                    {
+                        context.Vessel = vessel;
+                        context.Dock = dock;
+                        context.GitFacts = new BlackBoxGitFacts { WorktreeExisted = false, CheckoutPath = dock.WorktreePath };
+                    }, token).ConfigureAwait(false);
                     return false;
                 }
 
@@ -241,6 +267,12 @@ namespace Armada.Core.Services
                     mission.FailureKind = MissionFailureKindEnum.Infra;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                    await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxStepEnum.RetryLanding, context =>
+                    {
+                        context.Vessel = vessel;
+                        context.Dock = dock;
+                        context.Reason = "No landing handler is configured on this Admiral, so the landing could not be retried.";
+                    }, token).ConfigureAwait(false);
                     return false;
                 }
             }
@@ -272,6 +304,16 @@ namespace Armada.Core.Services
                         mission.FailureKind = failureKind;
                         mission.LastUpdateUtc = DateTime.UtcNow;
                         if (!await SaveRetryAsync().ConfigureAwait(false)) return false;
+                        IReadOnlyList<string> recordedConflicts = conflicts;
+                        await BlackBox.RecordMissionFailureAsync(mission, retryStatusBefore, BlackBoxSiteFacts.LandingStepOf(ex, BlackBoxStepEnum.RetryLanding), context =>
+                        {
+                            context.Vessel = vessel;
+                            context.Dock = dock != null && dock.Active ? dock : null;
+                            BlackBoxSiteFacts.ApplyException(context, ex);
+                            context.GitFacts ??= new BlackBoxGitFacts();
+                            foreach (string file in recordedConflicts)
+                                if (!context.GitFacts.ConflictedFiles.Contains(file)) context.GitFacts.ConflictedFiles.Add(file);
+                        }, token).ConfigureAwait(false);
                     }
                 }
                 catch { }
