@@ -206,7 +206,7 @@ bytes go to the configured storage target, `Database` by default. Black box data
 collector; `dataRetentionDays` and `retention.*` never touch it. The routes below that change or report on the whole
 install need a global admin, except `GET /api/v1/blackbox/retention` (tenant admins see their own tenant) and the
 per-entry routes (anyone who can see the entry). Every setting is in
-[UPGRADING.md](UPGRADING.md#upgrading-to-the-release-that-adds-the-black-box-v120-or-later).
+[UPGRADING.md](UPGRADING.md#the-mission-and-voyage-black-box-migrations-103-and-104).
 
 ### Checking retention
 
@@ -520,7 +520,7 @@ Risk: Low. Expected: A fresh process runs the mission.
 Capture writes the entry at once; enrichment (git state, conflicting missions, evidence) and analysis follow in the
 background, so a brand-new entry can show "Analysis is still running" for a few seconds. The panel fills in when the
 `blackbox.analyzed` event arrives. A 404 `BlackBoxNotFound` means no visible entry exists: the failure predates the
-upgrade and has not been swept yet (see the backfill in [UPGRADING.md](UPGRADING.md#upgrading-to-the-release-that-adds-the-black-box-v120-or-later)),
+upgrade and has not been swept yet (see the backfill in [UPGRADING.md](UPGRADING.md#the-mission-and-voyage-black-box-migrations-103-and-104)),
 the entry expired, or it belongs to another tenant.
 
 **Recovering: dry run, then confirm.** Run only a recovery path recorded in the entry, never a free-form command. The
