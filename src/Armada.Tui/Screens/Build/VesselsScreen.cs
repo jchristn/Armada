@@ -138,6 +138,7 @@ namespace Armada.Tui.Screens.Build
 
             RowActions.Add(new OpsAction<Vessel>("dispatch", "Dispatch", v => Context.Navigate(DispatchRoute(v)), "d"));
             RowActions.Add(new OpsAction<Vessel>("branches", "Manage Branches", v => ManageBranches(v), "b"));
+            RowActions.Add(new OpsAction<Vessel>("cleanup", "Cleanup", v => Cleanup(v), "c"));
             RowActions.Add(new OpsAction<Vessel>("objectives", "Manage Objectives", v => Context.Navigate(ObjectivesRoute(v)), "O"));
             RowActions.Add(new OpsAction<Vessel>("fleet", "Manage Fleet", v => Context.Navigate("/fleets/" + Uri.EscapeDataString(v.FleetId!)), "f", v => !String.IsNullOrEmpty(v.FleetId)));
             RowActions.Add(new OpsAction<Vessel>("workspace", "Open Workspace", v => Context.Navigate("/workspace/" + Uri.EscapeDataString(v.Id)), "w"));
@@ -195,6 +196,24 @@ namespace Armada.Tui.Screens.Build
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
             return OpsHandoff.Dispatch(OpsHandoff.FromVessel, vessel.Id, null, null, null, null, null);
+        }
+
+        /// <summary>
+        /// Open the vessel Cleanup dialog (read-only until cleanup is confirmed); the list reloads when it closes.
+        /// </summary>
+        /// <param name="vessel">Vessel.</param>
+        /// <returns>The dialog.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="vessel"/> is null.</exception>
+        public VesselCleanupDialog Cleanup(Vessel vessel)
+        {
+            if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            VesselCleanupDialog dialog = new VesselCleanupDialog(this, vessel.Id, vessel.Name);
+            Context.Modals.Show(dialog, r =>
+            {
+                _StatusReadUtc.TryRemove(vessel.Id, out DateTime _);
+                Refresh();
+            });
+            return dialog;
         }
 
         /// <summary>

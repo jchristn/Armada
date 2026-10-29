@@ -17,7 +17,7 @@ namespace Armada.Tui.Screens.Build
 
     /// <summary>
     /// A vessel's page (W4.4, <c>/vessels/:id</c>), the dashboard's VesselDetail: Manage Objectives, Manage Fleet,
-    /// Onboarding, Run Check, Open Workspace, Health (the health inspector with Re-evaluate), and History as buttons, plus Edit,
+    /// Onboarding, Run Check, Open Workspace, Health (the health inspector with Re-evaluate), History, and Cleanup as buttons, plus Edit,
     /// Duplicate, View JSON, Delete, Copy ID, and Copy Harbor ID (when a Harbor has the checkout); the Readiness and
     /// Landing Preview panels, every field (branch prefixes and
     /// policies, auto-approve, the auto-land and Definition-of-Done gates, the GitHub token state), the context
@@ -135,6 +135,7 @@ namespace Armada.Tui.Screens.Build
             Action("workspace", "Open Workspace", () => Context.Navigate("/workspace/" + Uri.EscapeDataString(VesselId)), "w", () => Vessel != null, true);
             Action("health", "Health", ShowHealth, "h", () => Vessel != null, true);
             Action("history", "History", () => Context.Navigate(VesselsScreen.HistoryRoute(VesselId)), "H", () => Vessel != null, true);
+            Action("cleanup", "Cleanup", ShowCleanup, "c", () => Vessel != null, true);
             Action("edit", "Edit", Edit, "e", () => Vessel != null);
             Action("duplicate", "Duplicate", Duplicate, "u", () => Vessel != null);
             Action("json", "View JSON", () => ShowJson(Tr("Vessel: {{name}}", LocalizationArgs.Of("name", Vessel!.Name)), Vessel), "j", () => Vessel != null);
@@ -256,6 +257,12 @@ namespace Armada.Tui.Screens.Build
             VesselHealthDialog dialog = new VesselHealthDialog(this, VesselId, Vessel.Name, Vessel.DefaultBranch, IsTenantAdmin, Evaluation);
             _HealthDialog = dialog;
             Context.Modals.Show(dialog, r => { if (ReferenceEquals(_HealthDialog, dialog)) _HealthDialog = null; });
+        }
+
+        private void ShowCleanup()
+        {
+            if (Vessel == null) return;
+            Context.Modals.Show(new VesselCleanupDialog(this, VesselId, Vessel.Name), r => Load());
         }
 
         private void Edit()

@@ -2749,7 +2749,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetVesselCleanupInventoryAsync",
       "workstream": "W0.2",
-      "notes": "Vessels"
+      "notes": "Vessels | used by VesselCleanupDialog"
     },
     {
       "kind": "api",
@@ -3317,7 +3317,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.ListVesselCleanupResourcesAsync",
       "workstream": "W0.2",
-      "notes": "Vessels"
+      "notes": "Vessels | used by VesselCleanupDialog"
     },
     {
       "kind": "api",
@@ -3685,7 +3685,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.RunVesselCleanupAsync",
       "workstream": "W0.2",
-      "notes": "Vessels"
+      "notes": "Vessels | used by VesselCleanupDialog"
     },
     {
       "kind": "api",
