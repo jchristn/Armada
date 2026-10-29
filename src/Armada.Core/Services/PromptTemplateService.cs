@@ -155,9 +155,16 @@ namespace Armada.Core.Services
         /// <summary>
         /// Current default content for the Ask Armada system prompt. Instructs the model to use only the
         /// tools actually provided, and to say so honestly (and point to the right surface) when it has no
-        /// tool for what the operator asked -- rather than hallucinating tool access.
+        /// tool for what the operator asked -- rather than hallucinating tool access -- and how to answer from a
+        /// mission's black box (<see cref="Armada.Core.Services.Ask.AskBlackBoxGuidance.Section"/>).
         /// </summary>
-        private const string _AskSystemDefault =
+        private const string _AskSystemDefault = _AskSystemRecapDefault + "\n" + Armada.Core.Services.Ask.AskBlackBoxGuidance.Section;
+
+        /// <summary>
+        /// The Ask Armada system prompt before the black box guidance was added. Used to upgrade an untouched built-in
+        /// template in place.
+        /// </summary>
+        private const string _AskSystemRecapDefault =
             "You are an AI captain in Armada's \"Ask Armada\" chat.\n" +
             "\n" +
             "## What you can do\n" +
@@ -512,7 +519,8 @@ namespace Armada.Core.Services
                 && !String.Equals(existing.Content, _AskSystemPreviousDefault, StringComparison.Ordinal)
                 && !String.Equals(existing.Content, _AskSystemScopeDefault, StringComparison.Ordinal)
                 && !String.Equals(existing.Content, _AskSystemDecisionsDefault, StringComparison.Ordinal)
-                && !String.Equals(existing.Content, _AskSystemDispatchDefault, StringComparison.Ordinal)) return;
+                && !String.Equals(existing.Content, _AskSystemDispatchDefault, StringComparison.Ordinal)
+                && !String.Equals(existing.Content, _AskSystemRecapDefault, StringComparison.Ordinal)) return;
 
             existing.Content = _AskSystemDefault;
             existing.LastUpdateUtc = DateTime.UtcNow;

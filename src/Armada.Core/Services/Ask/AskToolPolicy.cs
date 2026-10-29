@@ -107,7 +107,9 @@ namespace Armada.Core.Services.Ask
             "get_battery_run",
             "list_battery_results",
 
-            // Black box readers (plan 10.1); the write tools stay behind the Ask gate as proposals
+            // Black box readers (plan 10.1): every BlackBox tool the MCP authorization registry declares as a Read. The
+            // write tools (run_blackbox_recovery, apply_blackbox_recommendation, resolve_blackbox, annotate_blackbox, pin,
+            // delete, purge, gc, reanalyze) stay behind the Ask gate as proposals.
             "get_blackbox",
             "read_blackbox_section",
             "list_blackbox_objects",
@@ -120,7 +122,8 @@ namespace Armada.Core.Services.Ask
             "list_blackbox_fingerprints",
             "get_blackbox_fingerprint_trend",
             "get_blackbox_retention",
-            "get_blackbox_storage"
+            "get_blackbox_storage",
+            "export_blackbox_fixture"
         };
 
         private static readonly HashSet<string> _GateExempt = new HashSet<string>(StringComparer.Ordinal)

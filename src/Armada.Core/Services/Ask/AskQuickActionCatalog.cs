@@ -48,8 +48,28 @@ namespace Armada.Core.Services.Ask
                 Arg("maxDepth", "Max depth", "integer", false, "Maximum scan depth"),
                 Arg("runInBackground", "Run in background", "boolean", false, "Run discovery as a background job", "true")));
 
+            actions.Add(Action("/blackbox", "Black box of a failure", "Show the black box of a failed mission here, then ask the captain your question about it.", "get_blackbox", false,
+                Arg("missionId", "Mission", "mission", true, "Failed mission with a black box entry (msn_ prefix)"),
+                Arg("question", "Question", "text", false, "Optional question for the captain, sent once the card is shown")));
+
             foreach (AskQuickAction action in actions) action.ReadOnly = AskToolPolicy.IsReadOnly(action.ToolName);
             return actions;
+        }
+
+        /// <summary>
+        /// Remove the arguments of a quick action that its client uses itself rather than passing to the tool: the
+        /// question of /blackbox, which the client sends to the captain once the card is shown.
+        /// </summary>
+        /// <param name="toolName">Tool name.</param>
+        /// <param name="arguments">Arguments, or null.</param>
+        /// <returns>The arguments the tool receives (a copy when something was removed).</returns>
+        public static JsonObject? ToolArguments(string? toolName, JsonObject? arguments)
+        {
+            if (arguments == null || !String.Equals(AskToolPolicy.NormalizeToolName(toolName), "get_blackbox", StringComparison.Ordinal)) return arguments;
+            if (!arguments.ContainsKey("question")) return arguments;
+            JsonObject copy = (JsonObject)arguments.DeepClone();
+            copy.Remove("question");
+            return copy;
         }
 
         /// <summary>
