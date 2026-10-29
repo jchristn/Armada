@@ -49,6 +49,7 @@ export default function VesselFormModal({ vessel, fleets, pipelines, onClose, on
     branchCleanup: t('What happens to a mission branch after it lands. Local Only deletes it from the bare clone; Local and Remote also deletes it on the remote; None keeps it. Default is the global setting (Local Only).'),
     autoApprove: t('Whether CLI captains run here with their auto-approve (permission bypass) flags. Use captain setting keeps each captain as configured; On or Off overrides every captain on this vessel.'),
     pipeline: t('Persona pipeline used when a dispatch to this vessel does not name one, e.g. Architect then Worker then Judge. None falls back to the fleet default, then a single Worker stage.'),
+    serialize: t('When a new mission overlaps an active mission on this vessel (shared files or a reserved hotspot directory), dispatch chains it after that mission so it starts once that one lands. Off (the default) dispatches it right away with an overlap warning. A dependency you set yourself is never replaced.'),
     concurrent: t('Let several missions be active on this vessel at once, each in its own worktree. Off (the default) runs one mission at a time, which avoids merge conflicts between missions.'),
     modelContext: t('Ask captains to record what they learn about this repo (build quirks, test patterns, architecture) into Model Context, which is fed to future missions. On by default.'),
     secretScan: t('Before landing, scan each mission diff for secrets such as API keys, and block changes to Protected Path Patterns or text from the Private Identifier Denylist. Off by default.'),
@@ -188,6 +189,10 @@ export default function VesselFormModal({ vessel, fleets, pipelines, onClose, on
           <label style={checkboxLabelStyle} title={tip.concurrent}>
             <input title={tip.concurrent} type="checkbox" checked={form.allowConcurrentMissions} onChange={e => setForm({ ...form, allowConcurrentMissions: e.target.checked })} style={checkboxStyle} />
             <span style={{ verticalAlign: 'middle' }}>{t('Allow Concurrent Missions')}</span>
+          </label>
+          <label style={checkboxLabelStyle} title={tip.serialize}>
+            <input title={tip.serialize} type="checkbox" checked={form.serializeOverlappingMissions} onChange={e => setForm({ ...form, serializeOverlappingMissions: e.target.checked })} style={checkboxStyle} aria-label={t('Serialize Overlapping Missions')} />
+            <span style={{ verticalAlign: 'middle' }}>{t('Serialize Overlapping Missions')}</span>
           </label>
           <label style={checkboxLabelStyle} title={tip.modelContext}>
             <input title={tip.modelContext} type="checkbox" checked={form.enableModelContext} onChange={e => setForm({ ...form, enableModelContext: e.target.checked })} style={checkboxStyle} />

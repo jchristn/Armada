@@ -20,6 +20,7 @@ export interface VesselFormState {
   landingMode: string;
   branchCleanupPolicy: string;
   allowConcurrentMissions: boolean;
+  serializeOverlappingMissions: boolean;
   autoApproveMode: string;
   defaultPipelineId: string;
   requirePassingChecksToLand: boolean;
@@ -57,7 +58,7 @@ export interface LandingModeOption {
 export const emptyVesselForm: VesselFormState = {
   name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '',
   projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '', gitHubTokenOverride: '', clearGitHubTokenOverride: false,
-  landingMode: 'LocalMerge', branchCleanupPolicy: 'LocalAndRemote', allowConcurrentMissions: false, autoApproveMode: 'inherit', defaultPipelineId: '',
+  landingMode: 'LocalMerge', branchCleanupPolicy: 'LocalAndRemote', allowConcurrentMissions: false, serializeOverlappingMissions: false, autoApproveMode: 'inherit', defaultPipelineId: '',
   requirePassingChecksToLand: false, protectedBranchPatterns: '', releaseBranchPrefix: 'release/', hotfixBranchPrefix: 'hotfix/',
   requirePullRequestForProtectedBranches: false, requireMergeQueueForReleaseBranches: false,
   secretScanEnabled: false, protectedPathPatterns: '', privateIdentifierDenylist: '',
@@ -118,6 +119,7 @@ export function vesselToForm(v: Vessel): VesselFormState {
     landingMode: v.landingMode ?? '',
     branchCleanupPolicy: v.branchCleanupPolicy ?? '',
     allowConcurrentMissions: v.allowConcurrentMissions,
+    serializeOverlappingMissions: v.serializeOverlappingMissions ?? false,
     autoApproveMode: v.autoApprove === true ? 'on' : v.autoApprove === false ? 'off' : 'inherit',
     defaultPipelineId: v.defaultPipelineId ?? '',
     requirePassingChecksToLand: v.requirePassingChecksToLand ?? false,
@@ -171,6 +173,7 @@ export function buildVesselPayload(form: VesselFormState, existing: Vessel | nul
   payload.landingMode = form.landingMode || null;
   payload.branchCleanupPolicy = form.branchCleanupPolicy || null;
   payload.allowConcurrentMissions = form.allowConcurrentMissions;
+  payload.serializeOverlappingMissions = form.serializeOverlappingMissions;
   payload.autoApprove = form.autoApproveMode === 'on' ? true : form.autoApproveMode === 'off' ? false : null;
   payload.defaultPipelineId = form.defaultPipelineId || null;
   payload.requirePassingChecksToLand = form.requirePassingChecksToLand;
