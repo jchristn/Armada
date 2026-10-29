@@ -146,6 +146,12 @@ namespace Armada.Server
         public StorageSettings? Storage { get; set; }
 
         /// <summary>
+        /// Black box settings (capture, storage, retention, sweeper), or null to leave unchanged. Storage secrets read back
+        /// masked from GET keep their stored values when written back masked.
+        /// </summary>
+        public BlackBoxSettings? BlackBox { get; set; }
+
+        /// <summary>
         /// Optional CLI tool permission settings update (AskDefaultPolicy, MissionDefaultPolicy, AllowOwnerApproval,
         /// PromptTimeoutSeconds). When supplied, replaces the full permissions object; omitted fields take their defaults
         /// and PromptTimeoutSeconds is clamped to 10..3600. Applied live to the next launch.

@@ -4,6 +4,7 @@ namespace Armada.Core.Services
     using System.Text.Json;
     using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -61,6 +62,11 @@ namespace Armada.Core.Services
         /// on its Harbor through this; without it every dock is treated as local.
         /// </summary>
         public DockHostResolver? DockHosts { get; set; }
+
+        /// <summary>
+        /// Black box capture called at mission failure sites, or null when the black box is not wired (no capture).
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; }
 
         #endregion
 
@@ -1576,6 +1582,7 @@ namespace Armada.Core.Services
                 return false;
             }
 
+            MissionStatusEnum statusBefore = mission.Status;
             mission.Status = MissionStatusEnum.Failed;
             mission.CompletedUtc = DateTime.UtcNow;
             mission.LastUpdateUtc = DateTime.UtcNow;
@@ -1583,6 +1590,16 @@ namespace Armada.Core.Services
             mission.FailureKind = MissionFailureKindEnum.ScopeViolation;
             await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
             _Logging.Warn(_Header + "mission " + mission.Id + " failed scope validation: " + mission.FailureReason);
+
+            // Black box reference capture site: update the row first, then record the failure in one line. The capture
+            // never throws and records this method, file and line as the failure site.
+            await BlackBox.RecordMissionFailureAsync(mission, statusBefore, BlackBoxStepEnum.ScopeViolation, context =>
+            {
+                context.Dock = dock;
+                context.ScopedFiles.AddRange(allowedFiles.OrderBy(f => f, StringComparer.Ordinal));
+                context.OutOfScopeFiles.AddRange(outOfScopeFiles);
+                context.Note = "Scope check base: dock start commit " + startCommit + ".";
+            }, token).ConfigureAwait(false);
             return true;
         }
 

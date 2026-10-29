@@ -560,6 +560,12 @@ namespace Armada.Server.Routes
                 if (body.RepositoryHealth != null)
                     _settings.RepositoryHealth = body.RepositoryHealth;
                 if (body.Storage != null) _settings.Storage = body.Storage;
+                if (body.BlackBox != null)
+                {
+                    // Storage secrets come back from GET masked; a masked value keeps the stored secret.
+                    Armada.Core.BlackBox.BlackBoxSettingsSecrets.KeepMasked(body.BlackBox, _settings.BlackBox, _RedactedSecret);
+                    _settings.BlackBox = body.BlackBox;
+                }
                 if (body.Retention != null)
                     _settings.Retention = body.Retention;
                 if (body.Permissions != null)
@@ -758,6 +764,7 @@ namespace Armada.Server.Routes
                 RepositoryHealth = _settings.RepositoryHealth,
                 Retention = _settings.Retention,
                 Storage = _settings.Storage,
+                BlackBox = Armada.Core.BlackBox.BlackBoxSettingsSecrets.Mask(_settings.BlackBox, _RedactedSecret),
                 Permissions = _settings.Permissions,
                 Ask = _settings.Ask,
                 Push = RedactPush(_settings.Push)

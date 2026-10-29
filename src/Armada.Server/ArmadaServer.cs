@@ -41,6 +41,12 @@ namespace Armada.Server
         public Action? OnStopping { get; set; }
 
         /// <summary>
+        /// The mission and voyage black box (capture, sweeper, garbage collection, and the service every surface calls),
+        /// or null before <see cref="StartAsync"/>.
+        /// </summary>
+        public Armada.Core.BlackBox.BlackBoxRuntime? BlackBox => _BlackBox;
+
+        /// <summary>
         /// Replaces what an authorized <c>POST /api/v1/server/restart</c> does: when set, it runs instead of launching a
         /// replacement process and stopping this one, and returns true when the restart started. The route still
         /// requires a global admin before calling it. Null (the default) restarts for real. Tests set it so nothing
@@ -161,6 +167,7 @@ namespace Armada.Server
         private DataExpiryService? _DataExpiry = null;
         private RetentionService _Retention = null!;
         private StorageInventoryService _StorageInventory = null!;
+        private Armada.Core.BlackBox.BlackBoxRuntime? _BlackBox = null;
         private RemoteTunnelManager _RemoteTunnel = null!;
         private RemoteDashboardRelayService _RemoteDashboardRelay = null!;
         private PlanningSessionCoordinator _PlanningSessions = null!;
@@ -303,6 +310,16 @@ namespace Armada.Server
             IDefinitionOfDoneGate definitionOfDoneGate = new DefinitionOfDoneGate(_Logging);
             MissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService, _Git, definitionOfDoneGate);
             _MissionService = missionService;
+
+            // Mission and voyage black box: one runtime shared by capture sites, background loops and every surface.
+            Armada.Core.BlackBox.DatabaseBlackBoxEventSink blackBoxEvents = new Armada.Core.BlackBox.DatabaseBlackBoxEventSink(_Database, _Logging);
+            blackBoxEvents.OnEmitted = (evt, payload) =>
+            {
+                _WebSocketHub?.BroadcastToTenant(evt.TenantId, evt.EventType, evt.Message, payload);
+                return Task.CompletedTask;
+            };
+            _BlackBox = Armada.Core.BlackBox.BlackBoxRuntime.Create(_Database, _Settings, _Logging, new BuildIdentityBlackBoxVersionProvider(), blackBoxEvents);
+            missionService.BlackBox = _BlackBox.Capture;
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);
             AdmiralService admiralService = new AdmiralService(_Logging, _Database, _Settings, captainService, missionService, voyageService, dockService, escalationService);
@@ -924,6 +941,7 @@ namespace Armada.Server
             }
 
             _StorageInventory.Start();
+            _BlackBox?.Background.Start();
 
             // Start health check loop
             _HealthCheckTask = HealthCheckLoopAsync(_TokenSource.Token);
@@ -970,6 +988,15 @@ namespace Armada.Server
             }
 
             _VesselHealthService?.Dispose();
+            try
+            {
+                _BlackBox?.Background.StopAsync().GetAwaiter().GetResult();
+                _BlackBox?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "error stopping the black box on shutdown: " + ex.Message);
+            }
             _TokenSource.Cancel();
             _AskTracker?.Stop();
             _PushNotifications?.Dispose();
