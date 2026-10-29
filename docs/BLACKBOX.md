@@ -35,13 +35,18 @@ targets plug in through `IBlackBoxStore` and `BlackBoxStoreFactory`.
 
 - `BlackBoxRuntime.Create(DatabaseDriver database, ArmadaSettings settings, LoggingModule logging, IBlackBoxVersionProvider? version = null, IBlackBoxEventSink? events = null)`
   builds every component once and exposes them: `Redactor`, `Stores`, `Objects`, `Renderer`, `Writer`, `Events`,
-  `Capture`, `Pipeline`, `Queue`, `Sweeper`, `GarbageCollector`, `Service`, `Background`.
+  `Capture`, `Pipeline`, `Advisor`, `Reanalyzer`, `Queue`, `Sweeper`, `GarbageCollector`, `Service`, `Background`. It sets
+  `Pipeline.Advisor` to a `BlackBoxAdvisor` over `BlackBoxRuleCatalog.Default`, `Pipeline.SummaryWriter` to a
+  `ModelEndpointBlackBoxSummaryWriter`, registers `BlackBoxConfigurationEnricher` as the first enricher, and gives
+  `Background` the `Reanalyzer`.
 - The Admiral (`src/Armada.Server/ArmadaServer.cs`) builds one runtime right after `MissionService`, with
   `BuildIdentityBlackBoxVersionProvider` (BuildIdentity version and commit) and a `DatabaseBlackBoxEventSink` whose
   `OnEmitted` broadcasts each event to the tenant's WebSocket clients. It sets `MissionService.BlackBox`, starts
   `Background` (enrichment worker, sweeper every `blackBox.sweeper.intervalSeconds`, garbage collection every
   `blackBox.retention.gcIntervalMinutes`; both check `blackBox.enabled` on every tick) and stops it before the database
-  is disposed. `ArmadaServer.BlackBox` exposes the runtime to routes and tests.
+  is disposed. `ArmadaServer.BlackBox` exposes the runtime to routes and tests. After registering the MCP tools the
+  Admiral sets `Service.ActionExecutor` to a `BlackBoxMcpActionExecutor` (recovery runs and recommendation applies run
+  through the registered MCP tool handlers, as the caller).
 - Namespaces: services in `Armada.Core.BlackBox`, storage in `Armada.Core.BlackBox.Storage`, models in
   `Armada.Core.Models`, enums in `Armada.Core.Enums`, settings in `Armada.Core.Settings`, database interfaces in
   `Armada.Core.Database.Interfaces`, shared SQL in `Armada.Core.Database.BlackBox`.
@@ -136,6 +141,8 @@ Task<BlackBoxRecommendationApplyResult> ApplyRecommendationAsync(AuthContext cal
 Task<BlackBoxBundleResult> GetBundleAsync(AuthContext caller, BlackBoxBundleRequest? request, CancellationToken token = default);
 Task<EnumerationResult<BlackBoxHotspot>> EnumerateHotspotsAsync(AuthContext caller, BlackBoxHotspotEnumerateRequest? request, CancellationToken token = default);
 Task<EnumerationResult<BlackBoxFingerprintSummary>> EnumerateFingerprintsAsync(AuthContext caller, BlackBoxFingerprintEnumerateRequest? request, CancellationToken token = default);
+Task<BlackBoxFingerprintTrend> GetFingerprintTrendAsync(AuthContext caller, string fingerprint, CancellationToken token = default);
+Task<BlackBoxFixture> ExportFixtureAsync(AuthContext caller, string entryId, string? name = null, CancellationToken token = default);
 ```
 
 ### IBlackBoxEnricher
@@ -154,6 +161,24 @@ Task EnrichAsync(BlackBoxEnrichmentContext context, CancellationToken token = de
 ```csharp
 int RulesVersion { get; }
 BlackBoxAnalysis? Analyze(BlackBoxRecord record);
+```
+
+Implemented by `BlackBoxAdvisor` (section 3.13).
+
+### IBlackBoxActionExecutor
+
+`src/Armada.Core/BlackBox/IBlackBoxActionExecutor.cs`
+
+```csharp
+Task<BlackBoxRecoveryStepResult> ExecuteAsync(AuthContext caller, BlackBoxAction action, CancellationToken token = default);
+```
+
+### IBlackBoxSummaryWriter
+
+`src/Armada.Core/BlackBox/IBlackBoxSummaryWriter.cs`
+
+```csharp
+Task<string?> WriteSummaryAsync(string endpointId, BlackBoxRecord record, BlackBoxAnalysis analysis, CancellationToken token = default);
 ```
 
 ### IBlackBoxEnrichmentQueue
@@ -197,7 +222,17 @@ Other public classes:
 | `BlackBoxCapture` | `IBlackBoxCapture`; `Enrichment` property; `static TrimSourcePath(string?)` |
 | `BlackBoxCaptureExtensions` | `RecordMissionFailureAsync`, `RecordVoyageFailureAsync` (one-line helpers) |
 | `BlackBoxService` | `IBlackBoxService`; `static Summarize(BlackBoxEntry)`, `static SummarizeObject(BlackBoxObject)` |
-| `BlackBoxPipeline` | `AddEnricher(IBlackBoxEnricher)`, `Advisor` (default `NoOpBlackBoxAdvisor`), `ProcessAsync(entryId)`, `LoadRecordAsync(entry)` |
+| `BlackBoxPipeline` | `AddEnricher(IBlackBoxEnricher)`, `Advisor` (default `NoOpBlackBoxAdvisor`; the runtime sets `BlackBoxAdvisor`), `SummaryWriter`, `SummaryTimeoutMs` (30000), `ProcessAsync(entryId)`, `ReanalyzeAsync(entryId)` (advisor only), `LoadRecordAsync(entry)` |
+| `BlackBoxAdvisor` | `IBlackBoxAdvisor`; `Catalog`; `static Analyze(record, catalog, diagnostics)`, `static Tally(votes)` |
+| `BlackBoxRuleCatalog` | `CurrentRulesVersion`, `Default`, `Rules`, `Find(id)`, `static BuildRules()`; rule building blocks `BlackBoxRule`, `BlackBoxRuleRecommendation`, `BlackBoxRuleImprovement`, `BlackBoxRulePath`, `BlackBoxRuleStep` |
+| `BlackBoxRuleTemplate`, `BlackBoxRulePlaceholders`, `BlackBoxRuleFacts` | Placeholder rendering, placeholder values, derived facts shared by rule predicates |
+| `BlackBoxActionCommands` | `SupportedTools`, `DataLossTools`, `IsSupported`, `Rest(action)`, `Cli(action)` |
+| `BlackBoxReanalyzer` | `RunOnceAsync()`: re-analyzes entries with an older rules version (`PageSize` 100, `MaxPagesPerRun` 5, `MaxPerRun` 100) |
+| `BlackBoxConfigurationResolver` | `Resolve(inputs)`, `LoadAsync(...)` (persona, workflow profile), `Merge(target, extra)`; `BlackBoxConfigurationInputs`; `BlackBoxConfigurationEnricher` |
+| `BlackBoxConfirmationStore` | `Issue`, `Consume`, `Lifetime` (10 minutes), `MaxPending` (10000), `Clock`; `BlackBoxPendingConfirmation` |
+| `BlackBoxFixtureExporter` | `Sanitize(record)`, `Build(record, advisor, ...)`, `Serialize`, `Parse`, `WriteAsync(fixture, directory)` |
+| `ModelEndpointBlackBoxSummaryWriter` | `IBlackBoxSummaryWriter` over a model endpoint (`MaxTokens` 400, `MaxPromptChars` 12000), `BuildPrompt` |
+| `BlackBoxMcpActionExecutor` (Armada.Server) | `IBlackBoxActionExecutor` through `AskActionService.ExecuteAsync` |
 | `BlackBoxEnrichmentQueue` | `IBlackBoxEnrichmentQueue`; `Start()`, `StopAsync()`, `DrainAsync()`; capacity 10000 |
 | `BlackBoxEnrichmentContext` | Entry, Record, Mission, Voyage, Vessel, and collectors Files, Links, Objects (`BlackBoxPendingObject`: Name, ContentType, Data, IsText) |
 | `BlackBoxEntryWriter` | Writes record.json, briefs and evidence with redaction, bounds, fallback and the time budget; saves totals |
@@ -448,7 +483,7 @@ payload) and broadcast to the tenant's WebSocket clients (declared in `WebSocket
 | `blackbox.deleted` | `BlackBoxDeletedPayload` (entryId, missionId, voyageId, reason) |
 | `blackbox.storage_fallback` | `BlackBoxStorageFallbackPayload` (entryId, from, to, error) |
 | `blackbox.gc_completed` | `BlackBoxGcReport` |
-| `blackbox.recovery_run` | `BlackBoxRecoveryRunPayload` (entryId, pathId, dryRun, succeeded); emitted by wave two |
+| `blackbox.recovery_run` | `BlackBoxRecoveryRunPayload` (entryId, pathId, recommendationId, dryRun, succeeded, stepsRun, stepsFailed, userId); every recovery dry run and run, and every recommendation dry run and apply |
 
 ### 3.11 Redaction
 
@@ -463,9 +498,145 @@ values. Redaction runs on the record, every text evidence object and every rende
 `Database.BlackBoxEntries`, `Database.BlackBoxObjects`, `Database.BlackBoxFiles`, `Database.BlackBoxLinksNotes` (all
 four providers through `scripts/common/run-db-parity-tests.sh`), `Services.BlackBoxCapture`, `Services.BlackBoxSweeper`,
 `Services.BlackBoxGarbageCollector`, `Services.BlackBoxStore`, `Services.BlackBoxService`, `Services.BlackBoxRedactor`,
-`Services.BlackBoxFingerprint`, `Services.BlackBoxBriefRenderer`, `Models.BlackBoxSchema` (schema drift and
-validation). Test helpers: `BlackBoxTestKit`, `ScriptedBlackBoxStore`, `RecordingBlackBoxEventSink`,
-`BlackBoxSchemaValidator`. After changing a model, run `scripts/common/generate-blackbox-schema.sh`.
+`Services.BlackBoxFingerprint`, `Services.BlackBoxBriefRenderer`, `Services.BlackBoxAdvisor` (a golden case per rule,
+coverage, ties, placeholders, empty record, ranking, re-analysis, audiences), `Services.BlackBoxRecovery`,
+`Services.BlackBoxFixtures`, `Services.BlackBoxMaintainer` (bundle, trends), `Services.BlackBoxSummary`,
+`Services.BlackBoxConfiguration`, `Models.BlackBoxSchema` (schema drift and validation). Test helpers: `BlackBoxTestKit`,
+`ScriptedBlackBoxStore`, `RecordingBlackBoxEventSink`, `BlackBoxSchemaValidator`, `BlackBoxGoldenCase`,
+`BlackBoxRecoveryFixture`, `RecordingBlackBoxActionExecutor`, `ScriptedBlackBoxSummaryWriter`, `FakeChatEndpoint`. After changing a model, run `scripts/common/generate-blackbox-schema.sh`.
+
+### 3.13 Advisor and rule catalog
+
+`BlackBoxAdvisor.Analyze(record, catalog)` is pure and deterministic. It evaluates every rule's match predicate (a
+throwing predicate is no match), renders the matched rules, lets generic rules step aside for specific ones that
+rendered (`YieldsTo`), and falls back to `BBX-UNKNOWN-001` when nothing rendered. Findings, recommendations and paths are
+ordered by vote weight, then catalog order; recovery paths are deduplicated by their actions, ranked 1 to n and capped at
+10. Triage sums the weights per verdict; the highest total wins and a tie reports `Unknown` with `tiedWith` naming the
+candidates (confidence: High when the winner has at least 4 and leads by 2, Medium from 2, else Low). The summary (at
+most 6 sentences) is assembled from the subject, the top two findings, the triage, the top recovery path and the first
+recommendation.
+
+Rule text is a template: `{name}` is filled from the record (`BlackBoxRulePlaceholders.Names`, plus `{config:Setting}`
+for an effective configuration value) and `{name|fallback}` uses the fallback when the value is missing. A why statement
+with a missing placeholder skips the rule; a recommendation, improvement or recovery path with a missing placeholder is
+left out (both logged at debug). Stable ids: a recovery path is `rule id lower case + "." + key` (for example
+`bbx-land-001.stash-retry`), a recommendation the same (for example `bbx-land-001.landing-mode`).
+
+`BlackBoxRuleCatalog.CurrentRulesVersion` (1) is stored on every analyzed entry and record. Bump it when a rule's match,
+text, vote or recovery changes: `BlackBoxReanalyzer` (run after each sweep) re-analyzes Analyzed entries with an older
+version through `BlackBoxPipeline.ReanalyzeAsync` (advisor and summary only, no enrichers).
+
+| Rule | Phase | Matches | Vote |
+|---|---|---|---|
+| BBX-LAND-001 | Landing | step DirtyCheckout with dirty paths | UserConfig 3 |
+| BBX-LAND-002 | Landing | worktree missing, step DockMissing, or "could not start process ... working directory" | ArmadaDefect 3 |
+| BBX-LAND-003 | Landing | conflicted files and a conflicting mission that landed with overlapping files | UserConfig 2 |
+| BBX-LAND-004 | Landing | every conflicted file is generated or append-only (CHANGELOG, i18n, API surface, Postman, lock files, schemas) | ArmadaDefect 3 |
+| BBX-LAND-005 | Landing | step Verification | MissionBrief 2 |
+| BBX-LAND-006 | Landing | step Push, PullRequest or UnpublishedAncestry | External 2 |
+| BBX-LAND-007 | Landing | any other landing failure | none |
+| BBX-MQ-001 | MergeQueue | kind LandingConflict with no conflicted files | ArmadaDefect 2 |
+| BBX-MQ-002 | MergeQueue | step QueueTests | MissionBrief 1 |
+| BBX-MQ-003 | MergeQueue | any other merge-queue failure | none |
+| BBX-SCOPE-001 | Completion | scope violation whose out-of-scope entries are blank or scoped | ArmadaDefect 4 |
+| BBX-SCOPE-002 | Completion | start commit missing on a scope failure | none |
+| BBX-SCOPE-003 | Completion | a real scope violation | MissionBrief 2 |
+| BBX-NOOP-001 | Completion | kind or step NoOp | MissionBrief 2 |
+| BBX-DEP-001 | Completion | captain BLOCKED naming unlanded prerequisites dispatched in parallel | MissionBrief 4 |
+| BBX-BLOCK-001 | Completion | any other BLOCKED report | MissionBrief 2 |
+| BBX-OUT-001 | Completion | invalid output | UserConfig 1 |
+| BBX-BOUND-001 | Completion | boundary violation | MissionBrief 2 |
+| BBX-CHECK-001 | Completion | definition of done, stage check, compile or test failure | MissionBrief 1 |
+| BBX-UNFIN-001 | Completion | step Unfinished | MissionBrief 1 |
+| BBX-EXEC-001 | Execution | usage limit | Transient 3 |
+| BBX-EXEC-002 | Execution | stall recovery exhausted | Transient 2 |
+| BBX-EXEC-003 | Execution | max runtime exceeded | MissionBrief 2 |
+| BBX-EXEC-004 | Execution | authentication failure | UserConfig 3 |
+| BBX-EXEC-005 | Execution | model unavailable | Transient 2 |
+| BBX-EXEC-006 | Execution | process crash | Transient 1 |
+| BBX-EXEC-007 | Execution | operator stop or interruption | External 3 |
+| BBX-EXEC-008 | Execution | recovery exhausted | Transient 1 |
+| BBX-INFRA-001 | Dispatch | Harbor disconnected or unavailable | External 3 |
+| BBX-DISP-001 | Dispatch | no eligible captain, assignment failed | UserConfig 2 |
+| BBX-DISP-002 | Dispatch | any other dispatch failure | Transient 1 |
+| BBX-PROV-001 | Provision | any provisioning failure | Transient 1 |
+| BBX-REV-001 | Review | review denied | External 2 |
+| BBX-REV-002 | Review | judge rejected | MissionBrief 2 |
+| BBX-REV-003 | Review | review approved but the dock is gone | ArmadaDefect 3 |
+| BBX-REV-004 | Review | review timed out | External 2 |
+| BBX-DEP-002 | Handoff | dependency failed or cancelled | External 1 |
+| BBX-HAND-001 | Handoff | any other handoff failure | ArmadaDefect 1 |
+| BBX-RECOV-001 | Recovery | Armada's recovery failed | ArmadaDefect 2 |
+| BBX-VOY-001 | Voyage | a voyage entry | none |
+| BBX-EXT-001 | External | vessel deleted, operator transition | External 3 |
+| BBX-UNKNOWN-001 | (fallback) | nothing else rendered | none |
+
+Recorded actions name only `BlackBoxActionCommands.SupportedTools`: `retry_landing`, `restart_mission`, `cancel_mission`,
+`unstick_dock`, `repair_dock`, `update_vessel` (which now takes `landingMode`, or `Default` to clear it),
+`update_mission`. `cancel_mission` and `unstick_dock` steps are data-loss steps. Each step carries the MCP call, the
+REST request and, where Helm has one, the CLI command.
+
+The optional model-written summary: when `blackBox.summaryEndpointId` is set and `Pipeline.SummaryWriter` is wired,
+the pipeline asks that model endpoint (through the same PolyPrompt clients as the ApiEndpoint runtime) for 3 to 6
+sentences from the record facts and the rule findings, within `SummaryTimeoutMs`, and sets `summaryIsModelWritten`.
+Any failure, timeout or empty reply keeps the rules summary.
+
+### 3.14 Recovery contract
+
+`RunRecoveryAsync(caller, entryId, pathId, request)` and `ApplyRecommendationAsync(caller, entryId, recommendationId,
+request)` run only what the entry recorded:
+
+1. The entry must be visible to the caller; the path (or recommendation, which needs an `applyAction`) must be in the
+   entry's analysis (else `BlackBoxNotFoundException`; an advice-only recommendation is `ArgumentException`).
+2. Every recorded action must name a supported tool and target the entry's own mission, vessel and dock
+   (`ArgumentException`).
+3. Every action is authorized as if the caller called the tool directly, against its `McpToolAuthorizationRegistry`
+   requirement (`UnauthorizedAccessException`, before anything runs). The executor then runs the tool through its MCP
+   handler as the caller, which repeats the tool's own authorization and tenant scoping.
+4. `dryRun` (the default) returns the plan (or the action), runs nothing, and issues a confirm token (`bbc_...`) bound to
+   the entry, the path or recommendation, the kind, the caller, the plan's SHA-256 and the subject's version (mission or
+   voyage status and last update; plus the vessel's last update for recommendations). Tokens expire after 10 minutes,
+   are single use, and live in memory.
+5. A confirmed call (`dryRun: false`) needs the token (`BlackBoxConfirmationException` when missing). A path with
+   `dataLossRisk` also needs `acknowledgeDataLoss: true` (checked before the token is used). The token is then consumed
+   whatever happens next and refused when unknown, used, expired, for another entry, path, kind or caller, when the
+   subject changed since the dry run, or when the plan changed (re-analysis); each refusal asks for a new dry run.
+6. Steps run in order; a manual step is reported, not run; the first failed step stops the run and the rest report
+   "Not run". Tools that return a result with `success: false` (such as `retry_landing`) count as failed.
+7. The entry is annotated (`blackbox_notes`, `authorKind` from the request, default `Agent`; human UIs pass `Operator`)
+   and `blackbox.recovery_run` is emitted for dry runs and runs. The result carries per-step results.
+8. Where no `IBlackBoxActionExecutor` is wired, confirmed calls throw `NotImplementedException`.
+
+### 3.15 Maintainer loop: bundle, trends, fixtures
+
+- `GetBundleAsync`: up to 50 entries (filters of `BlackBoxEnumerateRequest`, `max` clamped to 1..50), grouped by
+  fingerprint, most frequent first. Markdown: the preamble asking the agent to rank Armada improvements, check them
+  against the source and write each as an Armada mission brief (with a fixture test, and new rules in catalog format),
+  then per group the fingerprint, first and last seen, Armada versions, triage and rule ids, the newest entry's full
+  maintainer brief and one-liners for the rest (cut at 1 MB). JSON: a `BlackBoxBundleDocument` with
+  `BlackBoxBundleGroup`s. `redactHosts` strips host paths; `truncated` is set when more entries matched than were
+  bundled.
+- `GetFingerprintTrendAsync`: counts of one fingerprint per Armada version (`BlackBoxFingerprintTrend`, versions ordered
+  by first sighting, each with open and ArmadaFixed counts; at most 1000 entries and 100 versions), scoped to the caller.
+- `ExportFixtureAsync`: a `BlackBoxFixture` (sanitized record plus the rule ids and triage the advisor produces now);
+  `BlackBoxFixtureExporter.WriteAsync` writes `{name}.json`. Fixtures live in `src/Test.Shared/Fixtures/BlackBox/` and
+  `Services.BlackBoxFixtures` checks each one still produces its expected rule ids (the first one leading) and triage,
+  is sanitized, and validates against the record schema. Current fixtures: `land-001-dirty-checkout`
+  (msn_mvskboi0_vJGaqsNlGqU), `land-002-dock-deleted` (msn_mvsjeweh_tmCfX52gt3z), `scope-001-false-violation` (Garrison
+  msn_mvsqzal6_b1BfR4tnZ29), `dep-001-parallel-dependency-mission-2` and `-mission-4` (the bounded-enumeration voyage).
+
+### 3.16 Effective configuration
+
+`BlackBoxConfigurationResolver.Resolve` records, with sources: LandingMode (voyage, vessel, global, MergeAndPush),
+AutoPush, AutoCreatePullRequests, AutoMergePullRequests (voyage, global), BranchCleanupPolicy (vessel, global), the
+mission's RequiresReview, WaitForVoyageWorkers, DependsOnMissionId, Persona, MissionMode and Tier, the vessel's
+AllowConcurrentMissions, AutoApprove, RequirePassingChecksToLand, DefinitionOfDone settings, AutoLandEnabled,
+ProtectedPathPatterns and DefaultPipelineId, the workflow profile's name, BuildCommand and UnitTestCommand, TestCommand
+and LintCommand (vessel override, else profile), MergeQueueTestCommand, the captain's runtime, model, endpoint,
+reasoning effort and permission policy, the persona's CaptainPriorities, PriorityAvailability, PriorityExhaustion and
+DefaultCaptainId, the global thresholds and attempt limits, and BlackBoxRetentionDays (vessel, global); at most 64
+values. Capture resolves from the rows it holds; `BlackBoxConfigurationEnricher` adds the persona and workflow profile
+values without replacing what capture recorded.
 
 ## 4. TODO(blackbox-wave2) list
 
@@ -475,8 +646,8 @@ Grep for `TODO(blackbox-wave2` to find each placeholder in code.
 |---|---|---|
 | capture sites | Wire the remaining failure writes in plan section 5.1 with `RecordMissionFailureAsync` / `RecordVoyageFailureAsync` | services listed in plan 5.3 |
 | enrichment | Git forensics, conflict attribution, attempts, evidence objects (`IBlackBoxEnricher` implementations) | `IBlackBoxEnricher`, `BlackBoxPipeline.AddEnricher` |
-| advisor | `BlackBoxRuleCatalog` and `BlackBoxAdvisor` (starter rules, triage) | `IBlackBoxAdvisor`, `BlackBoxPipeline.Advisor` |
-| recovery | `RunRecoveryAsync` and `ApplyRecommendationAsync` (dry run, confirm token, data-loss acknowledgement, annotation, `blackbox.recovery_run`) | `BlackBoxService` |
+| CLI | `armada blackbox export-fixture <id>`: call `ExportFixtureAsync` and write it with `BlackBoxFixtureExporter.WriteAsync` into `src/Test.Shared/Fixtures/BlackBox` | Helm |
+| surfaces | `GetFingerprintTrendAsync` (REST/MCP route), the recovery and recommendation tools (`run_blackbox_recovery`, `apply_blackbox_recommendation`); pass `authorKind` Operator from human UIs | REST, MCP, dashboard |
 | storage | Blobject targets (Disk, S3, AzureBlob, GoogleCloud, Cifs, Nfs), storage migration job, doctor check, storage inventory | `BlackBoxStoreFactory.CreateBuiltIn`, `BlackBoxService.StartStorageMigrationAsync`, `GetStorageMigrationAsync` |
 | gc | Quotas, vessel and mission cascades, orphan sweep, expiry recompute on policy change | `BlackBoxGarbageCollector.EnforceQuotasAsync`, `CascadeAsync`, `SweepOrphansAsync` |
 | surfaces | REST routes, MCP tools, WebSocket commands, clients, dashboard, TUI, Helm, VS Code, mobile | call `IBlackBoxService` |

@@ -410,6 +410,10 @@ An event referenced by a record.
 
 Analysis section: advisor findings. Every claim carries a rule id.
 
+Written by `BlackBoxAdvisor` from the versioned `BlackBoxRuleCatalog` (`record.rulesVersion` is the catalog version; entries
+analyzed with an older version are re-analyzed in the background). Rule ids, path and recommendation ids, and the
+recovery contract are in [BLACKBOX.md](BLACKBOX.md), sections 3.13 and 3.14.
+
 | Field | Type | Null | Required | Bounds | Description |
 |---|---|---|---|---|---|
 | `summary` | string | yes | no | at most 2000 chars | Plain-language summary (3 to 6 sentences), or null. |
@@ -437,7 +441,7 @@ A configuration change that could have prevented the failure.
 
 | Field | Type | Null | Required | Bounds | Description |
 |---|---|---|---|---|---|
-| `id` | string | no | yes | at most 2000 chars | Recommendation id within the entry (for example cr1). |
+| `id` | string | no | yes | at most 2000 chars | Stable recommendation id: the rule id in lower case, a dot and a key (for example bbx-land-001.landing-mode). |
 | `setting` | string | no | yes | at most 2000 chars | Setting. |
 | `scope` | enum: `Mission`, `Voyage`, `Vessel`, `WorkflowProfile`, `Captain`, `Persona`, `Global`, `Default`, `Unknown` | no | yes |  | Where to change it. |
 | `currentValue` | string | yes | no | at most 2000 chars | Current value, or null. |
@@ -454,7 +458,7 @@ A machine-readable action: an MCP tool name and its arguments.
 | Field | Type | Null | Required | Bounds | Description |
 |---|---|---|---|---|---|
 | `tool` | string | no | yes | at most 2000 chars | MCP tool name (for example retry_landing). |
-| `arguments` | map of string to string | no | yes | at most 32 entries | Tool arguments as text. |
+| `arguments` | map of string to string | no | yes | at most 32 entries | Tool arguments as text; when the action runs, true, false and whole numbers become JSON booleans and numbers. |
 
 ### BlackBoxImprovement
 
@@ -465,7 +469,7 @@ An Armada behavior change that could address the failure.
 | `area` | string | yes | no | at most 2000 chars | Area of Armada. |
 | `hypothesis` | string | no | yes | at most 2000 chars | Hypothesis. |
 | `evidence` | string | yes | no | at most 2000 chars | Evidence. |
-| `sourcePointers` | array of string | no | yes | at most 10 items; each at most 1024 chars | Source pointers (file, method). |
+| `sourcePointers` | array of string | no | yes | at most 10 items; each at most 1024 chars | Source pointers (repository-relative file:method). |
 | `severity` | enum: `Low`, `Medium`, `High`, `Critical`, `Unknown` | no | yes |  | Severity. |
 | `ruleId` | string | yes | no | at most 2000 chars | Rule that produced it. |
 | `knownIssue` | string | yes | no | at most 2000 chars | Known issue link, or null. |
@@ -476,7 +480,7 @@ A ranked recovery path with exact commands and a machine-readable action.
 
 | Field | Type | Null | Required | Bounds | Description |
 |---|---|---|---|---|---|
-| `id` | string | no | yes | at most 2000 chars | Path id within the entry (for example rp1). |
+| `id` | string | no | yes | at most 2000 chars | Stable path id: the rule id in lower case, a dot and a key (for example bbx-land-001.stash-retry). |
 | `rank` | integer | no | yes |  | Rank, 1 is best. |
 | `title` | string | no | yes | at most 500 chars | Title. |
 | `preconditions` | array of string | no | yes | at most 10 items; each at most 1024 chars | Preconditions. |
@@ -908,6 +912,10 @@ Payload of the blackbox.recovery_run event.
 | `pathId` | string | no | yes |  | Recovery path. |
 | `dryRun` | boolean | no | yes |  | Whether this was a dry run. |
 | `succeeded` | boolean | no | yes |  | Whether it succeeded. |
+| `recommendationId` | string | yes | no |  | Recommendation applied, when the run applied a configuration recommendation (PathId then holds the same id). |
+| `stepsRun` | integer | no | yes |  | Steps the run executed (0 for a dry run). |
+| `stepsFailed` | integer | no | yes |  | Steps that failed. |
+| `userId` | string | yes | no |  | User who ran it, or null. |
 
 ### BlackBoxGcReport
 
