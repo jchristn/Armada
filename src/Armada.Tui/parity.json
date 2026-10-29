@@ -2305,6 +2305,14 @@
     },
     {
       "kind": "api",
+      "key": "exportBlackBoxFixture",
+      "status": "implemented",
+      "tui": "ArmadaClient.ExportBlackBoxFixtureAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "getAskQuickActions",
       "status": "implemented",
       "tui": "ArmadaClient.GetAskQuickActionsAsync",
@@ -2356,6 +2364,14 @@
       "key": "getBlackBoxBundle",
       "status": "implemented",
       "tui": "ArmadaClient.GetBlackBoxBundleAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxFingerprintTrend",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxFingerprintTrendAsync",
       "workstream": "W0.2",
       "notes": "Missions"
     },

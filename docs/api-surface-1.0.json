@@ -839,6 +839,23 @@
       "experimental": false
     },
     {
+      "method": "GET",
+      "route": "/api/v1/blackbox/fingerprints/{fingerprint}/trend",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxFingerprintTrend",
+        "400": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get the trend of a black box failure mode",
+      "experimental": false
+    },
+    {
       "method": "POST",
       "route": "/api/v1/blackbox/gc",
       "auth": "AdminOnly",
@@ -1046,6 +1063,24 @@
         "BlackBox"
       ],
       "summary": "Download a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/export-fixture",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxFixtureExportRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxFixture",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Export a black box entry as a regression fixture",
       "experimental": false
     },
     {
@@ -10786,6 +10821,35 @@
       "experimental": false
     },
     {
+      "name": "export_blackbox_fixture",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Export a black box entry as a sanitized regression fixture (record without secrets, tenant and user ids, host paths or repository URL, plus the rule ids and triage the advisor produces now), to add under src/Test.Shared/Fixtures/BlackBox with a test. Global admins only. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
       "name": "fleet_action_run_status",
       "auth": "Authenticated",
       "resource": "FleetActionRun:Read",
@@ -11039,6 +11103,20 @@
         }
       ],
       "description": "Build a maintainer bundle: up to max (1-50, default 50) of the newest matching black box entries grouped by fingerprint, as one Markdown document of maintainer briefs (format Markdown, default) or JSON summaries. Use it to rank Armada improvements and write them as mission briefs on the Armada vessel. redactHosts strips absolute paths, host names and user names before sharing outside the installation.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox_fingerprint_trend",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "fingerprint",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get the trend of one black box failure mode: occurrences of the fingerprint per Armada version (ordered by first sighting, with open and ArmadaFixed counts; at most 1000 entries and 100 versions), to see whether a release fixed it.",
       "experimental": false
     },
     {
@@ -13512,7 +13590,7 @@
           "required": false
         }
       ],
-      "description": "Run one recovery path recorded in a black box entry's analysis (pathId, for example rp1). It never takes a free-form command: only the steps recorded in the entry run, each authorized as if you had called that tool directly. Always dry run first (dryRun defaults to true): the dry run returns the plan and a confirmToken (10 minutes, bound to the entry, the path and the mission's current version, so a mission that changed must be re-checked). Tell the user what will happen, then run with dryRun false and that confirmToken. A path marked dataLossRisk (deleting a branch, forcing a dock reclaim) is refused without acknowledgeDataLoss true; confirm with the user before setting it. Every run is annotated on the entry. Conflict with Code BlackBoxConfirmationRequired without a valid token or acknowledgement. Read the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "description": "Run one recovery path recorded in a black box entry's analysis (pathId, for example bbx-land-001.stash-retry). It never takes a free-form command: only the steps recorded in the entry run, each authorized as if you had called that tool directly. Always dry run first (dryRun defaults to true): the dry run returns the plan and a confirmToken (10 minutes, bound to the entry, the path and the mission's current version, so a mission that changed must be re-checked). Tell the user what will happen, then run with dryRun false and that confirmToken. A path marked dataLossRisk (deleting a branch, forcing a dock reclaim) is refused without acknowledgeDataLoss true; confirm with the user before setting it. Every dry run and run is annotated on the entry (authorKind Agent). A token is single use; a missing, expired, used or foreign token, a mission that changed, or a re-analyzed plan is Conflict with Code BlackBoxConfirmationRequired: dry run again. Read the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
       "experimental": false
     },
     {
@@ -15385,6 +15463,11 @@
           "required": false
         },
         {
+          "name": "landingMode",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "lintCommand",
           "type": "string",
           "required": false
@@ -16140,8 +16223,12 @@
         "fields": [
           "entryId",
           "pathId",
+          "recommendationId",
           "dryRun",
-          "succeeded"
+          "succeeded",
+          "stepsRun",
+          "stepsFailed",
+          "userId"
         ],
         "generic": false
       },

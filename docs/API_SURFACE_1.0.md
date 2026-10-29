@@ -24,8 +24,8 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 473 | 15 |
-| MCP tools | 231 | 8 |
+| REST routes | 475 | 15 |
+| MCP tools | 233 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 76 | 0 |
@@ -88,6 +88,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/blackbox/delete` | TenantAdmin | `BlackBoxDeleteManyRequest` | 200 `BlackBoxDeleteResult`, 400 `ApiErrorResponse`, 403 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/enumerate` | Authenticated | `BlackBoxEnumerateRequest` (optional) | 200 `EnumerationResult<BlackBoxEntrySummary>`, 400 |  |
 | POST | `/api/v1/blackbox/fingerprints/enumerate` | Authenticated | `BlackBoxFingerprintEnumerateRequest` (optional) | 200 `EnumerationResult<BlackBoxFingerprintSummary>`, 400 |  |
+| GET | `/api/v1/blackbox/fingerprints/{fingerprint}/trend` | Authenticated |  | 200 `BlackBoxFingerprintTrend`, 400 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/gc` | AdminOnly | `BlackBoxGcRunRequest` (optional) | 200 `BlackBoxGcReport`, 403 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/hotspots/enumerate` | Authenticated | `BlackBoxHotspotEnumerateRequest` (optional) | 200 `EnumerationResult<BlackBoxHotspot>`, 400 |  |
 | POST | `/api/v1/blackbox/purge` | AdminOnly | `BlackBoxPurgeRequest` (optional) | 200 `BlackBoxPurgeResult`, 403 `ApiErrorResponse` |  |
@@ -100,6 +101,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/blackbox/{id}` | Authenticated |  | 200 `BlackBoxEntry`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/{id}/brief` | Authenticated |  | 200 `string`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/{id}/download` | Authenticated |  | 200 `string`, 404 `ApiErrorResponse` |  |
+| POST | `/api/v1/blackbox/{id}/export-fixture` | AdminOnly | `BlackBoxFixtureExportRequest` (optional) | 200 `BlackBoxFixture`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/{id}/notes` | Authenticated |  | 200 `EnumerationResult<BlackBoxNote>`, 404 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/{id}/notes` | Authenticated | `BlackBoxNoteAddRequest` | 200 `BlackBoxNote`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/{id}/notes/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<BlackBoxNote>`, 404 `ApiErrorResponse` |  |
@@ -599,6 +601,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `evaluate_autoland` | Authenticated | `missionId*: string` |  |
 | `evaluate_captain` | Authenticated | `captainId: string`, `depth: string`, `modelEndpointId: string` |  |
 | `evaluate_vessel_health` | TenantAdmin | `fleetId: string`, `force: boolean`, `vesselIds: array<string>` |  |
+| `export_blackbox_fixture` | AdminOnly | `entryId: string`, `missionId: string`, `name: string`, `voyageId: string` |  |
 | `fleet_action_run_status` | Authenticated | `runId*: string` |  |
 | `get_ask_thread` | Authenticated | `threadId*: string` |  |
 | `get_ask_work` | Authenticated | `threadId*: string`, `workId*: string` |  |
@@ -608,6 +611,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_battery_run` | Authenticated | `id*: string` |  |
 | `get_blackbox` | Authenticated | `audience: string`, `entryId: string`, `format: string`, `missionId: string`, `redactHosts: boolean`, `voyageId: string` |  |
 | `get_blackbox_bundle` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `format: string`, `isCurrent: boolean`, `kind: string`, `max: integer`, `missionId: string`, `path: string`, `phase: string`, `pinned: boolean`, `redactHosts: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
+| `get_blackbox_fingerprint_trend` | Authenticated | `fingerprint*: string` |  |
 | `get_blackbox_retention` | TenantAdmin |  |  |
 | `get_blackbox_storage` | AdminOnly |  |  |
 | `get_captain` | Authenticated | `captainId*: string` |  |
@@ -742,7 +746,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `update_pipeline` | Authenticated | `description: string`, `name*: string`, `stages: array<object>` |  |
 | `update_playbook` | TenantAdmin | `active: boolean`, `content: string`, `description: string`, `fileName: string`, `id*: string` |  |
 | `update_prompt_template` | Authenticated | `content*: string`, `description: string`, `name*: string` |  |
-| `update_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `auditCommand: string`, `autoApprove: boolean`, `autoLandEnabled: boolean`, `autoLandMaxFiles: integer`, `autoLandMaxLines: integer`, `autoLandPathAllowGlobs: array<string>`, `autoLandPathDenyGlobs: array<string>`, `clearAutoApprove: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `definitionOfDoneBuildCommand: string`, `definitionOfDoneEnabled: boolean`, `definitionOfDoneTestCommand: string`, `definitionOfDoneTimeoutSeconds: integer`, `enableModelContext: boolean`, `gitHubTokenOverride: string`, `lintCommand: string`, `modelContext: string`, `name: string`, `projectContext: string`, `repoUrl: string`, `styleGuide: string`, `testCommand: string`, `vesselId*: string`, `workingDirectory: string` |  |
+| `update_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `auditCommand: string`, `autoApprove: boolean`, `autoLandEnabled: boolean`, `autoLandMaxFiles: integer`, `autoLandMaxLines: integer`, `autoLandPathAllowGlobs: array<string>`, `autoLandPathDenyGlobs: array<string>`, `clearAutoApprove: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `definitionOfDoneBuildCommand: string`, `definitionOfDoneEnabled: boolean`, `definitionOfDoneTestCommand: string`, `definitionOfDoneTimeoutSeconds: integer`, `enableModelContext: boolean`, `gitHubTokenOverride: string`, `landingMode: string`, `lintCommand: string`, `modelContext: string`, `name: string`, `projectContext: string`, `repoUrl: string`, `styleGuide: string`, `testCommand: string`, `vesselId*: string`, `workingDirectory: string` |  |
 | `update_vessel_context` | TenantAdmin | `modelContext: string`, `projectContext: string`, `styleGuide: string`, `vesselId*: string` |  |
 | `update_workflow_profile` | TenantAdmin | `abbreviatedUnitTestCommand: string`, `active: boolean`, `buildCommand: string`, `changelogGenerationCommand: string`, `deploymentVerificationCommand: string`, `description: string`, `e2eTestCommand: string`, `environments: array<object>`, `expectedArtifacts: array<string>`, `fleetId: string`, `id*: string`, `integrationTestCommand: string`, `isDefault: boolean`, `languageHints: array<string>`, `lintCommand: string`, `migrationCommand: string`, `name: string`, `ownershipScope: string`, `packageCommand: string`, `performanceCommand: string`, `publishArtifactCommand: string`, `releaseVersioningCommand: string`, `requiredInputs: array<object>`, `rollbackVerificationCommand: string`, `scope: string`, `securityScanCommand: string`, `unitTestCommand: string`, `vesselId: string` |  |
 | `validate_model_endpoint` | Authenticated | `endpointId*: string` |  |
@@ -794,7 +798,7 @@ Generic events carry a `message` and the payload `{ entityType, entityId, captai
 | `blackbox.captured` | tenant | `BlackBoxCapturedPayload` + `entryId`, `missionId`, `voyageId`, `vesselId`, `phase`, `step`, `kind`, `attempt`, `captureMode` |
 | `blackbox.deleted` | tenant | `BlackBoxDeletedPayload` + `entryId`, `missionId`, `voyageId`, `reason` |
 | `blackbox.gc_completed` | tenant | `BlackBoxGcReport` + `dryRun`, `startedUtc`, `finishedUtc`, `durationMs`, `expired`, `evicted`, `cascaded`, `retriedDeletes`, `orphansRemoved`, `objectsMissing`, `bytesFreed`, `failures`, `candidateEntryIds`, `errors` |
-| `blackbox.recovery_run` | tenant | `BlackBoxRecoveryRunPayload` + `entryId`, `pathId`, `dryRun`, `succeeded` |
+| `blackbox.recovery_run` | tenant | `BlackBoxRecoveryRunPayload` + `entryId`, `pathId`, `recommendationId`, `dryRun`, `succeeded`, `stepsRun`, `stepsFailed`, `userId` |
 | `blackbox.resolved` | tenant | `BlackBoxResolvedPayload` + `entryId`, `missionId`, `voyageId`, `resolution` |
 | `blackbox.storage_fallback` | tenant | `BlackBoxStorageFallbackPayload` + `entryId`, `from`, `to`, `error` |
 | `captain.batch_deleted` | tenant | generic |
