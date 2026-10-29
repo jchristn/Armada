@@ -701,6 +701,36 @@ Bounds: tails keep the last 256 KB (`BlackBoxForensics.TailBytes`) starting at a
 every cut is a `truncation.fields` entry; the writer then redacts every text object and caps it at
 `maxEvidenceObjectBytes`. Suites: `Services.BlackBoxEnrichment`, `Services.GitForensics`.
 
+### 3.17 Ask Armada
+
+Plan section 10. The pieces, in `Armada.Core.Services.Ask` unless noted:
+
+- **Policy** (`AskToolPolicy`): every BlackBox tool the MCP authorization registry declares as a Read (the 13 of
+  `McpBlackBoxTools.ReadTools` plus `export_blackbox_fixture`) runs without approval; every other black box tool
+  (recovery, recommendation, resolve, annotate, pin, delete, purge, gc, reanalyze) becomes a proposal.
+- **Prompt** (`AskBlackBoxGuidance.Section`): the "## Black box" section of the built-in `ask.system` template (get
+  the summary first, read only the needed sections, page evidence, answer with What happened / Why / My opinion /
+  What could have been done differently / Next steps, never invent files, commits or missions, say when facts are
+  missing, offer FailureReason when there is no entry, offer to save the opinion as a note). An untouched earlier
+  built-in is upgraded at startup; `AskTurnCoordinator.BuildPrompt` appends the section to a customized template that
+  lacks the heading, so operator edits keep working.
+- **Quick action** `/blackbox` (`AskQuickActionCatalog`): `missionId` (type `mission`, required) and `question` (text,
+  optional) mapping to `get_blackbox`; `question` is removed before the tool runs (the client sends it to the captain).
+- **Card**: tracked entity `BlackBox` (`AskTrackedEntityTypeEnum`). `AskWorkSnapshotBuilder.BlackBox` (the
+  `IBlackBoxService`) reads the entry as the thread's owner into `AskWorkSnapshot.BlackBox` (`AskBlackBoxCard`: the
+  digest, conflicting missions, the first conflicted files, recommendations, note count and the follow-ups from
+  `AskBlackBoxGuidance.FollowUps`: Fix it and Apply as proposals, Draft an Armada fix mission and Compare with
+  similar failures as messages). The card's state is Succeeded for Resolved and ArmadaFixed, otherwise Failed.
+- **Linking** (`AskWorkLinker`, `Armada.Server.Ask.AskActionService`): `get_blackbox` links the card (as a quick action,
+  an approved proposal, or a thread read); the write tools refresh it; `LinkMentionedBlackBoxesAsync` links the cards
+  of mentioned missions (`AskTurnCoordinator.OnConversationText`).
+- **Approval**: an approved `run_blackbox_recovery` or `apply_blackbox_recommendation` proposal runs the dry run, then
+  confirms it with its token (`DryRunThenConfirmAsync`); `McpBlackBoxTools.CallerAuthorKind` attributes Ask notes to
+  AskArmada.
+- **Tests**: `Services.AskBlackBox` (plan 16.8), `Services.PromptTemplateService`, `Tui.Ask`, dashboard
+  `AskBlackBoxCard.test.tsx`, `askBlackBox.test.ts` and `AskArmada.test.tsx`; the prompt evaluation script has a
+  `blackbox` case whose grounding check flags files, commits and missions that are not in the entry.
+
 ## 4. TODO(blackbox-wave2) list
 
 Grep for `TODO(blackbox-wave2` to find each placeholder in code.

@@ -140,12 +140,22 @@ without telemetry.
   tool names and argument shapes as MCP). They go through the identical proposal path: with auto-approve
   off the action is created already approved by the user who submitted the form (the form is the
   confirmation), so it executes immediately and is recorded with `source = QuickAction`. `/fleet-action`,
-  `/health`, and `/import` require tenant admin; `/dispatch` and `/status` do not.
+  `/health`, and `/import` require tenant admin; `/dispatch`, `/status` and `/blackbox` do not. With
+  `Propose: true` the action is not run: it becomes a Pending proposal with a confirm card (the black box
+  card's Fix it, Apply and Propose buttons).
+- **Black box actions.** Approving `run_blackbox_recovery` or `apply_blackbox_recommendation` (from the
+  captain or a card) is the user's confirmation: the server runs the dry run, then the confirmed run with
+  the dry run's token. A proposal with `dryRun: true` runs only the dry run; one that already carries a
+  `confirmToken` runs as written. Notes written from Ask (`annotate_blackbox`, recovery annotations) are
+  `authorKind` AskArmada. See `docs/BLACKBOX.md` section 3.17.
 - **Work linking** is by tool, in one mapping table (`AskWorkLinker`): `dispatch` -> Voyage id,
   `create_mission` / `restart_mission` -> Mission id, `run_fleet_action` -> FleetActionRun
   id, `evaluate_vessel_health` -> Job id, `import_vessels` / `discover_vessels` -> VesselImportBatch (and
   Job) id, `cancel_voyage` / `cancel_mission` / `cancel_fleet_action_run` -> refreshes the existing tracked
-  item.
+  item, `get_blackbox` -> BlackBox entry id (also when the captain reads it in a thread), and the black box
+  write tools refresh that card. Mission ids mentioned in a user message or a reply link the card of the
+  mission's current black box entry when the thread's owner can see it (once per thread, hosted on a System
+  WorkUpdate message). A BlackBox card posts no milestones and starts no report turn.
 - **Needs You.** Pending, unexpired proposals in the caller's own threads also appear in the inbox
   (`POST /api/v1/inbox/enumerate`, MCP `enumerate` with `entityType` `inbox`) as kind `ask_proposal` ("Ask approval: <summary>", linking to
   `/ask/<threadId>`), so the dashboard's Needs You page (`/inbox`) and the TUI's Needs You and Approvals
@@ -356,6 +366,7 @@ The dashboard, the mobile app, and the TUI share one command catalog: the server
 | `/status` | | Summarizes all active work (quick action, runs at once) |
 | `/health` | | Evaluates the health of every active vessel (quick action, runs at once) |
 | `/import` | | Opens the import wizard |
+| `/blackbox` | `<missionId> [question]` | Shows the black box card of a failed mission (`get_blackbox`); the question, if any, is then sent to the captain. Without a mission id the dashboard opens a form (the TUI fills the composer) |
 | `/new` (alias `/clear`) | | Starts a new conversation with a fresh context and the same captain; the old one stays in the list |
 | `/help` | | Opens the menu with every command and its description |
 | `/summarize` | | Posts a summary of the open conversation |
