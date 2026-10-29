@@ -107,7 +107,10 @@ namespace Armada.Core.Services.Ask
             "get_battery_run",
             "list_battery_results",
 
-            // Black box readers (plan 10.1): every BlackBox tool the MCP authorization registry declares as a Read. The
+            // Black box readers (plan 10.1): every BlackBox tool the MCP authorization registry declares as a Read,
+            // including the admin-level ones (get_blackbox_retention TenantAdmin; get_blackbox_storage and
+            // export_blackbox_fixture AdminOnly), like validate_workflow_profile: the gate sits outside the registry
+            // check, so a thread call still runs as the thread owner and is refused (Forbidden) without the role. The
             // write tools (run_blackbox_recovery, apply_blackbox_recommendation, resolve_blackbox, annotate_blackbox, pin,
             // delete, purge, gc, reanalyze) stay behind the Ask gate as proposals.
             "get_blackbox",

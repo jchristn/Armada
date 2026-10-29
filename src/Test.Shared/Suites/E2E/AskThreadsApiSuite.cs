@@ -9,6 +9,7 @@ namespace Test.Shared.Suites.E2E
     using System.Threading.Tasks;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Ask;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -355,6 +356,42 @@ namespace Test.Shared.Suites.E2E
                 EnumerationResult<AskTrackedWork> afterWork = await JsonHelper.DeserializeAsync<EnumerationResult<AskTrackedWork>>(await a.PostAsync("/api/v1/ask/threads/" + thread.Id + "/work/enumerate", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false)).ConfigureAwait(false);
                 AssertEqual(AskTrackedEntityTypeEnum.Voyage, afterWork.Objects.Single().EntityType, "voyage tracked after approval");
                 await a.DeleteAsync("/api/v1/voyages/" + afterWork.Objects.Single().EntityId).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("admin_reads_keep_caller_authorization", "Admin-level black box reads on the Ask allowlist (get_blackbox_retention: TenantAdmin, get_blackbox_storage: AdminOnly) run without a proposal but still check the thread owner's own authorization", async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                E2ETenantUser member = await E2ETenantUser.CreateAsync(fx.AuthClient, "askbbuser", false).ConfigureAwait(false);
+                E2ETenantUser tenantAdmin = await E2ETenantUser.CreateAsync(fx.AuthClient, "askbbadmin", true, member.TenantId).ConfigureAwait(false);
+                Armada.Core.Services.SessionTokenService tokens = new Armada.Core.Services.SessionTokenService(fx.SessionTokenEncryptionKey);
+                foreach (string tool in new[] { "get_blackbox_retention", "get_blackbox_storage" })
+                    AssertTrue(AskToolPolicy.IsReadOnly(tool), tool + " is on the read-only allowlist");
+
+                async Task<string> ThreadCallAsync(E2ETenantUser user, string tool)
+                {
+                    string threadId;
+                    using (Armada.Runtimes.Mcp.McpToolClient plain = new Armada.Runtimes.Mcp.McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", tokens.CreateToken(user.TenantId, user.UserId).Token!))
+                    {
+                        await plain.InitializeAsync().ConfigureAwait(false);
+                        threadId = JsonHelper.Deserialize<AskThread>(await plain.CallToolAsync("create_ask_thread", "{}").ConfigureAwait(false)).Id;
+                    }
+
+                    string threadToken = tokens.CreateThreadScopedToken(user.TenantId, user.UserId, threadId, TimeSpan.FromMinutes(10)).Token!;
+                    using (Armada.Runtimes.Mcp.McpToolClient thread = new Armada.Runtimes.Mcp.McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", threadToken))
+                    {
+                        await thread.InitializeAsync().ConfigureAwait(false);
+                        return await thread.CallToolAsync(tool, "{}").ConfigureAwait(false);
+                    }
+                }
+
+                string memberRetention = await ThreadCallAsync(member, "get_blackbox_retention").ConfigureAwait(false);
+                AssertContains("Forbidden", memberRetention, "a regular user is refused retention from Ask");
+                AssertFalse(memberRetention.Contains("Proposed as", StringComparison.Ordinal), "refused, not proposed");
+                string adminRetention = await ThreadCallAsync(tenantAdmin, "get_blackbox_retention").ConfigureAwait(false);
+                AssertFalse(adminRetention.Contains("Forbidden", StringComparison.Ordinal) || adminRetention.Contains("Proposed as", StringComparison.Ordinal), "a tenant admin reads retention at once: " + adminRetention);
+                string adminStorage = await ThreadCallAsync(tenantAdmin, "get_blackbox_storage").ConfigureAwait(false);
+                AssertContains("Forbidden", adminStorage, "storage needs a global admin, also from Ask");
+                AssertFalse(adminStorage.Contains("Proposed as", StringComparison.Ordinal), "refused, not proposed");
             }));
 
             cases.Add(CaseAsync("quick_action_catalog", "GET quick-actions returns the catalog", async () =>
