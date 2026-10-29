@@ -18,8 +18,9 @@ namespace Test.Shared.Suites.Services
     /// <summary>
     /// Descriptors for captain auto-recovery behavior in <see cref="CaptainService"/>. Cases cover
     /// recovery relaunch failure marking the mission failed, missing recovery prerequisites failing
-    /// the mission, cancelled-voyage recovery skipping, and a healthy worktree relaunch that avoids
-    /// destructive repair. Each case builds a fresh SQLite store and stubs the git and dock services.
+    /// the mission, cancelled-voyage recovery skipping, retention of a landing worktree, and a healthy
+    /// worktree relaunch that avoids destructive repair. Each case builds a fresh SQLite store and stubs
+    /// the git and dock services.
     /// </summary>
     public sealed class CaptainServiceSuite : IArmadaTestSuite
     {
@@ -219,6 +220,14 @@ namespace Test.Shared.Suites.Services
                     AssertNull(updatedCaptain.CurrentMissionId, "Captain current mission should be cleared");
                     AssertEqual(1, docks.ReclaimCalls, "Dock should be reclaimed when recovery is skipped");
                 }
+            }));
+
+            cases.Add(CaseAsync("recovery_retains_dock_for_missions_that_still_need_landing", "Recovery keeps docks for missions that still need landing", TestTags.Reliability, async () =>
+            {
+                await AssertRecoveryRetainsDockAsync(MissionStatusEnum.WorkProduced).ConfigureAwait(false);
+                await AssertRecoveryRetainsDockAsync(MissionStatusEnum.PullRequestOpen).ConfigureAwait(false);
+                await AssertRecoveryRetainsDockAsync(MissionStatusEnum.LandingFailed).ConfigureAwait(false);
+                await AssertRecoveryRetainsDockAsync(MissionStatusEnum.InProgress).ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("healthy_recovery_worktree_relaunch_skips_repair", "Healthy recovery worktree relaunch skips destructive repair", TestTags.Positive, async () =>
@@ -443,6 +452,75 @@ namespace Test.Shared.Suites.Services
             settings.ReposDirectory = Path.Combine(Path.GetTempPath(), "armada_test_repos_" + Guid.NewGuid().ToString("N"));
             settings.LogDirectory = Path.Combine(Path.GetTempPath(), "armada_test_logs_" + Guid.NewGuid().ToString("N"));
             return settings;
+        }
+
+        private static async Task AssertRecoveryRetainsDockAsync(MissionStatusEnum status)
+        {
+            // An earlier case in this process can delete the process temp directory. Create the
+            // worktree first so the parent exists again before the database file is opened.
+            string worktree = TestTemp.NewDirectory("recovery-worktree");
+            string logs = TestTemp.NewDirectory("recovery-logs");
+            string marker = Path.Combine(worktree, "landing-payload.txt");
+            File.WriteAllText(marker, "landing payload");
+            try
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.LogDirectory = logs;
+                    Test.Shared.Infrastructure.StubGitService git = new Test.Shared.Infrastructure.StubGitService();
+                    // InProgress stays on the relaunch path. Report the directory as not a repository
+                    // so recovery fails that mission and reclaims its dock.
+                    if (status == MissionStatusEnum.InProgress) git.IsRepositoryResult = false;
+                    DockService docks = new DockService(logging, testDb.Driver, settings, git);
+                    CaptainService service = new CaptainService(logging, testDb.Driver, settings, git, docks);
+                    string suffix = status.ToString() + "-" + Guid.NewGuid().ToString("N");
+                    Vessel vessel = await testDb.Driver.Vessels.CreateAsync(new Vessel("recovery-vessel-" + suffix, "https://example.invalid/repo.git")).ConfigureAwait(false);
+                    Dock dock = await testDb.Driver.Docks.CreateAsync(new Dock(vessel.Id) { WorktreePath = worktree, Active = true }).ConfigureAwait(false);
+                    Mission mission = await testDb.Driver.Missions.CreateAsync(new Mission("recovery-mission-" + suffix)
+                    {
+                        VesselId = vessel.Id,
+                        DockId = dock.Id,
+                        Status = status,
+                        ProcessId = 739185
+                    }).ConfigureAwait(false);
+                    Captain captain = await testDb.Driver.Captains.CreateAsync(new Captain("recovery-captain-" + suffix)
+                    {
+                        State = CaptainStateEnum.Working,
+                        ProcessId = mission.ProcessId,
+                        CurrentMissionId = mission.Id,
+                        CurrentDockId = dock.Id
+                    }).ConfigureAwait(false);
+
+                    await service.TryRecoverAsync(captain).ConfigureAwait(false);
+
+                    Mission updatedMission = (await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                    Captain updatedCaptain = (await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!;
+                    Dock updatedDock = (await testDb.Driver.Docks.ReadAsync(dock.Id).ConfigureAwait(false))!;
+                    bool shouldRetain = status == MissionStatusEnum.WorkProduced
+                        || status == MissionStatusEnum.PullRequestOpen
+                        || status == MissionStatusEnum.LandingFailed;
+                    MissionStatusEnum expectedStatus = status == MissionStatusEnum.InProgress
+                        ? MissionStatusEnum.Failed
+                        : status;
+                    string statusDetail = status == MissionStatusEnum.InProgress
+                        ? "Recovery fails an in-progress mission whose worktree is not a repository"
+                        : "Recovery preserves the landing status";
+                    AssertEqual(expectedStatus, updatedMission.Status, statusDetail);
+                    AssertEqual(dock.Id, updatedMission.DockId, "Recovery keeps the mission dock reference and releases only the captain");
+                    AssertEqual(CaptainStateEnum.Idle, updatedCaptain.State, "Recovery releases the captain");
+                    AssertNull(updatedCaptain.CurrentDockId, "A released captain no longer owns the retained dock");
+                    AssertEqual(!shouldRetain, !updatedDock.Active, "Recovery reclaims only a dock no longer needed for landing");
+                    AssertEqual(shouldRetain, Directory.Exists(worktree), "The landing worktree remains available");
+                    AssertEqual(shouldRetain, File.Exists(marker), "The landing worktree contents remain available");
+                }
+            }
+            finally
+            {
+                TestTemp.TryDelete(worktree);
+                TestTemp.TryDelete(logs);
+            }
         }
 
         private static async Task<StopFixture> CreateStopFixtureAsync(TestDatabase db, string worktree, string persona)

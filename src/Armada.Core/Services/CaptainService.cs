@@ -207,6 +207,11 @@ namespace Armada.Core.Services
                     ? await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false)
                     : null;
 
+                // Reload after the dock and voyage reads. Landing can advance the mission while
+                // recovery is waiting on those stores, and the current status owns dock retention.
+                Mission? latestMission = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+                if (latestMission != null) mission = latestMission;
+
                 if (mission.Status == MissionStatusEnum.Verifying) return; // A queued/running check owns this captain.
 
                 bool voyageCancelled = voyage != null && voyage.Status == VoyageStatusEnum.Cancelled;
@@ -218,6 +223,7 @@ namespace Armada.Core.Services
 
                 if (voyageCancelled || !missionRecoverable)
                 {
+                    MissionStatusEnum observedStatus = mission.Status;
                     if (voyageCancelled && mission.Status != MissionStatusEnum.Cancelled)
                     {
                         mission.Status = MissionStatusEnum.Cancelled;
@@ -226,15 +232,25 @@ namespace Armada.Core.Services
 
                     mission.ProcessId = null;
                     mission.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-
-                    try
+                    if (!await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { observedStatus }, token).ConfigureAwait(false))
                     {
-                        await _Docks.ReclaimAsync(dock.Id, token: token).ConfigureAwait(false);
+                        Mission? reloadedMission = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+                        if (reloadedMission != null) mission = reloadedMission;
                     }
-                    catch (Exception ex)
+
+                    bool missionStillNeedsDock = mission.Status == MissionStatusEnum.WorkProduced
+                        || mission.Status == MissionStatusEnum.PullRequestOpen
+                        || mission.Status == MissionStatusEnum.LandingFailed;
+                    if (!missionStillNeedsDock)
                     {
-                        _Logging.Warn(_Header + "error reclaiming dock " + dock.Id + " while skipping recovery for captain " + captain.Id + ": " + ex.ToString());
+                        try
+                        {
+                            await _Docks.ReclaimAsync(dock.Id, token: token).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _Logging.Warn(_Header + "error reclaiming dock " + dock.Id + " while skipping recovery for captain " + captain.Id + ": " + ex.ToString());
+                        }
                     }
 
                     await ReleaseAsync(captain, token: token).ConfigureAwait(false);

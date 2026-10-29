@@ -1683,24 +1683,40 @@ namespace Armada.Core.Services
                         }
                     }
 
-                    if (!MissionStateMachine.IsTerminalOrPostWork(mission.Status))
+                    // The stop can wait while completion or landing advances the mission. Use the
+                    // current status before writing failure or reclaiming its landing worktree.
+                    if (mission != null)
+                        mission = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+
+                    if (mission != null && !MissionStateMachine.IsTerminalOrPostWork(mission.Status))
                     {
+                        MissionStatusEnum observedStatus = mission.Status;
                         mission.Status = MissionStatusEnum.Failed;
                         mission.FailureReason = "Mission exceeded max runtime of " + _Settings.MaxMissionRuntimeMinutes + " minutes";
                         mission.FailureKind = MissionFailureKindEnum.MaxRuntimeExceeded;
                         mission.ProcessId = null;
                         mission.CompletedUtc = DateTime.UtcNow;
                         mission.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                        ArmadaMetrics.MissionRuntimeExceeded.Add(1);
-                        ArmadaMetrics.MissionsFailed.Add(1);
+                        bool failed = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { observedStatus }, token).ConfigureAwait(false);
+                        if (failed)
+                        {
+                            ArmadaMetrics.MissionRuntimeExceeded.Add(1);
+                            ArmadaMetrics.MissionsFailed.Add(1);
 
-                        await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (exceeded max runtime)",
-                            entityType: "mission", entityId: mission.Id,
-                            captainId: captain.Id, missionId: mission.Id, token: token).ConfigureAwait(false);
+                            await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (exceeded max runtime)",
+                                entityType: "mission", entityId: mission.Id,
+                                captainId: captain.Id, missionId: mission.Id, token: token).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            mission = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+                        }
                     }
 
-                    await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
+                    if (mission == null || (mission.Status != MissionStatusEnum.WorkProduced
+                        && mission.Status != MissionStatusEnum.PullRequestOpen
+                        && mission.Status != MissionStatusEnum.LandingFailed))
+                        await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
                     await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
                     return;
                 }
@@ -1764,28 +1780,44 @@ namespace Armada.Core.Services
                                 }
                             }
 
+                            // Re-read after stopping the process. A completion or landing transition
+                            // may have finished while the stop request was in flight.
+                            if (mission != null)
+                                mission = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+
                             // Mark the active mission as Failed
                             if (mission != null &&
                                 !MissionStateMachine.IsTerminalOrPostWork(mission.Status))
                             {
+                                MissionStatusEnum observedStatus = mission.Status;
                                 mission.Status = MissionStatusEnum.Failed;
                                 mission.FailureReason = "Captain stalled, recovery exhausted. " + stallReason + " " + stallRemediation;
                                 mission.FailureKind = MissionFailureKindEnum.StallRecoveryExhausted;
                                 mission.ProcessId = null;
                                 mission.CompletedUtc = DateTime.UtcNow;
                                 mission.LastUpdateUtc = DateTime.UtcNow;
-                                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                                ArmadaMetrics.MissionsFailed.Add(1);
-                                _Logging.Warn(_Header + "mission " + mission.Id + " marked failed (captain stalled, recovery exhausted)");
+                                bool failed = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { observedStatus }, token).ConfigureAwait(false);
+                                if (failed)
+                                {
+                                    ArmadaMetrics.MissionsFailed.Add(1);
+                                    _Logging.Warn(_Header + "mission " + mission.Id + " marked failed (captain stalled, recovery exhausted)");
 
-                                // Emit mission.failed event
-                                await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (captain stalled, recovery exhausted)",
-                                    entityType: "mission", entityId: mission.Id,
-                                    captainId: captain.Id, missionId: mission.Id, token: token).ConfigureAwait(false);
+                                    // Emit mission.failed event
+                                    await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (captain stalled, recovery exhausted)",
+                                        entityType: "mission", entityId: mission.Id,
+                                        captainId: captain.Id, missionId: mission.Id, token: token).ConfigureAwait(false);
+                                }
+                                else
+                                {
+                                    mission = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
+                                }
                             }
 
-                            // Reclaim the dock worktree so it doesn't leak
-                            await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
+                            // Landing statuses still need the worktree after the captain stops.
+                            if (mission == null || (mission.Status != MissionStatusEnum.WorkProduced
+                                && mission.Status != MissionStatusEnum.PullRequestOpen
+                                && mission.Status != MissionStatusEnum.LandingFailed))
+                                await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
 
                             // Release the captain to Idle instead of Stalled so it can pick up new work.
                             // The mission is already marked Failed -- no need to also block the captain.

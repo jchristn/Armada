@@ -1237,6 +1237,22 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("max_runtime_retains_dock_when_mission_enters_landing_state", "Max runtime keeps a dock when the mission enters a landing state", TestTags.Reliability, async () =>
+            {
+                await AssertRuntimeReclaimRetainsDockAsync(true, MissionStatusEnum.WorkProduced).ConfigureAwait(false);
+                await AssertRuntimeReclaimRetainsDockAsync(true, MissionStatusEnum.PullRequestOpen).ConfigureAwait(false);
+                await AssertRuntimeReclaimRetainsDockAsync(true, MissionStatusEnum.LandingFailed).ConfigureAwait(false);
+                await AssertRuntimeReclaimRetainsDockAsync(true, MissionStatusEnum.InProgress).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("exhausted_stall_retains_dock_when_mission_enters_landing_state", "Exhausted stall recovery keeps a dock when the mission enters a landing state", TestTags.Reliability, async () =>
+            {
+                await AssertRuntimeReclaimRetainsDockAsync(false, MissionStatusEnum.WorkProduced).ConfigureAwait(false);
+                await AssertRuntimeReclaimRetainsDockAsync(false, MissionStatusEnum.PullRequestOpen).ConfigureAwait(false);
+                await AssertRuntimeReclaimRetainsDockAsync(false, MissionStatusEnum.LandingFailed).ConfigureAwait(false);
+                await AssertRuntimeReclaimRetainsDockAsync(false, MissionStatusEnum.InProgress).ConfigureAwait(false);
+            }));
+
             cases.Add(CaseAsync("health_check_async_assigned_orphan_without_started_process_reverts_to_pending", "HealthCheckAsync AssignedOrphanWithoutStartedProcess RevertsToPending", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -2084,6 +2100,86 @@ namespace Test.Shared.Suites.Services
             IMissionService missionService = new MissionService(logging, db, settings, dockService, captainService);
             IVoyageService voyageService = new VoyageService(logging, db);
             return new AdmiralService(logging, db, settings, captainService, missionService, voyageService, dockService);
+        }
+
+        private static async Task AssertRuntimeReclaimRetainsDockAsync(bool maxRuntime, MissionStatusEnum statusAtStop)
+        {
+            // An earlier case in this process can delete the process temp directory. Create the
+            // worktree first so the parent exists again before the database file is opened.
+            string worktree = TestTemp.NewDirectory("landing-worktree");
+            string logs = TestTemp.NewDirectory("landing-logs");
+            string marker = Path.Combine(worktree, "landing-payload.txt");
+            File.WriteAllText(marker, "landing payload");
+            try
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.LogDirectory = logs;
+                    settings.MaxMissionRuntimeMinutes = maxRuntime ? 1 : 0;
+                    settings.StallThresholdMinutes = 1;
+                    settings.MaxRecoveryAttempts = 0;
+                    StubGitService git = new StubGitService();
+                    IDockService dockService = new DockService(logging, db, settings, git);
+                    ICaptainService captains = new CaptainService(logging, db, settings, git, dockService);
+                    IMissionService missions = new MissionService(logging, db, settings, dockService, captains);
+                    AdmiralService service = new AdmiralService(logging, db, settings, captains, missions, new VoyageService(logging, db), dockService);
+                    service.OnIsProcessTracked = _ => true;
+
+                    string suffix = statusAtStop.ToString() + "-" + Guid.NewGuid().ToString("N");
+                    Vessel vessel = await db.Vessels.CreateAsync(new Vessel("landing-vessel-" + suffix, "https://example.invalid/repo.git")).ConfigureAwait(false);
+                    Dock dock = await db.Docks.CreateAsync(new Dock(vessel.Id) { WorktreePath = worktree, Active = true }).ConfigureAwait(false);
+                    Mission mission = await db.Missions.CreateAsync(new Mission("landing-mission-" + suffix)
+                    {
+                        VesselId = vessel.Id,
+                        DockId = dock.Id,
+                        Status = MissionStatusEnum.InProgress,
+                        ProcessId = 739184,
+                        StartedUtc = DateTime.UtcNow.AddMinutes(-5)
+                    }).ConfigureAwait(false);
+                    Captain captain = await db.Captains.CreateAsync(new Captain("landing-captain-" + suffix)
+                    {
+                        State = CaptainStateEnum.Working,
+                        ProcessId = mission.ProcessId,
+                        CurrentMissionId = mission.Id,
+                        CurrentDockId = dock.Id,
+                        LastHeartbeatUtc = DateTime.UtcNow.AddMinutes(-5)
+                    }).ConfigureAwait(false);
+
+                    service.OnStopAgent = async _ =>
+                    {
+                        Mission current = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                        current.Status = statusAtStop;
+                        current.LastUpdateUtc = DateTime.UtcNow;
+                        await db.Missions.UpdateAsync(current).ConfigureAwait(false);
+                    };
+
+                    await service.HealthCheckAsync().ConfigureAwait(false);
+
+                    Mission updatedMission = (await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                    Captain updatedCaptain = (await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!;
+                    Dock updatedDock = (await db.Docks.ReadAsync(dock.Id).ConfigureAwait(false))!;
+                    bool landingState = statusAtStop == MissionStatusEnum.WorkProduced
+                        || statusAtStop == MissionStatusEnum.PullRequestOpen
+                        || statusAtStop == MissionStatusEnum.LandingFailed;
+                    // Exhausted stall recovery retains the dock even when the mission fails, so uncommitted work survives.
+                    bool retainDock = landingState || !maxRuntime;
+                    AssertEqual(landingState ? statusAtStop : MissionStatusEnum.Failed, updatedMission.Status, "A concurrent landing-state transition must not be replaced by stale health-check state");
+                    AssertEqual(retainDock ? dock.Id : null, updatedMission.DockId, "Landing states and exhausted stall recovery keep the mission dock reference");
+                    AssertEqual(CaptainStateEnum.Idle, updatedCaptain.State, "The captain is released after stopping the process");
+                    AssertNull(updatedCaptain.CurrentDockId, "The released captain no longer owns the retained dock");
+                    AssertEqual(!retainDock, !updatedDock.Active, "The dock is reclaimed only when failure cleanup does not still need the worktree");
+                    AssertEqual(retainDock, Directory.Exists(worktree), "A retained dock keeps the worktree available");
+                    AssertEqual(retainDock, File.Exists(marker), "A retained dock keeps the worktree contents available");
+                }
+            }
+            finally
+            {
+                TestTemp.TryDelete(worktree);
+                TestTemp.TryDelete(logs);
+            }
         }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)
