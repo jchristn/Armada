@@ -757,6 +757,24 @@ calls them without a proposal.
 The maintainer bundle (`POST /api/v1/blackbox/bundle`, `get_blackbox_bundle`), fingerprint trends per Armada version,
 regression fixtures (`export-fixture`) and the Prometheus metrics come from the same plan section.
 
+### Where the extensions appear in the UIs
+
+| Extension | Dashboard | VS Code | Mobile |
+|---|---|---|---|
+| Overlap and brief lint preview | **Dispatch preview** under the brief on Dispatch, Create Mission, Create Voyage (per mission) and the pipeline run form, refreshed as you type (debounced; overlap preview with a vessel, brief lint without) | **Armada: Preview Mission Overlap** (Command Palette and the Armada Failures title bar): the open repository's vessel by remote URL, then a title and brief; opens the warnings, brief lint, suggested dependency and likely files | Live check on Dispatch, Create Voyage (per mission) and Create Mission |
+| Dispatch warnings (create responses) | **Dispatch warnings** banner on the missions list after Create Mission, and on the voyage page after Dispatch, Create Voyage or a pipeline run | Shown by the preview command | A sheet of the returned warnings before the new mission or voyage opens; a toast after a pipeline run, planning dispatch or Retry Failed |
+| Serialize overlapping missions | Vessel **Edit**: **Serialize Overlapping Missions** (with a tooltip); the Reservations card says whether overlaps are chained or warned | | |
+| Reservations | Vessel page **Reservations** card (paged, linked to the reserving missions) | | |
+| Configuration doctor | Vessel page **Black Box doctor** card (window 7, 30, 90 or 365 days, paged, links to the example entry and mission, **Apply...** with a dry run and confirmation where the recommendation has an action) | Entry view: **Recurring on this vessel** (the first five findings, linked to their example entries) | |
+| Combined timeline | Entry panel and page: **Timeline** section (paged, oldest or newest first, entity links; open by default on `/blackbox/{id}`) | **Armada: Show Black Box Timeline** (Command Palette, Failures context menu, entry view button; 100 per page) | Entry screen **Timeline** (ten per page, Load more, linked) |
+| Attempt diff | Entry panel and page: **Attempt diff** section (pick another attempt of the mission or type any entry id; side by side values and changed files) | **Armada: Compare Black Box Attempts** (Command Palette, Failures context menu, entry view button) | |
+| Nearby successes | Entry panel and page: **Nearby successes** section (paged, linked to the missions that landed) | | Mission entry screen **Nearby successes** (ten per page, Load more, linked) |
+| Voyage cascade graph | Voyage page **Cascade graph** card for a voyage with failures: an SVG graph (nodes open the entry or mission, the root outlined, a legend for the four edge kinds) and the same missions and edges as a list | | Failed voyage detail **Cascade** list (missions with status, failure kind, root marker and edges, linked) |
+| Runbook linkage | Recovery paths show **Runs runbook: {title}** linked to the runbook | Entry view: the linked runbook on each path | Entry screen: **Runbook: {name}** on each path |
+| Recovery statistics | Black Box page **Recovery stats** tab (paged by rule and path, filter by vessel and rule, success rate bars); each recovery path shows its success rate | Entry view: each path's success rate | Entry screen: each path's success rate |
+
+The TUI and Helm CLI pieces are pending (section 14).
+
 # Part 2: developer contract
 
 ## 13. Developer contract
@@ -1837,5 +1855,5 @@ Grep for `TODO(blackbox-docs)` in this document and `TODO(blackbox-wave2` in cod
 | Owner | Item | Where |
 |---|---|---|
 | TUI and Helm | Failure tab, Black Box screen, `armada blackbox ...` commands including `export-fixture` (section 4) | `src/Armada.Tui`, `src/Armada.Helm` |
-| Insight UIs | Dashboard dispatch dialog overlap warnings, reservations, doctor, timeline and cascade views; TUI and Helm commands (section 12) | `src/Armada.Dashboard`, `src/Armada.Tui`, `src/Armada.Helm` |
+| Insight UIs | TUI and Helm views and commands for the section 12 extensions (overlap preview, reservations, doctor, timeline, attempt diff, nearby successes, cascade graph, recovery statistics) | `src/Armada.Tui`, `src/Armada.Helm` |
 | MCP resources | Typed errors for resource reads of a missing entry or object (they return JSON-RPC -32603 today) | `McpBlackBoxResources.cs` |
