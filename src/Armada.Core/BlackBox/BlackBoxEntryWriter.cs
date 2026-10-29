@@ -23,7 +23,23 @@ namespace Armada.Core.BlackBox
     /// </summary>
     public class BlackBoxEntryWriter
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Per-entry locks shared with the storage migrator (default <see cref="BlackBoxEntryLocks.Default"/>), so a write and a
+        /// storage migration of the same entry never interleave.
+        /// </summary>
+        public BlackBoxEntryLocks EntryLocks
+        {
+            get => _EntryLocks;
+            set => _EntryLocks = value ?? throw new ArgumentNullException(nameof(value));
+        }
+
+        #endregion
+
         #region Private-Members
+
+        private BlackBoxEntryLocks _EntryLocks = BlackBoxEntryLocks.Default;
 
         private readonly string _Header = "[BlackBoxEntryWriter] ";
         private readonly DatabaseDriver _Database;
@@ -78,6 +94,26 @@ namespace Armada.Core.BlackBox
         {
             if (entry == null) throw new ArgumentNullException(nameof(entry));
             if (record == null) throw new ArgumentNullException(nameof(record));
+            using (await _EntryLocks.AcquireAsync(entry.Id, token).ConfigureAwait(false))
+            {
+                // A storage migration may have moved the entry since the caller read it: write to where it is now, and
+                // never save the stale location back over the migrator's switch.
+                BlackBoxEntry? current = await _Database.BlackBoxEntries.ReadAsync(entry.Id, null, true, token).ConfigureAwait(false);
+                if (current != null)
+                {
+                    entry.StorageTarget = current.StorageTarget;
+                    entry.StoragePrefix = current.StoragePrefix;
+                }
+                await WriteLockedAsync(entry, record, evidence, budget, token).ConfigureAwait(false);
+            }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task WriteLockedAsync(BlackBoxEntry entry, BlackBoxRecord record, List<BlackBoxPendingObject>? evidence, CancellationToken budget, CancellationToken token)
+        {
             bool compress = _Settings.Storage.Compress;
             List<BlackBoxPendingObject> pending = PrepareEvidence(record, evidence ?? new List<BlackBoxPendingObject>());
             _Redactor.RedactRecord(record);
@@ -141,9 +177,6 @@ namespace Armada.Core.BlackBox
             await _Database.BlackBoxEntries.UpdateAsync(entry, token).ConfigureAwait(false);
         }
 
-        #endregion
-
-        #region Private-Methods
 
         private async Task<BlackBoxObject?> WriteRecordAsync(BlackBoxEntry entry, BlackBoxRecord record, bool compress, CancellationToken budget, CancellationToken token)
         {

@@ -588,6 +588,12 @@ stays where it was (the job ends `Failed` with `FailedEntries` and `LastError`).
 while another is unfinished); a target that fails its health check is refused with 503. `From` limits the job to
 entries on one source target. Set `blackBox.storage.target` to the new target as well, so new entries go there.
 
+Within one Admiral process the job and the entry writer (capture, enrichment and re-analysis, which rewrite
+`record.json` and the briefs) share per-entry locks (`BlackBoxEntryLocks`): a write in flight holds back the move of its
+entry, a move holds back writes to its entry, and a write re-reads the entry's location under the lock, so it lands on
+the new target and never saves the old location back over the switch. Run one Admiral against a data directory while a
+migration runs; the locks do not span processes.
+
 **Backups.** Database-target entries are inside the database backup. External-target entries are not copied: the
 backup manifest's `blackBox` section lists them (up to 10000 references), and the restore result says which restored
 entries point at objects outside the database.
