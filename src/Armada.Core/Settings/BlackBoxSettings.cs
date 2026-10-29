@@ -64,6 +64,46 @@ namespace Armada.Core.Settings
             set => _SummaryEndpointId = String.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 
+        /// <summary>
+        /// Black box entries that must record conflicts in a directory before an active mission's scoped files there
+        /// reserve it (soft directory reservations). Default 3, clamped to 0..1000; 0 turns reservations off.
+        /// </summary>
+        public int HotspotReservationThreshold
+        {
+            get => _HotspotReservationThreshold;
+            set => _HotspotReservationThreshold = Math.Clamp(value, 0, 1000);
+        }
+
+        /// <summary>
+        /// Days the success flight recorder keeps its minimal records of successful landings. Default 7, clamped to
+        /// 0..90; 0 turns the recorder off (nothing is recorded and existing records are removed by the next cleanup).
+        /// </summary>
+        public int SuccessRetentionDays
+        {
+            get => _SuccessRetentionDays;
+            set => _SuccessRetentionDays = Math.Clamp(value, 0, 90);
+        }
+
+        /// <summary>
+        /// Hours on either side of a failure in which a successful landing on the same vessel counts as nearby. Default
+        /// 24, clamped to 1..168.
+        /// </summary>
+        public int NearbySuccessWindowHours
+        {
+            get => _NearbySuccessWindowHours;
+            set => _NearbySuccessWindowHours = Math.Clamp(value, 1, 168);
+        }
+
+        /// <summary>
+        /// Interval of the insight worker (success recording, success cleanup, recovery outcome watching), in seconds.
+        /// Default 60, clamped to 5..3600.
+        /// </summary>
+        public int InsightIntervalSeconds
+        {
+            get => _InsightIntervalSeconds;
+            set => _InsightIntervalSeconds = Math.Clamp(value, 5, 3600);
+        }
+
         #endregion
 
         #region Private-Members
@@ -73,6 +113,10 @@ namespace Armada.Core.Settings
         private BlackBoxRetentionSettings _Retention = new BlackBoxRetentionSettings();
         private BlackBoxSweeperSettings _Sweeper = new BlackBoxSweeperSettings();
         private string? _SummaryEndpointId = null;
+        private int _HotspotReservationThreshold = 3;
+        private int _SuccessRetentionDays = 7;
+        private int _NearbySuccessWindowHours = 24;
+        private int _InsightIntervalSeconds = 60;
 
         #endregion
 
