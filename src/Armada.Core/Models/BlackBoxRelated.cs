@@ -47,6 +47,23 @@ namespace Armada.Core.Models
             set => _DownstreamMissionIds = value ?? new List<string>();
         }
 
+        /// <summary>
+        /// Successful landings on the same vessel within blackBox.nearbySuccessWindowHours of the failure that changed
+        /// some of the same files (success flight recorder), most overlap first.
+        /// </summary>
+        [CollectionBound(BlackBoxInsightLimits.MaxNearbySuccesses, Reason = "Capped by BlackBoxNearbySuccessEnricher")]
+        public List<BlackBoxNearbySuccess> NearbySuccesses
+        {
+            get => _NearbySuccesses;
+            set => _NearbySuccesses = value ?? new List<BlackBoxNearbySuccess>();
+        }
+
+        /// <summary>
+        /// Nearby successes found (NearbySuccesses holds the first ten).
+        /// </summary>
+        public int NearbySuccessTotal { get; set; } = 0;
+
+        private List<BlackBoxNearbySuccess> _NearbySuccesses = new List<BlackBoxNearbySuccess>();
         private List<BlackBoxSimilarEntry> _SimilarEntries = new List<BlackBoxSimilarEntry>();
         private List<string> _DownstreamMissionIds = new List<string>();
 

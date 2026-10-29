@@ -70,6 +70,12 @@ namespace Armada.Core.BlackBox
         /// </summary>
         public VesselGitInspector Inspector { get; }
 
+        /// <summary>
+        /// Prevention, forensics and operations: overlap analyzer and dispatch advisor, insight reads, success flight
+        /// recorder, recovery outcome tracking and runbook linkage (with their worker).
+        /// </summary>
+        public BlackBoxInsights Insights { get; }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -100,6 +106,7 @@ namespace Armada.Core.BlackBox
             Service.Redactor = Redactor;
             Background = new BlackBoxBackgroundService(settings, Queue, Sweeper, GarbageCollector, logging);
             Background.Reanalyzer = Reanalyzer;
+            Insights = new BlackBoxInsights(database, settings, Pipeline, Advisor, Service, Inspector, logging);
         }
 
         /// <summary>
@@ -141,6 +148,7 @@ namespace Armada.Core.BlackBox
         public void Dispose()
         {
             Background.Dispose();
+            Insights.Dispose();
             Queue.Dispose();
         }
 
