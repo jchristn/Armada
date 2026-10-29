@@ -8,6 +8,11 @@ import type { Mission, Voyage, WebSocketMessage } from '../types/models';
 
 vi.mock('../api/client', () => ({
   getVoyage: vi.fn(),
+  getMissionBlackBox: vi.fn(() => Promise.reject(Object.assign(new Error('not found'), { status: 404, data: { code: 'BlackBoxNotFound' } }))),
+  getVoyageBlackBox: vi.fn(() => Promise.reject(Object.assign(new Error('not found'), { status: 404, data: { code: 'BlackBoxNotFound' } }))),
+  getBlackBox: vi.fn(),
+  getBlackBoxBrief: vi.fn(() => Promise.resolve('# FIX THIS')),
+  listMissionBlackBoxEntries: vi.fn(() => Promise.resolve({ objects: [] })),
   getMission: vi.fn(),
   purgeVoyage: vi.fn(),
   cancelVoyage: vi.fn(),

@@ -15,7 +15,7 @@ import { appPathFromLink, isRootLink } from '../navigation/deepLinks';
 import { redirectSystemPath } from '../app/+native-intent';
 import { DASHBOARD_ROUTES } from '../navigation/dashboardRoutes.generated';
 import { cliPermissionsHref, cliPermissionsRedirectTarget, planningHref, planningRedirectTarget } from '../navigation/legacyRedirects';
-import { NAV_SECTIONS, activeNavKey, allNavItems, sectionsForTab, withBlackBox } from '../navigation/navItems';
+import { NAV_SECTIONS, activeNavKey, allNavItems, sectionsForTab } from '../navigation/navItems';
 import { matchRoute } from '../navigation/routeMatch';
 import { SidebarPreferenceProvider } from '../navigation/SidebarPreferenceProvider';
 import { TabStack } from '../navigation/TabStack';
@@ -50,11 +50,7 @@ describe('navigation model mirrors the dashboard', () => {
   it('has the dashboard sections, in order, with the same items', () => {
     expect(NAV_SECTIONS.map((s) => s.label)).toEqual(navModelSections.map((s) => s.label));
     for (const [i, section] of navModelSections.entries()) {
-      // The app adds Black Box under OPERATIONS until the shared nav model lists it (withBlackBox is then a no-op).
-      const expected = section.items.filter((x) => !x.hidden).map((x) => x.label);
-      const dashboardHasBlackBox = navModelSections.some((s) => s.items.some((x) => x.to === '/blackbox'));
-      if (section.key === 'operations' && !dashboardHasBlackBox) expected.splice(expected.indexOf('Missions') + 1, 0, 'Black Box');
-      expect(NAV_SECTIONS[i].items.map((x) => x.label)).toEqual(expected);
+      expect(NAV_SECTIONS[i].items.map((x) => x.label)).toEqual(section.items.filter((x) => !x.hidden).map((x) => x.label));
     }
   });
 
@@ -64,8 +60,9 @@ describe('navigation model mirrors the dashboard', () => {
     expect(sectionsForTab('work').flatMap((s) => s.items.map((x) => x.to))).toContain('/blackbox');
     expect(matchRoute('/blackbox')?.route.file).toBe('(app)/(work)/blackbox/index.tsx');
     expect(matchRoute('/blackbox/bbx_1')?.params).toEqual({ id: 'bbx_1' });
-    // Adding it again (the dashboard now lists it) changes nothing.
-    expect(withBlackBox(NAV_SECTIONS)).toBe(NAV_SECTIONS);
+    // It comes from the shared nav model, directly after Activity.
+    const ops = NAV_SECTIONS.find((s) => s.key === 'operations')!.items.map((x) => x.to);
+    expect(ops.indexOf('/blackbox')).toBe(ops.indexOf('/activity') + 1);
   });
 
   it('follows the v1.2.0 consolidation: Activity on Work, no ACTIVITY or DELIVERY section, hub tabs are not items', () => {

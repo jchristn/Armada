@@ -43,6 +43,7 @@ import Markdown from '../components/shared/Markdown';
 import Button from '../components/shared/Button';
 import CaptainRef from '../components/shared/CaptainRef';
 import AssignmentBlockerCard from '../components/missions/AssignmentBlockerCard';
+import BlackBoxPanel from '../components/blackbox/BlackBoxPanel';
 import BranchesModal from '../components/vessels/BranchesModal';
 import { useLocale } from '../context/LocaleContext';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
@@ -770,32 +771,28 @@ export default function MissionDetail() {
           <span className="detail-label" title={t('User ID of whoever made the most recent review decision.')}>{t('Reviewed By')}</span>
           <span className="mono">{mission.reviewedByUserId || '-'}</span>
         </div>
-        {mission.failureReason && (
+        {(mission.failureReason || mission.lastBlackBoxEntryId || mission.status === 'Failed' || mission.status === 'LandingFailed') && (
           <div className="detail-field" style={{ gridColumn: '1 / -1' }}>
             <span className="detail-label" title={t('Why the mission failed or could not land, as recorded when it failed.')}>{t('Failure Reason')}</span>
-            <span className="text-dim">{t('The failure reason and available remediation are recorded here. Correct configuration problems before restarting; see the mission log for inference turns and tool calls.')}</span>
-            <pre style={{
-              margin: 0,
-              padding: '0.75rem',
-              background: 'rgba(255, 80, 80, 0.08)',
-              border: '1px solid rgba(255, 80, 80, 0.2)',
-              borderRadius: '4px',
-              color: 'var(--text)',
-              fontSize: '0.85em',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              fontFamily: 'monospace'
-            }} className="mission-failure-reason" data-failure-kind={mission.failureKind ?? undefined}>{mission.failureReason}</pre>
-            <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
-              {/* A landing blocked by the host (FailureKind Infra: a dirty checkout, a held lock) is fixed outside Armada
-                  and then retried; offer the retry next to the reason so it is one click away. */}
-              {mission.status === 'LandingFailed' && mission.failureKind === 'Infra' && showLand && (
-                <Button className="btn btn-sm btn-primary" onClick={handleLand} title={t('Rebase the mission branch onto its target branch and land it using the vessel\'s landing mode (merge, pull request or merge queue).')}>{t('Retry Landing')}</Button>
+            <span className="text-dim">{t('The black box below records where, how and why the mission failed, with ranked recovery paths. Correct configuration problems before restarting; see the mission log for inference turns and tool calls.')}</span>
+            <BlackBoxPanel
+              missionId={mission.id}
+              fallbackReason={mission.failureReason}
+              fallbackKind={mission.failureKind}
+              onChanged={loadMission}
+              extraActions={(
+                <>
+                  {/* A landing blocked by the host (FailureKind Infra: a dirty checkout, a held lock) is fixed outside Armada
+                      and then retried; offer the retry next to the reason so it is one click away. */}
+                  {mission.status === 'LandingFailed' && mission.failureKind === 'Infra' && showLand && (
+                    <Button className="btn btn-sm btn-primary" onClick={handleLand} title={t('Rebase the mission branch onto its target branch and land it using the vessel\'s landing mode (merge, pull request or merge queue).')}>{t('Retry Landing')}</Button>
+                  )}
+                  {mission.captainId && <Link className="btn btn-sm" to={`/captains/${mission.captainId}`}>{t('Open captain configuration')}</Link>}
+                  {missionCaptain?.modelEndpointId && <Link className="btn btn-sm" to="/configuration?tab=endpoints">{t('Open inference endpoints')}</Link>}
+                  {mission.vesselId && <Link className="btn btn-sm" to={`/vessels/${mission.vesselId}`}>{t('Open vessel configuration')}</Link>}
+                </>
               )}
-              {mission.captainId && <Link className="btn btn-sm" to={`/captains/${mission.captainId}`}>{t('Open captain configuration')}</Link>}
-              {missionCaptain?.modelEndpointId && <Link className="btn btn-sm" to="/configuration?tab=endpoints">{t('Open inference endpoints')}</Link>}
-              {mission.vesselId && <Link className="btn btn-sm" to={`/vessels/${mission.vesselId}`}>{t('Open vessel configuration')}</Link>}
-            </div>
+            />
           </div>
         )}
         {mission.reviewComment && (

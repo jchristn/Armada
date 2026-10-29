@@ -83,6 +83,8 @@ const DispatchHub = lazy(() => import('./pages/DispatchHub'));
 const DeliveryHub = lazy(() => import('./pages/DeliveryHub'));
 const FleetActions = lazy(() => import('./pages/FleetActions'));
 const FleetActionRunDetail = lazy(() => import('./pages/FleetActionRunDetail'));
+const BlackBox = lazy(() => import('./pages/BlackBox'));
+const BlackBoxEntry = lazy(() => import('./pages/BlackBoxEntry'));
 
 function RouteFallback() {
   return <LoadingIndicator fullHeight label="Loading page..." />;
@@ -167,6 +169,8 @@ export default function App() {
                       {/* One optional-segment route so moving between /ask and /ask/:threadId keeps the page mounted. */}
                       <Route path="ask/:threadId?" element={<AskArmada />} />
                       <Route path="inbox" element={<Inbox />} />
+                      <Route path="blackbox" element={<BlackBox />} />
+                      <Route path="blackbox/:id" element={<BlackBoxEntry />} />
                       <Route path="cli-permissions" element={<CliPermissionsRedirect />} />
                       <Route path="delivery" element={<DeliveryHub />} />
                       <Route path="fleet-actions" element={<FleetActions />} />

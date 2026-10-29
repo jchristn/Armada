@@ -88,6 +88,7 @@ export const storageMessages: Record<string, string> = {
   'storage.VolumesUnavailable': 'Volume capacity is unavailable.',
   'storage.HarborReportUnavailable': 'No Harbor storage report is available. Connect an updated Harbor and allow one collection cycle. Previous reports are not persisted across Admiral restarts.',
   'storage.category.DatabaseFiles': 'Database files', 'storage.category.Repositories': 'Repositories', 'storage.category.Docks': 'Docks',
+  'storage.category.BlackBox': 'Black box', 'storage.BlackBoxUsageUnavailable': 'Black box usage could not be measured.',
   'storage.category.Backups': 'Backups', 'storage.category.Builds': 'Retained builds', 'storage.category.Other': 'Other managed files',
   'storage.category.Logs/server': 'Server logs', 'storage.category.Logs/missions': 'Mission logs', 'storage.category.Logs/captains': 'Captain logs',
   'storage.category.Logs/planning-sessions': 'Planning transcripts', 'storage.category.Logs/diffs': 'Saved diffs',

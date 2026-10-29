@@ -23,6 +23,7 @@ import type { Vessel } from '../types/models';
 import ImportFleetActionSettings from '../components/settings/ImportFleetActionSettings';
 import RetentionSettings from '../components/settings/RetentionSettings';
 import AskSettings from '../components/settings/AskSettings';
+import BlackBoxSettings from '../components/settings/BlackBoxSettings';
 import CliPermissionSettings from '../components/settings/CliPermissionSettings';
 import DefaultLandingModeField from '../components/settings/DefaultLandingModeField';
 import { DEFAULT_GLOBAL_LANDING_MODE } from '../lib/vesselForm';
@@ -909,6 +910,15 @@ export default function Server() {
       {settings && (
         <RetentionSettings
           retention={settings.retention}
+          locked={remoteSettingsLocked}
+          onSaved={(updated) => setSettings(mergeServerSettings(updated as unknown as ServerSettings))}
+          notify={showToast}
+        />
+      )}
+
+      {settings && isAdmin && settings.blackBox && (
+        <BlackBoxSettings
+          blackBox={settings.blackBox}
           locked={remoteSettingsLocked}
           onSaved={(updated) => setSettings(mergeServerSettings(updated as unknown as ServerSettings))}
           notify={showToast}
