@@ -125,6 +125,11 @@ namespace Armada.Core.Database.Sqlite
             CliPermissionRequests = new CliPermissionRequestMethods(this, _Settings, _Logging);
             CliPermissionRules = new CliPermissionRuleMethods(this, _Settings, _Logging);
             StageOutcomes = new StageOutcomeMethods(this, _Settings, _Logging);
+            BlackBoxEntries = new BlackBoxEntryMethods(this);
+            BlackBoxObjects = new BlackBoxObjectMethods(this);
+            BlackBoxFiles = new BlackBoxFileMethods(this);
+            BlackBoxLinks = new BlackBoxLinkMethods(this);
+            BlackBoxNotes = new BlackBoxNoteMethods(this);
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);
             FailureCauseRules = new FailureCauseRuleMethods(this, _Settings, _Logging);
             ModelProbeRuns = new ModelProbeRunMethods(this, _Settings, _Logging);
@@ -207,6 +212,11 @@ namespace Armada.Core.Database.Sqlite
             CliPermissionRequests = new CliPermissionRequestMethods(this, _Settings, _Logging);
             CliPermissionRules = new CliPermissionRuleMethods(this, _Settings, _Logging);
             StageOutcomes = new StageOutcomeMethods(this, _Settings, _Logging);
+            BlackBoxEntries = new BlackBoxEntryMethods(this);
+            BlackBoxObjects = new BlackBoxObjectMethods(this);
+            BlackBoxFiles = new BlackBoxFileMethods(this);
+            BlackBoxLinks = new BlackBoxLinkMethods(this);
+            BlackBoxNotes = new BlackBoxNoteMethods(this);
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);
             FailureCauseRules = new FailureCauseRuleMethods(this, _Settings, _Logging);
             ModelProbeRuns = new ModelProbeRunMethods(this, _Settings, _Logging);
@@ -644,6 +654,7 @@ namespace Armada.Core.Database.Sqlite
             try { vessel.TestCommand = NullableString(reader["test_command"]); } catch { }
             try { vessel.LintCommand = NullableString(reader["lint_command"]); } catch { }
             try { vessel.AuditCommand = NullableString(reader["audit_command"]); } catch { }
+            try { vessel.BlackBoxRetentionDays = reader["blackbox_retention_days"] == DBNull.Value ? null : Convert.ToInt32(reader["blackbox_retention_days"]); } catch { }
             try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); } catch { }
             try { vessel.ReleaseBranchPrefix = NullableString(reader["release_branch_prefix"]) ?? "release/"; } catch { vessel.ReleaseBranchPrefix = "release/"; }
             try { vessel.HotfixBranchPrefix = NullableString(reader["hotfix_branch_prefix"]) ?? "hotfix/"; } catch { vessel.HotfixBranchPrefix = "hotfix/"; }
@@ -769,6 +780,8 @@ namespace Armada.Core.Database.Sqlite
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
             try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }
             try { mission.FailureKind = MissionFailureKindColumn.FromDbValue(reader["failure_kind"]); } catch { }
+            try { mission.LastBlackBoxEntryId = NullableString(reader["last_blackbox_entry_id"]); } catch { }
+            try { mission.StartCommit = NullableString(reader["start_commit"]); } catch { }
             try { mission.WaitForVoyageWorkers = reader["wait_for_voyage_workers"] != DBNull.Value && Convert.ToInt64(reader["wait_for_voyage_workers"]) == 1; } catch { }
             try { mission.RequiresReview = Convert.ToInt64(reader["requires_review"]) == 1; } catch { }
             try
@@ -816,6 +829,7 @@ namespace Armada.Core.Database.Sqlite
             try { voyage.CaptainOverridesJson = NullableString(reader["captain_overrides_json"]); } catch { }
             voyage.ApprovalOptions = RunApprovalOptions.FromJson(NullableString(reader["approval_options_json"]));
             try { voyage.IsEvaluation = reader["is_evaluation"] != DBNull.Value && Convert.ToInt64(reader["is_evaluation"]) == 1; } catch { }
+            try { voyage.LastBlackBoxEntryId = NullableString(reader["last_blackbox_entry_id"]); } catch { }
             return voyage;
         }
 

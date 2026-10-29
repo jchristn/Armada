@@ -473,6 +473,36 @@ namespace Armada.Core
         public static readonly string AgentRuntimeIdPrefix = "art_";
 
         /// <summary>
+        /// Black box entry ID prefix (blackbox_entries).
+        /// </summary>
+        public static readonly string BlackBoxEntryIdPrefix = "bbx_";
+
+        /// <summary>
+        /// Black box object ID prefix (blackbox_objects).
+        /// </summary>
+        public static readonly string BlackBoxObjectIdPrefix = "bbo_";
+
+        /// <summary>
+        /// Black box file row ID prefix (blackbox_files).
+        /// </summary>
+        public static readonly string BlackBoxFileIdPrefix = "bbf_";
+
+        /// <summary>
+        /// Black box link row ID prefix (blackbox_links).
+        /// </summary>
+        public static readonly string BlackBoxLinkIdPrefix = "bbl_";
+
+        /// <summary>
+        /// Black box note ID prefix (blackbox_notes).
+        /// </summary>
+        public static readonly string BlackBoxNoteIdPrefix = "bbn_";
+
+        /// <summary>
+        /// Black box storage migration job ID prefix.
+        /// </summary>
+        public static readonly string BlackBoxStorageMigrationIdPrefix = "bbm_";
+
+        /// <summary>
         /// Default data retention period in days for completed records.
         /// </summary>
         public static readonly int DefaultDataRetentionDays = 30;

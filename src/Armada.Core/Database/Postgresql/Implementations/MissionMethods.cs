@@ -793,10 +793,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 cmd.Connection = conn;
                 cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description,
                     status, mode, priority, parent_mission_id, branch_name, dock_id, process_id,
-                    pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, rework_round, rework_escalated, tier, created_utc, started_utc, completed_utc, last_update_utc)
+                    pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, last_blackbox_entry_id, start_commit, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, rework_round, rework_escalated, tier, created_utc, started_utc, completed_utc, last_update_utc)
                     VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description,
                     @status, @mode, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id,
-                    @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @rework_round, @rework_escalated, @tier, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
+                    @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @last_blackbox_entry_id, @start_commit, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @rework_round, @rework_escalated, @tier, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
                 AddMissionParameters(cmd, mission);
                 await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
             }
@@ -832,7 +832,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         pr_url = @pr_url, commit_hash = @commit_hash, diff_snapshot = @diff_snapshot,
                         agent_output = @agent_output,
                         persona = @persona, depends_on_mission_id = @depends_on_mission_id,
-                        failure_reason = @failure_reason, failure_kind = @failure_kind, wait_for_voyage_workers = @wait_for_voyage_workers, requires_review = @requires_review,
+                        failure_reason = @failure_reason, failure_kind = @failure_kind, last_blackbox_entry_id = COALESCE(@last_blackbox_entry_id, last_blackbox_entry_id), start_commit = @start_commit, wait_for_voyage_workers = @wait_for_voyage_workers, requires_review = @requires_review,
                         review_deny_action = @review_deny_action, review_comment = @review_comment,
                         reviewed_by_user_id = @reviewed_by_user_id, review_requested_utc = @review_requested_utc,
                         reviewed_utc = @reviewed_utc, review_deadline_utc = @review_deadline_utc,
@@ -896,6 +896,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@failure_kind", MissionFailureKindColumn.ToDbValue(mission.FailureKind));
+            cmd.Parameters.AddWithValue("@last_blackbox_entry_id", (object?)mission.LastBlackBoxEntryId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@start_commit", (object?)mission.StartCommit ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@wait_for_voyage_workers", mission.WaitForVoyageWorkers);
             cmd.Parameters.AddWithValue("@requires_review", mission.RequiresReview);
             cmd.Parameters.AddWithValue("@review_deny_action", mission.ReviewDenyAction.ToString());
@@ -1018,6 +1020,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
             try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }
             try { mission.FailureKind = MissionFailureKindColumn.FromDbValue(reader["failure_kind"]); } catch { }
+            try { mission.LastBlackBoxEntryId = NullableString(reader["last_blackbox_entry_id"]); } catch { }
+            try { mission.StartCommit = NullableString(reader["start_commit"]); } catch { }
             try { mission.WaitForVoyageWorkers = reader["wait_for_voyage_workers"] != DBNull.Value && Convert.ToBoolean(reader["wait_for_voyage_workers"]); } catch { }
             try { mission.RequiresReview = Convert.ToBoolean(reader["requires_review"]); } catch { }
             try

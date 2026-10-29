@@ -430,6 +430,51 @@ namespace Armada.Core.Database
         }
 
         /// <summary>
+        /// Black box entries (blackbox_entries).
+        /// </summary>
+        public IBlackBoxEntryMethods BlackBoxEntries
+        {
+            get => _BlackBoxEntries;
+            protected set => _BlackBoxEntries = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box objects (blackbox_objects).
+        /// </summary>
+        public IBlackBoxObjectMethods BlackBoxObjects
+        {
+            get => _BlackBoxObjects;
+            protected set => _BlackBoxObjects = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box file rows (blackbox_files).
+        /// </summary>
+        public IBlackBoxFileMethods BlackBoxFiles
+        {
+            get => _BlackBoxFiles;
+            protected set => _BlackBoxFiles = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box link rows (blackbox_links).
+        /// </summary>
+        public IBlackBoxLinkMethods BlackBoxLinks
+        {
+            get => _BlackBoxLinks;
+            protected set => _BlackBoxLinks = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Black box notes (blackbox_notes).
+        /// </summary>
+        public IBlackBoxNoteMethods BlackBoxNotes
+        {
+            get => _BlackBoxNotes;
+            protected set => _BlackBoxNotes = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
         /// Handoff artifact methods (one row per stage attempt that handed work on).
         /// </summary>
         public IHandoffArtifactMethods HandoffArtifacts
@@ -661,6 +706,11 @@ namespace Armada.Core.Database
         private ICliPermissionRuleMethods _CliPermissionRules = null!;
         private IStageOutcomeMethods _StageOutcomes = null!;
         private IHandoffArtifactMethods _HandoffArtifacts = null!;
+        private IBlackBoxEntryMethods _BlackBoxEntries = null!;
+        private IBlackBoxObjectMethods _BlackBoxObjects = null!;
+        private IBlackBoxFileMethods _BlackBoxFiles = null!;
+        private IBlackBoxLinkMethods _BlackBoxLinks = null!;
+        private IBlackBoxNoteMethods _BlackBoxNotes = null!;
         private IFailureCauseRuleMethods _FailureCauseRules = null!;
         private IModelProbeRunMethods _ModelProbeRuns = null!;
         private IModelProbeResultMethods _ModelProbeResults = null!;

@@ -75,6 +75,11 @@ namespace Armada.Core.Database.Mysql
             CliPermissionRequests = new CliPermissionRequestMethods(_ConnectionString);
             CliPermissionRules = new CliPermissionRuleMethods(_ConnectionString);
             StageOutcomes = new StageOutcomeMethods(_ConnectionString);
+            BlackBoxEntries = new BlackBoxEntryMethods(_ConnectionString);
+            BlackBoxObjects = new BlackBoxObjectMethods(_ConnectionString);
+            BlackBoxFiles = new BlackBoxFileMethods(_ConnectionString);
+            BlackBoxLinks = new BlackBoxLinkMethods(_ConnectionString);
+            BlackBoxNotes = new BlackBoxNoteMethods(_ConnectionString);
             HandoffArtifacts = new HandoffArtifactMethods(_ConnectionString);
             FailureCauseRules = new FailureCauseRuleMethods(_ConnectionString);
             ModelProbeRuns = new ModelProbeRunMethods(_ConnectionString);
@@ -1062,7 +1067,127 @@ namespace Armada.Core.Database.Mysql
                     );",
                     @"CREATE INDEX idx_runbook_executions_tenant_user ON runbook_executions(tenant_id, user_id);",
                     @"CREATE INDEX idx_runbook_executions_runbook ON runbook_executions(runbook_id);",
-                    @"CREATE INDEX idx_runbook_executions_last_update ON runbook_executions(last_update_utc, id);")
+                    @"CREATE INDEX idx_runbook_executions_last_update ON runbook_executions(last_update_utc, id);"),
+                new SchemaMigration(103, "Add the mission and voyage black box: blackbox_entries, blackbox_objects (object bytes in a BLOB column for the Database target), blackbox_files, blackbox_links and blackbox_notes, plus missions.last_blackbox_entry_id, missions.start_commit, voyages.last_blackbox_entry_id and vessels.blackbox_retention_days",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_entries (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        user_id VARCHAR(64),
+                        subject_type VARCHAR(64) NOT NULL,
+                        mission_id VARCHAR(64),
+                        voyage_id VARCHAR(64),
+                        vessel_id VARCHAR(64),
+                        fleet_id VARCHAR(64),
+                        captain_id VARCHAR(64),
+                        harbor_id VARCHAR(64),
+                        dock_id VARCHAR(64),
+                        merge_entry_id VARCHAR(64),
+                        incident_id VARCHAR(64),
+                        stage_outcome_id VARCHAR(64),
+                        parent_mission_id VARCHAR(64),
+                        mission_title LONGTEXT,
+                        vessel_name LONGTEXT,
+                        attempt INT NOT NULL DEFAULT 1,
+                        is_current TINYINT(1) NOT NULL DEFAULT 0,
+                        supersedes_id VARCHAR(64),
+                        phase VARCHAR(64) NOT NULL,
+                        step VARCHAR(64) NOT NULL,
+                        failure_kind VARCHAR(64),
+                        status_before VARCHAR(64),
+                        status_after VARCHAR(64),
+                        triage VARCHAR(64) NOT NULL,
+                        fingerprint VARCHAR(64),
+                        capture_mode VARCHAR(64) NOT NULL,
+                        state VARCHAR(64) NOT NULL,
+                        resolution VARCHAR(64) NOT NULL,
+                        resolution_note LONGTEXT,
+                        resolution_link LONGTEXT,
+                        pinned TINYINT(1) NOT NULL DEFAULT 0,
+                        storage_target VARCHAR(64) NOT NULL,
+                        storage_prefix LONGTEXT,
+                        total_bytes BIGINT NOT NULL DEFAULT 0,
+                        object_count INT NOT NULL DEFAULT 0,
+                        schema_version INT NOT NULL DEFAULT 1,
+                        rules_version INT NOT NULL DEFAULT 0,
+                        armada_version LONGTEXT,
+                        armada_commit VARCHAR(64),
+                        reason_excerpt LONGTEXT,
+                        summary LONGTEXT,
+                        enrichment_attempts INT NOT NULL DEFAULT 0,
+                        last_error LONGTEXT,
+                        next_attempt_utc DATETIME(6),
+                        expires_utc DATETIME(6),
+                        created_utc DATETIME(6) NOT NULL,
+                        enriched_utc DATETIME(6),
+                        analyzed_utc DATETIME(6),
+                        resolved_utc DATETIME(6),
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_objects (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        entry_id VARCHAR(64) NOT NULL,
+                        tenant_id VARCHAR(64),
+                        name VARCHAR(255) NOT NULL,
+                        content_type VARCHAR(64) NOT NULL,
+                        content_encoding VARCHAR(64) NOT NULL,
+                        size_bytes BIGINT NOT NULL DEFAULT 0,
+                        uncompressed_bytes BIGINT NOT NULL DEFAULT 0,
+                        sha256 VARCHAR(64),
+                        storage_key LONGTEXT,
+                        missing TINYINT(1) NOT NULL DEFAULT 0,
+                        data LONGBLOB,
+                        created_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_files (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        entry_id VARCHAR(64) NOT NULL,
+                        tenant_id VARCHAR(64),
+                        vessel_id VARCHAR(64),
+                        path LONGTEXT NOT NULL,
+                        directory VARCHAR(512) NOT NULL,
+                        role VARCHAR(64) NOT NULL,
+                        conflicting_mission_id VARCHAR(64),
+                        created_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_links (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        entry_id VARCHAR(64) NOT NULL,
+                        tenant_id VARCHAR(64),
+                        mission_id VARCHAR(64) NOT NULL,
+                        relation VARCHAR(64) NOT NULL,
+                        commit_hash VARCHAR(64),
+                        overlap_file_count INT NOT NULL DEFAULT 0,
+                        created_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS blackbox_notes (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        entry_id VARCHAR(64) NOT NULL,
+                        tenant_id VARCHAR(64),
+                        user_id VARCHAR(64),
+                        author_kind VARCHAR(64) NOT NULL,
+                        body LONGTEXT NOT NULL,
+                        created_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE INDEX idx_blackbox_entries_tenant_mission_current ON blackbox_entries(tenant_id, mission_id, is_current);",
+                    @"CREATE INDEX idx_blackbox_entries_mission_current ON blackbox_entries(mission_id, is_current);",
+                    @"CREATE INDEX idx_blackbox_entries_tenant_voyage ON blackbox_entries(tenant_id, voyage_id);",
+                    @"CREATE INDEX idx_blackbox_entries_voyage ON blackbox_entries(voyage_id);",
+                    @"CREATE INDEX idx_blackbox_entries_tenant_vessel_created ON blackbox_entries(tenant_id, vessel_id, created_utc);",
+                    @"CREATE INDEX idx_blackbox_entries_tenant_fingerprint_created ON blackbox_entries(tenant_id, fingerprint, created_utc);",
+                    @"CREATE INDEX idx_blackbox_entries_expires ON blackbox_entries(expires_utc);",
+                    @"CREATE INDEX idx_blackbox_entries_tenant_resolution_triage ON blackbox_entries(tenant_id, resolution, triage);",
+                    @"CREATE INDEX idx_blackbox_entries_created ON blackbox_entries(created_utc, id);",
+                    @"CREATE INDEX idx_blackbox_entries_state ON blackbox_entries(state);",
+                    @"CREATE UNIQUE INDEX idx_blackbox_objects_entry_name ON blackbox_objects(entry_id, name);",
+                    @"CREATE INDEX idx_blackbox_files_tenant_vessel_directory ON blackbox_files(tenant_id, vessel_id, directory);",
+                    @"CREATE INDEX idx_blackbox_files_entry ON blackbox_files(entry_id);",
+                    @"CREATE INDEX idx_blackbox_links_entry ON blackbox_links(entry_id);",
+                    @"CREATE INDEX idx_blackbox_links_mission ON blackbox_links(mission_id);",
+                    @"CREATE INDEX idx_blackbox_notes_entry_created ON blackbox_notes(entry_id, created_utc);",
+                    @"ALTER TABLE missions ADD COLUMN last_blackbox_entry_id VARCHAR(64) NULL;",
+                    @"ALTER TABLE missions ADD COLUMN start_commit VARCHAR(64) NULL;",
+                    @"ALTER TABLE voyages ADD COLUMN last_blackbox_entry_id VARCHAR(64) NULL;",
+                    @"ALTER TABLE vessels ADD COLUMN blackbox_retention_days INT NULL;")
 
 
             };

@@ -128,6 +128,11 @@ namespace Armada.Core.Models
         /// </summary>
         public bool IsEvaluation { get; set; } = false;
 
+        /// <summary>
+        /// The voyage's current black box entry (bbx_ prefix), or null when it has none.
+        /// </summary>
+        public string? LastBlackBoxEntryId { get; set; } = null;
+
         #endregion
 
         #region Private-Members

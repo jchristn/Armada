@@ -228,6 +228,19 @@ namespace Armada.Core.Models
         public MissionFailureKindEnum? FailureKind { get; set; } = null;
 
         /// <summary>
+        /// The mission's current black box entry (bbx_ prefix), or null when it has none. Set when a failure is captured
+        /// and kept when a restart clears <see cref="FailureReason"/> and <see cref="FailureKind"/>, so the evidence of
+        /// the earlier failure stays reachable.
+        /// </summary>
+        public string? LastBlackBoxEntryId { get; set; } = null;
+
+        /// <summary>
+        /// The target-branch commit the mission's dock started from (recorded at assignment), or null when unknown.
+        /// The base for "what moved on the target since this mission started".
+        /// </summary>
+        public string? StartCommit { get; set; } = null;
+
+        /// <summary>
         /// When true, a Worker mission waits for other implementation pipelines in the voyage, including reviews
         /// and checks, to settle (Complete, WorkProduced, Failed, Cancelled, or LandingFailed). Its own downstream
         /// stages and the Architect are excluded to avoid a circular wait. Reworks inherit this barrier. Set from

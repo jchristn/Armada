@@ -906,6 +906,18 @@ namespace Armada.Core.Settings
         private StorageSettings _Storage = new StorageSettings();
 
         /// <summary>
+        /// Mission and voyage black box: capture, storage target, retention and sweeper (docs/BLACKBOX.md). Never null;
+        /// setting null restores the defaults. Storage secrets are masked on every settings read.
+        /// </summary>
+        public BlackBoxSettings BlackBox
+        {
+            get => _BlackBox;
+            set => _BlackBox = value ?? new BlackBoxSettings();
+        }
+
+        private BlackBoxSettings _BlackBox = new BlackBoxSettings();
+
+        /// <summary>
         /// Retention for Ask threads, finished background jobs, and finished import batches, pruned on the
         /// health-check loop's slow cadence. Never null; setting null restores the defaults.
         /// </summary>

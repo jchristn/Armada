@@ -81,6 +81,11 @@ namespace Armada.Core.Database.SqlServer
             CliPermissionRequests = new CliPermissionRequestMethods(this, _Settings, _Logging);
             CliPermissionRules = new CliPermissionRuleMethods(this, _Settings, _Logging);
             StageOutcomes = new StageOutcomeMethods(this, _Settings, _Logging);
+            BlackBoxEntries = new BlackBoxEntryMethods(this);
+            BlackBoxObjects = new BlackBoxObjectMethods(this);
+            BlackBoxFiles = new BlackBoxFileMethods(this);
+            BlackBoxLinks = new BlackBoxLinkMethods(this);
+            BlackBoxNotes = new BlackBoxNoteMethods(this);
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);
             FailureCauseRules = new FailureCauseRuleMethods(this, _Settings, _Logging);
             ModelProbeRuns = new ModelProbeRunMethods(this, _Settings, _Logging);
@@ -546,6 +551,7 @@ namespace Armada.Core.Database.SqlServer
             catch { vessel.LintCommand = null; }
             try { vessel.AuditCommand = NullableString(reader["audit_command"]); }
             catch { vessel.AuditCommand = null; }
+            try { vessel.BlackBoxRetentionDays = reader["blackbox_retention_days"] == DBNull.Value ? null : Convert.ToInt32(reader["blackbox_retention_days"]); } catch { }
             try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); }
             catch { vessel.DefinitionOfDoneTimeoutSeconds = 1800; }
             vessel.DefaultBranch = reader["default_branch"].ToString()!;
@@ -666,6 +672,8 @@ namespace Armada.Core.Database.SqlServer
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
             try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }
             try { mission.FailureKind = MissionFailureKindColumn.FromDbValue(reader["failure_kind"]); } catch { }
+            try { mission.LastBlackBoxEntryId = NullableString(reader["last_blackbox_entry_id"]); } catch { }
+            try { mission.StartCommit = NullableString(reader["start_commit"]); } catch { }
             try { mission.WaitForVoyageWorkers = reader["wait_for_voyage_workers"] != DBNull.Value && Convert.ToBoolean(reader["wait_for_voyage_workers"]); } catch { }
             try { mission.RequiresReview = reader["requires_review"] != DBNull.Value && Convert.ToBoolean(reader["requires_review"]); } catch { }
             try
@@ -711,6 +719,7 @@ namespace Armada.Core.Database.SqlServer
             try { voyage.CaptainOverridesJson = NullableString(reader["captain_overrides_json"]); } catch { }
             voyage.ApprovalOptions = RunApprovalOptions.FromJson(NullableString(reader["approval_options_json"]));
             try { voyage.IsEvaluation = reader["is_evaluation"] != DBNull.Value && Convert.ToBoolean(reader["is_evaluation"]); } catch { }
+            try { voyage.LastBlackBoxEntryId = NullableString(reader["last_blackbox_entry_id"]); } catch { }
             return voyage;
         }
 
