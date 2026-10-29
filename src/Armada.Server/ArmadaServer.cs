@@ -1432,13 +1432,13 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Tenants, users, credentials
-            new TenantRoutes(_Database, _JsonOptions)
+            new TenantRoutes(_Database, _JsonOptions) { BlackBoxHooks = _BlackBox?.Hooks }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Status, health, doctor, settings, server control
             SlotManager slotManager = new SlotManager(Path.Combine(_Settings.DataDirectory, "bin"), retentionCount: _Settings.RebuildSlotRetentionCount);
             ServerRebuildService rebuildService = new ServerRebuildService(_Database, _Settings, slotManager, new LocalHostCommandExecutor(), _Logging, () => Stop(), _HarborConnectionManager);
-            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync, () => RestartOverride?.Invoke())
+            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync, () => RestartOverride?.Invoke()) { BlackBox = _BlackBox }
                 .Register(_App, authenticate, _AuthorizationService);
 
             new StorageRoutes(_StorageInventory, _JsonOptions).Register(_App, authenticate, _AuthorizationService);
@@ -1451,7 +1451,7 @@ namespace Armada.Server
             VesselContextService vesselContextService = new VesselContextService(_Database, _RuntimeFactory, _Docks, _PromptTemplateService, _Logging);
             vesselContextService.LaunchRouter = _LaunchRouter;
             vesselContextService.PlaceDockAsync = _AgentLifecycle.ResolveDockPlacementAsync;
-            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler, _VesselHosts, _Admiral)
+            new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler, _VesselHosts, _Admiral) { BlackBoxHooks = _BlackBox?.Hooks }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Vessel import (bulk onboarding)
@@ -1566,7 +1566,7 @@ namespace Armada.Server
 
             // Missions
             new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, EmitMissionStatusChangedAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
-                { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager) }
+                { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager), BlackBoxHooks = _BlackBox?.Hooks }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Captains
@@ -2070,7 +2070,8 @@ namespace Armada.Server
                 _HarborJobControl,
                 _StageOutcomeAccess,
                 _ModelProbeAccess,
-                _BatteryAccess);
+                _BatteryAccess,
+                _BlackBox?.Hooks);
         }
 
         /// <summary>
