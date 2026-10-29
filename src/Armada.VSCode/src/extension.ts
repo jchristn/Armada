@@ -68,15 +68,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   context.subscriptions.push({ dispose: () => refreshTimer && clearTimeout(refreshTimer) });
 
   const onEvent = (type: string, data: BlackBoxSocketEventData): void => {
-    output.appendLine(`[live] ${type} ${data.entryId ?? data.id ?? ''} ${data.missionId ?? ''}`);
+    output.appendLine(`[live] ${type} ${data.entryId ?? ''} ${data.missionId ?? ''}`);
     scheduleRefresh();
     const settings = readSettings();
     if (type !== BlackBoxEvents.captured || !settings.notifyOnCapture) return;
     const matched = store.matchedVesselIds();
     if (matched.length && data.vesselId && !matched.includes(data.vesselId)) return;
-    const subject = data.missionId ?? data.voyageId ?? data.entryId ?? data.id ?? 'a mission';
-    void vscode.window.showWarningMessage(`Armada: black box captured for ${data.missionTitle ? `${data.missionTitle} (${subject})` : subject}.`, 'Open', 'Copy FIX THIS').then((choice) => {
-      const id = data.entryId ?? data.id ?? data.missionId ?? undefined;
+    const subject = data.missionId ?? data.voyageId ?? data.entryId ?? 'a mission';
+    const where = data.step ? ` (${data.phase ? `${data.phase} / ` : ''}${data.step})` : '';
+    void vscode.window.showWarningMessage(`Armada: black box captured for ${subject}${where}.`, 'Open', 'Copy FIX THIS').then((choice) => {
+      const id = data.entryId ?? data.missionId ?? undefined;
       if (!id) return;
       if (choice === 'Open') void commands.openBlackBox(id);
       if (choice === 'Copy FIX THIS') void commands.copyFixThis(id);

@@ -29,7 +29,7 @@ const SETTINGS: ArmadaSettings = {
 
 const NODE = { kind: 'entry', entry: summary() };
 
-function recoveryMock(dry: Partial<BlackBoxRecoveryResult>, real: Partial<BlackBoxRecoveryResult> | { status: number; json: unknown } = { Success: true, Summary: 'landed' }): MockFetch {
+function recoveryMock(dry: Partial<BlackBoxRecoveryResult>, real: Partial<BlackBoxRecoveryResult> | { status: number; json: unknown } = { Succeeded: true, Message: 'landed' }): MockFetch {
   return new MockFetch()
     .on('GET', '/api/v1/blackbox/bbx_1', { json: fullEntry() })
     .on('POST', '/api/v1/blackbox/enumerate', { json: page([]) })
@@ -59,10 +59,10 @@ beforeEach(() => fake.reset());
 
 describe('Run Recovery Path', () => {
   it('dry runs, shows the plan in a modal, and runs with the confirm token after confirmation', async () => {
-    const mock = recoveryMock({ ConfirmToken: 'tok-1', Steps: [{ Tool: 'retry_landing', Description: 'retry_landing {missionId: msn_x}' }], ExpectedOutcome: 'The mission lands' });
+    const mock = recoveryMock({ DryRun: true, ConfirmToken: 'tok-1', Plan: [{ Order: 1, Description: 'Retry the landing', Action: { Tool: 'retry_landing', Arguments: { missionId: 'msn_x' } } }] });
     fake.warning.push((_text: string, options: { modal?: boolean; detail?: string }, items: string[]) => {
       assert.strictEqual(options.modal, true);
-      assert.match(options.detail ?? '', /1\. retry_landing \{missionId: msn_x\}/);
+      assert.match(options.detail ?? '', /1\. Retry the landing \(retry_landing \{"missionId":"msn_x"\}\)/);
       assert.match(options.detail ?? '', /Expected outcome: The mission lands/);
       assert.deepStrictEqual(items, ['Run']);
       return 'Run';
@@ -70,7 +70,7 @@ describe('Run Recovery Path', () => {
     const outcome = await commands(mock).runRecoveryPath(NODE, 'rp1');
     assert.strictEqual(outcome, 'ran');
     const calls = mock.calls('POST', '/api/v1/blackbox/bbx_1/recovery/rp1').map((r) => r.body);
-    assert.deepStrictEqual(calls, [{ DryRun: true }, { DryRun: false, ConfirmToken: 'tok-1' }]);
+    assert.deepStrictEqual(calls, [{ DryRun: true, AuthorKind: 'Operator' }, { DryRun: false, ConfirmToken: 'tok-1', AuthorKind: 'Operator' }]);
     assert.ok(fake.messages.some((m) => m.level === 'info' && /ran\. landed/.test(m.text)));
   });
 
@@ -118,8 +118,8 @@ describe('Run Recovery Path', () => {
     assert.deepStrictEqual(realRuns(mock, 'rp2'), []);
   });
 
-  it('refuses when the dry run (not the record) reports data loss risk and it is not acknowledged', async () => {
-    const mock = recoveryMock({ ConfirmToken: 'tok', DataLossRisk: true });
+  it('refuses when a dry run plan step (not the record) is marked data loss risk and it is not acknowledged', async () => {
+    const mock = recoveryMock({ ConfirmToken: 'tok', Plan: [{ Order: 1, Description: 'Delete the branch', DataLossRisk: true }] });
     fake.quickPick.push([]);
     assert.strictEqual(await commands(mock).runRecoveryPath(NODE, 'rp1'), 'refusedDataLoss');
     assert.deepStrictEqual(realRuns(mock), []);
@@ -133,11 +133,11 @@ describe('Run Recovery Path', () => {
       return 'Run';
     });
     assert.strictEqual(await commands(mock).runRecoveryPath(NODE, 'rp2'), 'ran');
-    assert.deepStrictEqual(realRuns(mock, 'rp2'), [{ DryRun: false, ConfirmToken: 'tok', AcknowledgeDataLoss: true }]);
+    assert.deepStrictEqual(realRuns(mock, 'rp2'), [{ DryRun: false, ConfirmToken: 'tok', AcknowledgeDataLoss: true, AuthorKind: 'Operator' }]);
   });
 
   it('refuses when the dry run returns no confirm token', async () => {
-    const mock = recoveryMock({ Summary: 'precondition failed' });
+    const mock = recoveryMock({ Message: 'precondition failed' });
     assert.strictEqual(await commands(mock).runRecoveryPath(NODE, 'rp1'), 'noToken');
     assert.deepStrictEqual(realRuns(mock), []);
     assert.ok(fake.messages.some((m) => m.level === 'error' && /no confirm token/.test(m.text)));
@@ -151,7 +151,7 @@ describe('Run Recovery Path', () => {
   });
 
   it('reports step errors', async () => {
-    const mock = recoveryMock({ ConfirmToken: 'tok' }, { Success: false, Steps: [{ Tool: 'retry_landing', Success: false, Error: 'merge conflict again' }] });
+    const mock = recoveryMock({ ConfirmToken: 'tok' }, { Succeeded: false, StepResults: [{ Order: 1, Tool: 'retry_landing', Succeeded: false, Message: 'merge conflict again' }] });
     fake.warning.push('Run');
     assert.strictEqual(await commands(mock).runRecoveryPath(NODE, 'rp1'), 'ranWithErrors');
     assert.ok(fake.messages.some((m) => /merge conflict again/.test(m.text)));
@@ -163,7 +163,7 @@ describe('Run Recovery Path', () => {
   });
 
   it('shows a 503 error and never throws', async () => {
-    const mock = new MockFetch().otherwise(() => ({ status: 503, json: { Error: 'BlackBoxStoreUnavailable' } }));
+    const mock = new MockFetch().otherwise(() => ({ status: 503, json: { Error: 'ServiceUnavailable', Data: { Code: 'BlackBoxStoreUnavailable' } } }));
     assert.strictEqual(await commands(mock).runRecoveryPath(NODE), 'failed');
     assert.ok(fake.messages.some((m) => m.level === 'error' && /store is unavailable/.test(m.text)));
   });

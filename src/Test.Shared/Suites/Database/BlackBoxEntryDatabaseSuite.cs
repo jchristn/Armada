@@ -87,6 +87,16 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(2L, attempts.TotalRecords, "both attempts kept");
                 AssertEqual(a2.Id, attempts.Objects[0].Id, "newest first");
 
+                // A stale full-row update of a superseded attempt (an enrichment that read it before the next capture) never
+                // makes it current again.
+                a1.IsCurrent = true;
+                a1.SupersedesId = "bbx_stale";
+                await db.BlackBoxEntries.UpdateAsync(a1).ConfigureAwait(false);
+                BlackBoxEntry rereadA1 = (await db.BlackBoxEntries.ReadAsync(a1.Id).ConfigureAwait(false))!;
+                AssertFalse(rereadA1.IsCurrent, "UpdateAsync does not write is_current");
+                AssertNull(rereadA1.SupersedesId, "UpdateAsync does not write supersedes_id");
+                AssertEqual(a2.Id, (await db.BlackBoxEntries.ReadCurrentByMissionAsync("msn_att").ConfigureAwait(false))!.Id, "attempt 2 stays current");
+
                 List<Task<BlackBoxEntry>> concurrent = Enumerable.Range(0, 5).Select(_ => db.BlackBoxEntries.CreateCurrentAsync(BlackBoxTestKit.Entry("ten_a", "msn_conc"))).ToList();
                 await Task.WhenAll(concurrent).ConfigureAwait(false);
                 long current = await db.BlackBoxEntries.CountAsync(new BlackBoxEnumerateRequest { MissionId = "msn_conc", IsCurrent = true }).ConfigureAwait(false);

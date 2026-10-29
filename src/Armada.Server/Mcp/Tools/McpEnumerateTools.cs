@@ -35,17 +35,18 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="mergeQueue">Optional merge queue service for merge queue enumeration.</param>
         /// <param name="inbox">Optional inbox service, for entityType inbox.</param>
         /// <param name="cliPermissions">Optional CLI permission service, for entityTypes cli_permission_rules and cli_permission_requests.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IMergeQueueService? mergeQueue = null, InboxService? inbox = null, CliPermissionService? cliPermissions = null)
+        /// <param name="blackBox">Optional black box service, for entityType blackbox.</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IMergeQueueService? mergeQueue = null, InboxService? inbox = null, CliPermissionService? cliPermissions = null, Armada.Core.BlackBox.IBlackBoxService? blackBox = null)
         {
             register(
                 "enumerate",
-                "Find and browse entities with paginated, filtered, sorted access to: inbox (the needs-you items, most urgent first), cli_permission_rules, cli_permission_requests, objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, and vessel_health. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
+                "Find and browse entities with paginated, filtered, sorted access to: inbox (the needs-you items, most urgent first), cli_permission_rules, cli_permission_requests, objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, and blackbox (black box entry summaries, newest first). Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        entityType = new { type = "string", description = "Entity type to enumerate: inbox (needs-you items, most urgent first), cli_permission_rules (vesselId and captainId filter), cli_permission_requests (newest first; status, missionId, threadId, captainId, vesselId filter), objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target (requires runId), vessel_health (status filters overall status, fleetId and search narrow by fleet and vessel name)" },
+                        entityType = new { type = "string", description = "Entity type to enumerate: inbox (needs-you items, most urgent first), cli_permission_rules (vesselId and captainId filter), cli_permission_requests (newest first; status, missionId, threadId, captainId, vesselId filter), objectives, jobs, model_endpoints, harbors, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target (requires runId), vessel_health (status filters overall status, fleetId and search narrow by fleet and vessel name), blackbox (black box entry summaries; status filters resolution, search matches reason, summary and notes; vesselId, voyageId, missionId, captainId, fleetId and the date range filter)" },
                         pageNumber = new { type = "integer", description = "Page number (1-based, default 1)" },
                         pageSize = new { type = "integer", description = "Results per page (default 10, normalized into 1..1000; a few entity types apply their REST route's lower maximum, and the result's PageSize reports the size used)" },
                         order = new { type = "string", description = "Sort order: CreatedAscending, CreatedDescending (default)" },
@@ -643,8 +644,35 @@ namespace Armada.Server.Mcp.Tools
                                 Objects = targets.Objects.Select(FleetActionRunTargetSummary.FromTarget).ToList(),
                                 TotalMs = targets.TotalMs
                             };
+                        case "blackbox":
+                        case "black_box":
+                        case "blackbox_entries":
+                        case "blackbox-entries":
+                            if (blackBox == null) return (object)McpToolError.Unavailable("The black box is not available on this server.");
+                            BlackBoxEnumerateRequest blackBoxQuery = new BlackBoxEnumerateRequest
+                            {
+                                PageNumber = query.PageNumber,
+                                PageSize = query.PageSize,
+                                Order = query.Order,
+                                CreatedAfter = query.CreatedAfter,
+                                CreatedBefore = query.CreatedBefore,
+                                FleetId = query.FleetId,
+                                VesselId = query.VesselId,
+                                VoyageId = query.VoyageId,
+                                MissionId = query.MissionId,
+                                CaptainId = query.CaptainId,
+                                SearchText = String.IsNullOrWhiteSpace(request.Search) ? null : request.Search.Trim()
+                            };
+                            if (!String.IsNullOrWhiteSpace(query.Status))
+                            {
+                                if (!Armada.Core.EnumNames.TryParse(query.Status.Trim(), true, out BlackBoxResolutionEnum blackBoxResolution) || blackBoxResolution == BlackBoxResolutionEnum.Unknown)
+                                    return (object)McpToolError.InvalidArgument("Unknown black box resolution: " + query.Status + " (Open, Resolved, Duplicate, WontFix or ArmadaFixed)");
+                                blackBoxQuery.Resolution = blackBoxResolution;
+                            }
+
+                            return (object)await blackBox.EnumerateAsync(callerCtx, blackBoxQuery).ConfigureAwait(false);
                         default:
-                            return (object)McpToolError.InvalidArgument("Unknown entity type: " + entityType + ". Valid types: inbox, cli_permission_rules, cli_permission_requests, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health");
+                            return (object)McpToolError.InvalidArgument("Unknown entity type: " + entityType + ". Valid types: inbox, cli_permission_rules, cli_permission_requests, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, jobs, model_endpoints, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, blackbox");
                     }
                 });
         }

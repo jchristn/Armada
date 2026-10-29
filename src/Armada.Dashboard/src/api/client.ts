@@ -210,6 +210,41 @@ import type {
   ModelProbeRun,
   ModelProbeRunQuery,
 } from '../types/models';
+import type {
+  BlackBoxAudience,
+  BlackBoxBackfillRequest,
+  BlackBoxBackfillResult,
+  BlackBoxBundleQuery,
+  BlackBoxBundleResult,
+  BlackBoxDeleteResult,
+  BlackBoxEntry,
+  BlackBoxEntrySummary,
+  BlackBoxEnumerateQuery,
+  BlackBoxFingerprintQuery,
+  BlackBoxFingerprintSummary,
+  BlackBoxGcReport,
+  BlackBoxHotspot,
+  BlackBoxHotspotQuery,
+  BlackBoxNote,
+  BlackBoxObjectRead,
+  BlackBoxObjectSummary,
+  BlackBoxPurgeQuery,
+  BlackBoxPurgeResult,
+  BlackBoxRecommendationApplyRequest,
+  BlackBoxRecommendationApplyResult,
+  BlackBoxRecoveryRunRequest,
+  BlackBoxRecoveryRunResult,
+  BlackBoxResolveRequest,
+  BlackBoxRetentionStatus,
+  BlackBoxSearchQuery,
+  BlackBoxSection,
+  BlackBoxSectionResult,
+  BlackBoxStorageMigrationJob,
+  BlackBoxStorageMigrationRequest,
+  BlackBoxStorageStatus,
+  BlackBoxFingerprintTrend,
+  BlackBoxFixture,
+} from '../types/blackbox';
 import { MAX_PAGE_SIZE, MAX_PAGES } from './paging';
 
 /**
@@ -1333,6 +1368,292 @@ export const denyMissionReview = (id: string, options?: { comment?: string; acti
 export const getMissionDiff = (id: string) => get<DiffResult>(`/api/v1/missions/${id}/diff`, { timeout: 30000 });
 export const getMissionLog = (id: string, lines = 500) => get<LogResult>(`/api/v1/missions/${id}/log?lines=${lines}`);
 export const getMissionInstructions = (id: string) => get<InstructionsResult>(`/api/v1/missions/${id}/instructions`);
+
+// Black box (mission and voyage failure records, MISSION_BLACKBOX_PLAN.md 8.1; routes in BlackBoxRoutes.cs). An entry
+// the caller cannot see is 404 with data.code BlackBoxNotFound (read codes with apiErrorCode). Bodies are PascalCase for
+// the C# server; responses are camelized by `request` (action arguments are kept as written).
+
+const BLACKBOX = '/api/v1/blackbox';
+const BLACKBOX_READ: RequestOptions = { dictionaryKeys: ['arguments'] };
+
+function blackBoxFilterBody(query?: BlackBoxEnumerateQuery): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (!query) return body;
+  if (query.pageNumber !== undefined) body.PageNumber = query.pageNumber;
+  if (query.pageSize !== undefined) body.PageSize = query.pageSize;
+  if (query.order) body.Order = query.order;
+  if (query.tenantId) body.TenantId = query.tenantId;
+  if (query.fleetId) body.FleetId = query.fleetId;
+  if (query.vesselId) body.VesselId = query.vesselId;
+  if (query.voyageId) body.VoyageId = query.voyageId;
+  if (query.missionId) body.MissionId = query.missionId;
+  if (query.captainId) body.CaptainId = query.captainId;
+  if (query.harborId) body.HarborId = query.harborId;
+  if (query.subjectType) body.SubjectType = query.subjectType;
+  if (query.phase) body.Phase = query.phase;
+  if (query.step) body.Step = query.step;
+  if (query.kind) body.Kind = query.kind;
+  if (query.triage) body.Triage = query.triage;
+  if (query.resolution) body.Resolution = query.resolution;
+  if (query.state) body.State = query.state;
+  if (query.captureMode) body.CaptureMode = query.captureMode;
+  if (query.fingerprint) body.Fingerprint = query.fingerprint;
+  if (query.pinned !== undefined) body.Pinned = query.pinned;
+  if (query.isCurrent !== undefined) body.IsCurrent = query.isCurrent;
+  if (query.path) body.Path = query.path;
+  if (query.createdAfter) body.CreatedAfter = query.createdAfter;
+  if (query.createdBefore) body.CreatedBefore = query.createdBefore;
+  return body;
+}
+
+function blackBoxQuery(params: Record<string, string | number | boolean | null | undefined>): string {
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue;
+    parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+  }
+  return parts.length ? `?${parts.join('&')}` : '';
+}
+
+function blackBoxBriefQuery(opts?: { audience?: BlackBoxAudience; redactHosts?: boolean }): string {
+  return blackBoxQuery({ audience: opts?.audience, redactHosts: opts?.redactHosts ? true : undefined });
+}
+
+function blackBoxPagedBody(query?: { pageNumber?: number; pageSize?: number; order?: string }): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (query?.pageNumber !== undefined) body.PageNumber = query.pageNumber;
+  if (query?.pageSize !== undefined) body.PageSize = query.pageSize;
+  if (query?.order) body.Order = query.order;
+  return body;
+}
+
+/** Turns a failed raw black box response (object read, download) into the same ApiError `request` throws. */
+async function blackBoxRawError(res: Response): Promise<ApiError> {
+  if (res.status === 401) { onUnauthorized?.(); return unauthorizedError(); }
+  const text = await res.text();
+  let msg = `${res.status}: ${text}`;
+  let data: unknown = null;
+  try {
+    const e = JSON.parse(text);
+    msg = e.Message || e.message || e.Error || e.error || msg;
+    data = camelizeKeys(e.Data ?? e.data ?? null);
+  } catch {
+    // use raw text
+  }
+  return new ApiError(msg, res.status, data);
+}
+
+function blackBoxRawHeaders(): Record<string, string> {
+  const own: Record<string, string> = {};
+  if (authToken) own['X-Token'] = authToken;
+  return withExtraHeaders(own);
+}
+
+/** The mission's current black box entry with its record (404 BlackBoxNotFound when it has none). */
+export const getMissionBlackBox = (missionId: string, includeRecord = true) =>
+  get<BlackBoxEntry>(`/api/v1/missions/${encodeURIComponent(missionId)}/blackbox${blackBoxQuery({ includeRecord: includeRecord ? undefined : false })}`, BLACKBOX_READ);
+/** The FIX THIS brief (Markdown) of the mission's current entry; audience agent (default), user or maintainer. */
+export const getMissionBlackBoxBrief = (missionId: string, opts?: { audience?: BlackBoxAudience; redactHosts?: boolean }) =>
+  get<string>(`/api/v1/missions/${encodeURIComponent(missionId)}/blackbox/brief${blackBoxBriefQuery(opts)}`, { rawText: true });
+/** One page of a mission's black box entries (every failed attempt), newest first. */
+export const listMissionBlackBoxEntries = (missionId: string, params?: { pageNumber?: number; pageSize?: number; order?: string }) =>
+  get<EnumerationResult<BlackBoxEntrySummary>>(`/api/v1/missions/${encodeURIComponent(missionId)}/blackbox/entries${blackBoxQuery({ pageNumber: params?.pageNumber, pageSize: params?.pageSize, order: params?.order })}`);
+/** POST twin of listMissionBlackBoxEntries. */
+export const enumerateMissionBlackBoxEntries = (missionId: string, query?: { pageNumber?: number; pageSize?: number; order?: string }) =>
+  post<EnumerationResult<BlackBoxEntrySummary>>(`/api/v1/missions/${encodeURIComponent(missionId)}/blackbox/entries/enumerate`, blackBoxPagedBody(query));
+/** The voyage's current black box entry with its record. */
+export const getVoyageBlackBox = (voyageId: string, includeRecord = true) =>
+  get<BlackBoxEntry>(`/api/v1/voyages/${encodeURIComponent(voyageId)}/blackbox${blackBoxQuery({ includeRecord: includeRecord ? undefined : false })}`, BLACKBOX_READ);
+/** The FIX THIS brief (Markdown) of the voyage's current entry. */
+export const getVoyageBlackBoxBrief = (voyageId: string, opts?: { audience?: BlackBoxAudience; redactHosts?: boolean }) =>
+  get<string>(`/api/v1/voyages/${encodeURIComponent(voyageId)}/blackbox/brief${blackBoxBriefQuery(opts)}`, { rawText: true });
+
+/** One black box entry, with its record unless includeRecord is false. */
+export const getBlackBox = (entryId: string, includeRecord = true) =>
+  get<BlackBoxEntry>(`${BLACKBOX}/${encodeURIComponent(entryId)}?includeRecord=${includeRecord}`, BLACKBOX_READ);
+/** The FIX THIS brief (Markdown) of an entry. */
+export const getBlackBoxBrief = (entryId: string, opts?: { audience?: BlackBoxAudience; redactHosts?: boolean }) =>
+  get<string>(`${BLACKBOX}/${encodeURIComponent(entryId)}/brief${blackBoxBriefQuery(opts)}`, { rawText: true });
+/** One record section (the returned record carries only that section). 400 for an unknown section name. */
+export const getBlackBoxSection = (entryId: string, section: BlackBoxSection) =>
+  get<BlackBoxSectionResult>(`${BLACKBOX}/${encodeURIComponent(entryId)}/sections/${encodeURIComponent(section)}`, BLACKBOX_READ);
+/** One page of an entry's objects (record.json, briefs and evidence). */
+export const listBlackBoxObjects = (entryId: string, params?: { pageNumber?: number; pageSize?: number }) =>
+  get<EnumerationResult<BlackBoxObjectSummary>>(`${BLACKBOX}/${encodeURIComponent(entryId)}/objects${blackBoxQuery({ pageNumber: params?.pageNumber, pageSize: params?.pageSize })}`);
+/** POST twin of listBlackBoxObjects. */
+export const enumerateBlackBoxObjects = (entryId: string, query?: { pageNumber?: number; pageSize?: number; order?: string }) =>
+  post<EnumerationResult<BlackBoxObjectSummary>>(`${BLACKBOX}/${encodeURIComponent(entryId)}/objects/enumerate`, blackBoxPagedBody(query));
+
+/**
+ * Read (part of) one object: at most 1 MB per read from offset; nextOffset says where the next read starts. The name is
+ * sent as one encoded path segment (evidence/git-status.txt becomes evidence%2Fgit-status.txt).
+ */
+export async function readBlackBoxObject(entryId: string, name: string, range?: { offset?: number; length?: number }): Promise<BlackBoxObjectRead> {
+  const query = blackBoxQuery({ offset: range?.offset, length: range?.length }).replace(/^\?/, '');
+  const res = await fetchOrNetworkError(`${BASE_URL}/api/v1/blackbox/${encodeURIComponent(entryId)}/objects/${encodeURIComponent(name)}?${query}`, { method: 'GET', headers: blackBoxRawHeaders() });
+  if (!res.ok) throw await blackBoxRawError(res);
+  const contentType = res.headers.get('Content-Type') || 'application/octet-stream';
+  const etag = (res.headers.get('ETag') || '').replace(/"/g, '') || null;
+  const offset = Number(res.headers.get('X-BlackBox-Offset') ?? range?.offset ?? 0);
+  const totalHeader = res.headers.get('X-BlackBox-Total-Bytes');
+  const nextHeader = res.headers.get('X-BlackBox-Next-Offset');
+  const body = await res.blob();
+  const textual = /^text\/|^application\/json/i.test(contentType);
+  return {
+    contentType,
+    etag,
+    offset,
+    totalBytes: totalHeader !== null ? Number(totalHeader) : body.size,
+    nextOffset: nextHeader !== null ? Number(nextHeader) : null,
+    text: textual ? await body.text() : null,
+    body,
+  };
+}
+
+/** Download an entry as a .zip (every object plus manifest.json) through the host's platform adapter. */
+export async function downloadBlackBox(entryId: string): Promise<void> {
+  const res = await fetchOrNetworkError(`${BASE_URL}/api/v1/blackbox/${encodeURIComponent(entryId)}/download`, { method: 'GET', headers: blackBoxRawHeaders() });
+  if (!res.ok) throw await blackBoxRawError(res);
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : `${entryId}.zip`;
+  if (!platformAdapter) throw new Error('No platform adapter is configured to save downloaded files.');
+  await platformAdapter.saveFile({ filename, contentType: res.headers.get('Content-Type') || 'application/zip', body: blob });
+}
+
+/** One page of the notes on an entry, newest first. */
+export const listBlackBoxNotes = (entryId: string, params?: { pageNumber?: number; pageSize?: number }) =>
+  get<EnumerationResult<BlackBoxNote>>(`${BLACKBOX}/${encodeURIComponent(entryId)}/notes${blackBoxQuery({ pageNumber: params?.pageNumber, pageSize: params?.pageSize })}`);
+/** POST twin of listBlackBoxNotes. */
+export const enumerateBlackBoxNotes = (entryId: string, query?: { pageNumber?: number; pageSize?: number; order?: string }) =>
+  post<EnumerationResult<BlackBoxNote>>(`${BLACKBOX}/${encodeURIComponent(entryId)}/notes/enumerate`, blackBoxPagedBody(query));
+/** Add a note (1 to 8000 characters; author Operator). */
+export const addBlackBoxNote = (entryId: string, body: string) =>
+  post<BlackBoxNote>(`${BLACKBOX}/${encodeURIComponent(entryId)}/notes`, { Body: body });
+
+/** One page of the entries visible to the caller (filters on the querystring), newest first. */
+export const listBlackBox = (query?: BlackBoxEnumerateQuery) =>
+  get<EnumerationResult<BlackBoxEntrySummary>>(`${BLACKBOX}${blackBoxQuery({
+    tenantId: query?.tenantId, fleetId: query?.fleetId, vesselId: query?.vesselId, voyageId: query?.voyageId, missionId: query?.missionId,
+    captainId: query?.captainId, harborId: query?.harborId, subjectType: query?.subjectType, phase: query?.phase, step: query?.step,
+    kind: query?.kind, triage: query?.triage, resolution: query?.resolution, state: query?.state, captureMode: query?.captureMode,
+    fingerprint: query?.fingerprint, pinned: query?.pinned, isCurrent: query?.isCurrent, path: query?.path,
+    createdAfter: query?.createdAfter, createdBefore: query?.createdBefore, pageNumber: query?.pageNumber, pageSize: query?.pageSize, order: query?.order,
+  })}`);
+/** POST twin of listBlackBox (filters in the body). */
+export const enumerateBlackBox = (query?: BlackBoxEnumerateQuery) =>
+  post<EnumerationResult<BlackBoxEntrySummary>>(`${BLACKBOX}/enumerate`, blackBoxFilterBody(query));
+/** Full-text search over reason, summary and notes (query 1 to 200 characters) with the same filters. */
+export const searchBlackBox = (query: BlackBoxSearchQuery) =>
+  post<EnumerationResult<BlackBoxEntrySummary>>(`${BLACKBOX}/search`, { ...blackBoxFilterBody(query), Query: query.query });
+/** Maintainer bundle: up to 50 entries grouped by fingerprint, as Markdown (default) or JSON. */
+export const getBlackBoxBundle = (query?: BlackBoxBundleQuery) =>
+  post<BlackBoxBundleResult>(`${BLACKBOX}/bundle`, {
+    ...blackBoxFilterBody(query),
+    ...(query?.max !== undefined ? { Max: query.max } : {}),
+    ...(query?.format ? { Format: query.format } : {}),
+    ...(query?.redactHosts ? { RedactHosts: true } : {}),
+  });
+/** One page of directories that recur in black box file rows, most entries first. */
+export const enumerateBlackBoxHotspots = (query?: BlackBoxHotspotQuery) =>
+  post<EnumerationResult<BlackBoxHotspot>>(`${BLACKBOX}/hotspots/enumerate`, {
+    ...blackBoxPagedBody(query),
+    ...(query?.vesselId ? { VesselId: query.vesselId } : {}),
+    ...(query?.role ? { Role: query.role } : {}),
+    ...(query?.tenantId ? { TenantId: query.tenantId } : {}),
+    ...(query?.createdAfter ? { CreatedAfter: query.createdAfter } : {}),
+    ...(query?.createdBefore ? { CreatedBefore: query.createdBefore } : {}),
+  });
+/** One page of failure modes (entries grouped by fingerprint). */
+export const enumerateBlackBoxFingerprints = (query?: BlackBoxFingerprintQuery) =>
+  post<EnumerationResult<BlackBoxFingerprintSummary>>(`${BLACKBOX}/fingerprints/enumerate`, {
+    ...blackBoxPagedBody(query),
+    ...(query?.vesselId ? { VesselId: query.vesselId } : {}),
+    ...(query?.resolution ? { Resolution: query.resolution } : {}),
+    ...(query?.tenantId ? { TenantId: query.tenantId } : {}),
+    ...(query?.createdAfter ? { CreatedAfter: query.createdAfter } : {}),
+    ...(query?.createdBefore ? { CreatedBefore: query.createdBefore } : {}),
+  });
+
+/** Occurrences of one failure mode per Armada version (to see whether a release fixed it). */
+export const getBlackBoxFingerprintTrend = (fingerprint: string) =>
+  get<BlackBoxFingerprintTrend>(`${BLACKBOX}/fingerprints/${encodeURIComponent(fingerprint)}/trend`);
+
+/** Export an entry as a sanitized regression fixture (global admin). */
+export const exportBlackBoxFixture = (entryId: string, name?: string) =>
+  post<BlackBoxFixture>(`${BLACKBOX}/${encodeURIComponent(entryId)}/export-fixture`, name ? { Name: name } : {}, BLACKBOX_READ);
+
+/** Set the resolution (Open, Resolved, Duplicate, WontFix or ArmadaFixed) with an optional note and link. */
+export const resolveBlackBox = (entryId: string, request: BlackBoxResolveRequest) =>
+  post<BlackBoxEntry>(`${BLACKBOX}/${encodeURIComponent(entryId)}/resolve`, { Resolution: request.resolution, Note: request.note ?? null, Link: request.link ?? null }, BLACKBOX_READ);
+/** Pin an entry so garbage collection keeps it. */
+export const pinBlackBox = (entryId: string) =>
+  post<BlackBoxEntry>(`${BLACKBOX}/${encodeURIComponent(entryId)}/pin`, {}, BLACKBOX_READ);
+/** Unpin an entry (its expiry is recomputed). */
+export const unpinBlackBox = (entryId: string) =>
+  post<BlackBoxEntry>(`${BLACKBOX}/${encodeURIComponent(entryId)}/unpin`, {}, BLACKBOX_READ);
+/**
+ * Run a recovery path recorded in the entry. dryRun defaults to true and returns the plan and a confirmToken (10
+ * minutes); the real run needs that token, and acknowledgeDataLoss for a path marked dataLossRisk. 409
+ * BlackBoxConfirmationRequired without them; 501 NotImplemented where the recovery runner is not merged yet.
+ */
+export const runBlackBoxRecovery = (entryId: string, pathId: string, request?: BlackBoxRecoveryRunRequest) =>
+  post<BlackBoxRecoveryRunResult>(`${BLACKBOX}/${encodeURIComponent(entryId)}/recovery/${encodeURIComponent(pathId)}`, {
+    DryRun: request?.dryRun ?? true,
+    ...(request?.confirmToken ? { ConfirmToken: request.confirmToken } : {}),
+    ...(request?.acknowledgeDataLoss ? { AcknowledgeDataLoss: true } : {}),
+    AuthorKind: request?.authorKind ?? 'Operator',
+  }, BLACKBOX_READ);
+/** Apply a configuration recommendation's recorded action, with the same dry-run and confirm-token flow. */
+export const applyBlackBoxRecommendation = (entryId: string, recommendationId: string, request?: BlackBoxRecommendationApplyRequest) =>
+  post<BlackBoxRecommendationApplyResult>(`${BLACKBOX}/${encodeURIComponent(entryId)}/recommendations/${encodeURIComponent(recommendationId)}/apply`, {
+    DryRun: request?.dryRun ?? true,
+    ...(request?.confirmToken ? { ConfirmToken: request.confirmToken } : {}),
+    AuthorKind: request?.authorKind ?? 'Operator',
+  }, BLACKBOX_READ);
+/** Re-run enrichment and analysis (tenant admin). */
+export const reanalyzeBlackBox = (entryId: string) =>
+  post<BlackBoxEntry>(`${BLACKBOX}/${encodeURIComponent(entryId)}/reanalyze`, {}, BLACKBOX_READ);
+/** Delete one entry (tenant admin). */
+export const deleteBlackBox = (entryId: string) =>
+  del<BlackBoxDeleteResult>(`${BLACKBOX}/${encodeURIComponent(entryId)}`);
+/** Delete up to 1000 entries by id (tenant admin); more is 400 CollectionLimitExceeded before anything is deleted. */
+export const deleteBlackBoxEntries = (ids: string[]) =>
+  post<BlackBoxDeleteResult>(`${BLACKBOX}/delete`, { Ids: ids });
+
+/** Purge entries by filter (global admin); dryRun defaults to true and only reports what would go. */
+export const purgeBlackBox = (query?: BlackBoxPurgeQuery) =>
+  post<BlackBoxPurgeResult>(`${BLACKBOX}/purge`, {
+    ...blackBoxFilterBody(query),
+    DryRun: query?.dryRun ?? true,
+    ...(query?.includePinned ? { IncludePinned: true } : {}),
+    ...(query?.maxEntries !== undefined ? { MaxEntries: query.maxEntries } : {}),
+  });
+/** Run one garbage collection pass now (global admin); dryRun lists the candidates. */
+export const runBlackBoxGc = (dryRun = false) =>
+  post<BlackBoxGcReport>(`${BLACKBOX}/gc`, { DryRun: dryRun });
+/** Retention policy, counts, bytes and the last and next garbage collection run (tenant admin). */
+export const getBlackBoxRetention = () => get<BlackBoxRetentionStatus>(`${BLACKBOX}/retention`);
+/** Storage target, health, fallback and bytes per target (global admin). */
+export const getBlackBoxStorage = () => get<BlackBoxStorageStatus>(`${BLACKBOX}/storage`);
+/** Start a storage migration job (global admin); 501 NotImplemented where it is not merged yet. */
+export const migrateBlackBoxStorage = (request: BlackBoxStorageMigrationRequest) =>
+  post<BlackBoxStorageMigrationJob>(`${BLACKBOX}/storage/migrate`, {
+    To: request.to,
+    ...(request.from ? { From: request.from } : {}),
+    ...(request.deleteSource ? { DeleteSource: true } : {}),
+    ...(request.batchSize !== undefined ? { BatchSize: request.batchSize } : {}),
+  });
+/** One storage migration job (global admin). */
+export const getBlackBoxStorageMigration = (migrationId: string) =>
+  get<BlackBoxStorageMigrationJob>(`${BLACKBOX}/storage/migrations/${encodeURIComponent(migrationId)}`);
+/** Capture entries for failed missions and voyages that have none (global admin). */
+export const backfillBlackBox = (request?: BlackBoxBackfillRequest) =>
+  post<BlackBoxBackfillResult>(`${BLACKBOX}/backfill`, {
+    ...(request?.since ? { Since: request.since } : {}),
+    ...(request?.maxSubjects !== undefined ? { MaxSubjects: request.maxSubjects } : {}),
+  });
 
 // ==================== Voyages ====================
 export const listVoyages = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>

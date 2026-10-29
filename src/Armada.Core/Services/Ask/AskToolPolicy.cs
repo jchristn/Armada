@@ -105,7 +105,22 @@ namespace Armada.Core.Services.Ask
             // Fixture battery readers
             "list_battery_packs",
             "get_battery_run",
-            "list_battery_results"
+            "list_battery_results",
+
+            // Black box readers (plan 10.1); the write tools stay behind the Ask gate as proposals
+            "get_blackbox",
+            "read_blackbox_section",
+            "list_blackbox_objects",
+            "read_blackbox_object",
+            "list_blackbox_entries",
+            "search_blackbox",
+            "list_blackbox_notes",
+            "get_blackbox_bundle",
+            "list_blackbox_hotspots",
+            "list_blackbox_fingerprints",
+            "get_blackbox_fingerprint_trend",
+            "get_blackbox_retention",
+            "get_blackbox_storage"
         };
 
         private static readonly HashSet<string> _GateExempt = new HashSet<string>(StringComparer.Ordinal)

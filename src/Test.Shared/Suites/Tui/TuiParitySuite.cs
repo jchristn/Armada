@@ -67,7 +67,7 @@ namespace Test.Shared.Suites.Tui
             {
                 ParityManifest manifest = Load();
                 List<string> exports = DashboardSource.ApiExports();
-                AssertEqual(386, exports.Count, "server-calling exports");
+                AssertEqual(425, exports.Count, "server-calling exports");
                 Missing(manifest, "api", exports);
                 HashSet<string> methods = new HashSet<string>(typeof(ArmadaClient).GetMethods(BindingFlags.Public | BindingFlags.Instance).Select(m => m.Name), StringComparer.Ordinal);
                 List<string> missing = exports.Where(e => !methods.Contains(Char.ToUpperInvariant(e[0]) + e.Substring(1) + "Async")).ToList();

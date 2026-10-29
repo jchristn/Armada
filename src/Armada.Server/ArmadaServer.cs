@@ -552,7 +552,7 @@ namespace Armada.Server
             admiralService.OnLandingIntegritySweep = landingIntegrity.SweepAsync;
 
             // Every service that writes a mission or voyage failure records it in the black box.
-            Armada.Core.BlackBox.IBlackBoxCapture blackBoxCapture = _BlackBox.Capture;
+            Armada.Core.BlackBox.IBlackBoxCapture blackBoxCapture = _BlackBox!.Capture;
             if (blackBoxCapture is Armada.Core.BlackBox.BlackBoxCapture concreteCapture)
             {
                 concreteCapture.Harbors = _HarborConnectionManager;
@@ -820,6 +820,7 @@ namespace Armada.Server
             _AgentLifecycle.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetMissionService(_MissionService);
+            _WebSocketHub.SetBlackBoxService(_BlackBox?.Service, _BlackBox?.Capture);
             _AskThreads.SessionTokensAvailable = _SessionTokenService != null;
             _AskThreads.HarborPromptSupport = (tenantId, runtime) => _HarborConnectionManager != null && _HarborConnectionManager.AnyHarborCanPrompt(tenantId, runtime);
 
@@ -897,6 +898,8 @@ namespace Armada.Server
             _McpServer.RateLimits.ToolCallsPerSecond = _Settings.Mcp.ToolCallsPerSecond;
             _McpServer.AuthenticationHandler = AuthenticateMcpRequestAsync;
             RegisterMcpTools();
+            // Black box resources and prompts (Voltaic resource templates and prompts; plan 8.2).
+            if (_BlackBox != null) Armada.Server.Mcp.Tools.McpBlackBoxResources.Register(_McpServer, _BlackBox.Service);
             // Black box recovery runs and recommendation applies execute their recorded action through the registered
             // MCP tool handlers, as the caller.
             if (_BlackBox != null) _BlackBox.Service.ActionExecutor = new BlackBoxMcpActionExecutor(_AskActions);
@@ -1472,6 +1475,7 @@ namespace Armada.Server
             vesselContextService.LaunchRouter = _LaunchRouter;
             vesselContextService.PlaceDockAsync = _AgentLifecycle.ResolveDockPlacementAsync;
             new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler, _VesselHosts, _Admiral)
+                { BlackBox = _BlackBox?.Capture }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Vessel import (bulk onboarding)
@@ -1586,7 +1590,11 @@ namespace Armada.Server
 
             // Missions
             new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, EmitMissionStatusChangedAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
-                { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager) }
+                { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager), BlackBox = _BlackBox?.Capture }
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Mission and voyage black box
+            new BlackBoxRoutes(_BlackBox?.Service, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Captains
@@ -2090,7 +2098,9 @@ namespace Armada.Server
                 _HarborJobControl,
                 _StageOutcomeAccess,
                 _ModelProbeAccess,
-                _BatteryAccess);
+                _BatteryAccess,
+                _BlackBox?.Service,
+                _BlackBox?.Capture);
         }
 
         /// <summary>

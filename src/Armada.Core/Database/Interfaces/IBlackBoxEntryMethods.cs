@@ -111,6 +111,8 @@ namespace Armada.Core.Database.Interfaces
 
         /// <summary>
         /// Update every mutable column of an entry (not id, tenant, subject ids or creation time); sets LastUpdateUtc.
+        /// is_current and supersedes_id are owned by <see cref="CreateCurrentAsync"/> and <see cref="MarkSupersededAsync"/>
+        /// and never written here, so a writer holding a stale copy of a superseded entry cannot make it current again.
         /// </summary>
         /// <param name="entry">Entry.</param>
         /// <param name="token">Cancellation token.</param>
