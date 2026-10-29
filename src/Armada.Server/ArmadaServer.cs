@@ -559,6 +559,7 @@ namespace Armada.Server
                 concreteCapture.MissionStatusChanged = EmitMissionStatusChangedAsync;
             }
             admiralService.BlackBox = blackBoxCapture;
+            admiralService.DispatchAdvisor = _BlackBox.Insights.DispatchAdvisor;
             if (captainService is CaptainService concreteCaptains) concreteCaptains.BlackBox = blackBoxCapture;
             if (voyageService is VoyageService concreteVoyages) concreteVoyages.BlackBox = blackBoxCapture;
             if (_MergeQueue is MergeQueueService concreteQueue) concreteQueue.BlackBox = blackBoxCapture;
@@ -962,6 +963,7 @@ namespace Armada.Server
 
             _StorageInventory.Start();
             _BlackBox?.Background.Start();
+            _BlackBox?.Insights.Background.Start();
 
             // Start health check loop
             _HealthCheckTask = HealthCheckLoopAsync(_TokenSource.Token);
@@ -1011,6 +1013,7 @@ namespace Armada.Server
             try
             {
                 _BlackBox?.Background.StopAsync().GetAwaiter().GetResult();
+                _BlackBox?.Insights.Background.StopAsync().GetAwaiter().GetResult();
                 _BlackBox?.Dispose();
             }
             catch (Exception ex)
@@ -1629,6 +1632,9 @@ namespace Armada.Server
             new VesselHealthRoutes(_VesselHealthService)
                 .Register(_App, authenticate, _AuthorizationService);
 
+            // Black box prevention, forensics and operations reads
+            if (_BlackBox != null) new BlackBoxInsightRoutes(_BlackBox.Insights.Service).Register(_App, authenticate, _AuthorizationService);
+
             // Vessel cleanup inventory and garbage collection
             new VesselCleanupRoutes(_Database, new VesselCleanupService(_Database, _Settings, _Docks, new DockHostResolver(_Git, _Logging, _HarborConnectionManager), _Logging))
                 .Register(_App, authenticate, _AuthorizationService);
@@ -2090,7 +2096,8 @@ namespace Armada.Server
                 _HarborJobControl,
                 _StageOutcomeAccess,
                 _ModelProbeAccess,
-                _BatteryAccess);
+                _BatteryAccess,
+                _BlackBox?.Insights.Service);
         }
 
         /// <summary>
