@@ -10,6 +10,10 @@ All notable changes to Armada are documented in this file.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
 
+### WebSocket vessel deletion stops active captains
+
+- WebSocket vessel deletion now uses the shared mission cancellation service for Pending, Assigned, InProgress, Review, and Testing missions. It retains the existing Blocked mission cancellation. A failed agent stop does not block vessel deletion, and database failures in the mission loop now reach the command error path.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.

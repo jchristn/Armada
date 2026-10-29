@@ -305,21 +305,32 @@ namespace Armada.Server.WebSocket
                         return WebSocketCommandError.Create("delete_vessel", WebSocketCommandErrorCodeEnum.NotFound, "Vessel not found");
 
                     // Cancel active missions on this vessel
-                    try
+                    List<Mission> delVesselMissions = await _Database.Missions.EnumerateByVesselAsync(delVesselId).ConfigureAwait(false);
+                    foreach (Mission dvm in delVesselMissions)
                     {
-                        List<Mission> delVesselMissions = await _Database.Missions.EnumerateByVesselAsync(delVesselId).ConfigureAwait(false);
-                        foreach (Mission dvm in delVesselMissions)
+                        if (dvm.Status == MissionStatusEnum.Pending
+                            || dvm.Status == MissionStatusEnum.Assigned
+                            || dvm.Status == MissionStatusEnum.InProgress
+                            || dvm.Status == MissionStatusEnum.Review
+                            || dvm.Status == MissionStatusEnum.Testing)
                         {
-                            if (dvm.Status == MissionStatusEnum.Pending || dvm.Status == MissionStatusEnum.Blocked || dvm.Status == MissionStatusEnum.Assigned || dvm.Status == MissionStatusEnum.InProgress)
+                            try
                             {
-                                dvm.Status = MissionStatusEnum.Cancelled;
-                                dvm.CompletedUtc = DateTime.UtcNow;
-                                dvm.LastUpdateUtc = DateTime.UtcNow;
-                                await _Database.Missions.UpdateAsync(dvm).ConfigureAwait(false);
+                                await _Admiral.CancelMissionAsync(dvm).ConfigureAwait(false);
+                            }
+                            catch (InvalidOperationException)
+                            {
+                                continue;
                             }
                         }
+                        else if (dvm.Status == MissionStatusEnum.Blocked)
+                        {
+                            dvm.Status = MissionStatusEnum.Cancelled;
+                            dvm.CompletedUtc = DateTime.UtcNow;
+                            dvm.LastUpdateUtc = DateTime.UtcNow;
+                            await _Database.Missions.UpdateAsync(dvm).ConfigureAwait(false);
+                        }
                     }
-                    catch { }
 
                     // Clean up docks/worktrees for this vessel
                     try

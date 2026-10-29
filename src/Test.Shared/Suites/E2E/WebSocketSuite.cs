@@ -612,6 +612,49 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual("deleted", data.Status);
             }));
 
+            cases.Add(CaseAsync("delete_vessel_stops_captain_and_cancels_review_missions", "DeleteVessel_StopsCaptainAndCancelsReviewMissions", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                int restPort = fx.RestPort;
+
+                string vesselId = await CreateVesselViaRestAsync(authClient, "ws-del-vessel-active").ConfigureAwait(false);
+                string captainId = await CreateCaptainViaRestAsync(authClient, "ws-del-vessel-captain").ConfigureAwait(false);
+                HttpResponseMessage activeResponse = await authClient.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new Mission { Title = "ws-del-vessel-active", VesselId = vesselId, RequestedCaptainId = captainId })).ConfigureAwait(false);
+                activeResponse.EnsureSuccessStatusCode();
+                string activeBody = await activeResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                MissionCreateResponse activeWrapper = JsonHelper.Deserialize<MissionCreateResponse>(activeBody);
+                Mission activeMission = activeWrapper.Mission ?? JsonHelper.Deserialize<Mission>(activeBody);
+                AssertEqual(MissionStatusEnum.InProgress, activeMission.Status);
+
+                HttpResponseMessage reviewResponse = await authClient.PostAsync("/api/v1/missions",
+                    JsonHelper.ToJsonContent(new Mission { Title = "ws-del-vessel-review", VesselId = vesselId })).ConfigureAwait(false);
+                reviewResponse.EnsureSuccessStatusCode();
+                string reviewBody = await reviewResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                MissionCreateResponse reviewWrapper = JsonHelper.Deserialize<MissionCreateResponse>(reviewBody);
+                Mission reviewMission = reviewWrapper.Mission ?? JsonHelper.Deserialize<Mission>(reviewBody);
+                string reviewMissionId = reviewMission.Id;
+                foreach (string status in new[] { "Assigned", "InProgress", "Review" })
+                {
+                    HttpResponseMessage statusResponse = await authClient.PutAsync("/api/v1/missions/" + reviewMissionId + "/status",
+                        JsonHelper.ToJsonContent(new { Status = status })).ConfigureAwait(false);
+                    statusResponse.EnsureSuccessStatusCode();
+                }
+
+                JsonElement deleteResponse = await WsCommandAsync(restPort, "delete_vessel", new { id = vesselId }).ConfigureAwait(false);
+                AssertEqual("command.result", deleteResponse.GetProperty("type").GetString());
+
+                Mission cancelledActive = await GetViaRestAsync<Mission>(authClient, "/api/v1/missions/" + activeMission.Id).ConfigureAwait(false);
+                Captain stoppedCaptain = await GetViaRestAsync<Captain>(authClient, "/api/v1/captains/" + captainId).ConfigureAwait(false);
+                Mission cancelledReview = await GetViaRestAsync<Mission>(authClient, "/api/v1/missions/" + reviewMissionId).ConfigureAwait(false);
+                AssertEqual(MissionStatusEnum.Cancelled, cancelledActive.Status);
+                AssertEqual(CaptainStateEnum.Idle, stoppedCaptain.State);
+                AssertNull(stoppedCaptain.CurrentMissionId);
+                AssertNull(stoppedCaptain.ProcessId);
+                AssertEqual(MissionStatusEnum.Cancelled, cancelledReview.Status);
+            }));
+
             // Voyage Tests
             cases.Add(CaseAsync("list_voyages_empty_returns_empty_list", "ListVoyages_Empty_ReturnsEmptyList", TestTags.Positive, async () =>
             {
