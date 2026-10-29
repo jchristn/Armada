@@ -108,7 +108,8 @@ namespace Armada.Core.BlackBox
         }
 
         /// <summary>
-        /// The execution step of a terminal agent exit, from its runtime classification.
+        /// The step of a terminal agent exit, from its runtime classification: a run that ended without finishing its task
+        /// (TaskFailure, recorded as InvalidOutput) is a Completion step; the rest are Execution steps.
         /// </summary>
         /// <param name="kind">Runtime failure classification.</param>
         /// <returns>The step.</returns>
@@ -120,7 +121,7 @@ namespace Armada.Core.BlackBox
                 case RuntimeFailureKindEnum.AuthFailure: return BlackBoxStepEnum.AuthFailure;
                 case RuntimeFailureKindEnum.ModelUnavailable: return BlackBoxStepEnum.ModelUnavailable;
                 case RuntimeFailureKindEnum.Transient: return BlackBoxStepEnum.RecoveryExhausted;
-                case RuntimeFailureKindEnum.TaskFailure: return BlackBoxStepEnum.RecoveryExhausted;
+                case RuntimeFailureKindEnum.TaskFailure: return BlackBoxStepEnum.InvalidOutput;
                 default: return BlackBoxStepEnum.ProcessCrash;
             }
         }
