@@ -4,6 +4,7 @@ namespace Armada.Server.Routes
     using System.Globalization;
     using System.IO;
     using System.Text.Json;
+    using SyslogLogging;
     using WatsonWebserver;
     using WatsonWebserver.Core;
     using WatsonWebserver.Core.OpenApi;
@@ -35,6 +36,8 @@ namespace Armada.Server.Routes
         private readonly VesselHostResolver? _Hosts;
         private readonly IAdmiralService? _Admiral;
         private readonly VesselGitStatusCache _GitStatusCache = new VesselGitStatusCache();
+        private readonly LoggingModule? _Logging;
+        private readonly string _Header = "[VesselRoutes] ";
 
         /// <summary>
         /// Instantiate.
@@ -54,6 +57,7 @@ namespace Armada.Server.Routes
         /// repository for it (git status and the branch, history, push, and merge routes then run on that Harbor).</param>
         /// <param name="admiral">Optional admiral service; deleting a vessel cancels its active missions through it, which stops
         /// their agent processes. Without it the missions are only marked cancelled.</param>
+        /// <param name="logging">Optional logger for branch inspection failures.</param>
         public VesselRoutes(
             DatabaseDriver database,
             VesselReadinessService readiness,
@@ -67,8 +71,10 @@ namespace Armada.Server.Routes
             IVesselService? vesselService = null,
             ManualLandingReconciler? manualLandingReconciler = null,
             VesselHostResolver? hosts = null,
-            IAdmiralService? admiral = null)
+            IAdmiralService? admiral = null,
+            LoggingModule? logging = null)
         {
+            _Logging = logging;
             _Admiral = admiral;
             _ManualLandingReconciler = manualLandingReconciler;
             _Hosts = hosts;
@@ -82,6 +88,12 @@ namespace Armada.Server.Routes
             _git = git;
             _settings = settings;
             _VesselService = vesselService ?? new VesselService(database);
+        }
+
+        private string BranchInspectionError(string vesselId, Exception ex)
+        {
+            _Logging?.Warn(_Header + "branch inspection failed for vessel " + vesselId + ": " + ex.Message);
+            return "Git error: unable to list branches";
         }
 
         /// <summary>
@@ -375,7 +387,7 @@ namespace Armada.Server.Routes
                 if (repo.Found)
                 {
                     try { all = new List<BranchInfo>(await repo.Git!.ListBranchTipsAsync(repo.Path!, defaultBranch).ConfigureAwait(false)); }
-                    catch (Exception ex) { error = "Git error: " + ex.Message; }
+                    catch (Exception ex) when (!(ex is OperationCanceledException)) { error = BranchInspectionError(id, ex); }
                 }
 
                 EnumerationResult<BranchInfo> page = EnumerationResult<BranchInfo>.Page(query, all);
@@ -383,7 +395,7 @@ namespace Armada.Server.Routes
                 if (repo.Found && error == null && page.Objects.Count > 0)
                 {
                     try { await repo.Git!.MeasureBranchDivergenceAsync(repo.Path!, defaultBranch, page.Objects).ConfigureAwait(false); }
-                    catch (Exception ex) { error = "Git error: " + ex.Message; }
+                    catch (Exception ex) when (!(ex is OperationCanceledException)) { error = BranchInspectionError(id, ex); }
                 }
                 return new BranchEnumerationResult
                 {

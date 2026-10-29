@@ -2,6 +2,7 @@ namespace Test.Shared.Suites.E2E
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Net;
     using System.Net.Http;
     using System.Text;
@@ -1286,6 +1287,31 @@ namespace Test.Shared.Suites.E2E
 
             #endregion
 
+            #region Branch inspection
+
+            cases.Add(CaseAsync("branch_inspection_failure_hides_repository_path", "Branch Inspection Failure Hides Repository Path", TestTags.Negative, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient authClient = fx.AuthClient;
+                List<string> createdFleetIds = new List<string>();
+                List<string> createdVesselIds = new List<string>();
+                string repo = TestGitRepoHelper.CreateWorkingRepoCopy();
+                string marker = Path.GetFileName(repo);
+                ReplaceGitDirectoryWithInvalidGitfile(repo);
+                string vesselId = await CreateRepositoryVesselAsync(authClient, createdFleetIds, createdVesselIds, repo);
+
+                string pageBody = await ReadBranchEnumerationBodyAsync(authClient, vesselId);
+                AssertFalse(pageBody.Contains(marker), "enumerate response contains the repository directory");
+                BranchEnumerationResult page = JsonHelper.Deserialize<BranchEnumerationResult>(pageBody);
+                AssertEqual("Git error: unable to list branches", page.Error, "enumerate error");
+                AssertEqual(0, page.Objects.Count, "enumerate objects");
+
+                string log = await WaitForBranchInspectionLogAsync(fx, vesselId, marker);
+                AssertTrue(log.Contains(vesselId) && log.Contains(marker), "server log keeps the vessel id and the repository path");
+            }));
+
+            #endregion
+
             return new TestSuiteDescriptor(
                 suiteId: "E2E.Vessel",
                 displayName: "Vessel API Tests",
@@ -1295,6 +1321,83 @@ namespace Test.Shared.Suites.E2E
         #endregion
 
         #region Private-Methods
+
+        private static async Task<string> CreateRepositoryVesselAsync(HttpClient client, List<string> createdFleetIds, List<string> createdVesselIds, string repoPath)
+        {
+            string fleetId = await CreateFleetAsync(client, createdFleetIds, "BranchInspectFleet");
+            string name = "BranchInspect-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            StringContent content = JsonHelper.ToJsonContent(new
+            {
+                Name = name,
+                FleetId = fleetId,
+                RepoUrl = "https://example.com/branch-inspect.git",
+                LocalPath = repoPath,
+                DefaultBranch = "main"
+            });
+            using (HttpResponseMessage response = await client.PostAsync("/api/v1/vessels", content))
+            {
+                AssertEqual(HttpStatusCode.Created, response.StatusCode, "create vessel");
+                Vessel vessel = JsonHelper.Deserialize<Vessel>(await response.Content.ReadAsStringAsync());
+                createdVesselIds.Add(vessel.Id);
+                AssertEqual(repoPath, vessel.LocalPath, "stored local path");
+                return vessel.Id;
+            }
+        }
+
+        private static void ReplaceGitDirectoryWithInvalidGitfile(string repo)
+        {
+            string gitDirectory = Path.Combine(repo, ".git");
+            MakeWritable(gitDirectory);
+            Directory.Delete(gitDirectory, true);
+            File.WriteAllText(Path.Combine(repo, ".git"), "not-a-gitfile\n");
+        }
+
+        private static void MakeWritable(string directory)
+        {
+            DirectoryInfo root = new DirectoryInfo(directory);
+            if (root.Attributes.HasFlag(FileAttributes.ReadOnly)) root.Attributes = FileAttributes.Normal;
+            foreach (DirectoryInfo child in root.GetDirectories("*", SearchOption.AllDirectories))
+            {
+                if (child.Attributes.HasFlag(FileAttributes.ReadOnly)) child.Attributes = FileAttributes.Normal;
+            }
+            foreach (FileInfo file in root.GetFiles("*", SearchOption.AllDirectories))
+            {
+                if (file.Attributes.HasFlag(FileAttributes.ReadOnly)) file.Attributes = FileAttributes.Normal;
+            }
+        }
+
+        private static async Task<string> ReadBranchEnumerationBodyAsync(HttpClient client, string vesselId)
+        {
+            using (HttpResponseMessage response = await client.PostAsync(
+                "/api/v1/vessels/" + vesselId + "/branches/enumerate",
+                JsonHelper.ToJsonContent(new { PageNumber = 1, PageSize = 100 })))
+            {
+                AssertEqual(HttpStatusCode.OK, response.StatusCode, "enumerate status");
+                return await response.Content.ReadAsStringAsync();
+            }
+        }
+
+        private static async Task<string> WaitForBranchInspectionLogAsync(E2EServerFixture fx, string vesselId, string marker)
+        {
+            string path = Path.Combine(fx.TempDir, "fixture-warnings.log");
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(5));
+            string log = "";
+            while (true)
+            {
+                try
+                {
+                    if (File.Exists(path)) log = File.ReadAllText(path);
+                }
+                catch (IOException)
+                {
+                    log = "";
+                }
+
+                if (log.Contains(vesselId) && log.Contains(marker)) return log;
+                if (deadline.Passed) return log;
+                await Task.Delay(50);
+            }
+        }
 
         /// <summary>
         /// Creates a fleet and returns its ID.
