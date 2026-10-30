@@ -39,3 +39,29 @@ describe('ActionMenu keyboard access', () => {
     expect(trigger).toHaveFocus();
   });
 });
+
+describe('ActionMenu placement', () => {
+  it('opens upward against its trigger using the rendered menu height', async () => {
+    const innerHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { top: 760, bottom: 788, left: 900, right: 930, width: 30, height: 28, x: 900, y: 760, toJSON: () => ({}) } as DOMRect;
+    });
+    const heightSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute('role') === 'menu' ? 240 : 0;
+    });
+    try {
+      const items = Array.from({ length: 8 }, (_, i) => ({ label: 'Item ' + i, onClick: () => {} }));
+      render(<ActionMenu id="row-place" items={items} />);
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Actions' })); });
+      const menu = screen.getByRole('menu');
+      expect(menu.className).toContain('drop-up');
+      // 760 (trigger top) - 240 (measured menu) - 4 (gap); the 36px-per-item estimate would put it at 456.
+      expect(menu.style.top).toBe('516px');
+    } finally {
+      rectSpy.mockRestore();
+      heightSpy.mockRestore();
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: innerHeight });
+    }
+  });
+});

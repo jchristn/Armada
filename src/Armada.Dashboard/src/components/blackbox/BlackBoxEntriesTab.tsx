@@ -17,6 +17,8 @@ import {
 } from '../../lib/blackbox';
 import { loadBlackBoxSavedFilters, storeBlackBoxSavedFilters, type BlackBoxSavedFilter } from './savedFilters';
 import { useBlackBoxLive } from '../../lib/useBlackBoxLive';
+import { useBlackBoxRowActions } from './useBlackBoxRowActions';
+import ActionMenu from '../shared/ActionMenu';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import { EmptyState, ErrorState, LoadingState } from '../shared/StateBlocks';
 
@@ -50,7 +52,7 @@ function boolFilter(value: string): boolean | undefined {
  * Entries tab of the Black Box page: one page of entries at a time with every filter of the enumerate route
  * (vessel, voyage, mission, captain, phase, step, kind, triage, resolution, state, capture mode, subject type,
  * fingerprint, pinned, current, path, created after and before) plus full-text search, and named filters saved in this
- * browser. Follows the blackbox.* events live.
+ * browser. Each row has an action menu (useBlackBoxRowActions). Follows the blackbox.* events live.
  */
 export default function BlackBoxEntriesTab({ vessels }: { vessels: Vessel[] }) {
   const { t, formatDateTime } = useLocale();
@@ -100,6 +102,7 @@ export default function BlackBoxEntriesTab({ vessels }: { vessels: Vessel[] }) {
 
   useEffect(() => { void load(); }, [load]);
   useBlackBoxLive([], () => { void load(); });
+  const rowActions = useBlackBoxRowActions(() => { void load(); });
 
   function set<K extends keyof Filters>(key: K, value: Filters[K] | '') {
     setDraft((d) => {
@@ -175,6 +178,10 @@ export default function BlackBoxEntriesTab({ vessels }: { vessels: Vessel[] }) {
     { key: 'fingerprint', label: t('Fingerprint'), render: (r) => r.fingerprint ? <span className="mono" title={r.fingerprint}>{r.fingerprint.slice(0, 12)}</span> : '-', defaultHidden: true },
     { key: 'captureMode', label: t('Capture mode'), render: (r) => t(r.captureMode), defaultHidden: true },
     { key: 'pinned', label: t('Pinned'), render: (r) => r.pinned ? t('Yes') : t('No'), defaultHidden: true },
+    {
+      key: 'actions', label: t('Actions'), headerTitle: t('View, download, ask about, resolve, pin, reanalyze or delete an entry.'), fixed: true, interactive: true, className: 'text-right',
+      render: (r) => <ActionMenu id={`blackbox-${r.id}`} items={rowActions.items(r)} />,
+    },
   ];
 
   return (
@@ -241,6 +248,7 @@ export default function BlackBoxEntriesTab({ vessels }: { vessels: Vessel[] }) {
           ariaLabel={t('Black box entries')}
         />
       )}
+      {rowActions.dialogs}
     </div>
   );
 }

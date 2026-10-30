@@ -2,7 +2,6 @@
 // routes are in src/Armada.Server/Routes/BlackBoxRoutes.cs; the record schema is docs/BLACKBOX_SCHEMA.md.
 
 export type BlackBoxSubjectType = 'Mission' | 'Voyage' | 'Unknown';
-export type BlackBoxAudience = 'agent' | 'user' | 'maintainer';
 export type BlackBoxResolution = 'Open' | 'Resolved' | 'Duplicate' | 'WontFix' | 'ArmadaFixed' | 'Unknown';
 export type BlackBoxTriage = 'Unknown' | 'UserConfig' | 'MissionBrief' | 'Transient' | 'ArmadaDefect' | 'External';
 export type BlackBoxState = 'Captured' | 'Enriched' | 'Analyzed' | 'EnrichmentFailed' | 'Deleting' | 'ObjectMissing' | 'Unknown';

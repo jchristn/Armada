@@ -35,7 +35,9 @@ export default function ActionMenu({ items, id, triggerLabel }: ActionMenuProps)
     if (!btn) return;
 
     const rect = btn.getBoundingClientRect();
-    const estimatedMenuHeight = Math.max(items.length * 36 + 12, 80);
+    // Once the menu is rendered, place it by its real height so a menu that opens upward sits against its trigger.
+    const measuredMenuHeight = dropdownRef.current?.offsetHeight ?? 0;
+    const estimatedMenuHeight = measuredMenuHeight > 0 ? measuredMenuHeight : Math.max(items.length * 36 + 12, 80);
     const spaceBelow = window.innerHeight - rect.bottom;
     const shouldDropUp = spaceBelow < estimatedMenuHeight && rect.top > spaceBelow;
     const minWidth = 150;

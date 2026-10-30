@@ -1,5 +1,4 @@
 import type {
-  BlackBoxAudience,
   BlackBoxCaptureMode,
   BlackBoxEntry,
   BlackBoxEnumerateQuery,
@@ -18,13 +17,6 @@ export const BLACKBOX_EVENT_PREFIX = 'blackbox.';
 
 /** The black box events the dashboard follows live. */
 export const BLACKBOX_LIVE_EVENTS = ['blackbox.captured', 'blackbox.analyzed', 'blackbox.resolved', 'blackbox.deleted'] as const;
-
-/** Audiences of the FIX THIS brief, in toggle order. */
-export const BLACKBOX_AUDIENCES: { key: BlackBoxAudience; label: string; tooltip: string }[] = [
-  { key: 'user', label: 'User', tooltip: 'The brief for the person who owns the work: what happened and what to do next.' },
-  { key: 'agent', label: 'Agent', tooltip: 'The brief to paste into a coding agent and say FIX THIS: evidence, commands and recovery steps.' },
-  { key: 'maintainer', label: 'Maintainer', tooltip: 'The brief for Armada maintainers: rule ids, source pointers and what Armada could change.' },
-];
 
 export const BLACKBOX_PHASES = ['Dispatch', 'Provision', 'Execution', 'Completion', 'Review', 'Handoff', 'Landing', 'MergeQueue', 'Recovery', 'Voyage', 'External', 'Unknown'];
 
@@ -60,6 +52,15 @@ export function blackBoxAskPrompt(subjectId: string, kind: 'mission' | 'voyage' 
   return `Show me the pertinent details from the black box for ${kind} ${subjectId} and give me your opinion on why it failed and what could have been done differently`;
 }
 
+/**
+ * The Ask Armada prompt for an entry: the mission wording when the entry has a mission, otherwise the voyage wording
+ * (with the entry id when it names no voyage either).
+ */
+export function blackBoxEntryAskPrompt(subject: { id: string; missionId?: string | null; voyageId?: string | null }): string {
+  if (subject.missionId) return blackBoxAskPrompt(subject.missionId);
+  return blackBoxAskPrompt(subject.voyageId || subject.id, 'voyage');
+}
+
 /** Ask Armada URL with the prompt prefilled (the Ask page reads ?prompt=; router state carries it too). */
 export function blackBoxAskHref(prompt: string): string {
   return `/ask?prompt=${encodeURIComponent(prompt)}`;
@@ -76,8 +77,8 @@ export function isBlackBoxPending(entry: Pick<BlackBoxEntry, 'state'> | null | u
 }
 
 /** File name of a downloaded brief. */
-export function blackBoxBriefFileName(entryId: string, audience: BlackBoxAudience): string {
-  return `${entryId}-${audience}.md`;
+export function blackBoxBriefFileName(entryId: string): string {
+  return `blackbox-${entryId}.md`;
 }
 
 /** Human-readable byte count (B, KB, MB, GB). */

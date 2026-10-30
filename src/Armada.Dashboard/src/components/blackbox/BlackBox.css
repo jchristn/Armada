@@ -46,18 +46,6 @@
 
 .blackbox-toolbar { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
 
-.blackbox-audience { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.blackbox-audience button {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text);
-  padding: 0.25rem 0.6rem;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-.blackbox-audience button[aria-pressed="true"] { background: var(--accent-solid); color: #fff; }
-
 .blackbox-notice {
   padding: 0.5rem 0.75rem;
   border-radius: 6px;

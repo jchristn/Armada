@@ -78,7 +78,7 @@ export default function Inbox() {
   // Failed missions have a black box entry: copy its FIX THIS brief for a coding agent, or ask Armada about it.
   async function copyFixThis(missionId: string) {
     try {
-      const brief = await getMissionBlackBoxBrief(missionId, { audience: 'agent' });
+      const brief = await getMissionBlackBoxBrief(missionId);
       await copyToClipboard(brief);
       pushToast('success', t('FIX THIS brief copied. Paste it into your coding agent.'));
     } catch (err: unknown) {
@@ -144,7 +144,7 @@ export default function Inbox() {
                   type="button"
                   className="btn btn-sm inbox-copy-fix-this"
                   onClick={(e) => { e.stopPropagation(); void copyFixThis(item.entityId as string); }}
-                  title={t('Copy the FIX THIS brief for the selected audience, ready to paste into a coding agent.')}
+                  title={t('Copy the FIX THIS brief, ready to paste into a coding agent.')}
                 >
                   {t('Copy FIX THIS')}
                 </button>
