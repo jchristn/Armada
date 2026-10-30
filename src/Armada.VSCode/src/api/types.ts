@@ -21,7 +21,7 @@ export interface EnumerationResult<T> {
 export interface BlackBoxErrorDetail {
   /** BlackBoxNotFound, BlackBoxDeleting, BlackBoxObjectCorrupt, BlackBoxConfirmationRequired, BlackBoxObjectMissing, BlackBoxStoreUnavailable, BlackBoxActionsUnavailable, InvalidArgument or CollectionLimitExceeded. */
   Code?: string;
-  /** The request field at fault for InvalidArgument (for example audience or section). */
+  /** The request field at fault for InvalidArgument (for example section or offset). */
   Field?: string | null;
 }
 
@@ -39,9 +39,6 @@ export type BlackBoxResolution = 'Open' | 'Resolved' | 'Duplicate' | 'WontFix' |
 
 /** The resolutions an operator can pick when resolving an entry. */
 export const RESOLUTION_CHOICES: BlackBoxResolution[] = ['Resolved', 'Duplicate', 'WontFix', 'ArmadaFixed'];
-
-/** Brief audience (`?audience=`). */
-export type BlackBoxAudience = 'agent' | 'user' | 'maintainer';
 
 /** Minimal vessel shape the extension needs (GET /api/v1/vessels). */
 export interface Vessel {

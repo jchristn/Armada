@@ -97,7 +97,6 @@ describe('readSettings', () => {
     const s = readSettings();
     assert.strictEqual(s.url, 'http://localhost:7890');
     assert.strictEqual(s.dashboardUrl, 'http://localhost:7890/dashboard');
-    assert.strictEqual(s.briefAudience, 'agent');
     assert.strictEqual(s.authHeader, 'Bearer');
     assert.strictEqual(s.pollIntervalSeconds, 60);
   });
@@ -105,14 +104,14 @@ describe('readSettings', () => {
   it('clamps numbers and rejects unknown enum values', () => {
     fake.config.set('armada.liveUpdates.pollIntervalSeconds', 1);
     fake.config.set('armada.failures.maxEntries', 100000);
-    fake.config.set('armada.briefAudience', 'robots');
+    fake.config.set('armada.briefAudience', 'maintainer');
     fake.config.set('armada.authHeader', 'X-Api-Key');
     fake.config.set('armada.dashboardUrl', 'https://dash.example.com/dashboard/');
     const s = readSettings();
     assert.strictEqual(s.pollIntervalSeconds, 10);
     assert.strictEqual(s.maxEntries, 500);
-    assert.strictEqual(s.briefAudience, 'agent');
     assert.strictEqual(s.authHeader, 'X-Api-Key');
+    assert.strictEqual('briefAudience' in s, false, 'the removed briefAudience setting is ignored');
     assert.strictEqual(s.dashboardUrl, 'https://dash.example.com/dashboard');
   });
 });

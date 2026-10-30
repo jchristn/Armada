@@ -65,7 +65,6 @@ Build the package (see [Development](#development)) or take `armada-vscode-<vers
 | `armada.tenant` | empty | Optional tenant id; admin credentials use it to narrow lists to one tenant |
 | `armada.authHeader` | `Bearer` | Send the key as `Authorization: Bearer` or as the deprecated `X-Api-Key` |
 | `armada.dashboardUrl` | empty | Dashboard URL for Ask Armada; empty means `armada.url` plus `/dashboard` |
-| `armada.briefAudience` | `agent` | FIX THIS audience: `agent`, `user` or `maintainer` |
 | `armada.fixThis.openPreview` | `true` | Open a Markdown preview beside the FIX THIS editor |
 | `armada.failures.filterToWorkspaceVessel` | `true` | Show only the open repository's vessel (falls back to all vessels when none matches) |
 | `armada.failures.includeResolved` | `false` | Also list resolved entries |
@@ -120,7 +119,7 @@ REST routes:
 - `GET /api/v1/vessels?pageNumber=&pageSize=[&tenantId=]`
 - `POST /api/v1/blackbox/enumerate`
 - `GET /api/v1/blackbox/{id}`
-- `GET /api/v1/blackbox/{id}/brief?audience=`
+- `GET /api/v1/blackbox/{id}/brief`
 - `GET /api/v1/blackbox/{id}/sections/Conflict`
 - `GET /api/v1/blackbox/{id}/notes`, `POST /api/v1/blackbox/{id}/notes`
 - `POST /api/v1/blackbox/{id}/resolve`

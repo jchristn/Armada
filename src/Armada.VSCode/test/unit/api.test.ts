@@ -93,11 +93,12 @@ describe('ArmadaBlackBoxClient requests', () => {
     assert.ok(mock.requests[1].url.includes('pageNumber=2'));
   });
 
-  it('returns the brief as Markdown text with the audience', async () => {
+  it('returns the single FIX THIS brief as Markdown text', async () => {
     const mock = new MockFetch().on('GET', '/api/v1/blackbox/bbx_1/brief', { text: '# FIX THIS\n\nbody' });
-    const brief = await client(mock).getBrief('bbx_1', 'maintainer');
+    const brief = await client(mock).getBrief('bbx_1');
     assert.strictEqual(brief, '# FIX THIS\n\nbody');
-    assert.ok(mock.requests[0].url.endsWith('?audience=maintainer'));
+    assert.ok(mock.requests[0].url.endsWith('/api/v1/blackbox/bbx_1/brief'));
+    assert.ok(!mock.requests[0].url.includes('?'));
     assert.match(mock.requests[0].headers.Accept, /text\/markdown/);
   });
 
@@ -196,8 +197,8 @@ describe('ArmadaBlackBoxClient errors', () => {
       assert.strictEqual(err.code, 'BlackBoxNotFound');
       assert.match(describeError(err), /No black box entry/);
     });
-    const field = new MockFetch().otherwise(() => ({ status: 400, json: { Error: 'BadRequest', Message: 'audience must be agent, user or maintainer.', Data: { Code: 'InvalidArgument', Field: 'audience' } } }));
-    await rejectsWith(client(field).getBrief('bbx_1', 'agent'), 'badRequest', (err) => assert.strictEqual(err.code, 'InvalidArgument'));
+    const field = new MockFetch().otherwise(() => ({ status: 400, json: { Error: 'BadRequest', Message: 'redactHosts must be true or false.', Data: { Code: 'InvalidArgument', Field: 'redactHosts' } } }));
+    await rejectsWith(client(field).getBrief('bbx_1'), 'badRequest', (err) => assert.strictEqual(err.code, 'InvalidArgument'));
   });
 
   it('explains a 503 BlackBoxActionsUnavailable as a host that cannot run actions', async () => {
