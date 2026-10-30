@@ -471,12 +471,15 @@ namespace Armada.Core.Database.Sqlite
         }
 
         /// <summary>
-        /// Convert a DateTime to ISO 8601 format string.
+        /// Convert a DateTime to an ISO 8601 UTC string.
+        /// A value with no kind keeps its clock and is written as UTC.
+        /// A local value is converted to UTC. A UTC value is unchanged.
         /// </summary>
         /// <param name="dt">DateTime value.</param>
         /// <returns>ISO 8601 formatted string.</returns>
         internal static string ToIso8601(DateTime dt)
         {
+            if (dt.Kind == DateTimeKind.Unspecified) dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
             return dt.ToUniversalTime().ToString(_Iso8601Format, CultureInfo.InvariantCulture);
         }
 
