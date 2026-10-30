@@ -1,4 +1,4 @@
-import type { BlackBoxConflictingMission, BlackBoxFinding, BlackBoxRecoveryPath, BriefLintFinding, MissionOverlapWarning } from './blackbox';
+import type { BlackBoxConflictingMission, BlackBoxFinding, BlackBoxProposedChange, BlackBoxRecoveryPath, BriefLintFinding, MissionOverlapWarning } from './blackbox';
 export interface RunApprovalOptions {
   approveAll: boolean;
   timeoutSeconds: number;
@@ -3695,6 +3695,13 @@ export interface AskBlackBoxDigest {
   statusAfter?: string | null;
   triage?: string;
   triageConfidence?: string | null;
+  triageSuspected?: boolean;
+  resilienceInScope?: boolean;
+  selfHealable?: string;
+  selfHealingProposal?: string | null;
+  detectionGap?: string | null;
+  resilienceSeverity?: string;
+  topProposedChange?: BlackBoxProposedChange | null;
   summary?: string | null;
   why?: BlackBoxFinding[];
   recoveryPaths?: BlackBoxRecoveryPath[];

@@ -15,7 +15,10 @@ export type BlackBoxJobState = 'Pending' | 'Running' | 'Completed' | 'Failed' | 
 export type BlackBoxBundleFormat = 'Markdown' | 'Json';
 export type BlackBoxSection =
   | 'Subject' | 'Status' | 'Site' | 'Mechanism' | 'Classification' | 'Workspace' | 'Conflict' | 'Scope'
-  | 'Configuration' | 'Attempts' | 'Evidence' | 'Analysis' | 'Related' | 'Voyage' | 'Redaction' | 'Truncation';
+  | 'Configuration' | 'Attempts' | 'Evidence' | 'Analysis' | 'Resilience' | 'Handoff' | 'Related' | 'Voyage' | 'Redaction' | 'Truncation';
+export type BlackBoxSelfHealable = 'Yes' | 'No' | 'Unknown';
+export type BlackBoxDetectionGap = 'NoPreflightCheck' | 'CheckTooLate' | 'StateNotPersisted' | 'Race' | 'MissingInvariant' | 'MissingRetry' | 'None' | 'Unknown';
+export type BlackBoxAutoRecoveryKind = 'Redispatch' | 'OutputRepair' | 'LandingRetry' | 'DeferralRetry' | 'Rescue' | 'DockRepair' | 'Reconcile' | 'OrphanRecovery' | 'Unknown';
 
 /** One row of the entry lists (BlackBoxEntrySummary). */
 export interface BlackBoxEntrySummary {
@@ -292,6 +295,104 @@ export interface BlackBoxTriageVerdict {
   confidence: BlackBoxConfidence;
   votes?: BlackBoxTriageVote[];
   tiedWith?: BlackBoxTriage[];
+  /** Whether the handoff and landing prior (BBX-PRIOR-ARMADA) voted. */
+  priorApplied?: boolean;
+  /** Whether an ArmadaDefect verdict rests on the prior alone (a suspected Armada defect, Low confidence). */
+  suspected?: boolean;
+}
+
+/** A proposed Armada change written as a mission brief (BlackBoxProposedChange). */
+export interface BlackBoxProposedChange {
+  rank: number;
+  title: string;
+  change: string;
+  acceptanceTest?: string | null;
+  severity: BlackBoxSeverity;
+  ruleId?: string | null;
+  codePointers?: string[];
+  missionBrief?: string | null;
+}
+
+/** The test that would have caught the failure (BlackBoxRegressionTest). */
+export interface BlackBoxRegressionTest { suite: string; description: string }
+
+/** analysis.resilience: could Armada's handoff and landing have healed it, and what Armada should change. */
+export interface BlackBoxResilience {
+  inScope: boolean;
+  scopeReason?: string | null;
+  selfHealable: BlackBoxSelfHealable;
+  selfHealingProposal?: string | null;
+  detectionGapKind?: BlackBoxDetectionGap;
+  detectionGap?: string | null;
+  invariant?: string | null;
+  codePointers?: string[];
+  armadaVersion?: string | null;
+  armadaCommit?: string | null;
+  proposedChanges?: BlackBoxProposedChange[];
+  regressionTest?: BlackBoxRegressionTest | null;
+  severity: BlackBoxSeverity;
+  occurrences30Days?: number;
+  armadaVersionCount?: number;
+  attemptedRecoveries?: string[];
+  noChangeReason?: string | null;
+  ruleIds?: string[];
+}
+
+/** One step of the handoff and landing trail (BlackBoxHandoffStep). */
+export interface BlackBoxHandoffStep { timestampUtc: string; source: string; kind: string; message?: string | null; entityId?: string | null }
+
+/** One automatic recovery Armada attempted before the failure (BlackBoxAutoRecovery). */
+export interface BlackBoxAutoRecovery { kind: BlackBoxAutoRecoveryKind; attempts: number; lastUtc?: string | null; outcome: string; detail?: string | null }
+
+/** record.handoff: the handoff and landing trail of the attempt (BlackBoxHandoffTrail). */
+export interface BlackBoxHandoffTrail {
+  steps?: BlackBoxHandoffStep[];
+  stepTotal?: number;
+  truncated?: boolean;
+  autoRecoveries?: BlackBoxAutoRecovery[];
+  dockTransitions?: BlackBoxHandoffStep[];
+  dockStateAtFailure?: string | null;
+  landingAttempts?: number;
+  targetBranch?: string | null;
+  targetTipAtStart?: string | null;
+  targetTipAtFailure?: string | null;
+  targetMoved?: boolean | null;
+  targetCommitsDuringRun?: number | null;
+  note?: string | null;
+}
+
+/** One Armada resilience gap: a handoff and landing failure mode triaged ArmadaDefect (BlackBoxResilienceGap). */
+export interface BlackBoxResilienceGap {
+  fingerprint: string;
+  phase: string;
+  step: string;
+  failureKind?: string | null;
+  occurrences: number;
+  openCount: number;
+  firstSeenUtc: string;
+  lastSeenUtc: string;
+  latestEntryId?: string | null;
+  latestMissionId?: string | null;
+  latestMissionTitle?: string | null;
+  vesselName?: string | null;
+  armadaVersions?: string[];
+  severity: BlackBoxSeverity;
+  selfHealable: BlackBoxSelfHealable;
+  suspected: boolean;
+  topProposedChange?: BlackBoxProposedChange | null;
+  detectionGap?: string | null;
+  ruleIds?: string[];
+}
+
+/** Filters of the resilience gaps (BlackBoxResilienceGapRequest; page size at most 50). */
+export interface BlackBoxResilienceGapQuery {
+  pageNumber?: number;
+  pageSize?: number;
+  vesselId?: string;
+  resolution?: BlackBoxResolution;
+  phase?: string;
+  createdAfter?: string;
+  createdBefore?: string;
 }
 
 export interface BlackBoxAnalysis {
@@ -302,6 +403,8 @@ export interface BlackBoxAnalysis {
   armadaImprovements?: BlackBoxImprovement[];
   recoveryPaths?: BlackBoxRecoveryPath[];
   triage?: BlackBoxTriageVerdict | null;
+  /** The resilience analysis, filled for every analyzed entry. */
+  resilience?: BlackBoxResilience | null;
 }
 
 export interface BlackBoxRedactionRuleCount { rule?: string; count?: number }
@@ -327,6 +430,8 @@ export interface BlackBoxRelated {
   fingerprint?: string | null;
   similarEntries?: BlackBoxSimilarEntry[];
   occurrencesLast30Days?: number;
+  /** Armada versions the fingerprint was seen in. */
+  armadaVersions?: string[];
   cascadeRootEntryId?: string | null;
   downstreamMissionIds?: string[];
   /** The first ten successful landings near the failure that touched the same files. */
@@ -356,6 +461,8 @@ export interface BlackBoxRecord {
   analysis?: BlackBoxAnalysis | null;
   related?: BlackBoxRelated | null;
   voyage?: Record<string, unknown> | null;
+  /** The handoff and landing trail (entries in handoff and landing scope). */
+  handoff?: BlackBoxHandoffTrail | null;
   redaction?: BlackBoxRedaction;
   truncation?: BlackBoxTruncation;
 }
@@ -422,13 +529,15 @@ export interface BlackBoxEnumerateQuery {
   pinned?: boolean;
   isCurrent?: boolean;
   path?: string;
+  /** True for Armada's handoff and landing failures, false for the rest. */
+  resilienceScope?: boolean;
   createdAfter?: string;
   createdBefore?: string;
 }
 
 export interface BlackBoxSearchQuery extends BlackBoxEnumerateQuery { query: string }
 
-export interface BlackBoxBundleQuery extends BlackBoxEnumerateQuery { max?: number; format?: BlackBoxBundleFormat; redactHosts?: boolean }
+export interface BlackBoxBundleQuery extends BlackBoxEnumerateQuery { max?: number; format?: BlackBoxBundleFormat; redactHosts?: boolean; allFailures?: boolean }
 
 export interface BlackBoxBundleResult { format: BlackBoxBundleFormat; entryCount: number; fingerprintCount: number; content: string; truncated: boolean }
 
