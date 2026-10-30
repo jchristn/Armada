@@ -116,7 +116,7 @@ TITLE_OVERRIDES = {
     "/vessels/import": "Import Vessels", "/vessels/health": "Vessel Health", "/vessels/:id/onboarding": "Vessel Onboarding",
     "/vessels/:id/history": "View History", "/merge-queue/:id": "Merge Queue Entry", "/fleet-actions/runs/:id": "Fleet Action Run",
     "/workspace/:vesselId": "Workspace", "/workspace/:vesselId/:panel": "Workspace", "/checks/:id": "Check Run",
-    "/doctor": "Diagnostics", "/backlog/:id": "Backlog Item",
+    "/doctor": "Diagnostics", "/backlog/:id": "Backlog Item", "/blackbox": "Black Box", "/blackbox/:id": "Black Box Entry",
 }
 
 

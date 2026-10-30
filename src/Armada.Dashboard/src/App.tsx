@@ -8,7 +8,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoadingIndicator from './components/shared/LoadingIndicator';
 import Layout from './components/Layout';
-import { CliPermissionsRedirect, PlanningRedirect } from './components/LegacyNavRedirects';
+import { BlackBoxRedirect, CliPermissionsRedirect, PlanningRedirect } from './components/LegacyNavRedirects';
 import './App.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -83,7 +83,6 @@ const DispatchHub = lazy(() => import('./pages/DispatchHub'));
 const DeliveryHub = lazy(() => import('./pages/DeliveryHub'));
 const FleetActions = lazy(() => import('./pages/FleetActions'));
 const FleetActionRunDetail = lazy(() => import('./pages/FleetActionRunDetail'));
-const BlackBox = lazy(() => import('./pages/BlackBox'));
 const BlackBoxEntry = lazy(() => import('./pages/BlackBoxEntry'));
 
 function RouteFallback() {
@@ -169,7 +168,7 @@ export default function App() {
                       {/* One optional-segment route so moving between /ask and /ask/:threadId keeps the page mounted. */}
                       <Route path="ask/:threadId?" element={<AskArmada />} />
                       <Route path="inbox" element={<Inbox />} />
-                      <Route path="blackbox" element={<BlackBox />} />
+                      <Route path="blackbox" element={<BlackBoxRedirect />} />
                       <Route path="blackbox/:id" element={<BlackBoxEntry />} />
                       <Route path="cli-permissions" element={<CliPermissionsRedirect />} />
                       <Route path="delivery" element={<DeliveryHub />} />

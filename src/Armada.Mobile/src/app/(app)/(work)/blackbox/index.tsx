@@ -1,6 +1,6 @@
-import { BlackBoxListScreen } from '@/screens/blackbox/BlackBoxListScreen';
+import { BlackBoxRedirect } from '@/navigation/legacyRedirects';
 
-/** /blackbox: recent black box entries, filtered by vessel and failure kind. */
+/** /blackbox: now the Missions hub's Black Box tab; the old ?tab= becomes ?bbtab=, filters are kept. */
 export default function Screen() {
-  return <BlackBoxListScreen />;
+  return <BlackBoxRedirect />;
 }

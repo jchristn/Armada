@@ -13,7 +13,8 @@ namespace Armada.Tui.Screens.Operations
     using Armada.Tui.Widgets;
 
     /// <summary>
-    /// Black Box (<c>/blackbox</c>, a TUI extension until the dashboard page lands): the failure entries the black box
+    /// Black Box, the Missions hub's Black Box tab (<c>/missions?tab=blackbox</c>; <c>/blackbox</c> redirects there),
+    /// mirroring the dashboard's Black Box tab: the failure entries the black box
     /// recorded, server paged and filtered by vessel, triage, resolution, phase, and fingerprint (the route query
     /// <c>missionId</c>, <c>voyageId</c>, <c>vesselId</c>, and <c>fingerprint</c> pre-filter it). <c>g</c> opens the
     /// fingerprints view (most frequent failure signatures; choosing one filters the list), <c>R</c> the recovery

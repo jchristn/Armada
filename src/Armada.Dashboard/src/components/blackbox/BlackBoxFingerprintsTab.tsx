@@ -7,6 +7,7 @@ import { useLocale } from '../../context/LocaleContext';
 import { BLACKBOX_RESOLUTIONS } from '../../lib/blackbox';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import { EmptyState, ErrorState, LoadingState } from '../shared/StateBlocks';
+import { blackBoxHref } from '../../lib/navTargets';
 
 const SPARK_WIDTH = 96;
 const SPARK_HEIGHT = 22;
@@ -77,7 +78,7 @@ export default function BlackBoxFingerprintsTab({ vessels }: { vessels: Vessel[]
   useEffect(() => { void load(); }, [load]);
 
   const columns: DataTableColumn<BlackBoxFingerprintSummary>[] = [
-    { key: 'fingerprint', label: t('Fingerprint'), required: true, render: (r) => <Link to={`/blackbox?tab=entries&fingerprint=${encodeURIComponent(r.fingerprint)}`} className="mono" title={r.fingerprint}>{r.fingerprint.slice(0, 16)}</Link>, interactive: true },
+    { key: 'fingerprint', label: t('Fingerprint'), required: true, render: (r) => <Link to={blackBoxHref('entries', { fingerprint: r.fingerprint })} className="mono" title={r.fingerprint}>{r.fingerprint.slice(0, 16)}</Link>, interactive: true },
     { key: 'where', label: t('Phase / step'), render: (r) => `${t(r.phase)} / ${t(r.step)}` },
     { key: 'kind', label: t('Kind'), render: (r) => r.failureKind ? t(r.failureKind) : '-' },
     { key: 'count', label: t('Entries'), render: (r) => r.count },

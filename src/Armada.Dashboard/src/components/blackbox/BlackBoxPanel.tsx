@@ -26,6 +26,7 @@ import {
   isBlackBoxPending,
 } from '../../lib/blackbox';
 import { useBlackBoxLive } from '../../lib/useBlackBoxLive';
+import { blackBoxHref } from '../../lib/navTargets';
 import { browserPlatform } from '../../platform/browserPlatform';
 import { copyToClipboard } from '../shared/CopyButton';
 import CopyButton from '../shared/CopyButton';
@@ -557,7 +558,7 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
         <Section title={t('Similar failures')} testId="blackbox-related">
           {entry.fingerprint && (
             <p style={{ margin: '0 0 0.3rem' }}>
-              <Link to={`/blackbox?tab=entries&fingerprint=${encodeURIComponent(entry.fingerprint)}`} title={t('List every entry with this failure fingerprint.')}>{t('All entries with this fingerprint')}</Link>
+              <Link to={blackBoxHref('entries', { fingerprint: entry.fingerprint })} title={t('List every entry with this failure fingerprint.')}>{t('All entries with this fingerprint')}</Link>
               {related?.occurrencesLast30Days != null && <span className="text-dim"> · {t('{{count}} in the last 30 days', { count: related.occurrencesLast30Days })}</span>}
             </p>
           )}

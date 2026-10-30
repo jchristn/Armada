@@ -67,7 +67,7 @@ interface SweepRoute {
 
 // The dashboard's custom redirect components (LegacyNavRedirects: they keep the query, so App.tsx has no static
 // <Navigate> target for the route table) are mobile redirects too (navigation/legacyRedirects).
-const LEGACY_REDIRECTS = ['(more)/cli-permissions', '(work)/planning/index', '(work)/planning/[id]'];
+const LEGACY_REDIRECTS = ['(more)/cli-permissions', '(work)/planning/index', '(work)/planning/[id]', '(work)/blackbox/index'];
 const REDIRECTS = new Set([
   ...DASHBOARD_ROUTES.filter((r) => r.redirect).map((r) => r.file.replace(/^\(app\)\//, '').replace(/\.tsx$/, '')),
   ...LEGACY_REDIRECTS,

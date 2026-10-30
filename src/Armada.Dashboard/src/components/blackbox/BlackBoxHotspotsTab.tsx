@@ -6,6 +6,7 @@ import type { Vessel } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import { EmptyState, ErrorState, LoadingState } from '../shared/StateBlocks';
+import { blackBoxHref } from '../../lib/navTargets';
 
 const FILE_ROLES: BlackBoxFileRole[] = ['Conflicted', 'DirtyInCheckout', 'OutOfScope', 'ChangedByMission', 'ChangedByConflictingMission', 'BoundaryViolation'];
 
@@ -42,7 +43,7 @@ export default function BlackBoxHotspotsTab({ vessels }: { vessels: Vessel[] }) 
 
   const columns: DataTableColumn<BlackBoxHotspot>[] = [
     { key: 'vessel', label: t('Vessel'), required: true, render: (r) => r.vesselId ? <Link to={`/vessels/${r.vesselId}`}>{vesselName.get(r.vesselId) ?? r.vesselId}</Link> : '-', interactive: true },
-    { key: 'directory', label: t('Directory'), required: true, render: (r) => <Link to={`/blackbox?tab=entries&path=${encodeURIComponent(r.directory)}${r.vesselId ? `&vesselId=${encodeURIComponent(r.vesselId)}` : ''}`} className="mono" title={t('List the entries that touched this directory.')}>{r.directory}</Link>, interactive: true },
+    { key: 'directory', label: t('Directory'), required: true, render: (r) => <Link to={blackBoxHref('entries', { path: r.directory, vesselId: r.vesselId })} className="mono" title={t('List the entries that touched this directory.')}>{r.directory}</Link>, interactive: true },
     { key: 'entries', label: t('Entries'), render: (r) => r.entryCount },
     { key: 'files', label: t('Files'), render: (r) => r.fileCount },
     { key: 'lastSeen', label: t('Last seen'), render: (r) => r.lastSeenUtc ? formatDateTime(r.lastSeenUtc) : '-' },

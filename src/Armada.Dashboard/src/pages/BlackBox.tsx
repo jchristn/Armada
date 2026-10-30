@@ -10,10 +10,13 @@ import BlackBoxFingerprintsTab from '../components/blackbox/BlackBoxFingerprints
 import BlackBoxHotspotsTab from '../components/blackbox/BlackBoxHotspotsTab';
 import BlackBoxRetentionTab from '../components/blackbox/BlackBoxRetentionTab';
 import BlackBoxRecoveryStatsTab from '../components/blackbox/BlackBoxRecoveryStatsTab';
+import { BLACKBOX_SECTION_PARAM } from '../lib/navTargets';
 import '../components/blackbox/BlackBox.css';
 
 /**
- * The Black Box page (MISSION_BLACKBOX_PLAN.md 11.1): every mission and voyage failure record, with tabs Entries
+ * The Black Box tab of the Missions page (MISSION_BLACKBOX_PLAN.md 11.1; `/blackbox` redirects to
+ * `/missions?tab=blackbox`): every mission and voyage failure record, with sections (in `?bbtab=`, since the Missions
+ * hub owns `?tab=`) Entries
  * (filters, search, saved filters), Fingerprints (failure modes and their trend by Armada version), Hotspots
  * (directories failures keep touching), Recovery stats (success rates of recovery paths) and Retention (policy, usage, garbage collection and purge).
  */
@@ -33,6 +36,7 @@ export default function BlackBox() {
       />
       <Tabs
         ariaLabel="Black box sections"
+        param={BLACKBOX_SECTION_PARAM}
         tabs={[
           { key: 'entries', label: 'Entries', tooltip: 'Failure records, newest first, with filters and saved filters.', render: () => <BlackBoxEntriesTab vessels={vessels} /> },
           { key: 'fingerprints', label: 'Fingerprints', tooltip: 'Failure modes: entries that failed the same way, with their trend by Armada version.', render: () => <BlackBoxFingerprintsTab vessels={vessels} /> },

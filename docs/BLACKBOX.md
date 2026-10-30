@@ -183,11 +183,11 @@ Three ways to get a brief:
 
 | Surface | Where | Status |
 |---|---|---|
-| Dashboard | Mission and voyage detail black box panel; Black Box page under Operations; entry page `/blackbox/{id}`; settings | Available |
-| TUI | Mission and voyage Failure tab; Black Box screen (`g b`); entry screen; Settings and Storage sections | Available |
+| Dashboard | Mission and voyage detail black box panel; Black Box tab on the Missions page; entry page `/blackbox/{id}`; settings | Available |
+| TUI | Mission and voyage Failure tab; Black Box tab on the Missions screen (`g b`); entry screen; Settings and Storage sections | Available |
 | Helm CLI | `armada blackbox ...`, `armada mission failure <id>`, `armada voyage failure <id>` | Available |
 | VS Code | The Armada extension (`src/Armada.VSCode`) | Available |
-| Mobile | Mission and voyage detail panel, Black Box list and entry screens | Available |
+| Mobile | Mission and voyage detail panel, Black Box tab on the Missions hub, entry screen | Available |
 | REST | `/api/v1/missions/{id}/blackbox`, `/api/v1/voyages/{id}/blackbox`, `/api/v1/blackbox/...` | Available |
 | MCP | 23 tools, 4 resources, 2 prompts | Available |
 | WebSocket | Commands `blackbox.get`, `blackbox.brief`, `blackbox.list`; eight `blackbox.*` events | Available |
@@ -206,9 +206,12 @@ about this failure** (opens Ask with the prompt filled in; nothing is sent until
 note and link), Pin or Unpin, Reanalyze, Add note and **Open full page**. The panel updates live from the
 `blackbox.*` events, including while analysis is still running.
 
-**Black Box page** (Operations, `/blackbox`): tabs **Entries** (every filter, saved filters), **Fingerprints**,
-**Hotspots** and **Retention** (policy, usage, last and next garbage collection run, **Preview garbage collection**,
-and for administrators **Purge by filter** with a dry run first). `/blackbox/{id}` shows one entry on its own page.
+**Black Box tab on the Missions page** (`/missions?tab=blackbox`; the old `/blackbox` redirects there, keeping its
+filters, and the command palette lists **Black Box**): sections **Entries** (every filter, saved filters),
+**Fingerprints**, **Hotspots**, **Recovery stats** and **Retention** (policy, usage, last and next garbage collection
+run, **Preview garbage collection**, and for administrators **Purge by filter** with a dry run first). The section is
+in `?bbtab=` (for example `/missions?tab=blackbox&bbtab=fingerprints`), since the Missions page owns `?tab=`.
+`/blackbox/{id}` shows one entry on its own page.
 
 **Settings.** The server settings page has a Black Box section: storage target and its credentials (masked), compress,
 key prefix, fallback to the database, a store health check, **Migrate stored entries** with progress, and the retention
@@ -225,7 +228,7 @@ dry runs it and shows the plan; confirming runs it with the confirm token, and a
 as JSON, `s` resolves, `p` pins or unpins, `n` adds a note and `o` opens the entry. Every action is also in the `.`
 menu and the palette. Without an entry the tab says so and the screen's own keys (for example `r` Restart) apply.
 
-**Black Box screen** (`/blackbox`, `g b`): server-paged entries filtered by vessel, triage, resolution, phase and
+**Black Box tab on the Missions screen** (`/missions?tab=blackbox`, `g b`; `/blackbox` redirects there): server-paged entries filtered by vessel, triage, resolution, phase and
 fingerprint; `F` opens the fingerprints view (choosing one filters the list, `X` clears it), `R` the recovery stats;
 Enter opens an entry. **Entry screen** (`/blackbox/{id}`): the Brief tab (the same keys), the Objects tab (Enter opens a
 paged viewer that reads 64 KB at a time; `]` and `[` move between chunks), Notes, Timeline, Diff and Nearby Successes
@@ -286,7 +289,7 @@ Note**, **Ask Armada about this failure**, an entry view, `BX` decorations on fi
 
 The mobile app shows the black box on mission and voyage detail (the user audience summary, recovery paths with a
 dry run and a confirmation sheet, Resolve, notes, Copy and Share of the brief through the platform share sheet, and
-Ask Armada with the prompt prefilled), and a **Black Box** list under Operations (filtered by vessel and failure
+Ask Armada with the prompt prefilled), and a **Black Box** tab on the Missions hub (filtered by vessel and failure
 kind on the server, paged as you scroll, refreshed on `blackbox.*` events) with a full entry screen at
 `/blackbox/{id}`. See [MOBILE.md](MOBILE.md).
 
@@ -796,7 +799,7 @@ regression fixtures (`export-fixture`) and the Prometheus metrics come from the 
 | Nearby successes | Entry panel and page: **Nearby successes** section (paged, linked to the missions that landed) | | Mission entry screen **Nearby successes** (ten per page, Load more, linked) |
 | Voyage cascade graph | Voyage page **Cascade graph** card for a voyage with failures: an SVG graph (nodes open the entry or mission, the root outlined, a legend for the four edge kinds) and the same missions and edges as a list | | Failed voyage detail **Cascade** list (missions with status, failure kind, root marker and edges, linked) |
 | Runbook linkage | Recovery paths show **Runs runbook: {title}** linked to the runbook | Entry view: the linked runbook on each path | Entry screen: **Runbook: {name}** on each path |
-| Recovery statistics | Black Box page **Recovery stats** tab (paged by rule and path, filter by vessel and rule, success rate bars); each recovery path shows its success rate | Entry view: each path's success rate | Entry screen: each path's success rate |
+| Recovery statistics | Missions page Black Box tab, **Recovery stats** section (paged by rule and path, filter by vessel and rule, success rate bars); each recovery path shows its success rate | Entry view: each path's success rate | Entry screen: each path's success rate |
 
 The TUI and the Helm CLI are described below.
 
@@ -817,7 +820,7 @@ The TUI and the Helm CLI are described below.
   files (Enter opens the mission).
 - **Voyage screen.** The **Cascade** tab shows the cascade graph as a tree from the root failure (`*`), each mission
   with its status, failure kind, the edges that link it and its entry; Enter opens the entry, `m` the mission.
-- **Black Box list.** `R` shows the recovery stats (runs, outcomes and success rate per path, for the vessel filter).
+- **Black Box tab (Missions).** `R` shows the recovery stats (runs, outcomes and success rate per path, for the vessel filter).
 - **Runbooks.** A recovery path linked to a runbook shows `Runbook: <title> (<id>)` and its tracked success rate on the
   Failure tab, `[runbook: <title>]` in the `r` menu, and the dry run plan says the runbook runs instead of the steps.
 

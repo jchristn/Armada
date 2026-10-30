@@ -5,7 +5,6 @@ import { Share, Text } from 'react-native';
 import * as client from '@dashboard/api/client';
 import type { Mission, Voyage } from '@dashboard/types/models';
 import BlackBoxEntryRoute from '../app/(app)/(work)/blackbox/[id]';
-import BlackBoxListRoute from '../app/(app)/(work)/blackbox/index';
 import { useNotifications } from '../notifications/NotificationContext';
 import { BlackBoxPanel, type BlackBoxSource } from '../screens/blackbox/BlackBoxPanel';
 import {
@@ -20,6 +19,7 @@ import {
   voyageMayHaveBlackBox,
 } from '../screens/blackbox/blackBoxModel';
 import { MissionDetail } from '../screens/operations/MissionDetail';
+import { MissionsHubScreen } from '../screens/operations/MissionsHubScreen';
 import { VoyageDetail } from '../screens/operations/VoyageDetail';
 import { AGENT_BRIEF, CANCEL_PATH, MANUAL_PATH, RETRY_PATH, USER_BRIEF, blackBoxEntry, blackBoxSummary } from '../test/blackBoxFixtures';
 import { page } from '../test/operationsClient';
@@ -412,13 +412,22 @@ describe('black box entry screen', () => {
   });
 });
 
-describe('black box list', () => {
+describe('black box list (the Missions hub Black Box tab)', () => {
+  beforeEach(() => { setMockParams({ tab: 'blackbox' }); });
+
+  it('is the fourth Missions tab', async () => {
+    api.listBlackBox.mockResolvedValue(page([blackBoxSummary('1')]));
+    await renderScreen(<MissionsHubScreen />);
+    await waitFor(() => expect(screen.getByTestId('bbx-row-1')).toBeTruthy());
+    expect(screen.getByTestId('missions-hub-tab-blackbox')).toBeTruthy();
+  });
+
   it('pages through recent entries and opens one', async () => {
     api.listBlackBox.mockImplementation(async (query) => {
       if (query?.pageNumber === 2) return { ...page([blackBoxSummary('26')], 26), pageNumber: 2 };
       return page(Array.from({ length: 25 }, (_v, i) => blackBoxSummary(String(i + 1))), 26);
     });
-    await renderScreen(<BlackBoxListRoute />);
+    await renderScreen(<MissionsHubScreen />);
     await waitFor(() => expect(screen.getByTestId('bbx-row-1')).toBeTruthy());
     expect(api.listBlackBox).toHaveBeenCalledWith({ pageNumber: 1, pageSize: 25, vesselId: undefined, kind: undefined });
     await act(async () => { fireEvent(screen.getByTestId('bbx-entries'), 'endReached'); });
@@ -430,7 +439,7 @@ describe('black box list', () => {
 
   it('filters by vessel and failure kind on the server', async () => {
     api.listBlackBox.mockResolvedValue(page([blackBoxSummary('1')]));
-    await renderScreen(<BlackBoxListRoute />);
+    await renderScreen(<MissionsHubScreen />);
     await waitFor(() => expect(screen.getByTestId('bbx-row-1')).toBeTruthy());
     await act(async () => { await fireEvent.press(screen.getByTestId('bbx-filter-vessel')); });
     await act(async () => { await fireEvent.press(screen.getByTestId('bbx-filter-vessel-option-vsl_2')); });
@@ -444,20 +453,20 @@ describe('black box list', () => {
 
   it('shows the empty state with no entries', async () => {
     api.listBlackBox.mockResolvedValue(page([]));
-    await renderScreen(<BlackBoxListRoute />);
+    await renderScreen(<MissionsHubScreen />);
     await waitFor(() => expect(screen.getByText('No black box entries yet.')).toBeTruthy());
     expect(screen.getByText('Armada records an entry here whenever a mission or voyage fails.')).toBeTruthy();
   });
 
   it('shows an error state when the list fails', async () => {
     api.listBlackBox.mockRejectedValue(new ApiError('Forbidden', 403, null));
-    await renderScreen(<BlackBoxListRoute />);
+    await renderScreen(<MissionsHubScreen />);
     await waitFor(() => expect(screen.getByText('Forbidden')).toBeTruthy());
   });
 
   it('reloads on black box socket events', async () => {
     api.listBlackBox.mockResolvedValue(page([blackBoxSummary('1')]));
-    const { socket } = await renderScreen(<BlackBoxListRoute />);
+    const { socket } = await renderScreen(<MissionsHubScreen />);
     await waitFor(() => expect(screen.getByTestId('bbx-row-1')).toBeTruthy());
     const before = api.listBlackBox.mock.calls.length;
     await act(async () => { socket.message({ type: 'blackbox.captured', data: { entryId: 'bbx_2' } }); });

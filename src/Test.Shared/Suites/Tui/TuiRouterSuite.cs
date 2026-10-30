@@ -159,19 +159,21 @@ namespace Test.Shared.Suites.Tui
                 List<string> ops = NavCatalog.Sections.First(sec => sec.Label == "OPERATIONS").Items.Select(i => i.To).ToList();
                 AssertEqual(ops.IndexOf("/missions") + 1, ops.IndexOf("/activity"), "Activity directly under Missions");
                 AssertTrue(NavCatalog.Sections.First(sec => sec.Label == "BUILD").Items.Any(i => i.To == "/delivery"), "Delivery in BUILD");
-                foreach (string gone in new[] { "/jobs", "/planning", "/storage", "/cli-permissions" })
+                foreach (string gone in new[] { "/jobs", "/planning", "/storage", "/cli-permissions", "/blackbox" })
                     AssertFalse(NavCatalog.AllItems().Any(i => i.To == gone), gone + " is no sidebar item");
                 AssertEqual("/activity", NavCatalog.ItemForPath("/events/evt_1")?.To, "activity owns its detail pages");
                 AssertEqual("/delivery", NavCatalog.ItemForPath("/deployments/dpl_1")?.To, "delivery owns its detail pages");
                 AssertEqual("/server", NavCatalog.ItemForPath("/storage")?.To, "settings owns storage");
+                AssertEqual("/missions", NavCatalog.ItemForPath("/blackbox/bbx_1")?.To, "missions owns black box entries");
             }));
 
-            cases.Add(TuiCase.Sync(Suite, "nav_shortcuts_keep_go_keys", "Planning, Jobs, Storage, and CLI Tool Permissions keep Go commands that open their new tabs", () =>
+            cases.Add(TuiCase.Sync(Suite, "nav_shortcuts_keep_go_keys", "Planning, Jobs, Black Box, Storage, and CLI Tool Permissions keep Go commands that open their new tabs", () =>
             {
                 Dictionary<string, string> expected = new Dictionary<string, string>
                 {
                     ["go.planning"] = "/dispatch?tab=planning", ["go.jobs"] = "/activity?source=jobs",
                     ["go.storage"] = "/server?tab=storage", ["go.clipermissions"] = "/server?tab=cli-permissions",
+                    ["go.blackbox"] = "/missions?tab=blackbox",
                 };
                 using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/inbox"))
                 {
@@ -196,6 +198,9 @@ namespace Test.Shared.Suites.Tui
                 AssertEqual("/server?request=cpr_1&section=rules&tab=cli-permissions", TabLinks.CliPermissions("cpr_1", "rules"), "cli section and request");
                 AssertEqual("jobs", Router.Resolve(TabLinks.JobsPath).Tab?.Key, "jobs link");
                 AssertEqual("storage", Router.Resolve(TabLinks.StoragePath).Tab?.Key, "storage link");
+                AssertEqual("blackbox", Router.Resolve(TabLinks.BlackBoxPath).Tab?.Key, "black box link");
+                AssertEqual("/missions?fingerprint=fp%201&tab=blackbox", TabLinks.BlackBox("fp 1"), "black box fingerprint link");
+                AssertEqual("/missions?bbtab=fingerprints&tab=blackbox&vesselId=vsl_1", Router.Resolve("/blackbox?tab=fingerprints&vesselId=vsl_1").FullPath, "/blackbox keeps its filters; its old tab becomes bbtab");
                 AssertEqual("planning", Router.Resolve(TabLinks.Planning("ps_1")).Tab?.Key, "planning link");
                 AssertEqual("cli-permissions", Router.Resolve(TabLinks.CliPermissions("cpr_1")).Tab?.Key, "cli link");
                 AssertEqual("/dispatch?tab=planning&session=", Armada.Tui.Modals.CommandPaletteModal.EntityRoutes["psn_"], "palette psn_ jump");

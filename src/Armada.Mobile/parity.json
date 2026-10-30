@@ -101,7 +101,7 @@
       "status": "implemented",
       "mobile": "src/app/(app)/(work)/blackbox/index.tsx",
       "workstream": "W2.2",
-      "notes": "BlackBoxListScreen"
+      "notes": "redirect to /missions?tab=blackbox (the old tab becomes bbtab, filters kept)"
     },
     {
       "kind": "route",
@@ -1014,6 +1014,14 @@
       "mobile": "src/screens/fleetActions/FleetActionRunsTab.tsx",
       "workstream": "W3.2",
       "notes": "status filter in a sheet; split view on tablets"
+    },
+    {
+      "kind": "tab",
+      "key": "MissionsHub:blackbox",
+      "status": "implemented",
+      "mobile": "/missions?tab=blackbox",
+      "workstream": "W2.2",
+      "notes": "Black Box tab: recent entries filtered by vessel and failure kind, paged; split view on tablets"
     },
     {
       "kind": "tab",
