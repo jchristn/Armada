@@ -28,6 +28,7 @@ namespace Armada.Core.Services
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _RepoLocks =
             new System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
 
+        private const string _HeadsRefPrefix = "refs/heads/";
         private string _Header = "[GitService] ";
         private LoggingModule _Logging;
         private IHostCommandExecutor? _Commands = null;
@@ -947,6 +948,7 @@ namespace Armada.Core.Services
         /// <summary>
         /// List the local branches in a repository with their tip commit and their position (ahead/behind)
         /// relative to the given default branch. The default branch is flagged and marked at zero divergence.
+        /// A branch that cannot be compared has <see cref="BranchInfo.DivergenceError"/> set and keeps zero counts.
         /// </summary>
         /// <param name="repoPath">Repository path (bare repo or worktree).</param>
         /// <param name="defaultBranch">Default branch to measure divergence against (for example "main").</param>
@@ -964,7 +966,7 @@ namespace Armada.Core.Services
         /// <summary>
         /// List the local branches in a repository with their tip commit, without measuring divergence (one git
         /// command). Ahead and behind are left at zero; fill them for the branches shown with
-        /// <see cref="MeasureBranchDivergenceAsync"/>.
+        /// <see cref="MeasureBranchDivergenceAsync"/>. Each name is the path under refs/heads.
         /// </summary>
         /// <param name="repoPath">Repository path (bare repo or worktree).</param>
         /// <param name="defaultBranch">Default branch, flagged in the result (for example "main").</param>
@@ -975,8 +977,9 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
 
-            // Field-separated, one line per branch. Unit separator (\x1f) avoids collisions with commit text.
-            string format = "%(refname:short)\x1f%(HEAD)\x1f%(objectname:short)\x1f%(committerdate:iso-strict)\x1f%(contents:subject)";
+            // %(refname) stays refs/heads/<name> when a tag uses the same short name. The listed name is that path.
+            // Field separator is the unit separator (\x1f) so commit text cannot split a record.
+            string format = "%(refname)\x1f%(HEAD)\x1f%(objectname:short)\x1f%(committerdate:iso-strict)\x1f%(contents:subject)";
             string raw = await RunGitAsync(repoPath, token, "for-each-ref", "--format=" + format, "refs/heads/").ConfigureAwait(false);
 
             List<BranchInfo> branches = new List<BranchInfo>();
@@ -987,7 +990,7 @@ namespace Armada.Core.Services
                 if (parts.Length < 3) continue;
 
                 BranchInfo info = new BranchInfo();
-                info.Name = parts[0].Trim();
+                info.Name = LocalBranchName(parts[0].Trim());
                 info.IsCurrent = parts.Length > 1 && parts[1].Trim() == "*";
                 info.CommitHash = parts.Length > 2 ? parts[2].Trim() : null;
                 if (parts.Length > 3 && DateTimeOffset.TryParse(parts[3].Trim(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTimeOffset parsedDate))
@@ -1009,7 +1012,9 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Fill Ahead and Behind on each branch, relative to the default branch: one git command per branch other
-        /// than the default branch, which stays at zero. A branch whose divergence cannot be read keeps zeros.
+        /// than the default branch, which stays at zero. The comparison uses the refs/heads form of each name.
+        /// A comparison that fails, or whose output is not two non-negative integers, sets
+        /// <see cref="BranchInfo.DivergenceError"/> and leaves the counts unchanged.
         /// </summary>
         /// <param name="repoPath">Repository path (bare repo or worktree).</param>
         /// <param name="defaultBranch">Default branch to measure against (for example "main").</param>
@@ -1026,15 +1031,28 @@ namespace Armada.Core.Services
                 if (info.IsDefault || String.Equals(info.Name, defaultBranch, StringComparison.Ordinal)) continue;
                 try
                 {
-                    string counts = await RunGitAsync(repoPath, token, "rev-list", "--left-right", "--count", defaultBranch + "..." + info.Name).ConfigureAwait(false);
+                    string counts = await RunGitAsync(
+                        repoPath,
+                        token,
+                        "rev-list",
+                        "--left-right",
+                        "--count",
+                        _HeadsRefPrefix + defaultBranch + "..." + _HeadsRefPrefix + info.Name).ConfigureAwait(false);
                     string[] countParts = counts.Trim().Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (countParts.Length == 2)
+                    int behind;
+                    int ahead;
+                    if (countParts.Length == 2
+                        && Int32.TryParse(countParts[0], NumberStyles.None, CultureInfo.InvariantCulture, out behind)
+                        && Int32.TryParse(countParts[1], NumberStyles.None, CultureInfo.InvariantCulture, out ahead))
                     {
                         // left = commits on default not on branch (branch is behind); right = commits on branch not on default (ahead).
-                        Int32.TryParse(countParts[0], out int behind);
-                        Int32.TryParse(countParts[1], out int ahead);
                         info.Behind = behind;
                         info.Ahead = ahead;
+                        info.DivergenceError = null;
+                    }
+                    else
+                    {
+                        info.DivergenceError = "Unable to calculate branch divergence.";
                     }
                 }
                 catch (OperationCanceledException)
@@ -1043,7 +1061,7 @@ namespace Armada.Core.Services
                 }
                 catch
                 {
-                    // Divergence unknown (for example the default branch does not exist yet); leave zeros.
+                    info.DivergenceError = "Unable to calculate branch divergence.";
                 }
             }
         }
@@ -1674,6 +1692,13 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static string LocalBranchName(string refName)
+        {
+            if (refName.StartsWith(_HeadsRefPrefix, StringComparison.Ordinal))
+                return refName.Substring(_HeadsRefPrefix.Length);
+            return refName;
+        }
 
         private static List<long> ParseUnixSecondsLines(string output)
         {

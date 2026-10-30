@@ -41,14 +41,21 @@ namespace Armada.Core.Models
         public DateTime? CommitDate { get; set; } = null;
 
         /// <summary>
-        /// Number of commits this branch is ahead of the default branch.
+        /// Number of commits this branch is ahead of the default branch. Zero when this is the default
+        /// branch or when <see cref="DivergenceError"/> is set.
         /// </summary>
         public int Ahead { get; set; } = 0;
 
         /// <summary>
-        /// Number of commits this branch is behind the default branch.
+        /// Number of commits this branch is behind the default branch. Zero when this is the default
+        /// branch or when <see cref="DivergenceError"/> is set.
         /// </summary>
         public int Behind { get; set; } = 0;
+
+        /// <summary>
+        /// Why ahead and behind counts are unavailable, or null when those counts were measured.
+        /// </summary>
+        public string? DivergenceError { get; set; } = null;
 
         #endregion
 
