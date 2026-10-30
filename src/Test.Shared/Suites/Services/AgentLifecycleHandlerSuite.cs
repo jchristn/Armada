@@ -759,6 +759,46 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("stopping_old_liveness_loop_preserves_replacement", "Stopping an old liveness loop does not remove its replacement", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _);
+                using Process process = StartSilentProcess();
+                const string captainId = "heartbeat-owner";
+                const string missionId = "heartbeat-mission";
+                RegisterTrackedProcess(handler, process.Id, captainId, missionId);
+
+                System.Collections.Concurrent.ConcurrentDictionary<int, CancellationTokenSource> loops =
+                    GetProcessHeartbeatLoops(handler);
+                try
+                {
+                    for (int attempt = 0; attempt < 128; attempt++)
+                    {
+                        StartTrackedProcessHeartbeat(handler, process.Id, captainId, missionId);
+                        StopTrackedProcessHeartbeat(handler, process.Id);
+                        StartTrackedProcessHeartbeat(handler, process.Id, captainId, missionId);
+
+                        await Task.Yield();
+                        AssertTrue(loops.TryGetValue(process.Id, out CancellationTokenSource? current),
+                            "The replacement liveness loop must remain registered after the old loop stops (attempt " + attempt + ").");
+                        AssertFalse(current!.IsCancellationRequested,
+                            "The old loop must not cancel its replacement (attempt " + attempt + ").");
+
+                        StopTrackedProcessHeartbeat(handler, process.Id);
+                    }
+                }
+                finally
+                {
+                    StopTrackedProcessHeartbeat(handler, process.Id);
+                    try
+                    {
+                        process.Kill(entireProcessTree: true);
+                        process.WaitForExit(5000);
+                    }
+                    catch { }
+                }
+            }));
+
             cases.Add(CaseAsync("get_and_clear_mission_output_prefers_final_artifact", "GetAndClearMissionOutput prefers final message artifact over streamed output", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
@@ -1368,6 +1408,21 @@ namespace Test.Shared.Suites.Services
             MethodInfo method = typeof(AgentLifecycleHandler).GetMethod("StartProcessLivenessHeartbeat", BindingFlags.Instance | BindingFlags.NonPublic)
                 ?? throw new InvalidOperationException("Could not find StartProcessLivenessHeartbeat method");
             method.Invoke(handler, new object[] { processId, captainId, missionId });
+        }
+
+        private static void StopTrackedProcessHeartbeat(AgentLifecycleHandler handler, int processId)
+        {
+            MethodInfo method = typeof(AgentLifecycleHandler).GetMethod("StopProcessLivenessHeartbeat", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Could not find StopProcessLivenessHeartbeat method");
+            method.Invoke(handler, new object[] { processId });
+        }
+
+        private static System.Collections.Concurrent.ConcurrentDictionary<int, CancellationTokenSource> GetProcessHeartbeatLoops(AgentLifecycleHandler handler)
+        {
+            FieldInfo field = typeof(AgentLifecycleHandler).GetField("_ProcessHeartbeatLoops", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Could not find _ProcessHeartbeatLoops field");
+            return (System.Collections.Concurrent.ConcurrentDictionary<int, CancellationTokenSource>)(field.GetValue(handler)
+                ?? throw new InvalidOperationException("Process heartbeat loop map was null"));
         }
 
         private static Process StartSilentProcess()
