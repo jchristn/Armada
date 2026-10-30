@@ -1686,6 +1686,87 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("handle_process_exit_async_preserves_captured_output", "HandleProcessExitAsync stores captured output on a failed mission", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IDockService docks = new DockService(logging, db, settings, git);
+                    ICaptainService captains = new CaptainService(logging, db, settings, git, docks);
+                    MissionService missions = new MissionService(logging, db, settings, docks, captains);
+                    missions.OnGetMissionOutput = _ => "captured process output";
+                    AdmiralService service = new AdmiralService(logging, db, settings, captains, missions, new VoyageService(logging, db), docks);
+
+                    Mission mission = new Mission("Failed process output") { Status = MissionStatusEnum.InProgress, ProcessId = 4450 };
+                    await db.Missions.CreateAsync(mission).ConfigureAwait(false);
+                    Captain captain = new Captain("failed-output-captain") { State = CaptainStateEnum.Working, CurrentMissionId = mission.Id, ProcessId = 4450 };
+                    await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+
+                    await service.HandleProcessExitAsync(4450, 1, captain.Id, mission.Id).ConfigureAwait(false);
+
+                    Mission? updatedMission = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status);
+                    AssertEqual("captured process output", updatedMission.AgentOutput);
+                }
+            }));
+
+            cases.Add(CaseAsync("handle_process_exit_async_keeps_stored_output", "HandleProcessExitAsync keeps output already stored on the mission", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IDockService docks = new DockService(logging, db, settings, git);
+                    ICaptainService captains = new CaptainService(logging, db, settings, git, docks);
+                    MissionService missions = new MissionService(logging, db, settings, docks, captains);
+                    missions.OnGetMissionOutput = _ => "later captured output";
+                    AdmiralService service = new AdmiralService(logging, db, settings, captains, missions, new VoyageService(logging, db), docks);
+
+                    Mission mission = new Mission("Stored process output") { Status = MissionStatusEnum.InProgress, ProcessId = 4451, AgentOutput = "stored output" };
+                    await db.Missions.CreateAsync(mission).ConfigureAwait(false);
+                    Captain captain = new Captain("stored-output-captain") { State = CaptainStateEnum.Working, CurrentMissionId = mission.Id, ProcessId = 4451 };
+                    await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+
+                    await service.HandleProcessExitAsync(4451, 1, captain.Id, mission.Id).ConfigureAwait(false);
+
+                    Mission? updatedMission = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status);
+                    AssertEqual("stored output", updatedMission.AgentOutput);
+                }
+            }));
+
+            cases.Add(CaseAsync("handle_process_exit_async_leaves_output_empty_when_capture_is_empty", "HandleProcessExitAsync leaves output empty when capture is empty", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    StubGitService git = new StubGitService();
+                    IDockService docks = new DockService(logging, db, settings, git);
+                    ICaptainService captains = new CaptainService(logging, db, settings, git, docks);
+                    MissionService missions = new MissionService(logging, db, settings, docks, captains);
+                    missions.OnGetMissionOutput = _ => String.Empty;
+                    AdmiralService service = new AdmiralService(logging, db, settings, captains, missions, new VoyageService(logging, db), docks);
+
+                    Mission mission = new Mission("Empty process output") { Status = MissionStatusEnum.InProgress, ProcessId = 4452 };
+                    await db.Missions.CreateAsync(mission).ConfigureAwait(false);
+                    Captain captain = new Captain("empty-output-captain") { State = CaptainStateEnum.Working, CurrentMissionId = mission.Id, ProcessId = 4452 };
+                    await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+
+                    await service.HandleProcessExitAsync(4452, 1, captain.Id, mission.Id).ConfigureAwait(false);
+
+                    Mission? updatedMission = await db.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(MissionStatusEnum.Failed, updatedMission!.Status);
+                    AssertTrue(String.IsNullOrEmpty(updatedMission.AgentOutput), "An empty capture leaves AgentOutput empty");
+                }
+            }));
+
             cases.Add(CaseAsync("handle_process_exit_async_ignores_error_words_in_log", "HandleProcessExitAsync never quarantines or stalls from words in the mission log", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

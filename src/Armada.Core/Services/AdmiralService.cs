@@ -2867,6 +2867,12 @@ namespace Armada.Core.Services
             MissionStatusEnum terminalStatusBefore = mission?.Status ?? MissionStatusEnum.InProgress;
             if (mission != null)
             {
+                if (String.IsNullOrEmpty(mission.AgentOutput) && _Missions.OnGetMissionOutput != null)
+                {
+                    string? agentOutput = _Missions.OnGetMissionOutput(mission.Id);
+                    if (!String.IsNullOrEmpty(agentOutput)) mission.AgentOutput = agentOutput;
+                }
+
                 MissionStatusEnum observedStatus = mission.Status;
                 DateTime observedVersion = mission.LastUpdateUtc;
                 mission.Status = MissionStatusEnum.Failed;
