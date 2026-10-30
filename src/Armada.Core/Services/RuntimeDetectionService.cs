@@ -64,8 +64,10 @@ namespace Armada.Core.Services
 
                 using Process? process = Process.Start(startInfo);
                 if (process == null) return false;
-                process.WaitForExit(5000);
-                return true;
+                if (process.WaitForExit(5000)) return true;
+                try { process.Kill(true); }
+                catch { }
+                return false;
             }
             catch
             {
