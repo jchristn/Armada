@@ -652,11 +652,23 @@ namespace Armada.Server
                 TaskCompletionSource<int?> exitSource = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
                 object outputLock = new object();
                 StringBuilder output = new StringBuilder();
+                string? providerFailure = null;
+                bool isOpenCode = captain.Runtime == AgentRuntimeEnum.OpenCode;
 
                 runtime.OnStdoutReceived += (processId, line) =>
                 {
                     // stdout-only so CLI stderr banners (e.g. Codex's stdin/version preamble) stay out of the
                     // refinement transcript.
+                    if (isOpenCode && OpenCodeStreamEvent.TryParse(line, out OpenCodeStreamEvent? openCodeEvent) && openCodeEvent != null)
+                    {
+                        string? failureText = openCodeEvent.DescribeProviderFailure();
+                        if (failureText != null)
+                        {
+                            lock (outputLock) providerFailure = failureText;
+                            return;
+                        }
+                    }
+
                     string updatedContent;
                     lock (outputLock)
                     {
@@ -693,18 +705,28 @@ namespace Armada.Server
 
                 int? exitCode = await exitSource.Task.ConfigureAwait(false);
 
+                string? recordedFailure;
+                lock (outputLock) recordedFailure = providerFailure;
+
                 string finalContent = assistantMessage.Content ?? String.Empty;
-                try
+                if (!String.IsNullOrWhiteSpace(recordedFailure))
                 {
-                    if (File.Exists(finalMessageFilePath))
-                    {
-                        string artifact = await File.ReadAllTextAsync(finalMessageFilePath).ConfigureAwait(false);
-                        if (!String.IsNullOrWhiteSpace(artifact))
-                            finalContent = artifact.Trim();
-                    }
+                    finalContent = recordedFailure!;
                 }
-                catch
+                else
                 {
+                    try
+                    {
+                        if (File.Exists(finalMessageFilePath))
+                        {
+                            string artifact = await File.ReadAllTextAsync(finalMessageFilePath).ConfigureAwait(false);
+                            if (!String.IsNullOrWhiteSpace(artifact))
+                                finalContent = artifact.Trim();
+                        }
+                    }
+                    catch
+                    {
+                    }
                 }
 
                 if (String.IsNullOrWhiteSpace(finalContent) && exitCode.HasValue && exitCode.Value != 0)
@@ -729,7 +751,7 @@ namespace Armada.Server
                 if (CanReturnToActive(session, turn))
                 {
                     session.Status = ObjectiveRefinementSessionStatusEnum.Active;
-                    session.FailureReason = null;
+                    session.FailureReason = String.IsNullOrWhiteSpace(recordedFailure) ? null : recordedFailure;
                 }
                 session.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.ObjectiveRefinementSessions.UpdateAsync(session).ConfigureAwait(false);
@@ -935,10 +957,22 @@ namespace Armada.Server
             StringBuilder output = new StringBuilder();
             object outputLock = new object();
             int? processId = null;
+            string? providerFailure = null;
+            bool isOpenCode = captain.Runtime == AgentRuntimeEnum.OpenCode;
 
             runtime.OnStdoutReceived += (runtimeProcessId, line) =>
             {
                 // stdout-only so CLI stderr banners stay out of the captured refinement summary.
+                if (isOpenCode && OpenCodeStreamEvent.TryParse(line, out OpenCodeStreamEvent? openCodeEvent) && openCodeEvent != null)
+                {
+                    string? failureText = openCodeEvent.DescribeProviderFailure();
+                    if (failureText != null)
+                    {
+                        lock (outputLock) providerFailure = failureText;
+                        return;
+                    }
+                }
+
                 lock (outputLock)
                 {
                     BoundedTextBuffer.AppendLine(output, line, _MaxRefinementOutputChars);
@@ -970,23 +1004,35 @@ namespace Armada.Server
 
                 int? exitCode = await exitSource.Task.ConfigureAwait(false);
 
+                string? recordedFailure;
                 string finalOutput;
                 lock (outputLock)
                 {
+                    recordedFailure = providerFailure;
                     finalOutput = output.ToString().Trim();
                 }
 
-                try
+                if (!String.IsNullOrWhiteSpace(recordedFailure))
                 {
-                    if (File.Exists(finalMessageFilePath))
-                    {
-                        string artifact = await File.ReadAllTextAsync(finalMessageFilePath, token).ConfigureAwait(false);
-                        if (!String.IsNullOrWhiteSpace(artifact))
-                            finalOutput = artifact.Trim();
-                    }
+                    finalOutput = recordedFailure!;
+                    session.FailureReason = recordedFailure;
+                    session.LastUpdateUtc = DateTime.UtcNow;
+                    await _Database.ObjectiveRefinementSessions.UpdateAsync(session, token).ConfigureAwait(false);
                 }
-                catch
+                else
                 {
+                    try
+                    {
+                        if (File.Exists(finalMessageFilePath))
+                        {
+                            string artifact = await File.ReadAllTextAsync(finalMessageFilePath, token).ConfigureAwait(false);
+                            if (!String.IsNullOrWhiteSpace(artifact))
+                                finalOutput = artifact.Trim();
+                        }
+                    }
+                    catch
+                    {
+                    }
                 }
 
                 if (String.IsNullOrWhiteSpace(finalOutput) && exitCode.HasValue && exitCode.Value != 0)

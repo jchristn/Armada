@@ -2,6 +2,7 @@ namespace Armada.Core.Protocol
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json;
     using System.Text.Json.Serialization;
 
     /// <summary>
@@ -30,6 +31,11 @@ namespace Armada.Core.Protocol
 
         /// <summary>error.</summary>
         public const string TypeError = "error";
+
+        /// <summary>
+        /// Most characters kept from an untrusted provider message on an error event.
+        /// </summary>
+        public const int MaxProviderFailureMessageCharacters = 240;
 
         /// <summary>
         /// The OpenCode event types.
@@ -101,6 +107,68 @@ namespace Armada.Core.Protocol
 
             value = null;
             return false;
+        }
+
+        /// <summary>
+        /// Operator text for an error event. Uses <c>data.message</c> when it is present, otherwise the
+        /// top-level message, and appends the numeric status when one is present. Returns null when this
+        /// event is not an error. The text omits the session id, response body, headers, URL, and the rest
+        /// of the raw payload.
+        /// </summary>
+        /// <returns>The bounded failure text, or null.</returns>
+        public string? DescribeProviderFailure()
+        {
+            if (!String.Equals(Type, TypeError, StringComparison.Ordinal)) return null;
+
+            string message = "OpenCode provider request failed";
+            int? status = null;
+            if (!String.IsNullOrWhiteSpace(Error))
+            {
+                try
+                {
+                    OpenCodeProviderErrorDocument? document = JsonSerializer.Deserialize<OpenCodeProviderErrorDocument>(Error!);
+                    if (document != null)
+                    {
+                        string? raw = !String.IsNullOrWhiteSpace(document.Data?.Message) ? document.Data!.Message : document.Message;
+                        if (!String.IsNullOrWhiteSpace(raw)) message = raw!.Trim();
+                        if (document.Data != null && document.Data.StatusCode.HasValue) status = document.Data.StatusCode;
+                        else status = document.StatusCode;
+                    }
+                }
+                catch (JsonException)
+                {
+                }
+            }
+
+            if (message.Length > MaxProviderFailureMessageCharacters)
+                message = message.Substring(0, MaxProviderFailureMessageCharacters);
+            if (status.HasValue) return message + " (status " + status.Value.ToString() + ")";
+            return message;
+        }
+
+        #endregion
+
+        #region Private-Members
+
+        private sealed class OpenCodeProviderErrorDocument
+        {
+            [JsonPropertyName("message")]
+            public string? Message { get; set; } = null;
+
+            [JsonPropertyName("statusCode")]
+            public int? StatusCode { get; set; } = null;
+
+            [JsonPropertyName("data")]
+            public OpenCodeProviderErrorData? Data { get; set; } = null;
+        }
+
+        private sealed class OpenCodeProviderErrorData
+        {
+            [JsonPropertyName("message")]
+            public string? Message { get; set; } = null;
+
+            [JsonPropertyName("statusCode")]
+            public int? StatusCode { get; set; } = null;
         }
 
         #endregion

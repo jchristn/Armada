@@ -323,6 +323,7 @@ namespace Armada.Server
                 bool isCodex = captain.Runtime == AgentRuntimeEnum.Codex;
                 string? reportedModel = null;
                 string? claudeFinalReply = null;
+                string? openCodeProviderFailure = null;
 
                 // The in-process (ApiEndpoint) runtime reports tool activity on a typed channel; its stdout carries only the
                 // model's reply text, so reply text can never spoof a tool card and no diagnostic line leaks into the answer.
@@ -473,6 +474,13 @@ namespace Armada.Server
                         // OpenCode --format json streams typed events with a nested part. Surface assistant text and
                         // tool-call chips; the raw JSON envelope never leaks.
                         telemetry.ObserveOpenCode(openCodeEvent);
+                        string? providerFailure = openCodeEvent.DescribeProviderFailure();
+                        if (providerFailure != null)
+                        {
+                            lock (outputLock) openCodeProviderFailure = providerFailure;
+                            return;
+                        }
+
                         OpenCodePart? part = openCodeEvent.Part;
                         if (openCodeEvent.Type == OpenCodeStreamEvent.TypeText)
                         {
@@ -708,6 +716,11 @@ namespace Armada.Server
                 }
 
                 int? exitCode = await exitSource.Task.ConfigureAwait(false);
+
+                string? recordedFailure;
+                lock (outputLock) recordedFailure = openCodeProviderFailure;
+                if (!String.IsNullOrWhiteSpace(recordedFailure))
+                    return Failed(recordedFailure!);
 
                 string reply = String.Empty;
                 try
