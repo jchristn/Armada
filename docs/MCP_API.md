@@ -1510,7 +1510,7 @@ or voyage's **current** entry. One of the three is required (`InvalidArgument` o
 | `Unavailable` | `BlackBoxStoreUnavailable` | The storage target is unreachable |
 | `Unavailable` | `BlackBoxActionsUnavailable` | A confirmed run on a host with no action executor wired |
 | `Unavailable` | null | The black box is not available on this server (every tool on the stdio server) |
-| `InvalidArgument` | null, or `CollectionLimitExceeded` | A missing or invalid argument (format, audience, section, resolution, order, offset, length, a note body outside 1 to 8000 characters, a search query outside 1 to 200); more than 1000 `entryIds` is `CollectionLimitExceeded` |
+| `InvalidArgument` | null, or `CollectionLimitExceeded` | A missing or invalid argument (format, section, resolution, order, offset, length, a note body outside 1 to 8000 characters, a search query outside 1 to 200); more than 1000 `entryIds` is `CollectionLimitExceeded` |
 | `Forbidden` | null | The tool's permission level, or a recovery step whose tool the caller could not call directly |
 
 ```json
@@ -1549,12 +1549,12 @@ Start here when asked why something failed.
 |---|---|---|---|
 | `entryId` / `missionId` / `voyageId` | string | One of them | The entry, or the current entry of a mission or voyage |
 | `format` | string | No | `summary` (default, about 2 KB), `brief` or `json` |
-| `audience` | string | No | Brief audience for `format` `brief`: `agent` (default), `user` or `maintainer` |
 | `redactHosts` | boolean | No | Strip absolute paths, host names and user names from the brief (default false) |
 
 **Response:** `summary` returns a `BlackBoxDigest`: where it failed (phase, step, host, source file and method), how
 (mechanism), status before and after, why (the top findings), the triage verdict and confidence, and the top recovery
-paths. `brief` returns `{ EntryId, Audience, ContentType, Brief }` (the Markdown FIX THIS brief, rendered live).
+paths. `brief` returns `{ EntryId, ContentType, Brief }` (the Markdown FIX THIS brief, rendered live; there is one brief per
+entry).
 `json` returns the full `BlackBoxRecord`.
 
 ```json
@@ -1620,18 +1620,17 @@ paths. `brief` returns `{ EntryId, Audience, ContentType, Brief }` (the Markdown
 }
 ```
 
-`format` `brief` with `audience` `user`:
+`format` `brief`:
 
 ```json
 {
   "EntryId": "bbx_mvu1ftcv_zcdofOBmjhY",
-  "Audience": "User",
   "ContentType": "text/markdown",
-  "Brief": "# What went wrong: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nThis is what Armada recorded when the mission failed, and what you can do next.\n\n## Summary\n\n..."
+  "Brief": "# FIX THIS: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. ...\n\n## Summary\n\n..."
 }
 ```
 
-`InvalidArgument` for another `format` or `audience`; `NotFound` (`BlackBoxNotFound`) when there is no entry.
+`InvalidArgument` for another `format`; `NotFound` (`BlackBoxNotFound`) when there is no entry.
 
 ### read_blackbox_section
 
@@ -2261,7 +2260,7 @@ registered when the black box is running. Every read runs as the MCP caller thro
 
 | URI template | MIME type | Content |
 |---|---|---|
-| `armada://blackbox/{entryId}/brief.md` | `text/markdown` | The FIX THIS brief (agent audience), rendered live |
+| `armada://blackbox/{entryId}/brief.md` | `text/markdown` | The FIX THIS brief, rendered live |
 | `armada://blackbox/{entryId}/record.json` | `application/json` | The record, camelCase (the `record.json` serializer) |
 | `armada://blackbox/{entryId}/objects/{name}` | the object's | The first 64 KB of one object. URL-encode a name with a folder (`evidence%2Fgit-status.txt`). A text object longer than 64 KB ends with a `[first N of M bytes; read the rest with read_blackbox_object offset N]` line; a binary object is returned as a base64 `blob` |
 | `armada://missions/{missionId}/blackbox` | `application/json` | The digest (what `get_blackbox` `format` `summary` returns) of the mission's current entry, camelCase |
@@ -2286,7 +2285,7 @@ deleted, a corrupt object, an unavailable store) is `-32602` with the same `data
   "jsonrpc": "2.0",
   "result": {
     "resourceTemplates": [
-      { "uriTemplate": "armada://blackbox/{entryId}/brief.md", "name": "blackbox_brief", "description": "The FIX THIS brief (agent audience) of a black box entry, as Markdown.", "mimeType": "text/markdown" },
+      { "uriTemplate": "armada://blackbox/{entryId}/brief.md", "name": "blackbox_brief", "description": "The FIX THIS brief of a black box entry, as Markdown.", "mimeType": "text/markdown" },
       { "uriTemplate": "armada://blackbox/{entryId}/record.json", "name": "blackbox_record", "description": "The versioned record (record.json) of a black box entry.", "mimeType": "application/json" },
       { "uriTemplate": "armada://blackbox/{entryId}/objects/{name}", "name": "blackbox_object", "description": "The first 64 KB of one object of a black box entry (URL-encode a name with a folder, for example evidence%2Fgit-status.txt). Page a larger object with the read_blackbox_object tool.", "mimeType": "text/plain" },
       { "uriTemplate": "armada://missions/{missionId}/blackbox", "name": "mission_blackbox", "description": "The summary (digest) of a mission's current black box entry: where, how and why it failed, triage and the top recovery paths.", "mimeType": "application/json" }
@@ -2343,7 +2342,7 @@ prevent, fix Armada, compare or clean up, default explain) and `explain_blackbox
         "role": "user",
         "content": {
           "type": "text",
-          "text": "Review the black box for mission msn_mvu1fjp0_9Wd6Uuyp262 and fix it.\n\n1. Call get_blackbox {missionId: \"msn_mvu1fjp0_9Wd6Uuyp262\", format: \"summary\"} first.\n2. Read only the sections the goal needs with read_blackbox_section (Conflict, Workspace, Analysis), and page evidence with read_blackbox_object instead of loading it whole.\n3. Map the goal to tools: explain (get_blackbox summary or brief, sections, objects); fix or recover (run_blackbox_recovery with a ranked path: dry run, then confirm); prevent (apply_blackbox_recommendation: dry run, then confirm); fix Armada (get_blackbox {audience: maintainer}, then a mission on the Armada vessel with that brief); compare (list_blackbox_entries {fingerprint}, search_blackbox); clean up (resolve_blackbox, pin_blackbox, delete_blackbox_entries).\n\nRead the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did.\n"
+          "text": "Review the black box for mission msn_mvu1fjp0_9Wd6Uuyp262 and fix it.\n\n1. Call get_blackbox {missionId: \"msn_mvu1fjp0_9Wd6Uuyp262\", format: \"summary\"} first.\n2. Read only the sections the goal needs with read_blackbox_section (Conflict, Workspace, Analysis), and page evidence with read_blackbox_object instead of loading it whole.\n3. Map the goal to tools: explain (get_blackbox summary or brief, sections, objects); fix or recover (run_blackbox_recovery with a ranked path: dry run, then confirm); prevent (apply_blackbox_recommendation: dry run, then confirm); fix Armada (get_blackbox {format: brief} or get_blackbox_bundle, then a mission on the Armada vessel with that brief); compare (list_blackbox_entries {fingerprint}, search_blackbox); clean up (resolve_blackbox, pin_blackbox, delete_blackbox_entries).\n\nRead the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did.\n"
         }
       }
     ]
@@ -2379,7 +2378,7 @@ Agent: resolve_blackbox {entryId, resolution: "Resolved", note: "...", link: "ms
 | Explain it | `get_blackbox` (summary or brief), `read_blackbox_section`, `read_blackbox_object` |
 | Fix it, recover it | `run_blackbox_recovery` with a ranked path: dry run, then confirm |
 | Prevent it | `apply_blackbox_recommendation` (a configuration patch): dry run, then confirm |
-| Fix Armada | `get_blackbox {audience: "maintainer", format: "brief"}` or `get_blackbox_bundle`, then a mission on the Armada vessel with that brief |
+| Fix Armada | `get_blackbox {format: "brief"}` or `get_blackbox_bundle`, then a mission on the Armada vessel with that brief |
 | Compare | `list_blackbox_entries {fingerprint}`, `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `search_blackbox` |
 | Clean up | `resolve_blackbox`, `pin_blackbox`, `delete_blackbox_entries` |
 

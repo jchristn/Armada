@@ -270,7 +270,7 @@ Armada tests and merges each branch into main in order. Your project is built.
 Every failed mission or voyage gets a black box entry that says where it failed, how, why, and what to do next. Open
 the mission in the dashboard and read its Black box panel; **Copy FIX THIS** copies a brief you can paste straight into
 a coding agent, and **Ask Armada about this failure** opens Ask Armada with the question already written. Without the
-dashboard, `curl -H "Authorization: Bearer <token>" "http://localhost:7890/api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox/brief?audience=user"`
+dashboard, `curl -H "Authorization: Bearer <token>" "http://localhost:7890/api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox/brief"`
 returns the same brief as Markdown, and from Claude Code you can ask:
 
 > Why did mission msn_mvu1fjp0_9Wd6Uuyp262 fail?

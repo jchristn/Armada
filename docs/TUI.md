@@ -176,7 +176,7 @@ The Voyages tab pages on the server with the title and status filters and the us
 
 The Merge Queue tab filters by branch, target, status, vessel, and user, and sorts by branch, target, status, and priority. Process All (`P`) confirms first, Enqueue (`n`) takes branch, target, mission id, vessel, test command, and priority, and Delete Selected (`D`) removes the marked entries. The row menu has View Detail, Process (`p`), Cancel (`x`), Mission Diff (`d`) and Mission Log (`l`) when the entry has a mission, links, copy actions, View JSON, and Delete. An entry's page shows the Landing Preview for its branch, every field, and the test output in the log viewer.
 
-The Black Box tab (`/missions?tab=blackbox`, `g b`; the old `/blackbox` route redirects there) lists the failure entries the black box recorded, the dashboard's tab of the same name; see [BLACKBOX.md](BLACKBOX.md#tui) for its keys.
+The Black Box tab (`/missions?tab=blackbox`, `g b`; the old `/blackbox` route redirects there) lists the failure entries the black box recorded, the dashboard's tab of the same name; see [BLACKBOX.md](BLACKBOX.md#tui) for its keys. The Failure tab of the mission and voyage screens, and an entry's Brief tab, show the entry's single FIX THIS brief, the same one `c` copies and `x` exports.
 
 ### Handoffs between screens
 

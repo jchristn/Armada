@@ -62,9 +62,7 @@ is on; reads always return the decoded bytes. `sha256` is over the stored (encod
 | Name | Content type | Content |
 |---|---|---|
 | `record.json` | application/json | The `BlackBoxRecord` (section 4). At most 256 KB. |
-| `brief.md` | text/markdown | FIX THIS brief, agent audience: triage preamble, evidence, recovery paths, answer instructions. Targets 12 KB, at most 40 KB. |
-| `brief.user.md` | text/markdown | Operator audience: plain language, no stack frames or source pointers. |
-| `brief.maintainer.md` | text/markdown | Maintainer audience: build identity, source pointers, Armada improvement hypotheses. |
+| `brief.md` | text/markdown | The FIX THIS brief (one per entry): triage preamble, evidence, recovery paths, answer instructions. Targets 12 KB, at most 40 KB. |
 | `evidence/agent-output.txt` | text/plain | The captain's output (capture), or its last 256 KB (enrichment, when capture did not store it). |
 | `evidence/mission.log` | text/plain | The last 256 KB of the mission log, starting at a line. |
 | `evidence/diff.patch` | text/x-diff | The mission's diff (its diff snapshot, or the worktree against the target). |
@@ -80,6 +78,9 @@ is on; reads always return the decoded bytes. `sha256` is over the stored (encod
 Evidence objects are at most `blackBox.storage.maxEvidenceObjectBytes` (default 1 MB) uncompressed; larger content
 keeps its head and tail around a marker line `[... cut by Armada: N bytes originally, head and tail kept ...]`. The
 set of evidence objects grows with enrichment; consumers list objects instead of assuming names.
+Entries written by v1.2.0 pre-release builds may also hold `brief.user.md` and `brief.maintainer.md` (text/markdown)
+from the removed brief audiences. They are neither migrated nor deleted and read like any other object; new entries
+write only `brief.md`.
 
 ## 4. record.json sections and fields
 
@@ -671,7 +672,7 @@ Other shapes, defined in `src/Armada.Core/Models` and shown with examples in [RE
 
 | Shape | Returned by |
 |---|---|
-| `BlackBoxBriefResult` (`entryId`, `audience`, `contentType`, `brief`) | MCP `get_blackbox {format: "brief"}`, WebSocket `blackbox.brief`. REST brief routes return the Markdown itself (`text/markdown; charset=utf-8`, `ETag` the SHA-256). |
+| `BlackBoxBriefResult` (`entryId`, `contentType`, `brief`) | MCP `get_blackbox {format: "brief"}`, WebSocket `blackbox.brief`. REST brief routes return the Markdown itself (`text/markdown; charset=utf-8`, `ETag` the SHA-256). |
 | `BlackBoxRecoveryRunResult` (`entryId`, `pathId`, `dryRun`, `confirmToken`, `confirmTokenExpiresUtc`, `plan`, `stepResults`, `succeeded`, `refused`, `unmetPreconditions`, `message`) | Recovery dry runs and runs |
 | `BlackBoxRecommendationApplyResult` | Recommendation dry runs and applies |
 | `BlackBoxHotspot` (`vesselId`, `directory`, `fileCount`, `entryCount`, `lastSeenUtc`) | Hotspot pages |

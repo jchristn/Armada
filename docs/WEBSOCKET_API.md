@@ -1273,7 +1273,7 @@ Commands are sent via the `command` route. Each command returns a `command.resul
 | **Backup** | `backup` | Create a backup ZIP | optional `outputPath` |
 | | `restore` | Restore from a backup ZIP | `filePath` |
 | **Black Box** | `blackbox.get` | Get a black box entry (with its record by default) | `id` (`msn_`, `vyg_` or `bbx_`) or `data.entryId` / `data.missionId` / `data.voyageId`; optional `data.includeRecord` |
-| | `blackbox.brief` | Get the Markdown FIX THIS brief of an entry | as `blackbox.get`; optional `data.audience`, `data.redactHosts` |
+| | `blackbox.brief` | Get the Markdown FIX THIS brief of an entry | as `blackbox.get`; optional `data.redactHosts` |
 | | `blackbox.list` | One page of black box entries, newest first | optional `data` (BlackBoxEnumerateRequest filters), `query` |
 
 Any other `action` is rejected with `command.error` code `UnknownAction` (`Unknown action: <action>`).
@@ -2919,7 +2919,7 @@ Restore Armada from a previously created backup ZIP file.
 Read-only mirrors of the black box read routes and tools ([REST_API.md](REST_API.md#black-box),
 [MCP_API.md](MCP_API.md#black-box)). Global administrators only, like every command; tenant admins and regular users
 read black box entries over REST or MCP, which scope them. Replies are camelCase. Errors: `NotFound` for a missing
-entry (or a mission or voyage without one), `InvalidArgument` for a bad audience, filter or body, `Conflict` while the
+entry (or a mission or voyage without one), `InvalidArgument` for a missing target, a bad filter or body, `Conflict` while the
 entry is being deleted, and `Unavailable` when the black box is not running or its store is unreachable.
 
 #### blackbox.get
@@ -3001,7 +3001,7 @@ Get the Markdown FIX THIS brief of one entry, rendered live. The entry is named 
   "Route": "command",
   "action": "blackbox.brief",
   "id": "bbx_mvu1ftcv_zcdofOBmjhY",
-  "data": { "audience": "user", "redactHosts": false }
+  "data": { "redactHosts": false }
 }
 ```
 
@@ -3009,7 +3009,6 @@ Get the Markdown FIX THIS brief of one entry, rendered live. The entry is named 
 |---|---|---|---|
 | `action` | string | Yes | `"blackbox.brief"` |
 | `id` or `data.entryId` / `data.missionId` / `data.voyageId` | string | Yes | The entry |
-| `data.audience` | string | No | `agent` (default), `user` or `maintainer` |
 | `data.redactHosts` | boolean | No | Strip absolute paths, host names and user names (default `false`) |
 
 **Response:**
@@ -3020,9 +3019,8 @@ Get the Markdown FIX THIS brief of one entry, rendered live. The entry is named 
   "action": "blackbox.brief",
   "data": {
     "entryId": "bbx_mvu1ftcv_zcdofOBmjhY",
-    "audience": "User",
     "contentType": "text/markdown",
-    "brief": "# What went wrong: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nThis is what Armada recorded when the mission failed, and what you can do next.\n\n## Summary\n\n..."
+    "brief": "# FIX THIS: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. ...\n\n## Summary\n\n..."
   }
 }
 ```
@@ -3031,7 +3029,7 @@ Get the Markdown FIX THIS brief of one entry, rendered live. The entry is named 
 {
   "type": "command.error",
   "action": "blackbox.brief",
-  "error": "audience must be agent, user or maintainer.",
+  "error": "Give a missionId, voyageId or entryId.",
   "code": "InvalidArgument"
 }
 ```

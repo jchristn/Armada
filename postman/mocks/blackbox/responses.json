@@ -31,8 +31,8 @@
      "Resolution": "Open",
      "Pinned": false,
      "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
-     "TotalBytes": 9635,
-     "ObjectCount": 5,
+     "TotalBytes": 5899,
+     "ObjectCount": 3,
      "CreatedUtc": "2026-10-29T21:11:05.310433Z",
      "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
     }
@@ -140,18 +140,8 @@
    "PageNumber": 1,
    "PageSize": 25,
    "TotalPages": 1,
-   "TotalRecords": 5,
+   "TotalRecords": 3,
    "Objects": [
-    {
-     "Name": "brief.maintainer.md",
-     "ContentType": "text/markdown",
-     "ContentEncoding": "gzip",
-     "SizeBytes": 2215,
-     "UncompressedBytes": 5448,
-     "Sha256": "9cbfd53f78506886f69ab7902067d0e6865e75481805247c32ed908f25462ccf",
-     "IsMissing": false,
-     "CreatedUtc": "2026-10-29T21:11:05.436129Z"
-    },
     {
      "Name": "brief.md",
      "ContentType": "text/markdown",
@@ -161,16 +151,6 @@
      "Sha256": "aa6e439179e77986aa71d896366db972e6ced280a0d4706f4074d10bb95be595",
      "IsMissing": false,
      "CreatedUtc": "2026-10-29T21:11:05.435857Z"
-    },
-    {
-     "Name": "brief.user.md",
-     "ContentType": "text/markdown",
-     "ContentEncoding": "gzip",
-     "SizeBytes": 1521,
-     "UncompressedBytes": 3584,
-     "Sha256": "dfa8f87bf36b4f29ba2daf26684d3de5aeb8ec43734c11ca59612919840ddab7",
-     "IsMissing": false,
-     "CreatedUtc": "2026-10-29T21:11:05.436002Z"
     },
     {
      "Name": "evidence/events.json",
@@ -227,8 +207,8 @@
      "Resolution": "Open",
      "Pinned": false,
      "ReasonExcerpt": "Mission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
-     "TotalBytes": 9199,
-     "ObjectCount": 5,
+     "TotalBytes": 5463,
+     "ObjectCount": 3,
      "CreatedUtc": "2026-10-29T21:11:05.382585Z",
      "ExpiresUtc": "2027-04-27T21:11:05.382585Z"
     }
@@ -264,8 +244,8 @@
    "Resolution": "Open",
    "Pinned": false,
    "StorageTarget": "Database",
-   "TotalBytes": 9635,
-   "ObjectCount": 5,
+   "TotalBytes": 5899,
+   "ObjectCount": 3,
    "SchemaVersion": 1,
    "RulesVersion": 1,
    "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
@@ -483,12 +463,6 @@
   "headers": {},
   "text": "# FIX THIS: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. It records where, how and why a mission failed, with evidence.\n\nBefore changing anything, triage the failure. Decide which one it is, and say why, quoting the evidence below:\n\n1. **UserConfig**: the user's Armada configuration (vessel, captain, persona, landing mode, commands).\n2. **MissionBrief**: the mission brief or dependency ordering.\n3. **Transient**: a transient condition (provider, network, usage limit); retrying is likely to work.\n4. **ArmadaDefect**: a defect in Armada itself.\n5. **External**: an operator action or something outside Armada.\n\nThen act: for UserConfig or MissionBrief, propose the exact change; for Transient, the retry; for ArmadaDefect, locate the failure site in the Armada source at the build commit below and propose a fix with a test. Quote evidence, not guesses. Use only the recovery paths listed here when you act on the Armada installation, and confirm anything marked data-loss risk with the user first.\n\n## Summary\n\nMission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).\n\n- Mission failed during **Execution** at step **ProcessCrash** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n## Identity\n\n- Entry: bbx_mvu1ftcv_zcdofOBmjhY (attempt 1)\n- Mission: msn_mvu1fjp0_9Wd6Uuyp262\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Repository: /Users/alex/src/demo-api\n- Target branch: main\n\n## Where it failed\n\n- Phase / step: Execution / ProcessCrash\n- Host: Admiral\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n\n## How it failed\n\nReason:\n\n```\nCaptain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n## Status timeline\n\n- 2026-10-29 21:11:05Z Failed (failure write)\n\n## Why\n\n- The captain's process exited with code unknown before finishing. (rule BBX-EXEC-006, confidence Medium) Evidence: mechanism.exitCode, evidence/agent-output.txt\n- Triage votes: BBX-EXEC-006=Transientx1\n\n## Workspace\n\n- Target: main\n- Inspected on: Admiral\n- Target movement: Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n\n## Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- RequiresReview: `False` (Mission)\n- WaitForVoyageWorkers: `False` (Mission)\n- MissionMode: `Implementation` (Mission)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n## Recovery\n\n### 1. Restart the mission (bbx-exec-006.restart)\n\nRisk: Low. Expected: A fresh process runs the mission.\n\n1. Restart msn_mvu1fjp0_9Wd6Uuyp262.\n   - MCP: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}`\n   - CLI: `armada mission restart msn_mvu1fjp0_9Wd6Uuyp262`\n   - REST: `POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart`\n\nAction: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}` (run it with run_blackbox_recovery, dry run first)\n\n## Evidence\n\n- `evidence/events.json` (238 bytes): [   {     \"eventId\": \"evt_mvu1ftcq_iIAw5pelHTf\",     \"eventType\": \"mission.status_changed\",     \"message\": \"Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\",     \"createdUtc ... (38 more characters in record.json)\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\n\nRead an object with MCP `read_blackbox_object {\"entryId\": \"bbx_mvu1ftcv_zcdofOBmjhY\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/bbx_mvu1ftcv_zcdofOBmjhY/objects/<name>`.\n\n## Related failures\n\n- Fingerprint: 9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead\n- Same failure in the last 30 days: 1\n\n## Notes on this record\n\n- Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.\n- Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n- Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known.\n\n## Your answer\n\nState the triage verdict (UserConfig, MissionBrief, Transient, ArmadaDefect or External) and the evidence for it, the root cause, the fix, and how to verify it. If you change the Armada installation, use the recovery paths above and annotate the entry with `annotate_blackbox` when done.\n"
  },
- "missionBriefUser": {
-  "code": 200,
-  "contentType": "text/markdown; charset=utf-8",
-  "headers": {},
-  "text": "# What went wrong: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nThis is what Armada recorded when the mission failed, and what you can do next.\n\n## Summary\n\nMission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).\n\n- Mission failed during **Execution** at step **ProcessCrash** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n## What you can do\n\n### 1. Restart the mission\n\nRisk: Low. Expected: A fresh process runs the mission.\n\n1. Restart msn_mvu1fjp0_9Wd6Uuyp262.\n   - MCP: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}`\n   - CLI: `armada mission restart msn_mvu1fjp0_9Wd6Uuyp262`\n\n## Why\n\n- The captain's process exited with code unknown before finishing. (medium confidence)\n\n## Where it failed\n\n- Phase / step: Execution / ProcessCrash\n- Host: Admiral\n\n## How it failed\n\nReason:\n\n```\nCaptain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n## Workspace\n\n- Target: main\n- Inspected on: Admiral\n- Target movement: Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n\n## Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- RequiresReview: `False` (Mission)\n- WaitForVoyageWorkers: `False` (Mission)\n- MissionMode: `Implementation` (Mission)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n## Evidence\n\n- `evidence/events.json` (238 bytes)\n\n## Related failures\n\n- Same failure in the last 30 days: 1\n\n## Identity\n\n- Entry: bbx_mvu1ftcv_zcdofOBmjhY (attempt 1)\n- Mission: msn_mvu1fjp0_9Wd6Uuyp262\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Target branch: main\n\n## Notes on this record\n\n- Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.\n- Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n- Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known.\n\n"
- },
  "missionEntries": {
   "code": 200,
   "contentType": "application/json",
@@ -521,8 +495,8 @@
      "Resolution": "Open",
      "Pinned": false,
      "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
-     "TotalBytes": 9635,
-     "ObjectCount": 5,
+     "TotalBytes": 5899,
+     "ObjectCount": 3,
      "CreatedUtc": "2026-10-29T21:11:05.310433Z",
      "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
     }
@@ -562,8 +536,8 @@
      "Resolution": "Open",
      "Pinned": false,
      "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
-     "TotalBytes": 9635,
-     "ObjectCount": 5,
+     "TotalBytes": 5899,
+     "ObjectCount": 3,
      "CreatedUtc": "2026-10-29T21:11:05.310433Z",
      "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
     }
@@ -639,8 +613,8 @@
    "Resolution": "Open",
    "Pinned": false,
    "StorageTarget": "Database",
-   "TotalBytes": 9199,
-   "ObjectCount": 5,
+   "TotalBytes": 5463,
+   "ObjectCount": 3,
    "SchemaVersion": 1,
    "RulesVersion": 1,
    "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
@@ -689,8 +663,8 @@
    "Resolution": "Open",
    "Pinned": false,
    "StorageTarget": "Database",
-   "TotalBytes": 9635,
-   "ObjectCount": 5,
+   "TotalBytes": 5899,
+   "ObjectCount": 3,
    "SchemaVersion": 1,
    "RulesVersion": 1,
    "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
@@ -906,7 +880,7 @@
   "code": 200,
   "contentType": "text/markdown; charset=utf-8",
   "headers": {},
-  "text": "# Armada maintainer brief: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nThis brief is for an Armada maintainer. Rank the Armada improvements below, check each hypothesis against the source at the build commit, and write each accepted one as an Armada mission brief with a test.\n\n## Code site and triage\n\n- Site: unknown (no caller site recorded)\n- Phase / step: Execution / ProcessCrash (kind Crash)\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n- Triage: Transient (confidence Low)\n- Votes: BBX-EXEC-006=Transientx1\n- Rules: BBX-EXEC-006 (rules version 1)\n- Fingerprint: 9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead\n- Occurrences in the last 30 days: 1\n\n## Summary\n\nMission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).\n\n- Mission failed during **Execution** at step **ProcessCrash** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n## Why\n\n- The captain's process exited with code unknown before finishing. (rule BBX-EXEC-006, confidence Medium) Evidence: mechanism.exitCode, evidence/agent-output.txt\n- Triage votes: BBX-EXEC-006=Transientx1\n\n## How it failed\n\nReason:\n\n```\nCaptain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n## Where it failed\n\n- Phase / step: Execution / ProcessCrash\n- Host: Admiral\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n\n## Status timeline\n\n- 2026-10-29 21:11:05Z Failed (failure write)\n\n## Workspace\n\n- Target: main\n- Inspected on: Admiral\n- Target movement: Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n\n## Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- RequiresReview: `False` (Mission)\n- WaitForVoyageWorkers: `False` (Mission)\n- MissionMode: `Implementation` (Mission)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n## Recovery\n\n### 1. Restart the mission (bbx-exec-006.restart)\n\nRisk: Low. Expected: A fresh process runs the mission.\n\n1. Restart msn_mvu1fjp0_9Wd6Uuyp262.\n   - MCP: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}`\n   - CLI: `armada mission restart msn_mvu1fjp0_9Wd6Uuyp262`\n   - REST: `POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart`\n\nAction: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}` (run it with run_blackbox_recovery, dry run first)\n\n## Evidence\n\n- `evidence/events.json` (238 bytes): [   {     \"eventId\": \"evt_mvu1ftcq_iIAw5pelHTf\",     \"eventType\": \"mission.status_changed\",     \"message\": \"Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\",     \"createdUtc ... (38 more characters in record.json)\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\n\nRead an object with MCP `read_blackbox_object {\"entryId\": \"bbx_mvu1ftcv_zcdofOBmjhY\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/bbx_mvu1ftcv_zcdofOBmjhY/objects/<name>`.\n\n## Related failures\n\n- Fingerprint: 9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead\n- Same failure in the last 30 days: 1\n\n## Identity\n\n- Entry: bbx_mvu1ftcv_zcdofOBmjhY (attempt 1)\n- Mission: msn_mvu1fjp0_9Wd6Uuyp262\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Repository: {path}\n- Target branch: main\n\n## Notes on this record\n\n- Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.\n- Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n- Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known.\n\n"
+  "text": "# FIX THIS: Retry landings deferred on a dirty checkout (mission msn_mvu1fjp0_9Wd6Uuyp262)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. It records where, how and why a mission failed, with evidence.\n\nBefore changing anything, triage the failure. Decide which one it is, and say why, quoting the evidence below:\n\n1. **UserConfig**: the user's Armada configuration (vessel, captain, persona, landing mode, commands).\n2. **MissionBrief**: the mission brief or dependency ordering.\n3. **Transient**: a transient condition (provider, network, usage limit); retrying is likely to work.\n4. **ArmadaDefect**: a defect in Armada itself.\n5. **External**: an operator action or something outside Armada.\n\nThen act: for UserConfig or MissionBrief, propose the exact change; for Transient, the retry; for ArmadaDefect, locate the failure site in the Armada source at the build commit below and propose a fix with a test. Quote evidence, not guesses. Use only the recovery paths listed here when you act on the Armada installation, and confirm anything marked data-loss risk with the user first.\n\n## Summary\n\nMission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).\n\n- Mission failed during **Execution** at step **ProcessCrash** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n## Identity\n\n- Entry: bbx_mvu1ftcv_zcdofOBmjhY (attempt 1)\n- Mission: msn_mvu1fjp0_9Wd6Uuyp262\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Repository: {path}\n- Target branch: main\n\n## Where it failed\n\n- Phase / step: Execution / ProcessCrash\n- Host: Admiral\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n\n## How it failed\n\nReason:\n\n```\nCaptain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n## Status timeline\n\n- 2026-10-29 21:11:05Z Failed (failure write)\n\n## Why\n\n- The captain's process exited with code unknown before finishing. (rule BBX-EXEC-006, confidence Medium) Evidence: mechanism.exitCode, evidence/agent-output.txt\n- Triage votes: BBX-EXEC-006=Transientx1\n\n## Workspace\n\n- Target: main\n- Inspected on: Admiral\n- Target movement: Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n\n## Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- RequiresReview: `False` (Mission)\n- WaitForVoyageWorkers: `False` (Mission)\n- MissionMode: `Implementation` (Mission)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n## Recovery\n\n### 1. Restart the mission (bbx-exec-006.restart)\n\nRisk: Low. Expected: A fresh process runs the mission.\n\n1. Restart msn_mvu1fjp0_9Wd6Uuyp262.\n   - MCP: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}`\n   - CLI: `armada mission restart msn_mvu1fjp0_9Wd6Uuyp262`\n   - REST: `POST /api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/restart`\n\nAction: `restart_mission {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"}` (run it with run_blackbox_recovery, dry run first)\n\n## Evidence\n\n- `evidence/events.json` (238 bytes): [   {     \"eventId\": \"evt_mvu1ftcq_iIAw5pelHTf\",     \"eventType\": \"mission.status_changed\",     \"message\": \"Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\",     \"createdUtc ... (38 more characters in record.json)\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\n\nRead an object with MCP `read_blackbox_object {\"entryId\": \"bbx_mvu1ftcv_zcdofOBmjhY\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/bbx_mvu1ftcv_zcdofOBmjhY/objects/<name>`.\n\n## Related failures\n\n- Fingerprint: 9eab364095ddc8148f79ed0e7a81303bb19a5f115eba491962241d1a1403cead\n- Same failure in the last 30 days: 1\n\n## Notes on this record\n\n- Captured by the backfill after the fact; the failure site's volatile facts (git state, exception, command output) are missing.\n- Target movement omitted: the mission's start commit was not recorded, so the commits that landed on the target since it started are unknown.\n- Concurrent overlap skipped: neither the conflicted files nor the mission's changed files are known.\n\n## Your answer\n\nState the triage verdict (UserConfig, MissionBrief, Transient, ArmadaDefect or External) and the evidence for it, the root cause, the fix, and how to verify it. If you change the Armada installation, use the recovery paths above and annotate the entry with `annotate_blackbox` when done.\n"
  },
  "sectionBogus": {
   "code": 400,
@@ -932,18 +906,8 @@
    "PageNumber": 1,
    "PageSize": 25,
    "TotalPages": 1,
-   "TotalRecords": 5,
+   "TotalRecords": 3,
    "Objects": [
-    {
-     "Name": "brief.maintainer.md",
-     "ContentType": "text/markdown",
-     "ContentEncoding": "gzip",
-     "SizeBytes": 2215,
-     "UncompressedBytes": 5448,
-     "Sha256": "9cbfd53f78506886f69ab7902067d0e6865e75481805247c32ed908f25462ccf",
-     "IsMissing": false,
-     "CreatedUtc": "2026-10-29T21:11:05.436129Z"
-    },
     {
      "Name": "brief.md",
      "ContentType": "text/markdown",
@@ -953,16 +917,6 @@
      "Sha256": "aa6e439179e77986aa71d896366db972e6ced280a0d4706f4074d10bb95be595",
      "IsMissing": false,
      "CreatedUtc": "2026-10-29T21:11:05.435857Z"
-    },
-    {
-     "Name": "brief.user.md",
-     "ContentType": "text/markdown",
-     "ContentEncoding": "gzip",
-     "SizeBytes": 1521,
-     "UncompressedBytes": 3584,
-     "Sha256": "dfa8f87bf36b4f29ba2daf26684d3de5aeb8ec43734c11ca59612919840ddab7",
-     "IsMissing": false,
-     "CreatedUtc": "2026-10-29T21:11:05.436002Z"
     },
     {
      "Name": "evidence/events.json",
@@ -1304,8 +1258,8 @@
      "Resolution": "Open",
      "Pinned": false,
      "ReasonExcerpt": "Mission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
-     "TotalBytes": 9199,
-     "ObjectCount": 5,
+     "TotalBytes": 5463,
+     "ObjectCount": 3,
      "CreatedUtc": "2026-10-29T21:11:05.382585Z",
      "ExpiresUtc": "2027-04-27T21:11:05.382585Z"
     },
@@ -1330,8 +1284,8 @@
      "Resolution": "Open",
      "Pinned": false,
      "ReasonExcerpt": "Cancelled because dependency msn_mvu1fjp0_9Wd6Uuyp262 failed.",
-     "TotalBytes": 9475,
-     "ObjectCount": 5,
+     "TotalBytes": 5739,
+     "ObjectCount": 3,
      "CreatedUtc": "2026-10-29T21:11:05.377352Z",
      "ExpiresUtc": "2027-04-27T21:11:05.377352Z"
     },
@@ -1356,8 +1310,8 @@
      "Resolution": "Open",
      "Pinned": false,
      "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
-     "TotalBytes": 9635,
-     "ObjectCount": 5,
+     "TotalBytes": 5899,
+     "ObjectCount": 3,
      "CreatedUtc": "2026-10-29T21:11:05.310433Z",
      "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
     }
@@ -1397,8 +1351,8 @@
      "Resolution": "Open",
      "Pinned": false,
      "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
-     "TotalBytes": 9635,
-     "ObjectCount": 5,
+     "TotalBytes": 5899,
+     "ObjectCount": 3,
      "CreatedUtc": "2026-10-29T21:11:05.310433Z",
      "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
     }
@@ -1437,8 +1391,8 @@
      "Resolution": "Open",
      "Pinned": false,
      "ReasonExcerpt": "Mission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
-     "TotalBytes": 9199,
-     "ObjectCount": 5,
+     "TotalBytes": 5463,
+     "ObjectCount": 3,
      "CreatedUtc": "2026-10-29T21:11:05.382585Z",
      "ExpiresUtc": "2027-04-27T21:11:05.382585Z"
     },
@@ -1463,8 +1417,8 @@
      "Resolution": "Open",
      "Pinned": false,
      "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
-     "TotalBytes": 9635,
-     "ObjectCount": 5,
+     "TotalBytes": 5899,
+     "ObjectCount": 3,
      "CreatedUtc": "2026-10-29T21:11:05.310433Z",
      "ExpiresUtc": "2027-04-27T21:11:05.310433Z"
     }
@@ -1480,7 +1434,7 @@
    "Format": "Markdown",
    "EntryCount": 3,
    "FingerprintCount": 3,
-   "Content": "# Armada black box maintainer bundle\n\nThese are 3 Armada black box entries in 3 failure modes, grouped by fingerprint (most frequent first). You are asked to improve Armada itself. Rank the Armada improvements these failures suggest by impact (occurrences, severity, triage ArmadaDefect first), check each hypothesis against the Armada source at the build commits listed, and discard the ones the evidence does not support. Write each accepted improvement as an Armada mission brief: a title, the failure modes and entry ids it fixes, the code sites (file and method), the change, and a test that reproduces the failure (a black box fixture under src/Test.Shared/Fixtures/BlackBox when it fits). If a failure needs a new advisor rule, write it in BlackBoxRuleCatalog format (id, match, why, recommendation, recovery paths, triage vote).\n\n## Voyage / SettlementFailed / Crash (1 entry)\n\n- Fingerprint: bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329\n- First seen 2026-10-29 21:11:05Z, last seen 2026-10-29 21:11:05Z\n- Armada versions: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be\n- Triage: Transient; rules: BBX-EXEC-006, BBX-VOY-001\n\n### Armada maintainer brief: Harden landing retries (voyage vyg_mvu1fjoz_xO6urNkcaHp)\n\nThis brief is for an Armada maintainer. Rank the Armada improvements below, check each hypothesis against the source at the build commit, and write each accepted one as an Armada mission brief with a test.\n\n#### Code site and triage\n\n- Site: unknown (no caller site recorded)\n- Phase / step: Voyage / SettlementFailed (kind Crash)\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n- Triage: Transient (confidence Low)\n- Votes: BBX-EXEC-006=Transientx1\n- Rules: BBX-EXEC-006, BBX-VOY-001 (rules version 1)\n- Fingerprint: bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329\n- Occurrences in the last 30 days: 1\n\n#### Summary\n\nVoyage \"Harden landing retries\" (vyg_mvu1fjoz_xO6urNkcaHp) failed during Voyage at step SettlementFailed (kind Crash). The captain's process exited with code unknown before finishing. The voyage stopped at step SettlementFailed (no halt reason recorded); start with the black box of msn_mvu1fjp0_9Wd6Uuyp262. Triage: Transient (low confidence). Suggested next step: recover the root mission first (bbx-voy-001.recover-root).\n\n- Voyage failed during **Voyage** at step **SettlementFailed** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n#### Why\n\n- The captain's process exited with code unknown before finishing. (rule BBX-EXEC-006, confidence Medium) Evidence: mechanism.exitCode, evidence/agent-output.txt\n- The voyage stopped at step SettlementFailed (no halt reason recorded); start with the black box of msn_mvu1fjp0_9Wd6Uuyp262. (rule BBX-VOY-001, confidence Medium) Evidence: voyage.cascadeRootMissionId, voyage.failedMissionEntryIds\n- Triage votes: BBX-EXEC-006=Transientx1\n\n#### How it failed\n\nReason:\n\n```\nMission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n#### Where it failed\n\n- Phase / step: Voyage / SettlementFailed\n- Host: Admiral\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n\n#### Status timeline\n\n- 2026-10-29 21:11:05Z Failed (failure write)\n\n#### Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n#### Recovery\n\n### 1. Recover the root mission first (bbx-voy-001.recover-root)\n\nRisk: Low. Expected: The voyage continues once its root mission lands.\n\n1. Open get_blackbox {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"} and follow its recovery paths.\n\n#### Evidence\n\n- `evidence/events.json` (465 bytes): [   {     \"eventId\": \"evt_mvu1ftep_XguRXMHez86\",     \"eventType\": \"mission.status_changed\",     \"message\": \"Mission Cancelled (DependencyCancelled): Document landing retries\",     \"createdUtc\": \"2026- ... (265 more characters in record.json)\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Cancelled (DependencyCancelled): Document landing retries\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\n\nRead an object with MCP `read_blackbox_object {\"entryId\": \"bbx_mvu1ftew_95PyT7WmtrV\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/bbx_mvu1ftew_95PyT7WmtrV/objects/<name>`.\n\n#### Related failures\n\n- Fingerprint: bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329\n- Same failure in the last 30 days: 1\n\n#### Identity\n\n- Entry: bbx_mvu1ftew_95PyT7WmtrV (attempt 1)\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Repository: {path}\n- Target branch: main\n\n#### Notes on this record\n\n- Captured by the backfill; the failure site's volatile facts are missing.\n\n\n\n(trimmed for the example)\n",
+   "Content": "# Armada black box maintainer bundle\n\nThese are 3 Armada black box entries in 3 failure modes, grouped by fingerprint (most frequent first). You are asked to improve Armada itself. Rank the Armada improvements these failures suggest by impact (occurrences, severity, triage ArmadaDefect first), check each hypothesis against the Armada source at the build commits listed, and discard the ones the evidence does not support. Write each accepted improvement as an Armada mission brief: a title, the failure modes and entry ids it fixes, the code sites (file and method), the change, and a test that reproduces the failure (a black box fixture under src/Test.Shared/Fixtures/BlackBox when it fits). If a failure needs a new advisor rule, write it in BlackBoxRuleCatalog format (id, match, why, recommendation, recovery paths, triage vote).\n\n## Voyage / SettlementFailed / Crash (1 entry)\n\n- Fingerprint: bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329\n- First seen 2026-10-29 21:11:05Z, last seen 2026-10-29 21:11:05Z\n- Armada versions: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be\n- Triage: Transient; rules: BBX-EXEC-006, BBX-VOY-001\n\n### FIX THIS: Harden landing retries (voyage vyg_mvu1fjoz_xO6urNkcaHp)\n\nYou are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. It records where, how and why a voyage failed, with evidence.\n\nBefore changing anything, triage the failure. Decide which one it is, and say why, quoting the evidence below:\n\n1. **UserConfig**: the user's Armada configuration (vessel, captain, persona, landing mode, commands).\n2. **MissionBrief**: the mission brief or dependency ordering.\n3. **Transient**: a transient condition (provider, network, usage limit); retrying is likely to work.\n4. **ArmadaDefect**: a defect in Armada itself.\n5. **External**: an operator action or something outside Armada.\n\nThen act: for UserConfig or MissionBrief, propose the exact change; for Transient, the retry; for ArmadaDefect, locate the failure site in the Armada source at the build commit below and propose a fix with a test. Quote evidence, not guesses. Use only the recovery paths listed here when you act on the Armada installation, and confirm anything marked data-loss risk with the user first.\n\n#### Summary\n\nVoyage \"Harden landing retries\" (vyg_mvu1fjoz_xO6urNkcaHp) failed during Voyage at step SettlementFailed (kind Crash). The captain's process exited with code unknown before finishing. The voyage stopped at step SettlementFailed (no halt reason recorded); start with the black box of msn_mvu1fjp0_9Wd6Uuyp262. Triage: Transient (low confidence). Suggested next step: recover the root mission first (bbx-voy-001.recover-root).\n\n- Voyage failed during **Voyage** at step **SettlementFailed** (kind Crash).\n- Status: unknown -> Failed.\n- Triage: Transient (confidence Low).\n- Captured by the backfill after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n\n#### Identity\n\n- Entry: bbx_mvu1ftew_95PyT7WmtrV (attempt 1)\n- Voyage: vyg_mvu1fjoz_xO6urNkcaHp (Harden landing retries)\n- Vessel: demo-api (vsl_mvu1ffz5_4Vb0gY5fhKv)\n- Repository: {path}\n- Target branch: main\n\n#### Where it failed\n\n- Phase / step: Voyage / SettlementFailed\n- Host: Admiral\n- Armada build: 1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be (commit 5de469cff2709733b1ffb68fbc45d1303e9e41be)\n\n#### How it failed\n\nReason:\n\n```\nMission msn_mvu1fjp0_9Wd6Uuyp262 failed: Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.\n```\n\n\n#### Status timeline\n\n- 2026-10-29 21:11:05Z Failed (failure write)\n\n#### Why\n\n- The captain's process exited with code unknown before finishing. (rule BBX-EXEC-006, confidence Medium) Evidence: mechanism.exitCode, evidence/agent-output.txt\n- The voyage stopped at step SettlementFailed (no halt reason recorded); start with the black box of msn_mvu1fjp0_9Wd6Uuyp262. (rule BBX-VOY-001, confidence Medium) Evidence: voyage.cascadeRootMissionId, voyage.failedMissionEntryIds\n- Triage votes: BBX-EXEC-006=Transientx1\n\n#### Configuration in effect\n\n- LandingMode: `MergeAndPush` (Global)\n- AutoPush: `True` (Default)\n- AutoMergePullRequests: `False` (Global)\n- BranchCleanupPolicy: `LocalOnly` (Global)\n- AllowConcurrentMissions: `False` (Vessel)\n- RequirePassingChecksToLand: `False` (Vessel)\n- DefinitionOfDoneEnabled: `False` (Vessel)\n- AutoLandEnabled: `False` (Vessel)\n- StallThresholdMinutes: `10` (Global)\n- ToolWaitHardLimitMinutes: `60` (Global)\n- StageCheckTimeoutMinutes: `15` (Global)\n- MaxMissionRuntimeMinutes: `240` (Global)\n- MaxRecoveryAttempts: `3` (Global)\n- MaxMissionRecoveryAttempts: `2` (Global)\n- MaxLandingRetries: `3` (Global)\n- MaxNoOpRedispatchAttempts: `1` (Global)\n- MaxOutputRepairAttempts: `1` (Global)\n- ReviewTimeoutMinutes: `1440` (Global)\n- LandingDeferralDeadlineHours: `24` (Global)\n- MaxConcurrentMissions: `0` (Global)\n- BlockDependentsOfFailedStages: `False` (Global)\n- BlackBoxRetentionDays: `180` (Global)\n- WorkflowProfile: `demo-api: basic checks` (WorkflowProfile)\n- LintCommand: `git diff --check` (WorkflowProfile)\n\n#### Recovery\n\n### 1. Recover the root mission first (bbx-voy-001.recover-root)\n\nRisk: Low. Expected: The voyage continues once its root mission lands.\n\n1. Open get_blackbox {\"missionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\"} and follow its recovery paths.\n\n#### Evidence\n\n- `evidence/events.json` (465 bytes): [   {     \"eventId\": \"evt_mvu1ftep_XguRXMHez86\",     \"eventType\": \"mission.status_changed\",     \"message\": \"Mission Cancelled (DependencyCancelled): Document landing retries\",     \"createdUtc\": \"2026- ... (265 more characters in record.json)\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Cancelled (DependencyCancelled): Document landing retries\n- 2026-10-29 21:11:05Z mission.status_changed: Mission Failed (ProcessCrash): Retry landings deferred on a dirty checkout\n\nRead an object with MCP `read_blackbox_object {\"entryId\": \"bbx_mvu1ftew_95PyT7WmtrV\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/bbx_mvu1ftew_95PyT7WmtrV/objects/<name>`.\n\n#### Related failures\n\n- Fingerprint: bcb7be821991076ba7d7551c9c5714b099bddaa13843c800b1bd4ee271e37329\n- Same failure in the last 30 days: 1\n\n#### Notes on this record\n\n- Captured by the backfill; the failure site's volatile facts are missing.\n\n#### Your answer\n\nState the triage verdict (UserConfig, MissionBrief, Transient, ArmadaDefect or External) and the evidence for it, the root cause, the fix, and how to verify it. If you change the Armada installation, use the recovery paths above and annotate the entry with `annotate_blackbox` when done.\n\n\n(trimmed for the example)\n",
    "Truncated": false
   }
  },
@@ -1611,8 +1565,8 @@
    "Resolution": "Open",
    "Pinned": true,
    "StorageTarget": "Database",
-   "TotalBytes": 9635,
-   "ObjectCount": 5,
+   "TotalBytes": 5899,
+   "ObjectCount": 3,
    "SchemaVersion": 1,
    "RulesVersion": 1,
    "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
@@ -1654,8 +1608,8 @@
    "Resolution": "Open",
    "Pinned": false,
    "StorageTarget": "Database",
-   "TotalBytes": 9635,
-   "ObjectCount": 5,
+   "TotalBytes": 5899,
+   "ObjectCount": 3,
    "SchemaVersion": 1,
    "RulesVersion": 1,
    "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
@@ -1809,8 +1763,8 @@
    "ResolutionLink": "https://github.com/example/demo-api/pull/42",
    "Pinned": false,
    "StorageTarget": "Database",
-   "TotalBytes": 9635,
-   "ObjectCount": 5,
+   "TotalBytes": 5899,
+   "ObjectCount": 3,
    "SchemaVersion": 1,
    "RulesVersion": 1,
    "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
@@ -1856,8 +1810,8 @@
    "ResolutionLink": "https://github.com/example/demo-api/pull/42",
    "Pinned": false,
    "StorageTarget": "Database",
-   "TotalBytes": 9979,
-   "ObjectCount": 5,
+   "TotalBytes": 6243,
+   "ObjectCount": 3,
    "SchemaVersion": 1,
    "RulesVersion": 1,
    "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",

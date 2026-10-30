@@ -481,21 +481,20 @@ phase, step, host and code site; how: exception, exit code, failing command or g
 confidence; a triage verdict saying whose fix it most likely is; and ranked recovery paths). Read it before you open
 logs: it quotes the evidence and names the next step.
 
-- **Dashboard:** the mission (or voyage) page has a Black box panel. **Copy FIX THIS** copies the brief for the selected
-  audience, ready to paste into a coding agent; **Ask Armada about this failure** opens Ask Armada with a prompt about
+- **Dashboard:** the mission (or voyage) page has a Black box panel. **Copy FIX THIS** copies the brief, ready to paste
+  into a coding agent; **Ask Armada about this failure** opens Ask Armada with a prompt about
   it; the panel also downloads the brief (.md) and every object (.zip), and resolves, pins and reanalyzes the entry.
 - **REST:** `GET /api/v1/missions/{id}/blackbox` (the entry and its record) and
   `GET /api/v1/missions/{id}/blackbox/brief` (the FIX THIS brief as Markdown); the voyage routes are the same under
-  `/api/v1/voyages/{id}`. `?audience=agent` (default) is the brief for a captain fixing the work, `user` is the plain
-  account for an operator, `maintainer` is the Armada-defect view; `redactHosts=true` strips absolute paths, host and
-  user names before you share it.
+  `/api/v1/voyages/{id}`. There is one brief, written for a coding agent asked to FIX THIS; `redactHosts=true` strips
+  absolute paths, host and user names before you share it.
 - **MCP:** `get_blackbox {"missionId": "msn_mvu1fjp0_9Wd6Uuyp262"}` returns a summary of about 2 KB; add
   `"format": "brief"` for the brief or `"format": "json"` for the whole record, then `read_blackbox_section` and
   `read_blackbox_object` for detail.
 
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  "http://127.0.0.1:7890/api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox/brief?audience=user"
+  "http://127.0.0.1:7890/api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox/brief"
 ```
 
 ```markdown

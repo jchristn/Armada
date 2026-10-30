@@ -45,6 +45,16 @@ Where this plan and the code differ, the code and docs/BLACKBOX.md are authorita
   server routes exist).
 - **Fixtures** for the real failures in 16.10 were reconstructed from this plan and the conversation record, since the
   missions had been deleted.
+- **Brief audiences removed (2026-10-30):** the agent, user and maintainer audiences were removed in favor of a single
+  brief. Every entry renders one FIX THIS brief (`brief.md`): the agent version, whose preamble asks the reader to
+  decide UserConfig, MissionBrief, Transient, ArmadaDefect or External and then fix with evidence. `BlackBoxAudienceEnum`,
+  the `?audience=` query parameter on the brief routes, the MCP `get_blackbox` `audience` argument, the WebSocket
+  `blackbox.brief` `data.audience` field, the `Audience` field of `BlackBoxBriefResult`, the client parameters, Helm
+  `--audience` and the dashboard, TUI, mobile and VS Code audience choices are gone, and `brief.user.md` and
+  `brief.maintainer.md` are no longer written. Entries that already hold those objects keep them as ordinary objects
+  (not migrated or deleted). The maintainer bundle stays and renders its own preamble with the single brief per failure
+  mode. Sections of this plan that mention audiences (3, 4.3, 8.1, 8.2, 9, 11, 12, 15, 16 and 18) describe the original
+  design.
 
 ## Contents
 

@@ -4713,7 +4713,7 @@ the black box code and `Field` names the offending parameter for `InvalidArgumen
 
 | HTTP | `Error` | `Data.Code` | When |
 |---|---|---|---|
-| 400 | `BadRequest` | `InvalidArgument` | A bad parameter or body (`Data.Field` names it when known): an unknown section or audience, an object `offset` below 0 or `length` outside 1 to 1048576, a note body outside 1 to 8000 characters, a search query outside 1 to 200 characters, a resolve note over 2000 or link over 1000 characters, an invalid filter value, an advice-only recommendation, or a recovery step that names an unsupported tool or another subject |
+| 400 | `BadRequest` | `InvalidArgument` | A bad parameter or body (`Data.Field` names it when known): an unknown section, a `redactHosts` that is not `true` or `false`, an object `offset` below 0 or `length` outside 1 to 1048576, a note body outside 1 to 8000 characters, a search query outside 1 to 200 characters, a resolve note over 2000 or link over 1000 characters, an invalid filter value, an advice-only recommendation, or a recovery step that names an unsupported tool or another subject |
 | 400 | `BadRequest` | `CollectionLimitExceeded` | More than 1000 ids in `POST /api/v1/blackbox/delete` (a `CollectionLimitErrorDetail`; nothing is deleted) |
 | 403 | `Forbidden` | (none) | The route's permission level, a recovery step the caller could not call directly, or storage migration without a global admin |
 | 404 | `NotFound` | `BlackBoxNotFound` | The entry, the mission's or voyage's entry, the object, the recovery path or the recommendation does not exist or is not visible |
@@ -4847,14 +4847,15 @@ curl -H "Authorization: Bearer $ARMADA_TOKEN" "$ARMADA_URL/api/v1/missions/msn_m
 #### GET /api/v1/missions/{id}/blackbox/brief
 
 The **FIX THIS** brief of the mission's current entry, as Markdown, rendered live from the record (so renderer
-improvements apply to old entries) with the ten newest notes.
+improvements apply to old entries) with the ten newest notes. There is one brief per entry, written for a coding agent
+asked to FIX THIS: it triages the failure (UserConfig, MissionBrief, Transient, ArmadaDefect or External) and fixes it
+with evidence.
 
 **Permission:** Authenticated
 
 | Parameter | In | Description |
 |---|---|---|
 | `id` | path | Mission ID (`msn_` prefix) |
-| `audience` | query | `agent` (default): the brief for a captain fixing the work. `user`: the plain account for the operator (no stack frames). `maintainer`: the Armada-defect view. Case-insensitive |
 | `redactHosts` | query | `true` strips absolute paths, host names and user names (for sharing outside the installation). Default `false` |
 
 **Response:** `200 OK`, `Content-Type: text/markdown; charset=utf-8`, with an `ETag` (the SHA-256 of the brief). A
@@ -4888,14 +4889,11 @@ Risk: Low. Expected: A fresh process runs the mission.
 ...
 ```
 
-The `user` brief starts `# What went wrong: ...` and lists "What you can do" first; the `maintainer` brief adds the
-Armada improvements and source pointers.
-
-**Errors:** `400` `InvalidArgument` (`Field` `audience`) for any other audience; `404` `BlackBoxNotFound` when there is no
-visible entry.
+**Errors:** `400` `InvalidArgument` (`Field` `redactHosts`) when `redactHosts` is not `true` or `false`; `404`
+`BlackBoxNotFound` when there is no visible entry.
 
 ```bash
-curl -H "Authorization: Bearer $ARMADA_TOKEN" "$ARMADA_URL/api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox/brief?audience=user&redactHosts=true"
+curl -H "Authorization: Bearer $ARMADA_TOKEN" "$ARMADA_URL/api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox/brief?redactHosts=true"
 ```
 
 #### GET /api/v1/missions/{id}/blackbox/entries
@@ -5004,7 +5002,7 @@ The voyage's current entry with its record (`includeRecord=false` for the index 
 
 #### GET /api/v1/voyages/{id}/blackbox/brief
 
-The brief of the voyage's current entry; the same `audience` and `redactHosts` parameters, `ETag` and errors as
+The brief of the voyage's current entry; the same `redactHosts` parameter, `ETag` and errors as
 [the mission brief](#get-apiv1missionsidblackboxbrief).
 
 **Permission:** Authenticated
@@ -5076,7 +5074,7 @@ is empty or over 200 characters.
 #### POST /api/v1/blackbox/bundle
 
 A maintainer bundle: up to `Max` (1 to 50, default 50) of the newest matching entries grouped by fingerprint (most
-frequent first), as one Markdown document of maintainer briefs (`Format` `Markdown`, the default) or JSON summaries
+frequent first), as one Markdown document with the FIX THIS brief of each failure mode (`Format` `Markdown`, the default) or JSON summaries
 (`Format` `Json`). The body takes the `BlackBoxEnumerateRequest` filters plus `Max`, `Format` and `RedactHosts`.
 Content is capped at 1 MB (`Truncated` true when cut).
 
@@ -5204,13 +5202,13 @@ One entry with its record (`includeRecord=false` for the index row only). Same s
 
 #### GET /api/v1/blackbox/{id}/brief
 
-The brief of one entry; the same `audience` and `redactHosts` parameters, `ETag` and errors as
+The brief of one entry; the same `redactHosts` parameter, `ETag` and errors as
 [the mission brief](#get-apiv1missionsidblackboxbrief).
 
 **Permission:** Authenticated
 
 ```bash
-curl -H "Authorization: Bearer $ARMADA_TOKEN" "$ARMADA_URL/api/v1/blackbox/bbx_mvu1ftcv_zcdofOBmjhY/brief?audience=maintainer"
+curl -H "Authorization: Bearer $ARMADA_TOKEN" "$ARMADA_URL/api/v1/blackbox/bbx_mvu1ftcv_zcdofOBmjhY/brief"
 ```
 
 #### GET /api/v1/blackbox/{id}/sections/{section}
@@ -5256,9 +5254,10 @@ fields and the requested section; the other sections are null (omitted on REST),
 
 #### GET /api/v1/blackbox/{id}/objects
 
-One page of the entry's objects (`record.json`, `brief.md`, `brief.user.md`, `brief.maintainer.md` and evidence such as
+One page of the entry's objects (`record.json`, `brief.md` and evidence such as
 `evidence/git-status.txt`, `evidence/diff.patch`, `evidence/events.json`; the names are in
-[BLACKBOX.md](BLACKBOX.md)), ordered by name.
+[BLACKBOX.md](BLACKBOX.md)), ordered by name. Entries written by v1.2.0 pre-release builds may also list
+`brief.user.md` and `brief.maintainer.md`; they read like any other object.
 
 **Permission:** Authenticated
 
