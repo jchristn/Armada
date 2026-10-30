@@ -37,6 +37,7 @@ namespace Armada.Tui.Screens.Operations
             screens.Register("MergeEntryScreen", (m, c) => new MergeEntryScreen(m, c));
             screens.Register("BlackBoxScreen", (m, c) => new BlackBoxScreen(m, c));
             screens.Register("BlackBoxEntryScreen", (m, c) => new BlackBoxEntryScreen(m, c));
+            screens.Register("BlackBoxGapsScreen", (m, c) => new BlackBoxGapsScreen(m, c));
         }
 
         #endregion

@@ -453,6 +453,7 @@ namespace Armada.Tui.Screens.Operations
                 case OpsHandoff.FromPlanning: return Tr("Prefilled from a planning session. Review the draft below and dispatch when ready.");
                 case OpsHandoff.FromIncident: return Tr("Prefilled from an incident. Review the hotfix draft below and dispatch when ready.");
                 case OpsHandoff.FromWorkspace: return Tr("Prefilled from Workspace selection. Review the scoped draft below and dispatch when ready.");
+                case OpsHandoff.FromBlackBox: return Tr("Prefilled with a proposed Armada fix from the black box. Check the vessel is Armada's own, review the brief and dispatch when ready.");
                 default: return null;
             }
         }

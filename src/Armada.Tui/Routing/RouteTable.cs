@@ -165,6 +165,7 @@ namespace Armada.Tui.Routing
             r.Add(Screen("/inbox", "Needs You", "InboxScreen", "W3.2"));
             r.Add(new RouteDefinition("/blackbox", "", "", "", TabLinks.BlackBoxPath, null, false, null,
                 new Dictionary<string, string>(StringComparer.Ordinal) { ["tab"] = TabLinks.BlackBoxSectionParam }));
+            r.Add(Screen("/blackbox/gaps", "Armada Resilience Gaps", "BlackBoxGapsScreen", "BB"));
             r.Add(Screen("/blackbox/:id", "Black Box Entry", "BlackBoxEntryScreen", "BB"));
             r.Add(Hub("/delivery", "Delivery", delivery));
             r.Add(Hub("/fleet-actions", "Fleet Actions", fleetActions));
