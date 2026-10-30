@@ -61,7 +61,9 @@ namespace Armada.Server.WebSocket
         private Func<string?, string?, string?, Task<AuthContext>>? _Authenticate;
         private ArmadaSettings? _Settings;
         private PushNotificationService? _Push = null;
+        private const int _OutboundFrameCapacity = 64;
         private ConcurrentDictionary<Guid, WebSocketClientState> _Clients = new ConcurrentDictionary<Guid, WebSocketClientState>();
+        private ConcurrentDictionary<Guid, WebSocketClientOutputQueue> _OutputQueues = new ConcurrentDictionary<Guid, WebSocketClientOutputQueue>();
         private ConditionalWeakTable<HttpContextBase, AuthContext> _UpgradeIdentities = new ConditionalWeakTable<HttpContextBase, AuthContext>();
 
         private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
@@ -178,6 +180,7 @@ namespace Armada.Server.WebSocket
             _UpgradeIdentities.Remove(ctx);
             WebSocketClientState client = new WebSocketClientState(session, auth!);
             _Clients.TryAdd(session.Id, client);
+            OutputFor(client);
             _Logging.Debug(_Header + "client connected: " + session.RemoteIp + ":" + session.RemotePort + " tenant " + client.TenantId + " user " + client.UserId);
 
             try
@@ -199,6 +202,8 @@ namespace Armada.Server.WebSocket
             finally
             {
                 _Clients.TryRemove(session.Id, out _);
+                if (_OutputQueues.TryRemove(session.Id, out WebSocketClientOutputQueue? ended))
+                    ended.Dispose();
                 _Logging.Debug(_Header + "client disconnected: " + session.RemoteIp + ":" + session.RemotePort);
             }
         }
@@ -306,7 +311,7 @@ namespace Armada.Server.WebSocket
                     WebSocketClientState client = kvp.Value;
                     if (!client.Session.IsConnected)
                     {
-                        _Clients.TryRemove(kvp.Key, out _);
+                        DropClient(kvp.Key, client, "WebSocket session is closed");
                         continue;
                     }
 
@@ -316,14 +321,7 @@ namespace Armada.Server.WebSocket
                     copy.CanDecide = copy.Status == CliPermissionRequestStatusEnum.Pending && CliPermissionAccess.CanDecide(client.Auth, copy, permissions);
                     copy.CanRemember = copy.CanDecide && CliPermissionAccess.CanRemember(client.Auth, copy);
                     object payload = BuildPayload(eventType, null, new { requestId = copy.Id, status = copy.Status, request = copy });
-                    try
-                    {
-                        client.Session.SendTextAsync(JsonSerializer.Serialize(payload, _JsonOptions)).Wait();
-                    }
-                    catch
-                    {
-                        _Clients.TryRemove(kvp.Key, out _);
-                    }
+                    EnqueueFrame(client, JsonSerializer.Serialize(payload, _JsonOptions));
                 }
             }
             catch (Exception ex)
@@ -604,7 +602,6 @@ namespace Armada.Server.WebSocket
 
         private async Task HandleMessageAsync(WebSocketClientState client, string body)
         {
-            WebSocketSession session = client.Session;
             WebSocketRouteMessage? routeMessage = null;
             try
             {
@@ -630,7 +627,7 @@ namespace Armada.Server.WebSocket
                         allTenants = client.AllTenants,
                         timestamp = DateTime.UtcNow
                     };
-                    await session.SendTextAsync(JsonSerializer.Serialize(initial, _JsonOptions)).ConfigureAwait(false);
+                    EnqueueFrame(client, JsonSerializer.Serialize(initial, _JsonOptions));
                     return;
                 }
 
@@ -647,14 +644,14 @@ namespace Armada.Server.WebSocket
                         result = await _CommandHandler.HandleCommandAsync(command.Action, command, body, client.Auth).ConfigureAwait(false);
                     }
 
-                    await session.SendTextAsync(JsonSerializer.Serialize(result, _JsonOptions)).ConfigureAwait(false);
+                    EnqueueFrame(client, JsonSerializer.Serialize(result, _JsonOptions));
                     return;
                 }
 
                 string errorJson = JsonSerializer.Serialize(
                     new { type = "error", message = "Unknown route: " + (route ?? "null") + ". Send a message with route 'subscribe' or 'command'" },
                     _JsonOptions);
-                await session.SendTextAsync(errorJson).ConfigureAwait(false);
+                EnqueueFrame(client, errorJson);
             }
             catch (Exception ex)
             {
@@ -662,11 +659,11 @@ namespace Armada.Server.WebSocket
                 try
                 {
                     string errorJson = JsonSerializer.Serialize(WebSocketCommandError.FromException(null, ex), _JsonOptions);
-                    await session.SendTextAsync(errorJson).ConfigureAwait(false);
+                    EnqueueFrame(client, errorJson);
                 }
-                catch
+                catch (Exception replyEx)
                 {
-                    // Client may have disconnected before we could reply.
+                    _Logging.Warn(_Header + "error reply was not queued: " + replyEx.Message);
                 }
             }
         }
@@ -712,25 +709,53 @@ namespace Armada.Server.WebSocket
                     WebSocketSession session = client.Session;
                     if (!session.IsConnected)
                     {
-                        _Clients.TryRemove(kvp.Key, out _);
+                        DropClient(kvp.Key, client, "WebSocket session is closed");
                         continue;
                     }
 
                     if (!filter(client)) continue;
-
-                    try
-                    {
-                        session.SendTextAsync(json).Wait();
-                    }
-                    catch
-                    {
-                        _Clients.TryRemove(kvp.Key, out _);
-                    }
+                    EnqueueFrame(client, json);
                 }
             }
             catch (Exception ex)
             {
                 _Logging.Warn(_Header + "broadcast error: " + ex.ToString());
+            }
+        }
+
+        private WebSocketClientOutputQueue OutputFor(WebSocketClientState client)
+        {
+            return _OutputQueues.GetOrAdd(client.Session.Id, _ => new WebSocketClientOutputQueue(
+                frame => client.Session.SendTextAsync(frame),
+                error => DropClient(
+                    client.Session.Id,
+                    client,
+                    error == null
+                        ? "Outbound queue full; reconnect and refresh state"
+                        : "WebSocket send failed; reconnect and refresh state"),
+                _OutboundFrameCapacity));
+        }
+
+        private void EnqueueFrame(WebSocketClientState client, string frame)
+        {
+            WebSocketClientOutputQueue queue = OutputFor(client);
+            queue.TryEnqueue(frame);
+        }
+
+        private void DropClient(Guid clientId, WebSocketClientState client, string reason)
+        {
+            bool removedClient = _Clients.TryRemove(clientId, out _);
+            bool removedQueue = _OutputQueues.TryRemove(clientId, out WebSocketClientOutputQueue? outputQueue);
+            if (!removedClient && !removedQueue) return;
+            if (removedQueue && outputQueue != null) outputQueue.Dispose();
+            _Logging.Warn(_Header + "disconnected client: " + reason);
+            try
+            {
+                client.Session.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "client abort error: " + ex.Message);
             }
         }
 
