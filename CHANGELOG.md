@@ -145,6 +145,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
 
+### Landing preview uses the effective landing mode
+
+- **Preview checks follow the landing handler.** A mission preview resolves the landing mode before it describes the action or applies branch policy: the voyage mode, then the vessel mode, then the server setting, then MergeAndPush. A vessel preview uses the same order without a voyage. The reported landing mode is that resolved mode. The inherited-mode warning still appears when the stored vessel mode is empty and, for a mission, the stored voyage mode is empty. The warning text is unchanged. Branch cleanup policy and the landing handler are unchanged.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.

@@ -43,12 +43,16 @@ namespace Armada.Core.Services
             if (auth == null) throw new ArgumentNullException(nameof(auth));
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
 
+            // Same order as mission landing: vessel, then the Admiral default, then MergeAndPush. A vessel preview has no voyage.
+            LandingModeEnum resolvedLandingMode = vessel.LandingMode ?? _Settings?.LandingMode ?? LandingModeEnum.MergeAndPush;
+            bool landingModeInherited = !vessel.LandingMode.HasValue;
+
             LandingPreviewResult result = new LandingPreviewResult
             {
                 VesselId = vessel.Id,
                 SourceBranch = NormalizeEmpty(sourceBranch),
                 TargetBranch = !String.IsNullOrWhiteSpace(vessel.DefaultBranch) ? vessel.DefaultBranch : "main",
-                LandingMode = vessel.LandingMode,
+                LandingMode = resolvedLandingMode,
                 BranchCleanupPolicy = vessel.BranchCleanupPolicy,
                 RequirePassingChecksToLand = vessel.RequirePassingChecksToLand,
                 RequirePullRequestForProtectedBranches = vessel.RequirePullRequestForProtectedBranches,
@@ -59,7 +63,7 @@ namespace Armada.Core.Services
             result.ProtectedBranchMatch = DetermineProtectedBranchMatch(vessel, result.TargetBranch);
             result.TargetBranchProtected = !String.IsNullOrWhiteSpace(result.ProtectedBranchMatch);
             await PopulateCheckSummaryAsync(auth, result, token).ConfigureAwait(false);
-            EvaluateCommonIssues(result);
+            EvaluateCommonIssues(result, landingModeInherited);
             EvaluateBranchPolicyIssues(result);
             FinalizeResult(result);
             return result;
@@ -78,13 +82,20 @@ namespace Armada.Core.Services
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
             if (mission == null) throw new ArgumentNullException(nameof(mission));
 
+            // Same order as MissionLandingHandler: voyage, then vessel, then the Admiral default, then MergeAndPush.
+            Voyage? voyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
+            LandingModeEnum resolvedLandingMode = voyage?.LandingMode ?? vessel.LandingMode ?? _Settings?.LandingMode ?? LandingModeEnum.MergeAndPush;
+            bool landingModeInherited = !vessel.LandingMode.HasValue && voyage?.LandingMode == null;
+
             LandingPreviewResult result = new LandingPreviewResult
             {
                 VesselId = vessel.Id,
                 MissionId = mission.Id,
                 SourceBranch = NormalizeEmpty(mission.BranchName),
                 TargetBranch = !String.IsNullOrWhiteSpace(vessel.DefaultBranch) ? vessel.DefaultBranch : "main",
-                LandingMode = vessel.LandingMode,
+                LandingMode = resolvedLandingMode,
+                EffectiveLandingMode = resolvedLandingMode,
+                ManualLandingOnly = resolvedLandingMode == LandingModeEnum.None,
                 BranchCleanupPolicy = vessel.BranchCleanupPolicy,
                 RequirePassingChecksToLand = vessel.RequirePassingChecksToLand,
                 RequirePullRequestForProtectedBranches = vessel.RequirePullRequestForProtectedBranches,
@@ -95,12 +106,8 @@ namespace Armada.Core.Services
             result.ProtectedBranchMatch = DetermineProtectedBranchMatch(vessel, result.TargetBranch);
             result.TargetBranchProtected = !String.IsNullOrWhiteSpace(result.ProtectedBranchMatch);
             await PopulateCheckSummaryAsync(auth, result, token).ConfigureAwait(false);
-            EvaluateCommonIssues(result);
+            EvaluateCommonIssues(result, landingModeInherited);
             EvaluateBranchPolicyIssues(result);
-            // The mode the landing handler will actually use: voyage, then vessel, then the Admiral default.
-            Voyage? voyage = String.IsNullOrEmpty(mission.VoyageId) ? null : await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
-            result.EffectiveLandingMode = voyage?.LandingMode ?? vessel.LandingMode ?? _Settings?.LandingMode ?? LandingModeEnum.MergeAndPush;
-            result.ManualLandingOnly = result.EffectiveLandingMode == LandingModeEnum.None;
             result.MissionStatus = mission.Status;
             bool landable = EvaluateMissionIssues(result, mission);
             FinalizeResult(result);
@@ -148,7 +155,7 @@ namespace Armada.Core.Services
                 || (run.CompletedUtc.HasValue && run.ExitCode.HasValue && run.ExitCode.Value == 0));
         }
 
-        private static void EvaluateCommonIssues(LandingPreviewResult result)
+        private static void EvaluateCommonIssues(LandingPreviewResult result, bool landingModeInherited)
         {
             result.ExpectedLandingAction = DescribeLandingAction(result.LandingMode);
 
@@ -162,7 +169,7 @@ namespace Armada.Core.Services
                     "Armada cannot fully predict landing behavior without a source branch.");
             }
 
-            if (!result.LandingMode.HasValue)
+            if (landingModeInherited)
             {
                 AddIssue(
                     result,
@@ -171,7 +178,8 @@ namespace Armada.Core.Services
                     "Landing mode is inherited",
                     "This vessel does not declare a landing mode directly, so global or voyage settings may change the final behavior.");
             }
-            else if (result.LandingMode.Value == LandingModeEnum.None)
+
+            if (result.LandingMode == LandingModeEnum.None)
             {
                 AddIssue(
                     result,
