@@ -40,15 +40,18 @@ export function entityRoute(entityType: string | null | undefined, entityId: str
   return route ? route(entityId) : null;
 }
 
-/** The typed id fields a notification carries. */
+/** The fields a notification uses to open a record. `kind` and `entityId` are absent on an older stored entry. */
 export interface NotificationTarget {
   missionId: string | null;
   voyageId: string | null;
   captainId: string | null;
+  kind?: string | null;
+  entityId?: string | null;
 }
 
-/** Return the detail route for a notification from whichever typed id field it carries. */
+/** Return the detail route for a notification. A kind and id use the entity route. An older entry uses its typed id. */
 export function notificationRoute(n: NotificationTarget): string | null {
+  if (n.kind && n.entityId) return entityRoute(n.kind, n.entityId);
   if (n.missionId) return `/missions/${n.missionId}`;
   if (n.voyageId) return `/voyages/${n.voyageId}`;
   if (n.captainId) return `/captains/${n.captainId}`;

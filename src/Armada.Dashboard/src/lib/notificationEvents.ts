@@ -15,6 +15,10 @@ export interface Notification {
   title: string;
   message: string;
   timestampUtc: string;
+  /** Kind of the record this entry opens. An entry saved before this field existed has none. */
+  kind?: NotificationEntityKind | null;
+  /** Id of the record this entry opens. An entry saved before this field existed has none. */
+  entityId?: string | null;
   missionId: string | null;
   voyageId: string | null;
   captainId: string | null;
@@ -118,6 +122,8 @@ export function buildEntityNotification(
     title,
     message,
     timestampUtc,
+    kind: entry.kind,
+    entityId: entry.id,
     missionId: entry.kind === 'Mission' ? entry.id : null,
     voyageId: entry.kind === 'Voyage' ? entry.id : null,
     captainId: entry.kind === 'Captain' ? entry.id : null,

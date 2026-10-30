@@ -60,6 +60,15 @@ function saveNotifications(notifications: Notification[]) {
   }
 }
 
+/** The event time when that string is a usable time. Otherwise the browser time. */
+function notificationTimestamp(timestamp: string | undefined): string {
+  if (typeof timestamp === 'string') {
+    const trimmed = timestamp.trim();
+    if (trimmed.length > 0 && !Number.isNaN(Date.parse(trimmed))) return trimmed;
+  }
+  return new Date().toISOString();
+}
+
 // ── Provider ──
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
@@ -89,7 +98,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       if (lastSeenRef.current.get(key) === seen) return;
       lastSeenRef.current.set(key, seen);
 
-      const notification = buildEntityNotification(entry, t, newNotificationId(), new Date().toISOString());
+      const notification = buildEntityNotification(entry, t, newNotificationId(), notificationTimestamp(msg.timestamp));
       setNotifications(prev => prependNotification(prev, notification));
 
       const toastId = ++toastCounterRef.current;
