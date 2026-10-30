@@ -307,17 +307,26 @@ namespace Armada.Core.Database.Sqlite
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
 
-                // Get current schema version
+                // Read every applied version. The maximum remains the current schema version.
+                List<int> appliedVersions = new List<int>();
                 int currentVersion = 0;
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT COALESCE(MAX(version), 0) FROM schema_migrations;";
-                    object? result = await cmd.ExecuteScalarAsync(token).ConfigureAwait(false);
-                    if (result != null && result != DBNull.Value) currentVersion = Convert.ToInt32(result);
+                    cmd.CommandText = "SELECT version FROM schema_migrations;";
+                    using (SqliteDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                        {
+                            int version = Convert.ToInt32(reader.GetValue(0));
+                            appliedVersions.Add(version);
+                            if (version > currentVersion) currentVersion = version;
+                        }
+                    }
                 }
 
                 // Apply pending migrations
                 List<SchemaMigration> migrations = TableQueries.GetMigrations();
+                RequireDeclaredMigrationsPresent("SQLite", migrations, appliedVersions);
                 int applied = 0;
 
                 foreach (SchemaMigration migration in migrations)

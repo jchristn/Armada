@@ -841,6 +841,64 @@ namespace Armada.Core.Database
 
         #endregion
 
+        #region Protected-Methods
+
+        /// <summary>
+        /// Stop before migration execution when the ledger has an applied maximum and a lower migration
+        /// still declared by this build has no row. A version number this build does not declare, including
+        /// a ledger version above every declared migration, does not stop startup.
+        /// </summary>
+        /// <param name="providerName">Provider name included in the error.</param>
+        /// <param name="declaredMigrations">Migrations this build applies.</param>
+        /// <param name="appliedVersions">Versions present in schema_migrations.</param>
+        /// <exception cref="ArgumentNullException">Thrown when a required argument is null or the provider name is empty.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when a declared version below the applied maximum has no row.</exception>
+        protected static void RequireDeclaredMigrationsPresent(
+            string providerName,
+            IReadOnlyList<SchemaMigration> declaredMigrations,
+            IReadOnlyList<int> appliedVersions)
+        {
+            if (String.IsNullOrEmpty(providerName)) throw new ArgumentNullException(nameof(providerName));
+            if (declaredMigrations == null) throw new ArgumentNullException(nameof(declaredMigrations));
+            if (appliedVersions == null) throw new ArgumentNullException(nameof(appliedVersions));
+            if (appliedVersions.Count == 0) return;
+
+            int appliedMaximum = 0;
+            for (int i = 0; i < appliedVersions.Count; i++)
+            {
+                if (appliedVersions[i] > appliedMaximum) appliedMaximum = appliedVersions[i];
+            }
+
+            if (appliedMaximum <= 0) return;
+
+            List<int> missing = new List<int>();
+            foreach (SchemaMigration migration in declaredMigrations)
+            {
+                if (migration.Version >= appliedMaximum) continue;
+
+                bool present = false;
+                for (int i = 0; i < appliedVersions.Count; i++)
+                {
+                    if (appliedVersions[i] == migration.Version)
+                    {
+                        present = true;
+                        break;
+                    }
+                }
+
+                if (!present) missing.Add(migration.Version);
+            }
+
+            if (missing.Count == 0) return;
+
+            throw new InvalidOperationException(
+                providerName + " schema_migrations is missing declared version "
+                + String.Join(", ", missing)
+                + " below applied maximum " + appliedMaximum + ".");
+        }
+
+        #endregion
+
         #region Internal-Methods
 
         /// <summary>
