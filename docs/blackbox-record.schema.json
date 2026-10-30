@@ -4722,6 +4722,281 @@
         "ruleIds"
       ]
     },
+    "BlackBoxResilienceGap": {
+      "title": "BlackBoxResilienceGap",
+      "description": "One Armada resilience gap: a failure mode (fingerprint) triaged ArmadaDefect in handoff and landing scope, with its recurrence and the newest entry's resilience analysis.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "fingerprint": {
+          "description": "Failure-mode fingerprint.",
+          "type": [
+            "string"
+          ]
+        },
+        "phase": {
+          "description": "Phase of the newest entry.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "Dispatch",
+            "Provision",
+            "Execution",
+            "Completion",
+            "Review",
+            "Handoff",
+            "Landing",
+            "MergeQueue",
+            "Recovery",
+            "Voyage",
+            "External"
+          ]
+        },
+        "step": {
+          "description": "Step of the newest entry.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "VoyageParentNotRunnable",
+            "AssignmentFailed",
+            "NoEligibleCaptain",
+            "HarborUnavailable",
+            "MemoryPressure",
+            "DockProvision",
+            "WorktreeCreate",
+            "BranchCreate",
+            "StartCommitRecord",
+            "ProcessCrash",
+            "UsageLimit",
+            "AuthFailure",
+            "ModelUnavailable",
+            "Stall",
+            "MaxRuntime",
+            "RecoveryExhausted",
+            "Interrupted",
+            "OperatorStop",
+            "NoOp",
+            "Unfinished",
+            "CaptainBlocked",
+            "InvalidOutput",
+            "ScopeViolation",
+            "BoundaryViolation",
+            "DefinitionOfDone",
+            "StageCheck",
+            "JudgeRejected",
+            "ReviewDenied",
+            "ReviewTimeout",
+            "ReviewApprovedDockMissing",
+            "PlanParse",
+            "StageBranchHarden",
+            "DependencyCancelled",
+            "IntegrationBarrier",
+            "DockMissing",
+            "TargetIntegration",
+            "Verification",
+            "DirtyCheckout",
+            "UnpublishedAncestry",
+            "Push",
+            "PullRequest",
+            "FastForward",
+            "LocalMerge",
+            "RetryLanding",
+            "DeferralExpired",
+            "QueueResolveRepo",
+            "QueueMergeConflict",
+            "QueueTests",
+            "QueueProcessing",
+            "QueuePush",
+            "RescueFailed",
+            "RedispatchExhausted",
+            "OrphanedExit",
+            "UnconfirmedStop",
+            "MissingMergeHandoff",
+            "SettlementFailed",
+            "Halted",
+            "Cancelled",
+            "StageFailed",
+            "VesselDeleted",
+            "OperatorTransition"
+          ]
+        },
+        "failureKind": {
+          "description": "Failure kind of the newest entry, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Compile",
+            "TestFail",
+            "Timeout",
+            "LandingConflict",
+            "Crash",
+            "NoOp",
+            "Boundary",
+            "ScopeViolation",
+            "JudgeRejected",
+            "Infra",
+            "Unknown",
+            "ReviewDenied",
+            "DependencyFailed",
+            "MaxRuntimeExceeded",
+            "StallRecoveryExhausted",
+            "OperatorAction",
+            "InvalidOutput",
+            "Blocked",
+            null
+          ]
+        },
+        "occurrences": {
+          "description": "Entries with this fingerprint that match the filter.",
+          "type": [
+            "integer"
+          ]
+        },
+        "openCount": {
+          "description": "Open entries among them.",
+          "type": [
+            "integer"
+          ]
+        },
+        "firstSeenUtc": {
+          "description": "First seen (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "lastSeenUtc": {
+          "description": "Last seen (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "latestEntryId": {
+          "description": "Newest entry.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "latestMissionId": {
+          "description": "Mission of the newest entry, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "latestMissionTitle": {
+          "description": "Title of that mission, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vesselName": {
+          "description": "Vessel of the newest entry, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "armadaVersions": {
+          "description": "Armada versions the fingerprint was seen in.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ]
+          },
+          "maxItems": 20
+        },
+        "severity": {
+          "description": "Severity of the newest entry's resilience section.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Low",
+            "Medium",
+            "High",
+            "Critical",
+            "Unknown"
+          ]
+        },
+        "selfHealable": {
+          "description": "Whether Armada could have healed it by itself.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Yes",
+            "No",
+            "Unknown"
+          ]
+        },
+        "suspected": {
+          "description": "Whether the ArmadaDefect verdict rests on the scope prior alone (suspected, not proven).",
+          "type": [
+            "boolean"
+          ]
+        },
+        "topProposedChange": {
+          "description": "The most impactful proposed Armada change, or null.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxProposedChange"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "detectionGap": {
+          "description": "Why Armada did not catch it earlier, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ruleIds": {
+          "description": "Rules behind the newest entry's resilience section.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ]
+          },
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "fingerprint",
+        "phase",
+        "step",
+        "occurrences",
+        "openCount",
+        "firstSeenUtc",
+        "lastSeenUtc",
+        "armadaVersions",
+        "severity",
+        "selfHealable",
+        "suspected",
+        "ruleIds"
+      ]
+    },
     "BlackBoxResolvedPayload": {
       "title": "BlackBoxResolvedPayload",
       "description": "Payload of the blackbox.resolved event.",

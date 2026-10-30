@@ -45,7 +45,7 @@ namespace Armada.Core.BlackBox
             typeof(BlackBoxDownloadManifest), typeof(BlackBoxDigest), typeof(BlackBoxNote), typeof(BlackBoxSectionResult),
             typeof(BlackBoxCapturedPayload), typeof(BlackBoxCaptureFailedPayload), typeof(BlackBoxAnalyzedPayload),
             typeof(BlackBoxResolvedPayload), typeof(BlackBoxDeletedPayload), typeof(BlackBoxStorageFallbackPayload),
-            typeof(BlackBoxRecoveryRunPayload), typeof(BlackBoxGcReport)
+            typeof(BlackBoxRecoveryRunPayload), typeof(BlackBoxGcReport), typeof(BlackBoxResilienceGap)
         };
 
         #endregion
