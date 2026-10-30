@@ -19,8 +19,8 @@ namespace Test.Shared.Suites.Services
     /// validation rejections (no commands, cross-tenant vessel scope, inputs scoped to unknown
     /// environments), command previews, vessel/fleet/global resolution and preview, check-run
     /// execution with artifact collection, retry, structured test/coverage parsing, readiness
-    /// evaluation (missing inputs, toolchains/environments/checklist, environment-scoped inputs),
-    /// landing preview gating, and fail-fast on missing required inputs.
+    /// evaluation (missing inputs, toolchains/environments/checklist, environment-scoped inputs,
+    /// path-valued shell assignments), landing preview gating, and fail-fast on missing required inputs.
     /// </summary>
     public sealed class WorkflowProfileCheckRunServiceSuite : IArmadaTestSuite
     {
@@ -807,6 +807,68 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("readiness_skips_a_path_valued_shell_assignment", "Readiness skips a path-valued shell assignment and reports a digit-leading name as missing", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                    VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+
+                    await EnsureTenantAndUserAsync(testDb, "ten_assign", "usr_assign").ConfigureAwait(false);
+
+                    string workingDirectory = Path.Combine(Path.GetTempPath(), "armada-readiness-assignment-" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(workingDirectory);
+                    try
+                    {
+                        await File.WriteAllTextAsync(Path.Combine(workingDirectory, "gradlew"), String.Empty).ConfigureAwait(false);
+
+                        Vessel vessel = CreateVessel("ten_assign", "usr_assign", workingDirectory);
+                        await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                        WorkflowProfile profile = new WorkflowProfile
+                        {
+                            TenantId = "ten_assign",
+                            UserId = "usr_assign",
+                            Name = "Assignment Workflow",
+                            Scope = WorkflowProfileScopeEnum.Vessel,
+                            VesselId = vessel.Id,
+                            BuildCommand = "JAVA_HOME=/usr/lib/jvm/example ./gradlew build"
+                        };
+                        profile = await testDb.Driver.WorkflowProfiles.CreateAsync(profile).ConfigureAwait(false);
+
+                        AuthContext auth = AuthContext.Authenticated("ten_assign", "usr_assign", false, false, "UnitTest");
+
+                        async Task<VesselReadinessResult> EvaluateBuildAsync(string command)
+                        {
+                            profile.BuildCommand = command;
+                            await testDb.Driver.WorkflowProfiles.UpdateAsync(profile).ConfigureAwait(false);
+                            return await readiness.EvaluateAsync(
+                                auth,
+                                vessel,
+                                requestedCheckType: CheckRunTypeEnum.Build).ConfigureAwait(false);
+                        }
+
+                        VesselReadinessResult pathResult = await EvaluateBuildAsync("JAVA_HOME=/usr/lib/jvm/example ./gradlew build").ConfigureAwait(false);
+                        VesselReadinessResult controlResult = await EvaluateBuildAsync("FOO=bar ./gradlew build").ConfigureAwait(false);
+                        VesselReadinessResult digitResult = await EvaluateBuildAsync("1FOO=bar").ConfigureAwait(false);
+
+                        bool pathClean = !HasAnyMissingCommand(pathResult);
+                        bool controlClean = !HasAnyMissingCommand(controlResult);
+                        bool digitMissing = HasMissingCommand(digitResult, "1FOO=bar");
+                        AssertTrue(
+                            pathClean && controlClean && digitMissing,
+                            "path=" + MissingCommandText(pathResult)
+                                + "; control=" + MissingCommandText(controlResult)
+                                + "; digit=" + MissingCommandText(digitResult));
+                    }
+                    finally
+                    {
+                        TryDeleteDirectory(workingDirectory);
+                    }
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Workflow Profile and Check Run Services",
@@ -881,6 +943,33 @@ namespace Test.Shared.Suites.Services
             catch
             {
             }
+        }
+
+        private static bool HasMissingCommand(VesselReadinessResult result, string dependency)
+        {
+            return result.Issues.Exists(issue =>
+                issue.Code == "command_dependency_missing"
+                && issue.Message.Contains("'" + dependency + "'", StringComparison.Ordinal));
+        }
+
+        private static bool HasAnyMissingCommand(VesselReadinessResult result)
+        {
+            return result.Issues.Exists(issue => issue.Code == "command_dependency_missing");
+        }
+
+        private static string MissingCommandText(VesselReadinessResult result)
+        {
+            List<string> messages = new List<string>();
+            foreach (VesselReadinessIssue issue in result.Issues)
+            {
+                if (issue.Code == "command_dependency_missing")
+                    messages.Add(issue.Message);
+            }
+
+            if (messages.Count == 0)
+                return "none";
+
+            return String.Join(" | ", messages);
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
