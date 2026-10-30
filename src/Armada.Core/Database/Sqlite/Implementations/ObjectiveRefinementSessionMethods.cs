@@ -2,6 +2,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
 {
     using System.Text;
     using Microsoft.Data.Sqlite;
+    using Armada.Core.Database;
     using Armada.Core.Database.Interfaces;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -282,7 +283,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 FleetId = SqliteDatabaseDriver.NullableString(reader["fleet_id"]),
                 VesselId = SqliteDatabaseDriver.NullableString(reader["vessel_id"]),
                 Title = reader["title"].ToString()!,
-                Status = Enum.TryParse<ObjectiveRefinementSessionStatusEnum>(reader["status"].ToString(), true, out ObjectiveRefinementSessionStatusEnum parsed) ? parsed : ObjectiveRefinementSessionStatusEnum.Created,
+                Status = ObjectivePersistenceHelper.ParseRefinementSessionStatus(reader["status"], reader["id"].ToString()!),
                 ProcessId = SqliteDatabaseDriver.NullableInt(reader["process_id"]),
                 FailureReason = SqliteDatabaseDriver.NullableString(reader["failure_reason"]),
                 CreatedUtc = SqliteDatabaseDriver.FromIso8601(reader["created_utc"].ToString()!),

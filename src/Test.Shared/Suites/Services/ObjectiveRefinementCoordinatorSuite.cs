@@ -2,9 +2,14 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Data.Common;
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
+    using Microsoft.Data.SqlClient;
+    using Microsoft.Data.Sqlite;
+    using MySqlConnector;
+    using Npgsql;
     using Armada.Core.Database;
     using Armada.Core.Database.Sqlite;
     using Armada.Core.Enums;
@@ -260,6 +265,40 @@ namespace Test.Shared.Suites.Services
                 AssertNull(persistedCaptain.ProcessId);
             }));
 
+            cases.Add(CaseAsync("read_async_rejects_unknown_status_and_preserves_empty_status_fallback", "ReadAsync rejects an unknown stored status and keeps the empty status fallback", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using CoordinatorFixture fixture = new CoordinatorFixture(testDb.Driver);
+
+                CoordinatorFixture.TenantUserResult tenantUser = await fixture.CreateTenantUserAsync().ConfigureAwait(false);
+                Objective objective = await fixture.CreateObjectiveAsync("Status parsing", tenantUser.TenantId, tenantUser.UserId).ConfigureAwait(false);
+                Captain captain = await fixture.CreateCaptainAsync("status-parse", AgentRuntimeEnum.Custom, tenantUser.TenantId, tenantUser.UserId, CaptainStateEnum.Refining).ConfigureAwait(false);
+                ObjectiveRefinementSession session = await fixture.CreateSessionAsync(objective, captain, processId: 1234).ConfigureAwait(false);
+
+                await SetStoredStatusAsync(testDb, session.Id, "NotAStatus").ConfigureAwait(false);
+
+                Exception? exception = null;
+                try
+                {
+                    await testDb.Driver.ObjectiveRefinementSessions.ReadAsync(session.Id).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    exception = ex;
+                }
+
+                AssertTrue(exception is InvalidOperationException, "An unknown non-empty status must fail the read.");
+                InvalidOperationException invalidStatusException = (InvalidOperationException)exception!;
+                AssertContains(session.Id, invalidStatusException.Message);
+                AssertContains("NotAStatus", invalidStatusException.Message);
+                AssertEqual("NotAStatus", await ReadStoredStatusAsync(testDb, session.Id).ConfigureAwait(false));
+
+                await SetStoredStatusAsync(testDb, session.Id, String.Empty).ConfigureAwait(false);
+                ObjectiveRefinementSession? emptyStatusSession = await testDb.Driver.ObjectiveRefinementSessions.ReadAsync(session.Id).ConfigureAwait(false);
+                AssertNotNull(emptyStatusSession);
+                AssertEqual(ObjectiveRefinementSessionStatusEnum.Created, emptyStatusSession!.Status);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Objective Refinement Coordinator",
@@ -269,6 +308,54 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static async Task SetStoredStatusAsync(TestDatabase testDb, string sessionId, string status)
+        {
+            using DbConnection connection = CreateConnection(testDb);
+            await connection.OpenAsync().ConfigureAwait(false);
+            using DbCommand command = connection.CreateCommand();
+            command.CommandText = "UPDATE objective_refinement_sessions SET status = @status WHERE id = @id";
+
+            DbParameter statusParameter = command.CreateParameter();
+            statusParameter.ParameterName = "@status";
+            statusParameter.Value = status;
+            command.Parameters.Add(statusParameter);
+
+            DbParameter idParameter = command.CreateParameter();
+            idParameter.ParameterName = "@id";
+            idParameter.Value = sessionId;
+            command.Parameters.Add(idParameter);
+
+            AssertEqual(1, await command.ExecuteNonQueryAsync().ConfigureAwait(false), "one refinement session must be updated");
+        }
+
+        private static async Task<string> ReadStoredStatusAsync(TestDatabase testDb, string sessionId)
+        {
+            using DbConnection connection = CreateConnection(testDb);
+            await connection.OpenAsync().ConfigureAwait(false);
+            using DbCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT status FROM objective_refinement_sessions WHERE id = @id";
+
+            DbParameter idParameter = command.CreateParameter();
+            idParameter.ParameterName = "@id";
+            idParameter.Value = sessionId;
+            command.Parameters.Add(idParameter);
+
+            object? value = await command.ExecuteScalarAsync().ConfigureAwait(false);
+            return Convert.ToString(value) ?? String.Empty;
+        }
+
+        private static DbConnection CreateConnection(TestDatabase testDb)
+        {
+            switch (TestDatabaseConfig.Type)
+            {
+                case Armada.Core.Enums.DatabaseTypeEnum.Sqlite: return new SqliteConnection(testDb.ConnectionString);
+                case Armada.Core.Enums.DatabaseTypeEnum.Postgresql: return new NpgsqlConnection(testDb.ConnectionString);
+                case Armada.Core.Enums.DatabaseTypeEnum.Mysql: return new MySqlConnection(testDb.ConnectionString);
+                case Armada.Core.Enums.DatabaseTypeEnum.SqlServer: return new SqlConnection(testDb.ConnectionString);
+                default: throw new InvalidOperationException("Unsupported test database provider.");
+            }
+        }
 
         private sealed class CoordinatorFixture : IDisposable
         {

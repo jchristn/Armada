@@ -301,7 +301,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 FleetId = SqlServerDatabaseDriver.NullableString(reader["fleet_id"]),
                 VesselId = SqlServerDatabaseDriver.NullableString(reader["vessel_id"]),
                 Title = reader["title"].ToString()!,
-                Status = ObjectivePersistenceHelper.ParseEnum(reader["status"], ObjectiveRefinementSessionStatusEnum.Created),
+                Status = ObjectivePersistenceHelper.ParseRefinementSessionStatus(reader["status"], reader["id"].ToString()!),
                 ProcessId = SqlServerDatabaseDriver.NullableInt(reader["process_id"]),
                 FailureReason = SqlServerDatabaseDriver.NullableString(reader["failure_reason"]),
                 CreatedUtc = SqlServerDatabaseDriver.FromIso8601(reader["created_utc"].ToString()!),

@@ -301,7 +301,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 FleetId = NullableString(reader["fleet_id"]),
                 VesselId = NullableString(reader["vessel_id"]),
                 Title = reader["title"].ToString()!,
-                Status = ObjectivePersistenceHelper.ParseEnum(reader["status"], ObjectiveRefinementSessionStatusEnum.Created),
+                Status = ObjectivePersistenceHelper.ParseRefinementSessionStatus(reader["status"], reader["id"].ToString()!),
                 ProcessId = NullableInt(reader["process_id"]),
                 FailureReason = NullableString(reader["failure_reason"]),
                 CreatedUtc = DateTime.SpecifyKind(Convert.ToDateTime(reader["created_utc"]), DateTimeKind.Utc),
