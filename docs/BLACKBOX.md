@@ -245,7 +245,7 @@ share outside the installation.
 
 Three ways to get a brief:
 
-1. The dashboard black box panel on the mission page: **Copy FIX THIS** (also on Inbox failure rows).
+1. The dashboard black box panel on the mission page: **Copy Markdown** (also on Inbox failure rows).
 2. A terminal: `curl -s -H "Authorization: Bearer $TOKEN" http://localhost:7890/api/v1/missions/msn_x/blackbox/brief | pbcopy`
    (or `armada blackbox show msn_x --brief | pbcopy`, section 4).
 3. MCP: `get_blackbox {"missionId": "msn_x", "format": "brief"}`.
@@ -276,7 +276,7 @@ brief, targeted at the vessel named Armada or whose repository URL ends in armad
 change, it opens Ask Armada), Where, How, Why, Conflict (files, directories and conflicting missions), What would have prevented
 it (with **Dry run...** then confirm to apply a recommendation), What Armada could change, Recovery (each path dry runs
 first and runs only after you confirm; data-loss paths are flagged), Configuration (each value with its source),
-Attempts (switch between attempts), Evidence, Similar failures and Notes. Actions: **Copy FIX THIS**, **Download .md**, **Download .zip**, **View JSON**, **Ask Armada
+Attempts (switch between attempts), Evidence, Similar failures and Notes. Actions: **Copy Markdown** (the FIX THIS brief), **Copy JSON** (the entry and its record), **Download .zip**, **Ask Armada
 about this failure** (opens Ask with the prompt filled in; nothing is sent until you press Send), Resolve (with a
 note and link), Pin or Unpin, Reanalyze, Add note and **Open full page**. The panel updates live from the
 `blackbox.*` events, including while analysis is still running.
@@ -292,7 +292,7 @@ in `?bbtab=` (for example `/missions?tab=blackbox&bbtab=fingerprints`), since th
 
 **Settings.** The server settings page has a Black Box section: storage target and its credentials (masked), compress,
 key prefix, fallback to the database, a store health check, **Migrate stored entries** with progress, and the retention
-policy. **Inbox** failure rows have Copy FIX THIS and Ask Armada actions, and the Storage page counts black box usage.
+policy. **Inbox** failure rows have Copy Markdown and Ask Armada actions, and the Storage page counts black box usage.
 
 ### TUI
 
@@ -527,7 +527,7 @@ for admins) run as you: from Ask they are refused when you lack the role, never 
   your question, if any, to the captain. On the dashboard `/blackbox` alone opens a form listing recent failures.
 - **The card** shows status chips (triage and confidence, kind, step, capture mode, resolution), where and how it
   failed, the findings, the conflicting missions and files, the ranked recovery paths and the configuration
-  recommendations, Copy FIX THIS, and the follow-ups: **Fix it** and **Apply the configuration change** create a
+  recommendations, Copy Markdown, and the follow-ups: **Fix it** and **Apply the configuration change** create a
   proposal (approving it runs a dry run, then confirms it); **Draft an Armada fix mission** (built from the entry's top
   proposed Armada change, its acceptance and regression tests and the code pointers at the build commit) and
   **Compare with similar failures** ask the captain. A mission id mentioned in the conversation links its entry's card automatically.

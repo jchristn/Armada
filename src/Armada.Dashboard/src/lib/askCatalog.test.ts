@@ -86,7 +86,7 @@ describe('Ask Armada i18n catalog', () => {
     expect(keys).toContain('Unknown command {{command}}. Type / to see commands');
     expect(keys).toContain('Show thinking is off.');
     expect(keys).toContain('Start a new conversation with a fresh context (also /clear)');
-    expect(keys).toContain('Copy FIX THIS');
+    expect(keys).toContain('Copy Markdown');
     expect(keys).toContain('Recorded after the fact, so some facts (such as the workspace and the captain log) may be missing.');
   });
 

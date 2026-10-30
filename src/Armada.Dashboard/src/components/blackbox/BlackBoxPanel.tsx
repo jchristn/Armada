@@ -15,7 +15,6 @@ import { useNotifications } from '../../context/NotificationContext';
 import {
   blackBoxAskHref,
   blackBoxAskState,
-  blackBoxBriefFileName,
   blackBoxErrorCode,
   blackBoxEntryAskPrompt,
   blackBoxErrorStatus,
@@ -25,7 +24,6 @@ import { useBlackBoxLive } from '../../lib/useBlackBoxLive';
 import { blackBoxHref } from '../../lib/navTargets';
 import { copyToClipboard } from '../shared/CopyButton';
 import CopyButton from '../shared/CopyButton';
-import JsonViewer from '../shared/JsonViewer';
 import LoadingIndicator from '../shared/LoadingIndicator';
 import Markdown from '../shared/Markdown';
 import BlackBoxActionDialog, { type BlackBoxActionTarget } from './BlackBoxActionDialog';
@@ -36,7 +34,7 @@ import BlackBoxNotes from './BlackBoxNotes';
 import BlackBoxResolveDialog from './BlackBoxResolveDialog';
 import BlackBoxResilienceSection from './BlackBoxResilienceSection';
 import BlackBoxTimeline from './BlackBoxTimeline';
-import { downloadBlackBoxMarkdown, reanalyzeBlackBoxEntry, toggleBlackBoxPin } from './blackBoxEntryActions';
+import { reanalyzeBlackBoxEntry, toggleBlackBoxPin } from './blackBoxEntryActions';
 import './BlackBox.css';
 
 const ATTEMPT_PAGE_SIZE = 20;
@@ -85,7 +83,7 @@ function Lazy({ title, children, defaultOpen }: { title: string; children: () =>
 /**
  * The black box panel (MISSION_BLACKBOX_PLAN.md 11.1): one failure's record rendered as the brief's sections (Summary,
  * Armada resilience (right after the Summary, with Draft Armada fix mission), Where, How, Why, Conflict, Configuration, What would have prevented it, What Armada could change, Recovery,
- * Attempts, Evidence, Notes), with Copy FIX THIS, the .md and .zip downloads, the JSON record,
+ * Attempts, Evidence, Notes), with Copy Markdown, Copy JSON, the .zip download,
  * Ask Armada, Resolve, Pin and Reanalyze. Recovery paths dry run first and confirm in BlackBoxActionDialog. Follows
  * the blackbox.* WebSocket events for its subject, so a pending entry fills in when its analysis lands.
  */
@@ -102,7 +100,6 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
   const [attempts, setAttempts] = useState<BlackBoxEntrySummary[]>([]);
   const [brief, setBrief] = useState<{ key: string; text: string } | null>(null);
   const [briefError, setBriefError] = useState('');
-  const [showJson, setShowJson] = useState(false);
   const [showResolve, setShowResolve] = useState(false);
   const [action, setAction] = useState<BlackBoxActionTarget | null>(null);
   const [busy, setBusy] = useState('');
@@ -190,9 +187,14 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
     }
   }
 
-  async function downloadMarkdown() {
+  async function copyJson() {
     if (!entry) return;
-    await downloadBlackBoxMarkdown(blackBoxBriefFileName(entry.id), fetchBrief, t, pushToast);
+    try {
+      await copyToClipboard(JSON.stringify(entry, null, 2));
+      pushToast('success', t('Black box JSON copied.'));
+    } catch (err: unknown) {
+      pushToast('error', t('The JSON could not be copied: {{message}}', { message: err instanceof Error ? err.message : String(err) }));
+    }
   }
 
   async function downloadZip() {
@@ -318,10 +320,9 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
       </div>
 
       <div className="blackbox-toolbar">
-        <button type="button" className="btn btn-sm btn-primary" onClick={() => void copyFixThis()} title={t('Copy the FIX THIS brief, ready to paste into a coding agent.')}>{t('Copy FIX THIS')}</button>
-        <button type="button" className="btn btn-sm" onClick={() => void downloadMarkdown()} title={t('Save the FIX THIS brief as a Markdown file.')}>{t('Download .md')}</button>
+        <button type="button" className="btn btn-sm btn-primary" onClick={() => void copyFixThis()} title={t('Copy the FIX THIS brief, ready to paste into a coding agent.')}>{t('Copy Markdown')}</button>
         <button type="button" className="btn btn-sm" disabled={busy === 'zip'} onClick={() => void downloadZip()} title={t('Download every object of this entry and its manifest as a .zip.')}>{t('Download .zip')}</button>
-        <button type="button" className="btn btn-sm" onClick={() => setShowJson(true)} title={t('Show the entry and its versioned record as JSON.')}>{t('View JSON')}</button>
+        <button type="button" className="btn btn-sm" onClick={() => void copyJson()} title={t('Copy the entry and its versioned record as JSON.')}>{t('Copy JSON')}</button>
         <button type="button" className="btn btn-sm" onClick={askArmada} title={t('Open Ask Armada with a prompt about this failure; nothing is sent until you press Send.')}>{t('Ask Armada about this failure')}</button>
         <button type="button" className="btn btn-sm" onClick={() => setShowResolve(true)} title={t('Set the resolution of this entry, with a note and a link.')}>{t('Resolve')}</button>
         <button type="button" className="btn btn-sm" disabled={busy === 'pin'} onClick={() => void togglePin()} title={entry.pinned ? t('Let garbage collection expire this entry again.') : t('Keep this entry past its retention.')}>{entry.pinned ? t('Unpin') : t('Pin')}</button>
@@ -574,7 +575,6 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
         {() => <BlackBoxNotes entryId={entry.id} refreshKey={notesKey} />}
       </Lazy>
 
-      <JsonViewer open={showJson} title={t('Black box entry')} id={entry.id} data={entry} onClose={() => setShowJson(false)} />
       <BlackBoxResolveDialog
         open={showResolve}
         entry={entry}

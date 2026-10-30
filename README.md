@@ -539,11 +539,11 @@ When a mission or voyage fails, for any reason (dispatch, execution, completion 
 
 **Three ways to get the FIX THIS brief** (paste it into any coding agent and say "FIX THIS"):
 
-1. The dashboard black box panel on the mission page: **Copy FIX THIS**.
+1. The dashboard black box panel on the mission page: **Copy Markdown**.
 2. The terminal: `armada blackbox show <id> --brief | pbcopy` once the Helm black box commands land; today, the REST route: `curl -s -H "Authorization: Bearer $TOKEN" http://localhost:7890/api/v1/missions/<id>/blackbox/brief | pbcopy`.
 3. MCP: `get_blackbox {"missionId": "<id>"}` for the 2 KB summary, or `{"missionId": "<id>", "format": "brief"}` for the brief.
 
-The panel shows the same sections as the brief, **Copy FIX THIS**, downloads (`.md`, `.zip`, JSON), recovery buttons that dry run and then confirm, Resolve, Pin, notes, links to the conflicting missions and similar failures, and **Ask Armada about this failure**. The **Black Box** tab on the Missions page lists every entry with filters, fingerprints, hotspots and retention (with a garbage collection preview), and server settings choose the storage target and retention. The VS Code extension (`src/Armada.VSCode`) and the mobile app show the same entry. The TUI has a Failure tab on mission and voyage screens and a Black Box tab on the Missions screen (`g b`), and the Helm CLI has `armada blackbox` commands (for example `armada blackbox show <id> --brief | pbcopy`).
+The panel shows the same sections as the brief, **Copy Markdown**, **Copy JSON**, a `.zip` download, recovery buttons that dry run and then confirm, Resolve, Pin, notes, links to the conflicting missions and similar failures, and **Ask Armada about this failure**. The **Black Box** tab on the Missions page lists every entry with filters, fingerprints, hotspots and retention (with a garbage collection preview), and server settings choose the storage target and retention. The VS Code extension (`src/Armada.VSCode`) and the mobile app show the same entry. The TUI has a Failure tab on mission and voyage screens and a Black Box tab on the Missions screen (`g b`), and the Helm CLI has `armada blackbox` commands (for example `armada blackbox show <id> --brief | pbcopy`).
 
 
 Over MCP, an agent can take "Review the black box for mission msn_x and fix it" end to end: read the summary, read the sections and evidence it needs, dry run a recorded recovery path, confirm it with the token, and resolve the entry. It can only run actions recorded in the entry, each authorized as if you had called that tool, and anything that risks data loss needs an explicit acknowledgement.

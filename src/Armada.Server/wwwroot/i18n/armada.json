@@ -7005,7 +7005,12 @@
         "Top proposed Armada change": "Principal cambio propuesto para Armada",
         "Verdict": "Veredicto",
         "Whether Armada could have recovered from this by itself.": "Si Armada podría haberse recuperado de esto por sí solo.",
-        "commit": "commit"
+        "commit": "commit",
+        "Copy Markdown": "Copiar Markdown",
+        "Copy JSON": "Copiar JSON",
+        "Copy the entry and its versioned record as JSON.": "Copia la entrada y su registro versionado como JSON.",
+        "Black box JSON copied.": "JSON de la caja negra copiado.",
+        "The JSON could not be copied: {{message}}": "No se pudo copiar el JSON: {{message}}"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -12953,7 +12958,12 @@
         "Top proposed Armada change": "首要的 Armada 建议更改",
         "Verdict": "结论",
         "Whether Armada could have recovered from this by itself.": "Armada 能否自行从中恢复。",
-        "commit": "提交"
+        "commit": "提交",
+        "Copy Markdown": "复制 Markdown",
+        "Copy JSON": "复制 JSON",
+        "Copy the entry and its versioned record as JSON.": "将该条目及其带版本的记录复制为 JSON。",
+        "Black box JSON copied.": "黑匣子 JSON 已复制。",
+        "The JSON could not be copied: {{message}}": "无法复制 JSON：{{message}}"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -18864,7 +18874,12 @@
         "Top proposed Armada change": "首要的 Armada 建議變更",
         "Verdict": "結論",
         "Whether Armada could have recovered from this by itself.": "Armada 能否自行從中復原。",
-        "commit": "提交"
+        "commit": "提交",
+        "Copy Markdown": "複製 Markdown",
+        "Copy JSON": "複製 JSON",
+        "Copy the entry and its versioned record as JSON.": "將此項目及其帶版本的記錄複製為 JSON。",
+        "Black box JSON copied.": "已複製黑盒子 JSON。",
+        "The JSON could not be copied: {{message}}": "無法複製 JSON：{{message}}"
       },
       "sections": {}
     },
@@ -24735,7 +24750,12 @@
         "Top proposed Armada change": "首要嘅 Armada 建議變更",
         "Verdict": "結論",
         "Whether Armada could have recovered from this by itself.": "Armada 可唔可以自己由呢度復原。",
-        "commit": "提交"
+        "commit": "提交",
+        "Copy Markdown": "複製 Markdown",
+        "Copy JSON": "複製 JSON",
+        "Copy the entry and its versioned record as JSON.": "將呢個項目同佢有版本嘅記錄複製做 JSON。",
+        "Black box JSON copied.": "已複製黑盒 JSON。",
+        "The JSON could not be copied: {{message}}": "複製唔到 JSON：{{message}}"
       },
       "sections": {}
     },
@@ -30622,7 +30642,12 @@
         "Top proposed Armada change": "最優先の Armada 変更案",
         "Verdict": "判定",
         "Whether Armada could have recovered from this by itself.": "Armada がこれから自力で回復できたかどうか。",
-        "commit": "コミット"
+        "commit": "コミット",
+        "Copy Markdown": "Markdown をコピー",
+        "Copy JSON": "JSON をコピー",
+        "Copy the entry and its versioned record as JSON.": "エントリとそのバージョン付きレコードを JSON としてコピーします。",
+        "Black box JSON copied.": "ブラックボックスの JSON をコピーしました。",
+        "The JSON could not be copied: {{message}}": "JSON をコピーできませんでした: {{message}}"
       },
       "sections": {}
     },
@@ -36500,7 +36525,12 @@
         "Top proposed Armada change": "Wichtigste vorgeschlagene Armada-Änderung",
         "Verdict": "Urteil",
         "Whether Armada could have recovered from this by itself.": "Ob Armada sich selbst davon hätte erholen können.",
-        "commit": "Commit"
+        "commit": "Commit",
+        "Copy Markdown": "Markdown kopieren",
+        "Copy JSON": "JSON kopieren",
+        "Copy the entry and its versioned record as JSON.": "Kopiert den Eintrag und seinen versionierten Datensatz als JSON.",
+        "Black box JSON copied.": "Blackbox-JSON kopiert.",
+        "The JSON could not be copied: {{message}}": "Das JSON konnte nicht kopiert werden: {{message}}"
       },
       "sections": {}
     },
@@ -42378,7 +42408,12 @@
         "Top proposed Armada change": "Principal changement proposé pour Armada",
         "Verdict": "Verdict",
         "Whether Armada could have recovered from this by itself.": "Si Armada aurait pu s'en remettre seul.",
-        "commit": "commit"
+        "commit": "commit",
+        "Copy Markdown": "Copier le Markdown",
+        "Copy JSON": "Copier le JSON",
+        "Copy the entry and its versioned record as JSON.": "Copie l'entrée et son enregistrement versionné au format JSON.",
+        "Black box JSON copied.": "JSON de la boîte noire copié.",
+        "The JSON could not be copied: {{message}}": "Le JSON n'a pas pu être copié : {{message}}"
       },
       "sections": {}
     },
@@ -48256,7 +48291,12 @@
         "Top proposed Armada change": "Principale modifica proposta per Armada",
         "Verdict": "Verdetto",
         "Whether Armada could have recovered from this by itself.": "Se Armada avrebbe potuto riprendersi da solo.",
-        "commit": "commit"
+        "commit": "commit",
+        "Copy Markdown": "Copia Markdown",
+        "Copy JSON": "Copia JSON",
+        "Copy the entry and its versioned record as JSON.": "Copia la voce e il suo record con versione come JSON.",
+        "Black box JSON copied.": "JSON della scatola nera copiato.",
+        "The JSON could not be copied: {{message}}": "Impossibile copiare il JSON: {{message}}"
       },
       "sections": {}
     }

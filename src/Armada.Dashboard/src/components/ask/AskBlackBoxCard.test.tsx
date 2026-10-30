@@ -69,7 +69,7 @@ describe('AskWorkCard for a black box entry', () => {
     expect(paths[0]).toHaveTextContent('Rebase and retry');
     expect(screen.queryByRole('button', { name: 'Propose' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Fix it' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Copy FIX THIS' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy Markdown' })).toBeInTheDocument();
   });
 
   it('proposes recovery paths, recommendations and Fix it, and asks the captain for message follow-ups', () => {

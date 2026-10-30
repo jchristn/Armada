@@ -99,7 +99,7 @@ describe('Black box i18n catalog', () => {
   const keys = blackBoxKeys();
 
   it('finds the black box strings', () => {
-    expect(keys).toContain('Copy FIX THIS');
+    expect(keys).toContain('Copy Markdown');
     expect(keys).toContain('What would have prevented it');
     expect(keys).toContain('I understand that this can delete work that cannot be recovered.');
     expect(keys).toContain('Save Black Box Settings');

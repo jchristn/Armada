@@ -146,7 +146,7 @@ export default function Inbox() {
                   onClick={(e) => { e.stopPropagation(); void copyFixThis(item.entityId as string); }}
                   title={t('Copy the FIX THIS brief, ready to paste into a coding agent.')}
                 >
-                  {t('Copy FIX THIS')}
+                  {t('Copy Markdown')}
                 </button>
                 <button
                   type="button"

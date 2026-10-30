@@ -297,7 +297,7 @@ describe('MissionDetail black box', () => {
     vi.mocked(getMissionLandingPreview).mockResolvedValue(preview({ missionStatus: 'LandingFailed' }));
     renderPage();
     expect(await screen.findByText('Another mission changed the same files before this one landed.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Copy FIX THIS' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy Markdown' })).toBeInTheDocument();
     expect(getMissionBlackBox).toHaveBeenCalledWith('msn_1');
   });
 });
