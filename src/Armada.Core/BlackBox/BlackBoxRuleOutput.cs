@@ -19,6 +19,8 @@ namespace Armada.Core.BlackBox
 
         public List<BlackBoxRecoveryPath> Paths { get; } = new List<BlackBoxRecoveryPath>();
 
+        public BlackBoxResilience? Resilience { get; set; } = null;
+
         public BlackBoxRuleOutput(BlackBoxRule rule)
         {
             Rule = rule ?? throw new ArgumentNullException(nameof(rule));

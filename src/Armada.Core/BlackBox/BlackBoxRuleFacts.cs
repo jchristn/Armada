@@ -20,6 +20,13 @@ namespace Armada.Core.BlackBox
         private static readonly Regex _Dependency = new Regex(@"depends on (?:mission\s+)?(?<dep>msn_[A-Za-z0-9_]+|#?\d+|mission\s+\d+)[^.;\n]{0,160}?(?:not (?:yet )?(?:landed|merged|complete|finished)|has not landed|hasn't landed|is still running|running (?:concurrently|in parallel)|in parallel|concurrently)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
         private static readonly Regex _Concurrent = new Regex(@"(?:missions?\s+[\d\s,\-and]+\s+(?:are|were)\s+(?:still\s+)?running\s+(?:concurrently|in parallel))|(?:dispatched\s+(?:concurrently|in parallel))|(?:(?:prerequisite|depends on|builds on|requires)[^.;\n]{0,200}?(?:(?:still\s+)?running (?:concurrently|in parallel)|not (?:yet )?(?:landed|merged|on the target)))", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
         private static readonly Regex _MissingDirectory = new Regex(@"(?:start process .{0,200}working directory|working directory .{0,200}(?:does not exist|not found))|(?:No such file or directory)|(?:cannot find the (?:path|directory))|(?:DirectoryNotFoundException)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        private static readonly Regex _NonFastForward = new Regex(@"non-fast-forward|\[rejected\].{0,80}\(fetch first\)|fetch first|Updates were rejected because|tip of your current branch is behind", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        private static readonly Regex _AuthRefused = new Regex(@"Authentication failed|Permission denied \(publickey|could not read Username|HTTP Basic: Access denied|Bad credentials|invalid credentials|requested URL returned error: 40[13]|gh auth login|denied to |not authorized|token (?:has )?expired", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        private static readonly Regex _TargetMovedText = new Regex(@"not possible to fast-forward|cannot fast-forward|diverged|target (?:branch )?(?:advanced|moved)|landing_target_advanced|is not an ancestor", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        private static readonly Regex _BranchMissingText = new Regex(@"couldn't find remote ref|invalid reference|not a valid (?:object name|branch name)|unknown revision or path|branch .{0,120} (?:not found|does not exist|is missing)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        private static readonly Regex _WorktreeRegistration = new Regex(@"is not a working tree|is a missing but (?:already registered|locked) worktree|already registered worktree|already checked out at|is already used by worktree|use 'add -f' to override|worktree .{0,200}(?:locked|already exists|not registered)|git worktree prune", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        private static readonly Regex _StaleEntry = new Regex(@"\blease\b|stale|expired|abandoned|timed out waiting|stuck in|no longer (?:held|owned)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        private static readonly Regex _RetriesExhausted = new Regex(@"retries exhausted|retry budget|gave up after|landing_retries_exhausted|exhausted (?:its|the) (?:landing )?retries", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
         private static readonly string[] _GeneratedFileNames = new string[] { "CHANGELOG.md", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "packages.lock.json" };
 
         #endregion
@@ -196,6 +203,75 @@ namespace Armada.Core.BlackBox
         {
             string text = AllText(r);
             return text.Length > 0 && _MissingDirectory.IsMatch(text);
+        }
+
+        /// <summary>Whether the remote rejected a push because the target moved (non-fast-forward, fetch first).</summary>
+        /// <param name="r">Record.</param>
+        /// <returns>True for a non-fast-forward rejection.</returns>
+        public static bool PushRejectedMovedTarget(BlackBoxRecord r)
+        {
+            string text = AllText(r);
+            return text.Length > 0 && _NonFastForward.IsMatch(text);
+        }
+
+        /// <summary>Whether the remote refused Armada's credentials (authentication or permission failure).</summary>
+        /// <param name="r">Record.</param>
+        /// <returns>True for a credential refusal.</returns>
+        public static bool RemoteAuthRefused(BlackBoxRecord r)
+        {
+            string text = AllText(r);
+            return text.Length > 0 && _AuthRefused.IsMatch(text);
+        }
+
+        /// <summary>Whether the target moved during the run: the recorded tips differ, the handoff trail says so, or the
+        /// failure text reports a moved or diverged target.</summary>
+        /// <param name="r">Record.</param>
+        /// <returns>True when the target moved.</returns>
+        public static bool TargetMoved(BlackBoxRecord r)
+        {
+            BlackBoxWorkspace? w = r?.Workspace;
+            if (w != null && !String.IsNullOrEmpty(w.TargetTipAtStart) && !String.IsNullOrEmpty(w.TargetTipAtFailure) && !String.Equals(w.TargetTipAtStart, w.TargetTipAtFailure, StringComparison.OrdinalIgnoreCase)) return true;
+            if (r?.Handoff?.TargetMoved == true) return true;
+            string text = AllText(r!);
+            return text.Length > 0 && _TargetMovedText.IsMatch(text);
+        }
+
+        /// <summary>Whether the mission branch was missing (recorded as not existing, or git could not resolve it).</summary>
+        /// <param name="r">Record.</param>
+        /// <returns>True when the branch is missing.</returns>
+        public static bool BranchMissing(BlackBoxRecord r)
+        {
+            if (r?.Workspace?.BranchExists == false) return true;
+            string text = AllText(r!);
+            return text.Length > 0 && _BranchMissingText.IsMatch(text);
+        }
+
+        /// <summary>Whether git reported a stale or unregistered worktree (not a working tree, already registered, locked).</summary>
+        /// <param name="r">Record.</param>
+        /// <returns>True for a worktree registration error.</returns>
+        public static bool WorktreeRegistrationError(BlackBoxRecord r)
+        {
+            string text = AllText(r);
+            return text.Length > 0 && _WorktreeRegistration.IsMatch(text);
+        }
+
+        /// <summary>Whether the failure text reports a stale merge entry or an expired lease.</summary>
+        /// <param name="r">Record.</param>
+        /// <returns>True for a stale entry or expired lease.</returns>
+        public static bool StaleOrExpired(BlackBoxRecord r)
+        {
+            string text = AllText(r);
+            return text.Length > 0 && _StaleEntry.IsMatch(text);
+        }
+
+        /// <summary>Whether Armada's landing retries ran out (step RetryLanding, or the text says so).</summary>
+        /// <param name="r">Record.</param>
+        /// <returns>True when the retries were exhausted.</returns>
+        public static bool LandingRetriesExhausted(BlackBoxRecord r)
+        {
+            if (Step(r) == BlackBoxStepEnum.RetryLanding) return true;
+            string text = AllText(r);
+            return text.Length > 0 && _RetriesExhausted.IsMatch(text);
         }
 
         /// <summary>A configuration value by setting name (case-insensitive), or null.</summary>

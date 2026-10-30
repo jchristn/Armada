@@ -33,6 +33,16 @@ namespace Armada.Core.Models
         public int OccurrencesLast30Days { get; set; } = 0;
 
         /// <summary>
+        /// Armada versions the fingerprint was seen in (this entry's included), oldest sighting first.
+        /// </summary>
+        [CollectionBound(BlackBoxLimits.MaxRelatedVersions, Reason = "Capped by BlackBoxPipeline")]
+        public List<string> ArmadaVersions
+        {
+            get => _ArmadaVersions;
+            set => _ArmadaVersions = value ?? new List<string>();
+        }
+
+        /// <summary>
         /// Cascade root entry, or null.
         /// </summary>
         public string? CascadeRootEntryId { get; set; } = null;
@@ -66,6 +76,7 @@ namespace Armada.Core.Models
         private List<BlackBoxNearbySuccess> _NearbySuccesses = new List<BlackBoxNearbySuccess>();
         private List<BlackBoxSimilarEntry> _SimilarEntries = new List<BlackBoxSimilarEntry>();
         private List<string> _DownstreamMissionIds = new List<string>();
+        private List<string> _ArmadaVersions = new List<string>();
 
         /// <summary>
         /// Instantiate.

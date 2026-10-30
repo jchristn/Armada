@@ -58,6 +58,19 @@ namespace Armada.Core.BlackBox
         /// <summary>The fallback rule fires only when no other rule matched.</summary>
         public bool IsFallback { get; set; } = false;
 
+        /// <summary>Resilience template (self-healing, detection gap, code pointers, proposed Armada changes), or null.</summary>
+        public BlackBoxRuleResilience? Resilience { get; set; } = null;
+
+        /// <summary>Whether the rule is about Armada's handoff and landing: its phase is in scope or it was marked with
+        /// <see cref="Heals"/> on an in-scope condition of another phase. Every such rule carries resilience content.</summary>
+        public bool InResilienceScope => BlackBoxResilienceScope.IsScopePhase(Phase) || _HandoffMechanics;
+
+        #endregion
+
+        #region Private-Members
+
+        private bool _HandoffMechanics = false;
+
         #endregion
 
         #region Constructors-and-Factories
@@ -149,6 +162,18 @@ namespace Armada.Core.BlackBox
         public BlackBoxRule Improve(BlackBoxRuleImprovement improvement)
         {
             Improvements.Add(improvement ?? throw new ArgumentNullException(nameof(improvement)));
+            return this;
+        }
+
+        /// <summary>Set the resilience template.</summary>
+        /// <param name="resilience">Resilience template.</param>
+        /// <param name="handoffMechanics">True when the rule is about Armada handoff mechanics outside the scope phases
+        /// (output contract parsing, check harness errors, a false scope check, dock facts).</param>
+        /// <returns>This rule.</returns>
+        public BlackBoxRule Heals(BlackBoxRuleResilience resilience, bool handoffMechanics = false)
+        {
+            Resilience = resilience ?? throw new ArgumentNullException(nameof(resilience));
+            _HandoffMechanics = _HandoffMechanics || handoffMechanics;
             return this;
         }
 

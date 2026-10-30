@@ -27,7 +27,7 @@ namespace Armada.Core.BlackBox
             "failingCommand", "commandExitCode", "exitCode", "phase", "step", "kind", "reason", "exceptionMessage",
             "gitStderr", "outOfScopeCount", "outOfScopeFiles", "blankCount", "prerequisite", "sourceFile", "method", "site",
             "armadaVersion", "landingMode", "stallThresholdMinutes", "maxMissionRuntimeMinutes", "runtimeFailureKind",
-            "cascadeRootMission", "haltReason", "harborLinkState"
+            "cascadeRootMission", "haltReason", "harborLinkState", "targetTipAtStart", "targetTipAtFailure", "dockState"
         };
 
         #endregion
@@ -111,6 +111,9 @@ namespace Armada.Core.BlackBox
                 case "cascadeRootMission": return Blank(record.Voyage?.CascadeRootMissionId);
                 case "haltReason": return Blank(BlackBoxLimits.Clip(OneLine(record.Voyage?.HaltReason), 300));
                 case "harborLinkState": return Blank(w?.HarborLinkState);
+                case "targetTipAtStart": return Blank(w?.TargetTipAtStart ?? record.Handoff?.TargetTipAtStart);
+                case "targetTipAtFailure": return Blank(w?.TargetTipAtFailure ?? record.Handoff?.TargetTipAtFailure);
+                case "dockState": return Blank(w?.DockState ?? record.Handoff?.DockStateAtFailure);
                 default: return null;
             }
         }

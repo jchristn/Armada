@@ -28,6 +28,12 @@ namespace Armada.Core.Models
         public bool RedactHosts { get; set; } = false;
 
         /// <summary>
+        /// Bundle every failure. When false (the default) and neither Triage nor ResilienceScope is set, the bundle holds
+        /// the Armada resilience gaps: entries in handoff and landing scope triaged ArmadaDefect.
+        /// </summary>
+        public bool AllFailures { get; set; } = false;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         public BlackBoxBundleRequest()

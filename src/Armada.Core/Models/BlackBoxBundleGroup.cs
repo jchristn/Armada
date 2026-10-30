@@ -72,6 +72,31 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Resilience severity of the newest entry (escalated by recurrence).
+        /// </summary>
+        public BlackBoxSeverityEnum Severity { get; set; } = BlackBoxSeverityEnum.Low;
+
+        /// <summary>
+        /// Whether Armada could have healed the newest entry by itself.
+        /// </summary>
+        public BlackBoxSelfHealableEnum SelfHealable { get; set; } = BlackBoxSelfHealableEnum.Unknown;
+
+        /// <summary>
+        /// Proposed Armada changes of the newest entry, as mission briefs.
+        /// </summary>
+        [CollectionBound(BlackBoxLimits.MaxProposedChanges, Reason = "Capped by BlackBoxRecordBounder")]
+        public List<BlackBoxProposedChange> ProposedChanges
+        {
+            get => _ProposedChanges;
+            set => _ProposedChanges = value ?? new List<BlackBoxProposedChange>();
+        }
+
+        /// <summary>
+        /// The regression test that would have caught the newest entry, or null.
+        /// </summary>
+        public BlackBoxRegressionTest? RegressionTest { get; set; } = null;
+
+        /// <summary>
         /// The newest entry.
         /// </summary>
         public BlackBoxEntrySummary? Newest { get; set; } = null;
@@ -90,6 +115,7 @@ namespace Armada.Core.Models
         private List<string> _RuleIds = new List<string>();
         private List<BlackBoxImprovement> _Improvements = new List<BlackBoxImprovement>();
         private List<BlackBoxEntrySummary> _Others = new List<BlackBoxEntrySummary>();
+        private List<BlackBoxProposedChange> _ProposedChanges = new List<BlackBoxProposedChange>();
 
         /// <summary>
         /// Instantiate.

@@ -2,11 +2,18 @@
   "name": "scope-001-false-violation",
   "description": "Garrison msn_mvsqzal6_b1BfR4tnZ29: a false ScopeViolation whose out-of-scope list held a blank entry and a file that was in the mission's scope.",
   "source": "msn_mvsqzal6_b1BfR4tnZ29 (Garrison; reconstructed from MISSION_BLACKBOX_PLAN.md 16.10)",
-  "rulesVersion": 1,
+  "rulesVersion": 2,
   "expectedRuleIds": [
     "BBX-SCOPE-001"
   ],
   "expectedTriage": "ArmadaDefect",
+  "expectedResilience": {
+    "inScope": true,
+    "selfHealable": "Yes",
+    "proposalContains": "scope parser",
+    "selfHealingContains": "normalized both file lists",
+    "recommendationId": null
+  },
   "record": {
     "entryId": "bbx_fixture_scope001",
     "schemaVersion": 1,
