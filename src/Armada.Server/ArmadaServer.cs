@@ -486,11 +486,8 @@ namespace Armada.Server
 
             // Initialize log rotation and data expiry
             _LogRotation = new LogRotationService(_Logging, _Settings.MaxLogFileSizeBytes, _Settings.MaxLogFileCount);
-            // DataExpiryService talks to SQLite directly (its write gate parses a SQLite connection string), so it exists
-            // only for SQLite; constructing it with a server provider's connection string threw and stopped startup.
-            _DataExpiry = _Settings.Database.Type == DatabaseTypeEnum.Sqlite
-                ? new DataExpiryService(_Logging, _Settings.Database.GetConnectionString(), _Settings.DataRetentionDays)
-                : null;
+            // Data expiry uses the active database connection. SQLite writes still enter the shared write gate.
+            _DataExpiry = new DataExpiryService(_Logging, _Settings.Database.GetConnectionString(), _Settings.DataRetentionDays);
             _Retention = new RetentionService(_Database, _Settings, _Logging);
 
             // Initialize handler classes (WebSocketHub is created later, so pass null initially)
@@ -2391,8 +2388,7 @@ namespace Armada.Server
                     // Run data expiry every 100 health check cycles (100 x HeartbeatIntervalSeconds plus loop time; about 17 minutes at the default 10 s)
                     if (_HealthCheckCycles % 100 == 0)
                     {
-                        // DataExpiryService talks to SQLite directly; on server providers it would throw and skip the
-                        // rest of this block, so it only runs for SQLite and each step is isolated.
+                        // A data-expiry failure is logged and does not stop the later retention steps.
                         if (_DataExpiry != null)
                         {
                             try { _DataExpiry.RetentionDays = _Settings.DataRetentionDays; await _DataExpiry.PurgeExpiredDataAsync(token).ConfigureAwait(false); }

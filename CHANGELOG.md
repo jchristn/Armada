@@ -144,6 +144,9 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
+- Data retention deletes completed voyages, their missions, orphan stage outcomes, read signals, old events, inactive docks, and finished merge entries on SQLite, PostgreSQL, MySQL, and SQL Server when retention days is greater than zero. Zero days still deletes nothing.
+- The newest `objective.snapshot` event for each objective is kept, including when that snapshot is older than the cutoff. Older snapshots of the same objective are deleted. A normal old event is still deleted.
+- On SQL Server, a child mission's `parent_mission_id` is cleared before an expired parent mission is deleted.
 
 ### Landing failure prevention
 
