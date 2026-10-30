@@ -45,6 +45,18 @@ export default function CheckRunDetail() {
     onConfirm: () => {},
   });
 
+  // A different route id replaces the run before paint. The same id keeps it while the next read runs.
+  const [routeId, setRouteId] = useState(id);
+  if (routeId !== id) {
+    setRouteId(id);
+    setLoading(true);
+    setRun(null);
+    setVessel(null);
+    setProfile(null);
+    setComparison(null);
+    setError('');
+  }
+
   useEffect(() => {
     if (!id) return;
     let mounted = true;
@@ -52,7 +64,6 @@ export default function CheckRunDetail() {
 
     async function load() {
       try {
-        setLoading(true);
         const nextRun = await getCheckRun(runId);
         if (!mounted) return;
         setRun(nextRun);
@@ -119,7 +130,14 @@ export default function CheckRunDetail() {
   }
 
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
-  if (!run) return <p className="text-dim">{t('Check run not found.')}</p>;
+  if (!run) {
+    return (
+      <div>
+        <ErrorModal error={error} onClose={() => setError('')} />
+        <p className="text-dim">{t('Check run not found.')}</p>
+      </div>
+    );
+  }
 
   return (
     <div>
