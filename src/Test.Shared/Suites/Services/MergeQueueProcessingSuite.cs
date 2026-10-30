@@ -226,6 +226,67 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("stale_testing_entry_is_reprocessed", "Queue resumes a Testing entry after its processing lease expires", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    repos.PushBranch("feature/recovery", "recovered.txt", "recovered\n");
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/recovery", null, null).ConfigureAwait(false);
+                    entry.Status = MergeStatusEnum.Testing;
+                    entry.TestStartedUtc = DateTime.UtcNow.AddMinutes(-16);
+                    entry.TestExitCode = 7;
+                    await testDb.Driver.MergeEntries.UpdateAsync(entry).ConfigureAwait(false);
+
+                    await queue.ProcessQueueAsync().ConfigureAwait(false);
+
+                    MergeEntry? processed = await queue.GetAsync(entry.Id).ConfigureAwait(false);
+                    AssertEqual(MergeStatusEnum.Landed, processed!.Status, "stale entry is resumed and landed");
+                    AssertTrue(repos.OriginHasFile("main", "recovered.txt"), "recovered change reaches origin main");
+                }
+            }));
+
+            cases.Add(CaseAsync("testing_entry_without_start_time_is_reprocessed", "Queue resumes a Testing entry without a start time", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    repos.PushBranch("feature/missing-start", "missing-start.txt", "recovered\n");
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/missing-start", null, null).ConfigureAwait(false);
+                    entry.Status = MergeStatusEnum.Testing;
+                    entry.TestStartedUtc = null;
+                    await testDb.Driver.MergeEntries.UpdateAsync(entry).ConfigureAwait(false);
+
+                    await queue.ProcessQueueAsync().ConfigureAwait(false);
+
+                    MergeEntry? processed = await queue.GetAsync(entry.Id).ConfigureAwait(false);
+                    AssertEqual(MergeStatusEnum.Landed, processed!.Status, "entry without a start time is resumed and landed");
+                    AssertTrue(repos.OriginHasFile("main", "missing-start.txt"), "recovered change reaches origin main");
+                }
+            }));
+
+            cases.Add(CaseAsync("fresh_testing_entry_is_not_reprocessed", "Queue leaves a fresh Testing entry alone", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    repos.PushBranch("feature/fresh", "fresh.txt", "pending\n");
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/fresh", null, null).ConfigureAwait(false);
+                    entry.Status = MergeStatusEnum.Testing;
+                    entry.TestStartedUtc = DateTime.UtcNow;
+                    await testDb.Driver.MergeEntries.UpdateAsync(entry).ConfigureAwait(false);
+
+                    await queue.ProcessQueueAsync().ConfigureAwait(false);
+
+                    MergeEntry? unchanged = await queue.GetAsync(entry.Id).ConfigureAwait(false);
+                    AssertEqual(MergeStatusEnum.Testing, unchanged!.Status, "fresh entry remains owned by its current processor");
+                    AssertTrue(!repos.OriginHasFile("main", "fresh.txt"), "fresh entry is not landed by another pass");
+                }
+            }));
+
             cases.Add(CaseAsync("passing_integration_receipt", "Merge queue persists passing checks against the exact SHA pushed to origin", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
