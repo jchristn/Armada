@@ -60,6 +60,10 @@
 .blackbox-section > h4 { margin: 0 0 0.45rem; font-size: 0.92rem; }
 .blackbox-section > summary { cursor: pointer; font-weight: 600; font-size: 0.92rem; margin-bottom: 0.4rem; }
 
+/* Armada resilience: the Armada angle of a handoff or landing failure, right after the Summary. */
+.blackbox-resilience[data-in-scope="true"] { border-left: 3px solid var(--tag-review-fg); padding-left: 0.6rem; }
+.blackbox-resilience details > summary { cursor: pointer; font-size: 0.85rem; }
+
 .blackbox-kv {
   display: grid;
   grid-template-columns: minmax(8rem, max-content) minmax(0, 1fr);

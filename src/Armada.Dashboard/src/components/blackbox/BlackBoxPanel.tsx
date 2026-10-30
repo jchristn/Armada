@@ -34,6 +34,7 @@ import BlackBoxEvidence from './BlackBoxEvidence';
 import BlackBoxNearbySuccesses from './BlackBoxNearbySuccesses';
 import BlackBoxNotes from './BlackBoxNotes';
 import BlackBoxResolveDialog from './BlackBoxResolveDialog';
+import BlackBoxResilienceSection from './BlackBoxResilienceSection';
 import BlackBoxTimeline from './BlackBoxTimeline';
 import { downloadBlackBoxMarkdown, reanalyzeBlackBoxEntry, toggleBlackBoxPin } from './blackBoxEntryActions';
 import './BlackBox.css';
@@ -83,7 +84,7 @@ function Lazy({ title, children, defaultOpen }: { title: string; children: () =>
 
 /**
  * The black box panel (MISSION_BLACKBOX_PLAN.md 11.1): one failure's record rendered as the brief's sections (Summary,
- * Where, How, Why, Conflict, Configuration, What would have prevented it, What Armada could change, Recovery,
+ * Armada resilience (right after the Summary, with Draft Armada fix mission), Where, How, Why, Conflict, Configuration, What would have prevented it, What Armada could change, Recovery,
  * Attempts, Evidence, Notes), with Copy FIX THIS, the .md and .zip downloads, the JSON record,
  * Ask Armada, Resolve, Pin and Reanalyze. Recovery paths dry run first and confirm in BlackBoxActionDialog. Follows
  * the blackbox.* WebSocket events for its subject, so a pending entry fills in when its analysis lands.
@@ -298,6 +299,14 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
           </h3>
           <div className="blackbox-chips">
             {triage && triage.verdict !== 'Unknown' && <span className="blackbox-chip blackbox-chip-warning" title={t('Triage verdict: whose fix this most likely is, and how confident the rules are.')}>{t(triage.verdict)} ({t(triage.confidence)})</span>}
+            {(triage?.verdict ?? entry.triage) === 'ArmadaDefect' && (
+              <span className="blackbox-chip blackbox-chip-danger" data-testid="blackbox-armada-defect-badge" data-suspected={triage?.suspected ? 'true' : 'false'}
+                title={triage?.suspected
+                  ? t('Only the handoff and landing prior (BBX-PRIOR-ARMADA) voted ArmadaDefect: the black box assumes Armada could have handled this. Look for the Armada fix first.')
+                  : t('The rules found evidence that Armada itself caused this failure.')}>
+                {triage?.suspected ? t('Suspected Armada defect') : t('Armada defect')}
+              </span>
+            )}
             <span className={`blackbox-chip${pending ? ' blackbox-chip-warning' : entry.state === 'Analyzed' ? ' blackbox-chip-ok' : entry.state === 'EnrichmentFailed' || entry.state === 'ObjectMissing' ? ' blackbox-chip-danger' : ''}`} title={t('Capture state: Captured, then Enriched with git and log forensics, then Analyzed.')}>{t(entry.state)}</span>
             <span className={`blackbox-chip${resolved ? ' blackbox-chip-ok' : ''}`} title={t('Resolution of this entry.')}>{t(entry.resolution)}</span>
             {entry.failureKind && <span className="blackbox-chip">{t(entry.failureKind)}</span>}
@@ -353,6 +362,8 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
           {resolved && entry.resolutionLink && <><dt>{t('Resolution link')}</dt><dd className="mono">{entry.resolutionLink}</dd></>}
         </dl>
       </Section>
+
+      <BlackBoxResilienceSection entry={entry} resilience={analysis?.resilience} handoff={record?.handoff} />
 
       <Section title={t('Where')} tooltip={t('The phase and step that failed, the host and the code site.')} testId="blackbox-where">
         <dl className="blackbox-kv">
