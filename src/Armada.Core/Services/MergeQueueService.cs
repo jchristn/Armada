@@ -1154,9 +1154,11 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Delete the entry's branch (local and remote) when its work is in the target branch: always for a Landed entry
-        /// unless git shows the branch is not merged, and for a Cancelled entry only when git shows it is merged. Failed
-        /// entries keep their branch. Best effort: problems are logged and the entry is still deleted.
+        /// Delete the entry's mission branch when git shows that its work is in the target branch.
+        /// A landed entry follows the vessel branch cleanup policy, or the global policy when the vessel
+        /// does not set one. None keeps both refs. LocalOnly deletes the local ref. LocalAndRemote deletes
+        /// both refs. A cancelled entry deletes both refs when git shows that the branch is merged. A failed
+        /// entry keeps its branch. Best effort: git problems are logged and the entry is still deleted.
         /// </summary>
         private async Task CleanupEntryBranchAsync(MergeEntry entry, CancellationToken token)
         {
@@ -1207,14 +1209,31 @@ namespace Armada.Core.Services
                 return;
             }
 
-            try
+            bool deleteRemote = true;
+            if (entry.Status == MergeStatusEnum.Landed)
             {
-                await RunGitAsync(host, host.RepoPath, token, "push", "origin", "--delete", entry.BranchName).ConfigureAwait(false);
-                _Logging.Debug(_Header + "deleted remote branch " + entry.BranchName);
+                BranchCleanupPolicyEnum policy = await ResolveLandedBranchCleanupPolicyAsync(entry, token).ConfigureAwait(false);
+                if (policy == BranchCleanupPolicyEnum.None)
+                {
+                    _Logging.Info(_Header + "keeping branch " + entry.BranchName + " of landed entry " + entry.Id
+                        + ": branch cleanup policy is None");
+                    return;
+                }
+
+                deleteRemote = policy == BranchCleanupPolicyEnum.LocalAndRemote;
             }
-            catch (Exception ex) when (!(ex is OperationCanceledException))
+
+            if (deleteRemote)
             {
-                _Logging.Debug(_Header + "remote branch delete for " + entry.BranchName + " skipped: " + ex.Message);
+                try
+                {
+                    await RunGitAsync(host, host.RepoPath, token, "push", "origin", "--delete", entry.BranchName).ConfigureAwait(false);
+                    _Logging.Debug(_Header + "deleted remote branch " + entry.BranchName);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException))
+                {
+                    _Logging.Debug(_Header + "remote branch delete for " + entry.BranchName + " skipped: " + ex.Message);
+                }
             }
 
             try
@@ -1226,6 +1245,26 @@ namespace Armada.Core.Services
             {
                 _Logging.Debug(_Header + "local branch delete for " + entry.BranchName + " skipped: " + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Vessel branch cleanup policy for a landed entry, or the global policy when the vessel does not set one.
+        /// </summary>
+        /// <param name="entry">Landed merge-queue entry.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The policy that applies to the entry.</returns>
+        private async Task<BranchCleanupPolicyEnum> ResolveLandedBranchCleanupPolicyAsync(MergeEntry entry, CancellationToken token)
+        {
+            if (!String.IsNullOrEmpty(entry.VesselId))
+            {
+                Vessel? vessel = !String.IsNullOrEmpty(entry.TenantId)
+                    ? await _Database.Vessels.ReadAsync(entry.TenantId, entry.VesselId, token).ConfigureAwait(false)
+                    : await _Database.Vessels.ReadAsync(entry.VesselId, token).ConfigureAwait(false);
+                if (vessel != null && vessel.BranchCleanupPolicy.HasValue)
+                    return vessel.BranchCleanupPolicy.Value;
+            }
+
+            return _Settings.BranchCleanupPolicy;
         }
 
         /// <summary>
