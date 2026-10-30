@@ -48,6 +48,18 @@ namespace Armada.Core.Database.Interfaces
         Task<UserMaster> UpdateAsync(UserMaster user, CancellationToken token = default);
 
         /// <summary>
+        /// Replace <c>password_sha256</c> when the stored hash is still <paramref name="expectedHash"/>.
+        /// No other column is written. A row whose hash has changed is left as stored.
+        /// </summary>
+        /// <param name="tenantId">Tenant identifier.</param>
+        /// <param name="id">User identifier.</param>
+        /// <param name="expectedHash">Hash the row must still hold.</param>
+        /// <param name="replacementHash">Adaptive hash to store.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when exactly one row was updated.</returns>
+        Task<bool> UpgradePasswordAsync(string tenantId, string id, string expectedHash, string replacementHash, CancellationToken token = default);
+
+        /// <summary>
         /// Delete a user by tenant and identifier.
         /// </summary>
         Task DeleteAsync(string tenantId, string id, CancellationToken token = default);

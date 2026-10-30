@@ -71,9 +71,13 @@ namespace Armada.Core.Services
             {
                 try
                 {
-                    // The database layer stretches any non-PBKDF2 value on write.
-                    await _Database.Users.UpdateAsync(user, token).ConfigureAwait(false);
-                    upgraded++;
+                    // Store the stretched hash only while the row still holds the value that was read.
+                    string expected = user.PasswordSha256;
+                    string replacement = PasswordHasher.ToStorageFormat(expected);
+                    if (await _Database.Users.UpgradePasswordAsync(user.TenantId, user.Id, expected, replacement, token).ConfigureAwait(false))
+                    {
+                        upgraded++;
+                    }
                 }
                 catch (Exception ex)
                 {

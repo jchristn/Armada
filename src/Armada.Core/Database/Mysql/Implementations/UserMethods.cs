@@ -250,6 +250,31 @@ namespace Armada.Core.Database.Mysql.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<bool> UpgradePasswordAsync(string tenantId, string id, string expectedHash, string replacementHash, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+            if (string.IsNullOrEmpty(expectedHash)) throw new ArgumentNullException(nameof(expectedHash));
+            if (string.IsNullOrEmpty(replacementHash)) throw new ArgumentNullException(nameof(replacementHash));
+            if (!Armada.Core.Services.PasswordHasher.IsAdaptiveHash(replacementHash)) throw new ArgumentException("The replacement password hash must already be in the adaptive format.", nameof(replacementHash));
+
+            using (MySqlConnection conn = new MySqlConnection(_ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (MySqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "UPDATE users SET password_sha256 = @replacement WHERE tenant_id = @tenantId AND id = @id AND password_sha256 = @expected;";
+                    cmd.Parameters.AddWithValue("@replacement", replacementHash);
+                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                    cmd.Parameters.AddWithValue("@id", id);
+                    cmd.Parameters.AddWithValue("@expected", expectedHash);
+                    int rows = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    return rows == 1;
+                }
+            }
+        }
+
+        /// <inheritdoc />
         public async Task DeleteAsync(string tenantId, string id, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
