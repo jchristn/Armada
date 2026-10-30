@@ -97,6 +97,23 @@ namespace Test.Shared.Suites.Database
                 AssertNull(rereadA1.SupersedesId, "UpdateAsync does not write supersedes_id");
                 AssertEqual(a2.Id, (await db.BlackBoxEntries.ReadCurrentByMissionAsync("msn_att").ConfigureAwait(false))!.Id, "attempt 2 stays current");
 
+                // A stale full-row update (an enrichment that read the entry before an operator pinned or resolved it)
+                // never undoes the pin, the resolution or the expiry those operations set.
+                BlackBoxEntry stale = (await db.BlackBoxEntries.ReadAsync(a2.Id).ConfigureAwait(false))!;
+                DateTime resolvedAt = DateTime.UtcNow;
+                await db.BlackBoxEntries.UpdatePinnedAsync(a2.Id, true, null).ConfigureAwait(false);
+                await db.BlackBoxEntries.UpdateResolutionAsync(a2.Id, BlackBoxResolutionEnum.WontFix, "kept", "msn_link", resolvedAt, null).ConfigureAwait(false);
+                stale.Summary = "enriched later";
+                await db.BlackBoxEntries.UpdateAsync(stale).ConfigureAwait(false);
+                BlackBoxEntry afterStale = (await db.BlackBoxEntries.ReadAsync(a2.Id).ConfigureAwait(false))!;
+                AssertEqual("enriched later", afterStale.Summary, "UpdateAsync still writes enrichment fields");
+                AssertTrue(afterStale.Pinned, "UpdateAsync does not unpin");
+                AssertEqual(BlackBoxResolutionEnum.WontFix, afterStale.Resolution, "UpdateAsync does not reopen");
+                AssertEqual("kept", afterStale.ResolutionNote, "UpdateAsync keeps the resolution note");
+                AssertEqual("msn_link", afterStale.ResolutionLink, "UpdateAsync keeps the resolution link");
+                AssertNotNull(afterStale.ResolvedUtc, "UpdateAsync keeps resolved_utc");
+                AssertNull(afterStale.ExpiresUtc, "UpdateAsync does not rewrite expires_utc");
+
                 List<Task<BlackBoxEntry>> concurrent = Enumerable.Range(0, 5).Select(_ => db.BlackBoxEntries.CreateCurrentAsync(BlackBoxTestKit.Entry("ten_a", "msn_conc"))).ToList();
                 await Task.WhenAll(concurrent).ConfigureAwait(false);
                 long current = await db.BlackBoxEntries.CountAsync(new BlackBoxEnumerateRequest { MissionId = "msn_conc", IsCurrent = true }).ConfigureAwait(false);

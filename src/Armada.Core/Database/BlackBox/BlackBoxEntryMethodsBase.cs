@@ -34,15 +34,17 @@ namespace Armada.Core.Database.BlackBox
             "next_attempt_utc", "expires_utc", "created_utc", "enriched_utc", "analyzed_utc", "resolved_utc", "last_update_utc"
         };
 
+        // Columns UpdateAsync writes. Operator-owned state (pin, resolution, resolved time, expiry) and attempt chaining
+        // (is_current, supersedes_id) have dedicated updates, so a stale full-row update from enrichment cannot undo them.
         private static readonly string[] _MutableColumns = new string[]
         {
             "user_id", "vessel_id", "fleet_id", "captain_id", "harbor_id", "dock_id", "merge_entry_id", "incident_id",
             "stage_outcome_id", "parent_mission_id", "mission_title", "vessel_name", "attempt",
             "phase", "step", "failure_kind", "status_before", "status_after", "triage", "fingerprint", "capture_mode", "state",
-            "resolution", "resolution_note", "resolution_link", "pinned", "storage_target", "storage_prefix", "total_bytes",
+            "storage_target", "storage_prefix", "total_bytes",
             "object_count", "schema_version", "rules_version", "armada_version", "armada_commit", "reason_excerpt", "summary",
-            "enrichment_attempts", "last_error", "next_attempt_utc", "expires_utc", "enriched_utc", "analyzed_utc",
-            "resolved_utc", "last_update_utc"
+            "enrichment_attempts", "last_error", "next_attempt_utc", "enriched_utc", "analyzed_utc",
+            "last_update_utc"
         };
 
         private readonly BlackBoxSqlDialect _Sql;
