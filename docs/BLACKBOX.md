@@ -292,7 +292,7 @@ in `?bbtab=` (for example `/missions?tab=blackbox&bbtab=fingerprints`), since th
 
 **Settings.** The server settings page has a Black Box section: storage target and its credentials (masked), compress,
 key prefix, fallback to the database, a store health check, **Migrate stored entries** with progress, and the retention
-policy. **Inbox** failure rows have Copy Markdown and Ask Armada actions, and the Storage page counts black box usage.
+policy. **Inbox** failure rows have Copy Markdown, Copy JSON and Ask Armada actions, and the Storage page counts black box usage.
 
 ### TUI
 

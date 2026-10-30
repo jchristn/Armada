@@ -1,10 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import Inbox from './Inbox';
-import { decideCliPermissionRequest, getInbox, getMissionBlackBoxBrief, retryMissionLanding } from '../api/client';
+import { decideCliPermissionRequest, getInbox, getMissionBlackBox, getMissionBlackBoxBrief, retryMissionLanding } from '../api/client';
 import type { CliPermissionRequest, InboxItem, WebSocketMessage } from '../types/models';
 
-vi.mock('../api/client', () => ({ getInbox: vi.fn(), decideCliPermissionRequest: vi.fn(), retryMissionLanding: vi.fn(), getMissionBlackBoxBrief: vi.fn(), apiErrorMessage: (_e: unknown, f: string) => f }));
+vi.mock('../api/client', () => ({ getInbox: vi.fn(), decideCliPermissionRequest: vi.fn(), retryMissionLanding: vi.fn(), getMissionBlackBoxBrief: vi.fn(), getMissionBlackBox: vi.fn(), apiErrorMessage: (_e: unknown, f: string) => f }));
 const handlers = new Set<(msg: WebSocketMessage) => void>();
 vi.mock('../context/WebSocketContext', () => ({
   useWebSocket: () => ({
@@ -197,6 +197,7 @@ describe('Needs You failure rows: black box actions', () => {
 
   beforeEach(() => {
     pushToast.mockClear();
+    vi.mocked(getMissionBlackBox).mockReset();
     vi.mocked(getInbox).mockResolvedValue([
       { ...item('failed', 'Failed: Append line', '/missions/msn_1', 'Critical'), entityId: 'msn_1' },
       item('review', 'Review: Docs', '/missions/msn_2'),
@@ -212,6 +213,7 @@ describe('Needs You failure rows: black box actions', () => {
     fireEvent.click(within(interventions).getByRole('button', { name: 'Copy Markdown' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('# FIX THIS'));
     expect(getMissionBlackBoxBrief).toHaveBeenCalledWith('msn_1');
+    expect(pushToast).toHaveBeenCalledWith('success', 'Black box Markdown copied. Paste it into your coding agent.');
     // The row itself was not opened.
     expect(screen.getByTestId('location').textContent).toBe('/inbox');
   });
@@ -222,6 +224,69 @@ describe('Needs You failure rows: black box actions', () => {
     const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
     fireEvent.click(within(interventions).getByRole('button', { name: 'Copy Markdown' }));
     await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', 'This mission has no black box entry yet.'));
+  });
+
+  it('shows Copy JSON only on failure cards with mission IDs, directly after Copy Markdown', async () => {
+    vi.mocked(getInbox).mockResolvedValue([
+      item('failed', 'Failed', '/missions/1'),
+      item('landing_failed', 'Landing failed', '/missions/2'),
+      item('review', 'Review', '/missions/3'),
+      item('stalled', 'Stalled', '/captains/1'),
+      { ...item('failed', 'No mission ID', '/missions'), entityId: null },
+    ]);
+    renderInbox();
+    const buttons = await screen.findAllByRole('button', { name: 'Copy JSON' });
+    expect(buttons).toHaveLength(2);
+    for (const button of buttons) {
+      expect(button).toHaveClass('inbox-copy-json');
+      expect(button).toHaveAttribute('title', 'Copy the entry and its versioned record as JSON.');
+      expect(button.previousElementSibling).toHaveTextContent('Copy Markdown');
+      expect(button.nextElementSibling).toHaveTextContent('Ask Armada');
+    }
+    for (const title of ['Review', 'Stalled', 'No mission ID']) {
+      const card = screen.getByText(title).closest('.card') as HTMLElement;
+      expect(within(card).queryByRole('button', { name: 'Copy JSON' })).toBeNull();
+    }
+  });
+
+  it.each(['failed', 'landing_failed'])('copies formatted JSON for %s without navigating', async (kind) => {
+    vi.mocked(getInbox).mockResolvedValue([{ ...item(kind, 'Failure', '/missions/msn_1'), entityId: 'msn_1' }]);
+    const entry = { id: 'bbx_1', record: { version: 1, missionId: 'msn_1' } };
+    vi.mocked(getMissionBlackBox).mockResolvedValue(entry as never);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderInbox();
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy JSON' }));
+    await waitFor(() => expect(pushToast).toHaveBeenCalledWith('success', 'Black box JSON copied.'));
+    expect(getMissionBlackBox).toHaveBeenCalledWith('msn_1');
+    expect(writeText).toHaveBeenCalledWith(JSON.stringify(entry, null, 2));
+    expect(screen.getByTestId('location')).toHaveTextContent('/inbox');
+  });
+
+  it.each([
+    [Object.assign(new Error('not found'), { status: 404 }), 'This mission has no black box entry yet.'],
+    [new Error('server unavailable'), 'The JSON could not be copied: server unavailable'],
+    ['unexpected failure', 'The JSON could not be copied: unexpected failure'],
+  ])('reports JSON fetch errors: %s', async (error, message) => {
+    vi.mocked(getMissionBlackBox).mockRejectedValue(error);
+    renderInbox();
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy JSON' }));
+    await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', message));
+    expect(screen.getByTestId('location')).toHaveTextContent('/inbox');
+  });
+
+  it('reports clipboard errors when copying JSON', async () => {
+    vi.mocked(getMissionBlackBox).mockResolvedValue({} as never);
+    const writeText = vi.fn().mockRejectedValue(new Error('clipboard unavailable'));
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    Object.defineProperty(document, 'execCommand', { value: vi.fn(() => { throw new Error('clipboard unavailable'); }), configurable: true });
+    try {
+      renderInbox();
+      fireEvent.click(await screen.findByRole('button', { name: 'Copy JSON' }));
+      await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', 'The JSON could not be copied: clipboard unavailable'));
+    } finally {
+      Reflect.deleteProperty(document, 'execCommand');
+    }
   });
 
   it('opens Ask Armada with the black box prompt', async () => {

@@ -4,6 +4,12 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## Unreleased
+
+### Dashboard
+
+- Needs You failure cards offer Copy JSON next to Copy Markdown, with matching black box copy messages.
+
 ## v1.2.0 (2026-10-29)
 
 v1.2.0 adds the mission and voyage black box: every failure writes an entry that says where, how and why it

@@ -7010,7 +7010,9 @@
         "Copy JSON": "Copiar JSON",
         "Copy the entry and its versioned record as JSON.": "Copia la entrada y su registro versionado como JSON.",
         "Black box JSON copied.": "JSON de la caja negra copiado.",
-        "The JSON could not be copied: {{message}}": "No se pudo copiar el JSON: {{message}}"
+        "The JSON could not be copied: {{message}}": "No se pudo copiar el JSON: {{message}}",
+        "Copy the black box brief as Markdown, ready to paste into a coding agent.": "Copiar el resumen de la caja negra como Markdown, listo para pegar en un agente de programacion.",
+        "Black box Markdown copied. Paste it into your coding agent.": "Markdown de la caja negra copiado. Pegalo en tu agente de programacion."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -12963,7 +12965,9 @@
         "Copy JSON": "复制 JSON",
         "Copy the entry and its versioned record as JSON.": "将该条目及其带版本的记录复制为 JSON。",
         "Black box JSON copied.": "黑匣子 JSON 已复制。",
-        "The JSON could not be copied: {{message}}": "无法复制 JSON：{{message}}"
+        "The JSON could not be copied: {{message}}": "无法复制 JSON：{{message}}",
+        "Copy the black box brief as Markdown, ready to paste into a coding agent.": "复制黑匣子摘要为 Markdown，可粘贴到编程代理。",
+        "Black box Markdown copied. Paste it into your coding agent.": "已复制黑匣子 Markdown。请粘贴到编程代理。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -18879,7 +18883,9 @@
         "Copy JSON": "複製 JSON",
         "Copy the entry and its versioned record as JSON.": "將此項目及其帶版本的記錄複製為 JSON。",
         "Black box JSON copied.": "已複製黑盒子 JSON。",
-        "The JSON could not be copied: {{message}}": "無法複製 JSON：{{message}}"
+        "The JSON could not be copied: {{message}}": "無法複製 JSON：{{message}}",
+        "Copy the black box brief as Markdown, ready to paste into a coding agent.": "複製黑盒子摘要為 Markdown，可貼到程式代理。",
+        "Black box Markdown copied. Paste it into your coding agent.": "已複製黑盒子 Markdown。請貼到程式代理。"
       },
       "sections": {}
     },
@@ -24755,7 +24761,9 @@
         "Copy JSON": "複製 JSON",
         "Copy the entry and its versioned record as JSON.": "將呢個項目同佢有版本嘅記錄複製做 JSON。",
         "Black box JSON copied.": "已複製黑盒 JSON。",
-        "The JSON could not be copied: {{message}}": "複製唔到 JSON：{{message}}"
+        "The JSON could not be copied: {{message}}": "複製唔到 JSON：{{message}}",
+        "Copy the black box brief as Markdown, ready to paste into a coding agent.": "複製黑盒摘要做 Markdown，可以貼到編程代理。",
+        "Black box Markdown copied. Paste it into your coding agent.": "已複製黑盒 Markdown。請貼到編程代理。"
       },
       "sections": {}
     },
@@ -30647,7 +30655,9 @@
         "Copy JSON": "JSON をコピー",
         "Copy the entry and its versioned record as JSON.": "エントリとそのバージョン付きレコードを JSON としてコピーします。",
         "Black box JSON copied.": "ブラックボックスの JSON をコピーしました。",
-        "The JSON could not be copied: {{message}}": "JSON をコピーできませんでした: {{message}}"
+        "The JSON could not be copied: {{message}}": "JSON をコピーできませんでした: {{message}}",
+        "Copy the black box brief as Markdown, ready to paste into a coding agent.": "ブラックボックスの概要を Markdown としてコピーし、コーディングエージェントに貼り付けます。",
+        "Black box Markdown copied. Paste it into your coding agent.": "ブラックボックスの Markdown をコピーしました。コーディングエージェントに貼り付けてください。"
       },
       "sections": {}
     },
@@ -36530,7 +36540,9 @@
         "Copy JSON": "JSON kopieren",
         "Copy the entry and its versioned record as JSON.": "Kopiert den Eintrag und seinen versionierten Datensatz als JSON.",
         "Black box JSON copied.": "Blackbox-JSON kopiert.",
-        "The JSON could not be copied: {{message}}": "Das JSON konnte nicht kopiert werden: {{message}}"
+        "The JSON could not be copied: {{message}}": "Das JSON konnte nicht kopiert werden: {{message}}",
+        "Copy the black box brief as Markdown, ready to paste into a coding agent.": "Den Blackbox-Kurzbericht als Markdown zum Einfuegen in einen Coding-Agenten kopieren.",
+        "Black box Markdown copied. Paste it into your coding agent.": "Blackbox-Markdown kopiert. In deinen Coding-Agenten einfuegen."
       },
       "sections": {}
     },
@@ -42413,7 +42425,9 @@
         "Copy JSON": "Copier le JSON",
         "Copy the entry and its versioned record as JSON.": "Copie l'entrée et son enregistrement versionné au format JSON.",
         "Black box JSON copied.": "JSON de la boîte noire copié.",
-        "The JSON could not be copied: {{message}}": "Le JSON n'a pas pu être copié : {{message}}"
+        "The JSON could not be copied: {{message}}": "Le JSON n'a pas pu être copié : {{message}}",
+        "Copy the black box brief as Markdown, ready to paste into a coding agent.": "Copier le resume de la boite noire en Markdown, pret a coller dans un agent de programmation.",
+        "Black box Markdown copied. Paste it into your coding agent.": "Markdown de la boite noire copie. Collez-le dans votre agent de programmation."
       },
       "sections": {}
     },
@@ -48296,7 +48310,9 @@
         "Copy JSON": "Copia JSON",
         "Copy the entry and its versioned record as JSON.": "Copia la voce e il suo record con versione come JSON.",
         "Black box JSON copied.": "JSON della scatola nera copiato.",
-        "The JSON could not be copied: {{message}}": "Impossibile copiare il JSON: {{message}}"
+        "The JSON could not be copied: {{message}}": "Impossibile copiare il JSON: {{message}}",
+        "Copy the black box brief as Markdown, ready to paste into a coding agent.": "Copia il riepilogo della scatola nera come Markdown, pronto da incollare in un agente di programmazione.",
+        "Black box Markdown copied. Paste it into your coding agent.": "Markdown della scatola nera copiato. Incollalo nel tuo agente di programmazione."
       },
       "sections": {}
     }
