@@ -229,6 +229,11 @@ namespace Armada.Server.Mcp.Tools
                     string captainId = request.CaptainId;
                     Captain? captain = await McpCallerScope.ReadCaptainAsync(database, caller, captainId).ConfigureAwait(false);
                     if (captain == null) return (object)McpToolError.NotFound("Captain not found");
+                    Captain storedBinding = new Captain(captain.Name, captain.Runtime)
+                    {
+                        Model = captain.Model,
+                        ModelEndpointId = captain.ModelEndpointId
+                    };
                     if (request.Name != null)
                         captain.Name = request.Name;
                     if (!String.IsNullOrEmpty(request.Runtime) && Enum.TryParse<AgentRuntimeEnum>(request.Runtime, true, out AgentRuntimeEnum rt))
@@ -258,7 +263,8 @@ namespace Armada.Server.Mcp.Tools
                         return (object)McpToolError.InvalidArgument(ex.Message, CaptainModelValidationFailureEnum.InvalidRuntimeOptions.ToString());
                     }
 
-                    if (agentLifecycle != null)
+                    // Live model validation runs only when the merged update changes Model, Runtime, or ModelEndpointId.
+                    if (agentLifecycle != null && AgentLifecycleHandler.ModelBindingChanged(storedBinding, captain))
                     {
                         CaptainModelValidationFailure? validationFailure = await agentLifecycle.ValidateCaptainModelDetailedAsync(captain).ConfigureAwait(false);
                         if (validationFailure != null) return (object)McpToolError.InvalidArgument(validationFailure.Message, validationFailure.Reason.ToString());
