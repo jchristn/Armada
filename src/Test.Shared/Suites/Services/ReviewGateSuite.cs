@@ -115,6 +115,8 @@ namespace Test.Shared.Suites.Services
                     Mission? beforeApprove = await testDb.Driver.Missions.ReadAsync(scenario.WorkerMission.Id).ConfigureAwait(false);
                     AssertNotNull(beforeApprove, "Reviewed mission should be readable before approval");
                     string? branchName = beforeApprove!.BranchName;
+                    beforeApprove.FailureReason = "stale failure";
+                    await testDb.Driver.Missions.UpdateAsync(beforeApprove).ConfigureAwait(false);
 
                     await scenario.Missions.ApproveReviewAsync(scenario.WorkerMission.Id, "usr_reviewer", "Looks good").ConfigureAwait(false);
 
@@ -123,6 +125,7 @@ namespace Test.Shared.Suites.Services
 
                     AssertNotNull(approved, "Approved mission should still exist");
                     AssertEqual(MissionStatusEnum.Complete, approved!.Status, "Approved reviewed stage should complete");
+                    AssertNull(approved.FailureReason, "approval clears the prior failure reason");
                     AssertEqual("usr_reviewer", approved.ReviewedByUserId, "Reviewer should be recorded");
                     AssertEqual("Looks good", approved.ReviewComment, "Approval comment should be recorded");
 
@@ -279,8 +282,8 @@ namespace Test.Shared.Suites.Services
             missionService.OnGetMissionOutput = _ => "reviewable stage output\n[ARMADA:RESULT] COMPLETE";
 
             Vessel vessel = new Vessel("review-vessel", "https://github.com/test/repo.git");
-            vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_review_bare_" + Guid.NewGuid().ToString("N"));
-            vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_review_work_" + Guid.NewGuid().ToString("N"));
+            vessel.LocalPath = TestTemp.NewDirectory("review_gate_bare");
+            vessel.WorkingDirectory = TestTemp.NewDirectory("review_gate_work");
             vessel.DefaultBranch = "main";
             vessel = await db.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 

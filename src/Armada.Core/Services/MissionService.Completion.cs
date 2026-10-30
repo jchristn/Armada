@@ -444,6 +444,8 @@ namespace Armada.Core.Services
             MissionStatusEnum observedStatus = mission.Status;
             DateTime observedVersion = mission.LastUpdateUtc;
             mission.Status = MissionStatusEnum.WorkProduced;
+            mission.FailureReason = null;
+            mission.FailureKind = null;
             mission.ProcessId = null;
             mission.LastUpdateUtc = DateTime.UtcNow;
             if (!await _Database.Missions.TryUpdateIfUnchangedAsync(mission, observedVersion, new MissionStatusEnum[] { observedStatus }, token).ConfigureAwait(false))
