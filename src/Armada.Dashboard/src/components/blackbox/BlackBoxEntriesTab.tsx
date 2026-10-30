@@ -150,7 +150,7 @@ export default function BlackBoxEntriesTab({ vessels }: { vessels: Vessel[] }) {
       </select>
     </label>
   );
-  const yesNo = (key: 'pinned' | 'isCurrent', label: string) => (
+  const yesNo = (key: 'pinned' | 'isCurrent' | 'resilienceScope', label: string) => (
     <label>
       {label}
       <select value={draft[key] === undefined ? '' : String(draft[key])} onChange={(e) => set(key, boolFilter(e.target.value) ?? '')} aria-label={label}>
@@ -210,12 +210,14 @@ export default function BlackBoxEntriesTab({ vessels }: { vessels: Vessel[] }) {
         {text('path', t('File path'), 'src/')}
         {yesNo('pinned', t('Pinned'))}
         {yesNo('isCurrent', t('Current attempt'))}
+        {yesNo('resilienceScope', t('Handoff and landing scope'))}
         <label>{t('Created after')}<input type="date" value={draft.createdAfter ?? ''} onChange={(e) => set('createdAfter', e.target.value)} aria-label={t('Created after')} /></label>
         <label>{t('Created before')}<input type="date" value={draft.createdBefore ?? ''} onChange={(e) => set('createdBefore', e.target.value)} aria-label={t('Created before')} /></label>
       </div>
       <div className="blackbox-saved">
         <button type="button" className="btn btn-sm btn-primary" onClick={() => apply()} title={t('Show the entries that match these filters.')}>{t('Apply filters')}</button>
         <button type="button" className="btn btn-sm" onClick={() => apply({})} title={t('Remove every filter.')}>{t('Clear')}</button>
+        <button type="button" className="btn btn-sm" data-testid="blackbox-gaps-quick-view" onClick={() => apply({ triage: 'ArmadaDefect', resilienceScope: true })} title={t('Show the Armada resilience gaps: handoff and landing failures triaged ArmadaDefect.')}>{t('Armada resilience gaps')}</button>
         <span className="text-dim">|</span>
         <select aria-label={t('Saved filters')} value="" onChange={(e) => { const f = saved.find((s) => s.name === e.target.value); if (f) apply(f.query); }} title={t('Filters saved in this browser.')}>
           <option value="">{t('Saved filters ({{count}})', { count: saved.length })}</option>
