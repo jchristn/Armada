@@ -200,24 +200,24 @@ describe('BlackBoxPanel empty, error and 404 states', () => {
 });
 
 describe('BlackBoxPanel actions', () => {
-  it('copies the FIX THIS brief for the selected audience', async () => {
+  it('copies the single FIX THIS brief', async () => {
     renderPanel();
     await screen.findByTestId('blackbox-summary');
-    fireEvent.click(screen.getByRole('button', { name: 'Agent' }));
-    await waitFor(() => expect(getBlackBoxBrief).toHaveBeenCalledWith('bbx_2', { audience: 'agent' }));
+    await waitFor(() => expect(getBlackBoxBrief).toHaveBeenCalledWith('bbx_2'));
     fireEvent.click(screen.getByRole('button', { name: 'Copy FIX THIS' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('# FIX THIS\nbrief body'));
     expect(pushToast).toHaveBeenCalledWith('success', expect.stringContaining('FIX THIS brief copied'));
   });
 
-  it('starts with the user audience and switches the pressed button', async () => {
+  it('has no audience toggle and fetches the brief without an audience', async () => {
     renderPanel();
     await screen.findByTestId('blackbox-summary');
-    expect(screen.getByRole('button', { name: 'User' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'Maintainer' }));
-    expect(screen.getByRole('button', { name: 'Maintainer' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'User' })).toHaveAttribute('aria-pressed', 'false');
-    await waitFor(() => expect(getBlackBoxBrief).toHaveBeenCalledWith('bbx_2', { audience: 'maintainer' }));
+    for (const name of ['User', 'Agent', 'Maintainer']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Brief audience' })).not.toBeInTheDocument();
+    await waitFor(() => expect(getBlackBoxBrief).toHaveBeenCalled());
+    for (const call of vi.mocked(getBlackBoxBrief).mock.calls) expect(call).toEqual(['bbx_2']);
+    // The single brief view shows the stack frames the old User audience hid.
+    expect(screen.getByLabelText('Stack')).toHaveTextContent('LandingService.MergeAsync');
   });
 
   it('reports a brief that cannot be copied', async () => {
@@ -234,7 +234,7 @@ describe('BlackBoxPanel actions', () => {
     renderPanel();
     await screen.findByTestId('blackbox-summary');
     fireEvent.click(screen.getByRole('button', { name: 'Download .md' }));
-    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ filename: 'bbx_2-user.md', contentType: 'text/markdown' })));
+    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ filename: 'blackbox-bbx_2.md', contentType: 'text/markdown' })));
     fireEvent.click(screen.getByRole('button', { name: 'Download .zip' }));
     await waitFor(() => expect(downloadBlackBox).toHaveBeenCalledWith('bbx_2'));
   });

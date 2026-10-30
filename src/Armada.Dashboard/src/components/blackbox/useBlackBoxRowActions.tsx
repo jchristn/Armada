@@ -5,7 +5,7 @@ import type { BlackBoxEntry, BlackBoxEntrySummary } from '../../types/blackbox';
 import { useAuth } from '../../context/AuthContext';
 import { useLocale } from '../../context/LocaleContext';
 import { useNotifications } from '../../context/NotificationContext';
-import { blackBoxAskHref, blackBoxAskState, blackBoxEntryAskPrompt, blackBoxEntryBriefFileName } from '../../lib/blackbox';
+import { blackBoxAskHref, blackBoxAskState, blackBoxBriefFileName, blackBoxEntryAskPrompt } from '../../lib/blackbox';
 import { useDeleteProgress } from '../../lib/useDeleteProgress';
 import type { ActionMenuItem } from '../shared/ActionMenu';
 import ConfirmDialog from '../shared/ConfirmDialog';
@@ -85,7 +85,7 @@ export function useBlackBoxRowActions(onChanged: () => void): BlackBoxRowActions
 
   const items = (row: BlackBoxEntrySummary): ActionMenuItem[] => [
     { label: 'View', title: 'Open the black box entry page with every section, the brief and the attempts.', onClick: () => navigate(`/blackbox/${encodeURIComponent(row.id)}`) },
-    { label: 'Download Markdown', title: 'Save the FIX THIS brief for a coding agent as a Markdown file.', onClick: () => { void downloadBlackBoxMarkdown(blackBoxEntryBriefFileName(row.id), () => getBlackBoxBrief(row.id), t, pushToast); } },
+    { label: 'Download Markdown', title: 'Save the FIX THIS brief for a coding agent as a Markdown file.', onClick: () => { void downloadBlackBoxMarkdown(blackBoxBriefFileName(row.id), () => getBlackBoxBrief(row.id), t, pushToast); } },
     { label: 'View JSON', title: 'Show the full black box entry as returned by the API.', onClick: () => { void viewJson(row); } },
     { label: 'Ask Armada', title: 'Open Ask Armada with a prompt about this failure; nothing is sent until you press Send.', onClick: () => askArmada(row) },
     { label: 'Resolve', title: 'Set the resolution of this entry, with a note and a link.', onClick: () => { void openResolve(row); } },

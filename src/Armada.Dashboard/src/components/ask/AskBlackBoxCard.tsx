@@ -33,7 +33,7 @@ export default function AskBlackBoxCard({ card }: AskBlackBoxCardProps) {
 
   async function copyBrief() {
     try {
-      const brief = await getBlackBoxBrief(entryId, { audience: 'agent' });
+      const brief = await getBlackBoxBrief(entryId);
       await copyToClipboard(typeof brief === 'string' ? brief : String(brief ?? ''));
       setCopyState('copied');
     } catch {

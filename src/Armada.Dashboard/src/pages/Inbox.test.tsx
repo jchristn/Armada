@@ -211,7 +211,7 @@ describe('Needs You failure rows: black box actions', () => {
     const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
     fireEvent.click(within(interventions).getByRole('button', { name: 'Copy FIX THIS' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('# FIX THIS'));
-    expect(getMissionBlackBoxBrief).toHaveBeenCalledWith('msn_1', { audience: 'agent' });
+    expect(getMissionBlackBoxBrief).toHaveBeenCalledWith('msn_1');
     // The row itself was not opened.
     expect(screen.getByTestId('location').textContent).toBe('/inbox');
   });

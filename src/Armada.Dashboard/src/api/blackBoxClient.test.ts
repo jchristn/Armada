@@ -6,6 +6,7 @@ import {
   deleteBlackBoxEntries,
   enumerateBlackBox,
   getBlackBox,
+  getBlackBoxBrief,
   getBlackBoxSection,
   getMissionBlackBox,
   getMissionBlackBoxBrief,
@@ -64,11 +65,17 @@ describe('black box client', () => {
     expect(section.record.conflict?.conflictedFiles).toEqual(['a.ts']);
   });
 
-  it('returns the brief as Markdown text with the audience on the querystring', async () => {
+  it('returns the brief as Markdown text with redactHosts on the querystring and no audience', async () => {
     const fetchMock = stub(new Response('# FIX THIS', { status: 200, headers: { 'Content-Type': 'text/markdown' } }));
-    const brief = await getMissionBlackBoxBrief('msn_1', { audience: 'maintainer', redactHosts: true });
+    const brief = await getMissionBlackBoxBrief('msn_1', { redactHosts: true });
     expect(brief).toBe('# FIX THIS');
-    expect(onlyCallArgs(fetchMock)[0]).toMatch(/\/api\/v1\/missions\/msn_1\/blackbox\/brief\?audience=maintainer&redactHosts=true$/);
+    expect(onlyCallArgs(fetchMock)[0]).toMatch(/\/api\/v1\/missions\/msn_1\/blackbox\/brief\?redactHosts=true$/);
+  });
+
+  it('requests the entry brief with no querystring by default', async () => {
+    const fetchMock = stub(new Response('# FIX THIS', { status: 200, headers: { 'Content-Type': 'text/markdown' } }));
+    expect(await getBlackBoxBrief('bbx_1')).toBe('# FIX THIS');
+    expect(onlyCallArgs(fetchMock)[0]).toMatch(/\/api\/v1\/blackbox\/bbx_1\/brief$/);
   });
 
   it('sends PascalCase filters for enumerate and search', async () => {

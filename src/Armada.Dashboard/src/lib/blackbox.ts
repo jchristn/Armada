@@ -1,5 +1,4 @@
 import type {
-  BlackBoxAudience,
   BlackBoxCaptureMode,
   BlackBoxEntry,
   BlackBoxEnumerateQuery,
@@ -18,13 +17,6 @@ export const BLACKBOX_EVENT_PREFIX = 'blackbox.';
 
 /** The black box events the dashboard follows live. */
 export const BLACKBOX_LIVE_EVENTS = ['blackbox.captured', 'blackbox.analyzed', 'blackbox.resolved', 'blackbox.deleted'] as const;
-
-/** Audiences of the FIX THIS brief, in toggle order. */
-export const BLACKBOX_AUDIENCES: { key: BlackBoxAudience; label: string; tooltip: string }[] = [
-  { key: 'user', label: 'User', tooltip: 'The brief for the person who owns the work: what happened and what to do next.' },
-  { key: 'agent', label: 'Agent', tooltip: 'The brief to paste into a coding agent and say FIX THIS: evidence, commands and recovery steps.' },
-  { key: 'maintainer', label: 'Maintainer', tooltip: 'The brief for Armada maintainers: rule ids, source pointers and what Armada could change.' },
-];
 
 export const BLACKBOX_PHASES = ['Dispatch', 'Provision', 'Execution', 'Completion', 'Review', 'Handoff', 'Landing', 'MergeQueue', 'Recovery', 'Voyage', 'External', 'Unknown'];
 
@@ -85,12 +77,7 @@ export function isBlackBoxPending(entry: Pick<BlackBoxEntry, 'state'> | null | u
 }
 
 /** File name of a downloaded brief. */
-export function blackBoxBriefFileName(entryId: string, audience: BlackBoxAudience): string {
-  return `${entryId}-${audience}.md`;
-}
-
-/** File name of a brief downloaded from the entries table (the server's default audience). */
-export function blackBoxEntryBriefFileName(entryId: string): string {
+export function blackBoxBriefFileName(entryId: string): string {
   return `blackbox-${entryId}.md`;
 }
 

@@ -8,12 +8,11 @@ import {
   getVoyageBlackBox,
   listMissionBlackBoxEntries,
 } from '../../api/client';
-import type { BlackBoxAudience, BlackBoxEntry, BlackBoxEntrySummary, BlackBoxRecord } from '../../types/blackbox';
+import type { BlackBoxEntry, BlackBoxEntrySummary, BlackBoxRecord } from '../../types/blackbox';
 import { useAuth } from '../../context/AuthContext';
 import { useLocale } from '../../context/LocaleContext';
 import { useNotifications } from '../../context/NotificationContext';
 import {
-  BLACKBOX_AUDIENCES,
   blackBoxAskHref,
   blackBoxAskState,
   blackBoxBriefFileName,
@@ -85,7 +84,7 @@ function Lazy({ title, children, defaultOpen }: { title: string; children: () =>
 /**
  * The black box panel (MISSION_BLACKBOX_PLAN.md 11.1): one failure's record rendered as the brief's sections (Summary,
  * Where, How, Why, Conflict, Configuration, What would have prevented it, What Armada could change, Recovery,
- * Attempts, Evidence, Notes), with Copy FIX THIS, the .md and .zip downloads, the JSON record, the audience toggle,
+ * Attempts, Evidence, Notes), with Copy FIX THIS, the .md and .zip downloads, the JSON record,
  * Ask Armada, Resolve, Pin and Reanalyze. Recovery paths dry run first and confirm in BlackBoxActionDialog. Follows
  * the blackbox.* WebSocket events for its subject, so a pending entry fills in when its analysis lands.
  */
@@ -100,7 +99,6 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
   const [entry, setEntry] = useState<BlackBoxEntry | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(entryId ?? null);
   const [attempts, setAttempts] = useState<BlackBoxEntrySummary[]>([]);
-  const [audience, setAudience] = useState<BlackBoxAudience>('user');
   const [brief, setBrief] = useState<{ key: string; text: string } | null>(null);
   const [briefError, setBriefError] = useState('');
   const [showJson, setShowJson] = useState(false);
@@ -160,24 +158,24 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
     setBrief(null);
   });
 
-  const briefKey = entry ? `${entry.id}|${audience}|${entry.lastUpdateUtc ?? ''}` : '';
+  const briefKey = entry ? `${entry.id}|${entry.lastUpdateUtc ?? ''}` : '';
   const fetchBrief = useCallback(async (): Promise<string> => {
     if (!entry) return '';
     if (brief && brief.key === briefKey) return brief.text;
-    const text = await getBlackBoxBrief(entry.id, { audience });
+    const text = await getBlackBoxBrief(entry.id);
     setBrief({ key: briefKey, text });
     setBriefError('');
     return text;
-  }, [entry, audience, brief, briefKey]);
+  }, [entry, brief, briefKey]);
 
   useEffect(() => {
     if (!entry || state !== 'ready') return;
     let cancelled = false;
-    getBlackBoxBrief(entry.id, { audience })
+    getBlackBoxBrief(entry.id)
       .then((text) => { if (!cancelled) { setBrief({ key: briefKey, text }); setBriefError(''); } })
       .catch((err: unknown) => { if (!cancelled) setBriefError(err instanceof Error ? err.message : String(err)); });
     return () => { cancelled = true; };
-    // briefKey covers the entry id, its last update and the audience.
+    // briefKey covers the entry id and its last update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [briefKey, state]);
 
@@ -193,7 +191,7 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
 
   async function downloadMarkdown() {
     if (!entry) return;
-    await downloadBlackBoxMarkdown(blackBoxBriefFileName(entry.id, audience), fetchBrief, t, pushToast);
+    await downloadBlackBoxMarkdown(blackBoxBriefFileName(entry.id), fetchBrief, t, pushToast);
   }
 
   async function downloadZip() {
@@ -278,7 +276,7 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
   const hasMechanismFields = !!(mechanism?.exceptionType || mechanism?.failingCommand || mechanism?.gitOperation || mechanism?.runtimeFailureKind)
     || mechanism?.exitCode != null || hasSuspectedCause;
   const hasMechanism = hasMechanismFields || !!classification?.rawReason || !!mechanism?.gitStderrTail || !!mechanism?.commandOutputTail
-    || (!!mechanism?.stackFrames?.length && audience !== 'user');
+    || !!mechanism?.stackFrames?.length;
   const workspace = record?.workspace;
   const conflict = record?.conflict;
   const configValues = record?.configuration?.values ?? [];
@@ -308,16 +306,11 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
             {!entry.isCurrent && <span className="blackbox-chip" title={t('A later attempt has its own entry.')}>{t('Superseded')}</span>}
           </div>
         </div>
-        <div className="blackbox-audience" role="group" aria-label={t('Brief audience')}>
-          {BLACKBOX_AUDIENCES.map((a) => (
-            <button key={a.key} type="button" aria-pressed={audience === a.key} onClick={() => setAudience(a.key)} title={t(a.tooltip)}>{t(a.label)}</button>
-          ))}
-        </div>
       </div>
 
       <div className="blackbox-toolbar">
-        <button type="button" className="btn btn-sm btn-primary" onClick={() => void copyFixThis()} title={t('Copy the FIX THIS brief for the selected audience, ready to paste into a coding agent.')}>{t('Copy FIX THIS')}</button>
-        <button type="button" className="btn btn-sm" onClick={() => void downloadMarkdown()} title={t('Save the brief for the selected audience as a Markdown file.')}>{t('Download .md')}</button>
+        <button type="button" className="btn btn-sm btn-primary" onClick={() => void copyFixThis()} title={t('Copy the FIX THIS brief, ready to paste into a coding agent.')}>{t('Copy FIX THIS')}</button>
+        <button type="button" className="btn btn-sm" onClick={() => void downloadMarkdown()} title={t('Save the FIX THIS brief as a Markdown file.')}>{t('Download .md')}</button>
         <button type="button" className="btn btn-sm" disabled={busy === 'zip'} onClick={() => void downloadZip()} title={t('Download every object of this entry and its manifest as a .zip.')}>{t('Download .zip')}</button>
         <button type="button" className="btn btn-sm" onClick={() => setShowJson(true)} title={t('Show the entry and its versioned record as JSON.')}>{t('View JSON')}</button>
         <button type="button" className="btn btn-sm" onClick={askArmada} title={t('Open Ask Armada with a prompt about this failure; nothing is sent until you press Send.')}>{t('Ask Armada about this failure')}</button>
@@ -392,7 +385,7 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
         {classification?.rawReason && <pre className="blackbox-pre mission-failure-reason" data-failure-kind={entry.failureKind ?? fallbackKind ?? undefined} data-i18n-skip="true">{classification.rawReason}</pre>}
         {mechanism?.gitStderrTail && <pre className="blackbox-pre" data-i18n-skip="true" aria-label={t('Git output')}>{mechanism.gitStderrTail}</pre>}
         {mechanism?.commandOutputTail && <pre className="blackbox-pre" data-i18n-skip="true" aria-label={t('Command output')}>{mechanism.commandOutputTail}</pre>}
-        {!!mechanism?.stackFrames?.length && audience !== 'user' && <pre className="blackbox-pre" data-i18n-skip="true" aria-label={t('Stack')}>{mechanism.stackFrames.join('\n')}</pre>}
+        {!!mechanism?.stackFrames?.length && <pre className="blackbox-pre" data-i18n-skip="true" aria-label={t('Stack')}>{mechanism.stackFrames.join('\n')}</pre>}
       </Section>
 
       <Section title={t('Why')} tooltip={t('Findings of the rule-based analysis, with rule ids and confidence.')} testId="blackbox-why">
@@ -484,7 +477,7 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
                 {imp.severity && imp.severity !== 'Unknown' && <span className="blackbox-chip" style={{ marginLeft: '0.3rem' }}>{t(imp.severity)}</span>}
                 {imp.knownIssue && <span className="text-dim"> ({imp.knownIssue})</span>}
                 {imp.evidence && <div className="text-dim" style={{ fontSize: '0.82rem' }}>{imp.evidence}</div>}
-                {audience === 'maintainer' && !!imp.sourcePointers?.length && <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{imp.sourcePointers.join(', ')}</div>}
+                {!!imp.sourcePointers?.length && <div className="mono text-dim" style={{ fontSize: '0.78rem' }}>{imp.sourcePointers.join(', ')}</div>}
               </li>
             ))}
           </ul>
