@@ -92,7 +92,9 @@ the porcelain status, the conflicted files, whether the worktree existed, the Ha
 **sweeper** runs every `blackBox.sweeper.intervalSeconds` (60) and captures any failed mission or voyage that has no
 current entry (`Sweeper`), and the **backfill** does the same for failures from before the upgrade or any window you
 choose (`Backfill`). Sweeper and backfill entries are flagged as lower fidelity in the brief: the failure site's
-volatile facts are missing.
+volatile facts are missing. Their step is inferred from the failure kind and, for a LandingFailed mission, from the
+reason (DirtyCheckout, DockMissing, Push, PullRequest, Verification, ..., else TargetIntegration), so a swept landing
+failure stays in the Landing phase and the handoff and landing scope.
 
 **State.** An entry is written `Captured`, then enriched in the background (`Enriched`: git forensics run on the host
 that owns the dock, conflict attribution, attempts, evidence) and analyzed (`Analyzed`: the rule catalog). Other
@@ -265,8 +267,13 @@ Three ways to get a brief:
 ### Dashboard
 
 **Mission and voyage pages.** A **Black box** panel replaces the bare failure text (Retry Landing stays). Its
-sections follow the brief: Summary (triage verdict, capture state, a notice for sweeper or backfill captures and for
-missing objects), Where, How, Why, Conflict (files, directories and conflicting missions), What would have prevented
+sections follow the brief: Summary (triage verdict, with an **Armada defect** or **Suspected Armada defect** badge, capture state, a notice for sweeper or backfill captures and for
+missing objects), **Armada resilience** right after it (scope, self-healable verdict and what Armada could have done,
+detection gap and invariant, severity with recurrence, recoveries already attempted, code pointers with the build
+commit, proposed Armada changes with Copy on each brief, the regression test and the collapsed handoff trail; one line
+outside the scope) with **Draft Armada fix mission** (opens Dispatch prefilled with the top change's title and mission
+brief, targeted at the vessel named Armada or whose repository URL ends in armada; without one, or without a proposed
+change, it opens Ask Armada), Where, How, Why, Conflict (files, directories and conflicting missions), What would have prevented
 it (with **Dry run...** then confirm to apply a recommendation), What Armada could change, Recovery (each path dry runs
 first and runs only after you confirm; data-loss paths are flagged), Configuration (each value with its source),
 Attempts (switch between attempts), Evidence, Similar failures and Notes. Actions: **Copy FIX THIS**, **Download .md**, **Download .zip**, **View JSON**, **Ask Armada
@@ -275,7 +282,9 @@ note and link), Pin or Unpin, Reanalyze, Add note and **Open full page**. The pa
 `blackbox.*` events, including while analysis is still running.
 
 **Black Box tab on the Missions page** (`/missions?tab=blackbox`; the old `/blackbox` redirects there, keeping its
-filters, and the command palette lists **Black Box**): sections **Entries** (every filter, saved filters),
+filters, and the command palette lists **Black Box**): sections **Entries** (every filter including **Handoff and landing scope**, saved filters, and an **Armada resilience
+gaps** quick view), **Armada resilience gaps** (`bbtab=gaps`: gaps grouped by fingerprint with occurrences, open count,
+severity, self-healable, suspected and the top proposed change; paged, vessel and resolution filters, Open by default),
 **Fingerprints**, **Hotspots**, **Recovery stats** and **Retention** (policy, usage, last and next garbage collection
 run, **Preview garbage collection**, and for administrators **Purge by filter** with a dry run first). The section is
 in `?bbtab=` (for example `/missions?tab=blackbox&bbtab=fingerprints`), since the Missions page owns `?tab=`.
@@ -287,17 +296,21 @@ policy. **Inbox** failure rows have Copy FIX THIS and Ask Armada actions, and th
 
 ### TUI
 
-**Failure tab** (mission and voyage screens; `]` moves to it). It shows the entry's status, where it failed, triage,
-resolution, the ranked recovery paths and the FIX THIS brief. While the tab has focus its keys run before the
+**Failure tab** (mission and voyage screens; `]` moves to it). It shows the entry's status, where it failed, triage
+(marked "suspected Armada defect" when only the prior voted), the Armada resilience section (right after the summary
+fields, before the recovery paths), resolution, the ranked recovery paths and the FIX THIS brief. While the tab has focus its keys run before the
 screen's and the status bar lists them: `c` copies the FIX THIS brief to the clipboard (OSC 52), `x` exports
 it to a file (default `blackbox-{entryId}.md` in the current directory), `r` lists the recovery paths (choosing one
 dry runs it and shows the plan; confirming runs it with the confirm token, and a data-loss path asks you to type
 `LOSE DATA` first; notes are written as Operator), `a` opens Ask Armada with the prompt filled in, `j` shows the entry
-as JSON, `s` resolves, `p` pins or unpins, `n` adds a note and `o` opens the entry. Every action is also in the `.`
+as JSON, `A` drafts an Armada fix mission (opens Dispatch at `/dispatch?from=blackbox` prefilled with the top proposed
+change's mission brief on the Armada vessel; listed only when the entry proposes a change), `s` resolves, `p` pins or unpins, `n` adds a note and `o` opens the entry. Every action is also in the `.`
 menu and the palette. Without an entry the tab says so and the screen's own keys (for example `r` Restart) apply.
 
 **Black Box tab on the Missions screen** (`/missions?tab=blackbox`, `g b`; `/blackbox` redirects there): server-paged entries filtered by vessel, triage, resolution, phase and
-fingerprint; `F` opens the fingerprints view (choosing one filters the list, `X` clears it), `R` the recovery stats;
+fingerprint; `F` opens the fingerprints view (choosing one filters the list, `X` clears it), `G` the **Armada Resilience Gaps** view
+(`/blackbox/gaps`; server paged, vessel, resolution and phase filters; Enter or `o` opens the newest entry, `i`
+details, `y` copies the top proposed change, `f` lists the fingerprint's entries, `j` JSON, `B` back), `R` the recovery stats;
 Enter opens an entry. **Entry screen** (`/blackbox/{id}`): the Brief tab (the same keys), the Objects tab (Enter opens a
 paged viewer that reads 64 KB at a time; `]` and `[` move between chunks), Notes, Timeline, Diff and Nearby Successes
 (section 12); `w` downloads the .zip, `f` lists similar failures. The voyage screen's Cascade tab and the vessel
@@ -326,6 +339,7 @@ armada blackbox gc [--dry-run]
 armada blackbox retention
 armada blackbox storage status | migrate --to <target> [--from] [--delete-source] | migration <id>
 armada blackbox bundle [filters] [--max N] [--format markdown|json] [-o bundle.md]
+armada blackbox gaps [--vessel vsl_...] [--resolution Open] [--phase Landing] [--since 30d] [--page N] [--page-size N] [--json]
 armada blackbox backfill [--since 30d] [--max N]
 armada blackbox export-fixture <entryId> [--name] [-o dir]
 armada mission failure <id>        (alias of blackbox show for a mission)
@@ -335,7 +349,9 @@ armada voyage failure <id>         (alias of blackbox show for a voyage)
 The prevention and forensics commands (`timeline`, `diff`, `nearby`, `recovery-stats`, `cascade`, `vessel
 overlap-preview|reservations|doctor|update`, `mission lint-brief`) are listed in section 12.
 
-`armada blackbox show msn_x --brief | pbcopy` is the terminal path to "paste into an agent and say FIX THIS": with
+`armada blackbox show` prints an **Armada resilience** panel before the recovery paths (and marks a suspected Armada
+defect on the triage line); `armada blackbox gaps` lists the Armada resilience gaps (page size 25 by default, at most
+50). `armada blackbox show msn_x --brief | pbcopy` is the terminal path to "paste into an agent and say FIX THIS": with
 `--brief` (and `--json`, `cat` and `bundle` without `-o`) stdout holds only the payload and every status line goes to
 stderr. Exit codes: 0 success, 1 failure or bad option, 2 credential (401 or 403) or target error, 3 not found (404),
 4 refused. `recover` and `purge` are dry runs by default; `--execute` asks to confirm (`--yes` answers for you and is
@@ -350,12 +366,16 @@ view in the Explorer (entries grouped by vessel, filtered to the open repository
 for open entries), **Copy FIX THIS**, **Open FIX THIS in Editor**, **Send FIX THIS to Chat**, **Run Recovery Path...**
 (dry run, modal confirmation, explicit acknowledgement for data-loss paths), **Resolve Black Box Entry**, **Add
 Note**, **Ask Armada about this failure**, an entry view, `BX` decorations on files that conflicted in an open entry and
-`H` decorations on hotspot directories, and live updates over the WebSocket with a polling fallback. Connect with
+`H` decorations on hotspot directories, the Armada resilience section right after the Summary in the entry view (with
+the suspected badge), **Draft Armada Fix Mission** (copies the top proposed change's mission brief and opens the editor
+chat with it), **Show Resilience Gaps** (25 per page, filtered to the open repository's vessel), and live updates over the WebSocket with a polling fallback. Connect with
 **Armada: Connect** (the key is kept in VS Code secret storage).
 
 ### Mobile
 
-The mobile app shows the black box on mission and voyage detail (the summary and the FIX THIS brief, recovery paths with a
+The mobile app shows the black box on mission and voyage detail (the summary, the Armada resilience section right after
+it with the Suspected Armada defect badge, Copy fix brief on each proposed change and **Draft Armada fix mission**
+(opens Ask Armada prefilled), the FIX THIS brief, recovery paths with a
 dry run and a confirmation sheet, Resolve, notes, Copy and Share of the brief through the platform share sheet, and
 Ask Armada with the prompt prefilled), and a **Black Box** tab on the Missions hub (filtered by vessel and failure
 kind on the server, paged as you scroll, refreshed on `blackbox.*` events) with a full entry screen at
