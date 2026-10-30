@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { deleteCheckRun, getCheckRun, getVessel, getWorkflowProfile, listCheckRuns, retryCheckRun } from '../api/client';
-import type { CheckRun, Vessel, WorkflowProfile } from '../types/models';
+import type { CheckRun, Vessel, WebSocketMessage, WorkflowProfile } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -21,7 +21,17 @@ import {
   type CheckRunComparison,
 } from '../lib/checkRunComparison';
 import { formatCheckDuration, formatCoverageMetric } from '../lib/deliveryForms';
+import { useLiveRefresh } from '../lib/useLiveRefresh';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
+
+function checkRunEventMatchesOpenRun(message: WebSocketMessage, openId: string): boolean {
+  const data = message.data;
+  if (!data || typeof data !== 'object') return true;
+  const record = data as { id?: unknown; Id?: unknown };
+  const eventId = typeof record.id === 'string' ? record.id : typeof record.Id === 'string' ? record.Id : '';
+  if (!eventId) return true;
+  return eventId === openId;
+}
 
 export default function CheckRunDetail() {
   const { id } = useParams<{ id: string }>();
@@ -34,7 +44,10 @@ export default function CheckRunDetail() {
   const [vessel, setVessel] = useState<Vessel | null>(null);
   const [profile, setProfile] = useState<WorkflowProfile | null>(null);
   const [comparison, setComparison] = useState<CheckRunComparison | null>(null);
+  const [comparisonPage, setComparisonPage] = useState<{ examined: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadedRunIdRef = useRef<string | null>(null);
+  const refreshRunRef = useRef<() => void>(() => {});
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState('');
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
@@ -46,13 +59,13 @@ export default function CheckRunDetail() {
   });
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) return undefined;
     let mounted = true;
     const runId = id;
 
-    async function load() {
+    async function load(initial: boolean) {
       try {
-        setLoading(true);
+        if (initial && mounted) setLoading(true);
         const nextRun = await getCheckRun(runId);
         if (!mounted) return;
         setRun(nextRun);
@@ -74,18 +87,30 @@ export default function CheckRunDetail() {
         if (!mounted) return;
         setVessel(nextVessel);
         setProfile(nextProfile);
-        setComparison(relatedRunsResult?.objects ? buildCheckRunComparison(nextRun, relatedRunsResult.objects) : null);
+        const relatedRuns = relatedRunsResult?.objects;
+        setComparison(relatedRuns ? buildCheckRunComparison(nextRun, relatedRuns) : null);
+        setComparisonPage(relatedRunsResult && relatedRuns
+          ? { examined: relatedRuns.length, total: relatedRunsResult.totalRecords }
+          : null);
         setError('');
+        loadedRunIdRef.current = runId;
       } catch (err: unknown) {
         if (mounted) setError(err instanceof Error ? err.message : t('Failed to load check run.'));
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted && initial) setLoading(false);
       }
     }
 
-    load();
+    refreshRunRef.current = () => { void load(loadedRunIdRef.current !== runId); };
+    void load(loadedRunIdRef.current !== runId);
     return () => { mounted = false; };
   }, [id, t]);
+
+  useLiveRefresh(['check-run.'], (message) => {
+    if (!id) return;
+    if (message && !checkRunEventMatchesOpenRun(message, id)) return;
+    refreshRunRef.current();
+  }, (message) => !id || checkRunEventMatchesOpenRun(message, id));
 
   const outputLineCount = useMemo(() => Math.max(1, (run?.output || '').split(/\r?\n/).length), [run?.output]);
 
@@ -222,6 +247,15 @@ export default function CheckRunDetail() {
           <h3 title={t('One-line result summary recorded for the run.')}>{t('Summary')}</h3>
           <p style={{ margin: 0 }}>{run.summary}</p>
         </div>
+      )}
+
+      {comparisonPage && comparisonPage.examined < comparisonPage.total && (
+        <p className="check-run-comparison-summary">
+          {t('Searched {{examined}} of {{total}} runs of this type. Runs outside this page are not part of the comparison.', {
+            examined: comparisonPage.examined,
+            total: comparisonPage.total,
+          })}
+        </p>
       )}
 
       {comparison && (
