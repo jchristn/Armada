@@ -4,6 +4,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using System.Text.Json.Serialization;
     using Microsoft.Data.SqlClient;
     using SyslogLogging;
     using Armada.Core.Database.Interfaces;
@@ -24,6 +25,14 @@ namespace Armada.Core.Database.SqlServer.Implementations
         private readonly SqlServerDatabaseDriver _Driver;
         private readonly DatabaseSettings _Settings;
         private readonly LoggingModule _Logging;
+
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        private enum CaptainDeleteScope
+        {
+            ById,
+            ByTenantAndId,
+            ByTenantUserAndId
+        }
 
         #endregion
 
@@ -226,22 +235,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
-            {
-                await conn.OpenAsync(token).ConfigureAwait(false);
-                using (SqlCommand cmd = conn.CreateCommand())
-                {
-                    // SQL Server forbids two ON DELETE SET NULL foreign keys from one table to the same parent
-                    // (error 1785, "multiple cascade paths"), so the signals->captains FKs are NO ACTION and the
-                    // null-on-delete that PostgreSQL does at the DB level is done here in application code.
-                    cmd.CommandText =
-                        "UPDATE signals SET from_captain_id = NULL WHERE from_captain_id = @id; " +
-                        "UPDATE signals SET to_captain_id = NULL WHERE to_captain_id = @id; " +
-                        "DELETE FROM captains WHERE id = @id;";
-                    cmd.Parameters.AddWithValue("@id", id);
-                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                }
-            }
+            await DeleteCaptainAndSignalReferencesAsync(CaptainDeleteScope.ById, id, null, null, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -460,22 +454,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
-            {
-                await conn.OpenAsync(token).ConfigureAwait(false);
-                using (SqlCommand cmd = conn.CreateCommand())
-                {
-                    // See DeleteAsync(id): null the signals->captains references in application code because
-                    // SQL Server cannot express two ON DELETE SET NULL FKs from signals to captains.
-                    cmd.CommandText =
-                        "UPDATE signals SET from_captain_id = NULL WHERE from_captain_id = @id; " +
-                        "UPDATE signals SET to_captain_id = NULL WHERE to_captain_id = @id; " +
-                        "DELETE FROM captains WHERE tenant_id = @tenantId AND id = @id;";
-                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
-                    cmd.Parameters.AddWithValue("@id", id);
-                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                }
-            }
+            await DeleteCaptainAndSignalReferencesAsync(CaptainDeleteScope.ByTenantAndId, id, tenantId, null, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -793,18 +772,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
             if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
 
-            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
-            {
-                await conn.OpenAsync(token).ConfigureAwait(false);
-                using (SqlCommand cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = "DELETE FROM captains WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
-                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
-                    cmd.Parameters.AddWithValue("@userId", userId);
-                    cmd.Parameters.AddWithValue("@id", id);
-                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                }
-            }
+            await DeleteCaptainAndSignalReferencesAsync(CaptainDeleteScope.ByTenantUserAndId, id, tenantId, userId, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -1007,6 +975,82 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(now));
                     int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                     return rowsAffected > 0;
+                }
+            }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        /// <summary>
+        /// Delete the captains matched by <paramref name="scope"/> and clear both signal
+        /// references to those same captains. The statements run in one transaction.
+        /// SQL Server cannot declare two ON DELETE SET NULL foreign keys from signals to
+        /// captains, so this method nulls the references. A scope that matches no captain
+        /// changes nothing. A delete that fails rolls the reference updates back.
+        /// </summary>
+        /// <param name="scope">Fixed captain match for this overload.</param>
+        /// <param name="id">Captain identifier.</param>
+        /// <param name="tenantId">Tenant identifier for a tenant or user scope.</param>
+        /// <param name="userId">User identifier for a user scope.</param>
+        /// <param name="token">Cancellation token.</param>
+        private async Task DeleteCaptainAndSignalReferencesAsync(
+            CaptainDeleteScope scope,
+            string id,
+            string? tenantId,
+            string? userId,
+            CancellationToken token)
+        {
+            string sql;
+            switch (scope)
+            {
+                case CaptainDeleteScope.ById:
+                    sql =
+                        "UPDATE signals SET from_captain_id = NULL WHERE from_captain_id IN (SELECT id FROM captains WHERE id = @id); " +
+                        "UPDATE signals SET to_captain_id = NULL WHERE to_captain_id IN (SELECT id FROM captains WHERE id = @id); " +
+                        "DELETE FROM captains WHERE id = @id;";
+                    break;
+                case CaptainDeleteScope.ByTenantAndId:
+                    sql =
+                        "UPDATE signals SET from_captain_id = NULL WHERE from_captain_id IN (SELECT id FROM captains WHERE tenant_id = @tenantId AND id = @id); " +
+                        "UPDATE signals SET to_captain_id = NULL WHERE to_captain_id IN (SELECT id FROM captains WHERE tenant_id = @tenantId AND id = @id); " +
+                        "DELETE FROM captains WHERE tenant_id = @tenantId AND id = @id;";
+                    break;
+                case CaptainDeleteScope.ByTenantUserAndId:
+                    sql =
+                        "UPDATE signals SET from_captain_id = NULL WHERE from_captain_id IN (SELECT id FROM captains WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id); " +
+                        "UPDATE signals SET to_captain_id = NULL WHERE to_captain_id IN (SELECT id FROM captains WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id); " +
+                        "DELETE FROM captains WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(scope));
+            }
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlTransaction transaction = (SqlTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
+                {
+                    using (SqlCommand cmd = conn.CreateCommand())
+                    {
+                        cmd.Transaction = transaction;
+                        cmd.CommandText = sql;
+                        cmd.Parameters.AddWithValue("@id", id);
+                        if (scope == CaptainDeleteScope.ByTenantAndId || scope == CaptainDeleteScope.ByTenantUserAndId)
+                        {
+                            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+                            cmd.Parameters.AddWithValue("@tenantId", tenantId);
+                        }
+                        if (scope == CaptainDeleteScope.ByTenantUserAndId)
+                        {
+                            if (string.IsNullOrEmpty(userId)) throw new ArgumentNullException(nameof(userId));
+                            cmd.Parameters.AddWithValue("@userId", userId);
+                        }
+                        await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    }
+
+                    await transaction.CommitAsync(token).ConfigureAwait(false);
                 }
             }
         }

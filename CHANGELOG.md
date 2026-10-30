@@ -145,6 +145,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
 
+### SQL Server captain delete keeps signal references with the captain
+
+- **Scoped deletes.** Each SQL Server captain delete clears `signals.from_captain_id` and `signals.to_captain_id` only for captains that match that delete, then deletes those captains, in one transaction. The id delete matches `id`. The tenant delete matches `tenant_id` and `id`. The user delete matches `tenant_id`, `user_id`, and `id`. A delete that matches no captain leaves the captain and both signal references unchanged. A delete that fails because another row still references the captain rolls the signal updates back. SQL Server still cannot declare two `ON DELETE SET NULL` keys from `signals` to `captains`, so this delete nulls the references.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.
