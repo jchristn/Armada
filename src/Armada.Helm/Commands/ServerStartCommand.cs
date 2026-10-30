@@ -74,84 +74,92 @@ namespace Armada.Helm.Commands
             // Build and deploy the React dashboard if source is available
             BuildAndDeployDashboard(serverExe);
 
-            // Launch the server executable
-            ProcessStartInfo startInfo;
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                startInfo = new ProcessStartInfo
+            // Launch the server executable. Disposing the handle releases it and does not stop the server.
+            ProcessStartInfo startInfo = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? new ProcessStartInfo
                 {
                     FileName = target.FileName,
                     Arguments = target.JoinArguments(),
                     UseShellExecute = true,
                     WindowStyle = ProcessWindowStyle.Minimized
-                };
-            }
-            else
+                }
+                : BuildUnixServerStartInfo(target);
+
+            using (Process process = new Process { StartInfo = startInfo })
             {
-                // On Unix, UseShellExecute=true doesn't launch executables the same way.
-                // Use UseShellExecute=false and redirect streams to avoid holding the CLI streams.
-                startInfo = new ProcessStartInfo
+                bool started = process.Start();
+                if (!started)
                 {
-                    FileName = target.FileName,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    RedirectStandardInput = true,
-                    CreateNoWindow = true
-                };
-                foreach (string argument in target.Arguments) startInfo.ArgumentList.Add(argument);
-            }
-
-            Process process = new Process { StartInfo = startInfo };
-            bool started = process.Start();
-            if (!started)
-            {
-                AnsiConsole.MarkupLine("[red]Failed to start server process.[/]");
-                return 1;
-            }
-
-            string baseUrl = GetBaseUrl();
-            AnsiConsole.MarkupLine($"[green]Admiral server starting...[/] (PID: {process.Id})");
-            AnsiConsole.MarkupLine($"[dim]  REST API:   {baseUrl}[/]");
-            AnsiConsole.MarkupLine($"[dim]  WebSocket:  ws://localhost:{GetSettings().AdmiralPort}/ws[/]");
-            AnsiConsole.MarkupLine($"[dim]  Dashboard:  {baseUrl}/dashboard[/]");
-            AnsiConsole.MarkupLine($"[dim]  MCP:        http://localhost:{GetSettings().McpPort}[/]");
-
-            // Poll until the server is ready
-            bool ready = false;
-            for (int i = 0; i < 30; i++)
-            {
-                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-
-                if (process.HasExited)
-                {
-                    AnsiConsole.MarkupLine($"[red]Server process exited with code {process.ExitCode}.[/]");
-                    break;
+                    AnsiConsole.MarkupLine("[red]Failed to start server process.[/]");
+                    return 1;
                 }
 
-                try
+                string baseUrl = GetBaseUrl();
+                AnsiConsole.MarkupLine($"[green]Admiral server starting...[/] (PID: {process.Id})");
+                AnsiConsole.MarkupLine($"[dim]  REST API:   {baseUrl}[/]");
+                AnsiConsole.MarkupLine($"[dim]  WebSocket:  ws://localhost:{GetSettings().AdmiralPort}/ws[/]");
+                AnsiConsole.MarkupLine($"[dim]  Dashboard:  {baseUrl}/dashboard[/]");
+                AnsiConsole.MarkupLine($"[dim]  MCP:        http://localhost:{GetSettings().McpPort}[/]");
+
+                // Poll until the server is ready
+                bool ready = false;
+                for (int i = 0; i < 30; i++)
                 {
-                    using HttpClient pollClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-                    HttpResponseMessage pollResp = await pollClient.GetAsync(baseUrl + "/api/v1/status/health", cancellationToken).ConfigureAwait(false);
-                    if (pollResp.IsSuccessStatusCode)
+                    await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+
+                    if (process.HasExited)
                     {
-                        ready = true;
+                        AnsiConsole.MarkupLine($"[red]Server process exited with code {process.ExitCode}.[/]");
                         break;
                     }
+
+                    try
+                    {
+                        using (HttpClient pollClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) })
+                        {
+                            HttpResponseMessage pollResp = await pollClient.GetAsync(baseUrl + "/api/v1/status/health", cancellationToken).ConfigureAwait(false);
+                            if (pollResp.IsSuccessStatusCode)
+                            {
+                                ready = true;
+                                break;
+                            }
+                        }
+                    }
+                    catch { }
                 }
-                catch { }
-            }
 
-            if (ready)
+                if (ready)
+                {
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.MarkupLine("[green]Admiral server is running![/]");
+                }
+                else if (!process.HasExited)
+                    AnsiConsole.MarkupLine("[gold1]Server is still starting. Check [green]armada server status[/] in a few seconds.[/]");
+
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Start information for the Admiral on Unix. The server writes its own log and outlives this command, so its
+        /// standard streams go to /dev/null instead of unread pipes. The shell replaces itself, so the process is the
+        /// server. Arguments are passed as separate values, not through the shell string.
+        /// </summary>
+        /// <param name="target">Resolved server launch.</param>
+        /// <returns>The start information.</returns>
+        private static ProcessStartInfo BuildUnixServerStartInfo(ServerLaunchTarget target)
+        {
+            ProcessStartInfo startInfo = new ProcessStartInfo
             {
-                AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine("[green]Admiral server is running![/]");
-            }
-            else if (!process.HasExited)
-                AnsiConsole.MarkupLine("[gold1]Server is still starting. Check [green]armada server status[/] in a few seconds.[/]");
-
-            return 0;
+                FileName = "/bin/sh",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("exec \"$0\" \"$@\" </dev/null >/dev/null 2>&1");
+            startInfo.ArgumentList.Add(target.FileName);
+            foreach (string argument in target.Arguments) startInfo.ArgumentList.Add(argument);
+            return startInfo;
         }
 
         /// <summary>
@@ -214,25 +222,25 @@ namespace Armada.Helm.Commands
                 if (buildAttempt == 0)
                     buildInfo.ArgumentList.Add("-q");
 
-                Process buildProcess = new Process { StartInfo = buildInfo };
-                buildProcess.Start();
-                buildProcess.StandardOutput.ReadToEnd();
-                string buildStderr = buildProcess.StandardError.ReadToEnd();
-                buildProcess.WaitForExit();
-
-                if (buildProcess.ExitCode == 0)
-                    break;
-
-                if (buildAttempt == 0)
+                using (Process buildProcess = new Process { StartInfo = buildInfo })
                 {
-                    AnsiConsole.MarkupLine("[dim]Retrying build...[/]");
-                    continue;
-                }
+                    buildProcess.Start();
+                    string buildStderr = ReadStandardError(buildProcess);
 
-                AnsiConsole.MarkupLine("[red]Server build failed.[/]");
-                if (!string.IsNullOrEmpty(buildStderr))
-                    AnsiConsole.MarkupLine($"[dim]{Markup.Escape(buildStderr.Trim())}[/]");
-                return null;
+                    if (buildProcess.ExitCode == 0)
+                        break;
+
+                    if (buildAttempt == 0)
+                    {
+                        AnsiConsole.MarkupLine("[dim]Retrying build...[/]");
+                        continue;
+                    }
+
+                    AnsiConsole.MarkupLine("[red]Server build failed.[/]");
+                    if (!string.IsNullOrEmpty(buildStderr))
+                        AnsiConsole.MarkupLine($"[dim]{Markup.Escape(buildStderr.Trim())}[/]");
+                    return null;
+                }
             }
 
             return File.Exists(builtExe) ? builtExe : null;
@@ -396,13 +404,16 @@ namespace Armada.Helm.Commands
                     tscInfo.ArgumentList.Add(tscPath);
                 }
 
-                Process tscProcess = new Process { StartInfo = tscInfo };
-                tscProcess.Start();
-                tscProcess.StandardOutput.ReadToEnd();
-                string tscStderr = tscProcess.StandardError.ReadToEnd();
-                tscProcess.WaitForExit();
+                string tscStderr;
+                int tscExit;
+                using (Process tscProcess = new Process { StartInfo = tscInfo })
+                {
+                    tscProcess.Start();
+                    tscStderr = ReadStandardError(tscProcess);
+                    tscExit = tscProcess.ExitCode;
+                }
 
-                if (tscProcess.ExitCode != 0)
+                if (tscExit != 0)
                 {
                     if (hasExistingDist)
                         AnsiConsole.MarkupLine("[gold1]Dashboard build failed. Continuing with the existing React dashboard bundle.[/]");
@@ -433,13 +444,16 @@ namespace Armada.Helm.Commands
                 }
                 viteInfo.ArgumentList.Add("build");
 
-                Process viteProcess = new Process { StartInfo = viteInfo };
-                viteProcess.Start();
-                viteProcess.StandardOutput.ReadToEnd();
-                string viteStderr = viteProcess.StandardError.ReadToEnd();
-                viteProcess.WaitForExit();
+                string viteStderr;
+                int viteExit;
+                using (Process viteProcess = new Process { StartInfo = viteInfo })
+                {
+                    viteProcess.Start();
+                    viteStderr = ReadStandardError(viteProcess);
+                    viteExit = viteProcess.ExitCode;
+                }
 
-                if (viteProcess.ExitCode != 0)
+                if (viteExit != 0)
                 {
                     if (hasExistingDist)
                         AnsiConsole.MarkupLine("[gold1]Dashboard build failed. Continuing with the existing React dashboard bundle.[/]");
@@ -509,6 +523,21 @@ namespace Armada.Helm.Commands
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Read standard output and standard error together, then wait for exit. Reading one stream to the end
+        /// first blocks when the other stream fills its pipe.
+        /// </summary>
+        /// <param name="process">Started process with both streams redirected.</param>
+        /// <returns>The standard error text.</returns>
+        private static string ReadStandardError(Process process)
+        {
+            Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> errorTask = process.StandardError.ReadToEndAsync();
+            Task.WaitAll(outputTask, errorTask);
+            process.WaitForExit();
+            return errorTask.Result;
         }
 
         private static void CopyDirectory(string sourceDir, string destDir)

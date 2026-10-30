@@ -1088,12 +1088,19 @@ namespace Armada.Helm.Commands
                 foreach (string arg in args)
                     startInfo.ArgumentList.Add(arg);
 
-                using Process? process = Process.Start(startInfo);
-                if (process == null)
-                    return false;
+                using (Process? process = Process.Start(startInfo))
+                {
+                    if (process == null)
+                        return false;
 
-                await process.WaitForExitAsync().ConfigureAwait(false);
-                return process.ExitCode == 0;
+                    // Read both streams while the client runs. Waiting first leaves a full pipe unread, and the
+                    // client blocks before it can exit.
+                    Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+                    Task<string> errorTask = process.StandardError.ReadToEndAsync();
+                    await Task.WhenAll(outputTask, errorTask).ConfigureAwait(false);
+                    await process.WaitForExitAsync().ConfigureAwait(false);
+                    return process.ExitCode == 0;
+                }
             }
             catch
             {
