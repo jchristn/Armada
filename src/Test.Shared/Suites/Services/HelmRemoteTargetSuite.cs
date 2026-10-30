@@ -7,6 +7,7 @@ namespace Test.Shared.Suites.Services
     using System.Net;
     using System.Net.Http;
     using System.Net.Http.Json;
+    using System.Text;
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using System.Threading;
@@ -483,6 +484,126 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(RestartWaitResultEnum.NeverWentDown, neverDown);
             }));
 
+            cases.Add(CaseAsync("reset_keeps_data_when_health_http_error_still_responds", "reset keeps local data when the health endpoint still returns an HTTP error after stop", TestTags.Negative, async () =>
+            {
+                string dataDirectory = TestTemp.NewDirectory("reset-http-error-data");
+                string settingsPath = Armada.Core.Settings.ArmadaSettings.DefaultSettingsPath;
+                bool hadSettings = File.Exists(settingsPath);
+                byte[]? previousSettings = hadSettings ? await File.ReadAllBytesAsync(settingsPath).ConfigureAwait(false) : null;
+                ShutdownProbeServer server = new ShutdownProbeServer(HttpStatusCode.ServiceUnavailable, remainAvailableAfterStop: true);
+                try
+                {
+                    Armada.Core.Settings.ArmadaSettings settings = new Armada.Core.Settings.ArmadaSettings
+                    {
+                        DataDirectory = dataDirectory,
+                        AdmiralPort = server.Port
+                    };
+                    await settings.SaveAsync(settingsPath).ConfigureAwait(false);
+                    settings.InitializeDirectories();
+                    File.WriteAllText(settings.DatabasePath, "database marker");
+
+                    int exitCode = await RunCliAsync("reset", "--force").ConfigureAwait(false);
+
+                    AssertEqual(1, exitCode, "reset refuses to delete data while the local server still answers");
+                    AssertTrue(File.Exists(settings.DatabasePath), "database remains available");
+                    AssertTrue(server.StopRequested, "reset sent the existing stop request");
+                }
+                finally
+                {
+                    server.Dispose();
+                    if (hadSettings) await File.WriteAllBytesAsync(settingsPath, previousSettings!).ConfigureAwait(false);
+                    else if (File.Exists(settingsPath)) File.Delete(settingsPath);
+                }
+            }));
+
+            cases.Add(CaseAsync("reset_deletes_data_after_health_endpoint_refuses_connection", "reset deletes local data after the health endpoint refuses connections", TestTags.Positive, async () =>
+            {
+                string dataDirectory = TestTemp.NewDirectory("reset-stopped-data");
+                string settingsPath = Armada.Core.Settings.ArmadaSettings.DefaultSettingsPath;
+                bool hadSettings = File.Exists(settingsPath);
+                byte[]? previousSettings = hadSettings ? await File.ReadAllBytesAsync(settingsPath).ConfigureAwait(false) : null;
+                ShutdownProbeServer server = new ShutdownProbeServer(HttpStatusCode.OK, remainAvailableAfterStop: false);
+                try
+                {
+                    Armada.Core.Settings.ArmadaSettings settings = new Armada.Core.Settings.ArmadaSettings
+                    {
+                        DataDirectory = dataDirectory,
+                        AdmiralPort = server.Port
+                    };
+                    await settings.SaveAsync(settingsPath).ConfigureAwait(false);
+                    settings.InitializeDirectories();
+                    File.WriteAllText(settings.DatabasePath, "database marker");
+
+                    int exitCode = await RunCliAsync("reset", "--force").ConfigureAwait(false);
+
+                    AssertEqual(0, exitCode, "reset completes after the local endpoint stops answering");
+                    AssertFalse(File.Exists(settings.DatabasePath), "database is removed after shutdown is proved");
+                    AssertTrue(server.StopRequested, "reset sent the existing stop request");
+                }
+                finally
+                {
+                    server.Dispose();
+                    if (hadSettings) await File.WriteAllBytesAsync(settingsPath, previousSettings!).ConfigureAwait(false);
+                    else if (File.Exists(settingsPath)) File.Delete(settingsPath);
+                }
+            }));
+
+            cases.Add(CaseAsync("reset_keeps_data_when_stop_request_fails", "reset keeps data when the stop request fails and health still responds", TestTags.Negative, async () =>
+            {
+                string dataDirectory = TestTemp.NewDirectory("reset-stop-failure-data");
+                string settingsPath = Armada.Core.Settings.ArmadaSettings.DefaultSettingsPath;
+                bool hadSettings = File.Exists(settingsPath);
+                byte[]? previousSettings = hadSettings ? await File.ReadAllBytesAsync(settingsPath).ConfigureAwait(false) : null;
+                ShutdownProbeServer server = new ShutdownProbeServer(HttpStatusCode.OK, remainAvailableAfterStop: true, stopStatus: HttpStatusCode.InternalServerError);
+                try
+                {
+                    Armada.Core.Settings.ArmadaSettings settings = new Armada.Core.Settings.ArmadaSettings { DataDirectory = dataDirectory, AdmiralPort = server.Port };
+                    await settings.SaveAsync(settingsPath).ConfigureAwait(false);
+                    settings.InitializeDirectories();
+                    File.WriteAllText(settings.DatabasePath, "database marker");
+
+                    int exitCode = await RunCliAsync("reset", "--force").ConfigureAwait(false);
+
+                    AssertEqual(1, exitCode, "reset fails when the authenticated stop request fails");
+                    AssertTrue(File.Exists(settings.DatabasePath), "database remains after stop failure");
+                    AssertTrue(server.StopRequested, "reset sent the existing stop request");
+                }
+                finally
+                {
+                    server.Dispose();
+                    if (hadSettings) await File.WriteAllBytesAsync(settingsPath, previousSettings!).ConfigureAwait(false);
+                    else if (File.Exists(settingsPath)) File.Delete(settingsPath);
+                }
+            }));
+
+            cases.Add(CaseAsync("reset_waits_for_slow_shutdown_before_deleting_data", "reset retains data until a delayed shutdown completes", TestTags.Positive, async () =>
+            {
+                string dataDirectory = TestTemp.NewDirectory("reset-slow-shutdown-data");
+                string settingsPath = Armada.Core.Settings.ArmadaSettings.DefaultSettingsPath;
+                bool hadSettings = File.Exists(settingsPath);
+                byte[]? previousSettings = hadSettings ? await File.ReadAllBytesAsync(settingsPath).ConfigureAwait(false) : null;
+                ShutdownProbeServer server = new ShutdownProbeServer(HttpStatusCode.OK, remainAvailableAfterStop: false, stopDelay: TimeSpan.FromSeconds(1));
+                try
+                {
+                    Armada.Core.Settings.ArmadaSettings settings = new Armada.Core.Settings.ArmadaSettings { DataDirectory = dataDirectory, AdmiralPort = server.Port };
+                    await settings.SaveAsync(settingsPath).ConfigureAwait(false);
+                    settings.InitializeDirectories();
+                    File.WriteAllText(settings.DatabasePath, "database marker");
+
+                    int exitCode = await RunCliAsync("reset", "--force").ConfigureAwait(false);
+
+                    AssertEqual(0, exitCode, "reset succeeds after delayed shutdown");
+                    AssertFalse(File.Exists(settings.DatabasePath), "database is removed after shutdown is proved");
+                    AssertTrue(server.DataExistedDuringHealth, "database remained while health still responded");
+                }
+                finally
+                {
+                    server.Dispose();
+                    if (hadSettings) await File.WriteAllBytesAsync(settingsPath, previousSettings!).ConfigureAwait(false);
+                    else if (File.Exists(settingsPath)) File.Delete(settingsPath);
+                }
+            }));
+
             cases.Add(CaseAsync("api_captain_endpoint_binding", "CLI creates API captains and preserves endpoint binding on update", TestTags.Positive, async () =>
             {
                 using SecurityTestServer server = await SecurityTestServer.PrepareAsync("127.0.0.1", null).ConfigureAwait(false);
@@ -620,6 +741,75 @@ namespace Test.Shared.Suites.Services
             public int ExitCode { get; set; } = 0;
 
             public string Output { get; set; } = "";
+        }
+
+        private sealed class ShutdownProbeServer : IDisposable
+        {
+            private readonly HttpListener _Listener;
+            private readonly CancellationTokenSource _Cancellation = new CancellationTokenSource();
+            private readonly Task _Loop;
+            private readonly HttpStatusCode _HealthStatus;
+            private readonly bool _RemainAvailableAfterStop;
+            private readonly HttpStatusCode _StopStatus;
+            private readonly TimeSpan _StopDelay;
+            private int _DataExistedDuringHealth;
+            private int _StopRequested;
+
+            public int Port { get; }
+
+            public bool StopRequested { get { return Volatile.Read(ref _StopRequested) != 0; } }
+
+            public bool DataExistedDuringHealth { get { return Volatile.Read(ref _DataExistedDuringHealth) != 0; } }
+
+            public ShutdownProbeServer(HttpStatusCode healthStatus, bool remainAvailableAfterStop, HttpStatusCode stopStatus = HttpStatusCode.OK, TimeSpan? stopDelay = null)
+            {
+                _HealthStatus = healthStatus;
+                _RemainAvailableAfterStop = remainAvailableAfterStop;
+                _StopStatus = stopStatus;
+                _StopDelay = stopDelay ?? TimeSpan.Zero;
+                _Listener = TestPorts.StartHttpListener(p => new[] { "http://127.0.0.1:" + p + "/" }, out int port);
+                Port = port;
+                _Loop = Task.Run(() => ListenAsync(_Cancellation.Token));
+            }
+
+            public void Dispose()
+            {
+                _Cancellation.Cancel();
+                _Listener.Close();
+                try { _Loop.Wait(TimeSpan.FromSeconds(5)); } catch { }
+                _Cancellation.Dispose();
+            }
+
+            private async Task ListenAsync(CancellationToken token)
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    HttpListenerContext context;
+                    try { context = await _Listener.GetContextAsync().ConfigureAwait(false); }
+                    catch { return; }
+
+                    string path = context.Request.Url?.AbsolutePath ?? "";
+                    if (path == "/api/v1/status/health" && File.Exists(Armada.Core.Settings.ArmadaSettings.DefaultSettingsPath))
+                    {
+                        Armada.Core.Settings.ArmadaSettings current = await Armada.Core.Settings.ArmadaSettings.LoadAsync().ConfigureAwait(false);
+                        if (File.Exists(current.DatabasePath)) Interlocked.Exchange(ref _DataExistedDuringHealth, 1);
+                    }
+                    if (path == "/api/v1/server/stop") Interlocked.Exchange(ref _StopRequested, 1);
+                    context.Response.StatusCode = path == "/api/v1/status/health" ? (int)_HealthStatus : path == "/api/v1/server/stop" ? (int)_StopStatus : (int)HttpStatusCode.OK;
+                    byte[] body = Encoding.UTF8.GetBytes("{}");
+                    context.Response.ContentLength64 = body.Length;
+                    try { await context.Response.OutputStream.WriteAsync(body, 0, body.Length, token).ConfigureAwait(false); }
+                    catch { }
+                    context.Response.Close();
+
+                    if (path == "/api/v1/server/stop" && !_RemainAvailableAfterStop && _StopStatus == HttpStatusCode.OK)
+                    {
+                        if (_StopDelay > TimeSpan.Zero) await Task.Delay(_StopDelay, token).ConfigureAwait(false);
+                        _Listener.Close();
+                        return;
+                    }
+                }
+            }
         }
 
         private sealed class ProfileFixture

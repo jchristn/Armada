@@ -4,6 +4,7 @@ namespace Armada.Helm.Commands
     using System.Net;
     using System.Net.Http;
     using System.Net.Http.Json;
+    using System.Net.Sockets;
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using Spectre.Console;
@@ -570,6 +571,68 @@ namespace Armada.Helm.Commands
             HttpResponseMessage response = await GetHttpClient().PostAsync(GetBaseUrl() + path, null).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 throw await FailAsync(response, "POST " + path).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Request local shutdown and wait until the health endpoint refuses a connection.
+        /// </summary>
+        /// <param name="stopRequest">The existing authenticated stop request.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True only when the local health endpoint refuses connections.</returns>
+        protected async Task<bool> StopLocalServerAndWaitAsync(Func<Task> stopRequest, CancellationToken token)
+        {
+            using (HttpClient client = CreateAdminHttpClient(TimeSpan.FromSeconds(3)))
+            {
+                string healthUrl = GetBaseUrl() + "/api/v1/status/health";
+                if (await HealthEndpointRefusesConnectionAsync(client, healthUrl, token).ConfigureAwait(false)) return true;
+
+                try
+                {
+                    await stopRequest().ConfigureAwait(false);
+                }
+                catch
+                {
+                    return false;
+                }
+
+                long deadline = System.Diagnostics.Stopwatch.GetTimestamp() + (long)(30 * System.Diagnostics.Stopwatch.Frequency);
+                while (System.Diagnostics.Stopwatch.GetTimestamp() < deadline && !token.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(250), token).ConfigureAwait(false);
+                    if (await HealthEndpointRefusesConnectionAsync(client, healthUrl, token).ConfigureAwait(false)) return true;
+                }
+
+                return false;
+            }
+        }
+
+        private static async Task<bool> HealthEndpointRefusesConnectionAsync(HttpClient client, string url, CancellationToken token)
+        {
+            try
+            {
+                using (HttpResponseMessage response = await client.GetAsync(url, token).ConfigureAwait(false))
+                {
+                    return false;
+                }
+            }
+            catch (HttpRequestException ex) when (HasConnectionRefused(ex))
+            {
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool HasConnectionRefused(Exception exception)
+        {
+            for (Exception? current = exception; current != null; current = current.InnerException)
+            {
+                if (current is SocketException socket && socket.SocketErrorCode == SocketError.ConnectionRefused) return true;
+            }
+
+            return false;
         }
 
         /// <summary>

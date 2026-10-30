@@ -25,7 +25,7 @@ namespace Armada.Helm.Commands
         {
             RequireTarget();
 
-            ArmadaSettings armadaSettings = GetSettings();
+            ArmadaSettings armadaSettings = await ArmadaSettings.LoadAsync().ConfigureAwait(false);
 
             if (!settings.Force)
             {
@@ -45,22 +45,26 @@ namespace Armada.Helm.Commands
                 }
             }
 
-            // Stop the server if running
-            try
+            // Do not remove files until the local server refuses connections.
+            bool stopped = await StopLocalServerAndWaitAsync(async () =>
             {
-                bool healthy = await GetApiClient().HealthCheckAsync().ConfigureAwait(false);
-                if (healthy)
+                using (HttpClient client = CreateAdminHttpClient(TimeSpan.FromSeconds(3)))
+                using (HttpResponseMessage response = await client.PostAsync(
+                    GetBaseUrl() + "/api/v1/server/stop",
+                    null,
+                    cancellationToken).ConfigureAwait(false))
                 {
-                    AnsiConsole.MarkupLine("[dim]Stopping Admiral server...[/]");
-                    try { await PostAsync("/api/v1/server/stop").ConfigureAwait(false); }
-                    catch (Exception ex)
-                    {
-                        AnsiConsole.MarkupLine("[yellow]Could not stop the Admiral through the API:[/] " + Markup.Escape(ex.Message));
-                    }
-                    await Task.Delay(1000).ConfigureAwait(false);
+                    response.EnsureSuccessStatusCode();
                 }
+            }, cancellationToken).ConfigureAwait(false);
+            if (!stopped)
+            {
+                AnsiConsole.MarkupLine("[red]Could not confirm that the Admiral server stopped. No data was deleted.[/]");
+                return 1;
             }
-            catch { }
+
+            // GetSettings may initialize the local directories, so call it only after shutdown is confirmed.
+            armadaSettings = GetSettings();
 
             // Kill any captain processes
             try
