@@ -161,6 +161,12 @@ namespace Armada.Core.Services
         private const string _AskSystemDefault = _AskSystemRecapDefault + "\n" + Armada.Core.Services.Ask.AskBlackBoxGuidance.Section;
 
         /// <summary>
+        /// The Ask Armada system prompt with the black box guidance as it shipped before the resilience bias. Used to
+        /// upgrade an untouched built-in template in place.
+        /// </summary>
+        private const string _AskSystemBlackBoxDefault = _AskSystemRecapDefault + "\n" + Armada.Core.Services.Ask.AskBlackBoxGuidance.PreviousSection;
+
+        /// <summary>
         /// The Ask Armada system prompt before the black box guidance was added. Used to upgrade an untouched built-in
         /// template in place.
         /// </summary>
@@ -520,7 +526,8 @@ namespace Armada.Core.Services
                 && !String.Equals(existing.Content, _AskSystemScopeDefault, StringComparison.Ordinal)
                 && !String.Equals(existing.Content, _AskSystemDecisionsDefault, StringComparison.Ordinal)
                 && !String.Equals(existing.Content, _AskSystemDispatchDefault, StringComparison.Ordinal)
-                && !String.Equals(existing.Content, _AskSystemRecapDefault, StringComparison.Ordinal)) return;
+                && !String.Equals(existing.Content, _AskSystemRecapDefault, StringComparison.Ordinal)
+                && !String.Equals(existing.Content, _AskSystemBlackBoxDefault, StringComparison.Ordinal)) return;
 
             existing.Content = _AskSystemDefault;
             existing.LastUpdateUtc = DateTime.UtcNow;

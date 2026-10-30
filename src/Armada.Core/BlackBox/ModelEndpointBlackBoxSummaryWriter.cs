@@ -120,11 +120,25 @@ namespace Armada.Core.BlackBox
             foreach (BlackBoxFinding f in analysis.Why) facts.Append("Finding ").Append(f.RuleId).Append(" (").Append(f.Confidence).Append("): ").Append(f.Statement).Append('\n');
             if (analysis.Triage != null) facts.Append("Triage: ").Append(analysis.Triage.Verdict).Append(analysis.Triage.TiedWith.Count > 1 ? " (tie: " + String.Join(", ", analysis.Triage.TiedWith) + ")" : String.Empty).Append('\n');
             foreach (BlackBoxRecoveryPath p in analysis.RecoveryPaths.Take(3)) facts.Append("Recovery ").Append(p.Rank).Append(": ").Append(p.Title).Append('\n');
+            BlackBoxResilience? res = analysis.Resilience;
+            bool inScope = res?.InScope == true;
+            if (res != null)
+            {
+                facts.Append("Armada handoff and landing scope: ").Append(inScope ? "yes (" + (res.ScopeReason ?? "in scope") + ")" : "no").Append('\n');
+                facts.Append("Self-healable by Armada: ").Append(res.SelfHealable).Append(res.SelfHealingProposal != null ? "; Armada could have " + res.SelfHealingProposal : String.Empty).Append('\n');
+                if (res.DetectionGap != null) facts.Append("Detection gap: ").Append(res.DetectionGap).Append('\n');
+                foreach (BlackBoxProposedChange c in res.ProposedChanges.Take(2)) facts.Append("Proposed Armada change ").Append(c.Rank).Append(" (").Append(c.Severity).Append("): ").Append(c.Title).Append('\n');
+                if (analysis.Triage?.Suspected == true) facts.Append("Triage note: a suspected Armada defect (only the handoff and landing prior voted for it).\n");
+            }
             string body = facts.ToString();
             if (body.Length > MaxPromptChars) body = body.Substring(0, MaxPromptChars);
             return "You summarize Armada black box entries (a record of why an AI coding mission failed). "
                 + "Write 3 to 6 plain sentences for the person who owns the mission: what failed, why (quote the findings, do not invent causes), "
-                + "the triage verdict, and the first thing to do next. No headings, no lists, no em-dashes.\n\n" + body;
+                + "the triage verdict, and the first thing to do next. No headings, no lists, no em-dashes. "
+                + (inScope
+                    ? "This failure is in Armada's own handoff and landing: assume Armada could have been more resilient. Lead with the Armada angle (\"Armada's landing could not ...; Armada could have ...\"), "
+                      + "using the self-healing and proposed Armada change facts, before any user-side advice.\n\n"
+                    : "If the facts list a proposed Armada change, mention it after the user-side advice.\n\n") + body;
         }
 
         #endregion

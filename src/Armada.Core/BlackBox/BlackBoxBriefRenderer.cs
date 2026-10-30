@@ -12,7 +12,10 @@ namespace Armada.Core.BlackBox
     /// <summary>
     /// Renders the FIX THIS brief of a black box entry as Markdown (brief.md): a self-contained package to paste into a
     /// coding agent, with the triage instruction (decide UserConfig, MissionBrief, Transient, ArmadaDefect or External,
-    /// then fix with evidence) and the sections in record order. Renders whatever sections the record has. Size: aims for <see cref="TargetBytes"/> and never
+    /// then fix with evidence) and the sections in record order. Every brief has an "Armada resilience" section right
+    /// after the Summary; in Armada's handoff and landing scope it is the full resilience analysis (self-healing verdict,
+    /// detection gap, code pointers at the build commit, proposed Armada changes as mission briefs, regression test) and
+    /// the preamble asks the reader to look for the Armada fix first; outside the scope it is short. Renders whatever sections the record has. Size: aims for <see cref="TargetBytes"/> and never
     /// exceeds <see cref="MaxBytes"/>. Trimming order when over budget: list items (50, 25, 10, 5), then long text
     /// (4000, 1500, 500 characters), then whole sections (Evidence, Related, Attempts, Configuration, Status timeline,
     /// Workspace, Scope), then a hard cut with a marker. The output is redacted again and never contains em-dashes.
@@ -51,7 +54,7 @@ namespace Armada.Core.BlackBox
 
         private static readonly int[] _ListLimits = new int[] { 50, 25, 10, 5 };
         private static readonly int[] _TextLimits = new int[] { 4000, 1500, 500 };
-        private static readonly string[] _Order = new string[] { "Header", "Summary", "Identity", "Where", "How", "Timeline", "Why", "Conflict", "Workspace", "Scope", "Configuration", "Prevention", "Improvements", "Recovery", "Attempts", "Evidence", "Related", "Footer", "Answer" };
+        private static readonly string[] _Order = new string[] { "Header", "Summary", "Resilience", "Identity", "Where", "How", "Timeline", "Why", "Conflict", "Workspace", "Scope", "Configuration", "Prevention", "Improvements", "Recovery", "Attempts", "Evidence", "Related", "Footer", "Answer" };
         private static readonly string[] _DropOrder = new string[] { "Evidence", "Related", "Attempts", "Configuration", "Timeline", "Workspace", "Scope" };
         private static readonly Regex _AbsolutePath = new Regex(@"(?:[A-Za-z]:\\|/)(?:Users|home|private|tmp|var|opt|srv|mnt|Volumes)[^\s'""`)\]]*", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private readonly BlackBoxRedactor _Redactor;
@@ -142,6 +145,13 @@ namespace Armada.Core.BlackBox
             sb.Append("3. **Transient**: a transient condition (provider, network, usage limit); retrying is likely to work.\n");
             sb.Append("4. **ArmadaDefect**: a defect in Armada itself.\n");
             sb.Append("5. **External**: an operator action or something outside Armada.\n\n");
+            bool inScope = r.Analysis?.Resilience?.InScope == true || BlackBoxResilienceScope.InScope(r);
+            if (inScope)
+            {
+                sb.Append("This failure is in Armada's own handoff and landing. The black box assumes Armada's handoff and landing could have been more resilient here: ");
+                sb.Append("first look for the Armada fix (what Armada could have retried, recreated, rebased, repaired or checked earlier), with a test that would have caught it, ");
+                sb.Append("before concluding it is the user's configuration, the brief or a transient. The Armada resilience section below is the starting point.\n\n");
+            }
             sb.Append("Then act: for UserConfig or MissionBrief, propose the exact change; for Transient, the retry; for ArmadaDefect, locate the failure site");
             if (!String.IsNullOrEmpty(site.SourceFile)) sb.Append(" (").Append(Inline(site.SourceFile!)).Append(site.SourceLine.HasValue ? ":" + site.SourceLine.Value.ToString(CultureInfo.InvariantCulture) : String.Empty).Append(" in ").Append(Inline(site.Method ?? "?")).Append(")");
             sb.Append(" in the Armada source at the build commit below and propose a fix with a test. Quote evidence, not guesses. Use only the recovery paths listed here when you act on the Armada installation, and confirm anything marked data-loss risk with the user first.\n\n");
@@ -165,11 +175,16 @@ namespace Armada.Core.BlackBox
             BlackBoxTriageEnum triage = r.Analysis?.Triage?.Verdict ?? entry.Triage;
             sb.Append("- Triage: ").Append(triage);
             if (r.Analysis?.Triage != null) sb.Append(" (confidence ").Append(r.Analysis.Triage.Confidence).Append(")");
+            if (r.Analysis?.Triage?.Suspected == true) sb.Append(", suspected Armada defect: only the handoff and landing prior (").Append(BlackBoxResilienceScope.PriorRuleId).Append(") voted for it");
             sb.Append(triage == BlackBoxTriageEnum.Unknown ? ", not decided yet; decide it from the evidence.\n" : ".\n");
             if (r.CaptureMode != BlackBoxCaptureModeEnum.Inline) sb.Append("- Captured by the ").Append(r.CaptureMode.ToString().ToLowerInvariant()).Append(" after the fact: lower fidelity, the failure site's volatile facts (git state, exception) may be missing.\n");
             if (r.State == BlackBoxStateEnum.Captured) sb.Append("- Enrichment is pending: git forensics and analysis are not in this brief yet.\n");
             if (r.Truncation.TimedOut) sb.Append("- Capture ran out of its time budget; this entry is partial.\n");
             sb.Append('\n');
+
+            // Armada resilience
+            sb = Begin(sections, "Resilience");
+            AppendResilience(sb, r, site, entry, inScope, listLimit, textLimit);
 
             // Identity
             sb = Begin(sections, "Identity");
@@ -476,6 +491,7 @@ namespace Armada.Core.BlackBox
 
             sb = Begin(sections, "Answer");
             sb.Append("## Your answer\n\n");
+            if (inScope) sb.Append("Start with the Armada angle: say whether Armada's handoff and landing could have handled this (and how, citing the Armada resilience section), and propose the Armada change with a test, before any user-side fix. ");
             sb.Append("State the triage verdict (UserConfig, MissionBrief, Transient, ArmadaDefect or External) and the evidence for it, the root cause, the fix, and how to verify it. ");
             sb.Append("If you change the Armada installation, use the recovery paths above and annotate the entry with `annotate_blackbox` when done.\n");
 
@@ -488,6 +504,56 @@ namespace Armada.Core.BlackBox
             text = _Redactor.Redact(text) ?? String.Empty;
             if (redactHosts) text = _AbsolutePath.Replace(text, "{path}");
             return NoDashes(text);
+        }
+
+        private static void AppendResilience(StringBuilder sb, BlackBoxRecord r, BlackBoxSite site, BlackBoxEntry entry, bool inScope, int listLimit, int textLimit)
+        {
+            BlackBoxResilience? res = r.Analysis?.Resilience;
+            sb.Append("## Armada resilience\n\n");
+            if (res == null)
+            {
+                sb.Append(inScope
+                    ? "This failure is in Armada's handoff and landing scope, but the resilience analysis is not in this record yet (enrichment or analysis pending). Assume Armada could have handled it and look for the Armada fix first.\n\n"
+                    : "No resilience analysis yet (enrichment or analysis pending).\n\n");
+                return;
+            }
+            if (!res.InScope && res.ProposedChanges.Count == 0)
+            {
+                sb.Append(res.NoChangeReason ?? "No Armada change suggested: the failure is outside Armada's handoff and landing.").Append('\n');
+                if (res.SelfHealable != BlackBoxSelfHealableEnum.Unknown) sb.Append("- Self-healable: ").Append(res.SelfHealable).Append('\n');
+                sb.Append('\n');
+                return;
+            }
+            if (res.InScope) Line(sb, "Scope", "Armada handoff and landing (" + (res.ScopeReason ?? "in scope") + ")");
+            else sb.Append("Outside Armada's handoff and landing scope; the rules still suggest an Armada change.\n\n");
+            sb.Append("- Self-healable: **").Append(res.SelfHealable).Append("**");
+            if (res.SelfHealingProposal != null) sb.Append(". Armada could have ").Append(Inline(Clip(res.SelfHealingProposal, textLimit)).TrimEnd('.')).Append('.');
+            sb.Append('\n');
+            if (res.DetectionGap != null) sb.Append("- Detection gap (").Append(res.DetectionGapKind).Append("): ").Append(Inline(Clip(res.DetectionGap, textLimit))).Append('\n');
+            Line(sb, "Invariant that should hold", res.Invariant == null ? null : Clip(res.Invariant, textLimit));
+            Line(sb, "Severity", res.Severity + " (seen " + res.Occurrences30Days.ToString(CultureInfo.InvariantCulture) + (res.Occurrences30Days == 1 ? " time" : " times") + " in 30 days"
+                + (res.ArmadaVersionCount > 1 ? ", in " + res.ArmadaVersionCount.ToString(CultureInfo.InvariantCulture) + " Armada versions" : String.Empty) + ")");
+            if (res.AttemptedRecoveries.Count > 0) Line(sb, "Armada already attempted", String.Join("; ", res.AttemptedRecoveries.Take(listLimit)));
+            if (res.CodePointers.Count > 0)
+            {
+                string build = (res.ArmadaVersion ?? site.ArmadaVersion ?? entry.ArmadaVersion ?? "unknown") + ((res.ArmadaCommit ?? site.ArmadaCommit ?? entry.ArmadaCommit) != null ? " commit " + (res.ArmadaCommit ?? site.ArmadaCommit ?? entry.ArmadaCommit) : String.Empty);
+                sb.Append("- Code pointers (Armada ").Append(Inline(build)).Append("): ").Append(String.Join(", ", res.CodePointers.Take(listLimit).Select(p => "`" + Inline(p) + "`"))).Append('\n');
+            }
+            if (res.RegressionTest != null) sb.Append("- Regression test: ").Append(Inline(res.RegressionTest.Suite)).Append(": ").Append(Inline(Clip(res.RegressionTest.Description, textLimit))).Append('\n');
+            if (res.RuleIds.Count > 0) Line(sb, "Rules", String.Join(", ", res.RuleIds));
+            sb.Append('\n');
+            if (res.ProposedChanges.Count > 0)
+            {
+                sb.Append("Proposed Armada changes (mission briefs for the Armada vessel, most impactful first):\n\n");
+                foreach (BlackBoxProposedChange c in res.ProposedChanges.OrderBy(x => x.Rank).Take(listLimit))
+                {
+                    sb.Append(c.Rank.ToString(CultureInfo.InvariantCulture)).Append(". **").Append(Inline(c.Title)).Append("** (severity ").Append(c.Severity).Append(c.RuleId != null ? ", rule " + c.RuleId : String.Empty).Append(")\n");
+                    sb.Append("   - Change: ").Append(Inline(Clip(c.Change, textLimit))).Append('\n');
+                    if (c.AcceptanceTest != null) sb.Append("   - Acceptance test: ").Append(Inline(Clip(c.AcceptanceTest, textLimit))).Append('\n');
+                    if (c.CodePointers.Count > 0) sb.Append("   - Code: ").Append(String.Join(", ", c.CodePointers.Take(5).Select(p => "`" + Inline(p) + "`"))).Append('\n');
+                }
+                sb.Append('\n');
+            }
         }
 
         private static StringBuilder Begin(Dictionary<string, StringBuilder> sections, string name)
