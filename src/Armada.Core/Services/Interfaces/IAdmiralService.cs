@@ -1,5 +1,6 @@
 namespace Armada.Core.Services.Interfaces
 {
+    using Armada.Core.BlackBox;
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
@@ -8,6 +9,11 @@ namespace Armada.Core.Services.Interfaces
     /// </summary>
     public interface IAdmiralService
     {
+        /// <summary>
+        /// Black box capture for the failures the Admiral writes (and operator cancellations through it), or null.
+        /// </summary>
+        IBlackBoxCapture? BlackBox => null;
+
         /// <summary>
         /// Delegate invoked when a captain needs an agent process started.
         /// The handler receives (captain, mission, dock) and should return the process ID.
@@ -172,6 +178,21 @@ namespace Armada.Core.Services.Interfaces
         /// <exception cref="InvalidOperationException">Thrown when the agent process could not be stopped or its exit was not
         /// confirmed; the mission, captain and dock are left unchanged so nothing else is assigned while it may still run.</exception>
         Task<Mission> CancelMissionAsync(Mission mission, CancellationToken token = default);
+
+        /// <summary>
+        /// Cancel a mission like <see cref="CancelMissionAsync(Mission, CancellationToken)"/>, recording the cancellation
+        /// the caller's way: the black box step, failure kind and reason, and capture context in
+        /// <paramref name="options"/>, so the cancel records one entry (for example VesselDeleted) instead of an
+        /// OperatorTransition the caller then supersedes.
+        /// </summary>
+        /// <param name="mission">Mission to cancel, already read with the caller's scope.</param>
+        /// <param name="options">How to record the cancellation, or null for the default.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated mission.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when mission is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the agent process could not be stopped or its exit was not
+        /// confirmed.</exception>
+        Task<Mission> CancelMissionAsync(Mission mission, MissionCancelOptions? options, CancellationToken token = default);
 
         /// <summary>
         /// Stop a specific captain gracefully.

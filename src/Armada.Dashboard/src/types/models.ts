@@ -1,3 +1,4 @@
+import type { BlackBoxConflictingMission, BlackBoxFinding, BlackBoxRecoveryPath, BriefLintFinding, MissionOverlapWarning } from './blackbox';
 export interface RunApprovalOptions {
   approveAll: boolean;
   timeoutSeconds: number;
@@ -196,6 +197,8 @@ export interface Vessel {
   /** Per-vessel override for the Audit intent. */
   auditCommand?: string | null;
   allowConcurrentMissions: boolean;
+  /** Chain a mission that overlaps an active one after it (DependsOnMissionId) at dispatch. */
+  serializeOverlappingMissions?: boolean;
   /** Per-vessel auto-approve override for missions; null or absent uses the captain setting. */
   autoApprove?: boolean | null;
   defaultPipelineId: string | null;
@@ -327,6 +330,10 @@ export interface CaptainToolsQuery {
 export type MissionMode = 'Implementation' | 'Audit' | 'Research';
 
 export interface Mission {
+  /** Overlap warnings dispatch returned for this mission (transient; only on the create response). */
+  overlapWarnings?: MissionOverlapWarning[] | null;
+  /** Brief lint findings dispatch returned for this mission (transient; only on the create response). */
+  briefLintWarnings?: BriefLintFinding[] | null;
   id: string;
   tenantId: string | null;
   userId?: string | null;
@@ -356,6 +363,8 @@ export interface Mission {
   processId: number | null;
   prUrl: string | null;
   commitHash: string | null;
+  /** Current black box entry (bbx_...) when the mission failed; null otherwise. Absent on older servers. */
+  lastBlackBoxEntryId?: string | null;
   failureReason: string | null;
   /** Category of the failure (MissionFailureKindEnum), for example 'Infra' when the host blocked landing. */
   failureKind?: string | null;
@@ -522,6 +531,10 @@ export interface TokenUsageSummaryResult {
 
 export interface Voyage {
   approvalOptions?: RunApprovalOptions | null;
+  /** Overlap warnings dispatch returned for the voyage's missions (transient; only on the create response). */
+  overlapWarnings?: MissionOverlapWarning[] | null;
+  /** Brief lint findings dispatch returned for the voyage's missions (transient; only on the create response). */
+  briefLintWarnings?: BriefLintFinding[] | null;
   id: string;
   tenantId: string | null;
   title: string;
@@ -539,6 +552,8 @@ export interface Voyage {
   selectedPlaybooks?: SelectedPlaybook[];
   captainOverridesJson?: string | null;
   /** True for evaluation work (fixture battery, model evaluation); its stage outcomes never count as production data. */
+  /** Current black box entry when the voyage failed. Absent on older servers. */
+  lastBlackBoxEntryId?: string | null;
   isEvaluation?: boolean;
 }
 
@@ -3526,7 +3541,7 @@ export type AskMessageRole = 'User' | 'Assistant' | 'System';
 export type AskMessageKind = 'Text' | 'ActionProposal' | 'ActionResult' | 'WorkUpdate' | 'Summary' | 'Error' | 'CliPermission' | 'WorkReport';
 export type AskProposalStatus = 'Pending' | 'Approved' | 'Rejected' | 'Expired' | 'Executed' | 'Failed';
 export type AskProposalSource = 'Captain' | 'QuickAction';
-export type AskTrackedEntityType = 'Voyage' | 'Mission' | 'FleetActionRun' | 'Job' | 'VesselImportBatch';
+export type AskTrackedEntityType = 'Voyage' | 'Mission' | 'FleetActionRun' | 'Job' | 'VesselImportBatch' | 'BlackBox';
 export type AskWorkState = 'Active' | 'Succeeded' | 'Failed' | 'Cancelled';
 export type AskTurnState = 'started' | 'completed' | 'failed' | 'cancelled';
 
@@ -3652,6 +3667,79 @@ export interface AskWorkSnapshot {
   startedUtc?: string | null;
   completedUtc?: string | null;
   capturedUtc?: string | null;
+  /** The black box card of BlackBox work; null for every other kind. */
+  blackBox?: AskBlackBoxCard | null;
+}
+
+/** The black box summary on an Ask card (server BlackBoxDigest, MCP get_blackbox format summary). */
+export interface AskBlackBoxDigest {
+  entryId: string;
+  subjectType?: string;
+  missionId?: string | null;
+  voyageId?: string | null;
+  title?: string | null;
+  vesselName?: string | null;
+  attempt?: number;
+  captureMode?: string;
+  state?: string;
+  phase?: string;
+  step?: string;
+  host?: string | null;
+  sourceFile?: string | null;
+  sourceLine?: number | null;
+  method?: string | null;
+  kind?: string | null;
+  reason?: string | null;
+  mechanism?: string | null;
+  statusBefore?: string | null;
+  statusAfter?: string | null;
+  triage?: string;
+  triageConfidence?: string | null;
+  summary?: string | null;
+  why?: BlackBoxFinding[];
+  recoveryPaths?: BlackBoxRecoveryPath[];
+  conflictedFileTotal?: number;
+  objectCount?: number;
+  resolution?: string;
+  createdUtc?: string;
+}
+
+/** One configuration recommendation on the Ask black box card. */
+export interface AskBlackBoxRecommendation {
+  id: string;
+  setting: string;
+  scope?: string;
+  currentValue?: string | null;
+  suggestedValue?: string | null;
+  rationale?: string | null;
+  ruleId?: string | null;
+  /** Armada can apply it (proposed as apply_blackbox_recommendation); otherwise howToApply says how. */
+  canApply?: boolean;
+  howToApply?: string | null;
+}
+
+/** A follow-up the card offers: a tool becomes a proposal the user approves; a prompt is sent to the captain. */
+export interface AskBlackBoxFollowUp {
+  /** fix, apply, armada-fix or compare. */
+  name: string;
+  /** English key rendered through t. */
+  label: string;
+  description?: string | null;
+  toolName?: string | null;
+  /** The tool's arguments as JSON object text. */
+  argumentsText?: string | null;
+  prompt?: string | null;
+}
+
+/** The Ask black box card (MISSION_BLACKBOX_PLAN.md 10.3). */
+export interface AskBlackBoxCard {
+  digest: AskBlackBoxDigest;
+  fingerprint?: string | null;
+  conflictingMissions?: BlackBoxConflictingMission[];
+  conflictedFiles?: string[];
+  recommendations?: AskBlackBoxRecommendation[];
+  followUps?: AskBlackBoxFollowUp[];
+  noteCount?: number;
 }
 
 export interface AskTrackedWork {

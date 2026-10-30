@@ -4,6 +4,7 @@ namespace Armada.Core.Services
     using System.Text.Json;
     using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -138,12 +139,15 @@ namespace Armada.Core.Services
                     if (await TryScheduleOutputRepairAsync(completedMission, planError, ArchitectPlanParser.FormatInstructions(), token).ConfigureAwait(false))
                         return false;
 
+                    MissionStatusEnum planStatusBefore = completedMission.Status;
                     completedMission.FailureReason = AppendRepairHistory(planError, completedMission);
                     completedMission.Status = MissionStatusEnum.Failed;
                     completedMission.FailureKind = MissionFailureKindEnum.InvalidOutput;
                     completedMission.CompletedUtc = DateTime.UtcNow;
                     completedMission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(completedMission, token).ConfigureAwait(false);
+                    await RecordFailureAsync(completedMission, planStatusBefore, BlackBoxStepEnum.PlanParse, null, context =>
+                        context.Note = "Architect plan error: " + planError, token).ConfigureAwait(false);
                     return false;
                 }
                 List<ParsedArchitectMission> parsed = ParseArchitectOutput(completedMission);
@@ -194,12 +198,15 @@ namespace Armada.Core.Services
 
                 _Logging.Warn(_Header + "architect mission " + completedMission.Id +
                     " produced no valid mission definitions -- marking as failed");
+                MissionStatusEnum markersStatusBefore = completedMission.Status;
                 completedMission.Status = MissionStatusEnum.Failed;
                 completedMission.FailureReason = failureReason;
                 completedMission.FailureKind = MissionFailureKindEnum.InvalidOutput;
                 completedMission.CompletedUtc = DateTime.UtcNow;
                 completedMission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(completedMission, token).ConfigureAwait(false);
+                await RecordFailureAsync(completedMission, markersStatusBefore, BlackBoxStepEnum.PlanParse, null, context =>
+                    context.Note = hadArchitectMarkers ? "The output had [ARMADA:MISSION] markers but none was valid." : "The output had no plan block and no mission markers.", token).ConfigureAwait(false);
                 return false;
             }
 
@@ -257,6 +264,7 @@ namespace Armada.Core.Services
                 bool advanced = await git.ForceAdvanceBranchAsync(dock.WorktreePath!, completedMission.BranchName!, headCommit!, token).ConfigureAwait(false);
                 if (!advanced)
                 {
+                    MissionStatusEnum hardenStatusBefore = completedMission.Status;
                     completedMission.Status = MissionStatusEnum.Failed;
                     completedMission.CommitHash = headCommit;
                     completedMission.FailureKind = MissionFailureKindEnum.LandingConflict;
@@ -266,6 +274,10 @@ namespace Armada.Core.Services
                     completedMission.CompletedUtc = DateTime.UtcNow;
                     completedMission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(completedMission, token).ConfigureAwait(false);
+                    await RecordFailureAsync(completedMission, hardenStatusBefore, BlackBoxStepEnum.StageBranchHarden, dock, context =>
+                    {
+                        context.GitFacts = new BlackBoxGitFacts { BranchTip = headCommit, GitOperation = "update-ref refs/heads/" + completedMission.BranchName, WorktreeExisted = true };
+                    }, token).ConfigureAwait(false);
                     return false;
                 }
                 if (advanced)
@@ -305,6 +317,7 @@ namespace Armada.Core.Services
             {
                 // Blocking applies to stages still waiting; one that somehow started is cancelled either way.
                 bool blockThis = block && dependent.Status == MissionStatusEnum.Pending;
+                MissionStatusEnum dependentStatusBefore = dependent.Status;
                 dependent.Status = blockThis ? MissionStatusEnum.Blocked : MissionStatusEnum.Cancelled;
                 dependent.FailureReason = "Blocked by failed dependency " + failedMission.Id
                     + (blockThis ? ". Restart that mission to continue, or cancel the voyage." : String.Empty);
@@ -314,6 +327,11 @@ namespace Armada.Core.Services
                 await _Database.Missions.UpdateAsync(dependent, token).ConfigureAwait(false);
                 _Logging.Info(_Header + (blockThis ? "blocked" : "cancelled") + " dependent mission " + dependent.Id +
                     " because upstream mission " + failedMission.Id + " ended in " + failedMission.Status);
+                await RecordFailureAsync(dependent, dependentStatusBefore, BlackBoxStepEnum.DependencyCancelled, null, context =>
+                {
+                    context.Note = (blockThis ? "Non-terminal: held as Blocked" : "Cancelled") + " because upstream mission " + failedMission.Id + " ended "
+                        + failedMission.Status + (failedMission.LastBlackBoxEntryId != null ? " (entry " + failedMission.LastBlackBoxEntryId + ")" : "") + ".";
+                }, token).ConfigureAwait(false);
                 await CancelDependentPipelineStagesAsync(dependent, token).ConfigureAwait(false);
             }
         }
@@ -330,7 +348,7 @@ namespace Armada.Core.Services
                 () => MergeQueueMissionActivity.GetMissionIdsWithActiveEntriesAsync(_Database, token)).ConfigureAwait(false);
             if (settled == null) return;
 
-            await VoyageSettlement.ApplyAsync(_Database, voyage, settled.Value, missions, token).ConfigureAwait(false);
+            await VoyageSettlement.ApplyAsync(_Database, voyage, settled.Value, missions, token, BlackBox).ConfigureAwait(false);
             _Logging.Info(_Header + "voyage " + voyage.Id + " reached terminal status " + voyage.Status + " during mission completion");
         }
 

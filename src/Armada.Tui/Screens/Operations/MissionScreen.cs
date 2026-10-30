@@ -107,6 +107,11 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public OpsDocumentView Playbooks { get; } = new OpsDocumentView();
 
+        /// <summary>
+        /// Failure panel: the mission's black box entry (user brief, recovery paths) with its own keys.
+        /// </summary>
+        public BlackBoxFailurePanel Failure { get; }
+
         #endregion
 
         #region Private-Members
@@ -158,6 +163,9 @@ namespace Armada.Tui.Screens.Operations
             Action("dock", "Open Dock", () => Context.Navigate("/docks/" + Uri.EscapeDataString(Mission!.DockId!)), null, () => Mission != null && !String.IsNullOrEmpty(Mission.DockId));
             Action("purge", "Purge", () => Ops.Purge(MissionId, Mission!.Title, true, Load), "P", () => Mission != null, false, true);
             Action("delete", "Delete", () => Ops.Delete(MissionId, Mission!.Title, () => Context.Navigate("/missions")), "del", () => Mission != null, false, true);
+            Failure = new BlackBoxFailurePanel(this, BlackBoxPanelSourceEnum.Mission, () => MissionId);
+            Failure.Changed = Load;
+            AddFailureActions(this, Failure);
 
             Overview.Builder = BuildOverview;
             Description.Builder = BuildDescription;
@@ -169,8 +177,14 @@ namespace Armada.Tui.Screens.Operations
             AddPanel("description", "Description", Description);
             AddPanel("linked", "Linked Checks and Deployments", Linked);
             AddPanel("playbooks", "Playbooks", Playbooks);
+            AddPanel("failure", "Failure", Failure);
+            Tabs.SelectedChanged += (s, e) =>
+            {
+                if (ReferenceEquals(CurrentPanel, Failure)) Failure.Ensure();
+            };
 
             SubscribeCoalesced("mission.changed", Load);
+            SubscribeCoalesced("blackbox.", () => { if (Failure.Loaded) Failure.Reload(); });
             Load();
             LoadLinked();
         }
@@ -253,6 +267,7 @@ namespace Armada.Tui.Screens.Operations
                 Status = m.Status.ToString();
                 SubtitleText = Tr("Missions") + " > " + m.Title + "   " + m.Id;
                 Invalidate();
+                if (!String.IsNullOrEmpty(m.LastBlackBoxEntryId) && (Failure.Entry == null || Failure.Entry.Id != m.LastBlackBoxEntryId)) Failure.Reload();
                 LoadPreview();
                 LoadPolicyNote();
                 if (!String.IsNullOrEmpty(m.PrUrl) && _PullRequestFor != m.Id + m.PrUrl) LoadPullRequest(false);
@@ -261,6 +276,30 @@ namespace Armada.Tui.Screens.Operations
             {
                 if (initial) LoadError = Tr("Failed to load mission: {{message}}", LocalizationArgs.Of("message", ex.Message));
             });
+        }
+
+        /// <summary>
+        /// Add the Failure panel's actions to a detail screen's action menu (no keys: the panel's own keys run them while
+        /// it has focus, and the menu and palette reach them from anywhere).
+        /// </summary>
+        /// <param name="screen">Screen.</param>
+        /// <param name="panel">Failure panel.</param>
+        /// <param name="panelKey">The panel's tab key.</param>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public static void AddFailureActions(OpsDetailScreen screen, BlackBoxFailurePanel panel, string panelKey = "failure")
+        {
+            if (screen == null) throw new ArgumentNullException(nameof(screen));
+            if (panel == null) throw new ArgumentNullException(nameof(panel));
+            Func<bool> has = () => panel.Entry != null;
+            screen.Actions.Add(new OpsScreenAction("failure-open", "Open Failure tab", () => { screen.SelectPanel(panelKey); panel.Ensure(); }, null, () => panel.Entry != null || !panel.Loaded) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-copy", "Copy FIX THIS brief", () => panel.CopyBrief(), null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-export", "Export failure brief", panel.ExportBrief, null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-recovery", "Failure recovery paths", panel.ShowRecovery, null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-ask", "Ask Armada about this failure", panel.AskArmada, null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-json", "Black box JSON", panel.ShowJson, null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-resolve", "Resolve failure", () => panel.Resolve(), null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-pin", "Pin or unpin black box entry", panel.TogglePin, null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-note", "Add failure note", () => panel.AddNote(), null, has) { Toolbar = false });
         }
 
         #endregion

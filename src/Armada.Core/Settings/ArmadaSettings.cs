@@ -246,8 +246,11 @@ namespace Armada.Core.Settings
         private int _StageCheckConcurrencyPerHarbor = 1;
 
         /// <summary>
-        /// Maximum number of automatic landing retries when landing fails due to target-branch drift.
-        /// Set to 0 to disable auto-retry. Must be in range [0, 10].
+        /// Maximum number of automatic landing retries per deferred landing: a LocalMerge landing refused because the
+        /// target checkout had tracked changes is retried by the health-loop sweep once the checkout is clean, at most
+        /// this many times for one deferral (and never after <see cref="LandingDeferralDeadlineHours"/>). Target-branch
+        /// drift needs no retry: landing integrates the current target before it publishes. Set to 0 to disable
+        /// automatic retries. Values outside [0, 10] are clamped.
         /// </summary>
         public int MaxLandingRetries
         {
@@ -904,6 +907,18 @@ namespace Armada.Core.Settings
         }
 
         private StorageSettings _Storage = new StorageSettings();
+
+        /// <summary>
+        /// Mission and voyage black box: capture, storage target, retention and sweeper (docs/BLACKBOX.md). Never null;
+        /// setting null restores the defaults. Storage secrets are masked on every settings read.
+        /// </summary>
+        public BlackBoxSettings BlackBox
+        {
+            get => _BlackBox;
+            set => _BlackBox = value ?? new BlackBoxSettings();
+        }
+
+        private BlackBoxSettings _BlackBox = new BlackBoxSettings();
 
         /// <summary>
         /// Retention for Ask threads, finished background jobs, and finished import batches, pruned on the

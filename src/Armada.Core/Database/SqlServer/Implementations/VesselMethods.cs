@@ -59,8 +59,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO vessels (id, tenant_id, user_id, fleet_id, name, repo_url, local_path, working_directory, preferred_harbor_id, required_capabilities, project_context, style_guide, enable_model_context, model_context, github_token_override, landing_mode, branch_cleanup_policy, require_passing_checks_to_land, auto_approve, allow_concurrent_missions, default_pipeline_id, default_branch, protected_branch_patterns_json, secret_scan_enabled, protected_path_patterns_json, private_identifier_denylist_json, release_branch_prefix, hotfix_branch_prefix, require_pull_request_for_protected_branches, require_merge_queue_for_release_branches, auto_land_enabled, auto_land_max_files, auto_land_max_lines, auto_land_path_allow_globs_json, auto_land_path_deny_globs_json, definition_of_done_enabled, definition_of_done_build_command, definition_of_done_test_command, test_command, lint_command, audit_command, definition_of_done_timeout_seconds, active, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @fleet_id, @name, @repo_url, @local_path, @working_directory, @preferred_harbor_id, @required_capabilities, @project_context, @style_guide, @enable_model_context, @model_context, @github_token_override, @landing_mode, @branch_cleanup_policy, @require_passing_checks_to_land, @auto_approve, @allow_concurrent_missions, @default_pipeline_id, @default_branch, @protected_branch_patterns_json, @secret_scan_enabled, @protected_path_patterns_json, @private_identifier_denylist_json, @release_branch_prefix, @hotfix_branch_prefix, @require_pull_request_for_protected_branches, @require_merge_queue_for_release_branches, @auto_land_enabled, @auto_land_max_files, @auto_land_max_lines, @auto_land_path_allow_globs_json, @auto_land_path_deny_globs_json, @definition_of_done_enabled, @definition_of_done_build_command, @definition_of_done_test_command, @test_command, @lint_command, @audit_command, @definition_of_done_timeout_seconds, @active, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO vessels (id, tenant_id, user_id, fleet_id, name, repo_url, local_path, working_directory, preferred_harbor_id, required_capabilities, project_context, style_guide, enable_model_context, model_context, github_token_override, landing_mode, branch_cleanup_policy, require_passing_checks_to_land, auto_approve, allow_concurrent_missions, default_pipeline_id, default_branch, protected_branch_patterns_json, secret_scan_enabled, protected_path_patterns_json, private_identifier_denylist_json, release_branch_prefix, hotfix_branch_prefix, require_pull_request_for_protected_branches, require_merge_queue_for_release_branches, auto_land_enabled, auto_land_max_files, auto_land_max_lines, auto_land_path_allow_globs_json, auto_land_path_deny_globs_json, definition_of_done_enabled, definition_of_done_build_command, definition_of_done_test_command, test_command, lint_command, audit_command, blackbox_retention_days, serialize_overlapping_missions, definition_of_done_timeout_seconds, active, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @fleet_id, @name, @repo_url, @local_path, @working_directory, @preferred_harbor_id, @required_capabilities, @project_context, @style_guide, @enable_model_context, @model_context, @github_token_override, @landing_mode, @branch_cleanup_policy, @require_passing_checks_to_land, @auto_approve, @allow_concurrent_missions, @default_pipeline_id, @default_branch, @protected_branch_patterns_json, @secret_scan_enabled, @protected_path_patterns_json, @private_identifier_denylist_json, @release_branch_prefix, @hotfix_branch_prefix, @require_pull_request_for_protected_branches, @require_merge_queue_for_release_branches, @auto_land_enabled, @auto_land_max_files, @auto_land_max_lines, @auto_land_path_allow_globs_json, @auto_land_path_deny_globs_json, @definition_of_done_enabled, @definition_of_done_build_command, @definition_of_done_test_command, @test_command, @lint_command, @audit_command, @blackbox_retention_days, @serialize_overlapping_missions, @definition_of_done_timeout_seconds, @active, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", vessel.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)vessel.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)vessel.UserId ?? DBNull.Value);
@@ -102,6 +102,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@test_command", (object?)vessel.TestCommand ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@lint_command", (object?)vessel.LintCommand ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@audit_command", (object?)vessel.AuditCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@blackbox_retention_days", vessel.BlackBoxRetentionDays.HasValue ? (object)vessel.BlackBoxRetentionDays.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@serialize_overlapping_missions", vessel.SerializeOverlappingMissions);
                     cmd.Parameters.AddWithValue("@definition_of_done_timeout_seconds", vessel.DefinitionOfDoneTimeoutSeconds);
                     cmd.Parameters.AddWithValue("@active", vessel.Active);
                     cmd.Parameters.AddWithValue("@created_utc", SqlServerDatabaseDriver.ToIso8601(vessel.CreatedUtc));
@@ -212,6 +214,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         test_command = @test_command,
                         lint_command = @lint_command,
                         audit_command = @audit_command,
+                        blackbox_retention_days = @blackbox_retention_days,
+                        serialize_overlapping_missions = @serialize_overlapping_missions,
                         definition_of_done_timeout_seconds = @definition_of_done_timeout_seconds,
                         active = @active,
                         last_update_utc = @last_update_utc
@@ -257,6 +261,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@test_command", (object?)vessel.TestCommand ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@lint_command", (object?)vessel.LintCommand ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@audit_command", (object?)vessel.AuditCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@blackbox_retention_days", vessel.BlackBoxRetentionDays.HasValue ? (object)vessel.BlackBoxRetentionDays.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@serialize_overlapping_missions", vessel.SerializeOverlappingMissions);
                     cmd.Parameters.AddWithValue("@definition_of_done_timeout_seconds", vessel.DefinitionOfDoneTimeoutSeconds);
                     cmd.Parameters.AddWithValue("@active", vessel.Active);
                     cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(vessel.LastUpdateUtc));

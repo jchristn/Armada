@@ -7,14 +7,39 @@ namespace Armada.Core.Services
     /// <summary>Integrate the latest known remote and local target before landing a mission branch.</summary>
     public static class LandingTargetSynchronization
     {
-        /// <summary>Fetch current target refs and merge them into the mission dock. Return whether its head changed.</summary>
+        /// <summary>
+        /// Fetch current target refs and merge them into the mission dock. Return the dock head before and after and the
+        /// target tips integrated against; <see cref="LandingTargetSynchronizationResult.Advanced"/> says whether it changed.
+        /// </summary>
         /// <exception cref="GitMergeConflictException">Thrown when git reports a merge conflict integrating the target.</exception>
         /// <exception cref="InvalidOperationException">Thrown when the target cannot be resolved or merged for another reason.</exception>
-        public static async Task<bool> SynchronizeAsync(IGitService git, string worktree, string targetBranch, string? targetCheckout, CancellationToken token = default)
+        public static Task<LandingTargetSynchronizationResult> SynchronizeAsync(IGitService git, string worktree, string targetBranch, string? targetCheckout, CancellationToken token = default)
         {
+            return SynchronizeAsync(git, worktree, targetBranch, targetCheckout, new LandingTargetSynchronizationResult(), token);
+        }
+
+        /// <summary>
+        /// Integrate the current target into the dock, filling a caller-owned result as each tip is read, so the tips
+        /// read before a merge conflict or other failure are still known to the caller (the black box records them).
+        /// </summary>
+        /// <param name="git">Git service for the dock's host.</param>
+        /// <param name="worktree">Dock worktree.</param>
+        /// <param name="targetBranch">Target branch.</param>
+        /// <param name="targetCheckout">Target checkout, or null.</param>
+        /// <param name="result">Result to fill.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The filled result.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when result is null.</exception>
+        /// <exception cref="GitMergeConflictException">Thrown when the target cannot be merged without conflicts.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the target cannot be integrated or resolved.</exception>
+        public static async Task<LandingTargetSynchronizationResult> SynchronizeAsync(IGitService git, string worktree, string targetBranch, string? targetCheckout, LandingTargetSynchronizationResult result, CancellationToken token = default)
+        {
+            if (result == null) throw new ArgumentNullException(nameof(result));
             string? before = await git.GetHeadCommitHashAsync(worktree, token).ConfigureAwait(false);
+            result.Before = before;
             await git.FetchRemotesAsync(worktree, token).ConfigureAwait(false);
             string? remoteTip = await git.ResolveBranchTipAsync(worktree, "origin/" + targetBranch, token).ConfigureAwait(false);
+            result.RemoteTargetTip = String.IsNullOrEmpty(remoteTip) ? null : remoteTip;
             if (!String.IsNullOrEmpty(remoteTip) && remoteTip != before)
             {
                 GitCommitMergeResult merged = await git.MergeCommitAsync(worktree, remoteTip, targetBranch, "Integrate current landing target " + targetBranch, token).ConfigureAwait(false);
@@ -24,12 +49,32 @@ namespace Armada.Core.Services
                     throw new InvalidOperationException("Cannot integrate current landing target: " + merged.Message + " " + String.Join(", ", merged.ConflictedFiles));
             }
             string? localTip = String.IsNullOrEmpty(targetCheckout) ? null : await git.ResolveBranchTipAsync(targetCheckout, targetBranch, token).ConfigureAwait(false);
+            result.LocalTargetTip = String.IsNullOrEmpty(localTip) ? null : localTip;
             if (!String.IsNullOrEmpty(localTip) && localTip != before && localTip != remoteTip)
                 await git.MergeBranchLocalAsync(worktree, targetCheckout!, targetBranch, token: token).ConfigureAwait(false);
             else if (String.IsNullOrEmpty(remoteTip) && String.IsNullOrEmpty(localTip))
                 throw new InvalidOperationException("Current landing target could not be resolved; refresh the target refs and retry landing.");
-            string? after = await git.GetHeadCommitHashAsync(worktree, token).ConfigureAwait(false);
-            return !String.Equals(before, after, StringComparison.Ordinal);
+            result.After = await git.GetHeadCommitHashAsync(worktree, token).ConfigureAwait(false);
+            return result;
+        }
+
+        /// <summary>
+        /// Build the <c>mission.landing_target_advanced</c> event payload from a synchronization result.
+        /// </summary>
+        /// <param name="result">The synchronization result.</param>
+        /// <param name="targetBranch">The target branch.</param>
+        /// <returns>The payload.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when result is null.</exception>
+        public static LandingTargetAdvancedPayload ToAdvancedPayload(LandingTargetSynchronizationResult result, string? targetBranch)
+        {
+            if (result == null) throw new ArgumentNullException(nameof(result));
+            LandingTargetAdvancedPayload payload = new LandingTargetAdvancedPayload();
+            payload.TargetBranch = targetBranch;
+            payload.Before = result.Before;
+            payload.After = result.After;
+            payload.RemoteTargetTip = result.RemoteTargetTip;
+            payload.LocalTargetTip = result.LocalTargetTip;
+            return payload;
         }
     }
 }

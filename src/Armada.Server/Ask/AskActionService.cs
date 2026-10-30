@@ -9,6 +9,8 @@ namespace Armada.Server.Ask
     using System.Text.Json.Nodes;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -57,6 +59,11 @@ namespace Armada.Server.Ask
         public Func<AskThread, AskActionProposal, Task>? OnProposalApproved { get; set; } = null;
 
         /// <summary>
+        /// Black box service used to link the cards of missions a conversation mentions. Null links none.
+        /// </summary>
+        public IBlackBoxService? BlackBox { get; set; } = null;
+
+        /// <summary>
         /// Maximum characters of a tool result stored on a proposal. Default 65536, minimum 1024, maximum 1048576.
         /// </summary>
         public int MaxResultChars
@@ -82,6 +89,14 @@ namespace Armada.Server.Ask
         private readonly LoggingModule _Logging;
         private readonly ConcurrentDictionary<string, Func<JsonElement?, Task<object>>> _Handlers = new ConcurrentDictionary<string, Func<JsonElement?, Task<object>>>(StringComparer.Ordinal);
         private int _MaxResultChars = 65536;
+
+        // Tools whose approval in Ask is the user's confirmation: the approved proposal runs the dry run, then confirms it
+        // with the dry run's token (MISSION_BLACKBOX_PLAN.md section 9 and 10.3).
+        private static readonly HashSet<string> _DryRunThenConfirmTools = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "run_blackbox_recovery",
+            "apply_blackbox_recommendation"
+        };
 
         private static readonly JsonSerializerOptions _ResultJson = new JsonSerializerOptions
         {
@@ -179,8 +194,8 @@ namespace Armada.Server.Ask
         /// <param name="threadId">Thread identifier.</param>
         /// <param name="request">Tool name and arguments.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The decision: 200 with the executed (or failed) proposal, 400 for an unknown tool, 404 when the thread
-        /// is not found.</returns>
+        /// <returns>The decision: 200 with the executed (or failed) proposal, or the Pending proposal when the request has
+        /// Propose set; 400 for an unknown tool; 404 when the thread is not found.</returns>
         public async Task<AskProposalDecision> SubmitQuickActionAsync(AuthContext auth, string threadId, AskActionRequest? request, CancellationToken token = default)
         {
             AskThread? thread = await _Threads.GetThreadAsync(auth, threadId, token).ConfigureAwait(false);
@@ -191,12 +206,23 @@ namespace Armada.Server.Ask
             string tool = AskToolPolicy.NormalizeToolName(request.ToolName);
             if (!HasTool(tool)) return new AskProposalDecision(null, 400, "Unknown tool: " + tool);
 
-            string argumentsText = request.Arguments != null ? request.Arguments.ToJsonString() : "{}";
+            JsonObject? toolArguments = AskQuickActionCatalog.ToolArguments(tool, request.Arguments);
+            string argumentsText = toolArguments != null ? toolArguments.ToJsonString() : "{}";
             AskActionProposal proposal = new AskActionProposal();
             proposal.ToolName = tool;
             proposal.ArgumentsText = argumentsText;
             proposal.SummaryText = await DescribeAsync(thread, tool, argumentsText, token).ConfigureAwait(false);
             proposal.Source = AskProposalSourceEnum.QuickAction;
+
+            if (request.Propose)
+            {
+                // Proposed from a card button (Fix it, Apply): wait for the user's approval like a captain proposal.
+                proposal.Status = AskProposalStatusEnum.Pending;
+                proposal = await _Threads.CreateProposalAsync(thread, proposal, true, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "thread " + thread.Id + ": " + tool + " proposed from a card as " + proposal.Id);
+                return new AskProposalDecision(proposal, 200, null);
+            }
+
             proposal.Status = AskProposalStatusEnum.Approved;
             proposal.DecidedByUserId = auth.UserId;
             proposal.DecidedUtc = DateTime.UtcNow;
@@ -275,6 +301,55 @@ namespace Armada.Server.Ask
         }
 
         /// <summary>
+        /// Link the black box cards of the missions a conversation message mentions (plan 10.3): each mentioned mission
+        /// whose current black box entry the thread's owner can see gets a BlackBox card, once. Errors are logged, never
+        /// thrown.
+        /// </summary>
+        /// <param name="thread">Thread.</param>
+        /// <param name="text">Message text.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Number of cards linked.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="thread"/> is null.</exception>
+        public async Task<int> LinkMentionedBlackBoxesAsync(AskThread thread, string? text, CancellationToken token = default)
+        {
+            if (thread == null) throw new ArgumentNullException(nameof(thread));
+            IBlackBoxService? service = BlackBox;
+            if (service == null) return 0;
+            List<string> missionIds = AskWorkLinker.MentionedMissionIds(text);
+            if (missionIds.Count < 1) return 0;
+
+            int linked = 0;
+            try
+            {
+                AuthContext? owner = await _Threads.ReadOwnerContextAsync(thread, token).ConfigureAwait(false);
+                if (owner == null) return 0;
+                foreach (string missionId in missionIds)
+                {
+                    BlackBoxEntry entry;
+                    try
+                    {
+                        entry = await service.GetMissionEntryAsync(owner, missionId, false, token).ConfigureAwait(false);
+                    }
+                    catch (BlackBoxException)
+                    {
+                        // No entry, or one the owner cannot see: nothing to link.
+                        continue;
+                    }
+
+                    AskWorkLink link = new AskWorkLink(AskTrackedEntityTypeEnum.BlackBox, entry.Id, false);
+                    string title = String.IsNullOrWhiteSpace(entry.MissionTitle) ? String.Empty : " (\"" + entry.MissionTitle + "\")";
+                    if (await LinkCardAsync(thread, link, "Black box of mission " + missionId + title + ".", token).ConfigureAwait(false)) linked++;
+                }
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _Logging.Warn(_Header + "black box links for thread " + thread.Id + " failed: " + ex.Message);
+            }
+
+            return linked;
+        }
+
+        /// <summary>
         /// Expire every pending proposal older than Ask.ProposalExpiryMinutes (it never executes).
         /// </summary>
         /// <param name="token">Cancellation token.</param>
@@ -341,6 +416,14 @@ namespace Armada.Server.Ask
                 return id;
             }
 
+            string BlackBoxTarget()
+            {
+                if (Str("entryId").Length > 0) return "entry " + Str("entryId");
+                if (Str("missionId").Length > 0) return "mission " + Str("missionId");
+                if (Str("voyageId").Length > 0) return "voyage " + Str("voyageId");
+                return "the entry";
+            }
+
             string tool = AskToolPolicy.NormalizeToolName(toolName);
             switch (tool)
             {
@@ -366,6 +449,20 @@ namespace Armada.Server.Ask
                     return "Import repositories from batch " + Str("batchId");
                 case "status":
                     return "Show Armada status";
+                case "get_blackbox":
+                    return "Show the black box of " + BlackBoxTarget();
+                case "run_blackbox_recovery":
+                    return "Run recovery path " + Str("pathId") + " from the black box of " + BlackBoxTarget()
+                        + (String.Equals(Str("dryRun"), "true", StringComparison.OrdinalIgnoreCase) ? " (dry run only)" : " (dry run, then confirm)")
+                        + (String.Equals(Str("acknowledgeDataLoss"), "true", StringComparison.OrdinalIgnoreCase) ? "; this path risks data loss" : String.Empty);
+                case "apply_blackbox_recommendation":
+                    return "Apply recommendation " + Str("recommendationId") + " from the black box of " + BlackBoxTarget()
+                        + (String.Equals(Str("dryRun"), "true", StringComparison.OrdinalIgnoreCase) ? " (dry run only)" : " (dry run, then apply)");
+                case "resolve_blackbox":
+                    return "Mark the black box of " + BlackBoxTarget() + " " + Str("resolution");
+                case "annotate_blackbox":
+                    string body = Str("body");
+                    return "Add a note to the black box of " + BlackBoxTarget() + (body.Length > 0 ? ": \"" + (body.Length > 120 ? body.Substring(0, 120) + "..." : body) + "\"" : String.Empty);
             }
 
             StringBuilder builder = new StringBuilder("Run " + tool);
@@ -435,9 +532,22 @@ namespace Armada.Server.Ask
             if (AskToolPolicy.IsGateExempt(name)) return await handler(args).ConfigureAwait(false);
             if (AskToolPolicy.IsThreadForbidden(name))
                 return McpToolError.Forbidden("Tool " + name + " cannot be used from an Ask conversation; CLI permission decisions, rules, and policies are made by people in Armada.");
-            if (AskToolPolicy.IsReadOnly(name)) return await handler(args).ConfigureAwait(false);
-
             string argumentsText = args.HasValue ? args.Value.GetRawText() : "{}";
+            if (AskToolPolicy.IsReadOnly(name))
+            {
+                object read = await handler(args).ConfigureAwait(false);
+                if (AskWorkLinker.LinkedReadTools().Contains(name) && !(read is McpToolError))
+                {
+                    foreach (AskWorkLink link in AskWorkLinker.Resolve(name, argumentsText, Serialize(read)))
+                    {
+                        try { await LinkCardAsync(thread, link, "Black box entry " + link.EntityId + ".", CancellationToken.None).ConfigureAwait(false); }
+                        catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "card link for " + name + " failed: " + ex.Message); }
+                    }
+                }
+
+                return read;
+            }
+
             AskActionProposal proposal = new AskActionProposal();
             proposal.ToolName = name;
             proposal.ArgumentsText = argumentsText;
@@ -457,7 +567,9 @@ namespace Armada.Server.Ask
             proposal.DecidedByUserId = thread.UserId;
             proposal.DecidedUtc = DateTime.UtcNow;
             proposal = await _Threads.CreateProposalAsync(thread, proposal, false).ConfigureAwait(false);
-            AskExecutionOutcome outcome = await InvokeAsync(handler, args).ConfigureAwait(false);
+            AskExecutionOutcome outcome = RunsDryRunThenConfirm(name, argumentsText)
+                ? await DryRunThenConfirmAsync(argumentsText, a => InvokeAsync(handler, a)).ConfigureAwait(false)
+                : await InvokeAsync(handler, args).ConfigureAwait(false);
             await RecordOutcomeAsync(thread, proposal, outcome, CancellationToken.None).ConfigureAwait(false);
             if (outcome.Result != null) return outcome.Result;
             return new McpToolError(outcome.ErrorCode ?? McpToolErrorCodeEnum.Failed, outcome.ErrorText ?? "The tool failed.");
@@ -468,7 +580,9 @@ namespace Armada.Server.Ask
             AskExecutionOutcome outcome;
             try
             {
-                outcome = await ExecuteAsync(proposal.ToolName, proposal.ArgumentsText, caller).ConfigureAwait(false);
+                outcome = RunsDryRunThenConfirm(proposal.ToolName, proposal.ArgumentsText)
+                    ? await DryRunThenConfirmAsync(proposal.ArgumentsText, a => ExecuteAsync(proposal.ToolName, ArgumentsText(a), caller)).ConfigureAwait(false)
+                    : await ExecuteAsync(proposal.ToolName, proposal.ArgumentsText, caller).ConfigureAwait(false);
             }
             catch (ArgumentException ex)
             {
@@ -488,26 +602,7 @@ namespace Armada.Server.Ask
 
             // Link the work the action created (or refresh the work it affected).
             AskTrackedWork? primary = null;
-            if (outcome.Ok)
-            {
-                foreach (AskWorkLink link in AskWorkLinker.Resolve(proposal.ToolName, proposal.ArgumentsText, proposal.ResultText))
-                {
-                    try
-                    {
-                        AskTrackedWork? work = link.RefreshOnly
-                            ? await _Threads.FindTrackedWorkAsync(thread, link, token).ConfigureAwait(false)
-                            : await _Threads.TrackWorkAsync(thread, link, token).ConfigureAwait(false);
-                        if (work == null) continue;
-                        if (primary == null && !link.RefreshOnly) primary = work;
-                        Func<AskTrackedWork, Task>? linked = OnWorkLinked;
-                        if (linked != null) await linked(work).ConfigureAwait(false);
-                    }
-                    catch (Exception ex) when (!(ex is OperationCanceledException))
-                    {
-                        _Logging.Warn(_Header + "work linking for " + proposal.Id + " failed: " + ex.Message);
-                    }
-                }
-            }
+            if (outcome.Ok) primary = await LinkAsync(thread, proposal.ToolName, proposal.ArgumentsText, proposal.ResultText, proposal.Id, token).ConfigureAwait(false);
 
             AskMessage result = new AskMessage();
             result.Role = AskMessageRoleEnum.System;
@@ -515,10 +610,126 @@ namespace Armada.Server.Ask
             result.ContentText = outcome.Ok
                 ? (proposal.SummaryText + ": done.")
                 : (proposal.SummaryText + ": failed. " + (outcome.ErrorText ?? String.Empty)).Trim();
+            if (!outcome.Ok && outcome.ErrorCode == McpToolErrorCodeEnum.NotFound && String.Equals(proposal.ToolName, "get_blackbox", StringComparison.Ordinal))
+                result.ContentText += " The mission has no black box entry; ask the captain for the mission's FailureReason (mission_status) instead.";
             result.ProposalId = proposal.Id;
             result.TrackedWorkId = primary?.Id;
             await _Threads.AppendMessageAsync(thread, result, true, null, token).ConfigureAwait(false);
             return proposal;
+        }
+
+        private async Task<AskTrackedWork?> LinkAsync(AskThread thread, string toolName, string? argumentsText, string? resultText, string context, CancellationToken token)
+        {
+            AskTrackedWork? primary = null;
+            foreach (AskWorkLink link in AskWorkLinker.Resolve(toolName, argumentsText, resultText))
+            {
+                try
+                {
+                    AskTrackedWork? work = link.RefreshOnly
+                        ? await _Threads.FindTrackedWorkAsync(thread, link, token).ConfigureAwait(false)
+                        : await _Threads.TrackWorkAsync(thread, link, token).ConfigureAwait(false);
+                    if (work == null) continue;
+                    if (primary == null && !link.RefreshOnly) primary = work;
+                    Func<AskTrackedWork, Task>? linked = OnWorkLinked;
+                    if (linked != null) await linked(work).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException))
+                {
+                    _Logging.Warn(_Header + "work linking for " + context + " failed: " + ex.Message);
+                }
+            }
+
+            return primary;
+        }
+
+        /// <summary>
+        /// Link a card that no action created (a read, or a mission the conversation mentioned): track it once and post a
+        /// system message that hosts the card in the conversation. Returns false when the thread already tracks it.
+        /// </summary>
+        private async Task<bool> LinkCardAsync(AskThread thread, AskWorkLink link, string text, CancellationToken token)
+        {
+            if (await _Threads.FindTrackedWorkAsync(thread, link, token).ConfigureAwait(false) != null) return false;
+            AskTrackedWork work = await _Threads.TrackWorkAsync(thread, link, token).ConfigureAwait(false);
+            AskMessage card = new AskMessage();
+            card.Role = AskMessageRoleEnum.System;
+            card.Kind = AskMessageKindEnum.WorkUpdate;
+            card.ContentText = text;
+            card.TrackedWorkId = work.Id;
+            await _Threads.AppendMessageAsync(thread, card, false, null, token).ConfigureAwait(false);
+            Func<AskTrackedWork, Task>? linked = OnWorkLinked;
+            if (linked != null) await linked(work).ConfigureAwait(false);
+            return true;
+        }
+
+        private static bool RunsDryRunThenConfirm(string? toolName, string? argumentsText)
+        {
+            if (!_DryRunThenConfirmTools.Contains(AskToolPolicy.NormalizeToolName(toolName))) return false;
+            BlackBoxConfirmArgs confirm = new BlackBoxConfirmArgs();
+            try
+            {
+                if (!String.IsNullOrWhiteSpace(argumentsText)) confirm = JsonSerializer.Deserialize<BlackBoxConfirmArgs>(argumentsText, _DescribeJsonOptions) ?? new BlackBoxConfirmArgs();
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+
+            // An explicit dry run stays a dry run, and a proposal that already carries a token runs as proposed.
+            return confirm.DryRun != true && String.IsNullOrWhiteSpace(confirm.ConfirmToken);
+        }
+
+        /// <summary>
+        /// Run an approved black box recovery or recommendation the way the tool asks: a dry run first, then the run with
+        /// the dry run's confirmation token. The user's approval of the proposal is the confirmation.
+        /// </summary>
+        private async Task<AskExecutionOutcome> DryRunThenConfirmAsync(string? argumentsText, Func<JsonElement?, Task<AskExecutionOutcome>> invoke)
+        {
+            JsonObject arguments = ParseObject(argumentsText);
+            arguments["dryRun"] = true;
+            arguments.Remove("confirmToken");
+            AskExecutionOutcome dry = await invoke(ParseArguments(arguments.ToJsonString())).ConfigureAwait(false);
+            if (!dry.Ok) return dry;
+
+            string? confirmToken = null;
+            if (dry.Result is BlackBoxRecoveryRunResult recovery) confirmToken = recovery.ConfirmToken;
+            else if (dry.Result is BlackBoxRecommendationApplyResult recommendation) confirmToken = recommendation.ConfirmToken;
+            if (String.IsNullOrWhiteSpace(confirmToken))
+            {
+                dry.Ok = false;
+                dry.ErrorText = "The dry run returned no confirmation token, so nothing was run.";
+                return dry;
+            }
+
+            arguments["dryRun"] = false;
+            arguments["confirmToken"] = confirmToken;
+            AskExecutionOutcome run = await invoke(ParseArguments(arguments.ToJsonString())).ConfigureAwait(false);
+            if (!run.Ok) return run;
+
+            // A run whose step failed is a failed action, not a successful call.
+            if (run.Result is BlackBoxRecoveryRunResult ran && !ran.Succeeded)
+            {
+                run.Ok = false;
+                run.ErrorText = String.IsNullOrWhiteSpace(ran.Message) ? "A recovery step failed." : ran.Message;
+            }
+            else if (run.Result is BlackBoxRecommendationApplyResult applied && !applied.Succeeded)
+            {
+                run.Ok = false;
+                run.ErrorText = String.IsNullOrWhiteSpace(applied.Message) ? "The recommendation could not be applied." : applied.Message;
+            }
+
+            return run;
+        }
+
+        private static JsonObject ParseObject(string? argumentsText)
+        {
+            if (String.IsNullOrWhiteSpace(argumentsText)) return new JsonObject();
+            try { return JsonNode.Parse(argumentsText) as JsonObject ?? new JsonObject(); }
+            catch (JsonException) { return new JsonObject(); }
+        }
+
+        private static string ArgumentsText(JsonElement? args)
+        {
+            return args.HasValue ? args.Value.GetRawText() : "{}";
         }
 
         private async Task<AskExecutionOutcome> InvokeAsync(Func<JsonElement?, Task<object>> handler, JsonElement? args)

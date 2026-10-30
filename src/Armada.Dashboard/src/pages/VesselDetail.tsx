@@ -19,6 +19,8 @@ import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 import { useNotifications } from '../context/NotificationContext';
 import { buildVesselDuplicatePayload } from '../lib/duplicates';
 import VesselFormModal from '../components/vessels/VesselFormModal';
+import VesselReservationsCard from '../components/blackbox/VesselReservationsCard';
+import VesselBlackBoxDoctorCard from '../components/blackbox/VesselBlackBoxDoctorCard';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 export default function VesselDetail() {
@@ -437,6 +439,9 @@ export default function VesselDetail() {
           <pre className="detail-context-block">{vessel.modelContext}</pre>
         </div>
       )}
+
+      <VesselReservationsCard vesselId={vessel.id} serializeOverlappingMissions={vessel.serializeOverlappingMissions} />
+      <VesselBlackBoxDoctorCard vesselId={vessel.id} onApplied={() => { void load(); }} />
 
       {/* Recent Missions */}
       <div style={{ marginTop: '1rem' }}>

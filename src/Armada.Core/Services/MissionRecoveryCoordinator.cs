@@ -6,6 +6,7 @@ namespace Armada.Core.Services
     using System.Threading;
     using System.Threading.Tasks;
     using SyslogLogging;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -20,6 +21,15 @@ namespace Armada.Core.Services
     /// </summary>
     public class MissionRecoveryCoordinator
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Black box capture for an original mission whose rescue budget is used up, or null.
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private readonly string _Header = "[MissionRecoveryCoordinator] ";
@@ -190,6 +200,14 @@ namespace Armada.Core.Services
                 incident.RecoveryNotes = ExhaustedNote;
                 await UpdateIncidentAsync(auth, incident, token).ConfigureAwait(false);
                 _Logging.Warn(_Header + "incident " + incident.Id + " exhausted its rescue budget; left open for a human");
+                Mission? lastRescue = rescues.LastOrDefault();
+                await BlackBox.RecordMissionFailureAsync(original, original.Status, BlackBoxStepEnum.RescueFailed, context =>
+                {
+                    context.IncidentId = incident.Id;
+                    context.Note = "Incident " + incident.Id + " used " + incident.RecoveryAttempts + " of " + maxAttempts + " rescue attempt(s); rescues: "
+                        + String.Join(", ", rescues.Select(r => r.Id + " (" + r.Status + ")"))
+                        + (lastRescue?.LastBlackBoxEntryId != null ? "; last rescue entry " + lastRescue.LastBlackBoxEntryId : "") + ".";
+                }, token).ConfigureAwait(false);
             }
         }
 

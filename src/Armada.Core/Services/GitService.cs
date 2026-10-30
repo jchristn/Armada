@@ -97,8 +97,11 @@ namespace Armada.Core.Services
         /// <inheritdoc />
         public async Task FastForwardVerifiedCommitAsync(string targetWorkDir, string sourceRepoPath, string commitHash, string targetBranch, CancellationToken token = default)
         {
-            if (!(await GetWorkingTreeStatusAsync(targetWorkDir, token).ConfigureAwait(false)).IsClean)
-                throw new GitDirtyCheckoutException(targetWorkDir, "Checkout has changes; verified work is preserved.");
+            // Untracked files also block the fast-forward, so the porcelain listing includes them. Keep the leading
+            // status columns (" M path"): only trailing whitespace is trimmed so ModifiedPaths parses exactly.
+            string porcelain = (await RunGitAsync(targetWorkDir, token, "status", "--porcelain", "--untracked-files=all").ConfigureAwait(false)).TrimEnd();
+            if (!String.IsNullOrWhiteSpace(porcelain))
+                throw new GitDirtyCheckoutException(targetWorkDir, porcelain);
             string? original = await GetCurrentBranchAsync(targetWorkDir, token).ConfigureAwait(false);
             if (String.IsNullOrEmpty(original)) throw new InvalidOperationException("Cannot land into a detached target checkout.");
             await RunGitAsync(targetWorkDir, token, "fetch", sourceRepoPath, commitHash).ConfigureAwait(false);
@@ -1581,6 +1584,93 @@ namespace Armada.Core.Services
             return page;
         }
 
+        /// <inheritdoc />
+        public async Task<string?> GetMergeBaseAsync(string repoPath, string a, string b, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(a)) throw new ArgumentNullException(nameof(a));
+            if (String.IsNullOrEmpty(b)) throw new ArgumentNullException(nameof(b));
+            RequireRevision(a, nameof(a));
+            RequireRevision(b, nameof(b));
+
+            try
+            {
+                if (!await RefResolvesAsync(repoPath, a, token).ConfigureAwait(false)) return null;
+                if (!await RefResolvesAsync(repoPath, b, token).ConfigureAwait(false)) return null;
+                GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", _NoMatch, token, "merge-base", a, b).ConfigureAwait(false);
+                if (!result.Succeeded) return null;
+                string sha = result.StandardOutput.Trim();
+                return GitRevisionNames.IsFullCommitId(sha) ? sha : null;
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Debug(_Header + "merge-base failed in " + repoPath + ": " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<GitCommitRange?> GetCommitRangeAsync(string repoPath, string fromRef, string toRef, int limit, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
+            if (String.IsNullOrEmpty(fromRef)) throw new ArgumentNullException(nameof(fromRef));
+            if (String.IsNullOrEmpty(toRef)) throw new ArgumentNullException(nameof(toRef));
+            RequireRevision(fromRef, nameof(fromRef));
+            RequireRevision(toRef, nameof(toRef));
+            if (limit < 1 || limit > GitCommitRange.MaxLimit) throw new ArgumentOutOfRangeException(nameof(limit), "limit must be between 1 and " + GitCommitRange.MaxLimit + ".");
+
+            try
+            {
+                string? from = await ResolveCommitShaAsync(repoPath, fromRef, token).ConfigureAwait(false);
+                if (from == null) return null;
+                string? to = await ResolveCommitShaAsync(repoPath, toRef, token).ConfigureAwait(false);
+                if (to == null) return null;
+
+                GitProcessResult count = await ExecuteProcessAsync(repoPath, "git", token, "rev-list", "--count", from + ".." + to).ConfigureAwait(false);
+                if (!count.Succeeded || !Int32.TryParse(count.StandardOutput.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int total)) return null;
+
+                GitCommitRange range = new GitCommitRange { FromSha = from, ToSha = to, TotalCount = total };
+                if (total == 0) return range;
+
+                GitProcessResult log = await ExecuteProcessAsync(repoPath, "git", token,
+                    "log", "--no-show-signature", "--date-order", "-z", "--no-color", "--no-ext-diff", "--no-textconv",
+                    "--format=" + GitMachineOutputParser.CommitLogFormat,
+                    "--raw", "--numstat", "-M", "--diff-merges=first-parent",
+                    "--max-count=" + limit.ToString(CultureInfo.InvariantCulture),
+                    from + ".." + to, "--").ConfigureAwait(false);
+                if (!log.Succeeded) return null;
+
+                foreach (VesselCommit commit in GitMachineOutputParser.ParseCommitLogZ(log.StandardOutput, GitCommitRange.MaxPathsPerCommit))
+                {
+                    GitCommitInfo info = new GitCommitInfo
+                    {
+                        Sha = commit.Sha,
+                        AuthorName = commit.AuthorName,
+                        AuthorEmail = commit.AuthorEmail,
+                        AuthoredUtc = commit.AuthoredUtc,
+                        CommittedUtc = commit.CommittedUtc,
+                        Subject = commit.Subject,
+                        IsMerge = commit.IsMerge,
+                        Trailers = GitTrailerParser.Parse(commit.Body),
+                        ChangedPathTotal = Math.Max(commit.FilesChanged, commit.Files.Count)
+                    };
+                    foreach (GitChangedFile file in commit.Files)
+                    {
+                        if (!String.IsNullOrEmpty(file.Path) && info.ChangedPaths.Count < GitCommitRange.MaxPathsPerCommit) info.ChangedPaths.Add(file.Path);
+                    }
+                    range.Commits.Add(info);
+                }
+
+                range.Truncated = range.TotalCount > range.Commits.Count;
+                return range;
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Debug(_Header + "commit range " + fromRef + ".." + toRef + " failed in " + repoPath + ": " + ex.Message);
+                return null;
+            }
+        }
+
         #endregion
 
         #region Private-Methods
@@ -1599,6 +1689,19 @@ namespace Armada.Core.Services
         {
             GitProcessResult result = await ExecuteProcessAsync(worktreePath, "git", _NoMatch, token, "rev-parse", "-q", "--verify", "MERGE_HEAD").ConfigureAwait(false);
             return result.Succeeded;
+        }
+
+        private static void RequireRevision(string revision, string name)
+        {
+            if (revision.StartsWith("-", StringComparison.Ordinal)) throw new ArgumentException(name + " must not start with '-'.", name);
+        }
+
+        private async Task<string?> ResolveCommitShaAsync(string repoPath, string gitRef, CancellationToken token)
+        {
+            GitProcessResult result = await ExecuteProcessAsync(repoPath, "git", _NoMatch, token, "rev-parse", "--verify", "--quiet", gitRef + "^{commit}").ConfigureAwait(false);
+            if (!result.Succeeded) return null;
+            string sha = result.StandardOutput.Trim();
+            return GitRevisionNames.IsFullCommitId(sha) ? sha : null;
         }
 
         private async Task<bool> RefResolvesAsync(string repoPath, string gitRef, CancellationToken token)

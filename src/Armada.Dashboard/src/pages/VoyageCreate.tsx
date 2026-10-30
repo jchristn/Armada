@@ -2,6 +2,8 @@ import RunApprovalFields, { DEFAULT_RUN_APPROVALS } from '../components/shared/R
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { listVessels, listPipelines, createVoyage } from '../api/client';
+import DispatchPreview from '../components/blackbox/DispatchWarnings';
+import { dispatchWarningsFrom } from '../lib/dispatchPreview';
 import { listAll } from '../api/paging';
 import type { Vessel, Pipeline, SelectedPlaybook } from '../types/models';
 import ErrorModal from '../components/shared/ErrorModal';
@@ -65,7 +67,7 @@ export default function VoyageCreate() {
       const voyage = await createVoyage({ ...buildVoyageCreateRequest(form), approvalOptions });
 
       pushToast('success', t('Voyage "{{title}}" created.', { title: title.trim() }));
-      navigate(`/voyages/${voyage.id}`);
+      navigate(`/voyages/${voyage.id}`, { state: { dispatchWarnings: dispatchWarningsFrom(voyage) } });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Failed to create voyage.'));
     } finally {
@@ -171,6 +173,7 @@ export default function VoyageCreate() {
                 <textarea value={m.description} onChange={e => updateMission(i, 'description', e.target.value)} title={t('Instructions the captain works from: what to change, where, and how to know it is done. Markdown is fine.')}
                   rows={2} placeholder={t('Detailed instructions for the AI captain...')} style={{ marginTop: 2, fontSize: 13 }} />
               </label>
+              <DispatchPreview compact vesselId={vesselId} title={m.title} description={m.description} enabled={!submitting} />
             </div>
           ))}
 

@@ -643,6 +643,147 @@ namespace Armada.Core.Client
 
         #endregion
 
+        #region Public-Methods-BlackBox
+
+        /// <summary>
+        /// Get a mission's current black box entry with its record (GET /api/v1/missions/{id}/blackbox). Throws
+        /// <see cref="HttpRequestException"/> with status 404 when the mission has no entry.
+        /// </summary>
+        /// <param name="missionId">Mission ID (msn_ prefix).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The entry.</returns>
+        public async Task<BlackBoxEntry?> GetMissionBlackBoxAsync(string missionId, CancellationToken token = default)
+        {
+            return await GetAsync<BlackBoxEntry>("/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/blackbox", token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get a voyage's current black box entry with its record (GET /api/v1/voyages/{id}/blackbox).
+        /// </summary>
+        /// <param name="voyageId">Voyage ID (vyg_ prefix).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The entry.</returns>
+        public async Task<BlackBoxEntry?> GetVoyageBlackBoxAsync(string voyageId, CancellationToken token = default)
+        {
+            return await GetAsync<BlackBoxEntry>("/api/v1/voyages/" + Uri.EscapeDataString(voyageId) + "/blackbox", token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get a black box entry with its record (GET /api/v1/blackbox/{id}).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The entry.</returns>
+        public async Task<BlackBoxEntry?> GetBlackBoxAsync(string entryId, CancellationToken token = default)
+        {
+            return await GetAsync<BlackBoxEntry>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get the Markdown FIX THIS brief of a black box entry (GET /api/v1/blackbox/{id}/brief).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="audience">Audience: agent (default), user or maintainer.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The Markdown brief.</returns>
+        public async Task<string> GetBlackBoxBriefAsync(string entryId, string audience = "agent", CancellationToken token = default)
+        {
+            HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/brief?audience=" + Uri.EscapeDataString(audience ?? "agent"), token).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get the Markdown FIX THIS brief of a mission's current black box entry (GET /api/v1/missions/{id}/blackbox/brief).
+        /// </summary>
+        /// <param name="missionId">Mission ID (msn_ prefix).</param>
+        /// <param name="audience">Audience: agent (default), user or maintainer.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The Markdown brief.</returns>
+        public async Task<string> GetMissionBlackBoxBriefAsync(string missionId, string audience = "agent", CancellationToken token = default)
+        {
+            HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/blackbox/brief?audience=" + Uri.EscapeDataString(audience ?? "agent"), token).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get one section of a black box record (GET /api/v1/blackbox/{id}/sections/{section}).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="section">Section.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The section.</returns>
+        public async Task<BlackBoxSectionResult?> GetBlackBoxSectionAsync(string entryId, BlackBoxSectionEnum section, CancellationToken token = default)
+        {
+            return await GetAsync<BlackBoxSectionResult>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/sections/" + section.ToString(), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Enumerate black box entries visible to the caller (POST /api/v1/blackbox/enumerate).
+        /// </summary>
+        /// <param name="query">Filters and paging, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page.</returns>
+        public async Task<EnumerationResult<BlackBoxEntrySummary>?> EnumerateBlackBoxAsync(BlackBoxEnumerateRequest? query = null, CancellationToken token = default)
+        {
+            return await PostAsync<EnumerationResult<BlackBoxEntrySummary>>("/api/v1/blackbox/enumerate", query ?? new BlackBoxEnumerateRequest(), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Enumerate the objects of a black box entry (POST /api/v1/blackbox/{id}/objects/enumerate).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="query">Paging, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page.</returns>
+        public async Task<EnumerationResult<BlackBoxObjectSummary>?> EnumerateBlackBoxObjectsAsync(string entryId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return await PostAsync<EnumerationResult<BlackBoxObjectSummary>>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/objects/enumerate", query ?? new EnumerationQuery(), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Enumerate the notes on a black box entry (POST /api/v1/blackbox/{id}/notes/enumerate).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="query">Paging, or null for the first page.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page.</returns>
+        public async Task<EnumerationResult<BlackBoxNote>?> EnumerateBlackBoxNotesAsync(string entryId, EnumerationQuery? query = null, CancellationToken token = default)
+        {
+            return await PostAsync<EnumerationResult<BlackBoxNote>>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/notes/enumerate", query ?? new EnumerationQuery(), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Resolve a black box entry (POST /api/v1/blackbox/{id}/resolve).
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="request">Resolution, note and link.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The updated entry.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
+        public async Task<BlackBoxEntry?> ResolveBlackBoxAsync(string entryId, BlackBoxResolveRequest request, CancellationToken token = default)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return await PostAsync<BlackBoxEntry>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/resolve", request, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Run a recorded recovery path of a black box entry (POST /api/v1/blackbox/{id}/recovery/{pathId}). A dry run (the
+        /// default) returns the plan and a confirm token; the real run needs that token.
+        /// </summary>
+        /// <param name="entryId">Entry ID (bbx_ prefix).</param>
+        /// <param name="pathId">Recovery path ID.</param>
+        /// <param name="request">Dry run, confirm token and data-loss acknowledgement, or null for a dry run.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The plan or the step results.</returns>
+        public async Task<BlackBoxRecoveryRunResult?> RunBlackBoxRecoveryAsync(string entryId, string pathId, BlackBoxRecoveryRunRequest? request = null, CancellationToken token = default)
+        {
+            return await PostAsync<BlackBoxRecoveryRunResult>("/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/recovery/" + Uri.EscapeDataString(pathId), request ?? new BlackBoxRecoveryRunRequest(), token).ConfigureAwait(false);
+        }
+
+        #endregion
+
         #region Public-Methods-Voyages
 
         /// <summary>

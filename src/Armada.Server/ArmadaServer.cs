@@ -41,6 +41,12 @@ namespace Armada.Server
         public Action? OnStopping { get; set; }
 
         /// <summary>
+        /// The mission and voyage black box (capture, sweeper, garbage collection, and the service every surface calls),
+        /// or null before <see cref="StartAsync"/>.
+        /// </summary>
+        public Armada.Core.BlackBox.BlackBoxRuntime? BlackBox => _BlackBox;
+
+        /// <summary>
         /// Replaces what an authorized <c>POST /api/v1/server/restart</c> does: when set, it runs instead of launching a
         /// replacement process and stopping this one, and returns true when the restart started. The route still
         /// requires a global admin before calling it. Null (the default) restarts for real. Tests set it so nothing
@@ -161,6 +167,7 @@ namespace Armada.Server
         private DataExpiryService? _DataExpiry = null;
         private RetentionService _Retention = null!;
         private StorageInventoryService _StorageInventory = null!;
+        private Armada.Core.BlackBox.BlackBoxRuntime? _BlackBox = null;
         private RemoteTunnelManager _RemoteTunnel = null!;
         private RemoteDashboardRelayService _RemoteDashboardRelay = null!;
         private PlanningSessionCoordinator _PlanningSessions = null!;
@@ -303,6 +310,16 @@ namespace Armada.Server
             IDefinitionOfDoneGate definitionOfDoneGate = new DefinitionOfDoneGate(_Logging);
             MissionService missionService = new MissionService(_Logging, _Database, _Settings, dockService, captainService, _PromptTemplateService, _Git, definitionOfDoneGate);
             _MissionService = missionService;
+
+            // Mission and voyage black box: one runtime shared by capture sites, background loops and every surface.
+            Armada.Core.BlackBox.DatabaseBlackBoxEventSink blackBoxEvents = new Armada.Core.BlackBox.DatabaseBlackBoxEventSink(_Database, _Logging);
+            blackBoxEvents.OnEmitted = (evt, payload) =>
+            {
+                _WebSocketHub?.BroadcastToTenant(evt.TenantId, evt.EventType, evt.Message, payload);
+                return Task.CompletedTask;
+            };
+            _BlackBox = Armada.Core.BlackBox.BlackBoxRuntime.Create(_Database, _Settings, _Logging, new BuildIdentityBlackBoxVersionProvider(), blackBoxEvents);
+            missionService.BlackBox = _BlackBox.Capture;
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);
             AdmiralService admiralService = new AdmiralService(_Logging, _Database, _Settings, captainService, missionService, voyageService, dockService, escalationService);
@@ -516,6 +533,7 @@ namespace Armada.Server
             // Split mode: a mission's dock goes on the Harbor routing picks for it (when that Harbor can serve the vessel),
             // and every later operation on a Harbor-hosted dock (instruction files, git, landing, reclaim) runs there.
             DockHostResolver dockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager);
+            if (_BlackBox != null) _BlackBox.Inspector.Hosts = dockHosts;
             if (dockService is DockService dockServiceImpl) dockServiceImpl.Hosts = dockHosts;
             if (captainService is CaptainService captainServiceImpl) captainServiceImpl.DockHosts = dockHosts;
             missionService.DockHosts = dockHosts;
@@ -532,6 +550,23 @@ namespace Armada.Server
                 IsCompletionInFlight = missionService.IsCompletionInFlight
             };
             admiralService.OnLandingIntegritySweep = landingIntegrity.SweepAsync;
+
+            // Every service that writes a mission or voyage failure records it in the black box.
+            Armada.Core.BlackBox.IBlackBoxCapture blackBoxCapture = _BlackBox!.Capture;
+            if (blackBoxCapture is Armada.Core.BlackBox.BlackBoxCapture concreteCapture)
+            {
+                concreteCapture.Harbors = _HarborConnectionManager;
+                concreteCapture.MissionStatusChanged = EmitMissionStatusChangedAsync;
+            }
+            admiralService.BlackBox = blackBoxCapture;
+            admiralService.DispatchAdvisor = _BlackBox.Insights.DispatchAdvisor;
+            if (captainService is CaptainService concreteCaptains) concreteCaptains.BlackBox = blackBoxCapture;
+            if (voyageService is VoyageService concreteVoyages) concreteVoyages.BlackBox = blackBoxCapture;
+            if (_MergeQueue is MergeQueueService concreteQueue) concreteQueue.BlackBox = blackBoxCapture;
+            _LandingService.BlackBox = blackBoxCapture;
+            _MissionRecovery.BlackBox = blackBoxCapture;
+            _MissionLanding.BlackBox = blackBoxCapture;
+            landingIntegrity.BlackBox = blackBoxCapture;
 
             // Evaluate (probe-only model probes): each probe runs through the captain's own runtime as a Harbor job,
             // under the evaluation budget and concurrency limits. Nothing it records changes routing or captain settings.
@@ -786,6 +821,12 @@ namespace Armada.Server
             _AgentLifecycle.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetCliPermissionService(_CliPermissions);
             _WebSocketHub.SetMissionService(_MissionService);
+            _WebSocketHub.SetBlackBoxService(_BlackBox?.Service, _BlackBox?.Capture);
+
+            // Ask Armada black box cards: read as the thread's owner; mentioned missions with an entry link their card.
+            _AskThreads.Snapshots.BlackBox = _BlackBox?.Service;
+            _AskActions.BlackBox = _BlackBox?.Service;
+            _AskTurns.OnConversationText = (thread, text) => _AskActions.LinkMentionedBlackBoxesAsync(thread, text);
             _AskThreads.SessionTokensAvailable = _SessionTokenService != null;
             _AskThreads.HarborPromptSupport = (tenantId, runtime) => _HarborConnectionManager != null && _HarborConnectionManager.AnyHarborCanPrompt(tenantId, runtime);
 
@@ -863,6 +904,11 @@ namespace Armada.Server
             _McpServer.RateLimits.ToolCallsPerSecond = _Settings.Mcp.ToolCallsPerSecond;
             _McpServer.AuthenticationHandler = AuthenticateMcpRequestAsync;
             RegisterMcpTools();
+            // Black box resources and prompts (Voltaic resource templates and prompts; plan 8.2).
+            if (_BlackBox != null) Armada.Server.Mcp.Tools.McpBlackBoxResources.Register(_McpServer, _BlackBox.Service);
+            // Black box recovery runs and recommendation applies execute their recorded action through the registered
+            // MCP tool handlers, as the caller.
+            if (_BlackBox != null) _BlackBox.Service.ActionExecutor = new BlackBoxMcpActionExecutor(_AskActions);
 
             StartMcpListener();
             _Logging.Info(_Header + "MCP server started on port " + _Settings.McpPort);
@@ -924,6 +970,8 @@ namespace Armada.Server
             }
 
             _StorageInventory.Start();
+            _BlackBox?.Background.Start();
+            _BlackBox?.Insights.Background.Start();
 
             // Start health check loop
             _HealthCheckTask = HealthCheckLoopAsync(_TokenSource.Token);
@@ -970,6 +1018,16 @@ namespace Armada.Server
             }
 
             _VesselHealthService?.Dispose();
+            try
+            {
+                _BlackBox?.Background.StopAsync().GetAwaiter().GetResult();
+                _BlackBox?.Insights.Background.StopAsync().GetAwaiter().GetResult();
+                _BlackBox?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "error stopping the black box on shutdown: " + ex.Message);
+            }
             _TokenSource.Cancel();
             _AskTracker?.Stop();
             _PushNotifications?.Dispose();
@@ -1405,13 +1463,13 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Tenants, users, credentials
-            new TenantRoutes(_Database, _JsonOptions)
+            new TenantRoutes(_Database, _JsonOptions) { BlackBoxHooks = _BlackBox?.Hooks }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Status, health, doctor, settings, server control
             SlotManager slotManager = new SlotManager(Path.Combine(_Settings.DataDirectory, "bin"), retentionCount: _Settings.RebuildSlotRetentionCount);
             ServerRebuildService rebuildService = new ServerRebuildService(_Database, _Settings, slotManager, new LocalHostCommandExecutor(), _Logging, () => Stop(), _HarborConnectionManager);
-            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync, () => RestartOverride?.Invoke())
+            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync, () => RestartOverride?.Invoke()) { BlackBox = _BlackBox }
                 .Register(_App, authenticate, _AuthorizationService);
 
             new StorageRoutes(_StorageInventory, _JsonOptions).Register(_App, authenticate, _AuthorizationService);
@@ -1425,6 +1483,7 @@ namespace Armada.Server
             vesselContextService.LaunchRouter = _LaunchRouter;
             vesselContextService.PlaceDockAsync = _AgentLifecycle.ResolveDockPlacementAsync;
             new VesselRoutes(_Database, _VesselReadinessService, _LandingPreviewService, EmitEventAsync, _JsonOptions, _Docks, vesselContextService, _Git, _Settings, _VesselService, _ManualLandingReconciler, _VesselHosts, _Admiral)
+                { BlackBox = _BlackBox?.Capture, BlackBoxHooks = _BlackBox?.Hooks }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Vessel import (bulk onboarding)
@@ -1539,7 +1598,15 @@ namespace Armada.Server
 
             // Missions
             new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, EmitMissionStatusChangedAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)
-                { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager) }
+                { MissionActivityLookup = _AgentLifecycle.MissionActivity.Get, DockHosts = new DockHostResolver(_Git, _Logging, _HarborConnectionManager), BlackBox = _BlackBox?.Capture, BlackBoxHooks = _BlackBox?.Hooks }
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Black box prevention, forensics and operations reads. Registered before BlackBoxRoutes so the literal
+            // /api/v1/blackbox/recovery-stats is matched before GET /api/v1/blackbox/{id}.
+            if (_BlackBox != null) new BlackBoxInsightRoutes(_BlackBox.Insights.Service).Register(_App, authenticate, _AuthorizationService);
+
+            // Mission and voyage black box
+            new BlackBoxRoutes(_BlackBox?.Service, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Captains
@@ -2043,7 +2110,11 @@ namespace Armada.Server
                 _HarborJobControl,
                 _StageOutcomeAccess,
                 _ModelProbeAccess,
-                _BatteryAccess);
+                _BatteryAccess,
+                _BlackBox?.Service,
+                _BlackBox?.Capture,
+                _BlackBox?.Hooks,
+                _BlackBox?.Insights.Service);
         }
 
         /// <summary>

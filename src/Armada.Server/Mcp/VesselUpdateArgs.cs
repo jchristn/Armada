@@ -46,6 +46,11 @@ namespace Armada.Server.Mcp
         public bool? AllowConcurrentMissions { get; set; }
 
         /// <summary>
+        /// Whether to chain a dispatched mission after an overlapping active mission (DependsOnMissionId), or null to leave the setting unchanged.
+        /// </summary>
+        public bool? SerializeOverlappingMissions { get; set; }
+
+        /// <summary>
         /// Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting;
         /// omit to leave the captain's setting in effect.
         /// </summary>
@@ -135,5 +140,11 @@ namespace Armada.Server.Mcp
         /// Per-vessel override for the Audit intent (beats a repo script and the ecosystem default).
         /// </summary>
         public string? AuditCommand { get; set; }
+
+        /// <summary>
+        /// Landing mode override for this vessel (MergeAndPush, LocalMerge, PullRequest, MergeQueue, None), or Default to
+        /// clear it so the global setting applies.
+        /// </summary>
+        public string? LandingMode { get; set; }
     }
 }

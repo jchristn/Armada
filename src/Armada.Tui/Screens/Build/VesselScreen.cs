@@ -22,7 +22,11 @@ namespace Armada.Tui.Screens.Build
     /// Landing Preview panels, every field (branch prefixes and
     /// policies, auto-approve, the auto-land and Definition-of-Done gates, the GitHub token state), the context
     /// blocks (project context, style guide, protected branches, dock boundary, model context), and the vessel's
-    /// missions. <c>?edit=1</c> (after Duplicate) opens the edit form once. Not thread-safe.
+    /// missions, plus the black box prevention panels: Reservations (the soft directory reservations active missions
+    /// hold, server paged; Enter opens the mission) and Black Box Doctor (the configuration recommendations that keep
+    /// recurring on the vessel, server paged; <c>A</c> applies an actionable one through the dry run and confirm flow,
+    /// Enter opens its example entry). <c>L</c> toggles Serialize Overlapping Missions. <c>?edit=1</c> (after
+    /// Duplicate) opens the edit form once. Not thread-safe.
     /// </summary>
     public class VesselScreen : OpsDetailScreen
     {
@@ -83,6 +87,26 @@ namespace Armada.Tui.Screens.Build
         /// </summary>
         public HealthEvaluation Evaluation { get; }
 
+        /// <summary>
+        /// Soft directory reservations panel (server paged).
+        /// </summary>
+        public ArmadaGrid<VesselReservation> Reservations { get; }
+
+        /// <summary>
+        /// Black box doctor panel (server paged).
+        /// </summary>
+        public ArmadaGrid<BlackBoxDoctorFinding> Doctor { get; }
+
+        /// <summary>
+        /// The last reservations page (threshold and scan details), or null.
+        /// </summary>
+        public VesselReservationPage? ReservationPage { get; private set; } = null;
+
+        /// <summary>
+        /// The last doctor page (window and scan details), or null.
+        /// </summary>
+        public BlackBoxDoctorPage? DoctorPage { get; private set; } = null;
+
         #endregion
 
         #region Private-Members
@@ -91,6 +115,8 @@ namespace Armada.Tui.Screens.Build
         private bool _LoadingPreview = false;
         private bool _EditHandled = false;
         private VesselHealthDialog? _HealthDialog = null;
+        private bool _ReservationsLoaded = false;
+        private bool _DoctorLoaded = false;
 
         #endregion
 
@@ -127,6 +153,39 @@ namespace Armada.Tui.Screens.Build
             MissionGrid.AddColumn(new GridColumn<MissionSummary>("branch", "Branch", m => String.IsNullOrEmpty(m.BranchName) ? "-" : m.BranchName!) { Weight = 3 });
             MissionGrid.Activated += (s, m) => Context.Navigate("/missions/" + Uri.EscapeDataString(m.Id));
 
+            Reservations = new ArmadaGrid<VesselReservation>(r => r.Directory + "|" + r.MissionId);
+            Reservations.MultiSelect = false;
+            Reservations.ModalHost = context.Modals;
+            Reservations.Dispatcher = context.Dispatcher;
+            Reservations.PageSize = 25;
+            Reservations.Loader = LoadReservationsAsync;
+            Reservations.EmptyText = "No directory reservations: no active mission works in a conflict hotspot.";
+            Reservations.AddColumn(new GridColumn<VesselReservation>("directory", "Directory", r => r.Directory) { Weight = 3 });
+            Reservations.AddColumn(new GridColumn<VesselReservation>("mission", "Mission", r => (String.IsNullOrEmpty(r.MissionTitle) ? "" : r.MissionTitle + "  ") + r.MissionId) { Weight = 4 });
+            Reservations.AddColumn(new GridColumn<VesselReservation>("status", "Status", r => r.MissionStatus ?? "-") { Width = 14 });
+            Reservations.AddColumn(new GridColumn<VesselReservation>("hotspot", "Failures", r => r.HotspotEntryCount.ToString(System.Globalization.CultureInfo.InvariantCulture)) { Width = 9 });
+            Reservations.AddColumn(new GridColumn<VesselReservation>("files", "Files", r => r.FileCount.ToString(System.Globalization.CultureInfo.InvariantCulture)) { Width = 7 });
+            Reservations.AddColumn(new GridColumn<VesselReservation>("since", "Since", r => Context.Loc.FormatRelative(r.SinceUtc, Context.Clock.UtcNow)) { Width = 14 });
+            Reservations.Activated += (s, r) => Context.Navigate("/missions/" + Uri.EscapeDataString(r.MissionId));
+
+            Doctor = new ArmadaGrid<BlackBoxDoctorFinding>(f => f.Key);
+            Doctor.MultiSelect = false;
+            Doctor.ModalHost = context.Modals;
+            Doctor.Dispatcher = context.Dispatcher;
+            Doctor.PageSize = 25;
+            Doctor.Loader = LoadDoctorAsync;
+            Doctor.EmptyText = "No recurring black box recommendations for this vessel in the last 30 days.";
+            Doctor.AddColumn(new GridColumn<BlackBoxDoctorFinding>("count", "Times", f => f.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) + "x") { Width = 7 });
+            Doctor.AddColumn(new GridColumn<BlackBoxDoctorFinding>("rule", "Rule", f => f.RuleId ?? "-") { Width = 14 });
+            Doctor.AddColumn(new GridColumn<BlackBoxDoctorFinding>("setting", "Setting", f => f.Setting + " (" + f.Scope + ")") { Weight = 3 });
+            Doctor.AddColumn(new GridColumn<BlackBoxDoctorFinding>("change", "Change", f => (f.CurrentValue ?? "-") + " -> " + (f.SuggestedValue ?? "-")) { Weight = 3 });
+            Doctor.AddColumn(new GridColumn<BlackBoxDoctorFinding>("apply", "Apply", f => Tr(f.Applicable && !String.IsNullOrEmpty(f.RecommendationId) ? "Yes" : "No")) { Width = 6 });
+            Doctor.AddColumn(new GridColumn<BlackBoxDoctorFinding>("last", "Last seen", f => Context.Loc.FormatRelative(f.LastSeenUtc, Context.Clock.UtcNow)) { Width = 14 });
+            GridColumn<BlackBoxDoctorFinding> rationale = new GridColumn<BlackBoxDoctorFinding>("rationale", "Rationale", f => f.Rationale ?? "") { Weight = 4 };
+            rationale.DefaultVisible = false;
+            Doctor.AddColumn(rationale);
+            Doctor.Activated += (s, f) => OpenExample(f);
+
             Action("dispatch", "Dispatch", () => Context.Navigate(VesselsScreen.DispatchRoute(Vessel!)), "d", () => Vessel != null, true);
             Action("objectives", "Manage Objectives", () => Context.Navigate(VesselsScreen.ObjectivesRoute(Vessel!)), "O", () => Vessel != null, true);
             Action("fleet", "Manage Fleet", () => Context.Navigate("/fleets/" + Uri.EscapeDataString(Vessel!.FleetId!)), "f", () => !String.IsNullOrEmpty(Vessel?.FleetId), true);
@@ -142,12 +201,35 @@ namespace Armada.Tui.Screens.Build
             Action("delete", "Delete", Delete, "del", () => Vessel != null, false, true);
             Action("copy-id", "Copy ID", () => Copy(VesselId, "Vessel ID"), "y");
             Action("copy-harbor-id", "Copy Harbor ID", () => Copy(Readiness?.HarborId, "Harbor ID"), "Y", () => !String.IsNullOrEmpty(Readiness?.HarborId));
+            OpsScreenAction serialize = Action("serialize-overlapping", "Serialize Overlapping Missions", ToggleSerialize, "L", () => Vessel != null);
+            serialize.Panel = "overview";
+            serialize.DynamicLabel = () => Tr(Vessel != null && Vessel.SerializeOverlappingMissions ? "Stop serializing overlapping missions" : "Serialize overlapping missions");
+            PanelAction("doctor", "doctor-apply", "Apply recommendation", () => ApplyFinding(Doctor.Current!), "A", () => Doctor.Current != null && Doctor.Current.Applicable && !String.IsNullOrEmpty(Doctor.Current.RecommendationId));
+            PanelAction("doctor", "doctor-details", "Recommendation details", () => ShowFinding(Doctor.Current!), "i", () => Doctor.Current != null);
+            PanelHint("doctor", "Enter", "Open example entry");
+            PanelHint("reservations", "Enter", "Open mission");
+            PanelHint("reservations", "< >", "Page");
 
             Overview.Builder = BuildOverview;
             ContextView.Builder = BuildContext;
             AddPanel("overview", "Overview", Overview);
             AddPanel("context", "Context", ContextView);
             AddPanel("missions", "Missions", MissionGrid);
+            AddPanel("reservations", "Reservations", Reservations);
+            AddPanel("doctor", "Black Box Doctor", Doctor);
+            Tabs.SelectedChanged += (s, e) =>
+            {
+                if (CurrentPanelKey == "reservations" && !_ReservationsLoaded)
+                {
+                    _ReservationsLoaded = true;
+                    Reservations.Reload();
+                }
+                else if (CurrentPanelKey == "doctor" && !_DoctorLoaded)
+                {
+                    _DoctorLoaded = true;
+                    Doctor.Reload();
+                }
+            };
             Load();
         }
 
@@ -194,6 +276,8 @@ namespace Armada.Tui.Screens.Build
                 Overview.Invalidate();
                 ContextView.Invalidate();
                 LoadPanels();
+                if (_ReservationsLoaded) Reservations.Reload();
+                if (_DoctorLoaded) Doctor.Reload();
                 if (!_EditHandled && OpsHandoff.Get(Route, "edit") == "1")
                 {
                     _EditHandled = true;
@@ -209,6 +293,117 @@ namespace Armada.Tui.Screens.Build
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Apply a doctor recommendation through its example entry: a dry run shows the action, confirming applies it
+        /// with the server's confirm token.
+        /// </summary>
+        /// <param name="finding">Finding.</param>
+        public void ApplyFinding(BlackBoxDoctorFinding finding)
+        {
+            if (finding == null || String.IsNullOrEmpty(finding.RecommendationId) || String.IsNullOrEmpty(finding.ExampleEntryId)) return;
+            if (!finding.Applicable)
+            {
+                Toast(NotificationSeverityEnum.Warning, Tr("This recommendation is advice only; change the setting by hand."));
+                return;
+            }
+
+            string entryId = finding.ExampleEntryId;
+            string recommendationId = finding.RecommendationId!;
+            BlackBoxRecommendationApplyRequest dry = new BlackBoxRecommendationApplyRequest();
+            dry.DryRun = true;
+            dry.AuthorKind = BlackBoxNoteAuthorKindEnum.Operator;
+            Call((c, t) => c.ApplyBlackBoxRecommendationAsync(entryId, recommendationId, dry, t), r =>
+            {
+                if (r == null) return;
+                string plan = Tr("Dry run: nothing has changed yet.") + "\n\n" + FindingText(finding)
+                    + (r.Action != null && !String.IsNullOrEmpty(r.Action.Tool) ? "\n\n" + Tr("Runs") + ": " + r.Action.Tool : "")
+                    + (String.IsNullOrEmpty(r.Message) ? "" : "\n\n" + r.Message);
+                if (String.IsNullOrEmpty(r.ConfirmToken))
+                {
+                    ShowText(Tr("Recommendation dry run"), plan + "\n\n" + Tr("The server did not issue a confirm token, so this recommendation cannot be applied from here."));
+                    return;
+                }
+
+                string token = r.ConfirmToken!;
+                Confirm("Apply Recommendation", plan, () =>
+                {
+                    BlackBoxRecommendationApplyRequest run = new BlackBoxRecommendationApplyRequest();
+                    run.DryRun = false;
+                    run.ConfirmToken = token;
+                    run.AuthorKind = BlackBoxNoteAuthorKindEnum.Operator;
+                    Call((c, t) => c.ApplyBlackBoxRecommendationAsync(entryId, recommendationId, run, t), done =>
+                    {
+                        bool ok = done != null && done.Succeeded;
+                        Toast(ok ? NotificationSeverityEnum.Success : NotificationSeverityEnum.Error, ok
+                            ? Tr("Recommendation applied: {{setting}}.", LocalizationArgs.Of("setting", finding.Setting))
+                            : Tr("The recommendation was not applied: {{message}}", LocalizationArgs.Of("message", done?.Message ?? "")));
+                        Load();
+                    }, "Apply failed");
+                }, "Apply");
+            }, "Recommendation dry run failed");
+        }
+
+        private void ShowFinding(BlackBoxDoctorFinding finding)
+        {
+            if (finding == null) return;
+            ShowText(Tr("Recommendation: {{setting}}", LocalizationArgs.Of("setting", finding.Setting)), FindingText(finding)
+                + "\n\n" + (finding.Applicable && !String.IsNullOrEmpty(finding.RecommendationId) ? Tr("A applies it (dry run first).") : Tr("Advice only: change the setting by hand.")));
+        }
+
+        private string FindingText(BlackBoxDoctorFinding f)
+        {
+            List<string> lines = new List<string>();
+            lines.Add((f.RuleId ?? "-") + " " + Tr("recommended {{setting}} {{value}} {{count}} times", LocalizationArgs.Of("setting", f.Setting, "value", f.SuggestedValue ?? "-", "count", f.Count)));
+            lines.Add(Tr("Scope") + ": " + f.Scope + "   " + Tr("Current") + ": " + (f.CurrentValue ?? "-") + "   " + Tr("Suggested") + ": " + (f.SuggestedValue ?? "-"));
+            lines.Add(Tr("Seen") + ": " + Context.Loc.FormatDateTime(f.FirstSeenUtc) + " - " + Context.Loc.FormatDateTime(f.LastSeenUtc));
+            lines.Add(Tr("Example entry") + ": " + f.ExampleEntryId + (String.IsNullOrEmpty(f.ExampleMissionId) ? "" : "  (" + f.ExampleMissionId + ")"));
+            if (!String.IsNullOrEmpty(f.Rationale)) lines.Add(f.Rationale!);
+            return String.Join("\n", lines);
+        }
+
+        private void OpenExample(BlackBoxDoctorFinding f)
+        {
+            if (f != null && !String.IsNullOrEmpty(f.ExampleEntryId)) Context.Navigate("/blackbox/" + Uri.EscapeDataString(f.ExampleEntryId));
+        }
+
+        private void ToggleSerialize()
+        {
+            if (Vessel == null) return;
+            bool on = !Vessel.SerializeOverlappingMissions;
+            VesselUpsertRequest body = VesselUpsertRequest.From(Vessel);
+            body.SerializeOverlappingMissions = on;
+            string name = Vessel.Name;
+            Call((c, t) => c.UpdateVesselAsync(VesselId, body, t), r =>
+            {
+                Toast(NotificationSeverityEnum.Success, on
+                    ? Tr("Vessel \"{{name}}\" now chains overlapping missions.", LocalizationArgs.Of("name", name))
+                    : Tr("Vessel \"{{name}}\" no longer chains overlapping missions.", LocalizationArgs.Of("name", name)));
+                Load();
+            }, "Save failed");
+        }
+
+        private async Task<GridPage<VesselReservation>> LoadReservationsAsync(GridQuery query, System.Threading.CancellationToken token)
+        {
+            EnumerationQuery q = new EnumerationQuery();
+            q.PageNumber = Math.Max(1, query.PageNumber);
+            q.PageSize = Math.Max(1, query.PageSize);
+            VesselReservationPage? page = await Context.Client.ListVesselReservationsAsync(VesselId, q, token).ConfigureAwait(false);
+            ReservationPage = page;
+            List<VesselReservation> rows = page?.Objects ?? new List<VesselReservation>();
+            return new GridPage<VesselReservation>(rows, page?.TotalRecords ?? rows.Count);
+        }
+
+        private async Task<GridPage<BlackBoxDoctorFinding>> LoadDoctorAsync(GridQuery query, System.Threading.CancellationToken token)
+        {
+            BlackBoxDoctorRequest q = new BlackBoxDoctorRequest();
+            q.PageNumber = Math.Max(1, query.PageNumber);
+            q.PageSize = Math.Max(1, query.PageSize);
+            BlackBoxDoctorPage? page = await Context.Client.GetVesselBlackBoxDoctorAsync(VesselId, q, token).ConfigureAwait(false);
+            DoctorPage = page;
+            List<BlackBoxDoctorFinding> rows = page?.Objects ?? new List<BlackBoxDoctorFinding>();
+            return new GridPage<BlackBoxDoctorFinding>(rows, page?.TotalRecords ?? rows.Count);
+        }
 
         private void LoadPanels()
         {
@@ -322,6 +517,7 @@ namespace Armada.Tui.Screens.Build
             doc.YesNo("Require PR For Protected Branches", v.RequirePullRequestForProtectedBranches);
             doc.YesNo("Require Merge Queue For Release Branches", v.RequireMergeQueueForReleaseBranches);
             doc.YesNo("Allow Concurrent Missions", v.AllowConcurrentMissions);
+            doc.Field("Serialize Overlapping Missions", Tr(v.SerializeOverlappingMissions ? "Yes" : "No") + "   (L)");
             doc.Field("Agent Auto-Approve", Tr(v.AutoApprove == true ? "On for this vessel" : v.AutoApprove == false ? "Off for this vessel" : "Use captain setting"));
             doc.Field("Auto-Land Gate", Tr(v.AutoLandEnabled ? "Enabled" : "Disabled"));
             if (v.AutoLandEnabled)

@@ -2,6 +2,7 @@ namespace Armada.Core.Services
 {
     using System.Text.Json;
     using SyslogLogging;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -26,6 +27,11 @@ namespace Armada.Core.Services
         /// checked on this machine.
         /// </summary>
         public DockHostResolver? DockHosts { get; set; }
+
+        /// <summary>
+        /// Black box capture for operator stops, unconfirmed stops and failed auto-recovery, or null.
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; } = null;
 
         #endregion
 
@@ -106,9 +112,19 @@ namespace Armada.Core.Services
                         Mission? held = await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
                         if (held != null)
                         {
+                            bool alreadyRecorded = String.Equals(held.FailureReason, reason, StringComparison.Ordinal);
+                            held.FailureKind = MissionFailureKindEnum.Infra;
                             held.FailureReason = reason;
                             held.LastUpdateUtc = DateTime.UtcNow;
                             await _Database.Missions.UpdateAsync(held, token).ConfigureAwait(false);
+                            // Non-terminal (the mission keeps its status and owner); recorded once per episode.
+                            if (!alreadyRecorded)
+                                await BlackBox.RecordMissionFailureAsync(held, held.Status, BlackBoxStepEnum.UnconfirmedStop, context =>
+                                {
+                                    context.Captain = captain;
+                                    context.Exception = ex;
+                                    context.Note = "Recall requested by " + stopContext.Describe() + ".";
+                                }, token).ConfigureAwait(false);
                         }
                     }
                     throw new InvalidOperationException(reason, ex);
@@ -218,6 +234,7 @@ namespace Armada.Core.Services
 
                 if (voyageCancelled || !missionRecoverable)
                 {
+                    MissionStatusEnum skippedStatusBefore = mission.Status;
                     if (voyageCancelled && mission.Status != MissionStatusEnum.Cancelled)
                     {
                         mission.Status = MissionStatusEnum.Cancelled;
@@ -227,6 +244,16 @@ namespace Armada.Core.Services
                     mission.ProcessId = null;
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                    if (skippedStatusBefore != mission.Status)
+                    {
+                        await BlackBox.RecordMissionFailureAsync(mission, skippedStatusBefore, BlackBoxStepEnum.VoyageParentNotRunnable, context =>
+                        {
+                            context.Captain = captain;
+                            context.Dock = dock;
+                            context.Voyage = voyage;
+                            context.Reason = "Auto-recovery found parent voyage " + mission.VoyageId + " Cancelled; the mission was cancelled instead of relaunched.";
+                        }, token).ConfigureAwait(false);
+                    }
 
                     try
                     {
@@ -353,7 +380,7 @@ namespace Armada.Core.Services
                         MissionFailureKindEnum launchKind = ex is HarborDockNotFoundException
                             ? MissionFailureKindEnum.Infra
                             : MissionFailureKindEnum.StallRecoveryExhausted;
-                        await FinalizeRecoveryFailureAsync(captain, mission, launchReason, launchKind, token).ConfigureAwait(false);
+                        await FinalizeRecoveryFailureAsync(captain, mission, launchReason, launchKind, token, ex).ConfigureAwait(false);
                     }
                 }
             }
@@ -366,7 +393,7 @@ namespace Armada.Core.Services
                         ? await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false)
                         : null;
                     string unexpectedReason = "Auto-recovery failed unexpectedly: " + ex.Message;
-                    await FinalizeRecoveryFailureAsync(captain, mission, unexpectedReason, MissionFailureKindEnum.StallRecoveryExhausted, token).ConfigureAwait(false);
+                    await FinalizeRecoveryFailureAsync(captain, mission, unexpectedReason, MissionFailureKindEnum.StallRecoveryExhausted, token, ex).ConfigureAwait(false);
                 }
                 catch { }
             }
@@ -435,6 +462,7 @@ namespace Armada.Core.Services
                 reason += " Uncommitted work could not be preserved: " + payload.WipError;
             }
 
+            MissionStatusEnum stopStatusBefore = mission.Status;
             mission.Status = MissionStatusEnum.Cancelled;
             mission.FailureKind = MissionFailureKindEnum.OperatorAction;
             mission.FailureReason = reason;
@@ -443,6 +471,15 @@ namespace Armada.Core.Services
             mission.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
             _Logging.Info(_Header + "mission " + mission.Id + " cancelled: " + reason);
+            await BlackBox.RecordMissionFailureAsync(mission, stopStatusBefore, BlackBoxStepEnum.OperatorStop, context =>
+            {
+                context.Captain = captain;
+                context.Dock = dock;
+                context.Note = "Stopped by " + stop.Source + (String.IsNullOrEmpty(stop.UserId) ? "" : " (user " + stop.UserId + ")")
+                    + (String.IsNullOrEmpty(payload.WipCommitHash) ? "" : "; WIP commit " + payload.WipCommitHash) + ".";
+                if (!String.IsNullOrEmpty(payload.WipCommitHash))
+                    context.GitFacts = new BlackBoxGitFacts { BranchTip = payload.WipCommitHash, GitOperation = "commit (WIP on operator stop)" };
+            }, token).ConfigureAwait(false);
 
             try
             {
@@ -519,11 +556,12 @@ namespace Armada.Core.Services
         /// <summary>
         /// Mark the mission as failed and return the captain to Idle when auto-recovery cannot continue.
         /// </summary>
-        private async Task FinalizeRecoveryFailureAsync(Captain captain, Mission? mission, string reason, MissionFailureKindEnum failureKind, CancellationToken token)
+        private async Task FinalizeRecoveryFailureAsync(Captain captain, Mission? mission, string reason, MissionFailureKindEnum failureKind, CancellationToken token, Exception? exception = null)
         {
             if (mission != null &&
                 !MissionStateMachine.IsTerminalOrPostWork(mission.Status))
             {
+                MissionStatusEnum recoveryStatusBefore = mission.Status;
                 mission.Status = MissionStatusEnum.Failed;
                 mission.FailureReason = reason;
                 mission.FailureKind = failureKind;
@@ -531,6 +569,12 @@ namespace Armada.Core.Services
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                await BlackBox.RecordMissionFailureAsync(mission, recoveryStatusBefore, BlackBoxStepEnum.RecoveryExhausted, context =>
+                {
+                    context.Captain = captain;
+                    BlackBoxSiteFacts.ApplyException(context, exception);
+                    context.Note = "Auto-recovery attempt " + captain.RecoveryAttempts + " of " + _Settings.MaxRecoveryAttempts + " could not continue.";
+                }, token).ConfigureAwait(false);
             }
 
             // Failed stall recovery must retain edits, including when the replacement launch throws.

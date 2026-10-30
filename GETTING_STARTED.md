@@ -265,6 +265,19 @@ Review the changes. When you're satisfied:
 
 Armada tests and merges each branch into main in order. Your project is built.
 
+## When a mission fails
+
+Every failed mission or voyage gets a black box entry that says where it failed, how, why, and what to do next. Open
+the mission in the dashboard and read its Black box panel; **Copy FIX THIS** copies a brief you can paste straight into
+a coding agent, and **Ask Armada about this failure** opens Ask Armada with the question already written. Without the
+dashboard, `curl -H "Authorization: Bearer <token>" "http://localhost:7890/api/v1/missions/msn_mvu1fjp0_9Wd6Uuyp262/blackbox/brief?audience=user"`
+returns the same brief as Markdown, and from Claude Code you can ask:
+
+> Why did mission msn_mvu1fjp0_9Wd6Uuyp262 fail?
+
+which calls the MCP tool `get_blackbox {"missionId": "msn_mvu1fjp0_9Wd6Uuyp262"}`. Recovery paths in the entry run as
+a dry run first and only run for real when you confirm. See [docs/BLACKBOX.md](docs/BLACKBOX.md).
+
 ---
 
 ## Without the orchestrator

@@ -200,6 +200,35 @@ internal services); reads return only what writes allowed.
 - Captain chat `History` limited to 1000 messages; Harbor probe `Arguments` 256; failure-cause rule `Match` lists 256;
   `HarborReasons` on checkout errors at most 50 with `HarborReasonCount`.
 
+### Black box surfaces (v1.2.0)
+
+| Surface | Bound | Evidence |
+|---|---|---|
+| REST `GET /api/v1/blackbox` and `POST .../enumerate`, `POST .../search`, `GET`/`POST .../missions/{id}/blackbox/entries[/enumerate]`, `.../{id}/objects[/enumerate]`, `.../{id}/notes[/enumerate]`, `POST .../hotspots/enumerate`, `POST .../fingerprints/enumerate`; MCP `list_blackbox_entries`, `list_blackbox_objects`, `list_blackbox_notes`, `list_blackbox_hotspots`, `list_blackbox_fingerprints`, `search_blackbox`, `enumerate` entityType `blackbox`; WebSocket `blackbox.list` | **Paged** in SQL with the caller's scope before counting (default 10, 1 to 1000 normalized); search query 1 to 200 characters | `E2E.BlackBox/rest_lists_and_analytics`, `/mcp_read_tools`, `/websocket_commands`, `Database.BlackBoxEntries`, `Database.BlackBoxFiles`, `Database.BlackBoxObjects`, `Database.BlackBoxLinksNotes` |
+| Object reads (`GET .../objects/{name}`, MCP `read_blackbox_object`, resource `armada://blackbox/{entryId}/objects/{name}`) | **Limited**: REST 1 MB and MCP 64 KB per read (length outside the range is 400 / `InvalidArgument`), with `X-BlackBox-Next-Offset` / `nextOffset` and the total; the resource returns the first 64 KB and names the offset to continue with `read_blackbox_object` | `E2E.BlackBox/rest_sections_objects_download` (3 MB in 1 MB reads), `/mcp_read_tools` (64 KB chunks), `/mcp_resources_and_prompts` |
+| `GET .../blackbox/{id}/download` (.zip) | **Fixed**: the entry's objects (at most 128 per entry, each at most `maxEvidenceObjectBytes`, the entry at most `maxEntryBytes`) plus `manifest.json`, whose `Objects` and `MissingObjects` lists are bounded at 128 | `E2E.BlackBox/rest_sections_objects_download`, `BlackBoxDownloadManifest` |
+| `POST /api/v1/blackbox/delete`, MCP `delete_blackbox_entries` | **Limited** to 1000 ids (CollectionLimitExceeded before anything is deleted) | `E2E.BlackBox/rest_limits_and_authorization`, `/mcp_write_tools_and_errors` |
+| Entry, record, section and brief reads (REST, MCP `get_blackbox`, `read_blackbox_section`, resources `brief.md` and `record.json`, WebSocket `blackbox.get` and `blackbox.brief`) | **Fixed**: every record list carries `[CollectionBound]` (`BlackBoxLimits`), `record.json` at most 256 KB, briefs at most 40 KB with the ten newest notes | `Models.BlackBoxSchema`, `E2E.ResponseShape`, `E2E.BlackBox/rest_briefs_by_audience` |
+| `POST /api/v1/blackbox/bundle`, MCP `get_blackbox_bundle` | **Limited**: `max` clamped to 1 to 50 entries; Markdown cut at 1 MB with `Truncated`; at most 10 Armada versions per group | `Services.BlackBoxMaintainer/bundle_grouping_and_cap` |
+| `GET /api/v1/blackbox/fingerprints/{fingerprint}/trend`, MCP `get_blackbox_fingerprint_trend` | **Fixed**: counts the newest 1000 entries of the fingerprint (read in pages of 100) and lists at most 100 versions | `Services.BlackBoxMaintainer/fingerprint_trend` |
+| `POST /api/v1/blackbox/purge`, MCP `purge_blackbox` | **Limited**: `maxEntries` clamped to 1 to 100000 (default 10000), deleted in pages of 200; the result carries counts and at most 100 `SampleEntryIds` | `E2E.BlackBox/rest_global_admin_routes`, `BlackBoxPurgeResult` |
+| `POST /api/v1/blackbox/gc`, MCP `run_blackbox_gc`, event `blackbox.gc_completed` | **Fixed**: counts, at most 100 `CandidateEntryIds` and 20 `Errors`; each pass works in batches of `gcBatchSize` (10 to 1000), deletes store objects 1000 keys at a time, and reads at most 100000 keys per orphan sweep | `Services.BlackBoxGarbageCollector/expiry_pinned_current_dry_run`, `Services.BlackBoxRetention`, `BlackBoxGcReport` |
+| `POST /api/v1/blackbox/backfill` | **Limited**: `maxSubjects` clamped to 1 to 100000 per subject kind, read in pages of `blackBox.sweeper.pageSize` (1 to 1000); the result is counts | `E2E.BlackBox/rest_global_admin_routes`, `BlackBoxSweeper` |
+| `POST /api/v1/blackbox/storage/migrate`, `GET .../storage/migrations/{id}` | **Limited**: `batchSize` clamped to 1 to 1000 (default 50); the job is scalars and a cursor | `Services.BlackBoxStorageTargets/migration_failures_and_restart`, `BlackBoxStorageMigrationJob` |
+| `GET /api/v1/blackbox/retention`, `GET /api/v1/blackbox/storage`, MCP `get_blackbox_retention`, `get_blackbox_storage` | **Fixed**: counts; `Usage` at most one row per storage target (7) | `E2E.BlackBox/rest_global_admin_routes`, `BlackBoxStorageStatus` |
+| Backup manifest `blackBox` section (`GET /api/v1/backup`, MCP `backup`) and the restore result's `BlackBox` section | **Fixed**: `ExternalEntryRefs` at most 10000 with `ExternalEntryRefsTruncated`, `ExternalTargets` at most 7; the restore result lists at most 100 external entry ids | `Services.BlackBoxStorageTargets/backup_inventory`, `BlackBoxBackupInventory` |
+
+### Black box insights (plan 13)
+
+| Surface | Change | Evidence |
+|---|---|---|
+| REST `GET`/`POST .../reservations(/enumerate)`, MCP `list_vessel_reservations` | Computed from at most 200 active missions and 1000 hotspot directories (`ScanTruncated`); page cut with an exact total | `Services.BlackBoxPrevention/hotspots_and_reservations` |
+| REST `GET`/`POST .../blackbox-doctor(/enumerate)`, MCP `get_vessel_blackbox_doctor` | Aggregated from the newest 200 entries in the window (`EntriesScanned`, `ScanTruncated`); paged | `Services.BlackBoxPrevention/doctor_groups_recurring_recommendations` |
+| REST `GET /api/v1/blackbox/recovery-stats` and its enumerate twin, MCP `get_blackbox_recovery_stats` | Grouped and paged in SQL | `Database.BlackBoxInsights/recovery_outcomes` |
+| REST `GET`/`POST .../nearby-successes(/enumerate)`, MCP `list_blackbox_nearby_successes` | At most 200 success records compared, read in a SQL page; page cut with an exact total | `Services.BlackBoxForensicsExtensions/nearby_successes` |
+| REST `GET`/`POST .../timeline(/enumerate)`, MCP `get_blackbox_timeline` | Each source capped at 200 and the merge at 1000 (`Sources`, `Truncated`); paged | `Services.BlackBoxForensicsExtensions/timeline_merges_sources` |
+| Overlap preview, brief lint, attempt diff, cascade graph, dispatch `OverlapWarnings` and `BriefLintWarnings` | Fixed: 50 warnings, 200 likely files, 50 findings, 100 differences and 200 files per side, 200 nodes and 1000 edges, each with its total | `E2E.ResponseShape`, `Services.BlackBoxPrevention/lint_quiet_on_clean_briefs`, `Services.BlackBoxForensicsExtensions/cascade_graph` |
+
 ### Deliberately left, with reasons
 
 - `GET /api/v1/history` and `POST /api/v1/history/enumerate` return a bounded page, but the server still walks its 13

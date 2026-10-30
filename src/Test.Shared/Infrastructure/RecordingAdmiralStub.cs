@@ -9,7 +9,7 @@ namespace Test.Shared.Infrastructure
 
     /// <summary>
     /// A loopback HTTP stub standing in for a remote Admiral: answers the health endpoint and the mission and fleet
-    /// lists with empty pages (and mission creation with <see cref="MissionCreateReply"/>), and records every request (path and credential headers) so tests can assert where the
+    /// lists with empty pages (and mission creation with <see cref="MissionCreateReply"/>, and any route in <see cref="Replies"/>), and records every request (path, query, body, and credential headers) so tests can assert where the
     /// CLI sent its calls and with which credential.
     /// </summary>
     public sealed class RecordingAdmiralStub : IDisposable
@@ -25,6 +25,12 @@ namespace Test.Shared.Infrastructure
         /// Body returned (status 201) for <c>POST /api/v1/missions</c>; null answers that request with 404.
         /// </summary>
         public string? MissionCreateReply { get; set; } = null;
+
+        /// <summary>
+        /// Canned replies by <c>"METHOD /path?query"</c> (exact) or <c>"METHOD /path"</c>, checked before the built-in
+        /// routes.
+        /// </summary>
+        public Dictionary<string, StubAdmiralReply> Replies { get; } = new Dictionary<string, StubAdmiralReply>(StringComparer.Ordinal);
 
         #endregion
 
@@ -110,12 +116,33 @@ namespace Test.Shared.Infrastructure
                 recorded.Authorization = context.Request.Headers["Authorization"];
                 recorded.SessionToken = context.Request.Headers["X-Token"];
                 recorded.ApiKey = context.Request.Headers["X-Api-Key"];
+                recorded.Query = context.Request.Url?.Query ?? "";
+                if (context.Request.HasEntityBody)
+                {
+                    using (System.IO.StreamReader reader = new System.IO.StreamReader(context.Request.InputStream, Encoding.UTF8)) recorded.Body = await reader.ReadToEndAsync().ConfigureAwait(false);
+                }
+
                 lock (_Lock) _Requests.Add(recorded);
 
                 string body;
                 int status = 200;
+                string contentType = "application/json";
                 string? missionCreateReply = MissionCreateReply;
-                if (recorded.Path == "/api/v1/status/health") body = "{\"Status\":\"healthy\"}";
+                StubAdmiralReply? reply;
+                bool found;
+                lock (_Lock)
+                {
+                    found = Replies.TryGetValue(recorded.Method + " " + recorded.Path + recorded.Query, out reply) || Replies.TryGetValue(recorded.Method + " " + recorded.Path, out reply);
+                }
+
+                if (found && reply != null)
+                {
+                    status = reply.Status;
+                    body = reply.Body;
+                    contentType = reply.ContentType;
+                    foreach (KeyValuePair<string, string> header in reply.Headers) context.Response.Headers[header.Key] = header.Value;
+                }
+                else if (recorded.Path == "/api/v1/status/health") body = "{\"Status\":\"healthy\"}";
                 else if (recorded.Path == "/api/v1/missions" && recorded.Method == "POST" && missionCreateReply != null)
                 {
                     status = 201;
@@ -131,7 +158,7 @@ namespace Test.Shared.Infrastructure
 
                 byte[] bytes = Encoding.UTF8.GetBytes(body);
                 context.Response.StatusCode = status;
-                context.Response.ContentType = "application/json";
+                context.Response.ContentType = contentType;
                 context.Response.ContentLength64 = bytes.Length;
                 try
                 {

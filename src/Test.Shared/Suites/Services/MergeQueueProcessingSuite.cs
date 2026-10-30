@@ -79,6 +79,14 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.LandingFailed, updated!.Status, "mission must not stay WorkProduced");
                     AssertContains("merge conflict", updated.FailureReason ?? "");
                     AssertEqual(MissionFailureKindEnum.LandingConflict, updated.FailureKind, "failure kind is recorded where the failure happens");
+                    AssertContains("README.md", updated.FailureReason ?? "", "the conflicted file is named, read before the merge was aborted");
+                    AssertContains("README.md", processed.TestOutput ?? "");
+                    MergeQueueFailure failure = await ReadFailureAsync(testDb.Driver, mission.Id).ConfigureAwait(false);
+                    AssertEqual(MergeQueueFailureStepEnum.Merge, failure.Step);
+                    AssertEqual(MissionFailureKindEnum.LandingConflict, failure.Kind);
+                    AssertEqual("README.md", String.Join(",", failure.ConflictedFiles));
+                    AssertEqual(entry.Id, failure.MergeEntryId);
+                    AssertEqual(mainBefore, failure.TargetCommit, "the target commit the entry integrated against");
                 }
             }));
 
@@ -100,7 +108,99 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(mainBefore, repos.OriginHead("main"), "nothing landed");
                     Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.LandingFailed, updated!.Status);
+                    AssertEqual(MissionFailureKindEnum.TestFail, updated.FailureKind, "a failing check is a test failure, not a landing conflict");
+                    MergeQueueFailure failure = await ReadFailureAsync(testDb.Driver, mission.Id).ConfigureAwait(false);
+                    AssertEqual(MergeQueueFailureStepEnum.Verification, failure.Step);
+                    AssertEqual(MissionFailureKindEnum.TestFail, failure.Kind);
+                    AssertEqual(0, failure.ConflictedFiles.Count, "no conflicted files for a test failure");
                 }
+            }));
+
+            cases.Add(CaseAsync("push_failure_is_infra", "A refused push fails the entry as Infra at the publication step, not as a landing conflict", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                repos.PushBranch("feature/push-refused", "pushed.txt", "change\n");
+                string hook = Path.Combine(repos.Origin, "hooks", "pre-receive");
+                Directory.CreateDirectory(Path.GetDirectoryName(hook)!);
+                File.WriteAllText(hook, "#!/bin/sh\necho refused by test hook >&2\nexit 1\n");
+                if (!OperatingSystem.IsWindows())
+                    File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                MergeQueueService queue = CreateQueue(testDb.Driver);
+                Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/push-refused", mission.Id, null).ConfigureAwait(false);
+                string mainBefore = repos.OriginHead("main");
+
+                MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                AssertEqual(MergeStatusEnum.Failed, processed!.Status, processed.TestOutput);
+                AssertEqual(mainBefore, repos.OriginHead("main"), "nothing landed");
+                Mission updated = (await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                AssertEqual(MissionStatusEnum.LandingFailed, updated.Status);
+                AssertEqual(MissionFailureKindEnum.Infra, updated.FailureKind, updated.FailureReason);
+                MergeQueueFailure failure = await ReadFailureAsync(testDb.Driver, mission.Id).ConfigureAwait(false);
+                AssertEqual(MergeQueueFailureStepEnum.Publication, failure.Step);
+                AssertEqual(MissionFailureKindEnum.Infra, failure.Kind);
+            }));
+
+            cases.Add(CaseAsync("unresolvable_repository_is_infra", "An entry whose repository cannot be resolved fails as Infra at the resolution step", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                MergeQueueService queue = CreateQueue(testDb.Driver);
+                Vessel vessel = new Vessel("mq-missing-" + Guid.NewGuid().ToString("N").Substring(0, 12), "https://github.com/test/missing");
+                vessel.LocalPath = Path.Combine(TestTemp.NewDirectory("mq_missing"), "absent.git");
+                vessel.DefaultBranch = "main";
+                vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                Mission mission = new Mission("Unresolvable") { VesselId = vessel.Id, Status = MissionStatusEnum.WorkProduced };
+                mission = await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+                MergeEntry entry = new MergeEntry("feature/nowhere", "main") { VesselId = vessel.Id, MissionId = mission.Id };
+                entry = await queue.EnqueueAsync(entry).ConfigureAwait(false);
+
+                MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                AssertEqual(MergeStatusEnum.Failed, processed!.Status);
+                Mission updated = (await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                AssertEqual(MissionStatusEnum.LandingFailed, updated.Status);
+                AssertEqual(MissionFailureKindEnum.Infra, updated.FailureKind, updated.FailureReason);
+                MergeQueueFailure failure = await ReadFailureAsync(testDb.Driver, mission.Id).ConfigureAwait(false);
+                AssertEqual(MergeQueueFailureStepEnum.Resolution, failure.Step);
+            }));
+
+            cases.Add(CaseAsync("mutating_check_is_infra", "A check that rewrites the integration commit fails the mission as Infra, not as a test failure", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                repos.PushBranch("feature/mutating", "mutating.txt", "mutating\n");
+                MergeQueueService queue = CreateQueue(testDb.Driver);
+                Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/mutating", mission.Id, "git reset --hard HEAD^").ConfigureAwait(false);
+
+                await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+
+                Mission updated = (await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                AssertEqual(MissionStatusEnum.LandingFailed, updated.Status);
+                AssertEqual(MissionFailureKindEnum.Infra, updated.FailureKind, updated.FailureReason);
+                AssertEqual(MergeQueueFailureStepEnum.Verification, (await ReadFailureAsync(testDb.Driver, mission.Id).ConfigureAwait(false)).Step);
+            }));
+
+            cases.Add(CaseAsync("failure_classifier_maps_steps_to_kinds", "The merge queue failure classifier maps each failing step to the kind that describes it", TestTags.Positive, async () =>
+            {
+                AssertEqual(MissionFailureKindEnum.LandingConflict, MergeQueueFailureClassifier.ClassifyMerge(2));
+                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.ClassifyMerge(0), "a merge that failed without conflicts is not a conflict");
+                AssertEqual(MissionFailureKindEnum.TestFail, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification,
+                    new LandingVerificationException("failed", "Failed", "exit 3", 3, "abc", false)));
+                AssertEqual(MissionFailureKindEnum.Timeout, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification,
+                    new LandingVerificationException("timed out", "TimedOut", "sleep 999", null, "abc", false)));
+                AssertEqual(MissionFailureKindEnum.Timeout, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification, new TimeoutException("budget")));
+                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification,
+                    new LandingVerificationException("mutated", "Failed", "git reset", 0, "abc", true)));
+                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Verification, new InvalidOperationException("could not start /bin/sh")));
+                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Publication, new InvalidOperationException("push rejected")));
+                AssertEqual(MissionFailureKindEnum.Infra, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Preparation, new TimeoutException("fetch timed out")),
+                    "a timeout outside verification is an environment failure");
+                AssertEqual(MissionFailureKindEnum.LandingConflict, MergeQueueFailureClassifier.Classify(MergeQueueFailureStepEnum.Preparation,
+                    new GitMergeConflictException("conflict", new[] { "a.txt" })));
+                await Task.CompletedTask.ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("queue_processes_in_order_and_continues_after_failure", "Queue lands in priority order and continues past a failed entry", TestTags.Positive, async () =>
@@ -206,6 +306,15 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static async Task<MergeQueueFailure> ReadFailureAsync(DatabaseDriver db, string missionId)
+        {
+            List<ArmadaEvent> events = await db.Events.EnumerateRecentAsync(200).ConfigureAwait(false);
+            ArmadaEvent? failed = events.Find(e => e.EventType == "mission.landing_failed" && e.MissionId == missionId);
+            AssertNotNull(failed, "the merge queue records mission.landing_failed");
+            AssertNotNull(failed!.Payload, "the landing failure event carries the structured failure");
+            return System.Text.Json.JsonSerializer.Deserialize<MergeQueueFailure>(failed.Payload!)!;
+        }
 
         private static MergeQueueService CreateQueue(DatabaseDriver db)
         {

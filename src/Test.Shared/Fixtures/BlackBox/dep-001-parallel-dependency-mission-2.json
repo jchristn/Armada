@@ -1,0 +1,74 @@
+{
+  "name": "dep-001-parallel-dependency-mission-2",
+  "description": "Bounded-enumeration voyage, mission 2: the captain reported BLOCKED because missions that depend on each other were dispatched in parallel (signals 2026-10-29T02:26Z).",
+  "source": "bounded-enumeration voyage mission 2 (reconstructed from MISSION_BLACKBOX_PLAN.md 16.10 and the captain's BLOCKED signal)",
+  "rulesVersion": 1,
+  "expectedRuleIds": [
+    "BBX-DEP-001"
+  ],
+  "expectedTriage": "MissionBrief",
+  "record": {
+    "entryId": "bbx_fixture_dep001_2",
+    "schemaVersion": 1,
+    "captureMode": "Inline",
+    "state": "Captured",
+    "createdUtc": "2026-10-29T02:26:12Z",
+    "subject": {
+      "subjectType": "Mission",
+      "missionId": "msn_fixture_bounded_2",
+      "voyageId": "vyg_fixture_bounded",
+      "title": "Bounded enumeration 2: page the mission and voyage lists",
+      "voyageTitle": "Bounded enumeration",
+      "vesselId": "vsl_fixture_armada",
+      "vesselName": "Armada",
+      "vesselDefaultBranch": "main",
+      "captainId": "cpt_fixture_claude_2",
+      "captainRuntime": "ClaudeCode",
+      "attempt": 1,
+      "isRescue": false,
+      "branchName": "armada/msn_fixture_bounded_2"
+    },
+    "status": {
+      "before": "InProgress",
+      "after": "Failed",
+      "changedUtc": "2026-10-29T02:26:12Z"
+    },
+    "site": {
+      "phase": "Completion",
+      "step": "CaptainBlocked",
+      "hostKind": "Admiral",
+      "host": "Admiral",
+      "component": "MissionService",
+      "method": "TryAssignAsync",
+      "sourceFile": "src/Armada.Core/Services/MissionService.Completion.cs",
+      "armadaVersion": "1.1.0"
+    },
+    "classification": {
+      "kind": "Blocked",
+      "rawReason": "Captain reported BLOCKED: mission 2 depends on mission 1 (the shared EnumerationQuery bound helpers), which has not landed; missions 1-4 are running concurrently, so the helpers this brief builds on are not on the branch.",
+      "suspectedCause": "NotTheModel"
+    },
+    "workspace": {
+      "branchName": "armada/msn_fixture_bounded_2",
+      "startCommit": "51aa0c7",
+      "startCommitSource": "Mission",
+      "targetBranch": "main",
+      "dirtyPaths": [],
+      "dirtyPathTotal": 0
+    },
+    "configuration": {
+      "values": [
+        {
+          "setting": "WaitForVoyageWorkers",
+          "value": "False",
+          "source": "Mission"
+        },
+        {
+          "setting": "AllowConcurrentMissions",
+          "value": "True",
+          "source": "Vessel"
+        }
+      ]
+    }
+  }
+}

@@ -88,7 +88,12 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, AskWorkLinker.Resolve("update_vessel", "{}", "{\"id\":\"vsl_1\"}").Count, "unrelated tool");
                 AssertEqual(0, AskWorkLinker.Resolve("dispatch", "{}", "\"Proposed as aap_1\"").Count, "string result");
                 AssertEqual(0, AskWorkLinker.Resolve("dispatch", "{}", "not json").Count, "invalid json");
-                AssertEqual(10, AskWorkLinker.LinkedTools().Count, "mapping table size");
+                AssertEqual(15, AskWorkLinker.LinkedTools().Count, "mapping table size");
+                foreach (string read in AskWorkLinker.LinkedReadTools())
+                {
+                    AssertTrue(AskWorkLinker.LinkedTools().Contains(read), "linked read " + read + " is in the mapping table");
+                    AssertTrue(AskToolPolicy.IsReadOnly(read), "linked read " + read + " is read-only");
+                }
                 foreach (string tool in AskWorkLinker.LinkedTools())
                     AssertTrue(Armada.Core.Authorization.McpToolAuthorizationRegistry.TryGet(tool, out Armada.Core.Authorization.AuthorizationRequirement? _), "linked tool " + tool + " is a real MCP tool");
             }));
@@ -96,8 +101,8 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("quick_action_catalog", "Quick actions name real tools with their MCP argument names and a schema", () =>
             {
                 List<AskQuickAction> actions = AskQuickActionCatalog.All();
-                AssertEqual(String.Join(",", new List<string> { "/dispatch", "/fleet-action", "/status", "/health", "/import" }), String.Join(",", actions.Select(a => a.Command).ToList()));
-                AssertEqual(String.Join(",", new List<string> { "dispatch", "fleet-action", "status", "health", "import" }), String.Join(",", actions.Select(a => a.Name).ToList()));
+                AssertEqual(String.Join(",", new List<string> { "/dispatch", "/fleet-action", "/status", "/health", "/import", "/blackbox" }), String.Join(",", actions.Select(a => a.Command).ToList()));
+                AssertEqual(String.Join(",", new List<string> { "dispatch", "fleet-action", "status", "health", "import", "blackbox" }), String.Join(",", actions.Select(a => a.Name).ToList()));
                 AskQuickAction dispatch = actions.First(a => a.Name == "dispatch");
                 AssertEqual("dispatch", dispatch.ToolName);
                 AssertEqual(String.Join(",", new List<string> { "title", "vesselId", "missions", "description", "pipelineId" }), String.Join(",", dispatch.Arguments.Select(a => a.Name).ToList()));

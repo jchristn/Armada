@@ -32,7 +32,9 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="vesselService">Optional shared vessel creation service. Defaults to a new <see cref="VesselService"/>.</param>
         /// <param name="settings">Settings (managed docks and repos directories for safe vessel cleanup).</param>
         /// <param name="admiral">Admiral service; deleting a vessel cancels its active missions through it so their agents stop.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null, IVesselService? vesselService = null, Armada.Core.Settings.ArmadaSettings? settings = null, IAdmiralService? admiral = null)
+        /// <param name="blackBox">Optional black box capture for the missions delete_vessel cancels (step VesselDeleted).</param>
+        /// <param name="blackBoxHooks">Optional black box lifecycle hooks, called after deletes and updates (retention cascades, expiry recompute).</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IDockService? dockService = null, IVesselService? vesselService = null, Armada.Core.Settings.ArmadaSettings? settings = null, IAdmiralService? admiral = null, Armada.Core.BlackBox.IBlackBoxCapture? blackBox = null, Armada.Core.BlackBox.IBlackBoxLifecycleHooks? blackBoxHooks = null)
         {
             IVesselService creator = vesselService ?? new VesselService(database);
 
@@ -75,6 +77,7 @@ namespace Armada.Server.Mcp.Tools
                         workingDirectory = new { type = "string", description = "Optional local directory where completed mission changes will be pulled after merge. When repoUrl is a local clone (a file:// URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada)." },
                         gitHubTokenOverride = new { type = "string", description = "Optional per-vessel GitHub token override. Leave unset to use the global configured token." },
                         allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel (default false)" },
+                        serializeOverlappingMissions = new { type = "boolean", description = "Chain a dispatched mission after an active mission whose files it overlaps (or whose reserved hotspot directory it touches) with dependsOnMissionId instead of running both in parallel (default false: overlaps are only reported as dispatch warnings)" },
                         autoApprove = new { type = "boolean", description = "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting" },
                         enableModelContext = new { type = "boolean", description = "Enable model context accumulation -- agents will update context with key information discovered during missions (default true)" },
                         defaultPipelineId = new { type = "string", description = "Default pipeline ID for dispatches to this vessel (ppl_ prefix)" },
@@ -102,6 +105,7 @@ namespace Armada.Server.Mcp.Tools
                     vessel.WorkingDirectory = request.WorkingDirectory;
                     vessel.GitHubTokenOverride = request.GitHubTokenOverride;
                     vessel.AllowConcurrentMissions = request.AllowConcurrentMissions ?? false;
+                    vessel.SerializeOverlappingMissions = request.SerializeOverlappingMissions ?? false;
                     vessel.AutoApprove = request.AutoApprove;
                     vessel.EnableModelContext = request.EnableModelContext ?? true;
                     vessel.DefaultPipelineId = request.DefaultPipelineId;
@@ -138,6 +142,7 @@ namespace Armada.Server.Mcp.Tools
                         workingDirectory = new { type = "string", description = "New local directory where completed mission changes will be pulled after merge" },
                         gitHubTokenOverride = new { type = "string", description = "Optional per-vessel GitHub token override. Empty string clears the existing override." },
                         allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel" },
+                        serializeOverlappingMissions = new { type = "boolean", description = "Chain a dispatched mission after an active mission whose files it overlaps (or whose reserved hotspot directory it touches) with dependsOnMissionId instead of running both in parallel; false only reports overlaps as dispatch warnings" },
                         autoApprove = new { type = "boolean", description = "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting" },
                         clearAutoApprove = new { type = "boolean", description = "Remove the per-vessel auto-approve override so the captain's own setting applies" },
                         enableModelContext = new { type = "boolean", description = "Enable or disable model context accumulation" },
@@ -154,7 +159,8 @@ namespace Armada.Server.Mcp.Tools
                         definitionOfDoneTimeoutSeconds = new { type = "integer", description = "Per-phase timeout in seconds for each Definition-of-Done command (clamped to 30..7200)" },
                         testCommand = new { type = "string", description = "Per-vessel override for the Test intent (beats a repo script and the ecosystem default)" },
                         lintCommand = new { type = "string", description = "Per-vessel override for the Lint intent (beats a repo script and the ecosystem default)" },
-                        auditCommand = new { type = "string", description = "Per-vessel override for the Audit intent (beats a repo script and the ecosystem default)" }
+                        auditCommand = new { type = "string", description = "Per-vessel override for the Audit intent (beats a repo script and the ecosystem default)" },
+                        landingMode = new { type = "string", description = "Landing mode override for this vessel: " + McpToolHelpers.EnumNames<Armada.Core.Enums.LandingModeEnum>() + ", or Default to clear it so the global setting applies" }
                     },
                     required = new[] { "vesselId" }
                 },
@@ -184,6 +190,8 @@ namespace Armada.Server.Mcp.Tools
                     }
                     if (request.AllowConcurrentMissions.HasValue)
                         vessel.AllowConcurrentMissions = request.AllowConcurrentMissions.Value;
+                    if (request.SerializeOverlappingMissions.HasValue)
+                        vessel.SerializeOverlappingMissions = request.SerializeOverlappingMissions.Value;
                     if (request.ClearAutoApprove == true)
                         vessel.AutoApprove = null;
                     else if (request.AutoApprove.HasValue)
@@ -218,8 +226,18 @@ namespace Armada.Server.Mcp.Tools
                         vessel.LintCommand = String.IsNullOrWhiteSpace(request.LintCommand) ? null : request.LintCommand;
                     if (request.AuditCommand != null)
                         vessel.AuditCommand = String.IsNullOrWhiteSpace(request.AuditCommand) ? null : request.AuditCommand;
+                    if (request.LandingMode != null)
+                    {
+                        if (String.IsNullOrWhiteSpace(request.LandingMode) || String.Equals(request.LandingMode.Trim(), "Default", StringComparison.OrdinalIgnoreCase))
+                            vessel.LandingMode = null;
+                        else if (Enum.TryParse<Armada.Core.Enums.LandingModeEnum>(request.LandingMode.Trim(), true, out Armada.Core.Enums.LandingModeEnum landingMode) && Enum.IsDefined(typeof(Armada.Core.Enums.LandingModeEnum), landingMode))
+                            vessel.LandingMode = landingMode;
+                        else
+                            return (object)McpToolError.InvalidArgument("landingMode must be one of " + McpToolHelpers.EnumNames<Armada.Core.Enums.LandingModeEnum>() + ", or Default.");
+                    }
                     await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(database, vessel).ConfigureAwait(false);
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
+                    if (blackBoxHooks != null) await blackBoxHooks.OnVesselUpdatedAsync(vessel.Id).ConfigureAwait(false);
                     return (object)vessel;
                 });
 
@@ -243,9 +261,10 @@ namespace Armada.Server.Mcp.Tools
                     Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
                     if (vessel == null) return (object)McpToolError.NotFound("Vessel not found");
 
-                    List<string> warnings = await CleanupVesselResourcesAsync(vessel, database, dockService, settings, admiral).ConfigureAwait(false);
+                    List<string> warnings = await CleanupVesselResourcesAsync(vessel, database, dockService, settings, admiral, blackBox).ConfigureAwait(false);
 
                     await database.Vessels.DeleteAsync(vesselId).ConfigureAwait(false);
+                    if (blackBoxHooks != null) await blackBoxHooks.OnVesselDeletedAsync(vesselId).ConfigureAwait(false);
                     return (object)VesselDeleteResult.Create(vesselId, warnings);
                 });
 
@@ -284,8 +303,9 @@ namespace Armada.Server.Mcp.Tools
                             continue;
                         }
 
-                        await CleanupVesselResourcesAsync(vessel, database, dockService, settings, admiral).ConfigureAwait(false);
+                        await CleanupVesselResourcesAsync(vessel, database, dockService, settings, admiral, blackBox).ConfigureAwait(false);
                         await database.Vessels.DeleteAsync(id).ConfigureAwait(false);
+                        if (blackBoxHooks != null) await blackBoxHooks.OnVesselDeletedAsync(id).ConfigureAwait(false);
                         result.Deleted++;
                     }
                     result.ResolveStatus();
@@ -331,7 +351,7 @@ namespace Armada.Server.Mcp.Tools
         /// Cancels active missions, removes docks/worktrees, and deletes the bare repository.
         /// This method throws on failure -- vessel deletion should NOT proceed if cleanup fails.
         /// </summary>
-        private static async Task<List<string>> CleanupVesselResourcesAsync(Vessel vessel, DatabaseDriver database, IDockService? dockService, Armada.Core.Settings.ArmadaSettings? settings, IAdmiralService? admiral)
+        private static async Task<List<string>> CleanupVesselResourcesAsync(Vessel vessel, DatabaseDriver database, IDockService? dockService, Armada.Core.Settings.ArmadaSettings? settings, IAdmiralService? admiral, Armada.Core.BlackBox.IBlackBoxCapture? blackBox)
         {
             List<string> errors = new List<string>();
 
@@ -345,17 +365,24 @@ namespace Armada.Server.Mcp.Tools
                     || mission.Status == Armada.Core.Enums.MissionStatusEnum.Review
                     || mission.Status == Armada.Core.Enums.MissionStatusEnum.Testing)
                 {
+                    Armada.Core.Enums.MissionStatusEnum statusBefore = mission.Status;
                     if (admiral != null)
                     {
-                        // Stop the agent before the mission is cancelled; a failed stop is reported, not hidden.
-                        try { await admiral.CancelMissionAsync(mission).ConfigureAwait(false); }
+                        // Stop the agent before the mission is cancelled; a failed stop is reported, not hidden. The
+                        // cancel records the single VesselDeleted entry.
+                        try { await admiral.CancelMissionAsync(mission, BlackBoxOperatorCapture.VesselDeletedCancel(statusBefore, vessel, mission.VesselId, "MCP")).ConfigureAwait(false); }
                         catch (InvalidOperationException ex) { errors.Add("Mission " + mission.Id + ": " + ex.Message); continue; }
                     }
-                    mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
-                    mission.FailureReason = "Vessel deleted";
-                    mission.CompletedUtc = DateTime.UtcNow;
-                    mission.LastUpdateUtc = DateTime.UtcNow;
-                    await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    else
+                    {
+                        mission.Status = Armada.Core.Enums.MissionStatusEnum.Cancelled;
+                        mission.FailureKind = Armada.Core.Enums.MissionFailureKindEnum.OperatorAction;
+                        mission.FailureReason = "Vessel deleted";
+                        mission.CompletedUtc = DateTime.UtcNow;
+                        mission.LastUpdateUtc = DateTime.UtcNow;
+                        await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                        await BlackBoxOperatorCapture.RecordVesselDeletedAsync(blackBox, mission, statusBefore, vessel, "MCP").ConfigureAwait(false);
+                    }
                 }
             }
 

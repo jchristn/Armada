@@ -15,6 +15,8 @@ import {
 import AskQuickActionMenu, { QUICK_MENU_ID, quickOptionId } from './AskQuickActionMenu';
 import AskDispatchForm from './AskDispatchForm';
 import AskFleetActionForm from './AskFleetActionForm';
+import AskBlackBoxForm from './AskBlackBoxForm';
+import { parseBlackBoxCommand } from '../../lib/askBlackBox';
 
 interface AskComposerProps {
   quickActions: AskQuickAction[];
@@ -150,6 +152,19 @@ const AskComposer = forwardRef<AskComposerHandle, AskComposerProps>(function Ask
   }
 
   async function runItem(item: AskCommandItem, args: string) {
+    // `/blackbox msn_... [question]` typed in full runs at once; without a mission id it opens the form.
+    if (item.action && quickActionForm(item.action) === 'blackbox') {
+      const parsed = parseBlackBoxCommand(args);
+      if (parsed) {
+        setText('');
+        setHint(null);
+        const blackBoxArgs: Record<string, unknown> = { missionId: parsed.missionId };
+        if (parsed.question) blackBoxArgs.question = parsed.question;
+        await onQuickAction(item.action, blackBoxArgs);
+        inputRef.current?.focus();
+        return;
+      }
+    }
     if (item.action) { await choose(item.action); return; }
     const local = item.local;
     if (!local) return;
@@ -252,6 +267,9 @@ const AskComposer = forwardRef<AskComposerHandle, AskComposerProps>(function Ask
       )}
       {openForm && formKind === 'dispatch' && (
         <AskDispatchForm busy={actionBusy} onSubmit={(args) => void submitForm(args)} onCancel={() => setOpenForm(null)} />
+      )}
+      {openForm && formKind === 'blackbox' && (
+        <AskBlackBoxForm busy={actionBusy} onSubmit={(args) => void submitForm(args)} onCancel={() => setOpenForm(null)} />
       )}
       {openForm && formKind === 'fleet-action' && (
         <AskFleetActionForm busy={actionBusy} onSubmit={(args) => void submitForm(args)} onCancel={() => setOpenForm(null)} />

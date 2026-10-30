@@ -45,7 +45,7 @@ namespace Test.Shared.Suites.E2E
         {
             ["GET /api/v1/ask/quick-actions"] = 10,
             ["MCP list_ask_quick_actions"] = 10,
-            ["GET /api/v1/doctor"] = 11,
+            ["GET /api/v1/doctor"] = 12,
         };
 
         // Models in Armada.Core.Models that no REST route, MCP tool or WebSocket command returns, with why. They are not
@@ -55,12 +55,18 @@ namespace Test.Shared.Suites.E2E
             ["CaptainChatTurnResult"] = "In-process result of an Ask turn; its tool calls are stored and read through the paged Ask tool-call enumerations",
             ["DockLeaseState"] = "Landing's view of which missions hold a dock, used inside the landing pipeline",
             ["LandingDeferral"] = "Landing pipeline decision to defer a landing, recorded in-process",
+            ["BlackBoxEvictionQuery"] = "Black box garbage collection's quota query, used inside the collector",
+            ["BlackBoxScanQuery"] = "Black box keyset scan used by storage migration, expiry recompute and backup manifests",
+            ["BlackBoxBackupInventory"] = "Black box section of the backup manifest file and restore report, written into the ZIP",
+            ["BlackBoxExternalEntryRef"] = "External-target entry listed in the backup manifest file",
             ["DetectedEcosystem"] = "Workflow-profile provisioning input built from a repository scan",
             ["EcosystemCommand"] = "Workflow-profile provisioning input built from a repository scan",
             ["ResolvedEcosystemCommand"] = "Workflow-profile provisioning input built from a repository scan",
             ["RepositoryLayout"] = "Repository file list used by provisioning on the server",
             ["GitAnchorsSnapshot"] = "Git evidence collected for prompt rendering",
             ["GitCommitMergeResult"] = "Result of the git integration barrier, consumed by the landing pipeline",
+            ["MergeQueueMergeResult"] = "Result of merging a merge queue entry's branch, consumed by the merge queue",
+            ["MergeQueueFailure"] = "Merge queue failure facts, stored as mission.landing_failed event Payload JSON (an event string field)",
             ["RemoteTunnelHandshakePayload"] = "Remote tunnel protocol frame (proxy link), not a REST or MCP response",
             ["RemoteTunnelHandshakeResponse"] = "Remote tunnel protocol frame (proxy link), not a REST or MCP response",
             ["RemoteTunnelHttpRelayRequest"] = "Remote tunnel protocol frame (proxy link), not a REST or MCP response",

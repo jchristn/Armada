@@ -20,6 +20,9 @@ namespace Test.Automated
     ///
     /// <c>--generate-api-surface &lt;dir&gt;</c> runs no tests: it boots a throwaway in-process Admiral and rewrites
     /// api-surface-1.0.json and API_SURFACE_1.0.md in the directory (scripts/common/generate-api-surface.sh).
+    ///
+    /// <c>--generate-blackbox-schema &lt;dir&gt;</c> runs no tests: it writes blackbox-record.schema.json, generated from
+    /// the black box models, into the directory (scripts/common/generate-blackbox-schema.sh).
     /// </summary>
     public static class Program
     {
@@ -33,6 +36,7 @@ namespace Test.Automated
         {
             string? resultsPath = null;
             string? surfaceDirectory = null;
+            string? blackBoxSchemaDirectory = null;
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -65,12 +69,24 @@ namespace Test.Automated
                     case "--generate-api-surface":
                         if (next != null) surfaceDirectory = next;
                         break;
+                    case "--generate-blackbox-schema":
+                        if (next != null) blackBoxSchemaDirectory = next;
+                        break;
                     case "--db-name":
                         if (next != null) Environment.SetEnvironmentVariable("ARMADA_TEST_DB_NAME", next);
                         break;
                     default:
                         break;
                 }
+            }
+
+            if (blackBoxSchemaDirectory != null)
+            {
+                System.IO.Directory.CreateDirectory(blackBoxSchemaDirectory);
+                string schemaPath = System.IO.Path.Combine(blackBoxSchemaDirectory, "blackbox-record.schema.json");
+                System.IO.File.WriteAllText(schemaPath, Armada.Core.BlackBox.BlackBoxSchemaGenerator.GenerateJson());
+                Console.WriteLine("Black box schema written to " + System.IO.Path.GetFullPath(schemaPath));
+                return 0;
             }
 
             if (surfaceDirectory != null)

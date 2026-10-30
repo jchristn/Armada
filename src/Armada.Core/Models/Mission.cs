@@ -228,6 +228,35 @@ namespace Armada.Core.Models
         public MissionFailureKindEnum? FailureKind { get; set; } = null;
 
         /// <summary>
+        /// The mission's current black box entry (bbx_ prefix), or null when it has none. Set when a failure is captured
+        /// and kept when a restart clears <see cref="FailureReason"/> and <see cref="FailureKind"/>, so the evidence of
+        /// the earlier failure stays reachable.
+        /// </summary>
+        public string? LastBlackBoxEntryId { get; set; } = null;
+
+        /// <summary>
+        /// Overlap warnings found when this mission was dispatched (black box prevention, at most 50), or null. Returned by
+        /// the dispatch responses only; never stored.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(Armada.Core.BlackBox.BlackBoxInsightLimits.MaxOverlapWarnings, Reason = "Dispatch keeps the strongest 50")]
+        public List<MissionOverlapWarning>? OverlapWarnings { get; set; } = null;
+
+        /// <summary>
+        /// Brief lint findings found when this mission was dispatched (at most 50), or null. Returned by the dispatch
+        /// responses only; never stored. Lint never blocks a dispatch.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(Armada.Core.BlackBox.BlackBoxInsightLimits.MaxLintFindings, Reason = "Lint stops at 50")]
+        public List<BriefLintFinding>? BriefLintWarnings { get; set; } = null;
+
+        /// <summary>
+        /// The target-branch commit the mission's dock started from (recorded at assignment), or null when unknown.
+        /// The base for "what moved on the target since this mission started".
+        /// </summary>
+        public string? StartCommit { get; set; } = null;
+
+        /// <summary>
         /// When true, a Worker mission waits for other implementation pipelines in the voyage, including reviews
         /// and checks, to settle (Complete, WorkProduced, Failed, Cancelled, or LandingFailed). Its own downstream
         /// stages and the Architect are excluded to avoid a circular wait. Reworks inherit this barrier. Set from

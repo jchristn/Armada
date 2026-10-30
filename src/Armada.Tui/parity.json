@@ -97,6 +97,22 @@
     },
     {
       "kind": "route",
+      "key": "/blackbox",
+      "status": "implemented",
+      "tui": "BlackBoxScreen",
+      "workstream": "BB",
+      "notes": "Black Box list: server filters (vessel, triage, resolution, phase, fingerprint), paging, fingerprints view (F), row pin, JSON, delete; Go g b"
+    },
+    {
+      "kind": "route",
+      "key": "/blackbox/:id",
+      "status": "implemented",
+      "tui": "BlackBoxEntryScreen",
+      "workstream": "BB",
+      "notes": "Black box entry: brief with copy, export, recovery, Ask Armada, JSON, resolve, pin and note keys; objects with a paged 64 KB range viewer; notes; .zip download"
+    },
+    {
+      "kind": "route",
       "key": "/captains",
       "status": "implemented",
       "tui": "HubScreen",
@@ -1065,6 +1081,22 @@
     },
     {
       "kind": "api",
+      "key": "addBlackBoxNote",
+      "status": "implemented",
+      "tui": "ArmadaClient.AddBlackBoxNoteAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "applyBlackBoxRecommendation",
+      "status": "implemented",
+      "tui": "ArmadaClient.ApplyBlackBoxRecommendationAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "applyFleetRecommendations",
       "status": "implemented",
       "tui": "ArmadaClient.ApplyFleetRecommendationsAsync",
@@ -1110,6 +1142,14 @@
       "tui": "ArmadaClient.AuthenticateAsync",
       "workstream": "W0.2",
       "notes": "Auth"
+    },
+    {
+      "kind": "api",
+      "key": "backfillBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.BackfillBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
     },
     {
       "kind": "api",
@@ -1513,6 +1553,22 @@
     },
     {
       "kind": "api",
+      "key": "deleteBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.DeleteBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "deleteBlackBoxEntries",
+      "status": "implemented",
+      "tui": "ArmadaClient.DeleteBlackBoxEntriesAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "deleteCaptain",
       "status": "implemented",
       "tui": "ArmadaClient.DeleteCaptainAsync",
@@ -1849,6 +1905,14 @@
     },
     {
       "kind": "api",
+      "key": "diffBlackBoxEntries",
+      "status": "implemented",
+      "tui": "ArmadaClient.DiffBlackBoxEntriesAsync",
+      "workstream": "BB",
+      "notes": "Black box entry screen Diff tab (D picks another attempt or entry)"
+    },
+    {
+      "kind": "api",
       "key": "disableHarbor",
       "status": "implemented",
       "tui": "ArmadaClient.DisableHarborAsync",
@@ -1886,6 +1950,14 @@
       "tui": "ArmadaClient.DownloadBackupAsync",
       "workstream": "W0.2",
       "notes": "Backup / Restore | used by ServerSettingsScreen"
+    },
+    {
+      "kind": "api",
+      "key": "downloadBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.DownloadBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
     },
     {
       "kind": "api",
@@ -1993,6 +2065,46 @@
     },
     {
       "kind": "api",
+      "key": "enumerateBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.EnumerateBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateBlackBoxFingerprints",
+      "status": "implemented",
+      "tui": "ArmadaClient.EnumerateBlackBoxFingerprintsAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateBlackBoxHotspots",
+      "status": "implemented",
+      "tui": "ArmadaClient.EnumerateBlackBoxHotspotsAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateBlackBoxNotes",
+      "status": "implemented",
+      "tui": "ArmadaClient.EnumerateBlackBoxNotesAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateBlackBoxObjects",
+      "status": "implemented",
+      "tui": "ArmadaClient.EnumerateBlackBoxObjectsAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "enumerateCliPermissionRules",
       "status": "implemented",
       "tui": "ArmadaClient.EnumerateCliPermissionRulesAsync",
@@ -2070,6 +2182,14 @@
       "tui": "ArmadaClient.EnumerateMemoriesAsync",
       "workstream": "W0.2",
       "notes": "Memories"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateMissionBlackBoxEntries",
+      "status": "implemented",
+      "tui": "ArmadaClient.EnumerateMissionBlackBoxEntriesAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
     },
     {
       "kind": "api",
@@ -2209,6 +2329,14 @@
     },
     {
       "kind": "api",
+      "key": "exportBlackBoxFixture",
+      "status": "implemented",
+      "tui": "ArmadaClient.ExportBlackBoxFixtureAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "getAskQuickActions",
       "status": "implemented",
       "tui": "ArmadaClient.GetAskQuickActionsAsync",
@@ -2238,6 +2366,86 @@
       "tui": "ArmadaClient.GetBacklogItemAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxBrief",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxBriefAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxBundle",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxBundleAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxFingerprintTrend",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxFingerprintTrendAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxRecoveryStats",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxRecoveryStatsAsync",
+      "workstream": "BB",
+      "notes": "Black Box list R (recovery stats view)"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxRetention",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxRetentionAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxSection",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxSectionAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxStorage",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxStorageAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxStorageMigration",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxStorageMigrationAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getBlackBoxTimeline",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBlackBoxTimelineAsync",
+      "workstream": "BB",
+      "notes": "Black box entry screen Timeline tab (server paged)"
     },
     {
       "kind": "api",
@@ -2462,6 +2670,22 @@
       "tui": "ArmadaClient.GetMissionAsync",
       "workstream": "W0.2",
       "notes": "Missions | used by SetupWizardScreen"
+    },
+    {
+      "kind": "api",
+      "key": "getMissionBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetMissionBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getMissionBlackBoxBrief",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetMissionBlackBoxBriefAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
     },
     {
       "kind": "api",
@@ -2729,6 +2953,14 @@
     },
     {
       "kind": "api",
+      "key": "getVesselBlackBoxDoctor",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVesselBlackBoxDoctorAsync",
+      "workstream": "BB",
+      "notes": "Vessel screen Black Box Doctor tab (A applies through the dry run and confirm flow)"
+    },
+    {
+      "kind": "api",
       "key": "getVesselBranchCount",
       "status": "implemented",
       "tui": "ArmadaClient.GetVesselBranchCountAsync",
@@ -2822,6 +3054,30 @@
       "tui": "ArmadaClient.GetVoyageAsync",
       "workstream": "W0.2",
       "notes": "Voyages"
+    },
+    {
+      "kind": "api",
+      "key": "getVoyageBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVoyageBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getVoyageBlackBoxBrief",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVoyageBlackBoxBriefAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "getVoyageBlackBoxCascade",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVoyageBlackBoxCascadeAsync",
+      "workstream": "BB",
+      "notes": "Voyage screen Cascade tab"
     },
     {
       "kind": "api",
@@ -2921,6 +3177,14 @@
     },
     {
       "kind": "api",
+      "key": "lintMissionBrief",
+      "status": "implemented",
+      "tui": "ArmadaClient.LintMissionBriefAsync",
+      "workstream": "BB",
+      "notes": "Alt+P dispatch preview on Dispatch, Create Voyage and Create Mission (no vessel chosen)"
+    },
+    {
+      "kind": "api",
       "key": "listAllMuxEndpoints",
       "status": "implemented",
       "tui": "ArmadaClient.ListAllMuxEndpointsAsync",
@@ -2966,6 +3230,38 @@
       "tui": "ArmadaClient.ListBacklogRefinementSessionsAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
+    },
+    {
+      "kind": "api",
+      "key": "listBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "listBlackBoxNearbySuccesses",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListBlackBoxNearbySuccessesAsync",
+      "workstream": "BB",
+      "notes": "Black box entry screen Nearby Successes tab (server paged)"
+    },
+    {
+      "kind": "api",
+      "key": "listBlackBoxNotes",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListBlackBoxNotesAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "listBlackBoxObjects",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListBlackBoxObjectsAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
     },
     {
       "kind": "api",
@@ -3110,6 +3406,14 @@
       "tui": "ArmadaClient.ListMergeQueueAsync",
       "workstream": "W0.2",
       "notes": "Merge Queue"
+    },
+    {
+      "kind": "api",
+      "key": "listMissionBlackBoxEntries",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListMissionBlackBoxEntriesAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
     },
     {
       "kind": "api",
@@ -3329,6 +3633,14 @@
     },
     {
       "kind": "api",
+      "key": "listVesselReservations",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListVesselReservationsAsync",
+      "workstream": "BB",
+      "notes": "Vessel screen Reservations tab (server paged)"
+    },
+    {
+      "kind": "api",
       "key": "listVessels",
       "status": "implemented",
       "tui": "ArmadaClient.ListVesselsAsync",
@@ -3417,11 +3729,35 @@
     },
     {
       "kind": "api",
+      "key": "migrateBlackBoxStorage",
+      "status": "implemented",
+      "tui": "ArmadaClient.MigrateBlackBoxStorageAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "openWorkspaceTerminal",
       "status": "implemented",
       "tui": "ArmadaClient.OpenWorkspaceTerminalAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
+    },
+    {
+      "kind": "api",
+      "key": "pinBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.PinBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "previewMissionOverlap",
+      "status": "implemented",
+      "tui": "ArmadaClient.PreviewMissionOverlapAsync",
+      "workstream": "BB",
+      "notes": "Alt+P dispatch preview on Dispatch, Create Voyage and Create Mission"
     },
     {
       "kind": "api",
@@ -3457,6 +3793,14 @@
     },
     {
       "kind": "api",
+      "key": "purgeBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.PurgeBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "purgeMission",
       "status": "implemented",
       "tui": "ArmadaClient.PurgeMissionAsync",
@@ -3478,6 +3822,22 @@
       "tui": "ArmadaClient.PushVesselBranchAsync",
       "workstream": "W0.2",
       "notes": "Vessels"
+    },
+    {
+      "kind": "api",
+      "key": "readBlackBoxObject",
+      "status": "implemented",
+      "tui": "ArmadaClient.ReadBlackBoxObjectAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "reanalyzeBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.ReanalyzeBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
     },
     {
       "kind": "api",
@@ -3566,6 +3926,14 @@
       "tui": "ArmadaClient.ResetServerAsync",
       "workstream": "W0.2",
       "notes": "Server | used by ServerSettingsScreen"
+    },
+    {
+      "kind": "api",
+      "key": "resolveBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.ResolveBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
     },
     {
       "kind": "api",
@@ -3665,6 +4033,22 @@
     },
     {
       "kind": "api",
+      "key": "runBlackBoxGc",
+      "status": "implemented",
+      "tui": "ArmadaClient.RunBlackBoxGcAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
+      "key": "runBlackBoxRecovery",
+      "status": "implemented",
+      "tui": "ArmadaClient.RunBlackBoxRecoveryAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
+    },
+    {
+      "kind": "api",
       "key": "runCheck",
       "status": "implemented",
       "tui": "ArmadaClient.RunCheckAsync",
@@ -3694,6 +4078,14 @@
       "tui": "ArmadaClient.SaveWorkspaceFileAsync",
       "workstream": "W0.2",
       "notes": "Workspace"
+    },
+    {
+      "kind": "api",
+      "key": "searchBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.SearchBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
     },
     {
       "kind": "api",
@@ -3886,6 +4278,14 @@
       "tui": "ArmadaClient.SendRawAsync",
       "workstream": "W0.2",
       "notes": "TUI-only client call"
+    },
+    {
+      "kind": "api",
+      "key": "unpinBlackBox",
+      "status": "implemented",
+      "tui": "ArmadaClient.UnpinBlackBoxAsync",
+      "workstream": "W0.2",
+      "notes": "Missions"
     },
     {
       "kind": "api",
@@ -4470,6 +4870,14 @@
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
+    },
+    {
+      "kind": "setting",
+      "key": "settings.blackBox",
+      "status": "implemented",
+      "tui": "ServerSettingsScreen",
+      "workstream": "W7.7",
+      "notes": "Black Box Retention section edits the retention policy (saved with the whole black box object, masked secrets kept); storage target health, usage and a GC dry run are on the Storage tab; storage target credentials are edited in the dashboard or the settings file"
     },
     {
       "kind": "setting",

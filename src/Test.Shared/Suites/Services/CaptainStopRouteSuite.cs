@@ -77,6 +77,7 @@ namespace Test.Shared.Suites.Services
                                 AssertEqual(mission.Id, after.CurrentMissionId);
                                 AssertEqual(MissionStatusEnum.InProgress, active.Status);
                                 AssertContains("Recall deferred", active.FailureReason!);
+                                AssertEqual(MissionFailureKindEnum.Infra, active.FailureKind, "the deferred recall records a kind");
                             }
                         }
                         finally

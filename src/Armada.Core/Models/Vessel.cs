@@ -293,6 +293,24 @@ namespace Armada.Core.Models
         public string? AuditCommand { get; set; } = null;
 
         /// <summary>
+        /// Per-vessel black box retention override in days (0 keeps entries forever, maximum 3650), or null to use
+        /// <c>BlackBox.Retention.RetentionDays</c>.
+        /// </summary>
+        public int? BlackBoxRetentionDays
+        {
+            get => _BlackBoxRetentionDays;
+            set => _BlackBoxRetentionDays = value.HasValue ? (value.Value < 0 ? 0 : (value.Value > 3650 ? 3650 : value.Value)) : null;
+        }
+
+        /// <summary>
+        /// When true, a mission dispatched to this vessel whose likely files overlap an active mission's files (or a
+        /// directory an active mission reserves because the black box marks it a hotspot) is chained after that mission
+        /// with <see cref="Mission.DependsOnMissionId"/> instead of running in parallel. An explicit DependsOnMissionId is
+        /// never replaced. Default false: overlaps are only reported as dispatch warnings.
+        /// </summary>
+        public bool SerializeOverlappingMissions { get; set; } = false;
+
+        /// <summary>
         /// Per-phase timeout, in seconds, for each Definition-of-Done command. Exceeding it classifies as
         /// Timeout. Clamped to [30, 7200]; defaults to <see cref="Constants.DefaultDefinitionOfDoneTimeoutSeconds"/>.
         /// </summary>
@@ -351,6 +369,7 @@ namespace Armada.Core.Models
         private string _Name = "My Vessel";
         private int _AutoLandMaxFiles = 0;
         private int _AutoLandMaxLines = 0;
+        private int? _BlackBoxRetentionDays = null;
         private int _DefinitionOfDoneTimeoutSeconds = Constants.DefaultDefinitionOfDoneTimeoutSeconds;
         private string? _RepoUrl = null;
         private string? _GitHubTokenOverride = null;

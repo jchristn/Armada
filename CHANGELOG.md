@@ -4,7 +4,79 @@ All notable changes to Armada are documented in this file.
 
 ---
 
-## Unreleased
+## v1.2.0 (2026-10-29)
+
+v1.2.0 adds the mission and voyage black box: every failure writes an entry that says where, how and why it
+failed, which missions and files it collided with, and how to recover, with a FIX THIS brief for any coding agent (see
+the first section below). It also adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
+its section below). The rest of the release is about model evaluation: knowing how well each model does the work
+it is given, and handing work to it in a form it can use. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
+digest, escalation record) and a suspected cause; Quick probes give a captain or model endpoint a probe-only
+**Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
+are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
+mobile interfaces for the new surfaces. Since v1.1.0 was cut it also includes the `ExcludeReviewAuthorsFromJudge`
+setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 to 106 apply automatically at
+startup; see [UPGRADING.md](docs/UPGRADING.md#v110-to-v120).
+
+### Mission and voyage black box
+
+Every mission or voyage failure, of any kind and including landing failures, now writes a black box entry at the
+moment of failure: where it failed (phase, step, host, code site), how (exception, exit code, failing command, git
+error), status before and after, why (classified cause with rule ids and confidence), conflicting missions with the
+files and directories they collided on, the configuration in effect and what would have prevented the failure, Armada
+behavior changes that could address it, and ranked recovery paths with exact commands. Each entry renders a FIX THIS
+brief to paste into any coding agent. Entries are stored in the database by default (BLOBs indexed by mission,
+voyage, vessel, captain and other ids), or on disk, S3 and S3-compatible stores, Azure Blob, Google Cloud Storage,
+CIFS or NFS, with configurable retention and garbage collection. Available in the dashboard, the VS Code extension,
+the mobile app, REST, MCP, WebSocket and Ask Armada (read tools); the TUI Failure tab and Helm `armada blackbox`
+commands arrive with their own changes. Schema migrations 103 and 104 apply at startup. See
+[docs/BLACKBOX.md](docs/BLACKBOX.md) and [docs/BLACKBOX_SCHEMA.md](docs/BLACKBOX_SCHEMA.md).
+
+- Capture: every failure write (dispatch, provision, execution, completion, review, handoff, landing, merge queue, recovery, voyage settlement, operator transitions and vessel deletion) records an entry after the row update, within `blackBox.captureTimeoutMs` (2000), and never breaks failure handling. Each attempt keeps its own entry; `Mission.LastBlackBoxEntryId` and `Voyage.LastBlackBoxEntryId` point at the current one, and clearing a mission's failure reason no longer loses the evidence. A sweeper captures any failure without an entry (`CaptureMode` Sweeper), and `POST /api/v1/blackbox/backfill` captures failures from before the upgrade (Backfill). Every capture emits `mission.status_changed` with `PreviousStatus`, and missions record their start commit (`Mission.StartCommit`) at every provision.
+- Enrichment runs git on the host that owns the dock (the Admiral, or a Harbor over the Harbor link): worktree and branch state, `git status` of the worktree and target, target commits since the start commit, conflict attribution by `Armada-Mission-Id` trailer, concurrent missions on the same files, directory roll-ups, earlier attempts and rescues, evidence objects (agent output, mission log tail, diff and diff stat, check and verification output, merge entry, events) and the effective configuration with the source of every value.
+- Every black box entry is analyzed by a versioned rule catalog (42 rules, `BBX-LAND-001` to `BBX-UNKNOWN-001`, every failure phase covered): why findings with confidence and evidence, configuration recommendations, Armada improvement hypotheses with source pointers, ranked recovery paths with MCP, REST and CLI commands, a weighted triage verdict (a tie reports Unknown and both candidates) and a plain-language summary. Entries analyzed with older rules are re-analyzed in the background.
+- Recovery paths and configuration recommendations run only the action recorded in the entry: a dry run returns the plan and a 10-minute, single-use confirm token bound to the entry, the path and the mission version; the confirmed run re-checks the mission, refuses data-loss paths without `acknowledgeDataLoss`, authorizes every step as if the caller called the tool directly, annotates the entry and emits `blackbox.recovery_run`.
+- The effective configuration in an entry names the source of every value (mission, voyage, vessel, workflow profile, captain, persona, global or default), with the landing handler's precedence.
+- With `blackBox.summaryEndpointId` set, a model endpoint writes the entry summary (labeled model-written); any failure keeps the rules summary.
+- The user brief leads with what you can do and drops rule ids, source pointers and stack frames; the maintainer brief leads with the code site, triage, rule ids, fingerprint and occurrences. The maintainer bundle groups up to 50 entries by fingerprint and asks for ranked Armada mission briefs; fingerprint trends count a failure mode per Armada version; entries export as sanitized regression fixtures.
+- `update_vessel` accepts `landingMode` (or `Default` to clear the vessel's override).
+- Objects: `record.json` (versioned, JSON Schema in `docs/blackbox-record.schema.json`), `brief.md` (agent), `brief.user.md` (user) and `brief.maintainer.md` (maintainer), and `evidence/*`, all redacted (registered secrets, private keys, authorization headers, credentials in URLs, GitHub, Anthropic, OpenAI, AWS, Azure, Google and Slack tokens, JWTs, secret pairs) and bounded (record 256 KB, briefs 40 KB, evidence `maxEvidenceObjectBytes`).
+- REST (tag `BlackBox`, 39 routes): mission and voyage entries and briefs (`?audience=agent|user|maintainer`, `redactHosts`), entries per mission, entry reads, sections, objects with ranged reads (1 MB per read, `X-BlackBox-Next-Offset`, `ETag` the SHA-256), `.zip` download with `manifest.json`, notes, resolve, pin and unpin, recovery and recommendation dry runs and confirmed runs, reanalyze, export-fixture, list, enumerate and search, maintainer bundle, hotspots, fingerprints and fingerprint trends, delete and bulk delete (1000 ids), purge, garbage collection, retention, storage status, storage migration and backfill. Errors carry `Data.Code`: `BlackBoxNotFound` (404, also for another tenant's entry), `BlackBoxDeleting`, `BlackBoxObjectCorrupt` and `BlackBoxConfirmationRequired` (409), `BlackBoxObjectMissing` (410), `BlackBoxStoreUnavailable` (503).
+- MCP: 23 tools (`get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object` in 64 KB chunks, `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`, `list_blackbox_hotspots`, `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `get_blackbox_retention`, `get_blackbox_storage`, `annotate_blackbox`, `resolve_blackbox`, `run_blackbox_recovery`, `apply_blackbox_recommendation`, `pin_blackbox`, `delete_blackbox_entries`, `purge_blackbox`, `run_blackbox_gc`, `export_blackbox_fixture`, `reanalyze_blackbox`), entity type `blackbox` in `enumerate`, `LastBlackBoxEntryId` on `mission_status` and `voyage_status`, resources `armada://blackbox/{entryId}/brief.md`, `.../record.json`, `.../objects/{name}` and `armada://missions/{missionId}/blackbox`, and prompts `review_blackbox` and `explain_blackbox`. The read tools are on the Ask Armada read-only allowlist; the write tools become Ask proposals.
+- WebSocket: commands `blackbox.get`, `blackbox.brief` and `blackbox.list`, and events `blackbox.captured`, `blackbox.capture_failed`, `blackbox.analyzed`, `blackbox.resolved`, `blackbox.deleted`, `blackbox.storage_fallback`, `blackbox.gc_completed` and `blackbox.recovery_run`.
+- Clients: `Armada.Client` has a method per route (`GetMissionBlackBoxAsync`, `GetBlackBoxBriefAsync`, `ReadBlackBoxObjectAsync`, `RunBlackBoxRecoveryAsync`, `MigrateBlackBoxStorageAsync`, ...), the legacy core client (`ArmadaApiClient`) covers the read, brief, section, resolve and recovery calls, and the dashboard TypeScript client (shared with the mobile app) covers every route.
+- New `blackBox` settings: `enabled` (true), `captureTimeoutMs` (2000), `storage` (`target` Database, `keyPrefix`, `compress`, `maxEvidenceObjectBytes` 1 MB, `maxEntryBytes` 8 MB, `fallbackToDatabase` true, and `disk`, `s3`, `azureBlob`, `googleCloud`, `cifs` and `nfs` blocks whose secrets are masked on read and never logged), `retention` (`retentionDays` 180, `resolvedRetentionDays` 30, `keepLatestPerMission`, `maxEntriesPerVessel` 1000, `maxTotalBytes` 1 GB, `deleteWithMission` false, `deleteWithVessel` true, `gcIntervalMinutes` 60, `gcBatchSize` 200, `orphanGraceHours` 24), `sweeper` (`intervalSeconds` 60, `pageSize` 100, `maxEnrichmentAttempts` 5) and `summaryEndpointId`. Vessels gain `BlackBoxRetentionDays`.
+- Storage targets: Database (default, included in backups), Disk, S3 and S3-compatible (Less3, MinIO), Azure Blob, Google Cloud Storage, CIFS and NFS through Blobject 6.1.2; the target is recorded per entry, failed external writes fall back to the database (`blackbox.storage_fallback`), a resumable, SHA-256-verified migration job moves entries between targets, `GET /api/v1/doctor` gains a Black Box Storage check, the storage inventory reports black box bytes per target, and the backup manifest lists entries stored outside the database.
+- Retention and garbage collection: expiry, per-vessel and global quotas, cascades on vessel, mission and tenant deletion, two-phase deletes, an orphan sweep for external targets and a missing-object check, every `gcIntervalMinutes` and on demand (dry run available); pinning keeps an entry; purge by filter is a dry run by default. Prometheus metrics `armada_blackbox_entries_total`, `armada_blackbox_bytes`, `armada_blackbox_gc_deleted_total` and `armada_blackbox_capture_failures_total`.
+- Dashboard: a black box panel on mission and voyage pages (sections following the brief, Copy FIX THIS for the user, agent or maintainer audience, Download .md and .zip, View JSON, recovery and recommendation dry runs with confirmation, Resolve, Pin, Reanalyze, notes, attempts, Ask Armada about this failure, live updates), a Black Box page (Entries with saved filters, Fingerprints, Hotspots, Retention with a GC preview and purge by filter), a `/blackbox/{id}` entry page, Black Box storage and retention settings with a health check and migration, Inbox failure actions and a storage usage category, in every locale.
+- VS Code extension (`src/Armada.VSCode`): an Armada Failures view, Copy, Open and Send FIX THIS, recovery with a dry run and confirmation, resolve, notes, Ask Armada, conflict and hotspot file decorations, and live updates.
+- Mobile app: the black box on mission and voyage detail (summary, recovery with confirmation, resolve, notes, copy, share sheet, Ask Armada), and Black Box list and entry screens.
+- Postman: a Black Box folder with a request, tests and saved examples per route, and a mock in `postman/mocks/blackbox`.
+- Breaking changes: none. New fields and routes are additive.
+
+### Black box prevention, forensics and operations
+
+- Dispatch warns about overlapping work: a mission's likely files (its scoped-files directive and the repository paths its brief names that exist in the vessel) are compared with the vessel's active missions, black box conflict hotspots and reserved directories, and the warnings come back as `OverlapWarnings` on REST `POST /api/v1/missions` and `POST /api/v1/voyages` and MCP `create_mission` and `dispatch`. `POST /api/v1/vessels/{id}/overlap-preview` (MCP `preview_mission_overlap`) shows the same before dispatching.
+- `Vessel.SerializeOverlappingMissions` (default false; REST, `add_vessel`, `update_vessel`) chains a dispatched mission after the overlapping active mission with `DependsOnMissionId`; an explicit dependency is never replaced.
+- Soft directory reservations: an active mission's scoped files in a directory the black box marks hot (`blackBox.hotspotReservationThreshold`, default 3, 0 off) reserve it; a second mission there is warned or chained. `GET /api/v1/vessels/{id}/reservations`, MCP `list_vessel_reservations`.
+- The brief linter flags dependency language without `dependsOnMissionId`, verification-only briefs likely to fail as NoOp, host and parent-relative paths, and paths outside the vessel; dispatch returns the findings as `BriefLintWarnings` and never blocks. `POST /api/v1/missions/lint-brief`, MCP `lint_mission_brief`.
+- The configuration doctor lists the recommendations that recur across a vessel's black box entries (count, first and last seen, an example entry): `GET /api/v1/vessels/{id}/blackbox-doctor`, MCP `get_vessel_blackbox_doctor`.
+- Attempt diff (`GET /api/v1/blackbox/{id}/diff/{otherId}`, MCP `diff_blackbox_entries`), combined timeline across the entry, mission, dock, merge entry, captain and Harbor link (`GET /api/v1/blackbox/{id}/timeline`, MCP `get_blackbox_timeline`) and the voyage cascade graph (`GET /api/v1/voyages/{id}/blackbox/cascade`, MCP `get_voyage_blackbox_cascade`).
+- The success flight recorder keeps a minimal record of each successful landing for `blackBox.successRetentionDays` (default 7, 0 off); a failure's record lists nearby successes on the same vessel that touched the same files (`Related.NearbySuccesses`, `GET /api/v1/blackbox/{id}/nearby-successes`, MCP `list_blackbox_nearby_successes`).
+- Recovery paths link to runbooks tagged `blackbox: <path, rule, step or kind>` and a confirmed run starts the runbook instead of the tool steps. Every confirmed recovery run is tracked until the mission's next terminal status; per-path success rates (`GET /api/v1/blackbox/recovery-stats`, MCP `get_blackbox_recovery_stats`) break ties between equally weighted paths.
+- New tables `blackbox_successes` and `blackbox_recovery_outcomes` and the column `vessels.serialize_overlapping_missions` (migrations 105 and 106, every provider); `Armada.Client` gains the matching methods.
+
+### Black box evidence fixes
+
+- A verified fast-forward into a dirty target checkout reports the checkout's real `git status --porcelain` paths (tracked and untracked) in `GitDirtyCheckoutException.ModifiedPaths`, instead of parsing a sentence into a garbage path.
+- `retry_landing` lists conflicted files from the worktree where the merge ran (the dock worktree, then the target checkout), and from the conflicted files a merge read before it aborted, instead of from the owning repository, where the list was nearly always empty.
+- The merge queue reads the conflicted files of a failed merge before aborting it and names them in the entry's output and the mission's failure reason.
+- The merge queue classifies a failed entry by the step that failed: a real merge conflict is `LandingConflict`, a landing check that ran and failed is `TestFail` (`Timeout` when it ran out of time), and an unresolvable repository, a failed fetch or worktree, a check that could not run or rewrote the commit, and a refused push are `Infra`. Every merge queue failure was `LandingConflict` before, so non-conflict failures were auto-rescued. The structured facts (`MergeQueueFailure`: step, kind, conflicted files, target commit) are the Payload of the `mission.landing_failed` event the queue records; landing checks that do not pass raise `LandingVerificationException` with the command, exit code and commit.
+- `mission.landing_target_advanced` carries a payload (`LandingTargetAdvancedPayload`): the dock head `Before` and `After` integrating the target, the target branch, and the remote and local target tips it integrated against.
+- Every mission failure write records a `FailureKind`: a stranded landing handoff (`LandingConflict` for a real conflict, otherwise `Infra`), a lost merge queue handoff, an unverified orphan exit, a stop or recall the owning host never confirmed, a landing that was not attempted, and an unresolvable retry repository are `Infra`; missions cancelled because their vessel was deleted are `OperatorAction`. A kindless `LandingFailed` mission was classified as a landing conflict and auto-rescued.
+- `maxLandingRetries` (default 3) now limits automatic retries of a landing deferred on a dirty checkout: each deferral is retried at most that many times (recorded as `mission.landing_auto_retry`), then `mission.landing_retries_exhausted` is recorded once and the landing waits for a manual retry; 0 disables automatic retries. The setting was never read before.
+
+### Harbor and Helm packaging
 
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
@@ -236,19 +308,7 @@ Part of the bounded enumeration contract ([docs/ENUMERATION.md](docs/ENUMERATION
 - Vessels gain nullable `TestCommand`, `LintCommand` and `AuditCommand` overrides (schema migration 99 on all four providers), exposed through REST, MCP `add_vessel`/`update_vessel`, the .NET client, the dashboard vessel form and the Postman collection.
 - Fleet action templates accept `{{vessel.ecosystems}}`, `{{vessel.testCommand}}`, `{{vessel.lintCommand}}` and `{{vessel.auditCommand}}`; existing variables are unchanged.
 
-## v1.2.0 (2026-10-27)
-
-v1.2.0 adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
-the first section below). The rest of the release is about model evaluation: knowing how well each model does the work
-it is given, and handing work to it in a form it can use. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
-digest, escalation record) and a suspected cause; Quick probes give a captain or model endpoint a probe-only
-**Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
-are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
-mobile interfaces for the new surfaces. Since v1.1.0 was cut it also includes the `ExcludeReviewAuthorsFromJudge`
-setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 and later apply automatically at
-startup; see [UPGRADING.md](docs/UPGRADING.md#v110-to-v120).
-
-### pi runtime (lead highlight)
+### pi runtime
 
 - **pi as a captain runtime.** New captain runtime `Pi` for the pi coding agent (pi.dev, verified with pi 1.4.0 on macOS): `armada captain add pi-1 --runtime pi`. Captains launch `pi -p --mode json --no-session` with the prompt on stdin, `--model provider/id`, and reasoning effort mapped 1:1 to `--thinking off|minimal|low|medium|high`. `AgentRuntimeEnum.Pi` is appended last (runtimes are stored by name; no migration). The CLI, settings and MCP accept `pi`, `Pi` and `pi-coding-agent`.
 - pi exits 0 in JSON mode even when the provider fails, so Armada reads the stream: a run fails unless it reached `agent_end` with a normal stop (`error`, `aborted`, `length`, or no `agent_end` give a nonzero exit code). Provider errors are classified from the terminal records by their leading HTTP status (a retry that recovers is not reported). Token usage and cost come from each assistant `message_end`; mission output, Ask turns and planning sessions show readable text, thinking and tool calls, never raw JSON.

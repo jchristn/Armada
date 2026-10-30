@@ -1,13 +1,18 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import VoyageDetail from './VoyageDetail';
-import { getMission, getVoyage, listCaptains, listMissions, listVessels } from '../api/client';
+import { getMission, getVoyage, getVoyageBlackBoxCascade, listCaptains, listMissions, listVessels } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import { LIVE_REFRESH_DEBOUNCE_MS } from '../lib/useLiveRefresh';
 import type { Mission, Voyage, WebSocketMessage } from '../types/models';
 
 vi.mock('../api/client', () => ({
   getVoyage: vi.fn(),
+  getMissionBlackBox: vi.fn(() => Promise.reject(Object.assign(new Error('not found'), { status: 404, data: { code: 'BlackBoxNotFound' } }))),
+  getVoyageBlackBox: vi.fn(() => Promise.reject(Object.assign(new Error('not found'), { status: 404, data: { code: 'BlackBoxNotFound' } }))),
+  getBlackBox: vi.fn(),
+  getBlackBoxBrief: vi.fn(() => Promise.resolve('# FIX THIS')),
+  listMissionBlackBoxEntries: vi.fn(() => Promise.resolve({ objects: [] })),
   getMission: vi.fn(),
   purgeVoyage: vi.fn(),
   cancelVoyage: vi.fn(),
@@ -17,6 +22,7 @@ vi.mock('../api/client', () => ({
   createMission: vi.fn(),
   listVessels: vi.fn(),
   listCaptains: vi.fn(),
+  getVoyageBlackBoxCascade: vi.fn(),
 }));
 
 const localeValue = {
@@ -185,5 +191,53 @@ describe('VoyageDetail missions table', () => {
     expect(within(menu).getByRole('menuitemcheckbox', { name: /Mission/ })).toHaveAttribute('aria-disabled', 'true');
     // The row action buttons are a fixed column, not offered in the chooser.
     expect(within(menu).queryByRole('menuitemcheckbox', { name: /Actions/ })).toBeNull();
+  });
+});
+
+describe('VoyageDetail black box insights', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    vi.mocked(listVessels).mockResolvedValue(missionsPage([]) as never);
+    vi.mocked(listCaptains).mockResolvedValue(missionsPage([]) as never);
+    vi.mocked(getVoyageBlackBoxCascade).mockResolvedValue({
+      voyageId: 'vyg_1', voyageStatus: 'Failed', missionCount: 1, truncated: false, rootMissionId: 'msn_1',
+      nodes: [{ missionId: 'msn_1', title: 'Add request logging', status: 'Failed', isRoot: true }], edges: [],
+    });
+  });
+
+  function renderAt(state?: unknown) {
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/voyages/vyg_1', state }]}>
+        <Routes>
+          <Route path="/voyages/:id" element={<VoyageDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it('shows the dispatch warnings passed from the create flow', async () => {
+    serve(voyage('InProgress'), [mission('InProgress')]);
+    renderAt({ dispatchWarnings: { overlapWarnings: [{ kind: 'Reservation', directory: 'src/api', message: 'src/api is reserved by msn_9' }], briefLintWarnings: [] } });
+    const banner = await screen.findByTestId('dispatch-warnings-banner');
+    expect(within(banner).getByText('src/api is reserved by msn_9')).toBeInTheDocument();
+    expect(within(banner).getByText('Reserved directory')).toBeInTheDocument();
+  });
+
+  it('has no warnings banner or cascade card for a healthy voyage', async () => {
+    serve(voyage('InProgress'), [mission('InProgress')]);
+    renderAt();
+    await screen.findByRole('heading', { name: /Gateway hardening/ });
+    expect(screen.queryByTestId('dispatch-warnings-banner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('voyage-cascade-card')).not.toBeInTheDocument();
+    expect(getVoyageBlackBoxCascade).not.toHaveBeenCalled();
+  });
+
+  it('shows the cascade graph for a failed voyage', async () => {
+    serve(voyage('Failed'), [mission('Failed')]);
+    renderAt();
+    const card = await screen.findByTestId('voyage-cascade-card');
+    expect(await within(card).findByRole('img', { name: 'Cascade graph of 1 missions and 0 edges' })).toBeInTheDocument();
+    expect(getVoyageBlackBoxCascade).toHaveBeenCalledWith('vyg_1');
   });
 });

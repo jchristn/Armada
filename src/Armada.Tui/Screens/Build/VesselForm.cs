@@ -87,6 +87,7 @@ namespace Armada.Tui.Screens.Build
             SelectField<string> pipeline = screen.NewSelect("Default Pipeline", BuildText.PipelineOptions(pipelines, loc));
             pipeline.SetValue(editing?.DefaultPipelineId ?? "");
             OpsCheckField concurrent = new OpsCheckField("Allow Concurrent Missions", editing?.AllowConcurrentMissions ?? false);
+            OpsCheckField serialize = new OpsCheckField("Serialize Overlapping Missions", editing?.SerializeOverlappingMissions ?? false);
             OpsCheckField modelContextOn = new OpsCheckField("Enable Model Context", editing?.EnableModelContext ?? true);
 
             InputField releasePrefix = Input(editing != null && !String.IsNullOrEmpty(editing.ReleaseBranchPrefix) ? editing.ReleaseBranchPrefix : "release/", null);
@@ -136,6 +137,7 @@ namespace Armada.Tui.Screens.Build
             dialog.AddField("Agent Auto-Approve", autoApprove, "Whether CLI captains run missions on this vessel with their auto-approve (permission bypass) flags. Overrides the captain setting when set.");
             dialog.AddField("Default Pipeline", pipeline);
             dialog.AddField("", concurrent);
+            dialog.AddField("", serialize, "Black box prevention: a mission that overlaps an active one is dispatched to start after it lands.");
             dialog.AddField("", modelContextOn);
             dialog.Form.AddSection("Branch Policy");
             dialog.AddField("Release Branch Prefix", releasePrefix);
@@ -181,6 +183,7 @@ namespace Armada.Tui.Screens.Build
                 body.AutoApprove = autoApprove.Value == "on" ? true : autoApprove.Value == "off" ? false : (bool?)null;
                 body.DefaultPipelineId = String.IsNullOrEmpty(pipeline.Value) ? null : pipeline.Value;
                 body.AllowConcurrentMissions = concurrent.Checked;
+                body.SerializeOverlappingMissions = serialize.Checked;
                 body.EnableModelContext = modelContextOn.Checked;
                 body.ReleaseBranchPrefix = String.IsNullOrWhiteSpace(releasePrefix.Value) ? "release/" : releasePrefix.Value.Trim();
                 body.HotfixBranchPrefix = String.IsNullOrWhiteSpace(hotfixPrefix.Value) ? "hotfix/" : hotfixPrefix.Value.Trim();
@@ -256,6 +259,7 @@ namespace Armada.Tui.Screens.Build
             copy.RequirePullRequestForProtectedBranches = vessel.RequirePullRequestForProtectedBranches;
             copy.RequireMergeQueueForReleaseBranches = vessel.RequireMergeQueueForReleaseBranches;
             copy.AllowConcurrentMissions = vessel.AllowConcurrentMissions;
+            copy.SerializeOverlappingMissions = vessel.SerializeOverlappingMissions;
             copy.DefaultPipelineId = vessel.DefaultPipelineId;
             return copy;
         }

@@ -17,6 +17,7 @@
   <a href="#quick-start">Quick Start</a> |
   <a href="#how-it-works">How It Works</a> |
   <a href="#ask-armada">Ask Armada</a> |
+  <a href="#black-box-why-did-it-fail-and-what-now">Black Box</a> |
   <a href="#pipelines">Pipelines</a> |
   <a href="#terminal-ui">TUI</a> |
   <a href="#mobile-app">Mobile</a> |
@@ -36,7 +37,7 @@
 Armada is a self-hosted coordinator for the coding agents you already use: Claude Code, Codex, Gemini CLI, Cursor, Mux, OpenCode, pi, and any model behind an API endpoint. You describe the work. Armada hands it to agents, gives each one its own git worktree and branch, runs it through the stages you choose (plan, implement, test, review), lands the result the way you choose (merge, pull request, or merge queue), and records every log, diff, and decision in a database you can query later.
 
 - **The problem.** One agent in one terminal is easy. Five agents across twelve repositories is not: you juggle branches and worktrees, babysit sessions, lose track of what landed and what failed, and rebuild context every time you switch projects.
-- **What Armada does.** It turns agent work into durable, tracked units (missions) that run in parallel, in isolation, through review gates, with automatic recovery when an agent stalls or fails.
+- **What Armada does.** It turns agent work into durable, tracked units (missions) that run in parallel, in isolation, through review gates, with automatic recovery when an agent stalls or fails. When something does fail, the [black box](#black-box-why-did-it-fail-and-what-now) records where, how and why, and hands you a FIX THIS brief with ranked recovery paths.
 - **Why not just run the CLIs.** Armada runs those same CLIs, and adds the parts you otherwise do by hand: worktree isolation, queueing and routing, quality gates, landing, retries, history, and approvals from a browser, terminal, or phone.
 - **Who it's for.** Developers who work across several repositories, tech leads who want parallel agent work with a record of what changed, and AI engineers comparing runtimes and models on real tasks.
 
@@ -149,6 +150,7 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 
 ## What's New in v1.2.0
 
+- **Mission and voyage black box.** Every failure, of any kind and including landing failures, writes an entry at the moment of failure: where, how and why it failed, the missions, files and directories it collided with, the configuration that would have prevented it, and ranked recovery paths with exact commands. Copy the **FIX THIS** brief into any coding agent, run a recovery path with a dry run and a confirmation, or ask Ask Armada for its opinion. Entries live in the database by default, or on disk, S3 and S3-compatible stores, Azure Blob, Google Cloud Storage, CIFS or NFS, with retention and garbage collection. See [Black box](#black-box-why-did-it-fail-and-what-now) and [docs/BLACKBOX.md](docs/BLACKBOX.md).
 - **pi runtime support.** [pi](https://pi.dev) (the pi coding agent) is a first-class captain runtime: missions, Ask turns, and planning sessions run `pi -p --mode json` with exact token usage and cost, provider-error detection (pi exits 0 on provider errors in JSON mode), and the scoped Armada MCP binding. `armada mcp install` configures pi's `~/.pi/agent/mcp.json`; Approve in Armada works through a shipped pi extension that sends each shell command to the Approvals center and Ask (it fails closed); Refuse removes both of pi's shell tools (`bash` and Windows `powershell`). Add one with:
 
   ```bash
@@ -161,7 +163,7 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 - **Reader-aware handoffs.** Work is handed to the next stage in a form suited to the model that reads it.
 - **Captain usage visibility and management**, and mobile interfaces for the new surfaces.
 
-Every change is in [CHANGELOG.md](CHANGELOG.md#v120-2026-10-27).
+Every change is in [CHANGELOG.md](CHANGELOG.md#v120-2026-10-29).
 
 ## What's New in v1.1.0
 
@@ -190,6 +192,11 @@ Every change is in [CHANGELOG.md](CHANGELOG.md#v110-2026-10-15).
 - [Playbooks](#playbooks): reusable markdown guidance attached at dispatch time.
 - Planning sessions: chat with a captain, then dispatch the agreed plan without copy and paste.
 - Backlog of scoped objectives with acceptance criteria, optionally imported from GitHub issues or PRs.
+
+**Black box: failure forensics**
+- Every mission or voyage failure, of any kind and including landing failures, writes a [black box entry](#black-box-why-did-it-fail-and-what-now) at the moment of failure: where (phase, step, host, code site), how (exception, exit code, failing command, git error), status before and after, why (rule ids and confidence), conflicting missions with the files and directories they collided on, the configuration in effect, and ranked recovery paths with exact commands.
+- A **FIX THIS** brief for any coding agent, a plain account for you, and a maintainer view for Armada itself; recovery paths run with a dry run and a confirmation.
+- Stored in the database by default, or on disk, S3 and S3-compatible stores (Less3, MinIO), Azure Blob, Google Cloud Storage, CIFS or NFS, with retention and garbage collection ([docs/BLACKBOX.md](docs/BLACKBOX.md)).
 
 **Safety and control**
 - Git isolation: one worktree and branch per mission; your checkout is untouched until landing.
@@ -510,6 +517,54 @@ Armada:   "Rate limiting" finished: 1 of 1 missions landed.
 ```
 
 The design, REST routes (`/api/v1/ask/threads/...`), events, and settings are in [docs/ASK_ARMADA_HOME_BASE.md](docs/ASK_ARMADA_HOME_BASE.md); TUI keys are in [docs/TUI.md](docs/TUI.md#ask-armada).
+
+---
+
+## Black box: why did it fail, and what now?
+
+When a mission or voyage fails, for any reason (dispatch, execution, completion gates, review, handoff, landing, the merge queue, recovery, voyage settlement), Armada writes a **black box entry** at the moment of failure, before anything can erase the evidence. Restarting or rescuing the mission later never deletes it; each attempt keeps its own entry.
+
+**What an entry contains**
+
+- **Which** mission and voyage failed, on which vessel, captain, dock and host.
+- **Where** it failed: phase and step (for example `Landing / DirtyCheckout`), host (Admiral or a Harbor), the code site and the Armada build.
+- **How** it failed: the exception, exit code, failing command and its output, or the git operation and its error.
+- **Status** before and after, and the status timeline.
+- **Why**: findings from a versioned rule catalog, each with a rule id, confidence and the evidence it rests on, and a triage verdict: your configuration (`UserConfig`), the mission brief (`MissionBrief`), a `Transient` condition, an `ArmadaDefect`, or something `External`.
+- **Conflicts**: the missions that landed on the target since this one started and touched the same files (found by commit trailer), the conflicted files and the directories they cluster in.
+- **Configuration** in effect, with where each value came from, and what would have prevented the failure.
+- **What Armada could change**, with source pointers.
+- **Recovery paths**, ranked, each step with its MCP call, REST request and CLI command.
+- Bounded, redacted **evidence**: agent output, the diff, the mission log tail, check output, `git status` of the worktree and target, the target commits and the events.
+
+**Three ways to get the FIX THIS brief** (paste it into any coding agent and say "FIX THIS"):
+
+1. The dashboard black box panel on the mission page: **Copy FIX THIS**.
+2. The terminal: `armada blackbox show <id> --brief | pbcopy` once the Helm black box commands land; today, the REST route: `curl -s -H "Authorization: Bearer $TOKEN" http://localhost:7890/api/v1/missions/<id>/blackbox/brief | pbcopy`.
+3. MCP: `get_blackbox {"missionId": "<id>"}` for the 2 KB summary, or `{"missionId": "<id>", "format": "brief"}` for the brief.
+
+The panel shows the same sections as the brief with an audience toggle (user, agent, maintainer), **Copy FIX THIS**, downloads (`.md`, `.zip`, JSON), recovery buttons that dry run and then confirm, Resolve, Pin, notes, links to the conflicting missions and similar failures, and **Ask Armada about this failure**. The **Black Box** page under Operations lists every entry with filters, fingerprints, hotspots and retention (with a garbage collection preview), and server settings choose the storage target and retention. The VS Code extension (`src/Armada.VSCode`) and the mobile app show the same entry. The TUI has a Failure tab on mission and voyage screens and a Black Box screen, and the Helm CLI has `armada blackbox` commands (for example `armada blackbox show <id> --brief | pbcopy`).
+
+
+Over MCP, an agent can take "Review the black box for mission msn_x and fix it" end to end: read the summary, read the sections and evidence it needs, dry run a recorded recovery path, confirm it with the token, and resolve the entry. It can only run actions recorded in the entry, each authorized as if you had called that tool, and anything that risks data loss needs an explicit acknowledgement.
+
+In Ask Armada, ask:
+
+```
+Show me the pertinent details from the black box for mission msn_x and give me your opinion
+on why it failed and what could have been done differently.
+```
+
+The captain reads the entry (read tools need no approval), answers with what happened, why, its opinion clearly labeled, and what you or Armada could change, and offers the recovery paths as confirm cards.
+
+**Storage and retention**
+
+| | Default | Options |
+|---|---|---|
+| Storage target | Database (BLOBs indexed by mission, voyage, vessel, captain and other ids; included in backups) | Disk, S3 and S3-compatible (AWS, Less3, MinIO), Azure Blob, Google Cloud Storage, CIFS, NFS; per-entry target, migration between targets, fallback to the database |
+| Retention | 180 days (`blackBox.retention.retentionDays`; 0 keeps forever), resolved entries 30 days, the latest entry of each mission kept | Per-vessel override, pinning, 1000 entries per vessel, 1 GB total, garbage collection every 60 minutes, manual GC, purge by filter (dry run first) |
+
+Everything is in [docs/BLACKBOX.md](docs/BLACKBOX.md) (user guide and developer contract) and [docs/BLACKBOX_SCHEMA.md](docs/BLACKBOX_SCHEMA.md) (the record schema for consumers).
 
 ---
 
@@ -1002,6 +1057,16 @@ armada captain stop-all
 # Retry a failed mission, or every failed mission in a voyage
 armada mission retry msn_abc123
 armada voyage retry "API Hardening"
+
+# Read a failure's black box, copy its FIX THIS brief for an agent, and dry run a recovery path
+armada mission failure msn_abc123
+armada blackbox show msn_abc123 --brief | pbcopy
+armada blackbox recover bbx_abc123 <pathId>            # add --execute to run it
+
+# Before dispatch: preview a brief's overlaps on a vessel and lint it; after a failure: compare attempts and see the cascade
+armada vessel overlap-preview my-repo --brief-file brief.md
+armada blackbox diff bbx_abc123 bbx_def456
+armada voyage cascade vyg_abc123
 ```
 
 `--runtime` (on `captain add`, `captain update`, and `config set DefaultRuntime`) also accepts the enum names such as `ClaudeCode`; an unknown value is an error. An `api` captain needs an inference endpoint, chosen with `--model-endpoint <endpoint-id>`, in the dashboard or TUI, or through the REST and MCP captain APIs. Mux captains require a named endpoint, validated through `mux probe --require-tools`, and can target a non-default Mux config directory with `--mux-config-dir`. See [docs/CAPTAINS.md](docs/CAPTAINS.md) for what each runtime supports.
@@ -1108,7 +1173,7 @@ When the Admiral listens on another address (for example in Docker), MCP require
 
 You do not need any of this for Ask Armada or missions: Ask captains get a thread-scoped token for every turn, and every mission captain gets a mission-scoped MCP token (`mcp.missionScopedTokens`, default true) bound to the mission's tenant, owner, and captain, valid only while the mission is assigned or in progress (Gemini and Cursor captains get it only with `isolateCaptainLaunch`). See [docs/MCP_API.md](docs/MCP_API.md#mission-scoped-captain-calls).
 
-MCP clients can call `status`, `dispatch`, `enumerate`, `voyage_status`, `cancel_voyage`, and tools for checks, releases, objectives, deployments, runbooks, playbooks, personas, pipelines, prompt templates, memory, model endpoints, Harbors, vessel import (`discover_vessels`, `import_vessels`), fleet actions (`run_fleet_action`, `fleet_action_run_status`), and vessel health (`vessel_health`, `evaluate_vessel_health`). A failed call returns `isError` with a machine-readable `ErrorCode` (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`, `Failed`); branch on the code, not the text. Tool calls are rate limited per client (`mcp.toolCallsPerSecond`, default 100). See [docs/MCP_API.md](docs/MCP_API.md).
+MCP clients can call `status`, `dispatch`, `enumerate`, `voyage_status`, `cancel_voyage`, the black box tools (`get_blackbox`, `read_blackbox_section`, `read_blackbox_object`, `list_blackbox_entries`, `search_blackbox`, `run_blackbox_recovery`, `apply_blackbox_recommendation`, `resolve_blackbox`, `annotate_blackbox` and the retention and storage tools, plus the `armada://blackbox/...` resources and the `review_blackbox` and `explain_blackbox` prompts), and tools for checks, releases, objectives, deployments, runbooks, playbooks, personas, pipelines, prompt templates, memory, model endpoints, Harbors, vessel import (`discover_vessels`, `import_vessels`), fleet actions (`run_fleet_action`, `fleet_action_run_status`), and vessel health (`vessel_health`, `evaluate_vessel_health`). A failed call returns `isError` with a machine-readable `ErrorCode` (`NotFound`, `InvalidArgument`, `Conflict`, `Forbidden`, `Unavailable`, `Failed`); branch on the code, not the text. Tool calls are rate limited per client (`mcp.toolCallsPerSecond`, default 100). See [docs/MCP_API.md](docs/MCP_API.md).
 
 ### Papercuts
 
@@ -1227,6 +1292,7 @@ ID prefixes include `flt_` (fleet), `vsl_` (vessel), `cpt_` (captain), `msn_` (m
 | Runtimes and captains | [docs/CAPTAINS.md](docs/CAPTAINS.md), [docs/CAPTAIN_ROUTING.md](docs/CAPTAIN_ROUTING.md), [docs/SCHEDULING.md](docs/SCHEDULING.md) |
 | Pipelines and personas | [docs/PIPELINES.md](docs/PIPELINES.md), [docs/PERSONAS_GUIDE.md](docs/PERSONAS_GUIDE.md), [docs/PERSONAS.md](docs/PERSONAS.md) |
 | Landing and the merge queue | [docs/MERGING.md](docs/MERGING.md) |
+| Why a mission failed (black box) | [docs/BLACKBOX.md](docs/BLACKBOX.md), [docs/BLACKBOX_SCHEMA.md](docs/BLACKBOX_SCHEMA.md) |
 | Many repositories | [docs/FLEET_ACTIONS.md](docs/FLEET_ACTIONS.md), [docs/VESSEL_HEALTH.md](docs/VESSEL_HEALTH.md) |
 | Delivery workflows | [docs/DELIVERY_OPERATIONS.md](docs/DELIVERY_OPERATIONS.md) |
 | Terminal UI and mobile | [docs/TUI.md](docs/TUI.md), [docs/MOBILE.md](docs/MOBILE.md) |

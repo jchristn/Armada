@@ -5,6 +5,7 @@ namespace Armada.Core.Services
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -138,16 +139,22 @@ namespace Armada.Core.Services
                     }
                 }
 
+                MissionStatusEnum missionStatusBefore = mission.Status;
                 mission.Status = MissionStatusEnum.Cancelled;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                await _Admiral.BlackBox.RecordMissionFailureAsync(mission, missionStatusBefore, BlackBoxStepEnum.OperatorTransition,
+                    context => context.Reason = "The fleet action run that dispatched voyage " + voyageId + " was cancelled.", token).ConfigureAwait(false);
             }
 
+            VoyageStatusEnum voyageStatusBefore = voyage.Status;
             voyage.Status = VoyageStatusEnum.Cancelled;
             voyage.CompletedUtc = DateTime.UtcNow;
             voyage.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+            await _Admiral.BlackBox.RecordVoyageFailureAsync(voyage, voyageStatusBefore, BlackBoxStepEnum.Cancelled,
+                "The fleet action run that dispatched this voyage was cancelled.", null, token).ConfigureAwait(false);
         }
 
         #endregion

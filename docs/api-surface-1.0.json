@@ -737,6 +737,710 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxEntrySummary>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List black box entries",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/backfill",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Execute",
+      "requestType": "BlackBoxBackfillRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxBackfillResult",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Backfill black box entries",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/bundle",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxBundleRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxBundleResult",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Build a maintainer bundle",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/delete",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Delete",
+      "requestType": "BlackBoxDeleteManyRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BlackBoxDeleteResult",
+        "400": "ApiErrorResponse",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Delete black box entries",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxEnumerateRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxEntrySummary>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate black box entries",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/fingerprints/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxFingerprintEnumerateRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxFingerprintSummary>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate black box fingerprints",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/fingerprints/{fingerprint}/trend",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxFingerprintTrend",
+        "400": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get the trend of a black box failure mode",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/gc",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Execute",
+      "requestType": "BlackBoxGcRunRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxGcReport",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Run black box garbage collection now",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/hotspots/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxHotspotEnumerateRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxHotspot>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate black box hotspots",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/purge",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Delete",
+      "requestType": "BlackBoxPurgeRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxPurgeResult",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Purge black box entries by filter",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/recovery-stats",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxRecoveryStat>"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get black box recovery statistics",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/recovery-stats/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxRecoveryStatsRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxRecoveryStat>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate black box recovery statistics",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/retention",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxRetentionStatus",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get black box retention status",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/search",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxSearchRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxEntrySummary>",
+        "400": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Search black box entries",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/storage",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxStorageStatus",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get black box storage status",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/storage/migrate",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Execute",
+      "requestType": "BlackBoxStorageMigrationRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BlackBoxStorageMigrationJob",
+        "400": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Start a black box storage migration",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/storage/migrations/{id}",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxStorageMigrationJob",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get a black box storage migration job",
+      "experimental": false
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v1/blackbox/{id}",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Delete",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxDeleteResult",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Delete a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/brief",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "string",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get the FIX THIS brief of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/diff/{otherId}",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxAttemptDiff",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Diff two black box entries",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/download",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "string",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Download a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/export-fixture",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxFixtureExportRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxFixture",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Export a black box entry as a regression fixture",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/nearby-successes",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxNearbySuccess>",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List an entry's nearby successes",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/nearby-successes/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxNearbySuccess>",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate an entry's nearby successes",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/notes",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxNote>",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List the notes on a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/notes",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Create",
+      "requestType": "BlackBoxNoteAddRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BlackBoxNote",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Add a note to a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/notes/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxNote>",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate the notes on a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/objects",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxObjectSummary>",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List the objects of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/objects/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxObjectSummary>",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate the objects of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/objects/{name}",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "string",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "410": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Read a black box object",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/pin",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Update",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Pin a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/reanalyze",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Execute",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Re-run enrichment and analysis of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/recommendations/{recommendationId}/apply",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Execute",
+      "requestType": "BlackBoxRecommendationApplyRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxRecommendationApplyResult",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Apply a configuration recommendation of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/recovery/{pathId}",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Execute",
+      "requestType": "BlackBoxRecoveryRunRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxRecoveryRunResult",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Run a recovery path of a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/resolve",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Update",
+      "requestType": "BlackBoxResolveRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Resolve a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/sections/{section}",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxSectionResult",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get one section of a black box record",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/blackbox/{id}/timeline",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxTimelinePage",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get an entry's combined timeline",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/timeline/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxTimelinePage",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate an entry's combined timeline",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/blackbox/{id}/unpin",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Update",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Unpin a black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/captains",
       "auth": "Authenticated",
       "resource": "Captain:Read",
@@ -3080,6 +3784,24 @@
       "experimental": false
     },
     {
+      "method": "POST",
+      "route": "/api/v1/missions/lint-brief",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BriefLintRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BriefLintResult",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Lint a mission brief",
+      "experimental": false
+    },
+    {
       "method": "GET",
       "route": "/api/v1/missions/summaries",
       "auth": "Authenticated",
@@ -3160,6 +3882,76 @@
         "Missions"
       ],
       "summary": "Update a mission",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/missions/{id}/blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get a mission's current black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/missions/{id}/blackbox/brief",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "string",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get the FIX THIS brief of a mission's current black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/missions/{id}/blackbox/entries",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxEntrySummary>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List a mission's black box entries",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/missions/{id}/blackbox/entries/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxEntrySummary>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate a mission's black box entries",
       "experimental": false
     },
     {
@@ -6496,6 +7288,42 @@
       "experimental": false
     },
     {
+      "method": "GET",
+      "route": "/api/v1/vessels/{id}/blackbox-doctor",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxDoctorPage",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get the vessel's black box configuration doctor",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/vessels/{id}/blackbox-doctor/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxDoctorRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxDoctorPage",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate the vessel's black box configuration doctor",
+      "experimental": false
+    },
+    {
       "method": "POST",
       "route": "/api/v1/vessels/{id}/branches/enumerate",
       "auth": "Authenticated",
@@ -6819,6 +7647,24 @@
       "experimental": false
     },
     {
+      "method": "POST",
+      "route": "/api/v1/vessels/{id}/overlap-preview",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "MissionOverlapPreviewRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "MissionOverlapPreview",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Preview a mission's overlaps",
+      "experimental": false
+    },
+    {
       "method": "GET",
       "route": "/api/v1/vessels/{id}/readiness",
       "auth": "Authenticated",
@@ -6834,6 +7680,41 @@
         "Vessels"
       ],
       "summary": "Get vessel readiness",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/vessels/{id}/reservations",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "VesselReservationPage",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "List vessel reservations",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/vessels/{id}/reservations/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "VesselReservationPage",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate vessel reservations",
       "experimental": false
     },
     {
@@ -6952,6 +7833,59 @@
         "Voyages"
       ],
       "summary": "Get a voyage",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/voyages/{id}/blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxEntry",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get a voyage's current black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/voyages/{id}/blackbox/brief",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "string",
+        "400": "ApiErrorResponse",
+        "404": "ApiErrorResponse"
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get the FIX THIS brief of a voyage's current black box entry",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/voyages/{id}/blackbox/cascade",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BlackBoxCascadeGraph",
+        "404": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Get a voyage's black box cascade graph",
       "experimental": false
     },
     {
@@ -7488,6 +8422,11 @@
           "required": true
         },
         {
+          "name": "serializeOverlappingMissions",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "name": "styleGuide",
           "type": "string",
           "required": false
@@ -7504,6 +8443,35 @@
         }
       ],
       "description": "Register a new vessel (git repository) in a fleet",
+      "experimental": false
+    },
+    {
+      "name": "annotate_blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Create",
+      "arguments": [
+        {
+          "name": "body",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Add a note to a black box entry (body 1-8000 characters; recorded with authorKind Agent, or AskArmada from an Ask Armada conversation). Annotate what you found and what you did, so the next reader does not repeat it. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
       "experimental": false
     },
     {
@@ -7538,6 +8506,45 @@
         }
       ],
       "description": "Apply a refinement summary back to the linked backlog item and optionally promote its backlog state. Ends the session and releases its captain unless endSession is false.",
+      "experimental": false
+    },
+    {
+      "name": "apply_blackbox_recommendation",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Execute",
+      "arguments": [
+        {
+          "name": "confirmToken",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "recommendationId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Apply one configuration recommendation recorded in a black box entry's analysis (recommendationId) to prevent the failure next time; it runs only the recorded applyAction (for example an update_vessel patch), authorized as that tool. Same flow as run_blackbox_recovery: dry run first (dryRun defaults to true) to get the action and a confirmToken, tell the user what will change, then apply with dryRun false and the token. Read the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
       "experimental": false
     },
     {
@@ -9263,6 +10270,20 @@
       "experimental": false
     },
     {
+      "name": "delete_blackbox_entries",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Delete",
+      "arguments": [
+        {
+          "name": "entryIds",
+          "type": "array<string>",
+          "required": true
+        }
+      ],
+      "description": "Delete black box entries by id (entryIds, at most 1000; more is InvalidArgument with Code CollectionLimitExceeded before anything is deleted). Ids that are missing or not visible are skipped. Tenant admins and global admins only. This cannot be undone: pin entries you want to keep instead.",
+      "experimental": false
+    },
+    {
       "name": "delete_captain",
       "auth": "TenantAdmin",
       "resource": "Captain:Delete",
@@ -9651,6 +10672,25 @@
       "experimental": false
     },
     {
+      "name": "diff_blackbox_entries",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "otherEntryId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Compare two black box entries (two attempts of a mission, or any two you can see): what differs in captain, runtime, model, persona, status, phase and step, Armada version, failure kind and fingerprint, base commit and target tips, every effective configuration value, and the files each mission changed. At most 100 differences and 200 files per side.",
+      "experimental": false
+    },
+    {
       "name": "discover_vessels",
       "auth": "TenantAdmin",
       "resource": "VesselImport:Execute",
@@ -9985,7 +11025,7 @@
           "required": false
         }
       ],
-      "description": "Find and browse entities with paginated, filtered, sorted access to: inbox (the needs-you items, most urgent first), cli_permission_rules, cli_permission_requests, objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, and vessel_health. Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
+      "description": "Find and browse entities with paginated, filtered, sorted access to: inbox (the needs-you items, most urgent first), cli_permission_rules, cli_permission_requests, objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, and blackbox (black box entry summaries, newest first). Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
       "experimental": false
     },
     {
@@ -10048,6 +11088,35 @@
         }
       ],
       "description": "Start a background vessel health evaluation job for specific vessels, a fleet, or every active vessel. Returns jobId; alreadyRunning is true (and nothing starts) when an evaluation is already running for the tenant. Poll the job with enumerate entityType jobs or GET /api/v1/jobs/{id}. Requires tenant admin.",
+      "experimental": false
+    },
+    {
+      "name": "export_blackbox_fixture",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Export a black box entry as a sanitized regression fixture (record without secrets, tenant and user ids, host paths or repository URL, plus the rule ids and triage the advisor produces now), to add under src/Test.Shared/Fixtures/BlackBox with a test. Global admins only. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
       "experimental": false
     },
     {
@@ -10151,6 +11220,247 @@
         }
       ],
       "description": "Get one fixture battery run visible to the caller: its provenance (seed, sampling settings, battery version, configuration revision) and outcome counts. The per-task results are not embedded: page them with list_battery_results.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "audience",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "redactHosts",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Get the black box of a failed mission or voyage: start here when asked why something failed. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry. format summary (default, about 2 KB) returns where it failed (phase, step, host, source file and method), how (mechanism), status before and after, why (top findings), the triage verdict and confidence, and the top recovery paths; brief returns the Markdown FIX THIS brief for an audience (agent, user or maintainer); json returns the full record. Then read only the sections the question needs with read_blackbox_section and page evidence with read_blackbox_object. NotFound (Code BlackBoxNotFound) when there is no entry.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox_bundle",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fingerprint",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fleetId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "isCurrent",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "max",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "phase",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "redactHosts",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "step",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "subjectType",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "triage",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Build a maintainer bundle: up to max (1-50, default 50) of the newest matching black box entries grouped by fingerprint, as one Markdown document of maintainer briefs (format Markdown, default) or JSON summaries. Use it to rank Armada improvements and write them as mission briefs on the Armada vessel. redactHosts strips absolute paths, host names and user names before sharing outside the installation.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox_fingerprint_trend",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "fingerprint",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get the trend of one black box failure mode: occurrences of the fingerprint per Armada version (ordered by first sighting, with open and ArmadaFixed counts; at most 1000 entries and 100 versions), to see whether a release fixed it.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox_recovery_stats",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "ruleId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Get one page of black box recovery path statistics over the confirmed recovery runs you can see: per rule and path, runs, succeeded (the mission completed afterwards), failed, pending, expired and successRate; most runs first. The advisor breaks ties between equally weighted recovery paths with these rates.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox_retention",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Read",
+      "arguments": [],
+      "description": "Get the black box retention status: the policy, entry counts (total, pinned, deleting, expired), bytes, the next garbage collection run and the last run's report. Tenant admins see their tenant; global admins every tenant.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox_storage",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Read",
+      "arguments": [],
+      "description": "Get the black box storage status: the configured target, its health, whether writes fall back to the database, and bytes per target. Global admins only.",
+      "experimental": false
+    },
+    {
+      "name": "get_blackbox_timeline",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "description": "Get one page of a black box entry's combined timeline: the entry (captured, enriched, analyzed, resolved) and its notes, the mission or voyage and their events, the dock, the merge queue entry, the captain's events in the mission's window and the Harbor link events, in one order (oldest first unless order is CreatedDescending). Each source is capped at 200 items and the timeline at 1000; sources and truncated say where a cut applied.",
       "experimental": false
     },
     {
@@ -10596,6 +11906,49 @@
       "experimental": false
     },
     {
+      "name": "get_vessel_blackbox_doctor",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "windowDays",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "description": "Get a vessel's black box configuration doctor: the configuration recommendations that recur across its black box entries in a window (windowDays 1 to 365, default 30), one row per rule and setting with count, first and last seen, the suggested value and the newest entry as the example (apply it with apply_blackbox_recommendation). Most frequent first, paged; the newest 200 entries are read (entriesScanned, scanTruncated).",
+      "experimental": false
+    },
+    {
+      "name": "get_voyage_blackbox_cascade",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get a voyage's black box cascade graph: its missions (status, failure kind, current black box entry; at most 200) and the edges between them (DependsOn, CancelledBecause, BlockedBy, Sibling), with the cascade root (the earliest failure with no failed dependency) and its entry. Use it to see which failure took the others down.",
+      "experimental": false
+    },
+    {
       "name": "get_workflow_profile",
       "auth": "Authenticated",
       "resource": "WorkflowProfile:Read",
@@ -10674,6 +12027,35 @@
         }
       ],
       "description": "Import candidates from a discover_vessels batch as vessels. Pass the candidate paths to import, or allNew=true to import every candidate with status New. Each vessel gets RepoUrl = origin URL (or the local path), WorkingDirectory = the discovered path, and no LocalPath. Paths that already have a vessel are skipped. Large selections run as a background job (returns jobId; poll the batch with enumerate entityType vessel_import_batch or get the job). Requires tenant admin.",
+      "experimental": false
+    },
+    {
+      "name": "lint_mission_brief",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "dependsOnMissionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Lint a mission brief before dispatch: BRIEF-DEP-001 dependency language (\"after mission 2 lands\", \"depends on\", \"mission N\") without dependsOnMissionId, BRIEF-NOOP-001 a verification-only brief that is likely to fail as NoOp, BRIEF-PATH-001 a path whose top-level directory the vessel does not have (needs vesselId), BRIEF-PATH-002 a host or parent-relative path. At most 50 findings with a suggestion each. Warnings only; dispatch runs the same lint and never refuses a brief.",
       "experimental": false
     },
     {
@@ -11117,6 +12499,310 @@
       "experimental": false
     },
     {
+      "name": "list_blackbox_entries",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fingerprint",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fleetId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "isCurrent",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "phase",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "step",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "subjectType",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "triage",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of black box entries visible to the caller, newest first, filtered by vesselId, voyageId, missionId, captainId, fleetId, phase, step, kind, triage, resolution, state, fingerprint (compare failures of the same mode), pinned, isCurrent, path (any file role) and createdAfter/createdBefore. Returns an enumeration result of entry summaries.",
+      "experimental": false
+    },
+    {
+      "name": "list_blackbox_fingerprints",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of black box failure modes (entries grouped by fingerprint) with count, open count, first and last seen, the newest entry and its phase, step and kind. Filter by vesselId, resolution and createdAfter/createdBefore. Compare one mode's entries with list_blackbox_entries {fingerprint}.",
+      "experimental": false
+    },
+    {
+      "name": "list_blackbox_hotspots",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "role",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of black box hotspots: directories that recur in failures (conflicted, dirty, out of scope), most entries first, with file and entry counts and when last seen. Filter by vesselId, role and createdAfter/createdBefore.",
+      "experimental": false
+    },
+    {
+      "name": "list_blackbox_nearby_successes",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "description": "List one page of the successful landings near a failure (success flight recorder): same vessel, within blackBox.nearbySuccessWindowHours of the failure, that changed files the failure also touched; most overlap first, then closest in time. Each has the mission, landed time, hours from the failure, base and landed commits, run time and the overlapping files.",
+      "experimental": false
+    },
+    {
+      "name": "list_blackbox_notes",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of the notes on a black box entry (operator, agent, Ask Armada and system annotations, including what every recovery run did), newest first. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
+      "name": "list_blackbox_objects",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of a black box entry's objects (record.json, the briefs and evidence such as evidence/git-status.txt or evidence/diff.patch) with content type, sizes and SHA-256. Read one with read_blackbox_object. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
       "name": "list_failure_cause_rules",
       "auth": "Authenticated",
       "resource": "FailureCauseRule:Read",
@@ -11434,6 +13120,30 @@
       "experimental": false
     },
     {
+      "name": "list_vessel_reservations",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "List one page of a vessel's soft directory reservations: active missions whose scoped files sit in a directory the black box marks as a conflict hotspot (threshold blackBox.hotspotReservationThreshold; 0 turns reservations off). A mission dispatched into a reserved directory is warned, or chained after the reserving mission when the vessel has serializeOverlappingMissions. Ordered by directory then mission id; returns the page shape plus threshold, hotDirectoryCount, activeMissionsScanned and scanTruncated.",
+      "experimental": false
+    },
+    {
       "name": "list_voyage_progress",
       "auth": "Authenticated",
       "resource": "Voyage:Read",
@@ -11487,7 +13197,7 @@
           "required": true
         }
       ],
-      "description": "Get status of a specific mission",
+      "description": "Get status of a specific mission. LastBlackBoxEntryId names its current black box entry when it failed (read it with get_blackbox).",
       "experimental": false
     },
     {
@@ -11535,6 +13245,69 @@
       "experimental": false
     },
     {
+      "name": "pin_blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Update",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Pin (pinned true, the default) or unpin (pinned false) a black box entry. Garbage collection never deletes a pinned entry. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
+      "name": "preview_mission_overlap",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "dependsOnMissionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "excludeMissionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Before dispatching a mission, preview what it would overlap on a vessel: its likely files (scoped-files directive plus repository paths in the brief that exist in the vessel), the active missions whose files it shares, black box conflict hotspots and directories reserved by active missions, strongest first (at most 50), the mission dispatch would chain it after when the vessel has serializeOverlappingMissions (suggestedDependsOnMissionId), and the brief lint findings. Read-only: nothing is dispatched. dispatch and create_mission return the same warnings as overlapWarnings.",
+      "experimental": false
+    },
+    {
       "name": "preview_workflow_profile",
       "auth": "Authenticated",
       "resource": "WorkflowProfile:Read",
@@ -11573,6 +13346,120 @@
       "resource": "MergeQueue:Execute",
       "arguments": [],
       "description": "Process the merge queue: creates integration branches, runs tests, and lands passing batches",
+      "experimental": false
+    },
+    {
+      "name": "purge_blackbox",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Delete",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "fingerprint",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fleetId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "includePinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "isCurrent",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "maxEntries",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "phase",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "step",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "subjectType",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "triage",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Purge black box entries by filter (the list_blackbox_entries filters), oldest first, up to maxEntries (1-100000, default 10000). dryRun defaults to true and reports what would go (matched, a sample of ids, bytes) without deleting; pinned entries are skipped unless includePinned. Run the dry run, show the user the counts, and only then purge with dryRun false. Global admins only.",
       "experimental": false
     },
     {
@@ -11662,6 +13549,98 @@
         }
       ],
       "description": "Permanently delete a voyage and all its missions from the database. This cannot be undone.",
+      "experimental": false
+    },
+    {
+      "name": "read_blackbox_object",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "length",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Read a chunk of one black box object without flooding context: at most 64 KB per call (length 1 to 65536, default 65536) from offset (default 0). Returns content (UTF-8 text for text objects, base64 otherwise, cut at a character boundary), totalBytes, and nextOffset while more remains; call again with offset = nextOffset to page through a large log. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
+      "name": "read_blackbox_section",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "section",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Read one section of a black box record: Subject, Status, Site, Mechanism, Classification, Workspace (dirty paths, checkout), Conflict (conflicted files and the missions that landed them), Scope, Configuration (each setting and where it came from), Attempts, Evidence (the object index), Analysis (findings, triage, recovery paths, recommendations), Related, Voyage, Redaction or Truncation. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
+      "name": "reanalyze_blackbox",
+      "auth": "TenantAdmin",
+      "resource": "BlackBox:Execute",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Re-run enrichment and analysis of a black box entry with the current rules (rewrites record.json and the briefs). Tenant admins and global admins only. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
       "experimental": false
     },
     {
@@ -11838,6 +13817,45 @@
       "experimental": false
     },
     {
+      "name": "resolve_blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Update",
+      "arguments": [
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "link",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Set a black box entry's resolution (Open, Resolved, Duplicate, WontFix or ArmadaFixed) with an optional note (up to 2000 characters) and link (for example the landed commit or a pull request, up to 1000). Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
       "name": "resolve_workflow_profile",
       "auth": "Authenticated",
       "resource": "WorkflowProfile:Read",
@@ -12000,6 +14018,64 @@
       "experimental": false
     },
     {
+      "name": "run_blackbox_gc",
+      "auth": "AdminOnly",
+      "resource": "BlackBox:Execute",
+      "arguments": [
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "description": "Run one black box garbage collection pass now (expiry, quotas, cascades, retried deletes, orphan sweep) and return its report; dryRun true lists the candidates without deleting. Global admins only.",
+      "experimental": false
+    },
+    {
+      "name": "run_blackbox_recovery",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Execute",
+      "arguments": [
+        {
+          "name": "acknowledgeDataLoss",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "confirmToken",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "dryRun",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "entryId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pathId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Run one recovery path recorded in a black box entry's analysis (pathId, for example bbx-land-001.stash-retry). It never takes a free-form command: only the steps recorded in the entry run, each authorized as if you had called that tool directly. Always dry run first (dryRun defaults to true): the dry run returns the plan and a confirmToken (10 minutes, bound to the entry, the path and the mission's current version, so a mission that changed must be re-checked). Tell the user what will happen, then run with dryRun false and that confirmToken. A path marked dataLossRisk (deleting a branch, forcing a dock reclaim) is refused without acknowledgeDataLoss true; confirm with the user before setting it. Every dry run and run is annotated on the entry (authorKind Agent). A token is single use; a missing, expired, used or foreign token, a mission that changed, or a re-analyzed plan is Conflict with Code BlackBoxConfirmationRequired: dry run again. A step whose precondition is not met (restart_mission on a mission that is already Pending, retry_landing on one that is not LandingFailed, a deleted dock) is refused: refused true and unmetPreconditions name it, a refused dry run has no confirmToken and a refused confirmed run runs nothing. Read the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
       "name": "run_check",
       "auth": "TenantAdmin",
       "resource": "CheckRun:Execute",
@@ -12155,6 +14231,125 @@
         }
       ],
       "description": "Start a fleet action run over vessels. Pass actionId to run a saved action, or the inline definition fields (name, kind, commandText or promptTemplate) for an ad hoc run. Every vessel must be in the caller's tenant or the whole request is rejected. Returns the run id; poll fleet_action_run_status.",
+      "experimental": false
+    },
+    {
+      "name": "search_blackbox",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fingerprint",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fleetId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "isCurrent",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "phase",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "step",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "subjectType",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "triage",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Full-text search over the reason, summary and notes of the black box entries visible to the caller (query 1 to 200 characters), with the same filters and paging as list_blackbox_entries. Returns an enumeration result of entry summaries.",
       "experimental": false
     },
     {
@@ -13750,6 +15945,11 @@
           "required": false
         },
         {
+          "name": "landingMode",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "lintCommand",
           "type": "string",
           "required": false
@@ -13772,6 +15972,11 @@
         {
           "name": "repoUrl",
           "type": "string",
+          "required": false
+        },
+        {
+          "name": "serializeOverlappingMissions",
+          "type": "boolean",
           "required": false
         },
         {
@@ -14178,7 +16383,7 @@
           "required": true
         }
       ],
-      "description": "Get status of a specific voyage: the voyage with its mission counts (TotalMissions, MissionCountsByStatus). Missions are never embedded; read them one page at a time with enumerate (entityType missions, voyageId).",
+      "description": "Get status of a specific voyage: the voyage with its mission counts (TotalMissions, MissionCountsByStatus) and LastBlackBoxEntryId (its current black box entry, read it with get_blackbox). Missions are never embedded; read them one page at a time with enumerate (entityType missions, voyageId).",
       "experimental": false
     }
   ],
@@ -14229,6 +16434,9 @@
     ],
     "commands": [
       "backup",
+      "blackbox.brief",
+      "blackbox.get",
+      "blackbox.list",
       "cancel_merge",
       "cancel_mission",
       "cancel_voyage",
@@ -14409,6 +16617,131 @@
           "trackedWorkId",
           "snapshot",
           "trackedWork"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.analyzed",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxAnalyzedPayload",
+        "fields": [
+          "entryId",
+          "missionId",
+          "voyageId",
+          "state",
+          "triage",
+          "rulesVersion"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.capture_failed",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxCaptureFailedPayload",
+        "fields": [
+          "missionId",
+          "voyageId",
+          "step",
+          "error"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.captured",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxCapturedPayload",
+        "fields": [
+          "entryId",
+          "missionId",
+          "voyageId",
+          "vesselId",
+          "phase",
+          "step",
+          "kind",
+          "attempt",
+          "captureMode"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.deleted",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxDeletedPayload",
+        "fields": [
+          "entryId",
+          "missionId",
+          "voyageId",
+          "reason"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.gc_completed",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxGcReport",
+        "fields": [
+          "dryRun",
+          "startedUtc",
+          "finishedUtc",
+          "durationMs",
+          "expired",
+          "evicted",
+          "cascaded",
+          "retriedDeletes",
+          "orphansRemoved",
+          "objectsMissing",
+          "bytesFreed",
+          "failures",
+          "candidateEntryIds",
+          "errors"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.recovery_run",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxRecoveryRunPayload",
+        "fields": [
+          "entryId",
+          "pathId",
+          "recommendationId",
+          "dryRun",
+          "succeeded",
+          "stepsRun",
+          "stepsFailed",
+          "userId"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.resolved",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxResolvedPayload",
+        "fields": [
+          "entryId",
+          "missionId",
+          "voyageId",
+          "resolution"
+        ],
+        "generic": false
+      },
+      {
+        "type": "blackbox.storage_fallback",
+        "scope": "tenant",
+        "hasMessage": true,
+        "payloadType": "BlackBoxStorageFallbackPayload",
+        "fields": [
+          "entryId",
+          "from",
+          "to",
+          "error"
         ],
         "generic": false
       },
@@ -16405,6 +18738,2284 @@
       ]
     },
     {
+      "command": "blackbox backfill",
+      "description": "Backfill entries for past failures",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "max",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "since",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox bundle",
+      "description": "Build the maintainer bundle (up to 50 entries by fingerprint)",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "before",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "captain",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "fingerprint",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "format",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "kind",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "max",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "output",
+          "short": "o",
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "phase",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "pinned",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "redact-hosts",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "resolution",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "since",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "step",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "triage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "voyage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox cascade",
+      "description": "Show a voyage's cascade graph (alias of voyage cascade)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "voyageId",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox cat",
+      "description": "Print an evidence object (or a byte range) to stdout",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "argument",
+          "name": "name",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "length",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int64?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "offset",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int64?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox delete",
+      "description": "Delete entries and their evidence",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "ids",
+          "short": null,
+          "valueKind": "vector",
+          "type": "String[]",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox diff",
+      "description": "Show what changed between two entries",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "argument",
+          "name": "otherId",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox download",
+      "description": "Download an entry as a .zip",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "output",
+          "short": "o",
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox export-fixture",
+      "description": "Export an entry as a sanitized regression fixture",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "name",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "output",
+          "short": "o",
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox gc",
+      "description": "Run garbage collection now (--dry-run reports what would go)",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "dry-run",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox list",
+      "description": "List black box entries, newest first",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "before",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "captain",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "fingerprint",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "kind",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "phase",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "pinned",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "resolution",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "since",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "step",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "triage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "voyage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox nearby",
+      "description": "List the successful landings near a failure that touched the same files",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox note",
+      "description": "Add a note to an entry",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "argument",
+          "name": "text",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox objects",
+      "description": "List an entry's evidence objects",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox pin",
+      "description": "Pin entries (kept by garbage collection)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "ids",
+          "short": null,
+          "valueKind": "vector",
+          "type": "String[]",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox purge",
+      "description": "Purge entries by filter (dry run unless --execute)",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "before",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "captain",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "execute",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "fingerprint",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "include-pinned",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "kind",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "max",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "phase",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "pinned",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "resolution",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "since",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "step",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "triage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "voyage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "yes",
+          "short": "y",
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox recover",
+      "description": "Run a recovery path (dry run unless --execute)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "argument",
+          "name": "pathId",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "acknowledge-data-loss",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "execute",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "yes",
+          "short": "y",
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox recovery-stats",
+      "description": "Show recovery path success rates",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "rule",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox resolve",
+      "description": "Resolve an entry",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "link",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "note",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "resolution",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox retention",
+      "description": "Show the retention policy, usage, and garbage collection runs",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox show",
+      "description": "Show the black box entry of a mission, voyage, or entry id",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "audience",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "brief",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "redact-hosts",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox storage migrate",
+      "description": "Migrate objects to another storage target",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "batch-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "delete-source",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "from",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "to",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox storage migration",
+      "description": "Show a storage migration job",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox storage status",
+      "description": "Show the storage target, health, and usage",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox timeline",
+      "description": "Show an entry's combined timeline (oldest first)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "newest-first",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox unpin",
+      "description": "Unpin entries",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "ids",
+          "short": null,
+          "valueKind": "vector",
+          "type": "String[]",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "captain add",
       "description": "Recruit a new captain",
       "parameters": [
@@ -18279,6 +22890,210 @@
       ]
     },
     {
+      "command": "mission failure",
+      "description": "Show the mission's black box entry (alias of blackbox show)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "audience",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "brief",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "redact-hosts",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "mission lint-brief",
+      "description": "Lint a mission brief (warnings only)",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "brief",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "brief-file",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "depends-on",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "title",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "voyage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "mission list",
       "description": "List missions",
       "parameters": [
@@ -19511,6 +24326,84 @@
       ]
     },
     {
+      "command": "vessel doctor",
+      "description": "List a vessel's recurring black box configuration recommendations",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "window-days",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "vessel history",
       "description": "Show a vessel's commit history or activity heatmap (accepts name or ID)",
       "parameters": [
@@ -19849,6 +24742,116 @@
       ]
     },
     {
+      "command": "vessel overlap-preview",
+      "description": "Preview a mission's overlaps and brief lint on a vessel (nothing is dispatched)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "brief",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "brief-file",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "depends-on",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "exclude-mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "title",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "vessel remove",
       "description": "Decommission a vessel (accepts name or ID)",
       "parameters": [
@@ -19919,12 +24922,230 @@
       ]
     },
     {
+      "command": "vessel reservations",
+      "description": "List a vessel's soft directory reservations",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "vessel update",
+      "description": "Update a vessel's settings (accepts name or ID)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "serialize-overlapping-missions",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "voyage cancel",
       "description": "Cancel a voyage",
       "parameters": [
         {
           "kind": "argument",
           "name": "voyage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "voyage cascade",
+      "description": "Show which failure in a voyage took the others down",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "voyageId",
           "short": null,
           "valueKind": "scalar",
           "type": "String",
@@ -20078,6 +25299,100 @@
           "short": "v",
           "valueKind": "scalar",
           "type": "String",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "voyage failure",
+      "description": "Show the voyage's black box entry (alias of blackbox show)",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "id",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "audience",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "brief",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "redact-hosts",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
           "required": false
         }
       ]
@@ -20508,6 +25823,419 @@
       "key": "autoMergePullRequests",
       "type": "bool",
       "default": "false",
+      "experimental": false
+    },
+    {
+      "key": "blackBox",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.captureTimeoutMs",
+      "type": "int",
+      "default": "2000",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.enabled",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.hotspotReservationThreshold",
+      "type": "int",
+      "default": "3",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.insightIntervalSeconds",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.nearbySuccessWindowHours",
+      "type": "int",
+      "default": "24",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.deleteWithMission",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.deleteWithVessel",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.gcBatchSize",
+      "type": "int",
+      "default": "200",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.gcIntervalMinutes",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.keepLatestPerMission",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.maxEntriesPerVessel",
+      "type": "int",
+      "default": "1000",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.maxTotalBytes",
+      "type": "long",
+      "default": "1073741824",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.orphanGraceHours",
+      "type": "int",
+      "default": "24",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.resolvedRetentionDays",
+      "type": "int",
+      "default": "30",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.retention.retentionDays",
+      "type": "int",
+      "default": "180",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.azureBlob",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.azureBlob.accessKey",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.azureBlob.accountName",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.azureBlob.connectionString",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.azureBlob.container",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.azureBlob.endpoint",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.domain",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.hostname",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.password",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.port",
+      "type": "int",
+      "default": "445",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.preferEncryption",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.share",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.cifs.username",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.compress",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.disk",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.disk.directory",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.fallbackToDatabase",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.googleCloud",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.googleCloud.bucket",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.googleCloud.credentialsPath",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.googleCloud.endpoint",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.googleCloud.projectId",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.keyPrefix",
+      "type": "string",
+      "default": "\"armada/blackbox\"",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.maxEntryBytes",
+      "type": "int",
+      "default": "8388608",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.maxEvidenceObjectBytes",
+      "type": "int",
+      "default": "1048576",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.exportPath",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.groupId",
+      "type": "int",
+      "default": "0",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.hostname",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.mountPort",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.port",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.userId",
+      "type": "int",
+      "default": "0",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.nfs.version",
+      "type": "int",
+      "default": "3",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.accessKey",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.bucket",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.endpoint",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.region",
+      "type": "string",
+      "default": "\"us-east-1\"",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.secretKey",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.usePathStyle",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.s3.useSsl",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.storage.target",
+      "type": "enum BlackBoxStorageTargetEnum (Database|Disk|S3|AzureBlob|GoogleCloud|Cifs|Nfs|Unknown)",
+      "default": "\"Database\"",
+      "experimental": false,
+      "enumName": "BlackBoxStorageTargetEnum",
+      "enumValues": [
+        "Database",
+        "Disk",
+        "S3",
+        "AzureBlob",
+        "GoogleCloud",
+        "Cifs",
+        "Nfs",
+        "Unknown"
+      ]
+    },
+    {
+      "key": "blackBox.successRetentionDays",
+      "type": "int",
+      "default": "7",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.summaryEndpointId",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.sweeper",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "blackBox.sweeper.intervalSeconds",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.sweeper.maxEnrichmentAttempts",
+      "type": "int",
+      "default": "5",
+      "experimental": false
+    },
+    {
+      "key": "blackBox.sweeper.pageSize",
+      "type": "int",
+      "default": "100",
       "experimental": false
     },
     {

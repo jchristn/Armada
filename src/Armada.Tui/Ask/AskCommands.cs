@@ -93,6 +93,7 @@ namespace Armada.Tui.Ask
                 item.Command = command;
                 item.Title = String.IsNullOrEmpty(action.Title) ? (action.Name ?? "") : action.Title;
                 item.Description = action.Description ?? "";
+                if (AskQuickActions.FormFor(action) == AskQuickActionFormEnum.BlackBox) item.Usage = "<missionId> [question]";
                 item.Action = action;
                 items.Add(item);
             }

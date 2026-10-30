@@ -1,0 +1,5531 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:armada:blackbox:record-schema",
+  "$ref": "#/$defs/BlackBoxRecord",
+  "title": "Armada black box record (record.json)",
+  "description": "Schema of record.json, the versioned BlackBoxRecord of a black box entry, plus the entry, summary, object, chunk, manifest, digest, note and event payload shapes in $defs. Generated from the C# models by BlackBoxSchemaGenerator; see docs/BLACKBOX_SCHEMA.md. Readers ignore unknown properties and read unknown enum values as Unknown.",
+  "x-armada-schemaVersion": 1,
+  "$defs": {
+    "BlackBoxAction": {
+      "title": "BlackBoxAction",
+      "description": "A machine-readable action: an MCP tool name and its arguments.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "tool": {
+          "description": "MCP tool name (for example retry_landing).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "arguments": {
+          "description": "Tool arguments as text; when the action runs, true, false and whole numbers become JSON booleans and numbers.",
+          "type": [
+            "object"
+          ],
+          "additionalProperties": {
+            "type": [
+              "string"
+            ]
+          },
+          "maxProperties": 32
+        }
+      },
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    "BlackBoxAnalysis": {
+      "title": "BlackBoxAnalysis",
+      "description": "Analysis section: advisor findings. Every claim carries a rule id.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "summary": {
+          "description": "Plain-language summary (3 to 6 sentences), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "summaryIsModelWritten": {
+          "description": "Whether Summary was written by a model (labeled model-written).",
+          "type": [
+            "boolean"
+          ]
+        },
+        "why": {
+          "description": "Why findings.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxFinding"
+          },
+          "maxItems": 10
+        },
+        "configRecommendations": {
+          "description": "Configuration recommendations.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxConfigRecommendation"
+          },
+          "maxItems": 10
+        },
+        "armadaImprovements": {
+          "description": "Armada improvement hypotheses.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxImprovement"
+          },
+          "maxItems": 10
+        },
+        "recoveryPaths": {
+          "description": "Ranked recovery paths.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxRecoveryPath"
+          },
+          "maxItems": 10
+        },
+        "triage": {
+          "description": "Triage verdict, or null.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxTriageVerdict"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "summaryIsModelWritten",
+        "why",
+        "configRecommendations",
+        "armadaImprovements",
+        "recoveryPaths"
+      ]
+    },
+    "BlackBoxAnalyzedPayload": {
+      "title": "BlackBoxAnalyzedPayload",
+      "description": "Payload of the blackbox.analyzed event.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ]
+        },
+        "missionId": {
+          "description": "Mission.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voyageId": {
+          "description": "Voyage.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "State after the pipeline.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Captured",
+            "Enriched",
+            "Analyzed",
+            "EnrichmentFailed",
+            "Deleting",
+            "ObjectMissing",
+            "Unknown"
+          ]
+        },
+        "triage": {
+          "description": "Triage.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "UserConfig",
+            "MissionBrief",
+            "Transient",
+            "ArmadaDefect",
+            "External"
+          ]
+        },
+        "rulesVersion": {
+          "description": "Rules version.",
+          "type": [
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "entryId",
+        "state",
+        "triage",
+        "rulesVersion"
+      ]
+    },
+    "BlackBoxAttempt": {
+      "title": "BlackBoxAttempt",
+      "description": "A prior attempt of the subject, or a link in its rescue chain.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "attempt": {
+          "description": "Attempt number.",
+          "type": [
+            "integer"
+          ]
+        },
+        "entryId": {
+          "description": "Black box entry of the attempt, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "missionId": {
+          "description": "Mission of the attempt (differs for a rescue).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "stageOutcomeId": {
+          "description": "Stage outcome, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "kind": {
+          "description": "Failure kind, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Compile",
+            "TestFail",
+            "Timeout",
+            "LandingConflict",
+            "Crash",
+            "NoOp",
+            "Boundary",
+            "ScopeViolation",
+            "JudgeRejected",
+            "Infra",
+            "Unknown",
+            "ReviewDenied",
+            "DependencyFailed",
+            "MaxRuntimeExceeded",
+            "StallRecoveryExhausted",
+            "OperatorAction",
+            "InvalidOutput",
+            "Blocked",
+            null
+          ]
+        },
+        "reasonExcerpt": {
+          "description": "Reason excerpt (at most 500 characters).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "runtime": {
+          "description": "Runtime name, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "model": {
+          "description": "Model, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "durationMs": {
+          "description": "Duration in milliseconds, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "createdUtc": {
+          "description": "When (UTC), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "source": {
+          "description": "Where the attempt came from (BlackBox, StageOutcome, Handoff, Rescue), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "disposition": {
+          "description": "Stage disposition or handoff verdict, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "attempt"
+      ]
+    },
+    "BlackBoxCaptureFailedPayload": {
+      "title": "BlackBoxCaptureFailedPayload",
+      "description": "Payload of the blackbox.capture_failed event.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "missionId": {
+          "description": "Mission.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voyageId": {
+          "description": "Voyage.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "step": {
+          "description": "Step.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "VoyageParentNotRunnable",
+            "AssignmentFailed",
+            "NoEligibleCaptain",
+            "HarborUnavailable",
+            "MemoryPressure",
+            "DockProvision",
+            "WorktreeCreate",
+            "BranchCreate",
+            "StartCommitRecord",
+            "ProcessCrash",
+            "UsageLimit",
+            "AuthFailure",
+            "ModelUnavailable",
+            "Stall",
+            "MaxRuntime",
+            "RecoveryExhausted",
+            "Interrupted",
+            "OperatorStop",
+            "NoOp",
+            "Unfinished",
+            "CaptainBlocked",
+            "InvalidOutput",
+            "ScopeViolation",
+            "BoundaryViolation",
+            "DefinitionOfDone",
+            "StageCheck",
+            "JudgeRejected",
+            "ReviewDenied",
+            "ReviewTimeout",
+            "ReviewApprovedDockMissing",
+            "PlanParse",
+            "StageBranchHarden",
+            "DependencyCancelled",
+            "IntegrationBarrier",
+            "DockMissing",
+            "TargetIntegration",
+            "Verification",
+            "DirtyCheckout",
+            "UnpublishedAncestry",
+            "Push",
+            "PullRequest",
+            "FastForward",
+            "LocalMerge",
+            "RetryLanding",
+            "DeferralExpired",
+            "QueueResolveRepo",
+            "QueueMergeConflict",
+            "QueueTests",
+            "QueueProcessing",
+            "QueuePush",
+            "RescueFailed",
+            "RedispatchExhausted",
+            "OrphanedExit",
+            "UnconfirmedStop",
+            "MissingMergeHandoff",
+            "SettlementFailed",
+            "Halted",
+            "Cancelled",
+            "StageFailed",
+            "VesselDeleted",
+            "OperatorTransition"
+          ]
+        },
+        "error": {
+          "description": "Error (redacted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "step"
+      ]
+    },
+    "BlackBoxCapturedPayload": {
+      "title": "BlackBoxCapturedPayload",
+      "description": "Payload of the blackbox.captured event.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ]
+        },
+        "missionId": {
+          "description": "Mission.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voyageId": {
+          "description": "Voyage.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vesselId": {
+          "description": "Vessel.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "phase": {
+          "description": "Phase.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "Dispatch",
+            "Provision",
+            "Execution",
+            "Completion",
+            "Review",
+            "Handoff",
+            "Landing",
+            "MergeQueue",
+            "Recovery",
+            "Voyage",
+            "External"
+          ]
+        },
+        "step": {
+          "description": "Step.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "VoyageParentNotRunnable",
+            "AssignmentFailed",
+            "NoEligibleCaptain",
+            "HarborUnavailable",
+            "MemoryPressure",
+            "DockProvision",
+            "WorktreeCreate",
+            "BranchCreate",
+            "StartCommitRecord",
+            "ProcessCrash",
+            "UsageLimit",
+            "AuthFailure",
+            "ModelUnavailable",
+            "Stall",
+            "MaxRuntime",
+            "RecoveryExhausted",
+            "Interrupted",
+            "OperatorStop",
+            "NoOp",
+            "Unfinished",
+            "CaptainBlocked",
+            "InvalidOutput",
+            "ScopeViolation",
+            "BoundaryViolation",
+            "DefinitionOfDone",
+            "StageCheck",
+            "JudgeRejected",
+            "ReviewDenied",
+            "ReviewTimeout",
+            "ReviewApprovedDockMissing",
+            "PlanParse",
+            "StageBranchHarden",
+            "DependencyCancelled",
+            "IntegrationBarrier",
+            "DockMissing",
+            "TargetIntegration",
+            "Verification",
+            "DirtyCheckout",
+            "UnpublishedAncestry",
+            "Push",
+            "PullRequest",
+            "FastForward",
+            "LocalMerge",
+            "RetryLanding",
+            "DeferralExpired",
+            "QueueResolveRepo",
+            "QueueMergeConflict",
+            "QueueTests",
+            "QueueProcessing",
+            "QueuePush",
+            "RescueFailed",
+            "RedispatchExhausted",
+            "OrphanedExit",
+            "UnconfirmedStop",
+            "MissingMergeHandoff",
+            "SettlementFailed",
+            "Halted",
+            "Cancelled",
+            "StageFailed",
+            "VesselDeleted",
+            "OperatorTransition"
+          ]
+        },
+        "kind": {
+          "description": "Failure kind.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Compile",
+            "TestFail",
+            "Timeout",
+            "LandingConflict",
+            "Crash",
+            "NoOp",
+            "Boundary",
+            "ScopeViolation",
+            "JudgeRejected",
+            "Infra",
+            "Unknown",
+            "ReviewDenied",
+            "DependencyFailed",
+            "MaxRuntimeExceeded",
+            "StallRecoveryExhausted",
+            "OperatorAction",
+            "InvalidOutput",
+            "Blocked",
+            null
+          ]
+        },
+        "attempt": {
+          "description": "Attempt.",
+          "type": [
+            "integer"
+          ]
+        },
+        "captureMode": {
+          "description": "Capture mode.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Inline",
+            "Sweeper",
+            "Backfill",
+            "Unknown"
+          ]
+        }
+      },
+      "required": [
+        "entryId",
+        "phase",
+        "step",
+        "attempt",
+        "captureMode"
+      ]
+    },
+    "BlackBoxClassification": {
+      "title": "BlackBoxClassification",
+      "description": "Classification section: the failure kind, the raw reason and the suspected cause.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "kind": {
+          "description": "Failure kind (voyages use the root mission's kind).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Compile",
+            "TestFail",
+            "Timeout",
+            "LandingConflict",
+            "Crash",
+            "NoOp",
+            "Boundary",
+            "ScopeViolation",
+            "JudgeRejected",
+            "Infra",
+            "Unknown",
+            "ReviewDenied",
+            "DependencyFailed",
+            "MaxRuntimeExceeded",
+            "StallRecoveryExhausted",
+            "OperatorAction",
+            "InvalidOutput",
+            "Blocked",
+            null
+          ]
+        },
+        "rawReason": {
+          "description": "Raw failure reason (redacted, at most 8000 characters).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8000
+        },
+        "suspectedCause": {
+          "description": "Suspected cause from the failure-cause rules.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "None",
+            "Protocol",
+            "InstructionFollowing",
+            "ToolUse",
+            "Context",
+            "Capability",
+            "NotTheModel",
+            "Unknown",
+            "Mixed"
+          ]
+        },
+        "causeRuleId": {
+          "description": "Rule that assigned the cause, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "isRecoverable": {
+          "description": "Whether the failure is recoverable, or null when unknown.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "isTransient": {
+          "description": "Whether the failure looks transient, or null when unknown.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "suspectedCause"
+      ]
+    },
+    "BlackBoxCommitRef": {
+      "title": "BlackBoxCommitRef",
+      "description": "A commit referenced by a black box record.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "commitHash": {
+          "description": "Commit hash.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "subject": {
+          "description": "Commit subject, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "author": {
+          "description": "Author, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "committedUtc": {
+          "description": "Commit time (UTC), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "missionId": {
+          "description": "Armada-Mission-Id trailer value, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "commitHash"
+      ]
+    },
+    "BlackBoxConfigRecommendation": {
+      "title": "BlackBoxConfigRecommendation",
+      "description": "A configuration change that could have prevented the failure.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "id": {
+          "description": "Stable recommendation id: the rule id in lower case, a dot and a key (for example bbx-land-001.landing-mode).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "setting": {
+          "description": "Setting.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "scope": {
+          "description": "Where to change it.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Mission",
+            "Voyage",
+            "Vessel",
+            "WorkflowProfile",
+            "Captain",
+            "Persona",
+            "Global",
+            "Default",
+            "Unknown"
+          ]
+        },
+        "currentValue": {
+          "description": "Current value, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "suggestedValue": {
+          "description": "Suggested value, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "rationale": {
+          "description": "Why.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "ruleId": {
+          "description": "Rule that produced it.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "howToApply": {
+          "description": "Human instructions.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "applyAction": {
+          "description": "Machine-readable action, or null.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxAction"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "setting",
+        "scope"
+      ]
+    },
+    "BlackBoxConfigValue": {
+      "title": "BlackBoxConfigValue",
+      "description": "One effective configuration value and where it came from.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "setting": {
+          "description": "Setting name (for example LandingMode).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "value": {
+          "description": "Value as text (redacted when secret), or null when unset.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "source": {
+          "description": "Where the value came from.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Mission",
+            "Voyage",
+            "Vessel",
+            "WorkflowProfile",
+            "Captain",
+            "Persona",
+            "Global",
+            "Default",
+            "Unknown"
+          ]
+        }
+      },
+      "required": [
+        "setting",
+        "source"
+      ]
+    },
+    "BlackBoxConfiguration": {
+      "title": "BlackBoxConfiguration",
+      "description": "Configuration section: effective values that shaped the failure, each with its source.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "values": {
+          "description": "Effective values.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxConfigValue"
+          },
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "values"
+      ]
+    },
+    "BlackBoxConflict": {
+      "title": "BlackBoxConflict",
+      "description": "Conflict section: conflicted files and directories and the missions that collided.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "isConflict": {
+          "description": "Whether the failure is a merge conflict.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "conflictedFiles": {
+          "description": "Conflicted files (repository-relative, forward slashes).",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 500
+        },
+        "conflictedFileTotal": {
+          "description": "Total conflicted files before capping.",
+          "type": [
+            "integer"
+          ]
+        },
+        "conflictedFilesTruncated": {
+          "description": "Whether ConflictedFiles was cut.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "conflictedDirectories": {
+          "description": "Conflicted files rolled up to directories, with counts.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxDirectoryCount"
+          },
+          "maxItems": 100
+        },
+        "conflictingMissions": {
+          "description": "Missions whose landed commits touched the same files.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxConflictingMission"
+          },
+          "maxItems": 25
+        },
+        "targetCommitsSinceStart": {
+          "description": "Commits on the target since the mission started.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxCommitRef"
+          },
+          "maxItems": 50
+        },
+        "targetCommitTotal": {
+          "description": "Total target commits since start before capping.",
+          "type": [
+            "integer"
+          ]
+        },
+        "concurrentMissions": {
+          "description": "Other missions on the vessel that were active during this mission's run and touched the same files (from their diff snapshot or branch), landed or not; null when not analyzed.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxConflictingMission"
+          },
+          "maxItems": 25
+        },
+        "conflictedParentDirectories": {
+          "description": "The parent directory of each conflicted file, with counts (any depth); null when not analyzed.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxDirectoryCount"
+          },
+          "maxItems": 100
+        },
+        "deepestConflictedDirectory": {
+          "description": "The deepest directory holding at least two conflicted files, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "deepestConflictedDirectoryFileCount": {
+          "description": "Conflicted files under DeepestConflictedDirectory, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "isConflict",
+        "conflictedFiles",
+        "conflictedFileTotal",
+        "conflictedFilesTruncated",
+        "conflictedDirectories",
+        "conflictingMissions",
+        "targetCommitsSinceStart",
+        "targetCommitTotal"
+      ]
+    },
+    "BlackBoxConflictingMission": {
+      "title": "BlackBoxConflictingMission",
+      "description": "A mission whose work collided with the failed mission.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "missionId": {
+          "description": "Mission, or null for a commit made outside Armada.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "title": {
+          "description": "Mission title, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "commitHash": {
+          "description": "Landed commit, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "landedUtc": {
+          "description": "When the commit landed (UTC), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "overlappingFiles": {
+          "description": "Files both changed.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 50
+        },
+        "overlappingFileTotal": {
+          "description": "Total overlapping files before capping.",
+          "type": [
+            "integer"
+          ]
+        },
+        "isOutsideArmada": {
+          "description": "Whether the commit has no Armada-Mission-Id trailer.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "author": {
+          "description": "Commit author (for commits outside Armada), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "overlappingFiles",
+        "overlappingFileTotal",
+        "isOutsideArmada"
+      ]
+    },
+    "BlackBoxDeletedPayload": {
+      "title": "BlackBoxDeletedPayload",
+      "description": "Payload of the blackbox.deleted event.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ]
+        },
+        "missionId": {
+          "description": "Mission.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voyageId": {
+          "description": "Voyage.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why: Manual, Purge, Expired, Evicted, Cascade.",
+          "type": [
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "entryId",
+        "reason"
+      ]
+    },
+    "BlackBoxDiffStat": {
+      "title": "BlackBoxDiffStat",
+      "description": "Diff stat of the mission's change.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "files": {
+          "description": "Files changed.",
+          "type": [
+            "integer"
+          ]
+        },
+        "insertions": {
+          "description": "Lines inserted.",
+          "type": [
+            "integer"
+          ]
+        },
+        "deletions": {
+          "description": "Lines deleted.",
+          "type": [
+            "integer"
+          ]
+        },
+        "topPaths": {
+          "description": "Top paths by change size.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 50
+        }
+      },
+      "required": [
+        "files",
+        "insertions",
+        "deletions",
+        "topPaths"
+      ]
+    },
+    "BlackBoxDigest": {
+      "title": "BlackBoxDigest",
+      "description": "Compact view of a black box entry (about 2 KB) for MCP get_blackbox format=summary: identity, where, how, status before and after, why, and the top recovery paths.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ]
+        },
+        "subjectType": {
+          "description": "Mission or voyage.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Mission",
+            "Voyage",
+            "Unknown"
+          ]
+        },
+        "missionId": {
+          "description": "Mission.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voyageId": {
+          "description": "Voyage.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "Mission (or voyage) title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vesselName": {
+          "description": "Vessel name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "attempt": {
+          "description": "Attempt.",
+          "type": [
+            "integer"
+          ]
+        },
+        "captureMode": {
+          "description": "Capture mode (Sweeper and Backfill are lower fidelity).",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Inline",
+            "Sweeper",
+            "Backfill",
+            "Unknown"
+          ]
+        },
+        "state": {
+          "description": "State.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Captured",
+            "Enriched",
+            "Analyzed",
+            "EnrichmentFailed",
+            "Deleting",
+            "ObjectMissing",
+            "Unknown"
+          ]
+        },
+        "phase": {
+          "description": "Phase.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "Dispatch",
+            "Provision",
+            "Execution",
+            "Completion",
+            "Review",
+            "Handoff",
+            "Landing",
+            "MergeQueue",
+            "Recovery",
+            "Voyage",
+            "External"
+          ]
+        },
+        "step": {
+          "description": "Step.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "VoyageParentNotRunnable",
+            "AssignmentFailed",
+            "NoEligibleCaptain",
+            "HarborUnavailable",
+            "MemoryPressure",
+            "DockProvision",
+            "WorktreeCreate",
+            "BranchCreate",
+            "StartCommitRecord",
+            "ProcessCrash",
+            "UsageLimit",
+            "AuthFailure",
+            "ModelUnavailable",
+            "Stall",
+            "MaxRuntime",
+            "RecoveryExhausted",
+            "Interrupted",
+            "OperatorStop",
+            "NoOp",
+            "Unfinished",
+            "CaptainBlocked",
+            "InvalidOutput",
+            "ScopeViolation",
+            "BoundaryViolation",
+            "DefinitionOfDone",
+            "StageCheck",
+            "JudgeRejected",
+            "ReviewDenied",
+            "ReviewTimeout",
+            "ReviewApprovedDockMissing",
+            "PlanParse",
+            "StageBranchHarden",
+            "DependencyCancelled",
+            "IntegrationBarrier",
+            "DockMissing",
+            "TargetIntegration",
+            "Verification",
+            "DirtyCheckout",
+            "UnpublishedAncestry",
+            "Push",
+            "PullRequest",
+            "FastForward",
+            "LocalMerge",
+            "RetryLanding",
+            "DeferralExpired",
+            "QueueResolveRepo",
+            "QueueMergeConflict",
+            "QueueTests",
+            "QueueProcessing",
+            "QueuePush",
+            "RescueFailed",
+            "RedispatchExhausted",
+            "OrphanedExit",
+            "UnconfirmedStop",
+            "MissingMergeHandoff",
+            "SettlementFailed",
+            "Halted",
+            "Cancelled",
+            "StageFailed",
+            "VesselDeleted",
+            "OperatorTransition"
+          ]
+        },
+        "host": {
+          "description": "Host label.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceFile": {
+          "description": "Source file of the failure site.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceLine": {
+          "description": "Source line.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "method": {
+          "description": "Method.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "Failure kind.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Compile",
+            "TestFail",
+            "Timeout",
+            "LandingConflict",
+            "Crash",
+            "NoOp",
+            "Boundary",
+            "ScopeViolation",
+            "JudgeRejected",
+            "Infra",
+            "Unknown",
+            "ReviewDenied",
+            "DependencyFailed",
+            "MaxRuntimeExceeded",
+            "StallRecoveryExhausted",
+            "OperatorAction",
+            "InvalidOutput",
+            "Blocked",
+            null
+          ]
+        },
+        "reason": {
+          "description": "Reason excerpt (at most 500 characters).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mechanism": {
+          "description": "One-line mechanism (exception, exit code, failing command or git operation).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "statusBefore": {
+          "description": "Status before.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "statusAfter": {
+          "description": "Status after.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "triage": {
+          "description": "Triage verdict.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "UserConfig",
+            "MissionBrief",
+            "Transient",
+            "ArmadaDefect",
+            "External"
+          ]
+        },
+        "triageConfidence": {
+          "description": "Triage confidence, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Low",
+            "Medium",
+            "High",
+            "Unknown",
+            null
+          ]
+        },
+        "summary": {
+          "description": "Analysis summary, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "why": {
+          "description": "Top why findings.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxFinding"
+          },
+          "maxItems": 3
+        },
+        "recoveryPaths": {
+          "description": "Top recovery paths.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxRecoveryPath"
+          },
+          "maxItems": 3
+        },
+        "conflictedFileTotal": {
+          "description": "Conflicted files.",
+          "type": [
+            "integer"
+          ]
+        },
+        "objectCount": {
+          "description": "Objects.",
+          "type": [
+            "integer"
+          ]
+        },
+        "resolution": {
+          "description": "Resolution.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Open",
+            "Resolved",
+            "Duplicate",
+            "WontFix",
+            "ArmadaFixed",
+            "Unknown"
+          ]
+        },
+        "createdUtc": {
+          "description": "Created (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "entryId",
+        "subjectType",
+        "attempt",
+        "captureMode",
+        "state",
+        "phase",
+        "step",
+        "triage",
+        "why",
+        "recoveryPaths",
+        "conflictedFileTotal",
+        "objectCount",
+        "resolution",
+        "createdUtc"
+      ]
+    },
+    "BlackBoxDirectoryCount": {
+      "title": "BlackBoxDirectoryCount",
+      "description": "A directory and how many conflicted files it holds.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "directory": {
+          "description": "Directory (repository-relative, forward slashes; empty for the root).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "depth": {
+          "description": "Depth (1 to 3).",
+          "type": [
+            "integer"
+          ]
+        },
+        "fileCount": {
+          "description": "Conflicted files under it.",
+          "type": [
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "directory",
+        "depth",
+        "fileCount"
+      ]
+    },
+    "BlackBoxDownloadManifest": {
+      "title": "BlackBoxDownloadManifest",
+      "description": "manifest.json inside a black box .zip download: the entry, its schema version and every object with name, content type, size and SHA-256.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ]
+        },
+        "schemaVersion": {
+          "description": "Record schema version.",
+          "type": [
+            "integer"
+          ]
+        },
+        "missionId": {
+          "description": "Mission.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voyageId": {
+          "description": "Voyage.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "armadaVersion": {
+          "description": "Armada version that captured the entry.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "createdUtc": {
+          "description": "Entry creation (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "generatedUtc": {
+          "description": "When the download was built (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "objects": {
+          "description": "Objects in the archive (stored SHA-256 of the encoded bytes; the archive holds the decoded bytes).",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxObjectSummary"
+          },
+          "maxItems": 128
+        },
+        "missingObjects": {
+          "description": "Objects whose bytes could not be read.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ]
+          },
+          "maxItems": 128
+        }
+      },
+      "required": [
+        "entryId",
+        "schemaVersion",
+        "createdUtc",
+        "generatedUtc",
+        "objects",
+        "missingObjects"
+      ]
+    },
+    "BlackBoxEntry": {
+      "title": "BlackBoxEntry",
+      "description": "A black box entry: the index row (blackbox_entries) for one captured mission or voyage failure. The index is always in the database whatever the storage target; only object bytes move between targets. Record is populated only by reads that ask for it.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "id": {
+          "description": "Unique identifier (bbx_ prefix).",
+          "type": [
+            "string"
+          ]
+        },
+        "tenantId": {
+          "description": "Tenant.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "userId": {
+          "description": "Owner of the subject.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subjectType": {
+          "description": "Mission or voyage.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Mission",
+            "Voyage",
+            "Unknown"
+          ]
+        },
+        "missionId": {
+          "description": "Mission, or null for a voyage entry.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voyageId": {
+          "description": "Voyage, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vesselId": {
+          "description": "Vessel, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fleetId": {
+          "description": "Fleet, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "captainId": {
+          "description": "Captain, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "harborId": {
+          "description": "Harbor, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dockId": {
+          "description": "Dock, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mergeEntryId": {
+          "description": "Merge-queue entry, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "incidentId": {
+          "description": "Incident, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stageOutcomeId": {
+          "description": "Stage outcome, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parentMissionId": {
+          "description": "Parent mission, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "missionTitle": {
+          "description": "Denormalized mission (or voyage) title, kept after the mission is purged.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vesselName": {
+          "description": "Denormalized vessel name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "attempt": {
+          "description": "Attempt number for the subject, starting at 1.",
+          "type": [
+            "integer"
+          ]
+        },
+        "isCurrent": {
+          "description": "Whether this is the subject's current entry (one per subject).",
+          "type": [
+            "boolean"
+          ]
+        },
+        "supersedesId": {
+          "description": "The previous entry for the same subject, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "phase": {
+          "description": "Phase.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "Dispatch",
+            "Provision",
+            "Execution",
+            "Completion",
+            "Review",
+            "Handoff",
+            "Landing",
+            "MergeQueue",
+            "Recovery",
+            "Voyage",
+            "External"
+          ]
+        },
+        "step": {
+          "description": "Step.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "VoyageParentNotRunnable",
+            "AssignmentFailed",
+            "NoEligibleCaptain",
+            "HarborUnavailable",
+            "MemoryPressure",
+            "DockProvision",
+            "WorktreeCreate",
+            "BranchCreate",
+            "StartCommitRecord",
+            "ProcessCrash",
+            "UsageLimit",
+            "AuthFailure",
+            "ModelUnavailable",
+            "Stall",
+            "MaxRuntime",
+            "RecoveryExhausted",
+            "Interrupted",
+            "OperatorStop",
+            "NoOp",
+            "Unfinished",
+            "CaptainBlocked",
+            "InvalidOutput",
+            "ScopeViolation",
+            "BoundaryViolation",
+            "DefinitionOfDone",
+            "StageCheck",
+            "JudgeRejected",
+            "ReviewDenied",
+            "ReviewTimeout",
+            "ReviewApprovedDockMissing",
+            "PlanParse",
+            "StageBranchHarden",
+            "DependencyCancelled",
+            "IntegrationBarrier",
+            "DockMissing",
+            "TargetIntegration",
+            "Verification",
+            "DirtyCheckout",
+            "UnpublishedAncestry",
+            "Push",
+            "PullRequest",
+            "FastForward",
+            "LocalMerge",
+            "RetryLanding",
+            "DeferralExpired",
+            "QueueResolveRepo",
+            "QueueMergeConflict",
+            "QueueTests",
+            "QueueProcessing",
+            "QueuePush",
+            "RescueFailed",
+            "RedispatchExhausted",
+            "OrphanedExit",
+            "UnconfirmedStop",
+            "MissingMergeHandoff",
+            "SettlementFailed",
+            "Halted",
+            "Cancelled",
+            "StageFailed",
+            "VesselDeleted",
+            "OperatorTransition"
+          ]
+        },
+        "failureKind": {
+          "description": "Failure kind, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Compile",
+            "TestFail",
+            "Timeout",
+            "LandingConflict",
+            "Crash",
+            "NoOp",
+            "Boundary",
+            "ScopeViolation",
+            "JudgeRejected",
+            "Infra",
+            "Unknown",
+            "ReviewDenied",
+            "DependencyFailed",
+            "MaxRuntimeExceeded",
+            "StallRecoveryExhausted",
+            "OperatorAction",
+            "InvalidOutput",
+            "Blocked",
+            null
+          ]
+        },
+        "statusBefore": {
+          "description": "Status before the failure write.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "statusAfter": {
+          "description": "Status after the failure write.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "triage": {
+          "description": "Triage verdict.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "UserConfig",
+            "MissionBrief",
+            "Transient",
+            "ArmadaDefect",
+            "External"
+          ]
+        },
+        "fingerprint": {
+          "description": "Failure-mode fingerprint (64 hex characters), or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "captureMode": {
+          "description": "How it was captured.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Inline",
+            "Sweeper",
+            "Backfill",
+            "Unknown"
+          ]
+        },
+        "state": {
+          "description": "Processing state.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Captured",
+            "Enriched",
+            "Analyzed",
+            "EnrichmentFailed",
+            "Deleting",
+            "ObjectMissing",
+            "Unknown"
+          ]
+        },
+        "resolution": {
+          "description": "Resolution.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Open",
+            "Resolved",
+            "Duplicate",
+            "WontFix",
+            "ArmadaFixed",
+            "Unknown"
+          ]
+        },
+        "resolutionNote": {
+          "description": "What fixed it (at most 2000 characters).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolutionLink": {
+          "description": "Link to what fixed it: mission id, commit, PR or issue URL (at most 1000 characters).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pinned": {
+          "description": "Pinned entries are never expired or evicted.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "storageTarget": {
+          "description": "Where the entry's object bytes are stored.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Database",
+            "Disk",
+            "S3",
+            "AzureBlob",
+            "GoogleCloud",
+            "Cifs",
+            "Nfs",
+            "Unknown"
+          ]
+        },
+        "storagePrefix": {
+          "description": "Object key prefix for external targets, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "totalBytes": {
+          "description": "Stored (compressed) size of the entry's objects.",
+          "type": [
+            "integer"
+          ]
+        },
+        "objectCount": {
+          "description": "Number of objects.",
+          "type": [
+            "integer"
+          ]
+        },
+        "schemaVersion": {
+          "description": "Record schema version.",
+          "type": [
+            "integer"
+          ]
+        },
+        "rulesVersion": {
+          "description": "Advisor rules version.",
+          "type": [
+            "integer"
+          ]
+        },
+        "armadaVersion": {
+          "description": "Armada version that captured it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "armadaCommit": {
+          "description": "Armada commit that captured it, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasonExcerpt": {
+          "description": "Redacted reason excerpt for lists and search (at most 1000 characters).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "description": "Analysis summary excerpt for lists and search (at most 2000 characters), or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enrichmentAttempts": {
+          "description": "Enrichment attempts so far.",
+          "type": [
+            "integer"
+          ]
+        },
+        "lastError": {
+          "description": "Last enrichment or storage error (redacted), or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nextAttemptUtc": {
+          "description": "When the sweeper may retry enrichment (UTC), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "expiresUtc": {
+          "description": "When the entry expires (UTC); null when pinned or kept forever.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "createdUtc": {
+          "description": "Created (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "enrichedUtc": {
+          "description": "Enriched (UTC), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "analyzedUtc": {
+          "description": "Analyzed (UTC), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "resolvedUtc": {
+          "description": "Resolved (UTC), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "lastUpdateUtc": {
+          "description": "Last update (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "record": {
+          "description": "The record (record.json), populated only when a read asks for it; never stored in the row.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxRecord"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "subjectType",
+        "attempt",
+        "isCurrent",
+        "phase",
+        "step",
+        "triage",
+        "captureMode",
+        "state",
+        "resolution",
+        "pinned",
+        "storageTarget",
+        "totalBytes",
+        "objectCount",
+        "schemaVersion",
+        "rulesVersion",
+        "enrichmentAttempts",
+        "createdUtc",
+        "lastUpdateUtc"
+      ]
+    },
+    "BlackBoxEntrySummary": {
+      "title": "BlackBoxEntrySummary",
+      "description": "Short form of a black box entry for lists.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "id": {
+          "description": "Entry identifier.",
+          "type": [
+            "string"
+          ]
+        },
+        "subjectType": {
+          "description": "Mission or voyage.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Mission",
+            "Voyage",
+            "Unknown"
+          ]
+        },
+        "missionId": {
+          "description": "Mission.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voyageId": {
+          "description": "Voyage.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vesselId": {
+          "description": "Vessel.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "captainId": {
+          "description": "Captain.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "missionTitle": {
+          "description": "Mission (or voyage) title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vesselName": {
+          "description": "Vessel name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "attempt": {
+          "description": "Attempt.",
+          "type": [
+            "integer"
+          ]
+        },
+        "isCurrent": {
+          "description": "Whether current.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "phase": {
+          "description": "Phase.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "Dispatch",
+            "Provision",
+            "Execution",
+            "Completion",
+            "Review",
+            "Handoff",
+            "Landing",
+            "MergeQueue",
+            "Recovery",
+            "Voyage",
+            "External"
+          ]
+        },
+        "step": {
+          "description": "Step.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "VoyageParentNotRunnable",
+            "AssignmentFailed",
+            "NoEligibleCaptain",
+            "HarborUnavailable",
+            "MemoryPressure",
+            "DockProvision",
+            "WorktreeCreate",
+            "BranchCreate",
+            "StartCommitRecord",
+            "ProcessCrash",
+            "UsageLimit",
+            "AuthFailure",
+            "ModelUnavailable",
+            "Stall",
+            "MaxRuntime",
+            "RecoveryExhausted",
+            "Interrupted",
+            "OperatorStop",
+            "NoOp",
+            "Unfinished",
+            "CaptainBlocked",
+            "InvalidOutput",
+            "ScopeViolation",
+            "BoundaryViolation",
+            "DefinitionOfDone",
+            "StageCheck",
+            "JudgeRejected",
+            "ReviewDenied",
+            "ReviewTimeout",
+            "ReviewApprovedDockMissing",
+            "PlanParse",
+            "StageBranchHarden",
+            "DependencyCancelled",
+            "IntegrationBarrier",
+            "DockMissing",
+            "TargetIntegration",
+            "Verification",
+            "DirtyCheckout",
+            "UnpublishedAncestry",
+            "Push",
+            "PullRequest",
+            "FastForward",
+            "LocalMerge",
+            "RetryLanding",
+            "DeferralExpired",
+            "QueueResolveRepo",
+            "QueueMergeConflict",
+            "QueueTests",
+            "QueueProcessing",
+            "QueuePush",
+            "RescueFailed",
+            "RedispatchExhausted",
+            "OrphanedExit",
+            "UnconfirmedStop",
+            "MissingMergeHandoff",
+            "SettlementFailed",
+            "Halted",
+            "Cancelled",
+            "StageFailed",
+            "VesselDeleted",
+            "OperatorTransition"
+          ]
+        },
+        "failureKind": {
+          "description": "Failure kind.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Compile",
+            "TestFail",
+            "Timeout",
+            "LandingConflict",
+            "Crash",
+            "NoOp",
+            "Boundary",
+            "ScopeViolation",
+            "JudgeRejected",
+            "Infra",
+            "Unknown",
+            "ReviewDenied",
+            "DependencyFailed",
+            "MaxRuntimeExceeded",
+            "StallRecoveryExhausted",
+            "OperatorAction",
+            "InvalidOutput",
+            "Blocked",
+            null
+          ]
+        },
+        "statusBefore": {
+          "description": "Status before.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "statusAfter": {
+          "description": "Status after.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "triage": {
+          "description": "Triage.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "UserConfig",
+            "MissionBrief",
+            "Transient",
+            "ArmadaDefect",
+            "External"
+          ]
+        },
+        "fingerprint": {
+          "description": "Fingerprint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "captureMode": {
+          "description": "Capture mode.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Inline",
+            "Sweeper",
+            "Backfill",
+            "Unknown"
+          ]
+        },
+        "state": {
+          "description": "State.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Captured",
+            "Enriched",
+            "Analyzed",
+            "EnrichmentFailed",
+            "Deleting",
+            "ObjectMissing",
+            "Unknown"
+          ]
+        },
+        "resolution": {
+          "description": "Resolution.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Open",
+            "Resolved",
+            "Duplicate",
+            "WontFix",
+            "ArmadaFixed",
+            "Unknown"
+          ]
+        },
+        "pinned": {
+          "description": "Pinned.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "reasonExcerpt": {
+          "description": "Reason excerpt (at most 300 characters).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "totalBytes": {
+          "description": "Stored bytes.",
+          "type": [
+            "integer"
+          ]
+        },
+        "objectCount": {
+          "description": "Objects.",
+          "type": [
+            "integer"
+          ]
+        },
+        "createdUtc": {
+          "description": "Created (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "expiresUtc": {
+          "description": "Expires (UTC).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "subjectType",
+        "attempt",
+        "isCurrent",
+        "phase",
+        "step",
+        "triage",
+        "captureMode",
+        "state",
+        "resolution",
+        "pinned",
+        "totalBytes",
+        "objectCount",
+        "createdUtc"
+      ]
+    },
+    "BlackBoxEventRef": {
+      "title": "BlackBoxEventRef",
+      "description": "An event referenced by a record.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "eventId": {
+          "description": "Event identifier.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "eventType": {
+          "description": "Event type.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "message": {
+          "description": "Message (at most 500 characters).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "createdUtc": {
+          "description": "When (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "eventType",
+        "createdUtc"
+      ]
+    },
+    "BlackBoxEvidenceIndex": {
+      "title": "BlackBoxEvidenceIndex",
+      "description": "Evidence section: names, sizes and excerpts of the evidence objects, plus small structured evidence.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "objects": {
+          "description": "Evidence objects.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxEvidenceItem"
+          },
+          "maxItems": 64
+        },
+        "checkResults": {
+          "description": "Stage check results.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/StageCheckResult"
+          },
+          "maxItems": 10
+        },
+        "papercuts": {
+          "description": "Papercuts reported during the attempt.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 10
+        },
+        "diffStat": {
+          "description": "Diff stat, or null.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxDiffStat"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "relevantEvents": {
+          "description": "Relevant events, newest first.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxEventRef"
+          },
+          "maxItems": 50
+        }
+      },
+      "required": [
+        "objects",
+        "checkResults",
+        "papercuts",
+        "relevantEvents"
+      ]
+    },
+    "BlackBoxEvidenceItem": {
+      "title": "BlackBoxEvidenceItem",
+      "description": "One evidence object listed in a record.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "name": {
+          "description": "Object name (for example evidence/mission.log).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "contentType": {
+          "description": "Content type.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "sizeBytes": {
+          "description": "Stored size in bytes.",
+          "type": [
+            "integer"
+          ]
+        },
+        "uncompressedBytes": {
+          "description": "Uncompressed size in bytes.",
+          "type": [
+            "integer"
+          ]
+        },
+        "excerpt": {
+          "description": "Short excerpt (at most 500 characters).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "truncated": {
+          "description": "Whether the object was cut (head and tail kept).",
+          "type": [
+            "boolean"
+          ]
+        },
+        "originalBytes": {
+          "description": "Original size before cutting, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "sizeBytes",
+        "uncompressedBytes",
+        "truncated"
+      ]
+    },
+    "BlackBoxFinding": {
+      "title": "BlackBoxFinding",
+      "description": "One why finding.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "ruleId": {
+          "description": "Rule that produced it (for example BBX-LAND-003).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "statement": {
+          "description": "Statement.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "confidence": {
+          "description": "Confidence.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Low",
+            "Medium",
+            "High",
+            "Unknown"
+          ]
+        },
+        "evidenceRefs": {
+          "description": "References to evidence (section paths or object names).",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "ruleId",
+        "statement",
+        "confidence",
+        "evidenceRefs"
+      ]
+    },
+    "BlackBoxGcReport": {
+      "title": "BlackBoxGcReport",
+      "description": "Report of one black box garbage collection run (also the blackbox.gc_completed event payload).",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "dryRun": {
+          "description": "Whether this was a dry run.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "startedUtc": {
+          "description": "Started (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "finishedUtc": {
+          "description": "Finished (UTC).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "durationMs": {
+          "description": "Duration in milliseconds.",
+          "type": [
+            "integer"
+          ]
+        },
+        "expired": {
+          "description": "Entries expired by age.",
+          "type": [
+            "integer"
+          ]
+        },
+        "evicted": {
+          "description": "Entries evicted by quota.",
+          "type": [
+            "integer"
+          ]
+        },
+        "cascaded": {
+          "description": "Entries deleted with their vessel or mission.",
+          "type": [
+            "integer"
+          ]
+        },
+        "retriedDeletes": {
+          "description": "Entries left Deleting by an earlier run and finished now.",
+          "type": [
+            "integer"
+          ]
+        },
+        "orphansRemoved": {
+          "description": "Orphaned external objects removed.",
+          "type": [
+            "integer"
+          ]
+        },
+        "objectsMissing": {
+          "description": "Objects found missing.",
+          "type": [
+            "integer"
+          ]
+        },
+        "bytesFreed": {
+          "description": "Stored bytes freed.",
+          "type": [
+            "integer"
+          ]
+        },
+        "failures": {
+          "description": "Entries whose delete failed (left Deleting, retried next run).",
+          "type": [
+            "integer"
+          ]
+        },
+        "candidateEntryIds": {
+          "description": "Up to 100 entry ids deleted (or that a dry run would delete).",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ]
+          },
+          "maxItems": 100
+        },
+        "errors": {
+          "description": "Up to 20 error messages.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ]
+          },
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "dryRun",
+        "startedUtc",
+        "durationMs",
+        "expired",
+        "evicted",
+        "cascaded",
+        "retriedDeletes",
+        "orphansRemoved",
+        "objectsMissing",
+        "bytesFreed",
+        "failures",
+        "candidateEntryIds",
+        "errors"
+      ]
+    },
+    "BlackBoxImprovement": {
+      "title": "BlackBoxImprovement",
+      "description": "An Armada behavior change that could address the failure.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "area": {
+          "description": "Area of Armada.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "hypothesis": {
+          "description": "Hypothesis.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "evidence": {
+          "description": "Evidence.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "sourcePointers": {
+          "description": "Source pointers (repository-relative file:method).",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 10
+        },
+        "severity": {
+          "description": "Severity.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Low",
+            "Medium",
+            "High",
+            "Critical",
+            "Unknown"
+          ]
+        },
+        "ruleId": {
+          "description": "Rule that produced it.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "knownIssue": {
+          "description": "Known issue link, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "hypothesis",
+        "sourcePointers",
+        "severity"
+      ]
+    },
+    "BlackBoxMechanism": {
+      "title": "BlackBoxMechanism",
+      "description": "Mechanism section: how a failure happened.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "exceptionType": {
+          "description": "Exception type, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "exceptionMessage": {
+          "description": "Exception message (redacted, at most 4000 characters).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 4000
+        },
+        "stackFrames": {
+          "description": "Armada stack frames only.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 20
+        },
+        "exitCode": {
+          "description": "Agent exit code, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "runtimeFailureKind": {
+          "description": "How the runtime classified the exit, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Clean",
+            "UsageLimit",
+            "AuthFailure",
+            "Crash",
+            "ModelUnavailable",
+            "TaskFailure",
+            "Transient",
+            null
+          ]
+        },
+        "failingCommand": {
+          "description": "Failing command, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "commandExitCode": {
+          "description": "Failing command's exit code, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "commandOutputTail": {
+          "description": "Tail of the failing command's output (at most 8000 characters).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8000
+        },
+        "gitOperation": {
+          "description": "Git operation that failed, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "gitStderrTail": {
+          "description": "Tail of git stderr (at most 4000 characters).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "stackFrames"
+      ]
+    },
+    "BlackBoxNearbySuccess": {
+      "title": "BlackBoxNearbySuccess",
+      "description": "A successful landing on the same vessel near a failure that touched some of the same files (Related section and GET /api/v1/blackbox/{id}/nearby-successes).",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "successId": {
+          "description": "Success record (bbs_ prefix).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "missionId": {
+          "description": "Mission that landed.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "missionTitle": {
+          "description": "Its title.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "landedUtc": {
+          "description": "When it landed.",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "hoursFromFailure": {
+          "description": "Hours between the landing and the failure (negative when it landed before the failure).",
+          "type": [
+            "number"
+          ]
+        },
+        "baseCommit": {
+          "description": "Its start commit, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "targetCommit": {
+          "description": "Its landed commit, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "runMs": {
+          "description": "Its run time in milliseconds, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "overlappingFiles": {
+          "description": "Files it changed that the failure also touched, first 20.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 20
+        },
+        "overlappingFileCount": {
+          "description": "How many files overlap.",
+          "type": [
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "successId",
+        "missionId",
+        "landedUtc",
+        "hoursFromFailure",
+        "overlappingFiles",
+        "overlappingFileCount"
+      ]
+    },
+    "BlackBoxNote": {
+      "title": "BlackBoxNote",
+      "description": "A note on a black box entry by an operator, an agent, Ask Armada or Armada (blackbox_notes).",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "id": {
+          "description": "Unique identifier (bbn_ prefix).",
+          "type": [
+            "string"
+          ]
+        },
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ]
+        },
+        "tenantId": {
+          "description": "Tenant.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "userId": {
+          "description": "Author user, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "authorKind": {
+          "description": "Who wrote it.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Operator",
+            "Agent",
+            "AskArmada",
+            "System",
+            "Unknown"
+          ]
+        },
+        "body": {
+          "description": "Markdown body (at most 8000 characters).",
+          "type": [
+            "string"
+          ]
+        },
+        "createdUtc": {
+          "description": "Created (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "entryId",
+        "authorKind",
+        "body",
+        "createdUtc"
+      ]
+    },
+    "BlackBoxObjectChunk": {
+      "title": "BlackBoxObjectChunk",
+      "description": "A chunk of a black box object, for paging through large objects (MCP read_blackbox_object: at most 64 KB per call).",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ]
+        },
+        "name": {
+          "description": "Object name.",
+          "type": [
+            "string"
+          ]
+        },
+        "contentType": {
+          "description": "Content type.",
+          "type": [
+            "string"
+          ]
+        },
+        "offset": {
+          "description": "Offset of this chunk in the uncompressed object.",
+          "type": [
+            "integer"
+          ]
+        },
+        "length": {
+          "description": "Bytes in this chunk.",
+          "type": [
+            "integer"
+          ]
+        },
+        "totalBytes": {
+          "description": "Uncompressed size of the object.",
+          "type": [
+            "integer"
+          ]
+        },
+        "nextOffset": {
+          "description": "Offset of the next chunk, or null at the end.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "encoding": {
+          "description": "utf-8 for text objects, base64 otherwise.",
+          "type": [
+            "string"
+          ]
+        },
+        "content": {
+          "description": "Chunk content (text, or base64).",
+          "type": [
+            "string"
+          ]
+        },
+        "sha256": {
+          "description": "SHA-256 of the stored object.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "entryId",
+        "name",
+        "contentType",
+        "offset",
+        "length",
+        "totalBytes",
+        "encoding",
+        "content"
+      ]
+    },
+    "BlackBoxObjectSummary": {
+      "title": "BlackBoxObjectSummary",
+      "description": "Short form of a black box object for lists.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "name": {
+          "description": "Object name.",
+          "type": [
+            "string"
+          ]
+        },
+        "contentType": {
+          "description": "Content type.",
+          "type": [
+            "string"
+          ]
+        },
+        "contentEncoding": {
+          "description": "Stored encoding.",
+          "type": [
+            "string"
+          ]
+        },
+        "sizeBytes": {
+          "description": "Stored size.",
+          "type": [
+            "integer"
+          ]
+        },
+        "uncompressedBytes": {
+          "description": "Uncompressed size.",
+          "type": [
+            "integer"
+          ]
+        },
+        "sha256": {
+          "description": "SHA-256 of the stored bytes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "isMissing": {
+          "description": "Whether the bytes are missing.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "createdUtc": {
+          "description": "Created (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "name",
+        "contentType",
+        "contentEncoding",
+        "sizeBytes",
+        "uncompressedBytes",
+        "isMissing",
+        "createdUtc"
+      ]
+    },
+    "BlackBoxRecord": {
+      "title": "BlackBoxRecord",
+      "description": "The content of a black box entry's record.json: a versioned forensic snapshot of one mission or voyage failure, deserialized into typed classes (never read through JsonElement). A section that was not captured is null; readers render whatever sections exist. Every string is capped and every collection bounded (BlackBoxLimits).",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry identifier (bbx_ prefix).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "schemaVersion": {
+          "description": "Record schema version (BlackBoxLimits.SchemaVersion for this build).",
+          "type": [
+            "integer"
+          ]
+        },
+        "rulesVersion": {
+          "description": "Advisor rules version that produced the Analysis section (0 when not analyzed).",
+          "type": [
+            "integer"
+          ]
+        },
+        "captureMode": {
+          "description": "How the entry was captured.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Inline",
+            "Sweeper",
+            "Backfill",
+            "Unknown"
+          ]
+        },
+        "state": {
+          "description": "Processing state when the record was last written.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Captured",
+            "Enriched",
+            "Analyzed",
+            "EnrichmentFailed",
+            "Deleting",
+            "ObjectMissing",
+            "Unknown"
+          ]
+        },
+        "createdUtc": {
+          "description": "When the failure was captured (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "subject": {
+          "description": "Identity of the failed mission or voyage.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxSubject"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "status": {
+          "description": "Status before and after, and the timeline.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxStatusChange"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "site": {
+          "description": "Where it failed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxSite"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "mechanism": {
+          "description": "How it failed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxMechanism"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "classification": {
+          "description": "Kind, raw reason and suspected cause.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxClassification"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "workspace": {
+          "description": "Dock, worktree, branch and target state; null until captured or enriched.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxWorkspace"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "conflict": {
+          "description": "Conflicted files, directories and conflicting missions; null when not a conflict or not yet enriched.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxConflict"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "scope": {
+          "description": "Scoped, out-of-scope and boundary files; null when not applicable.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxScope"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "configuration": {
+          "description": "Effective configuration that shaped the failure.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxConfiguration"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "attempts": {
+          "description": "Prior attempts and the rescue chain, oldest first.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxAttempt"
+          },
+          "maxItems": 20
+        },
+        "evidence": {
+          "description": "Index of the evidence objects.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxEvidenceIndex"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "analysis": {
+          "description": "Advisor output; null until analyzed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxAnalysis"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "related": {
+          "description": "Fingerprint and similar entries.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxRelated"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "voyage": {
+          "description": "Voyage roll-up (voyage entries only).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxVoyageRollup"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "redaction": {
+          "$ref": "#/$defs/BlackBoxRedaction",
+          "description": "Which redaction rules fired and how often (never the values)."
+        },
+        "truncation": {
+          "$ref": "#/$defs/BlackBoxTruncation",
+          "description": "Fields that were cut, with their original sizes, and capture notes."
+        }
+      },
+      "required": [
+        "entryId",
+        "schemaVersion",
+        "rulesVersion",
+        "captureMode",
+        "state",
+        "createdUtc",
+        "attempts",
+        "redaction",
+        "truncation"
+      ]
+    },
+    "BlackBoxRecoveryPath": {
+      "title": "BlackBoxRecoveryPath",
+      "description": "A ranked recovery path with exact commands and a machine-readable action.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "id": {
+          "description": "Stable path id: the rule id in lower case, a dot and a key (for example bbx-land-001.stash-retry).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "rank": {
+          "description": "Rank, 1 is best.",
+          "type": [
+            "integer"
+          ]
+        },
+        "title": {
+          "description": "Title.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 500
+        },
+        "preconditions": {
+          "description": "Preconditions.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 10
+        },
+        "steps": {
+          "description": "Steps.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxRecoveryStep"
+          },
+          "maxItems": 10
+        },
+        "action": {
+          "description": "Primary action, or null.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxAction"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "risk": {
+          "description": "Risk.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Low",
+            "Medium",
+            "High",
+            "Critical",
+            "Unknown"
+          ]
+        },
+        "dataLossRisk": {
+          "description": "Whether any step can lose data (requires acknowledgeDataLoss).",
+          "type": [
+            "boolean"
+          ]
+        },
+        "expectedOutcome": {
+          "description": "Expected outcome.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "ruleId": {
+          "description": "Rule that produced it.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "runbookId": {
+          "description": "Runbook (pbk_ prefix) this path maps to, or null. Set after analysis when a runbook of the entry's tenant names the path, its rule, the failure step or the failure kind (see docs/BLACKBOX.md, runbook linkage). A confirmed run then starts the runbook (start_runbook_execution) instead of the path's tool steps.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "runbookTitle": {
+          "description": "Title of the linked runbook, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "successRate": {
+          "description": "Observed success rate of this path (missions that completed after a confirmed run, over settled runs), or null when fewer than three runs have settled. The advisor uses it to break ties between equally weighted paths.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "trackedRuns": {
+          "description": "Settled runs behind SuccessRate.",
+          "type": [
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "rank",
+        "title",
+        "preconditions",
+        "steps",
+        "risk",
+        "dataLossRisk",
+        "trackedRuns"
+      ]
+    },
+    "BlackBoxRecoveryRunPayload": {
+      "title": "BlackBoxRecoveryRunPayload",
+      "description": "Payload of the blackbox.recovery_run event.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ]
+        },
+        "pathId": {
+          "description": "Recovery path.",
+          "type": [
+            "string"
+          ]
+        },
+        "dryRun": {
+          "description": "Whether this was a dry run.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "succeeded": {
+          "description": "Whether it succeeded.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "recommendationId": {
+          "description": "Recommendation applied, when the run applied a configuration recommendation (PathId then holds the same id).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stepsRun": {
+          "description": "Steps the run executed (0 for a dry run).",
+          "type": [
+            "integer"
+          ]
+        },
+        "stepsFailed": {
+          "description": "Steps that failed.",
+          "type": [
+            "integer"
+          ]
+        },
+        "userId": {
+          "description": "User who ran it, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "entryId",
+        "pathId",
+        "dryRun",
+        "succeeded",
+        "stepsRun",
+        "stepsFailed"
+      ]
+    },
+    "BlackBoxRecoveryStep": {
+      "title": "BlackBoxRecoveryStep",
+      "description": "One step of a recovery path.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "order": {
+          "description": "Order, starting at 1.",
+          "type": [
+            "integer"
+          ]
+        },
+        "description": {
+          "description": "Description.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "mcpCommand": {
+          "description": "MCP command text.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "restCommand": {
+          "description": "REST command text.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "cliCommand": {
+          "description": "CLI command text.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "action": {
+          "description": "Machine-readable action, or null for a manual step.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxAction"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "dataLossRisk": {
+          "description": "Whether the step can lose data.",
+          "type": [
+            "boolean"
+          ]
+        }
+      },
+      "required": [
+        "order",
+        "description",
+        "dataLossRisk"
+      ]
+    },
+    "BlackBoxRedaction": {
+      "title": "BlackBoxRedaction",
+      "description": "Redaction report: rule names and counts, never values.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "rulesApplied": {
+          "description": "Rules that fired.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxRedactionRuleCount"
+          },
+          "maxItems": 32
+        },
+        "redactedCount": {
+          "description": "Total redactions.",
+          "type": [
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "rulesApplied",
+        "redactedCount"
+      ]
+    },
+    "BlackBoxRedactionRuleCount": {
+      "title": "BlackBoxRedactionRuleCount",
+      "description": "A redaction rule and how often it fired.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "rule": {
+          "description": "Rule name.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "count": {
+          "description": "Count.",
+          "type": [
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "rule",
+        "count"
+      ]
+    },
+    "BlackBoxRelated": {
+      "title": "BlackBoxRelated",
+      "description": "Related section: fingerprint, similar entries and cascade.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "fingerprint": {
+          "description": "Failure-mode fingerprint (BlackBoxFingerprint).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "similarEntries": {
+          "description": "Similar entries, newest first.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxSimilarEntry"
+          },
+          "maxItems": 10
+        },
+        "occurrencesLast30Days": {
+          "description": "Entries with the same fingerprint in the last 30 days.",
+          "type": [
+            "integer"
+          ]
+        },
+        "cascadeRootEntryId": {
+          "description": "Cascade root entry, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "downstreamMissionIds": {
+          "description": "Missions downstream of the cascade.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 100
+        },
+        "nearbySuccesses": {
+          "description": "Successful landings on the same vessel within blackBox.nearbySuccessWindowHours of the failure that changed some of the same files (success flight recorder), most overlap first.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxNearbySuccess"
+          },
+          "maxItems": 10
+        },
+        "nearbySuccessTotal": {
+          "description": "Nearby successes found (NearbySuccesses holds the first ten).",
+          "type": [
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "similarEntries",
+        "occurrencesLast30Days",
+        "downstreamMissionIds",
+        "nearbySuccesses",
+        "nearbySuccessTotal"
+      ]
+    },
+    "BlackBoxResolvedPayload": {
+      "title": "BlackBoxResolvedPayload",
+      "description": "Payload of the blackbox.resolved event.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ]
+        },
+        "missionId": {
+          "description": "Mission.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voyageId": {
+          "description": "Voyage.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolution": {
+          "description": "Resolution.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Open",
+            "Resolved",
+            "Duplicate",
+            "WontFix",
+            "ArmadaFixed",
+            "Unknown"
+          ]
+        }
+      },
+      "required": [
+        "entryId",
+        "resolution"
+      ]
+    },
+    "BlackBoxScope": {
+      "title": "BlackBoxScope",
+      "description": "Scope section: the mission's scoped files and what fell outside them.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "scopedFiles": {
+          "description": "Scoped files from the mission brief.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 200
+        },
+        "outOfScopeFiles": {
+          "description": "Changed files outside the scope.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 200
+        },
+        "outOfScopeFileTotal": {
+          "description": "Total out-of-scope files before capping.",
+          "type": [
+            "integer"
+          ]
+        },
+        "boundaryFindings": {
+          "description": "Protected-path findings.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "scopedFiles",
+        "outOfScopeFiles",
+        "outOfScopeFileTotal",
+        "boundaryFindings"
+      ]
+    },
+    "BlackBoxSectionResult": {
+      "title": "BlackBoxSectionResult",
+      "description": "One section of an entry's record. Record carries only the requested section (other sections are null).",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ]
+        },
+        "section": {
+          "description": "Section.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Subject",
+            "Status",
+            "Site",
+            "Mechanism",
+            "Classification",
+            "Workspace",
+            "Conflict",
+            "Scope",
+            "Configuration",
+            "Attempts",
+            "Evidence",
+            "Analysis",
+            "Related",
+            "Voyage",
+            "Redaction",
+            "Truncation",
+            "Unknown"
+          ]
+        },
+        "record": {
+          "$ref": "#/$defs/BlackBoxRecord",
+          "description": "Record with only the requested section populated."
+        }
+      },
+      "required": [
+        "entryId",
+        "section",
+        "record"
+      ]
+    },
+    "BlackBoxSimilarEntry": {
+      "title": "BlackBoxSimilarEntry",
+      "description": "An earlier entry with the same failure mode.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "missionId": {
+          "description": "Mission.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "missionTitle": {
+          "description": "Mission title.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "createdUtc": {
+          "description": "When (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "resolution": {
+          "description": "How it was resolved.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Open",
+            "Resolved",
+            "Duplicate",
+            "WontFix",
+            "ArmadaFixed",
+            "Unknown"
+          ]
+        },
+        "resolutionNote": {
+          "description": "Resolution note excerpt.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "entryId",
+        "createdUtc",
+        "resolution"
+      ]
+    },
+    "BlackBoxSite": {
+      "title": "BlackBoxSite",
+      "description": "Site section: where a failure happened, down to the Armada source line.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "phase": {
+          "description": "Phase (derived from Step).",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "Dispatch",
+            "Provision",
+            "Execution",
+            "Completion",
+            "Review",
+            "Handoff",
+            "Landing",
+            "MergeQueue",
+            "Recovery",
+            "Voyage",
+            "External"
+          ]
+        },
+        "step": {
+          "description": "Step the capture site reported.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "VoyageParentNotRunnable",
+            "AssignmentFailed",
+            "NoEligibleCaptain",
+            "HarborUnavailable",
+            "MemoryPressure",
+            "DockProvision",
+            "WorktreeCreate",
+            "BranchCreate",
+            "StartCommitRecord",
+            "ProcessCrash",
+            "UsageLimit",
+            "AuthFailure",
+            "ModelUnavailable",
+            "Stall",
+            "MaxRuntime",
+            "RecoveryExhausted",
+            "Interrupted",
+            "OperatorStop",
+            "NoOp",
+            "Unfinished",
+            "CaptainBlocked",
+            "InvalidOutput",
+            "ScopeViolation",
+            "BoundaryViolation",
+            "DefinitionOfDone",
+            "StageCheck",
+            "JudgeRejected",
+            "ReviewDenied",
+            "ReviewTimeout",
+            "ReviewApprovedDockMissing",
+            "PlanParse",
+            "StageBranchHarden",
+            "DependencyCancelled",
+            "IntegrationBarrier",
+            "DockMissing",
+            "TargetIntegration",
+            "Verification",
+            "DirtyCheckout",
+            "UnpublishedAncestry",
+            "Push",
+            "PullRequest",
+            "FastForward",
+            "LocalMerge",
+            "RetryLanding",
+            "DeferralExpired",
+            "QueueResolveRepo",
+            "QueueMergeConflict",
+            "QueueTests",
+            "QueueProcessing",
+            "QueuePush",
+            "RescueFailed",
+            "RedispatchExhausted",
+            "OrphanedExit",
+            "UnconfirmedStop",
+            "MissingMergeHandoff",
+            "SettlementFailed",
+            "Halted",
+            "Cancelled",
+            "StageFailed",
+            "VesselDeleted",
+            "OperatorTransition"
+          ]
+        },
+        "hostKind": {
+          "description": "Which host the failure happened on.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Admiral",
+            "Harbor",
+            "Unknown"
+          ]
+        },
+        "host": {
+          "description": "Host label: Admiral, or Harbor:{harborId}.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "component": {
+          "description": "Component (class) that captured the failure.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "method": {
+          "description": "Method that captured the failure ([CallerMemberName]).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "sourceFile": {
+          "description": "Repository-relative source file ([CallerFilePath], trimmed).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "sourceLine": {
+          "description": "Source line ([CallerLineNumber]).",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "armadaVersion": {
+          "description": "Armada build version.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "armadaCommit": {
+          "description": "Armada build commit, or null when unknown.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "phase",
+        "step",
+        "hostKind"
+      ]
+    },
+    "BlackBoxStatusChange": {
+      "title": "BlackBoxStatusChange",
+      "description": "Status section: the subject's status before and after the failure write, and its timeline.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "before": {
+          "description": "Status before the failure write (MissionStatusEnum or VoyageStatusEnum name), or null when unknown.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "after": {
+          "description": "Status after the failure write.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "changedUtc": {
+          "description": "When the status changed (UTC).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "timeline": {
+          "description": "Status changes in the attempt, oldest first.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxStatusTimelineEntry"
+          },
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "timeline"
+      ]
+    },
+    "BlackBoxStatusCount": {
+      "title": "BlackBoxStatusCount",
+      "description": "A status and a count.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "status": {
+          "description": "Status name.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "count": {
+          "description": "Count.",
+          "type": [
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "count"
+      ]
+    },
+    "BlackBoxStatusTimelineEntry": {
+      "title": "BlackBoxStatusTimelineEntry",
+      "description": "One status change in a black box status timeline.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "status": {
+          "description": "Status name.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "utc": {
+          "description": "When (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "source": {
+          "description": "What set it (event type or component), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "status",
+        "utc"
+      ]
+    },
+    "BlackBoxStorageFallbackPayload": {
+      "title": "BlackBoxStorageFallbackPayload",
+      "description": "Payload of the blackbox.storage_fallback event.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "entryId": {
+          "description": "Entry.",
+          "type": [
+            "string"
+          ]
+        },
+        "from": {
+          "description": "Target that failed.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Database",
+            "Disk",
+            "S3",
+            "AzureBlob",
+            "GoogleCloud",
+            "Cifs",
+            "Nfs",
+            "Unknown"
+          ]
+        },
+        "to": {
+          "description": "Target written instead.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Database",
+            "Disk",
+            "S3",
+            "AzureBlob",
+            "GoogleCloud",
+            "Cifs",
+            "Nfs",
+            "Unknown"
+          ]
+        },
+        "error": {
+          "description": "Error (no secrets).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "entryId",
+        "from",
+        "to"
+      ]
+    },
+    "BlackBoxSubject": {
+      "title": "BlackBoxSubject",
+      "description": "Identity section of a black box record: the failed mission or voyage and everything it ran with.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "subjectType": {
+          "description": "Mission or voyage.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Mission",
+            "Voyage",
+            "Unknown"
+          ]
+        },
+        "tenantId": {
+          "description": "Tenant.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "userId": {
+          "description": "Owner.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "missionId": {
+          "description": "Mission (msn_ prefix), or null for a voyage entry.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "voyageId": {
+          "description": "Voyage (vyg_ prefix), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "title": {
+          "description": "Mission title (or voyage title for a voyage entry).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "voyageTitle": {
+          "description": "Voyage title, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "vesselId": {
+          "description": "Vessel, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "vesselName": {
+          "description": "Vessel name, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "vesselRepoUrl": {
+          "description": "Vessel repository URL (credentials redacted), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "vesselDefaultBranch": {
+          "description": "Vessel default (target) branch, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "fleetId": {
+          "description": "Fleet, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "captainId": {
+          "description": "Captain, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "captainName": {
+          "description": "Captain name, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "captainRuntime": {
+          "description": "Captain runtime (AgentRuntimeEnum name), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "captainModel": {
+          "description": "Model the captain ran, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "modelEndpointId": {
+          "description": "Model endpoint, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "persona": {
+          "description": "Persona the mission routed as, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "pipelineStage": {
+          "description": "Pipeline stage name, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "harborId": {
+          "description": "Harbor the dock ran on, or null for the Admiral host.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "harborName": {
+          "description": "Harbor name, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "dockId": {
+          "description": "Dock, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "mergeEntryId": {
+          "description": "Merge-queue entry, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "incidentId": {
+          "description": "Incident, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "stageOutcomeId": {
+          "description": "Stage outcome of the attempt, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "attempt": {
+          "description": "Attempt number of this entry for the subject, starting at 1.",
+          "type": [
+            "integer"
+          ]
+        },
+        "isRescue": {
+          "description": "Whether the mission is a rescue.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "parentMissionId": {
+          "description": "Parent mission, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "branchName": {
+          "description": "Mission branch, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "redispatchAttempts": {
+          "description": "Redispatch attempts the mission used, or null when unknown.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "outputRepairAttempts": {
+          "description": "Output repair attempts the mission used, or null when unknown.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "noOpRedispatchAttempts": {
+          "description": "No-op redispatch attempts the mission used, or null when unknown.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rescueChain": {
+          "description": "Rescue chain: the mission's ancestors by ParentMissionId, nearest first; null when not analyzed.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "subjectType",
+        "attempt",
+        "isRescue"
+      ]
+    },
+    "BlackBoxTriageVerdict": {
+      "title": "BlackBoxTriageVerdict",
+      "description": "Triage verdict with the rule votes behind it.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "verdict": {
+          "description": "Verdict.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "UserConfig",
+            "MissionBrief",
+            "Transient",
+            "ArmadaDefect",
+            "External"
+          ]
+        },
+        "confidence": {
+          "description": "Confidence.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Low",
+            "Medium",
+            "High",
+            "Unknown"
+          ]
+        },
+        "votes": {
+          "description": "Votes.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxTriageVote"
+          },
+          "maxItems": 20
+        },
+        "tiedWith": {
+          "description": "Candidates on a tie.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "enum": [
+              "Unknown",
+              "UserConfig",
+              "MissionBrief",
+              "Transient",
+              "ArmadaDefect",
+              "External"
+            ]
+          },
+          "maxItems": 6
+        }
+      },
+      "required": [
+        "verdict",
+        "confidence",
+        "votes",
+        "tiedWith"
+      ]
+    },
+    "BlackBoxTriageVote": {
+      "title": "BlackBoxTriageVote",
+      "description": "One rule's triage vote.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "ruleId": {
+          "description": "Rule.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "verdict": {
+          "description": "Vote.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "UserConfig",
+            "MissionBrief",
+            "Transient",
+            "ArmadaDefect",
+            "External"
+          ]
+        },
+        "weight": {
+          "description": "Weight.",
+          "type": [
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "ruleId",
+        "verdict",
+        "weight"
+      ]
+    },
+    "BlackBoxTruncatedField": {
+      "title": "BlackBoxTruncatedField",
+      "description": "A field that was cut.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "field": {
+          "description": "Field path (for example Conflict.ConflictedFiles).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "originalSize": {
+          "description": "Original size.",
+          "type": [
+            "integer"
+          ]
+        },
+        "keptSize": {
+          "description": "Kept size.",
+          "type": [
+            "integer"
+          ]
+        },
+        "unit": {
+          "description": "Unit: chars, items or bytes.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "field",
+        "originalSize",
+        "keptSize",
+        "unit"
+      ]
+    },
+    "BlackBoxTruncation": {
+      "title": "BlackBoxTruncation",
+      "description": "Truncation report: what was cut and why. Nothing is dropped silently.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "fields": {
+          "description": "Fields that were cut.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxTruncatedField"
+          },
+          "maxItems": 64
+        },
+        "fieldTotal": {
+          "description": "Total truncated fields before capping.",
+          "type": [
+            "integer"
+          ]
+        },
+        "timedOut": {
+          "description": "Whether capture ran out of its time budget and wrote a partial entry.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "notes": {
+          "description": "Capture notes (timeouts, lower-fidelity capture, missing facts).",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "fields",
+        "fieldTotal",
+        "timedOut",
+        "notes"
+      ]
+    },
+    "BlackBoxVoyageRollup": {
+      "title": "BlackBoxVoyageRollup",
+      "description": "Voyage section (voyage entries only): missions by status, failed entries, cascade root and settlement.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "missionTotal": {
+          "description": "Missions in the voyage.",
+          "type": [
+            "integer"
+          ]
+        },
+        "missionsByStatus": {
+          "description": "Missions by status.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxStatusCount"
+          },
+          "maxItems": 16
+        },
+        "failedMissionIds": {
+          "description": "Failed missions.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 100
+        },
+        "failedMissionEntryIds": {
+          "description": "Current black box entries of the failed missions.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 100
+        },
+        "cascadeRootMissionId": {
+          "description": "Root failed mission, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "cascadeRootEntryId": {
+          "description": "Root failed mission's entry, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "settlementRule": {
+          "description": "Settlement rule that decided the voyage, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "haltReason": {
+          "description": "Halt reason, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "missionTotal",
+        "missionsByStatus",
+        "failedMissionIds",
+        "failedMissionEntryIds"
+      ]
+    },
+    "BlackBoxWorkspace": {
+      "title": "BlackBoxWorkspace",
+      "description": "Workspace section: dock, worktree, branch and target state at the failure.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "dockId": {
+          "description": "Dock, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "dockState": {
+          "description": "Dock state name, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "worktreePath": {
+          "description": "Worktree path, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "worktreeExists": {
+          "description": "Whether the worktree existed, or null when unknown.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "checkoutPath": {
+          "description": "Target checkout path, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "branchName": {
+          "description": "Mission branch, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "branchTip": {
+          "description": "Mission branch tip, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "missionCommit": {
+          "description": "Mission commit, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "startCommit": {
+          "description": "Commit the mission started from, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "startCommitSource": {
+          "description": "Where the start commit came from (Mission, DockAnchors, DockStartFile), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "targetBranch": {
+          "description": "Target branch, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "targetTipAtStart": {
+          "description": "Target tip when the mission started, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "targetTipAtFailure": {
+          "description": "Target tip at the failure, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "commitsBehindTarget": {
+          "description": "Commits the branch is behind the target, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "commitsAheadOfStart": {
+          "description": "Commits the branch is ahead of its start, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "checkoutDirty": {
+          "description": "Whether the target checkout had uncommitted tracked changes, or null.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "dirtyPaths": {
+          "description": "Dirty paths in the checkout.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 200
+        },
+        "dirtyPathTotal": {
+          "description": "Total dirty paths before capping.",
+          "type": [
+            "integer"
+          ]
+        },
+        "harborLinkState": {
+          "description": "Harbor link state for Harbor-hosted docks, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "harborLastSeenUtc": {
+          "description": "When the Harbor was last seen (UTC), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "branchExists": {
+          "description": "Whether the mission branch still exists in the repository, or null when unknown.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "commitsAheadOfTarget": {
+          "description": "Commits the branch is ahead of the target, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "inspectedHost": {
+          "description": "Host the workspace was inspected on at enrichment (Admiral or Harbor:{id}), or null when not inspected.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "inspectionNote": {
+          "description": "Why workspace facts are unknown or partial (for example a disconnected Harbor), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "targetMovementNote": {
+          "description": "Why target movement since the start commit was not read (for example no start commit), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "dirtyPaths",
+        "dirtyPathTotal"
+      ]
+    },
+    "StageCheckResult": {
+      "title": "StageCheckResult",
+      "description": "The result of a stage check: whether the stage's work was verified, and when it was not, why.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "status": {
+          "description": "What the check established.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Passed",
+            "Failed",
+            "Skipped",
+            "CouldNotRun"
+          ]
+        },
+        "reason": {
+          "description": "Why the check ended with this status.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "None",
+            "RuntimeNotChecked",
+            "ReviewPersona",
+            "VerifierReportedBlocker",
+            "NoDock",
+            "NoWorkflowProfile",
+            "NoCommands",
+            "NoNewCommit",
+            "HarborDisconnected",
+            "TimedOut",
+            "Error"
+          ]
+        },
+        "commands": {
+          "description": "The commands the check ran or would have run, in order.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 2
+        },
+        "unitTestScope": {
+          "description": "Which unit-test command the check chose (full or abbreviated), or null when the profile had no unit-test command.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Full",
+            "Abbreviated",
+            null
+          ]
+        },
+        "failedCommand": {
+          "description": "The command that failed or timed out, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "exitCode": {
+          "description": "Exit code of the failed command, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "preExistingFailures": {
+          "description": "Commands that failed on the stage's starting commit too, so they did not block the stage.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 2
+        },
+        "failureMessage": {
+          "description": "The note sent back to the captain describing a failure or an unverified check, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "durationMs": {
+          "description": "How long the check took, in milliseconds.",
+          "type": [
+            "integer"
+          ]
+        },
+        "checkedUtc": {
+          "description": "When the check ended (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "isBlocking": {
+          "description": "Whether the check blocks the stage. Only a confirmed Failed result blocks, even without a failure message; CouldNotRun and TimedOut are unverified warnings that never count as passing.",
+          "type": [
+            "boolean"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "reason",
+        "commands",
+        "preExistingFailures",
+        "durationMs",
+        "checkedUtc",
+        "isBlocking"
+      ]
+    }
+  }
+}

@@ -894,7 +894,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                             persona = @persona,
                             depends_on_mission_id = @depends_on_mission_id,
                             failure_reason = @failure_reason,
-                            failure_kind = @failure_kind,
+                            failure_kind = @failure_kind, last_blackbox_entry_id = COALESCE(@last_blackbox_entry_id, last_blackbox_entry_id), start_commit = @start_commit,
                             wait_for_voyage_workers = @wait_for_voyage_workers,
                             requires_review = @requires_review,
                             review_deny_action = @review_deny_action,
@@ -942,6 +942,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@failure_kind", MissionFailureKindColumn.ToDbValue(mission.FailureKind));
+                    cmd.Parameters.AddWithValue("@last_blackbox_entry_id", (object?)mission.LastBlackBoxEntryId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@start_commit", (object?)mission.StartCommit ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@wait_for_voyage_workers", (mission.WaitForVoyageWorkers ? 1 : 0));
                     cmd.Parameters.AddWithValue("@requires_review", mission.RequiresReview ? 1 : 0);
                     cmd.Parameters.AddWithValue("@review_deny_action", mission.ReviewDenyAction.ToString());
@@ -989,8 +991,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
             using (SqliteCommand cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
-                cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description, status, mode, priority, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, rework_round, rework_escalated, tier, parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, created_utc, started_utc, completed_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description, @status, @mode, @priority, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @rework_round, @rework_escalated, @tier, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
+                cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description, status, mode, priority, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, rework_round, rework_escalated, tier, parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, last_blackbox_entry_id, start_commit, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, created_utc, started_utc, completed_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description, @status, @mode, @priority, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @rework_round, @rework_escalated, @tier, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @last_blackbox_entry_id, @start_commit, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
                 cmd.Parameters.AddWithValue("@id", mission.Id);
                 cmd.Parameters.AddWithValue("@tenant_id", (object?)mission.TenantId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@user_id", (object?)mission.UserId ?? DBNull.Value);
@@ -1024,6 +1026,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 cmd.Parameters.AddWithValue("@depends_on_mission_id", (object?)mission.DependsOnMissionId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@failure_reason", (object?)mission.FailureReason ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@failure_kind", MissionFailureKindColumn.ToDbValue(mission.FailureKind));
+                cmd.Parameters.AddWithValue("@last_blackbox_entry_id", (object?)mission.LastBlackBoxEntryId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@start_commit", (object?)mission.StartCommit ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@wait_for_voyage_workers", (mission.WaitForVoyageWorkers ? 1 : 0));
                 cmd.Parameters.AddWithValue("@requires_review", mission.RequiresReview ? 1 : 0);
                 cmd.Parameters.AddWithValue("@review_deny_action", mission.ReviewDenyAction.ToString());

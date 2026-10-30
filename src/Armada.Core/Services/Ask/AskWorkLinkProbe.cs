@@ -48,6 +48,11 @@ namespace Armada.Core.Services.Ask
         /// </summary>
         public string? Error { get; set; } = null;
 
+        /// <summary>
+        /// Black box entry identifier (bbx_ prefix) of black box tool arguments and results.
+        /// </summary>
+        public string? EntryId { get; set; } = null;
+
         #endregion
     }
 }

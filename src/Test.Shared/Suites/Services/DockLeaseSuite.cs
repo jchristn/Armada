@@ -275,6 +275,47 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, landing.Retried.Count);
             }));
 
+            foreach (int maxRetries in new[] { 2, 0 })
+            {
+                cases.Add(CaseAsync("deferred_landing_retries_capped_by_max_landing_retries_" + maxRetries, "Automatic retries of one deferred landing stop at maxLandingRetries (" + maxRetries + "), and the exhaustion is recorded once", maxRetries == 0 ? TestTags.Negative : TestTags.Positive, async () =>
+                {
+                    using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                    string checkout = TestTemp.NewDirectory("deferred_capped");
+                    Mission mission = await testDb.Driver.Missions.CreateAsync(new Mission("Deferred and capped")
+                    {
+                        Status = MissionStatusEnum.LandingFailed,
+                        FailureKind = MissionFailureKindEnum.Infra,
+                        FailureReason = "Error merging locally: dirty"
+                    }).ConfigureAwait(false);
+                    LandingDeferral deferral = new LandingDeferral
+                    {
+                        CheckoutPath = checkout,
+                        FirstDeferredUtc = DateTime.UtcNow.AddMinutes(-5),
+                        DeadlineUtc = DateTime.UtcNow.AddHours(12)
+                    };
+                    await testDb.Driver.Events.CreateAsync(new ArmadaEvent(LandingIntegrityService.DeferredEventType, "deferred")
+                    {
+                        MissionId = mission.Id, EntityType = "mission", EntityId = mission.Id, Payload = JsonSerializer.Serialize(deferral)
+                    }).ConfigureAwait(false);
+                    ArmadaSettings settings = new ArmadaSettings();
+                    settings.MaxLandingRetries = maxRetries;
+                    RecordingLandingService landing = new RecordingLandingService();
+                    // The recording landing service leaves the mission LandingFailed, as a landing that is refused again would.
+                    LandingIntegrityService sweep = new LandingIntegrityService(CreateLogging(), testDb.Driver, settings, new DockService(CreateLogging(), testDb.Driver, CreateSettings(), new StubGitService()),
+                        landing, new StubGitService());
+                    sweep.LandingRetryInterval = TimeSpan.Zero;
+
+                    int total = 0;
+                    for (int i = 0; i < maxRetries + 3; i++) total += await sweep.RetryDeferredLandingsAsync().ConfigureAwait(false);
+
+                    AssertEqual(maxRetries, total, "retries stop at the configured maximum");
+                    AssertEqual(maxRetries, landing.Retried.Count);
+                    List<ArmadaEvent> events = await testDb.Driver.Events.EnumerateByMissionAsync(mission.Id).ConfigureAwait(false);
+                    AssertEqual(maxRetries, events.Count(e => e.EventType == LandingIntegrityService.AutoRetryEventType), "each automatic retry is recorded");
+                    AssertEqual(1, events.Count(e => e.EventType == LandingIntegrityService.RetriesExhaustedEventType), "exhaustion recorded once");
+                }));
+            }
+
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Dock Leases and Integrity", cases: cases);
         }
 

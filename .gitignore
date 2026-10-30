@@ -25,3 +25,10 @@ __pycache__/
 
 # macOS Finder metadata
 .DS_Store
+
+# VS Code extension (src/Armada.VSCode): dependencies, test and bundle output, and packaged VSIX files.
+src/Armada.VSCode/node_modules/
+src/Armada.VSCode/out/
+src/Armada.VSCode/dist/
+src/Armada.VSCode/.vscode-test/
+src/Armada.VSCode/*.vsix

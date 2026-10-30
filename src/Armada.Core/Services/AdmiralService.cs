@@ -4,6 +4,7 @@ namespace Armada.Core.Services
     using System.Linq;
     using SyslogLogging;
     using Armada.Core;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -17,6 +18,18 @@ namespace Armada.Core.Services
     public class AdmiralService : IAdmiralService
     {
         #region Public-Members
+
+        /// <summary>
+        /// Black box capture for the failures the Admiral writes, or null (no capture).
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; } = null;
+
+        /// <summary>
+        /// Consulted just before each dispatched mission is created (black box prevention: overlap warnings, brief lint,
+        /// optional chaining after an overlapping mission), or null. Its findings are returned on the dispatched mission
+        /// and voyage (OverlapWarnings, BriefLintWarnings); it never blocks a dispatch.
+        /// </summary>
+        public IMissionDispatchAdvisor? DispatchAdvisor { get; set; } = null;
 
         /// <inheritdoc />
         public Func<Captain, Mission, Dock, Task<int>>? OnLaunchAgent
@@ -133,6 +146,9 @@ namespace Armada.Core.Services
         private ArmadaSettings _Settings;
         private ISystemResourceProbe _ResourceProbe = new SystemResourceProbe();
         private long _MemoryPressureDeferrals = 0;
+        private MissionDispatchDeferredPayload? _LastMemoryDeferral = null;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _DeferralsRecorded =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal);
         // Process ids whose exit handler is running, with a count for overlapping callbacks; the health check skips them.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<int, int> _ExitsInProgress =
             new System.Collections.Concurrent.ConcurrentDictionary<int, int>();
@@ -265,6 +281,8 @@ namespace Armada.Core.Services
             _Logging.Info(_Header + "created voyage " + voyage.Id + ": " + title);
 
             // Create missions
+            List<MissionOverlapWarning> voyageWarnings = new List<MissionOverlapWarning>();
+            List<BriefLintFinding> voyageLint = new List<BriefLintFinding>();
             foreach (MissionDescription md in missionDescriptions)
             {
                 Mission mission = new Mission(md.Title, md.Description);
@@ -284,7 +302,9 @@ namespace Armada.Core.Services
 
                 if (!String.IsNullOrWhiteSpace(md.Persona))
                     mission.Persona = md.Persona!.Trim();
+                MissionDispatchAdvice? advice = await AdviseDispatchAsync(mission, vessel, token).ConfigureAwait(false);
                 mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                ApplyDispatchAdvice(mission, advice, voyageWarnings, voyageLint);
                 await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "created mission " + mission.Id + ": " + md.Title);
 
@@ -305,6 +325,8 @@ namespace Armada.Core.Services
 
             voyage.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+            voyage.OverlapWarnings = voyageWarnings.Count > 0 ? voyageWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
+            voyage.BriefLintWarnings = voyageLint.Count > 0 ? voyageLint.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;
 
             return voyage;
         }
@@ -385,6 +407,8 @@ namespace Armada.Core.Services
                 await _Database.Playbooks.SetVoyageSelectionsAsync(voyage.Id, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
             }
             _Logging.Info(_Header + "created pipeline voyage " + voyage.Id + ": " + title + " (pipeline: " + pipeline.Name + ")");
+            List<MissionOverlapWarning> voyageWarnings = new List<MissionOverlapWarning>();
+            List<BriefLintFinding> voyageLint = new List<BriefLintFinding>();
 
             foreach (MissionDescription md in missionDescriptions)
             {
@@ -417,14 +441,17 @@ namespace Armada.Core.Services
                     if (previousMissionId == null) mission.RequestedCaptainId = md.RequestedCaptainId;
 
                     // Only the first stage starts as Pending; dependent stages also start as Pending
-                    // but won't be assigned until their dependency completes
+                    // but won't be assigned until their dependency completes. The first stage is checked for overlaps.
+                    MissionDispatchAdvice? advice = previousMissionId == null ? await AdviseDispatchAsync(mission, vessel, token).ConfigureAwait(false) : null;
                     mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                    ApplyDispatchAdvice(mission, advice, voyageWarnings, voyageLint);
                     await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
                     _Logging.Info(_Header + "created pipeline mission " + mission.Id + ": " + mission.Title +
                         " (stage " + stage.Order + "/" + pipeline.Stages.Count + ", persona: " + stagePersonaName +
                         (previousMissionId != null ? ", depends on: " + previousMissionId : "") + ")");
 
-                    // Try to auto-assign only if no dependency (first stage)
+                    // Try to auto-assign only if no dependency (first stage); a first stage chained after an
+                    // overlapping mission waits for it like any dependent mission.
                     if (previousMissionId == null)
                     {
                         await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
@@ -447,6 +474,8 @@ namespace Armada.Core.Services
 
             voyage.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+            voyage.OverlapWarnings = voyageWarnings.Count > 0 ? voyageWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
+            voyage.BriefLintWarnings = voyageLint.Count > 0 ? voyageLint.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;
 
             return voyage;
         }
@@ -468,13 +497,17 @@ namespace Armada.Core.Services
                 if (owner != null && owner.IsEvaluation) mission.IsEvaluation = true;
             }
 
+            mission.OverlapWarnings = null;
+            mission.BriefLintWarnings = null;
+            Vessel? dispatchVessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+            MissionDispatchAdvice? advice = dispatchVessel != null ? await AdviseDispatchAsync(mission, dispatchVessel, token).ConfigureAwait(false) : null;
             mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
             await PersistMissionPlaybooksAsync(mission, mission.SelectedPlaybooks, token).ConfigureAwait(false);
             _Logging.Info(_Header + "created mission " + mission.Id + ": " + mission.Title);
 
             if (!String.IsNullOrEmpty(mission.VesselId))
             {
-                Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+                Vessel? vessel = dispatchVessel;
                 if (vessel != null)
                 {
                     bool assigned = await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
@@ -496,7 +529,33 @@ namespace Armada.Core.Services
                 }
             }
 
+            ApplyDispatchAdvice(mission, advice, null, null);
             return mission;
+        }
+
+        private async Task<MissionDispatchAdvice?> AdviseDispatchAsync(Mission mission, Vessel vessel, CancellationToken token)
+        {
+            IMissionDispatchAdvisor? advisor = DispatchAdvisor;
+            if (advisor == null) return null;
+            try
+            {
+                return await advisor.AdviseAsync(mission, vessel, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Warn(_Header + "dispatch advisor failed for mission \"" + mission.Title + "\" on vessel " + vessel.Id + " (dispatch continues): " + ex.Message);
+                return null;
+            }
+        }
+
+        private static void ApplyDispatchAdvice(Mission mission, MissionDispatchAdvice? advice, List<MissionOverlapWarning>? voyageWarnings, List<BriefLintFinding>? voyageLint)
+        {
+            if (advice == null) return;
+            foreach (MissionOverlapWarning w in advice.OverlapWarnings) w.MissionId = mission.Id;
+            mission.OverlapWarnings = advice.OverlapWarnings.Count > 0 ? advice.OverlapWarnings.Take(BlackBoxInsightLimits.MaxOverlapWarnings).ToList() : null;
+            mission.BriefLintWarnings = advice.BriefLintWarnings.Count > 0 ? advice.BriefLintWarnings.Take(BlackBoxInsightLimits.MaxLintFindings).ToList() : null;
+            if (voyageWarnings != null) voyageWarnings.AddRange(advice.OverlapWarnings);
+            if (voyageLint != null) voyageLint.AddRange(advice.BriefLintWarnings);
         }
 
         private static void RequireDispatchLimits(List<MissionDescription> missionDescriptions, List<SelectedPlaybook>? selectedPlaybooks)
@@ -559,9 +618,16 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<Mission> CancelMissionAsync(Mission mission, CancellationToken token = default)
+        public Task<Mission> CancelMissionAsync(Mission mission, CancellationToken token = default)
+        {
+            return CancelMissionAsync(mission, null, token);
+        }
+
+        /// <inheritdoc />
+        public async Task<Mission> CancelMissionAsync(Mission mission, MissionCancelOptions? options, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
+            MissionStatusEnum cancelStatusBefore = mission.Status;
 
             await MissionArchive.RecordAsync(_Database.Events, _Database.StageOutcomes, mission, "Cancel", token).ConfigureAwait(false);
 
@@ -603,11 +669,27 @@ namespace Armada.Core.Services
                 }
             }
 
+            bool stoppedAgent = ownsCaptain && captain!.ProcessId.HasValue;
             mission.Status = MissionStatusEnum.Cancelled;
             mission.ProcessId = null;
             mission.CompletedUtc = DateTime.UtcNow;
             mission.LastUpdateUtc = DateTime.UtcNow;
-            return await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (options?.FailureKind != null) mission.FailureKind = options.FailureKind;
+            if (options?.FailureReason != null) mission.FailureReason = options.FailureReason;
+            Mission cancelled = await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+            if (cancelStatusBefore != MissionStatusEnum.Cancelled)
+            {
+                // An operator cancel: triaged External. A running agent was stopped (OperatorStop); otherwise the status
+                // was changed by hand (OperatorTransition). A caller with its own reason (a deleted vessel) names the step.
+                BlackBoxStepEnum step = options?.BlackBoxStep ?? (stoppedAgent ? BlackBoxStepEnum.OperatorStop : BlackBoxStepEnum.OperatorTransition);
+                await BlackBox.RecordMissionFailureAsync(cancelled, cancelStatusBefore, step, context =>
+                {
+                    context.Captain = captain;
+                    context.Reason = "Cancelled by an operator" + (stoppedAgent ? "; the running agent was stopped." : ".");
+                    options?.ConfigureCapture?.Invoke(context);
+                }, token).ConfigureAwait(false);
+            }
+            return cancelled;
         }
 
         /// <inheritdoc />
@@ -840,7 +922,8 @@ namespace Armada.Core.Services
                     if (currentMission.RedispatchAttempts < InterruptedRedispatchLimit)
                         await HandleInterruptedProcessExitAsync(captain, currentMission, currentMission.Id, -1, token).ConfigureAwait(false);
                     else
-                        await HandleTerminalProcessExitFailureAsync(captain, currentMission, currentMission.Id, "Restart recovery limit reached after Admiral interruption", RuntimeFailureKindEnum.Transient, token, MissionFailureKindEnum.Infra).ConfigureAwait(false);
+                        await HandleTerminalProcessExitFailureAsync(captain, currentMission, currentMission.Id, "Restart recovery limit reached after Admiral interruption", RuntimeFailureKindEnum.Transient, token, MissionFailureKindEnum.Infra,
+                            step: BlackBoxStepEnum.Interrupted).ConfigureAwait(false);
                     resetCount++;
                     continue;
                 }
@@ -1166,7 +1249,8 @@ namespace Armada.Core.Services
                             return;
                         }
 
-                        await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, checkFailure, RuntimeFailureKindEnum.TaskFailure, token).ConfigureAwait(false);
+                        await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, checkFailure, RuntimeFailureKindEnum.TaskFailure, token,
+                            step: BlackBoxStepEnum.StageCheck, check: check, exitCode: exitCode).ConfigureAwait(false);
                         return;
                     }
                 }
@@ -1235,7 +1319,8 @@ namespace Armada.Core.Services
                 bool quarantine = failureKind == RuntimeFailureKindEnum.UsageLimit || failureKind == RuntimeFailureKindEnum.AuthFailure
                     || (exitCode >= 0 && failureKind == RuntimeFailureKindEnum.Crash && RecordCrashAndCheckLoop(captainId));
                 await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, failureReason, exitInfo.FailureKind, token,
-                    exitCode < 0 ? MissionFailureKindEnum.Infra : null, quarantine, exitInfo.ProviderError).ConfigureAwait(false);
+                    exitCode < 0 ? MissionFailureKindEnum.Infra : null, quarantine, exitInfo.ProviderError,
+                    step: exitCode < 0 ? BlackBoxStepEnum.RedispatchExhausted : null, exitCode: exitCode).ConfigureAwait(false);
             }
 
             // Try to dispatch any pending missions now that capacity may have freed up
@@ -1651,7 +1736,8 @@ namespace Armada.Core.Services
 
                     // The health monitor only knows the exit code (no structured provider error reached it).
                     RuntimeExitInfo healthExitInfo = RuntimeFailureClassifier.Decide(exitCode, null);
-                    await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, healthExitInfo.Describe(), healthExitInfo.FailureKind, token, exitCode < 0 ? MissionFailureKindEnum.Infra : null).ConfigureAwait(false);
+                    await HandleTerminalProcessExitFailureAsync(captain, mission, missionId, healthExitInfo.Describe(), healthExitInfo.FailureKind, token, exitCode < 0 ? MissionFailureKindEnum.Infra : null,
+                        step: exitCode < 0 ? BlackBoxStepEnum.RedispatchExhausted : null, exitCode: exitCode).ConfigureAwait(false);
                 }
             }
             else
@@ -1685,6 +1771,7 @@ namespace Armada.Core.Services
 
                     if (!MissionStateMachine.IsTerminalOrPostWork(mission.Status))
                     {
+                        MissionStatusEnum runtimeStatusBefore = mission.Status;
                         mission.Status = MissionStatusEnum.Failed;
                         mission.FailureReason = "Mission exceeded max runtime of " + _Settings.MaxMissionRuntimeMinutes + " minutes";
                         mission.FailureKind = MissionFailureKindEnum.MaxRuntimeExceeded;
@@ -1694,6 +1781,11 @@ namespace Armada.Core.Services
                         await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                         ArmadaMetrics.MissionRuntimeExceeded.Add(1);
                         ArmadaMetrics.MissionsFailed.Add(1);
+                        await BlackBox.RecordMissionFailureAsync(mission, runtimeStatusBefore, BlackBoxStepEnum.MaxRuntime, context =>
+                        {
+                            context.Captain = captain;
+                            context.Note = "Ran " + (int)(DateTime.UtcNow - mission.StartedUtc!.Value).TotalMinutes + " minutes; the ceiling is " + _Settings.MaxMissionRuntimeMinutes + ".";
+                        }, token).ConfigureAwait(false);
 
                         await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (exceeded max runtime)",
                             entityType: "mission", entityId: mission.Id,
@@ -1768,6 +1860,7 @@ namespace Armada.Core.Services
                             if (mission != null &&
                                 !MissionStateMachine.IsTerminalOrPostWork(mission.Status))
                             {
+                                MissionStatusEnum stallStatusBefore = mission.Status;
                                 mission.Status = MissionStatusEnum.Failed;
                                 mission.FailureReason = "Captain stalled, recovery exhausted. " + stallReason + " " + stallRemediation;
                                 mission.FailureKind = MissionFailureKindEnum.StallRecoveryExhausted;
@@ -1777,6 +1870,11 @@ namespace Armada.Core.Services
                                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                                 ArmadaMetrics.MissionsFailed.Add(1);
                                 _Logging.Warn(_Header + "mission " + mission.Id + " marked failed (captain stalled, recovery exhausted)");
+                                await BlackBox.RecordMissionFailureAsync(mission, stallStatusBefore, BlackBoxStepEnum.Stall, context =>
+                                {
+                                    context.Captain = captain;
+                                    context.Note = "Recovery attempts: " + captain.RecoveryAttempts + " of " + _Settings.MaxRecoveryAttempts + "; last output heartbeat " + outputHeartbeat.Value.ToString("o") + ".";
+                                }, token).ConfigureAwait(false);
 
                                 // Emit mission.failed event
                                 await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (captain stalled, recovery exhausted)",
@@ -1806,9 +1904,15 @@ namespace Armada.Core.Services
             _Logging.Warn(_Header + reason + " Captain: " + captain.Id);
             if (mission != null)
             {
+                // The owning host has not confirmed the job stopped: an environment problem, not the work.
+                bool alreadyRecorded = String.Equals(mission.FailureReason, reason, StringComparison.Ordinal);
+                mission.FailureKind = MissionFailureKindEnum.Infra;
                 mission.FailureReason = reason;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                // Non-terminal (the mission keeps its status); recorded once per episode, not on every health check.
+                if (!alreadyRecorded)
+                    await BlackBox.RecordMissionFailureAsync(mission, mission.Status, BlackBoxStepEnum.UnconfirmedStop, context => context.Captain = captain, token).ConfigureAwait(false);
             }
             await EmitEventAsync("captain.stop_unconfirmed", reason, entityType: "captain", entityId: captain.Id,
                 captainId: captain.Id, missionId: mission?.Id, voyageId: mission?.VoyageId,
@@ -2014,12 +2118,22 @@ namespace Armada.Core.Services
                 if (check == null || check.IsBlocking) continue;
                 DateTime version = mission.LastUpdateUtc;
                 mission.Status = MissionStatusEnum.LandingFailed;
+                // A lost landing callback is an Armada handoff failure, not a merge conflict an autonomous rescue can fix.
+                mission.FailureKind = MissionFailureKindEnum.Infra;
                 mission.FailureReason = "Stage check was nonblocking, but no merge queue entry was recorded within five minutes. Inspect the preserved branch and enqueue landing manually.";
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 if (await _Database.Missions.TryUpdateIfUnchangedAsync(mission, version, new[] { MissionStatusEnum.WorkProduced }, token).ConfigureAwait(false))
+                {
                     await EmitEventAsync("mission.landing_handoff_missing", mission.FailureReason,
                         entityType: "mission", entityId: mission.Id, missionId: mission.Id, vesselId: mission.VesselId,
                         voyageId: mission.VoyageId, tenantId: mission.TenantId, userId: mission.UserId, token: token).ConfigureAwait(false);
+                    await BlackBox.RecordMissionFailureAsync(mission, MissionStatusEnum.WorkProduced, BlackBoxStepEnum.MissingMergeHandoff, context =>
+                    {
+                        context.Vessel = vessel;
+                        context.Voyage = voyage;
+                        context.CheckResults.Add(check);
+                    }, token).ConfigureAwait(false);
+                }
             }
         }
 
@@ -2212,10 +2326,18 @@ namespace Armada.Core.Services
                         Mission? recovered = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
                         if (recovered == null || recovered.Status != mission.Status || recovered.ProcessId.HasValue) return;
                         recovered.Status = MissionStatusEnum.WorkProduced;
+                        recovered.FailureKind = MissionFailureKindEnum.Infra;
                         recovered.FailureReason = "Orphaned agent exit was not verified; stage checks and landing remain outstanding.";
                         recovered.CompletedUtc = null;
                         recovered.LastUpdateUtc = DateTime.UtcNow;
                         if (!await _Database.Missions.TryUpdateIfStatusAsync(recovered, new MissionStatusEnum[] { mission.Status }, token).ConfigureAwait(false)) return;
+                        // Non-terminal: held as WorkProduced for an operator to verify.
+                        await BlackBox.RecordMissionFailureAsync(recovered, mission.Status, BlackBoxStepEnum.OrphanedExit, context =>
+                        {
+                            context.Captain = captain;
+                            context.Dock = dock;
+                            context.Note = "Captain " + captain.Id + " had moved on to " + (captain.CurrentMissionId ?? "nothing") + "; agent process " + (mission.ProcessId?.ToString() ?? "(none)") + " was gone.";
+                        }, token).ConfigureAwait(false);
 
                         await EmitEventAsync("mission.orphan_recovered",
                             "Orphaned mission held as WorkProduced with unverified work: " + mission.Title + " (captain " + captain.Id + " had moved on)",
@@ -2299,7 +2421,11 @@ namespace Armada.Core.Services
 
             // Check for any idle captains with available capacity
             bool hasCapacity = await HasAvailableCapacityAsync(token).ConfigureAwait(false);
-            if (!hasCapacity) return;
+            if (!hasCapacity)
+            {
+                await RecordMemoryDeferralsAsync(pendingMissions, token).ConfigureAwait(false);
+                return;
+            }
 
             bool anyFailed = false;
 
@@ -2339,8 +2465,47 @@ namespace Armada.Core.Services
             _RetryDispatchNeeded = anyFailed;
         }
 
+        private async Task RecordMemoryDeferralsAsync(List<Mission> pendingMissions, CancellationToken token)
+        {
+            // One mission.dispatch_deferred per Pending mission and reason while the memory gate holds, not one per cycle.
+            MissionDispatchDeferredPayload? deferral = _LastMemoryDeferral;
+            if (deferral == null) return;
+            foreach (Mission mission in pendingMissions.Take(CollectionLimits.MaxRequestItems))
+            {
+                if (_DeferralsRecorded.TryGetValue(mission.Id, out string? recorded) && String.Equals(recorded, deferral.Reason, StringComparison.Ordinal)) continue;
+                _DeferralsRecorded[mission.Id] = deferral.Reason;
+                try
+                {
+                    MissionDispatchDeferredPayload payload = new MissionDispatchDeferredPayload
+                    {
+                        MissionId = mission.Id,
+                        Reason = deferral.Reason,
+                        AvailableBytes = deferral.AvailableBytes,
+                        TotalBytes = deferral.TotalBytes,
+                        MinimumAvailableBytes = deferral.MinimumAvailableBytes
+                    };
+                    ArmadaEvent evt = new ArmadaEvent("mission.dispatch_deferred", "Dispatch deferred for " + mission.Id + ": " + deferral.Reason);
+                    evt.TenantId = mission.TenantId;
+                    evt.UserId = mission.UserId;
+                    evt.EntityType = "mission";
+                    evt.EntityId = mission.Id;
+                    evt.MissionId = mission.Id;
+                    evt.VesselId = mission.VesselId;
+                    evt.VoyageId = mission.VoyageId;
+                    evt.Payload = System.Text.Json.JsonSerializer.Serialize(payload);
+                    await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+                {
+                    _Logging.Warn(_Header + "could not record mission.dispatch_deferred for " + mission.Id + ": " + ex.Message);
+                }
+            }
+            if (_DeferralsRecorded.Count > 10000) _DeferralsRecorded.Clear();
+        }
+
         private async Task<bool> HasAvailableCapacityAsync(CancellationToken token)
         {
+            _LastMemoryDeferral = null;
             // Global concurrency ceiling: refuse new work once the configured number of missions
             // is already running, as backpressure against unbounded captain execution.
             if (_Settings.MaxConcurrentMissions > 0)
@@ -2361,9 +2526,19 @@ namespace Armada.Core.Services
                 {
                     System.Threading.Interlocked.Increment(ref _MemoryPressureDeferrals);
                     _Logging.Info(_Header + "capacity gate " + (admission.DeferReason ?? "deferred for memory pressure"));
+                    _LastMemoryDeferral = new MissionDispatchDeferredPayload
+                    {
+                        Reason = admission.DeferReason ?? "deferred for memory pressure",
+                        AvailableBytes = available >= 0 ? available : (long?)null,
+                        TotalBytes = total >= 0 ? total : (long?)null,
+                        MinimumAvailableBytes = _Settings.MinAvailableMemoryBytesForLaunch
+                    };
                     return false;
                 }
             }
+
+            _LastMemoryDeferral = null;
+            _DeferralsRecorded.Clear();
 
             // Only idle captains have capacity for new assignments
             List<Captain> idleCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle, token).ConfigureAwait(false);
@@ -2683,9 +2858,13 @@ namespace Armada.Core.Services
             CancellationToken token,
             MissionFailureKindEnum? missionFailureKind = null,
             bool quarantineCaptain = false,
-            RuntimeProviderError? providerError = null)
+            RuntimeProviderError? providerError = null,
+            BlackBoxStepEnum? step = null,
+            StageCheckResult? check = null,
+            int? exitCode = null)
         {
             bool missionFailed = false;
+            MissionStatusEnum terminalStatusBefore = mission?.Status ?? MissionStatusEnum.InProgress;
             if (mission != null)
             {
                 MissionStatusEnum observedStatus = mission.Status;
@@ -2712,6 +2891,20 @@ namespace Armada.Core.Services
             if (mission != null && missionFailed)
             {
                 _Logging.Warn(_Header + "mission " + missionId + " marked failed after process exit");
+                await BlackBox.RecordMissionFailureAsync(mission, terminalStatusBefore, step ?? BlackBoxSiteFacts.ExecutionStepOf(runtimeFailureKind), context =>
+                {
+                    context.Captain = captain;
+                    context.ExitCode = exitCode;
+                    context.RuntimeFailureKind = runtimeFailureKind;
+                    if (check != null)
+                    {
+                        context.CheckResults.Add(check);
+                        context.FailingCommand = check.FailedCommand;
+                        context.CommandExitCode = check.ExitCode;
+                    }
+                    if (providerError != null) context.Note = "Provider error: HTTP " + (providerError.HttpStatusCode?.ToString() ?? "?") + " " + (providerError.ErrorType ?? "") + " " + (providerError.Message ?? "");
+                    if (quarantineCaptain) context.Note = (context.Note == null ? "" : context.Note + " ") + "Captain " + captain.Id + " was quarantined.";
+                }, token).ConfigureAwait(false);
 
                 await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (" + failureReason + ")",
                     entityType: "mission", entityId: mission.Id,
@@ -2772,6 +2965,7 @@ namespace Armada.Core.Services
             Voyage? voyage = await _Database.Voyages.ReadAsync(voyageId, token).ConfigureAwait(false);
             if (voyage == null) return;
             if (voyage.Status == VoyageStatusEnum.Cancelled || voyage.Status == VoyageStatusEnum.Complete) return;
+            VoyageStatusEnum voyageStatusBefore = voyage.Status;
 
             List<Mission> voyageMissions = await _Database.Missions.EnumerateByVoyageAsync(voyageId, token).ConfigureAwait(false);
 
@@ -2826,6 +3020,7 @@ namespace Armada.Core.Services
                 if (otherMission.Status == MissionStatusEnum.Blocked) continue;
                 // A pipeline stage still waiting on the failed one is held as Blocked when that is configured.
                 bool block = pipelineVoyage && _Settings.BlockDependentsOfFailedStages && otherMission.Status == MissionStatusEnum.Pending;
+                MissionStatusEnum haltedStatusBefore = otherMission.Status;
                 otherMission.Status = block ? MissionStatusEnum.Blocked : MissionStatusEnum.Cancelled;
                 otherMission.FailureReason = block
                     ? "Blocked by failed dependency " + failedMissionId + " (" + failureReason + "). Restart that mission to continue, or cancel the voyage."
@@ -2835,6 +3030,11 @@ namespace Armada.Core.Services
                 otherMission.CompletedUtc = block ? null : DateTime.UtcNow;
                 otherMission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(otherMission, token).ConfigureAwait(false);
+                await BlackBox.RecordMissionFailureAsync(otherMission, haltedStatusBefore, BlackBoxStepEnum.DependencyCancelled, context =>
+                {
+                    context.Voyage = voyage;
+                    context.Note = (block ? "Non-terminal: held as Blocked" : "Cancelled") + " when the voyage halted after mission " + failedMissionId + " failed.";
+                }, token).ConfigureAwait(false);
 
                 // A cancelled mission whose captain is still running must actually stop: recall its captain through the
                 // owner-aware stop path (which leaves the Cancelled status alone) instead of letting it run on unseen.
@@ -2866,6 +3066,16 @@ namespace Armada.Core.Services
                     voyage.CompletedUtc = DateTime.UtcNow;
                     voyage.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+                    if (voyage.Status == VoyageStatusEnum.Failed)
+                    {
+                        await BlackBox.RecordVoyageFailureAsync(voyage, voyageStatusBefore, BlackBoxStepEnum.StageFailed,
+                            "Pipeline stage " + failedMissionId + " failed and nothing else is active: " + failureReason, context =>
+                            {
+                                context.RootMissionId = failedMissionId;
+                                context.HaltReason = failureReason;
+                                context.SettlementRule = "A failed pipeline stage halts its own chain; the voyage settles once no mission is active.";
+                            }, token).ConfigureAwait(false);
+                    }
                 }
 
                 await EmitEventAsync("voyage.stage_failed", "Pipeline stage " + failedMissionId + " failed; its following stages were cancelled",
@@ -2875,6 +3085,12 @@ namespace Armada.Core.Services
 
             await EmitEventAsync("voyage.cancelled", "Voyage halted after mission " + failedMissionId + " failed",
                 entityType: "voyage", entityId: voyage.Id, missionId: failedMissionId, voyageId: voyage.Id, token: token).ConfigureAwait(false);
+            await BlackBox.RecordVoyageFailureAsync(voyage, voyageStatusBefore, BlackBoxStepEnum.Halted,
+                "Voyage halted after mission " + failedMissionId + " failed: " + failureReason, context =>
+                {
+                    context.RootMissionId = failedMissionId;
+                    context.HaltReason = failureReason;
+                }, token).ConfigureAwait(false);
         }
 
         private async Task MaintainCaptainPoolAsync(CancellationToken token)

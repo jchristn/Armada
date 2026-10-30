@@ -36,11 +36,13 @@ namespace Armada.Server.Mcp.Tools
         /// <param name="git">Git service for diff operations, or null if unavailable.</param>
         /// <param name="landingService">Optional landing service for mission landing operations.</param>
         /// <param name="missionService">Optional mission service for pipeline-aware restart_mission; without it restart answers Unavailable.</param>
-        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, IGitService? git, ILandingService? landingService = null, IMissionService? missionService = null)
+        /// <param name="blackBox">Optional black box capture for transition_mission_status to Failed, LandingFailed, Cancelled or Blocked (step OperatorTransition).</param>
+        /// <param name="blackBoxHooks">Optional black box lifecycle hooks, called after deletes and updates (retention cascades, expiry recompute).</param>
+        public static void Register(RegisterToolDelegate register, DatabaseDriver database, IAdmiralService admiral, ArmadaSettings? settings, IGitService? git, ILandingService? landingService = null, IMissionService? missionService = null, Armada.Core.BlackBox.IBlackBoxCapture? blackBox = null, Armada.Core.BlackBox.IBlackBoxLifecycleHooks? blackBoxHooks = null)
         {
             register(
                 "mission_status",
-                "Get status of a specific mission",
+                "Get status of a specific mission. LastBlackBoxEntryId names its current black box entry when it failed (read it with get_blackbox).",
                 new
                 {
                     type = "object",
@@ -300,6 +302,7 @@ namespace Armada.Server.Mcp.Tools
                     }
 
                     await database.Missions.DeleteAsync(missionId).ConfigureAwait(false);
+                    if (blackBoxHooks != null) await blackBoxHooks.OnMissionDeletedAsync(missionId).ConfigureAwait(false);
                     return (object)new { Status = "deleted", MissionId = missionId };
                 });
 
@@ -374,6 +377,7 @@ namespace Armada.Server.Mcp.Tools
                         }
 
                         await database.Missions.DeleteAsync(id).ConfigureAwait(false);
+                        if (blackBoxHooks != null) await blackBoxHooks.OnMissionDeletedAsync(id).ConfigureAwait(false);
                         result.Deleted++;
                     }
                     result.ResolveStatus();
@@ -487,6 +491,7 @@ namespace Armada.Server.Mcp.Tools
                         catch (InvalidOperationException ex) { return (object)McpToolError.Conflict(ex.Message); }
                     }
 
+                    MissionStatusEnum statusBefore = mission.Status;
                     mission.Status = newStatus;
                     mission.LastUpdateUtc = DateTime.UtcNow;
 
@@ -494,6 +499,7 @@ namespace Armada.Server.Mcp.Tools
                         mission.CompletedUtc = DateTime.UtcNow;
 
                     mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                    await BlackBoxOperatorCapture.RecordTransitionAsync(blackBox, mission, statusBefore, "MCP").ConfigureAwait(false);
 
                     Signal signal = new Signal(SignalTypeEnum.Progress, "Mission " + missionId + " transitioned to " + newStatus);
                     signal.TenantId = mission.TenantId;
