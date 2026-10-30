@@ -744,20 +744,55 @@ namespace Armada.Server.WebSocket
                                 List<Dock> mdDocks = await _Database.Docks.EnumerateByVesselAsync(mdMission.VesselId).ConfigureAwait(false);
                                 mdDock = mdDocks.FirstOrDefault(d => d.BranchName == mdMission.BranchName && d.Active);
                             }
-                            if (mdDock == null || String.IsNullOrEmpty(mdDock.WorktreePath) || !System.IO.Directory.Exists(mdDock.WorktreePath))
+                            if (mdDock == null || String.IsNullOrEmpty(mdDock.WorktreePath))
                                 return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "No diff available - worktree was already reclaimed and no saved diff exists");
-                            else if (_Git == null)
-                                return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "Git service not available");
-                            else
+
+                            DockHost? mdHost = null;
+                            bool mdRemote = DockHostResolver.IsHarborDock(mdDock);
+                            try
                             {
-                                string baseBranch = "main";
-                                if (!String.IsNullOrEmpty(mdMission.VesselId))
+                                if (mdRemote)
                                 {
-                                    Vessel? mdVessel = await _Database.Vessels.ReadAsync(mdMission.VesselId).ConfigureAwait(false);
-                                    if (mdVessel != null) baseBranch = mdVessel.DefaultBranch;
+                                    DockHostResolver? mdHosts = (Missions as MissionService)?.DockHosts;
+                                    if (mdHosts == null) throw new InvalidOperationException("Harbor delegation is not available.");
+                                    mdHost = mdHosts.ForDock(mdDock);
                                 }
-                                string diff = await _Git.DiffAsync(mdDock.WorktreePath, baseBranch).ConfigureAwait(false);
+
+                                bool mdExists = mdHost != null
+                                    ? await mdHost.Files.DirectoryExistsAsync(mdDock.WorktreePath).ConfigureAwait(false)
+                                    : System.IO.Directory.Exists(mdDock.WorktreePath);
+                                if (!mdExists)
+                                {
+                                    string mdMissing = mdRemote
+                                        ? "No diff available: the worktree is not accessible on its owning host and no saved diff exists"
+                                        : "No diff available - worktree was already reclaimed and no saved diff exists";
+                                    return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, mdMissing);
+                                }
+                            }
+                            catch (Exception ex) when (mdRemote && (ex is InvalidOperationException || ex is TimeoutException || ex is System.IO.IOException))
+                            {
+                                return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "The mission worktree is on Harbor " + mdDock.HarborId + ". Connect that Harbor, ensure it supports mission docks, and try again; its diff is currently unavailable.");
+                            }
+
+                            IGitService? mdGit = mdHost != null ? mdHost.Git : _Git;
+                            if (mdGit == null)
+                                return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "Git service not available");
+
+                            string baseBranch = "main";
+                            if (!String.IsNullOrEmpty(mdMission.VesselId))
+                            {
+                                Vessel? mdVessel = await _Database.Vessels.ReadAsync(mdMission.VesselId).ConfigureAwait(false);
+                                if (mdVessel != null) baseBranch = mdVessel.DefaultBranch;
+                            }
+
+                            try
+                            {
+                                string diff = await mdGit.DiffAsync(mdDock.WorktreePath, baseBranch).ConfigureAwait(false);
                                 return new { type = "command.result", action = "get_mission_diff", data = (object)new { MissionId = mdId, Branch = mdDock.BranchName ?? "", Diff = diff } };
+                            }
+                            catch (Exception ex) when (mdRemote && (ex is InvalidOperationException || ex is TimeoutException || ex is System.IO.IOException))
+                            {
+                                return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "The mission diff could not be read on Harbor " + mdDock.HarborId + ". Check its connection and mission log, then try again.");
                             }
                         }
                     }
