@@ -42,6 +42,10 @@ interfaces, storage, database) is in [BLACKBOX.md](BLACKBOX.md).
 - `record.json` carries `schemaVersion` (currently 1; the schema file carries it as `x-armada-schemaVersion`).
 - Additive changes keep the version: new optional fields, new sections, new enum values, larger limits.
 - Renames, removals, type changes and meaning changes bump `schemaVersion`.
+- The v1.2.0 resilience bias was additive and kept `schemaVersion` 1: `analysis.resilience`
+  (`BlackBoxResilience`), `handoff` (`BlackBoxHandoffTrail`), `related.armadaVersions`, `triage.priorApplied` and
+  `triage.suspected`, the section names `Resilience` and `Handoff`, and the digest's resilience fields. Records written
+  before it have `resilience` and `handoff` null until they are re-analyzed (rules version 2).
 - Readers must ignore unknown fields and treat unknown enum values as `Unknown`. Armada's own reader
   (`BlackBoxJson`) does exactly that: unknown properties are skipped, an unknown enum name or number reads as the
   enum's `Unknown` member (every black box enum has one), and a nullable Armada enum without an `Unknown` member (for
@@ -73,6 +77,7 @@ is on; reads always return the decoded bytes. `sha256` is over the stored (encod
 | `evidence/git-status.txt` | text/plain | `git status --porcelain` of the worktree and of the target checkout, on the host that owns them. |
 | `evidence/target-commits.txt` | text/plain | Target commits since the start commit (up to 500): SHA, date, author, subject, Armada mission or outside Armada, changed paths. |
 | `evidence/events.json` | application/json | The newest 50 events of the mission (or voyage), black box events excluded, as `BlackBoxEventRef` objects. |
+| `evidence/handoff-timeline.json` | application/json | The handoff and landing trail (`record.handoff`, a `BlackBoxHandoffTrail`) of entries in Armada's handoff and landing scope. |
 | `manifest.json` | application/json | Only inside a `.zip` download: `BlackBoxDownloadManifest` (entry id, schema version, objects with name, content type, size and SHA-256). |
 
 Evidence objects are at most `blackBox.storage.maxEvidenceObjectBytes` (default 1 MB) uncompressed; larger content
@@ -84,7 +89,7 @@ write only `brief.md`.
 
 ## 4. record.json sections and fields
 
-The root is `BlackBoxRecord`. Section order in the brief: Summary, Identity, Where, How, Status timeline, Why,
+The root is `BlackBoxRecord`. Section order in the brief: Summary, Armada resilience, Identity, Where, How, Status timeline, Why,
 Conflict, Workspace, Scope, Configuration, Prevention, Improvements, Recovery, Attempts, Evidence, Related.
 
 ### BlackBoxRecord
@@ -113,6 +118,7 @@ The content of a black box entry's record.json: a versioned forensic snapshot of
 | `analysis` | [BlackBoxAnalysis](#blackboxanalysis) or null | yes | no |  | Advisor output; null until analyzed. |
 | `related` | [BlackBoxRelated](#blackboxrelated) or null | yes | no |  | Fingerprint and similar entries. |
 | `voyage` | [BlackBoxVoyageRollup](#blackboxvoyagerollup) or null | yes | no |  | Voyage roll-up (voyage entries only). |
+| `handoff` | [BlackBoxHandoffTrail](#blackboxhandofftrail) or null | yes | no |  | Handoff and landing trail (entries in handoff and landing scope), or null. |
 | `redaction` | [BlackBoxRedaction](#blackboxredaction) | no | yes |  | Which redaction rules fired and how often (never the values). |
 | `truncation` | [BlackBoxTruncation](#blackboxtruncation) | no | yes |  | Fields that were cut, with their original sizes, and capture notes. |
 
@@ -443,6 +449,7 @@ recovery contract are in [BLACKBOX.md](BLACKBOX.md), sections 3.13 and 3.14.
 | `armadaImprovements` | array of [BlackBoxImprovement](#blackboximprovement) | no | yes | at most 10 items | Armada improvement hypotheses. |
 | `recoveryPaths` | array of [BlackBoxRecoveryPath](#blackboxrecoverypath) | no | yes | at most 10 items | Ranked recovery paths. |
 | `triage` | [BlackBoxTriageVerdict](#blackboxtriageverdict) or null | yes | no |  | Triage verdict, or null. |
+| `resilience` | [BlackBoxResilience](#blackboxresilience) or null | yes | no |  | Resilience analysis: could Armada's handoff and landing have healed it, why Armada did not catch it, where it lives in the Armada source and the Armada changes that would prevent it. Filled for every analyzed entry. |
 
 ### BlackBoxFinding
 
@@ -539,6 +546,8 @@ Triage verdict with the rule votes behind it.
 | `confidence` | enum: `Low`, `Medium`, `High`, `Unknown` | no | yes |  | Confidence. |
 | `votes` | array of [BlackBoxTriageVote](#blackboxtriagevote) | no | yes | at most 20 items | Votes. |
 | `tiedWith` | array of enum: `Unknown`, `UserConfig`, `MissionBrief`, `Transient`, `ArmadaDefect`, `External` | no | yes | at most 6 items | Candidates on a tie. |
+| `priorApplied` | boolean | no | yes |  | Whether the handoff and landing prior (BBX-PRIOR-ARMADA) took part in the vote. |
+| `suspected` | boolean | no | yes |  | Whether an ArmadaDefect verdict rests on the prior alone (no rule voted ArmadaDefect): a suspected Armada defect, reported with Low confidence. |
 
 ### BlackBoxTriageVote
 
@@ -550,6 +559,64 @@ One rule's triage vote.
 | `verdict` | enum: `Unknown`, `UserConfig`, `MissionBrief`, `Transient`, `ArmadaDefect`, `External` | no | yes |  | Vote. |
 | `weight` | integer | no | yes |  | Weight. |
 
+### BlackBoxResilience
+
+Resilience analysis of a black box failure (analysis.resilience): could Armada's handoff and landing have healed it by itself, why Armada did not catch it earlier, where in the Armada source it lives, and the Armada changes that would prevent it, as mission briefs. Filled by the advisor for every entry; never empty in handoff and landing scope.
+
+Written by `BlackBoxAdvisor` for every analyzed entry. In Armada's handoff and landing scope (`inScope`; phases
+Handoff, Landing, MergeQueue, Recovery and Provision, output contract parsing, check harness errors, a false scope
+check, and dock, worktree, branch or target-sync facts of any phase) it is never empty: the strongest in-scope rule's
+self-healing verdict, detection gap, invariant and regression test, code pointers (the failure site first), and the
+proposed Armada changes; the phase defaults fill what no rule covers. Outside the scope `noChangeReason` says why no
+Armada change is suggested unless a rule or improvement proposes one. Each proposed change's severity is escalated by
+recurrence (`occurrences30Days` 1 Medium, 3 or more High, 5 or more or `armadaVersionCount` 2 or more Critical); see
+[BLACKBOX.md](BLACKBOX.md), section 1.1 (Resilience bias).
+
+| Field | Type | Null | Required | Bounds | Description |
+|---|---|---|---|---|---|
+| `inScope` | boolean | no | yes |  | Whether the failure is in Armada's handoff and landing scope (phases Handoff, Landing, MergeQueue, Recovery and Provision, Armada handoff mechanics in Completion, and dock, worktree, branch or target-sync facts of any phase). |
+| `scopeReason` | string | yes | no | at most 2000 chars | Why the failure is in scope (for example "phase Landing" or "the dock worktree was missing"), or null. |
+| `selfHealable` | enum: `Yes`, `No`, `Unknown` | no | yes |  | Whether Armada could have recovered automatically. |
+| `selfHealingProposal` | string | yes | no | at most 2000 chars | What Armada could have done automatically (retry with backoff, recreate the worktree from the branch, rebase onto the moved target, ...), or null. |
+| `detectionGapKind` | enum: `NoPreflightCheck`, `CheckTooLate`, `StateNotPersisted`, `Race`, `MissingInvariant`, `MissingRetry`, `None`, `Unknown` | no | yes |  | Kind of detection gap. |
+| `detectionGap` | string | yes | no | at most 2000 chars | Why Armada did not catch or prevent it earlier, or null. |
+| `invariant` | string | yes | no | at most 2000 chars | The invariant that should hold so the failure cannot happen, or null. |
+| `codePointers` | array of string | no | yes | at most 12 items; each at most 1024 chars | Armada source locations most likely involved (the failure site first, then the handoff and landing services), as repository-relative file:method. |
+| `armadaVersion` | string | yes | no | at most 2000 chars | Armada version that failed (read the code pointers at this build). |
+| `armadaCommit` | string | yes | no | at most 2000 chars | Armada build commit that failed, or null. |
+| `proposedChanges` | array of [BlackBoxProposedChange](#blackboxproposedchange) | no | yes | at most 5 items | Proposed Armada changes as mission briefs, most impactful first. |
+| `regressionTest` | [BlackBoxRegressionTest](#blackboxregressiontest) or null | yes | no |  | The test that would have caught it, or null. |
+| `severity` | enum: `Low`, `Medium`, `High`, `Critical`, `Unknown` | no | yes |  | Overall severity: the highest proposed change's, escalated by recurrence (1 occurrence Medium, 3 or more High, 5 or more or seen in 2 or more Armada versions Critical). |
+| `occurrences30Days` | integer | no | yes |  | Entries with the same fingerprint in the last 30 days (this one included). |
+| `armadaVersionCount` | integer | no | yes |  | Armada versions the fingerprint was seen in. |
+| `attemptedRecoveries` | array of string | no | yes | at most 10 items; each at most 1024 chars | Automatic recoveries Armada already attempted before this failure and their outcome (from the handoff trail). |
+| `noChangeReason` | string | yes | no | at most 2000 chars | Why no Armada change is suggested (outside the handoff and landing scope), or null. |
+| `ruleIds` | array of string | no | yes | at most 10 items; each at most 1024 chars | Rules that contributed (BBX-PRIOR-ARMADA when the scope prior applied). |
+
+### BlackBoxProposedChange
+
+A proposed Armada change written as a mission-ready brief: title, one paragraph change and the acceptance test, ranked by impact, with a severity that escalates with recurrence.
+
+| Field | Type | Null | Required | Bounds | Description |
+|---|---|---|---|---|---|
+| `rank` | integer | no | yes |  | Rank by impact, 1 is the most impactful. |
+| `title` | string | no | yes | at most 500 chars | Mission title for the Armada change. |
+| `change` | string | no | yes | at most 2000 chars | One paragraph describing the change, written for the captain that will make it. |
+| `acceptanceTest` | string | yes | no | at most 2000 chars | The test that proves the change (suite and case), or null. |
+| `severity` | enum: `Low`, `Medium`, `High`, `Critical`, `Unknown` | no | yes |  | Severity after escalation by recurrence (fingerprint occurrences and Armada versions). |
+| `ruleId` | string | yes | no | at most 2000 chars | Rule that proposed it, or null for a scope default. |
+| `codePointers` | array of string | no | yes | at most 10 items; each at most 1024 chars | Armada source locations the change touches (repository-relative file:method). |
+| `missionBrief` | string | yes | no | at most 2000 chars | The change as a mission brief for the Armada vessel (title, change, acceptance test, code pointers and the Armada build commit), or null. |
+
+### BlackBoxRegressionTest
+
+The test that would have caught a black box failure.
+
+| Field | Type | Null | Required | Bounds | Description |
+|---|---|---|---|---|---|
+| `suite` | string | no | yes | at most 2000 chars | Test suite (for example Services.LandingService). |
+| `description` | string | no | yes | at most 2000 chars | The case that would have caught the failure. |
+
 ### BlackBoxRelated
 
 Related section: fingerprint, similar entries and cascade.
@@ -559,10 +626,11 @@ Related section: fingerprint, similar entries and cascade.
 | `fingerprint` | string | yes | no | at most 2000 chars | Failure-mode fingerprint (BlackBoxFingerprint). |
 | `similarEntries` | array of [BlackBoxSimilarEntry](#blackboxsimilarentry) | no | yes | at most 10 items | Similar entries, newest first. |
 | `occurrencesLast30Days` | integer | no | yes |  | Entries with the same fingerprint in the last 30 days. |
+| `armadaVersions` | array of string | no | yes | at most 20 items; each at most 1024 chars | Armada versions the fingerprint was seen in (this entry's included), oldest sighting first. |
 | `cascadeRootEntryId` | string | yes | no | at most 2000 chars | Cascade root entry, or null. |
 | `downstreamMissionIds` | array of string | no | yes | at most 100 items; each at most 1024 chars | Missions downstream of the cascade. |
-| `nearbySuccesses` | array of [BlackBoxNearbySuccess](#blackboxnearbysuccess) | no | yes | at most 10 items | Successful landings on the same vessel within blackBox.nearbySuccessWindowHours that changed files the failure touched, most overlap first. |
-| `nearbySuccessTotal` | integer | no | yes |  | Nearby successes found. |
+| `nearbySuccesses` | array of [BlackBoxNearbySuccess](#blackboxnearbysuccess) | no | yes | at most 10 items | Successful landings on the same vessel within blackBox.nearbySuccessWindowHours of the failure that changed some of the same files (success flight recorder), most overlap first. |
+| `nearbySuccessTotal` | integer | no | yes |  | Nearby successes found (NearbySuccesses holds the first ten). |
 
 ### BlackBoxNearbySuccess
 
@@ -617,6 +685,50 @@ A status and a count.
 |---|---|---|---|---|---|
 | `status` | string | no | yes | at most 2000 chars | Status name. |
 | `count` | integer | no | yes |  | Count. |
+
+### BlackBoxHandoffTrail
+
+Handoff and landing trail of a mission failure (record.handoff): the ordered completion, stage check, handoff, landing attempt, retry, deferral and reconcile steps, the automatic recoveries Armada already attempted, the dock and lease transitions, and how far the target moved. Written by the Handoff enricher for entries in handoff and landing scope (also stored as evidence/handoff-timeline.json); null otherwise.
+
+| Field | Type | Null | Required | Bounds | Description |
+|---|---|---|---|---|---|
+| `steps` | array of [BlackBoxHandoffStep](#blackboxhandoffstep) | no | yes | at most 100 items | Steps, oldest first. |
+| `stepTotal` | integer | no | yes |  | Steps found (Steps keeps the newest 100). |
+| `truncated` | boolean | no | yes |  | Whether steps were cut. |
+| `autoRecoveries` | array of [BlackBoxAutoRecovery](#blackboxautorecovery) | no | yes | at most 16 items | Automatic recoveries attempted, one per kind. |
+| `dockTransitions` | array of [BlackBoxHandoffStep](#blackboxhandoffstep) | no | yes | at most 20 items | Dock and lease transitions (provisioned, reclaimed, repaired, unstuck, preserved), oldest first. |
+| `dockStateAtFailure` | string | yes | no | at most 2000 chars | Dock state when the failure was captured, or null. |
+| `landingAttempts` | integer | no | yes |  | Landing attempts seen (the first landing plus retries). |
+| `targetBranch` | string | yes | no | at most 2000 chars | Target branch. |
+| `targetTipAtStart` | string | yes | no | at most 2000 chars | Target tip when the mission started, or null. |
+| `targetTipAtFailure` | string | yes | no | at most 2000 chars | Target tip at the failure, or null. |
+| `targetMoved` | boolean | yes | no |  | Whether the target moved during the run (null when unknown). |
+| `targetCommitsDuringRun` | integer | yes | no |  | Commits that landed on the target during the run, or null. |
+| `note` | string | yes | no | at most 2000 chars | Why parts are missing, or null. |
+
+### BlackBoxHandoffStep
+
+One step of a record's handoff and landing trail: a mission, dock, merge entry or landing event.
+
+| Field | Type | Null | Required | Bounds | Description |
+|---|---|---|---|---|---|
+| `timestampUtc` | string (date-time, UTC) | no | yes |  | When (UTC). |
+| `source` | enum: `Entry`, `Note`, `Mission`, `Voyage`, `Dock`, `MergeEntry`, `Captain`, `Harbor`, `Unknown` | no | yes |  | Source (Mission, Dock or MergeEntry). |
+| `kind` | string | no | yes | at most 2000 chars | Event type (for example mission.landing_retry or dock.reclaimed). |
+| `message` | string | yes | no | at most 500 chars | Message (at most 500 characters), or null. |
+| `entityId` | string | yes | no | at most 2000 chars | Entity the step is about (event, dock or merge entry id), or null. |
+
+### BlackBoxAutoRecovery
+
+One kind of automatic recovery Armada attempted before the failure, with its outcome.
+
+| Field | Type | Null | Required | Bounds | Description |
+|---|---|---|---|---|---|
+| `kind` | enum: `Redispatch`, `OutputRepair`, `LandingRetry`, `DeferralRetry`, `Rescue`, `DockRepair`, `Reconcile`, `OrphanRecovery`, `Unknown` | no | yes |  | Kind of recovery. |
+| `attempts` | integer | no | yes |  | Attempts recorded. |
+| `lastUtc` | string (date-time, UTC) | yes | no |  | Last attempt (UTC), or null when only a counter recorded it. |
+| `outcome` | enum: `Pending`, `Succeeded`, `Failed`, `RunFailed`, `Expired`, `Unknown` | no | yes |  | Outcome: Succeeded (it worked, the failure came later), Failed (it ran and did not help), Expired (retries or the deferral ran out) or Unknown. |
+| `detail` | string | yes | no | at most 2000 chars | Detail (the last attempt's message), or null. |
 
 ### BlackBoxRedaction
 
@@ -820,7 +932,7 @@ One section of an entry's record. Record carries only the requested section (oth
 | Field | Type | Null | Required | Bounds | Description |
 |---|---|---|---|---|---|
 | `entryId` | string | no | yes |  | Entry. |
-| `section` | enum: `Subject`, `Status`, `Site`, `Mechanism`, `Classification`, `Workspace`, `Conflict`, `Scope`, `Configuration`, `Attempts`, `Evidence`, `Analysis`, `Related`, `Voyage`, `Redaction`, `Truncation`, `Unknown` | no | yes |  | Section. |
+| `section` | enum: `Subject`, `Status`, `Site`, `Mechanism`, `Classification`, `Workspace`, `Conflict`, `Scope`, `Configuration`, `Attempts`, `Evidence`, `Analysis`, `Related`, `Voyage`, `Redaction`, `Truncation`, `Resilience`, `Handoff`, `Unknown` | no | yes |  | Section. |
 | `record` | [BlackBoxRecord](#blackboxrecord) | no | yes |  | Record with only the requested section populated. |
 
 ### BlackBoxDigest
@@ -851,6 +963,13 @@ Compact view of a black box entry (about 2 KB) for MCP get_blackbox format=summa
 | `statusAfter` | string | yes | no |  | Status after. |
 | `triage` | enum: `Unknown`, `UserConfig`, `MissionBrief`, `Transient`, `ArmadaDefect`, `External` | no | yes |  | Triage verdict. |
 | `triageConfidence` | enum: `Low`, `Medium`, `High`, `Unknown` | yes | no |  | Triage confidence, or null. |
+| `triageSuspected` | boolean | no | yes |  | Whether the ArmadaDefect verdict is suspected (rests on the handoff and landing prior alone). |
+| `resilienceInScope` | boolean | no | yes |  | Whether the failure is in Armada's handoff and landing scope. |
+| `selfHealable` | enum: `Yes`, `No`, `Unknown` | no | yes |  | Whether Armada could have healed it by itself. |
+| `selfHealingProposal` | string | yes | no |  | What Armada could have done automatically, or null. |
+| `detectionGap` | string | yes | no |  | Why Armada did not catch it earlier, or null. |
+| `resilienceSeverity` | enum: `Low`, `Medium`, `High`, `Critical`, `Unknown` | no | yes |  | Severity of the resilience section. |
+| `topProposedChange` | [BlackBoxProposedChange](#blackboxproposedchange) or null | yes | no |  | The most impactful proposed Armada change (its mission brief left out; read the Resilience section for it), or null. |
 | `summary` | string | yes | no |  | Analysis summary, or null. |
 | `why` | array of [BlackBoxFinding](#blackboxfinding) | no | yes | at most 3 items | Top why findings. |
 | `recoveryPaths` | array of [BlackBoxRecoveryPath](#blackboxrecoverypath) | no | yes | at most 3 items | Top recovery paths. |
@@ -858,6 +977,32 @@ Compact view of a black box entry (about 2 KB) for MCP get_blackbox format=summa
 | `objectCount` | integer | no | yes |  | Objects. |
 | `resolution` | enum: `Open`, `Resolved`, `Duplicate`, `WontFix`, `ArmadaFixed`, `Unknown` | no | yes |  | Resolution. |
 | `createdUtc` | string (date-time, UTC) | no | yes |  | Created (UTC). |
+
+### BlackBoxResilienceGap
+
+One Armada resilience gap: a failure mode (fingerprint) triaged ArmadaDefect in handoff and landing scope, with its recurrence and the newest entry's resilience analysis.
+
+| Field | Type | Null | Required | Bounds | Description |
+|---|---|---|---|---|---|
+| `fingerprint` | string | no | yes |  | Failure-mode fingerprint. |
+| `phase` | enum: `Unknown`, `Dispatch`, `Provision`, `Execution`, `Completion`, `Review`, `Handoff`, `Landing`, `MergeQueue`, `Recovery`, `Voyage`, `External` | no | yes |  | Phase of the newest entry. |
+| `step` | enum: `Unknown`, `VoyageParentNotRunnable`, `AssignmentFailed`, `NoEligibleCaptain`, `HarborUnavailable`, `MemoryPressure`, `DockProvision`, `WorktreeCreate`, `BranchCreate`, `StartCommitRecord`, `ProcessCrash`, `UsageLimit`, `AuthFailure`, `ModelUnavailable`, `Stall`, `MaxRuntime`, `RecoveryExhausted`, `Interrupted`, `OperatorStop`, `NoOp`, `Unfinished`, `CaptainBlocked`, `InvalidOutput`, `ScopeViolation`, `BoundaryViolation`, `DefinitionOfDone`, `StageCheck`, `JudgeRejected`, `ReviewDenied`, `ReviewTimeout`, `ReviewApprovedDockMissing`, `PlanParse`, `StageBranchHarden`, `DependencyCancelled`, `IntegrationBarrier`, `DockMissing`, `TargetIntegration`, `Verification`, `DirtyCheckout`, `UnpublishedAncestry`, `Push`, `PullRequest`, `FastForward`, `LocalMerge`, `RetryLanding`, `DeferralExpired`, `QueueResolveRepo`, `QueueMergeConflict`, `QueueTests`, `QueueProcessing`, `QueuePush`, `RescueFailed`, `RedispatchExhausted`, `OrphanedExit`, `UnconfirmedStop`, `MissingMergeHandoff`, `SettlementFailed`, `Halted`, `Cancelled`, `StageFailed`, `VesselDeleted`, `OperatorTransition` | no | yes |  | Step of the newest entry. |
+| `failureKind` | enum: `Compile`, `TestFail`, `Timeout`, `LandingConflict`, `Crash`, `NoOp`, `Boundary`, `ScopeViolation`, `JudgeRejected`, `Infra`, `Unknown`, `ReviewDenied`, `DependencyFailed`, `MaxRuntimeExceeded`, `StallRecoveryExhausted`, `OperatorAction`, `InvalidOutput`, `Blocked` | yes | no |  | Failure kind of the newest entry, or null. |
+| `occurrences` | integer | no | yes |  | Entries with this fingerprint that match the filter. |
+| `openCount` | integer | no | yes |  | Open entries among them. |
+| `firstSeenUtc` | string (date-time, UTC) | no | yes |  | First seen (UTC). |
+| `lastSeenUtc` | string (date-time, UTC) | no | yes |  | Last seen (UTC). |
+| `latestEntryId` | string | yes | no |  | Newest entry. |
+| `latestMissionId` | string | yes | no |  | Mission of the newest entry, or null. |
+| `latestMissionTitle` | string | yes | no |  | Title of that mission, or null. |
+| `vesselName` | string | yes | no |  | Vessel of the newest entry, or null. |
+| `armadaVersions` | array of string | no | yes | at most 20 items | Armada versions the fingerprint was seen in. |
+| `severity` | enum: `Low`, `Medium`, `High`, `Critical`, `Unknown` | no | yes |  | Severity of the newest entry's resilience section. |
+| `selfHealable` | enum: `Yes`, `No`, `Unknown` | no | yes |  | Whether Armada could have healed it by itself. |
+| `suspected` | boolean | no | yes |  | Whether the ArmadaDefect verdict rests on the scope prior alone (suspected, not proven). |
+| `topProposedChange` | [BlackBoxProposedChange](#blackboxproposedchange) or null | yes | no |  | The most impactful proposed Armada change, or null. |
+| `detectionGap` | string | yes | no |  | Why Armada did not catch it earlier, or null. |
+| `ruleIds` | array of string | no | yes | at most 10 items | Rules behind the newest entry's resilience section. |
 
 ### BlackBoxNote
 

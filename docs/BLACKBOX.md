@@ -5,7 +5,10 @@ small bundle of objects (the versioned `record.json`, the FIX THIS briefs and bo
 with evidence: which mission failed, where (phase, step, host, code site), how (exception, exit code, failing command,
 git error), the status before and after, why (classified cause with rule ids and confidence), which missions, files
 and directories it collided with, the configuration in effect and what would have prevented it, what Armada itself
-could change, and the ranked recovery paths with exact commands.
+could change, and the ranked recovery paths with exact commands. For failures in Armada's own handoff and landing
+the black box is deliberately biased toward finding the problem in Armada: it assumes Armada could have been more
+resilient, says what Armada could have done by itself, and writes the Armada change as a mission brief (section 1.1,
+Resilience bias).
 
 This document has two parts:
 
@@ -28,7 +31,7 @@ Work that is designed but not done yet is listed in section 14, Open items.
 
 Part 1, user guide
 
-1. [Concepts](#1-concepts)
+1. [Concepts](#1-concepts) (and [1.1 Resilience bias](#11-resilience-bias))
 2. [What an entry contains](#2-what-an-entry-contains)
 3. [The FIX THIS brief](#3-the-fix-this-brief)
 4. [Where to find entries](#4-where-to-find-entries)
@@ -99,7 +102,9 @@ from its store), `Deleting` (being deleted; hidden from readers).
 **Triage.** The analysis votes on one verdict: `UserConfig` (your Armada configuration), `MissionBrief` (the brief or
 the dependency ordering), `Transient` (provider, network, usage limit; retrying is likely to work), `ArmadaDefect` (a
 bug in Armada), `External` (an operator action or something outside Armada), or `Unknown` (no rule voted, or a tie,
-which names the tied verdicts). Confidence is Low, Medium or High.
+which names the tied verdicts). Confidence is Low, Medium or High. In Armada's handoff and landing scope the vote
+includes the `BBX-PRIOR-ARMADA` prior for ArmadaDefect (section 1.1); a verdict that rests on that prior alone is a
+**suspected** Armada defect (`triage.suspected`, Low confidence).
 
 **Resolution.** `Open` until someone resolves it: `Resolved`, `Duplicate`, `WontFix` or `ArmadaFixed`, with an
 optional note and link. Resolving shortens the entry's life (section 9).
@@ -109,6 +114,61 @@ across missions and Armada versions (lists, hotspots, trends, the maintainer bun
 
 **Notes.** Annotations by operators, agents, Ask Armada and Armada itself. Every recovery dry run and run is noted on
 the entry automatically. Briefs include the ten newest notes.
+
+### 1.1 Resilience bias
+
+The black box has a strong bias toward finding problems within Armada's own handoff and landing, and toward ways to
+make Armada more resilient. Every entry carries an **Armada resilience** section (`analysis.resilience`), and every
+surface shows it near the top.
+
+**Scope.** The handoff and landing scope is: the phases Handoff, Landing, MergeQueue, Recovery and Provision; the
+Completion steps that are Armada handoff mechanics (InvalidOutput and plan or marker parsing, a stage check,
+definition of done, landing verification or merge-queue test that could not run, as opposed to a real test failure,
+and a scope check that misread the scoped files or ran without a start commit); the ReviewApprovedDockMissing step;
+and the dock, worktree, branch and target-sync facts of any phase (a missing worktree or branch, a working directory
+Armada manages that vanished). `analysis.resilience.inScope` and `scopeReason` say whether and why an entry is in
+scope. Voyage entries are outside it (start from the root mission's entry).
+
+**The prior.** In scope the advisor adds its own vote, `BBX-PRIOR-ARMADA`, for ArmadaDefect with weight 2, recorded
+like any rule vote so you can see it in `triage.votes` (and `triage.priorApplied`). ArmadaDefect therefore wins unless
+a rule has strong, specific evidence for another verdict, a total of 3 or more: a dirty operator checkout
+(BBX-LAND-001, UserConfig), a remote that refused Armada's credentials (BBX-LAND-010, UserConfig), a concrete
+post-merge or merge-queue test failure (BBX-LAND-005, BBX-MQ-002, MissionBrief), a disconnected Harbor (BBX-INFRA-001,
+External) or a failed dependency (BBX-DEP-002, External). A tie with the prior goes to ArmadaDefect: a real merge
+conflict between two user missions (BBX-LAND-003) is still read as "could Armada have prevented or auto-resolved
+this?". A verdict that rests on the prior alone (no rule voted ArmadaDefect, including an in-scope failure no rule
+matched) is reported as a **suspected** Armada defect with Low confidence. Outside the scope there is no prior and
+triage works as before.
+
+**How to read the section.**
+
+| Field | Meaning |
+|---|---|
+| `selfHealable`, `selfHealingProposal` | Yes, No or Unknown, and what Armada could have done automatically: retry with backoff, recreate the dock worktree from the branch, land through an integration worktree instead of a dirty checkout, regenerate generated files on conflict, rebase onto the moved target, serialize overlapping missions, re-request missing markers, refresh a stale lease, reconnect the Harbor and resume |
+| `detectionGapKind`, `detectionGap`, `invariant` | Why Armada did not catch or prevent it earlier (NoPreflightCheck, CheckTooLate, StateNotPersisted, Race, MissingInvariant, MissingRetry) and the invariant that should hold |
+| `codePointers`, `armadaVersion`, `armadaCommit` | The Armada source locations most likely involved (the failure site first, then the handoff and landing services: MissionLandingHandler, LandingService, LandingTargetSynchronization, LandingVerification, MergeQueueService, LandingIntegrityService, DockService, MissionService handoff and completion, AdmiralService recovery), at the build that failed |
+| `proposedChanges` | Armada changes ranked by impact, each a mission brief (`title`, `change`, `acceptanceTest`, `codePointers`, `missionBrief` ready to dispatch on the Armada vessel) |
+| `severity`, `occurrences30Days`, `armadaVersionCount` | Severity escalates with recurrence of the fingerprint: seen once Medium, 3 or more times in 30 days High, 5 or more times or in 2 or more Armada versions Critical (a higher rule severity is kept) |
+| `regressionTest` | The test (suite and case) that would have caught it |
+| `attemptedRecoveries` | What Armada already tried before it gave up (from the handoff trail: redispatches, output repairs, landing and deferral retries, rescues, dock repairs, reconciles) and the outcome |
+| `noChangeReason` | Outside the scope, why no Armada change is suggested (for example a usage limit) |
+
+Every rule in scope carries this content; an in-scope failure no rule covers gets the phase defaults (retry with
+backoff and a preflight check, with the phase's services as code pointers) so the section is never empty in scope.
+Entries in scope also get the **handoff trail** (`record.handoff`, `evidence/handoff-timeline.json`, the Handoff
+section): the ordered completion, stage check, handoff, landing attempt, retry, deferral and reconcile steps of the
+attempt with timestamps, the automatic recoveries and their outcomes, the dock and lease transitions and how far the
+target moved.
+
+**Where it shows.** The brief puts `## Armada resilience` right after the Summary, before any user-facing
+configuration advice, and its preamble says plainly that the black box assumes Armada's handoff and landing could have
+been more resilient and asks the reader to look for the Armada fix (with a test) first. In scope the summary leads with
+the Armada angle ("Armada's landing could not finish ...; Armada could have ..."). The dashboard, TUI, mobile, VS Code
+and Helm show the section in their entry views, with a **Suspected Armada defect** marker and a **Draft Armada fix
+mission** action; the **Armada resilience gaps** list (`POST /api/v1/blackbox/resilience-gaps/enumerate`, MCP
+`list_blackbox_resilience_gaps`, `armada blackbox gaps`) groups the in-scope ArmadaDefect entries by fingerprint with
+their recurrence; the maintainer bundle defaults to those gaps; and Ask Armada first asks whether Armada's handoff and
+landing could have handled the failure.
 
 ## 2. What an entry contains
 
@@ -126,6 +186,8 @@ The record answers the questions in plan section 1, each from a named section of
 | Which files caused the conflict | `conflict.conflictedFiles` (with `conflictedFileTotal`) and `scope` for scope and boundary failures |
 | Which directories caused the conflict | `conflict.conflictedDirectories` (depth 1 to 3), `conflictedParentDirectories`, `deepestConflictedDirectory` |
 | What Armada could change | `analysis.improvements` (hypotheses with source pointers and severity) |
+| Could Armada have handled it by itself | `analysis.resilience` (self-healable verdict, detection gap, code pointers, proposed Armada changes as mission briefs, regression test; section 1.1) |
+| The handoff and landing steps of the attempt | `handoff` (ordered steps, automatic recoveries and outcomes, dock transitions, target movement; in scope only) |
 | The recovery paths | `analysis.recoveryPaths` (ranked, each step with its MCP call, REST request, CLI command and machine-readable action) |
 
 Plus `workspace` (dock, worktree and branch existence, branch tip, ahead and behind, dirty paths, target movement, the
@@ -147,6 +209,7 @@ Objects:
 | `evidence/git-status.txt` | `git status --porcelain` of the worktree and the target checkout, read on the owning host. |
 | `evidence/target-commits.txt` | Commits on the target since the mission's start commit (up to 500). |
 | `evidence/events.json` | The newest 50 events of the subject. |
+| `evidence/handoff-timeline.json` | The handoff and landing trail (`record.handoff`), for entries in handoff and landing scope. |
 
 Every object is redacted and bounded: evidence is capped at `blackBox.storage.maxEvidenceObjectBytes` (1 MB) keeping
 the head and tail around a marker line, and an entry at `maxEntryBytes` (8 MB). Downloads (`.zip`) add a
@@ -167,7 +230,12 @@ External and saying why with the evidence quoted, then fix it with evidence (the
 failure site in the Armada source with a fix and a test), use only the listed recovery paths, and confirm data-loss
 steps with the user.
 
-The brief's sections are Summary, Identity, Where it failed, How it failed, Status timeline, Why, Conflict,
+In handoff and landing scope the preamble also says the black box assumes Armada's handoff and landing could have
+been more resilient, and asks the reader to first look for the Armada fix (with a test) before concluding it is the
+user's configuration or a transient.
+
+The brief's sections are Summary, Armada resilience (always right after the Summary; short outside the scope),
+Identity, Where it failed, How it failed, Status timeline, Why, Conflict,
 Workspace, Scope, Configuration in effect, What would have prevented it, What Armada could change, Recovery,
 Attempts, Evidence, Related failures, Notes on this record and Your answer. Each recovery step shows its MCP call,
 CLI command and REST request. `redactHosts=true` strips absolute paths, host names and user names, for a brief you
@@ -190,7 +258,7 @@ Three ways to get a brief:
 | VS Code | The Armada extension (`src/Armada.VSCode`) | Available |
 | Mobile | Mission and voyage detail panel, Black Box tab on the Missions hub, entry screen | Available |
 | REST | `/api/v1/missions/{id}/blackbox`, `/api/v1/voyages/{id}/blackbox`, `/api/v1/blackbox/...` | Available |
-| MCP | 23 tools, 4 resources, 2 prompts | Available |
+| MCP | 24 tools, 4 resources, 2 prompts | Available |
 | WebSocket | Commands `blackbox.get`, `blackbox.brief`, `blackbox.list`; eight `blackbox.*` events | Available |
 | Ask Armada | Black box read tools without approval; write tools as proposals; `/blackbox`; black box cards | Available |
 
@@ -295,12 +363,13 @@ kind on the server, paged as you scroll, refreshed on `blackbox.*` events) with 
 
 ### REST, MCP and WebSocket
 
-- REST (tag `BlackBox`, 39 routes): read a mission's current entry `GET /api/v1/missions/{id}/blackbox`, its brief
+- REST (tag `BlackBox`, 40 routes): read a mission's current entry `GET /api/v1/missions/{id}/blackbox`, its brief
   `.../blackbox/brief`, all attempts `.../blackbox/entries`; voyages the same under
   `/api/v1/voyages/{id}/blackbox`; any entry under `/api/v1/blackbox/{id}` (sections, objects with ranged reads,
   `.zip` download, notes, resolve, pin, recovery, recommendation apply, reanalyze, export-fixture, delete); lists and
   analytics (`GET /api/v1/blackbox`, `POST .../enumerate`, `POST .../search`, `POST .../bundle`,
-  `POST .../hotspots/enumerate`, `POST .../fingerprints/enumerate`, `GET .../fingerprints/{fingerprint}/trend`); and
+  `POST .../hotspots/enumerate`, `POST .../fingerprints/enumerate`, `GET .../fingerprints/{fingerprint}/trend`,
+  `POST .../resilience-gaps/enumerate`); and
   administration (retention, storage, migrate, gc, purge, backfill, bulk delete). See [REST_API.md](REST_API.md).
 - MCP: see section 6 and [MCP_API.md](MCP_API.md).
 - WebSocket: `blackbox.get`, `blackbox.brief` and `blackbox.list` commands (global administrators, like every
@@ -369,14 +438,16 @@ Agent: resolve_blackbox {entryId, resolution: "Resolved", note: "...", link: "..
 | Explain it | `get_blackbox` (`format` summary, brief or json), `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object` |
 | Fix it, recover it | `run_blackbox_recovery` with a ranked path: dry run, then confirm |
 | Prevent it | `apply_blackbox_recommendation`: dry run, then confirm |
-| Fix Armada | `get_blackbox {format: "brief"}` or `get_blackbox_bundle`, then a mission on the Armada vessel with that brief |
+| Fix Armada | `read_blackbox_section {section: "Resilience"}` (the top proposed change's `missionBrief`), `list_blackbox_resilience_gaps` or `get_blackbox_bundle` (the resilience gaps by default), then a mission on the Armada vessel with that brief |
 | Compare | `list_blackbox_entries {fingerprint}`, `search_blackbox`, `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `list_blackbox_hotspots` |
 | Clean up | `resolve_blackbox`, `annotate_blackbox`, `pin_blackbox`, `delete_blackbox_entries` |
 | Administer | `get_blackbox_retention`, `get_blackbox_storage`, `run_blackbox_gc`, `purge_blackbox`, `reanalyze_blackbox`, `export_blackbox_fixture` |
 
 Every tool takes `entryId`, or `missionId` / `voyageId` for that subject's current entry. `get_blackbox` with the
-default `format: "summary"` returns a digest of about 2 KB: start there, then read only the sections the question
-needs, and page evidence with `read_blackbox_object` (`offset`, `length` up to 64 KB, `nextOffset` until null)
+default `format: "summary"` returns a digest of about 2 KB (including the Armada resilience angle:
+`ResilienceInScope`, `SelfHealable`, `SelfHealingProposal`, `DetectionGap`, `ResilienceSeverity`, `TopProposedChange`
+and `TriageSuspected`): start there, then read only the sections the question needs (`Resilience` and `Handoff` for
+the Armada angle), and page evidence with `read_blackbox_object` (`offset`, `length` up to 64 KB, `nextOffset` until null)
 instead of loading it whole. `blackbox` is also an entity type of the `enumerate` tool.
 
 Safety, carried in every action tool's description and in the `review_blackbox` prompt:
@@ -410,7 +481,7 @@ typed error; use the tools when you need the code.
 ## 7. Ask Armada
 
 The black box read tools (`get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object`,
-`list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`, `list_blackbox_hotspots`,
+`list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`, `list_blackbox_hotspots`, `list_blackbox_resilience_gaps`,
 `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `get_blackbox_retention`, `get_blackbox_storage`) are on
 the Ask Armada read-only allowlist, so the thread captain calls them without approval. The write tools
 (`run_blackbox_recovery`, `apply_blackbox_recommendation`, `resolve_blackbox`, `annotate_blackbox` and the rest) stay
@@ -421,9 +492,13 @@ Ask it:
 > Show me the pertinent details from the black box for mission msn_x and give me your opinion on why it failed and
 > what could have been done differently.
 
-The captain reads the summary, then only the sections it needs, and answers with what happened (from the entry),
-why (the findings with rule ids and confidence), its opinion (labeled as opinion), what could have been done
-differently (what you can change and what Armada should change), and next steps as proposals.
+The captain reads the summary, first assesses whether Armada's handoff and landing could have handled the failure
+(citing the entry's Armada resilience section: what Armada could have done, the detection gap, the proposed Armada
+change with its test, and whether the verdict is only a suspected Armada defect), then reads only the sections it
+needs, and answers with what happened (from the entry), why (the findings with rule ids and confidence), its opinion
+(labeled as opinion), what could have been done differently (what Armada should change first, then what you can
+change), and next steps as proposals, offering **Draft an Armada fix mission** when the entry proposes an Armada
+change.
 
 Admin-level reads (`get_blackbox_retention` for tenant admins, `get_blackbox_storage` and `export_blackbox_fixture`
 for admins) run as you: from Ask they are refused when you lack the role, never proposed.
@@ -433,13 +508,16 @@ for admins) run as you: from Ask they are refused when you lack the role, never 
 - **The card** shows status chips (triage and confidence, kind, step, capture mode, resolution), where and how it
   failed, the findings, the conflicting missions and files, the ranked recovery paths and the configuration
   recommendations, Copy FIX THIS, and the follow-ups: **Fix it** and **Apply the configuration change** create a
-  proposal (approving it runs a dry run, then confirms it); **Draft an Armada fix mission** and **Compare with similar
-  failures** ask the captain. A mission id mentioned in the conversation links its entry's card automatically.
+  proposal (approving it runs a dry run, then confirms it); **Draft an Armada fix mission** (built from the entry's top
+  proposed Armada change, its acceptance and regression tests and the code pointers at the build commit) and
+  **Compare with similar failures** ask the captain. A mission id mentioned in the conversation links its entry's card automatically.
 - **Prompt guidance**: the built-in `ask.system` template has a "Black box" section with the answer shape above, the
-  rule never to invent files, commits or missions that are not in the entry, saying so when a fact is missing (for
+  resilience bias (first assess whether Armada's handoff and landing could have handled it, cite the Resilience
+  section, offer Draft an Armada fix mission), the rule never to invent files, commits or missions that are not in the entry, saying so when a fact is missing (for
   example an entry captured by the sweeper), offering the mission's FailureReason when there is no entry, and offering
   to save the opinion as a note (a proposal; the note's `authorKind` is AskArmada). A customized template gets the
-  section appended to the turn prompt.
+  section appended to the turn prompt; an untouched built-in template from before the resilience bias is upgraded in
+  place at startup.
 - **Entry points**: "Ask Armada about this failure" on the dashboard panel and Inbox, the TUI, VS Code and mobile open
   a new conversation with the prompt above in the message box (`/ask?prompt=<text>`, removed from the URL once read).
 
@@ -1421,6 +1499,7 @@ reservations off), `SuccessRetentionDays` (7, 0 to 90, 0 turns the success recor
 | `evidence/diff.patch` | text/x-diff | capture (Mission.DiffSnapshot) |
 | `evidence/mission.log`, `evidence/diffstat.txt`, `evidence/check-<n>.txt`, `evidence/verification-<n>.txt`, `evidence/merge-entry.txt`, `evidence/git-status.txt`, `evidence/target-commits.txt` | text/plain | enrichers (13.17) |
 | `evidence/events.json` | application/json | enrichers (13.17) |
+| `evidence/handoff-timeline.json` | application/json | the Handoff enricher (13.17), entries in handoff and landing scope |
 | `manifest.json` | application/json | only inside a `.zip` download (`BlackBoxDownloadManifest`) |
 
 Names are constants in `BlackBoxObjectNames`. Text evidence is redacted and capped at `maxEvidenceObjectBytes` with the
@@ -1457,7 +1536,10 @@ four providers through `scripts/common/run-db-parity-tests.sh`), `Services.Black
 `Services.BlackBoxGarbageCollector`, `Services.BlackBoxStore`, `Services.BlackBoxService`, `Services.BlackBoxRedactor`,
 `Services.BlackBoxFingerprint`, `Services.BlackBoxBriefRenderer`, `Services.BlackBoxAdvisor` (a golden case per rule,
 coverage, ties, placeholders, empty record, ranking, re-analysis, the brief), `Services.BlackBoxRecovery`,
-`Services.BlackBoxFixtures`, `Services.BlackBoxMaintainer` (bundle, trends), `Services.BlackBoxSummary`,
+`Services.BlackBoxFixtures` (each fixture's expected rule ids, triage and resilience output), `Services.BlackBoxResilience`
+(scope, the prior winning and losing, no prior outside the scope, resilience content on every rule in scope, severity
+escalation, the summary and brief order, the handoff trail, resilience gaps and the bundle default),
+`Services.BlackBoxMaintainer` (bundle, trends), `Services.BlackBoxSummary`,
 `Services.BlackBoxConfiguration`, `Models.BlackBoxSchema` (schema drift and validation). Test helpers: `BlackBoxTestKit`,
 `ScriptedBlackBoxStore`, `RecordingBlackBoxEventSink`, `BlackBoxSchemaValidator`, `BlackBoxGoldenCase`,
 `BlackBoxRecoveryFixture`, `RecordingBlackBoxActionExecutor`, `ScriptedBlackBoxSummaryWriter`, `FakeChatEndpoint`. After changing a model, run `scripts/common/generate-blackbox-schema.sh`.
@@ -1479,22 +1561,47 @@ with a missing placeholder skips the rule; a recommendation, improvement or reco
 left out (both logged at debug). Stable ids: a recovery path is `rule id lower case + "." + key` (for example
 `bbx-land-001.stash-retry`), a recommendation the same (for example `bbx-land-001.landing-mode`).
 
-`BlackBoxRuleCatalog.CurrentRulesVersion` (1) is stored on every analyzed entry and record. Bump it when a rule's match,
+`BlackBoxRuleCatalog.CurrentRulesVersion` (2; 1 before the resilience bias) is stored on every analyzed entry and record. Bump it when a rule's match,
 text, vote or recovery changes: `BlackBoxReanalyzer` (run after each sweep) re-analyzes Analyzed entries with an older
 version through `BlackBoxPipeline.ReanalyzeAsync` (advisor and summary only, no enrichers).
 
+In Armada's handoff and landing scope (`BlackBoxResilienceScope.InScope`, section 1.1) `Triage` appends the
+`BBX-PRIOR-ARMADA` vote (ArmadaDefect, `BlackBoxLimits.ArmadaPriorWeight` 2) and tallies with ArmadaDefect as the
+tie-breaker (`Tally(votes, tieBreaker)`); `priorApplied` is set, and an ArmadaDefect verdict with no rule voting
+ArmadaDefect sets `suspected` and Low confidence. The resilience section is built by `BlackBoxResilienceBuilder` from each
+rendered rule's `BlackBoxRuleResilience` (set with `BlackBoxRule.Heals`; templates like the rest of the rule text),
+in weight order: the first rule with a self-healing verdict leads, code pointers start at the failure site, proposed
+changes (`BlackBoxRuleChange`) are deduplicated by title, ordered by severity, escalated by
+`BlackBoxResilienceSeverity.Escalate` from `related.occurrencesLast30Days` and `related.armadaVersions`, capped at 5 and
+rendered as mission briefs; with no rule content in scope, `BlackBoxResilienceDefaults.ForStep` fills it. Outside the
+scope the rule improvements become the proposed changes, or `noChangeReason` explains why there are none. Every rule
+whose `InResilienceScope` is true (its phase is in scope, or `Heals(..., handoffMechanics: true)`) must carry resilience
+content; `Services.BlackBoxResilience/every_scope_rule_heals` enforces it.
+
 | Rule | Phase | Matches | Vote |
 |---|---|---|---|
+| BBX-PRIOR-ARMADA | (scope prior) | every record in handoff and landing scope (not a rule; recorded as a vote) | ArmadaDefect 2 |
 | BBX-LAND-001 | Landing | step DirtyCheckout with dirty paths | UserConfig 3 |
 | BBX-LAND-002 | Landing | worktree missing, step DockMissing, or "could not start process ... working directory" | ArmadaDefect 3 |
 | BBX-LAND-003 | Landing | conflicted files and a conflicting mission that landed with overlapping files | UserConfig 2 |
 | BBX-LAND-004 | Landing | every conflicted file is generated or append-only (CHANGELOG, i18n, API surface, Postman, lock files, schemas) | ArmadaDefect 3 |
-| BBX-LAND-005 | Landing | step Verification | MissionBrief 2 |
-| BBX-LAND-006 | Landing | step Push, PullRequest or UnpublishedAncestry | External 2 |
+| BBX-LAND-005 | Landing | step Verification with a concrete failure (non-zero exit that is not a harness error, or kind TestFail or Compile) | MissionBrief 3 |
+| BBX-LAND-006 | Landing | step Push, PullRequest or UnpublishedAncestry (none of the specific publish rules) | External 2 |
 | BBX-LAND-007 | Landing | any other landing failure | none |
+| BBX-LAND-008 | Landing | push (or queue push, fast-forward) rejected as non-fast-forward or fetch first: the target moved | ArmadaDefect 3 |
+| BBX-LAND-009 | Landing | step PullRequest | External 2 |
+| BBX-LAND-010 | Landing | a publish step whose remote refused Armada's credentials | UserConfig 3 |
+| BBX-LAND-011 | Landing | TargetIntegration, FastForward or LocalMerge without conflicted files while the target moved | ArmadaDefect 3 |
+| BBX-LAND-012 | Landing | the mission branch is missing (branchExists false, or git cannot resolve it) at landing, queue or review | ArmadaDefect 3 |
+| BBX-LAND-013 | Landing | landing retries exhausted (step RetryLanding or the reason says so) | ArmadaDefect 2 |
+| BBX-LAND-014 | Landing | step DeferralExpired | ArmadaDefect 2 |
+| BBX-LAND-015 | Landing | step UnpublishedAncestry (not a credential refusal) | ArmadaDefect 2 |
 | BBX-MQ-001 | MergeQueue | kind LandingConflict with no conflicted files | ArmadaDefect 2 |
-| BBX-MQ-002 | MergeQueue | step QueueTests | MissionBrief 1 |
+| BBX-MQ-002 | MergeQueue | step QueueTests with a concrete failure | MissionBrief 3 |
 | BBX-MQ-003 | MergeQueue | any other merge-queue failure | none |
+| BBX-MQ-004 | MergeQueue | stale merge entry or expired processing lease | ArmadaDefect 3 |
+| BBX-MQ-005 | MergeQueue | step QueueResolveRepo | ArmadaDefect 2 |
+| BBX-MQ-006 | MergeQueue | step QueuePush | ArmadaDefect 2 |
 | BBX-SCOPE-001 | Completion | scope violation whose out-of-scope entries are blank or scoped | ArmadaDefect 4 |
 | BBX-SCOPE-002 | Completion | start commit missing on a scope failure | none |
 | BBX-SCOPE-003 | Completion | a real scope violation | MissionBrief 2 |
@@ -1504,6 +1611,8 @@ version through `BlackBoxPipeline.ReanalyzeAsync` (advisor and summary only, no 
 | BBX-OUT-001 | Completion | invalid output | UserConfig 1 |
 | BBX-BOUND-001 | Completion | boundary violation | MissionBrief 2 |
 | BBX-CHECK-001 | Completion | definition of done, stage check, compile or test failure | MissionBrief 1 |
+| BBX-CHECK-002 | Completion | a check step (stage check, definition of done, verification, queue tests) whose harness failed (CouldNotRun, exit 124, 126, 127, 137 or 143, command not found, timed out) | ArmadaDefect 2 |
+| BBX-CHECK-003 | Completion | a check step whose results both passed and failed (a flake) | ArmadaDefect 2 |
 | BBX-UNFIN-001 | Completion | step Unfinished | MissionBrief 1 |
 | BBX-EXEC-001 | Execution | usage limit | Transient 3 |
 | BBX-EXEC-002 | Execution | stall recovery exhausted | Transient 2 |
@@ -1516,14 +1625,25 @@ version through `BlackBoxPipeline.ReanalyzeAsync` (advisor and summary only, no 
 | BBX-INFRA-001 | Dispatch | Harbor disconnected or unavailable | External 3 |
 | BBX-DISP-001 | Dispatch | no eligible captain, assignment failed | UserConfig 2 |
 | BBX-DISP-002 | Dispatch | any other dispatch failure | Transient 1 |
-| BBX-PROV-001 | Provision | any provisioning failure | Transient 1 |
+| BBX-PROV-001 | Provision | any other provisioning failure | Transient 1 |
+| BBX-PROV-002 | Provision | git reports a stale or unregistered worktree (provision or landing) | ArmadaDefect 3 |
+| BBX-PROV-003 | Provision | step BranchCreate | ArmadaDefect 2 |
+| BBX-PROV-004 | Provision | step StartCommitRecord | ArmadaDefect 2 |
+| BBX-DOCK-001 | Provision | the dock worktree of a mission vanished outside landing, review and provisioning | ArmadaDefect 3 |
 | BBX-REV-001 | Review | review denied | External 2 |
 | BBX-REV-002 | Review | judge rejected | MissionBrief 2 |
 | BBX-REV-003 | Review | review approved but the dock is gone | ArmadaDefect 3 |
 | BBX-REV-004 | Review | review timed out | External 2 |
-| BBX-DEP-002 | Handoff | dependency failed or cancelled | External 1 |
+| BBX-DEP-002 | Handoff | dependency failed or cancelled | External 3 |
 | BBX-HAND-001 | Handoff | any other handoff failure | ArmadaDefect 1 |
-| BBX-RECOV-001 | Recovery | Armada's recovery failed | ArmadaDefect 2 |
+| BBX-HAND-002 | Handoff | step PlanParse | ArmadaDefect 3 |
+| BBX-HAND-003 | Handoff | step StageBranchHarden | ArmadaDefect 2 |
+| BBX-HAND-004 | Handoff | step IntegrationBarrier | ArmadaDefect 2 |
+| BBX-RECOV-001 | Recovery | any other failure of Armada's recovery | ArmadaDefect 2 |
+| BBX-RECOV-002 | Recovery | step UnconfirmedStop | ArmadaDefect 2 |
+| BBX-RECOV-003 | Recovery | step OrphanedExit | ArmadaDefect 2 |
+| BBX-RECOV-004 | Recovery | step MissingMergeHandoff | ArmadaDefect 3 |
+| BBX-RECOV-005 | Recovery | step RedispatchExhausted | ArmadaDefect 2 |
 | BBX-VOY-001 | Voyage | a voyage entry | none |
 | BBX-EXT-001 | External | vessel deleted, operator transition | External 3 |
 | BBX-UNKNOWN-001 | (fallback) | nothing else rendered | none |
@@ -1535,7 +1655,8 @@ REST request and, where Helm has one, the CLI command.
 
 The optional model-written summary: when `blackBox.summaryEndpointId` is set and `Pipeline.SummaryWriter` is wired,
 the pipeline asks that model endpoint (through the same PolyPrompt clients as the ApiEndpoint runtime) for 3 to 6
-sentences from the record facts and the rule findings, within `SummaryTimeoutMs`, and sets `summaryIsModelWritten`.
+sentences from the record facts, the rule findings and the resilience facts (in scope the prompt asks it to lead with
+the Armada angle: what Armada's handoff or landing could not do and what it could have done), within `SummaryTimeoutMs`, and sets `summaryIsModelWritten`.
 Any failure, timeout or empty reply keeps the rules summary.
 
 ### 13.14 Recovery contract
@@ -1568,21 +1689,38 @@ request)` run only what the entry recorded:
 
 ### 13.15 Maintainer loop: bundle, trends, fixtures
 
-- `GetBundleAsync`: up to 50 entries (filters of `BlackBoxEnumerateRequest`, `max` clamped to 1..50), grouped by
-  fingerprint, most frequent first. Markdown: the preamble asking the agent to rank Armada improvements, check them
-  against the source and write each as an Armada mission brief (with a fixture test, and new rules in catalog format),
-  then per group the fingerprint, first and last seen, Armada versions, triage and rule ids, the newest entry's FIX THIS
+- `GetBundleAsync`: up to 50 entries (filters of `BlackBoxEnumerateRequest`, `max` clamped to 1..50). By default
+  (`allFailures` false and neither `triage` nor `resilienceScope` set) it holds the Armada resilience gaps: entries in
+  handoff and landing scope triaged ArmadaDefect. Groups by fingerprint, ranked by the newest entry's resilience severity,
+  then occurrences, then recency. Markdown: the preamble asking the agent to produce Armada missions (start from each
+  group's proposed Armada changes and regression test, confirm them against the source, rank by impact, write each as
+  an Armada mission brief with a fixture test, and new rules in catalog format), then per group the fingerprint, first
+  and last seen, Armada versions, triage (suspected or not) and rule ids, the resilience severity, self-healable
+  verdict and detection gap, the proposed Armada changes and the regression test, the newest entry's FIX THIS
   brief (headings demoted under the group) and one-liners for the rest (cut at 1 MB). JSON: a `BlackBoxBundleDocument` with
-  `BlackBoxBundleGroup`s. `redactHosts` strips host paths; `truncated` is set when more entries matched than were
+  `BlackBoxBundleGroup`s (each with `severity`, `selfHealable`, `proposedChanges` and `regressionTest`). `redactHosts` strips host paths; `truncated` is set when more entries matched than were
   bundled.
+- `EnumerateResilienceGapsAsync` (`POST /api/v1/blackbox/resilience-gaps/enumerate`, `list_blackbox_resilience_gaps`,
+  `armada blackbox gaps`): the fingerprints of the entries triaged ArmadaDefect in handoff and landing scope (the
+  `ResilienceScope` index filter: the scope phases and their steps, the InvalidOutput and ReviewApprovedDockMissing
+  steps and the InvalidOutput kind), at most 50 per page, each a `BlackBoxResilienceGap` with occurrences, open count,
+  first and last seen, the newest entry and its mission, Armada versions, severity (the newest entry's, escalated by the
+  fingerprint's whole recurrence), self-healable, suspected, the detection gap, the top proposed change and the rule
+  ids; most severe first within the page, scoped to the caller. Dock facts recorded in other phases make an entry in
+  scope for the advisor but not for this index-level filter.
 - `GetFingerprintTrendAsync`: counts of one fingerprint per Armada version (`BlackBoxFingerprintTrend`, versions ordered
   by first sighting, each with open and ArmadaFixed counts; at most 1000 entries and 100 versions), scoped to the caller.
-- `ExportFixtureAsync`: a `BlackBoxFixture` (sanitized record plus the rule ids and triage the advisor produces now);
-  `BlackBoxFixtureExporter.WriteAsync` writes `{name}.json`. Fixtures live in `src/Test.Shared/Fixtures/BlackBox/` and
-  `Services.BlackBoxFixtures` checks each one still produces its expected rule ids (the first one leading) and triage,
+- `ExportFixtureAsync`: a `BlackBoxFixture` (sanitized record plus the rule ids, triage and resilience scope and
+  self-healable verdict the advisor produces now); `BlackBoxFixtureExporter.WriteAsync` writes `{name}.json`. Fixtures
+  live in `src/Test.Shared/Fixtures/BlackBox/` and `Services.BlackBoxFixtures` checks each one still produces its
+  expected rule ids (the first one leading), triage and `expectedResilience` (scope, self-healable, text the top
+  proposed change and the self-healing proposal must mention, a user-side recommendation that must still be offered),
   is sanitized, and validates against the record schema. Current fixtures: `land-001-dirty-checkout`
-  (msn_mvskboi0_vJGaqsNlGqU), `land-002-dock-deleted` (msn_mvsjeweh_tmCfX52gt3z), `scope-001-false-violation` (Garrison
-  msn_mvsqzal6_b1BfR4tnZ29), `dep-001-parallel-dependency-mission-2` and `-mission-4` (the bounded-enumeration voyage).
+  (msn_mvskboi0_vJGaqsNlGqU: UserConfig with the user-side LandingMode fix, plus the Armada proposal to land through an
+  integration worktree or auto-defer; self-healable Yes), `land-002-dock-deleted` (msn_mvsjeweh_tmCfX52gt3z:
+  ArmadaDefect, self-healable Yes, recreate the worktree from the branch), `scope-001-false-violation` (Garrison
+  msn_mvsqzal6_b1BfR4tnZ29: ArmadaDefect in the scope parser), `dep-001-parallel-dependency-mission-2` and `-mission-4`
+  (the bounded-enumeration voyage; MissionBrief, outside the scope).
 
 ### 13.16 Effective configuration
 
@@ -1600,7 +1738,9 @@ values without replacing what capture recorded.
 ### 13.17 Enrichment (built-in enrichers)
 
 `BlackBoxRuntime.Create` registers the built-in enrichers (`Armada.Core.BlackBox.Enrichment`,
-`BlackBoxEnricherCatalog.CreateDefaults`) on the pipeline, in this order. Each derives from `BlackBoxEnricherBase`,
+`BlackBoxEnricherCatalog.CreateDefaults`) on the pipeline, in this order. The pipeline also records
+`related.armadaVersions` (the Armada versions the fingerprint was seen in, from up to 100 entries) next to
+`occurrencesLast30Days`, for severity escalation. Each derives from `BlackBoxEnricherBase`,
 which catches everything but cancellation and records `"<Name> enrichment did not complete (...)"` in
 `truncation.notes`, so a failing host or git command never marks the entry EnrichmentFailed.
 
@@ -1612,6 +1752,7 @@ which catches everything but cancellation and records `"<Name> enrichment did no
 | `ConcurrentOverlap` | Other missions on the vessel active during the run window that touched the same files (diff snapshot, or their branch on the owning host, at most 10 branch reads), `conflict.concurrentMissions`, OverlappingFiles links |
 | `DirectoryRollup` | `conflictedDirectories` (depth 1 to 3), `conflictedParentDirectories`, `deepestConflictedDirectory` (at least two files) |
 | `Attempts` | Earlier entries, stage outcomes and handoff artifacts as `attempts` (bounded 20, oldest first); subject counters (redispatch, output repair, no-op); `subject.rescueChain`; RescueOf and ParentOfRescue (`Incident.RescueMissionIds`) links |
+| `Handoff` | For mission entries in handoff and landing scope: `record.handoff` and `evidence/handoff-timeline.json` (`BlackBoxHandoffEnricher.Build`): the mission's handoff and landing events (completion, stage check, handoff, landing attempts, retries, deferrals, reconcile, branch and review), the dock's and the merge entry's events, ordered and bounded at 100 (`stepTotal`, `truncated`); `autoRecoveries` per kind (Redispatch, OutputRepair, LandingRetry, DeferralRetry, Rescue, DockRepair, Reconcile, OrphanRecovery) with attempts, last attempt and outcome (Succeeded, Failed, Expired), also from the subject counters; `dockTransitions`; `landingAttempts`; target tips at start and failure, `targetMoved` and `targetCommitsDuringRun` |
 | `Evidence` | `evidence/agent-output.txt` (tail, when capture did not store it), `evidence/mission.log` (tail), `evidence/check-<n>.txt`, `evidence/verification-<n>.txt`, `evidence/merge-entry.txt`, `evidence/diff.patch` (worktree diff when no snapshot), `evidence/diffstat.txt` and `evidence.diffStat`, `evidence/events.json` and `evidence.relevantEvents` |
 | `Related` | DependencyOf and CascadeRoot links up `DependsOnMissionId`, `related.cascadeRootEntryId`, `related.downstreamMissionIds`, SiblingInVoyage and SharedDock links (fingerprint matches and similar entries are added by the pipeline) |
 | `Voyage` | Voyage entries: roll-up by status, failed missions and their entries, cascade root, downstream missions, CascadeRoot and SiblingInVoyage links |

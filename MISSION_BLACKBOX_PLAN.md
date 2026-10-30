@@ -20,7 +20,8 @@ Where this plan and the code differ, the code and docs/BLACKBOX.md are authorita
 - **Recovery path ids** are stable rule-derived ids such as `bbx-land-001.stash-retry`, not `rp1`. Confirm tokens are
   held in memory, so an Admiral restart invalidates outstanding dry runs. Preconditions are checked on the dry run and
   again on confirm.
-- **Rule catalog:** 42 rules at version 1 (every phase has at least one), more than the 14 starter rules in 6.2.
+- **Rule catalog:** 42 rules at version 1 (every phase has at least one), more than the 14 starter rules in 6.2; 66
+  rules at version 2 with the resilience bias (below).
 - **MCP resources and prompts** are supported by Voltaic 2.4.0 and are exposed (four resources, `review_blackbox`,
   `explain_blackbox`). A missing resource returns JSON-RPC -32002.
 - **Ask Armada:** the quick action catalog had 5 actions, not 10; `/blackbox` makes 6. Admin-level reads
@@ -55,6 +56,18 @@ Where this plan and the code differ, the code and docs/BLACKBOX.md are authorita
   (not migrated or deleted). The maintainer bundle stays and renders its own preamble with the single brief per failure
   mode. Sections of this plan that mention audiences (3, 4.3, 8.1, 8.2, 9, 11, 12, 15, 16 and 18) describe the original
   design.
+- **Resilience bias (2026-10-30):** the plan's advisor was neutral between the triage verdicts. It is now deliberately
+  biased toward finding problems within Armada's own handoff and landing: in that scope (phases Handoff, Landing,
+  MergeQueue, Recovery and Provision, output contract parsing, check harness errors, a false scope check, and dock,
+  worktree, branch and target-sync facts of any phase) the advisor adds the `BBX-PRIOR-ARMADA` vote (ArmadaDefect,
+  weight 2), so ArmadaDefect wins unless a rule has strong, specific evidence for another verdict, a tie goes to
+  ArmadaDefect, and a verdict that rests on the prior alone is a suspected defect with Low confidence. Every entry
+  carries an Armada resilience section (`analysis.resilience`: self-healable verdict, detection gap and invariant, code
+  pointers, proposed Armada changes as mission briefs with severity escalated by recurrence, regression test) and
+  in-scope entries a handoff trail (`record.handoff`); the brief puts the section right after the Summary, the maintainer
+  bundle defaults to the resilience gaps, and a resilience gaps list was added (REST, MCP, client, Helm, dashboard,
+  TUI). Rules version 2 (66 rules). The additions are additive, so `schemaVersion` stays 1. The neutral triage of
+  plan sections 6 and 7 still describes the behavior outside the scope.
 
 ## Contents
 
