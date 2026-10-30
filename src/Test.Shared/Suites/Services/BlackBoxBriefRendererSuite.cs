@@ -21,7 +21,7 @@ namespace Test.Shared.Suites.Services
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
-    /// BlackBoxBriefRenderer: golden-ish content per audience, audiences differ, size target and cap with trimming, no em-dashes, no secrets, and rendering from an almost empty record.
+    /// BlackBoxBriefRenderer: golden-ish content of the single FIX THIS brief, size target and cap with trimming, no em-dashes, no secrets, and rendering from an almost empty record.
     /// </summary>
     public sealed class BlackBoxBriefRendererSuite : IArmadaTestSuite
     {
@@ -35,7 +35,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("agent_brief_content", "The agent brief carries the preamble, triage instruction, site, reason, conflict, recovery and the answer instruction", TestTags.Positive, () =>
             {
                 BlackBoxBriefRenderer renderer = new BlackBoxBriefRenderer();
-                string brief = renderer.Render(SampleEntry(), SampleRecord(), BlackBoxAudienceEnum.Agent);
+                string brief = renderer.Render(SampleEntry(), SampleRecord());
                 AssertStartsWith("# FIX THIS: Add the parser (mission msn_brief)", brief);
                 foreach (string expected in new[] { "You are asked to FIX THIS", "**ArmadaDefect**", "**UserConfig**", "## Where it failed", "src/Armada.Core/Services/MissionService.cs:1582",
                     "## How it failed", "Mission modified files", "Armada stack frames", "## Conflict", "`src/core/a.cs`", "## Why", "BBX-LAND-003", "## Recovery", "retry_landing",
@@ -44,30 +44,27 @@ namespace Test.Shared.Suites.Services
                 return Task.CompletedTask;
             }));
 
-            cases.Add(Case("audiences_differ", "User has no stack frames or source pointers; maintainer has improvements and the build; all three differ", TestTags.Positive, () =>
+            cases.Add(Case("one_brief_carries_everything", "The single brief keeps the stack frames, source pointers, rule ids, improvements and build, and is stored as brief.md", TestTags.Positive, () =>
             {
                 BlackBoxBriefRenderer renderer = new BlackBoxBriefRenderer();
-                string agent = renderer.Render(SampleEntry(), SampleRecord(), BlackBoxAudienceEnum.Agent);
-                string user = renderer.Render(SampleEntry(), SampleRecord(), BlackBoxAudienceEnum.User);
-                string maintainer = renderer.Render(SampleEntry(), SampleRecord(), BlackBoxAudienceEnum.Maintainer);
-                AssertNotEqual(agent, user); AssertNotEqual(agent, maintainer); AssertNotEqual(user, maintainer);
-                AssertStartsWith("# What went wrong", user);
-                AssertFalse(user.Contains("Armada stack frames", StringComparison.Ordinal), "user: no stack frames");
-                AssertFalse(user.Contains("MissionService.cs:1582", StringComparison.Ordinal), "user: no source pointer");
-                AssertFalse(user.Contains("## What Armada could change", StringComparison.Ordinal), "user: no improvement hypotheses");
-                AssertContains("## What Armada could change", maintainer, "maintainer: improvements");
-                AssertContains("Armada maintainer brief", maintainer);
-                AssertContains("commit abc1234", maintainer, "maintainer: build");
-                AssertEqual("brief.md", BlackBoxBriefRenderer.ObjectName(BlackBoxAudienceEnum.Agent));
-                AssertEqual("brief.user.md", BlackBoxBriefRenderer.ObjectName(BlackBoxAudienceEnum.User));
-                AssertEqual("brief.maintainer.md", BlackBoxBriefRenderer.ObjectName(BlackBoxAudienceEnum.Maintainer));
+                BlackBoxEntry entry = SampleEntry();
+                BlackBoxRecord record = SampleRecord();
+                string brief = renderer.Render(entry, record);
+                AssertContains("Armada stack frames", brief, "stack frames");
+                AssertContains("MissionService.cs:1582", brief, "source pointer");
+                AssertContains("## What Armada could change", brief, "improvement hypotheses");
+                AssertContains("commit abc1234", brief, "build");
+                AssertFalse(brief.Contains("What went wrong", StringComparison.Ordinal), "no separate user heading");
+                AssertFalse(brief.Contains("maintainer brief", StringComparison.Ordinal), "no separate maintainer heading");
+                AssertEqual(brief, renderer.Render(entry, record), "rendering is deterministic");
+                AssertEqual("brief.md", BlackBoxObjectNames.Brief);
                 return Task.CompletedTask;
             }));
 
             cases.Add(Case("size_target_and_cap", "A typical brief fits the 12 KB target; a huge record is trimmed under the 40 KB cap with list and text trimming", TestTags.Negative, () =>
             {
                 BlackBoxBriefRenderer renderer = new BlackBoxBriefRenderer();
-                string typical = renderer.Render(SampleEntry(), SampleRecord(), BlackBoxAudienceEnum.Agent);
+                string typical = renderer.Render(SampleEntry(), SampleRecord());
                 AssertTrue(Encoding.UTF8.GetByteCount(typical) <= BlackBoxLimits.BriefTargetBytes, "typical under 12 KB: " + Encoding.UTF8.GetByteCount(typical));
                 BlackBoxRecord huge = SampleRecord();
                 huge.Conflict!.ConflictedFiles = Enumerable.Range(0, 500).Select(i => "src/very/long/directory/name/for/file/number/" + i + "/" + new string('f', 60) + ".cs").ToList();
@@ -76,16 +73,13 @@ namespace Test.Shared.Suites.Services
                 huge.Mechanism!.CommandOutputTail = new string('o', 8000);
                 huge.Mechanism.GitStderrTail = new string('g', 4000);
                 for (int i = 0; i < 64; i++) huge.Configuration!.Values.Add(new BlackBoxConfigValue { Setting = "S" + i, Value = new string('v', 300) });
-                foreach (BlackBoxAudienceEnum audience in new[] { BlackBoxAudienceEnum.Agent, BlackBoxAudienceEnum.User, BlackBoxAudienceEnum.Maintainer })
-                {
-                    string brief = renderer.Render(SampleEntry(), huge, audience);
-                    int bytes = Encoding.UTF8.GetByteCount(brief);
-                    AssertTrue(bytes <= BlackBoxLimits.BriefMaxBytes, audience + " under the 40 KB cap: " + bytes);
-                    AssertContains("more (see record.json)", brief, audience + " says lists were cut");
-                }
+                string trimmed = renderer.Render(SampleEntry(), huge);
+                int bytes = Encoding.UTF8.GetByteCount(trimmed);
+                AssertTrue(bytes <= BlackBoxLimits.BriefMaxBytes, "under the 40 KB cap: " + bytes);
+                AssertContains("more (see record.json)", trimmed, "says lists were cut");
                 renderer.MaxBytes = 4096;
                 renderer.TargetBytes = 2048;
-                string cut = renderer.Render(SampleEntry(), huge, BlackBoxAudienceEnum.Agent);
+                string cut = renderer.Render(SampleEntry(), huge);
                 AssertTrue(Encoding.UTF8.GetByteCount(cut) <= 4096, "hard cap honored: " + Encoding.UTF8.GetByteCount(cut));
                 AssertContains(BlackBoxBriefRenderer.CutMarker, cut, "cut marker");
                 return Task.CompletedTask;
@@ -99,15 +93,12 @@ namespace Test.Shared.Suites.Services
                 BlackBoxRecord record = SampleRecord();
                 record.Subject!.Title = "Title — with dash";
                 record.Classification!.RawReason = "push to https://ci:s3cr3tpass@git.example.com failed — token=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-                foreach (BlackBoxAudienceEnum audience in new[] { BlackBoxAudienceEnum.Agent, BlackBoxAudienceEnum.User, BlackBoxAudienceEnum.Maintainer })
-                {
-                    string brief = renderer.Render(entry, record, audience);
-                    AssertFalse(brief.Contains('—'), audience + " has no em-dash");
-                    AssertFalse(brief.Contains('–'), audience + " has no en-dash");
-                    AssertFalse(brief.Contains("s3cr3tpass", StringComparison.Ordinal), audience + " has no password");
-                    AssertFalse(brief.Contains("ghp_ABCDEF", StringComparison.Ordinal), audience + " has no token");
-                }
-                string hosts = renderer.Render(entry, record, BlackBoxAudienceEnum.Maintainer, true);
+                string brief = renderer.Render(entry, record);
+                AssertFalse(brief.Contains('—'), "no em-dash");
+                AssertFalse(brief.Contains('–'), "no en-dash");
+                AssertFalse(brief.Contains("s3cr3tpass", StringComparison.Ordinal), "no password");
+                AssertFalse(brief.Contains("ghp_ABCDEF", StringComparison.Ordinal), "no token");
+                string hosts = renderer.Render(entry, record, true);
                 AssertFalse(hosts.Contains("/Users/dev", StringComparison.Ordinal), "redactHosts strips absolute paths");
                 return Task.CompletedTask;
             }));
@@ -116,13 +107,13 @@ namespace Test.Shared.Suites.Services
             {
                 BlackBoxBriefRenderer renderer = new BlackBoxBriefRenderer();
                 BlackBoxEntry entry = new BlackBoxEntry { MissionId = "msn_sparse", CaptureMode = BlackBoxCaptureModeEnum.Sweeper };
-                string brief = renderer.Render(entry, null, BlackBoxAudienceEnum.Agent);
+                string brief = renderer.Render(entry, null);
                 AssertContains("(mission msn_sparse)", brief);
                 AssertContains("No analysis findings yet", brief);
                 AssertContains("No recovery paths recorded yet", brief);
                 BlackBoxRecord sweeper = new BlackBoxRecord { CaptureMode = BlackBoxCaptureModeEnum.Sweeper };
-                AssertContains("lower fidelity", renderer.Render(entry, sweeper, BlackBoxAudienceEnum.User), "sweeper fidelity note");
-                AssertContains("Enrichment is pending", renderer.Render(entry, sweeper, BlackBoxAudienceEnum.Agent), "pending enrichment note");
+                AssertContains("lower fidelity", renderer.Render(entry, sweeper), "sweeper fidelity note");
+                AssertContains("Enrichment is pending", renderer.Render(entry, sweeper), "pending enrichment note");
                 return Task.CompletedTask;
             }));
 

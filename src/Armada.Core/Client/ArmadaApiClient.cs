@@ -683,12 +683,11 @@ namespace Armada.Core.Client
         /// Get the Markdown FIX THIS brief of a black box entry (GET /api/v1/blackbox/{id}/brief).
         /// </summary>
         /// <param name="entryId">Entry ID (bbx_ prefix).</param>
-        /// <param name="audience">Audience: agent (default), user or maintainer.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The Markdown brief.</returns>
-        public async Task<string> GetBlackBoxBriefAsync(string entryId, string audience = "agent", CancellationToken token = default)
+        public async Task<string> GetBlackBoxBriefAsync(string entryId, CancellationToken token = default)
         {
-            HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/brief?audience=" + Uri.EscapeDataString(audience ?? "agent"), token).ConfigureAwait(false);
+            HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/brief", token).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
         }
@@ -697,12 +696,11 @@ namespace Armada.Core.Client
         /// Get the Markdown FIX THIS brief of a mission's current black box entry (GET /api/v1/missions/{id}/blackbox/brief).
         /// </summary>
         /// <param name="missionId">Mission ID (msn_ prefix).</param>
-        /// <param name="audience">Audience: agent (default), user or maintainer.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The Markdown brief.</returns>
-        public async Task<string> GetMissionBlackBoxBriefAsync(string missionId, string audience = "agent", CancellationToken token = default)
+        public async Task<string> GetMissionBlackBoxBriefAsync(string missionId, CancellationToken token = default)
         {
-            HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/blackbox/brief?audience=" + Uri.EscapeDataString(audience ?? "agent"), token).ConfigureAwait(false);
+            HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/blackbox/brief", token).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
         }

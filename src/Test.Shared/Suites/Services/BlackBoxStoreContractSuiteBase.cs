@@ -137,7 +137,7 @@ namespace Test.Shared.Suites.Services
             AssertEqual(Target, entry.StorageTarget, "entry target");
             AssertEqual(0, sink.Count(BlackBoxEventTypes.StorageFallback), "no fallback");
             List<BlackBoxObject> objects = await ObjectsAsync(t, id).ConfigureAwait(false);
-            AssertTrue(objects.Count >= 5, "record, three briefs and evidence: " + objects.Count);
+            AssertTrue(objects.Count >= 3, "record, the brief and evidence: " + objects.Count);
             AssertTrue(objects.All(o => !o.IsMissing), "nothing missing");
             if (Target == BlackBoxStorageTargetEnum.Database)
             {

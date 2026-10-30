@@ -15,7 +15,6 @@ const SETTINGS: ArmadaSettings = {
   tenant: '',
   authHeader: 'Bearer',
   dashboardUrl: 'http://armada.test:7890/dashboard',
-  briefAudience: 'agent',
   filterToWorkspaceVessel: true,
   includeResolved: false,
   maxEntries: 50,
@@ -182,9 +181,10 @@ describe('FIX THIS commands', () => {
 
   it('copies the brief', async () => {
     const mock = briefMock();
-    assert.strictEqual(await commands(mock, { briefAudience: 'user' }).copyFixThis(NODE), '# FIX THIS brief');
+    assert.strictEqual(await commands(mock).copyFixThis(NODE), '# FIX THIS brief');
     assert.strictEqual(fake.clipboard, '# FIX THIS brief');
-    assert.ok(mock.requests[0].url.endsWith('audience=user'));
+    assert.ok(mock.requests[0].url.endsWith('/api/v1/blackbox/bbx_1/brief'));
+    assert.ok(!mock.requests[0].url.includes('audience'));
   });
 
   it('opens the brief as an untitled Markdown document with a preview', async () => {

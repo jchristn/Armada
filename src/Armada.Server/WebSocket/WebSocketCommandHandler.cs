@@ -1241,12 +1241,8 @@ namespace Armada.Server.WebSocket
                     return new { type = "command.result", action = action, data = (object)entry };
                 }
 
-                BlackBoxAudienceEnum audience = BlackBoxAudienceEnum.Agent;
-                if (!String.IsNullOrWhiteSpace(data.Audience)
-                    && (!Armada.Core.EnumNames.TryParse(data.Audience.Trim(), true, out audience) || audience == BlackBoxAudienceEnum.Unknown))
-                    return WebSocketCommandError.Create(action, WebSocketCommandErrorCodeEnum.InvalidArgument, "audience must be agent, user or maintainer.");
-                string brief = await BlackBox.GetBriefAsync(ctx, resolved, audience, data.RedactHosts ?? false).ConfigureAwait(false);
-                return new { type = "command.result", action = action, data = (object)new BlackBoxBriefResult { EntryId = resolved, Audience = audience, Brief = brief } };
+                string brief = await BlackBox.GetBriefAsync(ctx, resolved, data.RedactHosts ?? false).ConfigureAwait(false);
+                return new { type = "command.result", action = action, data = (object)new BlackBoxBriefResult { EntryId = resolved, Brief = brief } };
             }
             catch (Armada.Core.BlackBox.BlackBoxNotFoundException ex)
             {

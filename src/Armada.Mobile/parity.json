@@ -2437,7 +2437,7 @@
       "status": "implemented",
       "mobile": "src/screens/blackbox/BlackBoxPanel.tsx",
       "workstream": "W2.2",
-      "notes": "Copy FIX THIS and Share (agent audience, platform share sheet) and Full report (user audience)"
+      "notes": "Copy FIX THIS and Share (platform share sheet) and Full report, all showing the single FIX THIS brief"
     },
     {
       "kind": "api",

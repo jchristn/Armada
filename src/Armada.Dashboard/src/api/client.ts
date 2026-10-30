@@ -211,7 +211,6 @@ import type {
   ModelProbeRunQuery,
 } from '../types/models';
 import type {
-  BlackBoxAudience,
   BlackBoxBackfillRequest,
   BlackBoxBackfillResult,
   BlackBoxBundleQuery,
@@ -1429,8 +1428,8 @@ function blackBoxQuery(params: Record<string, string | number | boolean | null |
   return parts.length ? `?${parts.join('&')}` : '';
 }
 
-function blackBoxBriefQuery(opts?: { audience?: BlackBoxAudience; redactHosts?: boolean }): string {
-  return blackBoxQuery({ audience: opts?.audience, redactHosts: opts?.redactHosts ? true : undefined });
+function blackBoxBriefQuery(opts?: { redactHosts?: boolean }): string {
+  return blackBoxQuery({ redactHosts: opts?.redactHosts ? true : undefined });
 }
 
 function blackBoxPagedBody(query?: { pageNumber?: number; pageSize?: number; order?: string }): Record<string, unknown> {
@@ -1466,8 +1465,8 @@ function blackBoxRawHeaders(): Record<string, string> {
 /** The mission's current black box entry with its record (404 BlackBoxNotFound when it has none). */
 export const getMissionBlackBox = (missionId: string, includeRecord = true) =>
   get<BlackBoxEntry>(`/api/v1/missions/${encodeURIComponent(missionId)}/blackbox${blackBoxQuery({ includeRecord: includeRecord ? undefined : false })}`, BLACKBOX_READ);
-/** The FIX THIS brief (Markdown) of the mission's current entry; audience agent (default), user or maintainer. */
-export const getMissionBlackBoxBrief = (missionId: string, opts?: { audience?: BlackBoxAudience; redactHosts?: boolean }) =>
+/** The FIX THIS brief (Markdown) of the mission's current entry. */
+export const getMissionBlackBoxBrief = (missionId: string, opts?: { redactHosts?: boolean }) =>
   get<string>(`/api/v1/missions/${encodeURIComponent(missionId)}/blackbox/brief${blackBoxBriefQuery(opts)}`, { rawText: true });
 /** One page of a mission's black box entries (every failed attempt), newest first. */
 export const listMissionBlackBoxEntries = (missionId: string, params?: { pageNumber?: number; pageSize?: number; order?: string }) =>
@@ -1479,14 +1478,14 @@ export const enumerateMissionBlackBoxEntries = (missionId: string, query?: { pag
 export const getVoyageBlackBox = (voyageId: string, includeRecord = true) =>
   get<BlackBoxEntry>(`/api/v1/voyages/${encodeURIComponent(voyageId)}/blackbox${blackBoxQuery({ includeRecord: includeRecord ? undefined : false })}`, BLACKBOX_READ);
 /** The FIX THIS brief (Markdown) of the voyage's current entry. */
-export const getVoyageBlackBoxBrief = (voyageId: string, opts?: { audience?: BlackBoxAudience; redactHosts?: boolean }) =>
+export const getVoyageBlackBoxBrief = (voyageId: string, opts?: { redactHosts?: boolean }) =>
   get<string>(`/api/v1/voyages/${encodeURIComponent(voyageId)}/blackbox/brief${blackBoxBriefQuery(opts)}`, { rawText: true });
 
 /** One black box entry, with its record unless includeRecord is false. */
 export const getBlackBox = (entryId: string, includeRecord = true) =>
   get<BlackBoxEntry>(`${BLACKBOX}/${encodeURIComponent(entryId)}?includeRecord=${includeRecord}`, BLACKBOX_READ);
 /** The FIX THIS brief (Markdown) of an entry. */
-export const getBlackBoxBrief = (entryId: string, opts?: { audience?: BlackBoxAudience; redactHosts?: boolean }) =>
+export const getBlackBoxBrief = (entryId: string, opts?: { redactHosts?: boolean }) =>
   get<string>(`${BLACKBOX}/${encodeURIComponent(entryId)}/brief${blackBoxBriefQuery(opts)}`, { rawText: true });
 /** One record section (the returned record carries only that section). 400 for an unknown section name. */
 export const getBlackBoxSection = (entryId: string, section: BlackBoxSection) =>

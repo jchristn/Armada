@@ -3,7 +3,7 @@ namespace Armada.Tui.Screens.Operations
     using Armada.Core.Models;
 
     /// <summary>
-    /// What one <see cref="BlackBoxFailurePanel"/> load read: the entry and its user and agent briefs.
+    /// What one <see cref="BlackBoxFailurePanel"/> load read: the entry and its FIX THIS brief.
     /// </summary>
     public class BlackBoxPanelLoad
     {
@@ -15,14 +15,9 @@ namespace Armada.Tui.Screens.Operations
         public BlackBoxEntry? Entry { get; }
 
         /// <summary>
-        /// User audience brief, or null.
+        /// FIX THIS brief, or null.
         /// </summary>
-        public string? UserBrief { get; }
-
-        /// <summary>
-        /// Agent audience (FIX THIS) brief, or null.
-        /// </summary>
-        public string? AgentBrief { get; }
+        public string? Brief { get; }
 
         #endregion
 
@@ -32,13 +27,11 @@ namespace Armada.Tui.Screens.Operations
         /// Instantiate.
         /// </summary>
         /// <param name="entry">Entry.</param>
-        /// <param name="userBrief">User brief.</param>
-        /// <param name="agentBrief">Agent brief.</param>
-        public BlackBoxPanelLoad(BlackBoxEntry? entry, string? userBrief, string? agentBrief)
+        /// <param name="brief">Brief.</param>
+        public BlackBoxPanelLoad(BlackBoxEntry? entry, string? brief)
         {
             Entry = entry;
-            UserBrief = userBrief;
-            AgentBrief = agentBrief;
+            Brief = brief;
         }
 
         #endregion

@@ -159,7 +159,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(BlackBoxStorageTargetEnum.S3, payload.From, "from"); AssertEqual(BlackBoxStorageTargetEnum.Database, payload.To, "to");
                 AssertFalse((payload.Error ?? "").Contains(settings.BlackBox.Storage.S3.SecretKey!), "no secret in the event");
                 List<BlackBoxObject> objects = (await t.Driver.BlackBoxObjects.EnumerateAsync(id, new EnumerationQuery { PageSize = 100 }).ConfigureAwait(false)).Objects;
-                AssertTrue(objects.Count >= 5 && objects.All(o => o.StorageKey == null && !o.IsMissing), "every object in the database");
+                AssertTrue(objects.Count >= 3 && objects.All(o => o.StorageKey == null && !o.IsMissing), "every object in the database");
                 AssertContains("agent output", Encoding.UTF8.GetString((await bb.Service.ReadObjectAsync(BlackBoxTestKit.Admin(), id, BlackBoxObjectNames.AgentOutput).ConfigureAwait(false)).Data), "readable");
                 BlackBoxRecord record = (await bb.Service.GetEntryAsync(BlackBoxTestKit.Admin(), id).ConfigureAwait(false)).Record!;
                 AssertTrue(record.Truncation.Notes.Any(n => n.Contains("written to the database instead")), "the record says so");
@@ -194,7 +194,7 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(record.IsMissing, "record.json present");
                 AssertNotNull((await bb.Service.GetEntryAsync(BlackBoxTestKit.Admin(), id).ConfigureAwait(false)).Record, "record readable");
                 List<BlackBoxObject> others = (await t.Driver.BlackBoxObjects.EnumerateAsync(id, new EnumerationQuery { PageSize = 100 }).ConfigureAwait(false)).Objects.Where(o => o.Name != BlackBoxObjectNames.Record).ToList();
-                AssertTrue(others.Count >= 4 && others.All(o => o.IsMissing), "evidence and briefs missing");
+                AssertTrue(others.Count >= 2 && others.All(o => o.IsMissing), "evidence and the brief missing");
                 await AssertThrowsAsync<BlackBoxObjectMissingException>(() => bb.Service.ReadObjectAsync(BlackBoxTestKit.Admin(), id, BlackBoxObjectNames.AgentOutput), "evidence reads 410").ConfigureAwait(false);
             }));
 

@@ -27,7 +27,6 @@ namespace Armada.Server.Routes
 
         private const string Tag = "BlackBox";
         private const string EntryIdDescription = "Black box entry ID (bbx_ prefix)";
-        private const string AudienceDescription = "Brief audience: agent (default), user or maintainer";
         private const string RedactHostsDescription = "Strip absolute paths, host names and user names (for sharing outside the installation)";
 
         private readonly IBlackBoxService? _Service;
@@ -96,10 +95,9 @@ namespace Armada.Server.Routes
 
             app.Get("/api/v1/missions/{id}/blackbox/brief", Handle(authenticate, authz, async (req, ctx, svc) =>
             {
-                BlackBoxAudienceEnum audience = ReadAudience(req);
                 bool redactHosts = ReadBool(req, "redactHosts") ?? false;
                 BlackBoxEntry entry = await svc.GetMissionEntryAsync(ctx, Param(req, "id"), false).ConfigureAwait(false);
-                string brief = await svc.GetBriefAsync(ctx, entry.Id, audience, redactHosts).ConfigureAwait(false);
+                string brief = await svc.GetBriefAsync(ctx, entry.Id, redactHosts).ConfigureAwait(false);
                 return await SendTextAsync(req, brief, "text/markdown; charset=utf-8").ConfigureAwait(false);
             }),
             api => BriefMetadata(api, "Get the FIX THIS brief of a mission's current black box entry", "Mission ID (msn_ prefix)"));
@@ -145,10 +143,9 @@ namespace Armada.Server.Routes
 
             app.Get("/api/v1/voyages/{id}/blackbox/brief", Handle(authenticate, authz, async (req, ctx, svc) =>
             {
-                BlackBoxAudienceEnum audience = ReadAudience(req);
                 bool redactHosts = ReadBool(req, "redactHosts") ?? false;
                 BlackBoxEntry entry = await svc.GetVoyageEntryAsync(ctx, Param(req, "id"), false).ConfigureAwait(false);
-                string brief = await svc.GetBriefAsync(ctx, entry.Id, audience, redactHosts).ConfigureAwait(false);
+                string brief = await svc.GetBriefAsync(ctx, entry.Id, redactHosts).ConfigureAwait(false);
                 return await SendTextAsync(req, brief, "text/markdown; charset=utf-8").ConfigureAwait(false);
             }),
             api => BriefMetadata(api, "Get the FIX THIS brief of a voyage's current black box entry", "Voyage ID (vyg_ prefix)"));
@@ -171,9 +168,8 @@ namespace Armada.Server.Routes
 
             app.Get("/api/v1/blackbox/{id}/brief", Handle(authenticate, authz, async (req, ctx, svc) =>
             {
-                BlackBoxAudienceEnum audience = ReadAudience(req);
                 bool redactHosts = ReadBool(req, "redactHosts") ?? false;
-                string brief = await svc.GetBriefAsync(ctx, Param(req, "id"), audience, redactHosts).ConfigureAwait(false);
+                string brief = await svc.GetBriefAsync(ctx, Param(req, "id"), redactHosts).ConfigureAwait(false);
                 return await SendTextAsync(req, brief, "text/markdown; charset=utf-8").ConfigureAwait(false);
             }),
             api => BriefMetadata(api, "Get the FIX THIS brief of a black box entry", EntryIdDescription));
@@ -330,7 +326,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag(Tag)
                 .WithSummary("Build a maintainer bundle")
-                .WithDescription("Up to max (1 to 50, default 50) of the newest matching entries, grouped by fingerprint, rendered as one Markdown document of maintainer briefs (format Markdown, the default) or as JSON entry summaries (format Json). redactHosts strips absolute paths, host names and user names for sharing outside the installation. Content is capped at 1 MB (Truncated true when cut).")
+                .WithDescription("Up to max (1 to 50, default 50) of the newest matching entries, grouped by fingerprint, rendered as one Markdown document with the brief of each failure mode (format Markdown, the default) or as JSON entry summaries (format Json). redactHosts strips absolute paths, host names and user names for sharing outside the installation. Content is capped at 1 MB (Truncated true when cut).")
                 .WithRequestBody(OpenApiJson.BodyFor<BlackBoxBundleRequest>("Filters, max, format and redactHosts", false))
                 .WithResponse(200, OpenApiJson.For<BlackBoxBundleResult>("The bundle"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
@@ -628,9 +624,8 @@ namespace Armada.Server.Routes
             return api
                 .WithTag(Tag)
                 .WithSummary(summary)
-                .WithDescription("The FIX THIS brief as text/markdown, rendered live from the record (with the ten newest notes), with an ETag (its SHA-256). audience agent (default) is the brief for a captain fixing the work, user the plain account for the operator (no stack frames), maintainer the Armada-defect view. 400 InvalidArgument (field audience) for any other audience; 404 BlackBoxNotFound when there is no visible entry.")
+                .WithDescription("The FIX THIS brief as text/markdown, rendered live from the record (with the ten newest notes), with an ETag (its SHA-256). There is one brief per entry, written for a coding agent asked to FIX THIS. 400 InvalidArgument (field redactHosts) when redactHosts is not a boolean; 404 BlackBoxNotFound when there is no visible entry.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", idDescription))
-                .WithParameter(OpenApiParameterMetadata.Query("audience", AudienceDescription, false))
                 .WithParameter(OpenApiParameterMetadata.Query("redactHosts", RedactHostsDescription, false, OpenApiSchemaMetadata.Boolean()))
                 .WithResponse(200, OpenApiResponseMetadata.Text("Markdown brief (text/markdown)"))
                 .WithResponse(400, OpenApiJson.For<ApiErrorResponse>("InvalidArgument"))
@@ -754,15 +749,6 @@ namespace Armada.Server.Routes
         private static string Param(ApiRequest req, string name)
         {
             return RouteParameters.Get(req, name);
-        }
-
-        private static BlackBoxAudienceEnum ReadAudience(ApiRequest req)
-        {
-            string? text = Blank(req.Query.GetValueOrDefault("audience"));
-            if (text == null) return BlackBoxAudienceEnum.Agent;
-            if (!EnumNames.TryParse(text, true, out BlackBoxAudienceEnum audience) || audience == BlackBoxAudienceEnum.Unknown)
-                throw new ArgumentException("audience must be agent, user or maintainer.", "audience");
-            return audience;
         }
 
         private static BlackBoxSectionEnum ReadSection(string text)

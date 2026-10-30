@@ -9,7 +9,6 @@
 
 import {
   ApiErrorResponse,
-  BlackBoxAudience,
   BlackBoxEntry,
   BlackBoxEntrySummary,
   BlackBoxEnumerateQuery,
@@ -41,15 +40,15 @@ export const Routes = {
   vessels: (pageNumber: number, pageSize: number): string =>
     `/api/v1/vessels?pageNumber=${pageNumber}&pageSize=${pageSize}`,
   missionEntry: (missionId: string): string => `/api/v1/missions/${enc(missionId)}/blackbox`,
-  missionBrief: (missionId: string, audience: BlackBoxAudience): string =>
-    `/api/v1/missions/${enc(missionId)}/blackbox/brief?audience=${enc(audience)}`,
+  missionBrief: (missionId: string): string =>
+    `/api/v1/missions/${enc(missionId)}/blackbox/brief`,
   missionEntries: (missionId: string): string => `/api/v1/missions/${enc(missionId)}/blackbox/entries`,
   voyageEntry: (voyageId: string): string => `/api/v1/voyages/${enc(voyageId)}/blackbox`,
-  voyageBrief: (voyageId: string, audience: BlackBoxAudience): string =>
-    `/api/v1/voyages/${enc(voyageId)}/blackbox/brief?audience=${enc(audience)}`,
+  voyageBrief: (voyageId: string): string =>
+    `/api/v1/voyages/${enc(voyageId)}/blackbox/brief`,
   entry: (entryId: string): string => `/api/v1/blackbox/${enc(entryId)}`,
-  entryBrief: (entryId: string, audience: BlackBoxAudience): string =>
-    `/api/v1/blackbox/${enc(entryId)}/brief?audience=${enc(audience)}`,
+  entryBrief: (entryId: string): string =>
+    `/api/v1/blackbox/${enc(entryId)}/brief`,
   section: (entryId: string, section: BlackBoxSectionName): string =>
     `/api/v1/blackbox/${enc(entryId)}/sections/${enc(section)}`,
   objects: (entryId: string): string => `/api/v1/blackbox/${enc(entryId)}/objects`,
@@ -302,18 +301,18 @@ export class ArmadaBlackBoxClient {
   }
 
   /** The FIX THIS brief (Markdown) for an entry. */
-  public getBrief(entryId: string, audience: BlackBoxAudience = 'agent'): Promise<string> {
-    return this.requestText('GET', Routes.entryBrief(entryId, audience));
+  public getBrief(entryId: string): Promise<string> {
+    return this.requestText('GET', Routes.entryBrief(entryId));
   }
 
   /** The FIX THIS brief for a mission's current entry. */
-  public getMissionBrief(missionId: string, audience: BlackBoxAudience = 'agent'): Promise<string> {
-    return this.requestText('GET', Routes.missionBrief(missionId, audience));
+  public getMissionBrief(missionId: string): Promise<string> {
+    return this.requestText('GET', Routes.missionBrief(missionId));
   }
 
   /** The FIX THIS brief for a voyage's entry. */
-  public getVoyageBrief(voyageId: string, audience: BlackBoxAudience = 'agent'): Promise<string> {
-    return this.requestText('GET', Routes.voyageBrief(voyageId, audience));
+  public getVoyageBrief(voyageId: string): Promise<string> {
+    return this.requestText('GET', Routes.voyageBrief(voyageId));
   }
 
   /** One record section: a record carrying only that section (the others are omitted). */

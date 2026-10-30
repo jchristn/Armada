@@ -79,15 +79,14 @@ namespace Armada.Core.BlackBox
         /// <exception cref="BlackBoxNotFoundException">Thrown when there is no visible entry.</exception>
         Task<BlackBoxSectionResult> GetSectionAsync(AuthContext caller, string entryId, BlackBoxSectionEnum section, CancellationToken token = default);
 
-        /// <summary>The FIX THIS brief, rendered from the record for an audience (Markdown).</summary>
+        /// <summary>The FIX THIS brief, rendered from the record (Markdown).</summary>
         /// <param name="caller">Caller.</param>
         /// <param name="entryId">Entry id.</param>
-        /// <param name="audience">Audience (Agent by default).</param>
         /// <param name="redactHosts">Strip absolute paths and host names.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Markdown.</returns>
         /// <exception cref="BlackBoxNotFoundException">Thrown when there is no visible entry.</exception>
-        Task<string> GetBriefAsync(AuthContext caller, string entryId, BlackBoxAudienceEnum audience = BlackBoxAudienceEnum.Agent, bool redactHosts = false, CancellationToken token = default);
+        Task<string> GetBriefAsync(AuthContext caller, string entryId, bool redactHosts = false, CancellationToken token = default);
 
         /// <summary>Every attempt of a mission, newest first by default.</summary>
         /// <param name="caller">Caller.</param>

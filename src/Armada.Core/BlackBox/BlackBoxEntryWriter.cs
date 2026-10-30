@@ -14,7 +14,7 @@ namespace Armada.Core.BlackBox
     using SyslogLogging;
 
     /// <summary>
-    /// Writes an entry's objects: record.json first, then the three briefs, then evidence. Redacts and bounds the record,
+    /// Writes an entry's objects: record.json first, then the brief, then evidence. Redacts and bounds the record,
     /// caps evidence objects (head and tail kept), applies the storage fallback (an external failure with
     /// FallbackToDatabase moves the entry to the database; without it record.json still goes to the database and the
     /// other objects are marked missing), honors a time budget (on timeout it rewrites record.json with
@@ -135,16 +135,13 @@ namespace Armada.Core.BlackBox
             if (!timedOut)
             {
                 List<BlackBoxPendingObject> rest = new List<BlackBoxPendingObject>();
-                foreach (BlackBoxAudienceEnum audience in new[] { BlackBoxAudienceEnum.Agent, BlackBoxAudienceEnum.User, BlackBoxAudienceEnum.Maintainer })
+                rest.Add(new BlackBoxPendingObject
                 {
-                    rest.Add(new BlackBoxPendingObject
-                    {
-                        Name = BlackBoxBriefRenderer.ObjectName(audience),
-                        ContentType = BlackBoxObjectNames.MarkdownContentType,
-                        Data = Encoding.UTF8.GetBytes(_Renderer.Render(entry, record, audience)),
-                        IsText = true
-                    });
-                }
+                    Name = BlackBoxObjectNames.Brief,
+                    ContentType = BlackBoxObjectNames.MarkdownContentType,
+                    Data = Encoding.UTF8.GetBytes(_Renderer.Render(entry, record)),
+                    IsText = true
+                });
                 rest.AddRange(pending);
                 foreach (BlackBoxPendingObject obj in rest)
                 {

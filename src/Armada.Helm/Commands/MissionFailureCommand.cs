@@ -5,7 +5,7 @@ namespace Armada.Helm.Commands
 
     /// <summary>
     /// <c>armada mission failure &lt;id&gt;</c>: an alias of <c>armada blackbox show</c> for a mission (the same options:
-    /// <c>--brief</c>, <c>--audience</c>, <c>--json</c>).
+    /// <c>--brief</c>, <c>--redact-hosts</c>, <c>--json</c>).
     /// </summary>
     [Description("Show the black box entry of a mission (alias of blackbox show)")]
     public class MissionFailureCommand : BlackBoxShowCommand

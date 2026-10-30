@@ -294,7 +294,7 @@ export class BlackBoxCommands {
   }
 
   private brief(entry: BlackBoxEntrySummary): Promise<string> {
-    return this._Deps.getClient().getBrief(entry.Id, this._Deps.getSettings().briefAudience);
+    return this._Deps.getClient().getBrief(entry.Id);
   }
 
   private async writeBriefFile(entry: BlackBoxEntrySummary, brief: string): Promise<vscode.Uri | undefined> {

@@ -104,11 +104,10 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "get_blackbox",
-                "Get the black box of a failed mission or voyage: start here when asked why something failed. " + TargetHint + " format summary (default, about 2 KB) returns where it failed (phase, step, host, source file and method), how (mechanism), status before and after, why (top findings), the triage verdict and confidence, and the top recovery paths; brief returns the Markdown FIX THIS brief for an audience (agent, user or maintainer); json returns the full record. Then read only the sections the question needs with read_blackbox_section and page evidence with read_blackbox_object. NotFound (Code BlackBoxNotFound) when there is no entry.",
+                "Get the black box of a failed mission or voyage: start here when asked why something failed. " + TargetHint + " format summary (default, about 2 KB) returns where it failed (phase, step, host, source file and method), how (mechanism), status before and after, why (top findings), the triage verdict and confidence, and the top recovery paths; brief returns the Markdown FIX THIS brief; json returns the full record. Then read only the sections the question needs with read_blackbox_section and page evidence with read_blackbox_object. NotFound (Code BlackBoxNotFound) when there is no entry.",
                 Schema(TargetProperties(new Dictionary<string, object>
                 {
                     ["format"] = new { type = "string", @enum = new[] { "summary", "brief", "json" }, description = "summary (default), brief or json" },
-                    ["audience"] = new { type = "string", @enum = new[] { "agent", "user", "maintainer" }, description = "Brief audience (format brief): agent (default), user or maintainer" },
                     ["redactHosts"] = new { type = "boolean", description = "Strip absolute paths, host names and user names from the brief (default false)" }
                 })),
                 (args) => Run(service, async svc =>
@@ -117,13 +116,12 @@ namespace Armada.Server.Mcp.Tools
                     BlackBoxGetArgs request = Read<BlackBoxGetArgs>(args);
                     string format = (request.Format ?? "summary").Trim().ToLowerInvariant();
                     if (format != "summary" && format != "brief" && format != "json") return McpToolError.InvalidArgument("format must be summary, brief or json.");
-                    BlackBoxAudienceEnum audience = ParseAudience(request.Audience);
                     string entryId = await ResolveAsync(svc, caller, request).ConfigureAwait(false);
                     if (format == "json") return await svc.GetRecordAsync(caller, entryId).ConfigureAwait(false);
                     if (format == "brief")
                     {
-                        string brief = await svc.GetBriefAsync(caller, entryId, audience, request.RedactHosts ?? false).ConfigureAwait(false);
-                        return new BlackBoxBriefResult { EntryId = entryId, Audience = audience, Brief = brief };
+                        string brief = await svc.GetBriefAsync(caller, entryId, request.RedactHosts ?? false).ConfigureAwait(false);
+                        return new BlackBoxBriefResult { EntryId = entryId, Brief = brief };
                     }
 
                     return await svc.GetDigestAsync(caller, entryId).ConfigureAwait(false);
@@ -220,7 +218,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "get_blackbox_bundle",
-                "Build a maintainer bundle: up to max (1-50, default 50) of the newest matching black box entries grouped by fingerprint, as one Markdown document of maintainer briefs (format Markdown, default) or JSON summaries. Use it to rank Armada improvements and write them as mission briefs on the Armada vessel. redactHosts strips absolute paths, host names and user names before sharing outside the installation.",
+                "Build a maintainer bundle: up to max (1-50, default 50) of the newest matching black box entries grouped by fingerprint, as one Markdown document with the brief of each failure mode (format Markdown, default) or JSON summaries. Use it to rank Armada improvements and write them as mission briefs on the Armada vessel. redactHosts strips absolute paths, host names and user names before sharing outside the installation.",
                 Schema(FilterProperties(new Dictionary<string, object>
                 {
                     ["max"] = new { type = "integer", description = "Entries (1-50, default 50)" },
@@ -495,14 +493,6 @@ namespace Armada.Server.Mcp.Tools
             if (String.IsNullOrWhiteSpace(target.EntryId) && String.IsNullOrWhiteSpace(target.MissionId) && String.IsNullOrWhiteSpace(target.VoyageId))
                 throw new ArgumentException("Give an entryId, missionId or voyageId.");
             return service.ResolveEntryIdAsync(caller, target.MissionId, target.VoyageId, target.EntryId);
-        }
-
-        private static BlackBoxAudienceEnum ParseAudience(string? text)
-        {
-            if (String.IsNullOrWhiteSpace(text)) return BlackBoxAudienceEnum.Agent;
-            if (!EnumNames.TryParse(text.Trim(), true, out BlackBoxAudienceEnum audience) || audience == BlackBoxAudienceEnum.Unknown)
-                throw new ArgumentException("audience must be agent, user or maintainer.");
-            return audience;
         }
 
         private static EnumerationQuery PageQuery(BlackBoxPageArgs request)

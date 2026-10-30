@@ -46,8 +46,9 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(frame, "Landing / ", "where");
                     TuiCase.Contains(frame, fx.Entry.Triage.ToString(), "triage");
                     TuiCase.Contains(frame, "1. " + fx.FirstPath.Title, "best recovery path");
-                    AssertEqual(fx.UserBrief, screen.Failure.UserBrief, "the user audience brief is shown");
-                    AssertTrue(stub.Saw("GET", "/api/v1/blackbox/" + fx.EntryId + "/brief", r => r.Query.Contains("audience=user")), "user brief read");
+                    AssertEqual(fx.Brief, screen.Failure.Brief, "the FIX THIS brief is shown");
+                    AssertTrue(stub.Saw("GET", "/api/v1/blackbox/" + fx.EntryId + "/brief", r => !r.Query.Contains("audience")), "the brief is read without an audience");
+                    AssertFalse(stub.Saw("GET", "/api/v1/blackbox/" + fx.EntryId + "/brief", r => r.Query.Contains("audience")), "no audience variant is requested");
                     host.Press("/").Type("Brief").Press("enter");
                     TuiCase.Contains(host.Screen(), "Brief", "brief section");
                 }
@@ -84,14 +85,14 @@ namespace Test.Shared.Suites.Tui
                         MissionScreen screen = OpenFailure(host);
                         AssertTrue(host.PumpUntil(() => screen.Failure.Entry != null), "entry loaded");
                         host.Press("c");
-                        AssertEqual(fx.AgentBrief, host.Tui.Context.Clipboard.LastCopied, "the agent brief is copied");
+                        AssertEqual(fx.Brief, host.Tui.Context.Clipboard.LastCopied, "the brief is copied");
                         host.Press("x");
                         AssertTrue(host.WaitForText("File path"), "path prompt");
                         TuiCase.Contains(host.Screen(), "blackbox-" + fx.EntryId + ".md", "default file name");
                         host.Press("ctrl+s");
                         string file = Path.Combine(dir, "blackbox-" + fx.EntryId + ".md");
                         AssertTrue(host.PumpUntil(() => File.Exists(file)), "brief written");
-                        AssertEqual(fx.AgentBrief, File.ReadAllText(file), "file content");
+                        AssertEqual(fx.Brief, File.ReadAllText(file), "file content");
                         AssertNull(screen.Failure.ExportTo(Path.Combine(dir, "missing-dir-is-created", "..", "\0bad")), "an invalid path is refused with a toast, not a crash");
                     }
                 }
@@ -267,7 +268,7 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(stub.CountFor("GET", "/api/v1/voyages/vyg_bb/blackbox") >= 1, "voyage route");
                     TuiCase.Contains(Status(host), "x Export", "x is export here, not Cancel Voyage");
                     host.Press("c");
-                    AssertEqual(fx.AgentBrief, host.Tui.Context.Clipboard.LastCopied, "copy");
+                    AssertEqual(fx.Brief, host.Tui.Context.Clipboard.LastCopied, "copy");
                 }
             }));
 

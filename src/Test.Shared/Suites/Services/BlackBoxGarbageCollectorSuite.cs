@@ -76,7 +76,7 @@ namespace Test.Shared.Suites.Services
                 Mission mission = await BlackBoxTestKit.FailedMissionAsync(t.Driver).ConfigureAwait(false);
                 string old = (await bb.Capture.RecordMissionFailureAsync(mission, MissionStatusEnum.InProgress, BlackBoxStepEnum.ScopeViolation).ConfigureAwait(false))!;
                 await bb.Capture.RecordMissionFailureAsync(mission, MissionStatusEnum.InProgress, BlackBoxStepEnum.ScopeViolation).ConfigureAwait(false);
-                AssertTrue(store.Objects.Count >= 8, "objects in the external store: " + store.Objects.Count);
+                AssertTrue(store.Objects.Count >= 4, "objects in the external store: " + store.Objects.Count);
                 await t.Driver.BlackBoxEntries.UpdateExpiresAsync(old, DateTime.UtcNow.AddDays(-1)).ConfigureAwait(false);
                 store.FailDeletes = true;
                 BlackBoxGcReport failed = await bb.GarbageCollector.RunAsync().ConfigureAwait(false);

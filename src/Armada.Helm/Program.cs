@@ -314,7 +314,7 @@ namespace Armada.Helm
                     .WithDescription("Show the black box entry of a mission, voyage, or entry id")
                     .WithExample("blackbox", "show", "msn_abc123")
                     .WithExample("blackbox", "show", "msn_abc123", "--brief")
-                    .WithExample("blackbox", "show", "bbx_abc123", "--audience", "maintainer", "--json");
+                    .WithExample("blackbox", "show", "bbx_abc123", "--json");
                 blackbox.AddCommand<BlackBoxListCommand>("list")
                     .WithDescription("List black box entries, newest first")
                     .WithExample("blackbox", "list", "--vessel", "vsl_abc123", "--triage", "ArmadaDefect", "--since", "30d");

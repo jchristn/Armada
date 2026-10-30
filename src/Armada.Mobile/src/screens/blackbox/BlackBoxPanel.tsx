@@ -63,10 +63,11 @@ export interface BlackBoxPanelProps {
 }
 
 /**
- * The black box of a failed mission or voyage (MISSION_BLACKBOX_PLAN.md 11.5): the user-audience summary (what
+ * The black box of a failed mission or voyage (MISSION_BLACKBOX_PLAN.md 11.5): the summary (what
  * happened, where, how, status before and after, why, conflicting missions, files and directories), the recorded
  * recovery paths (dry run, then a confirmation with a data-loss acknowledgement; runs are recorded as Operator),
- * Resolve, Add note, Share and Copy FIX THIS (the agent brief), and Ask Armada about this failure. Follows the entry
+ * Resolve, Add note, Share, Copy FIX THIS and Full report (all the entry's single FIX THIS brief), and Ask Armada
+ * about this failure. Follows the entry
  * live over the socket (blackbox.* events).
  */
 export function BlackBoxPanel({ source, fallback = null, standalone = false, after }: BlackBoxPanelProps) {
@@ -85,11 +86,11 @@ export function BlackBoxPanel({ source, fallback = null, standalone = false, aft
   const entry = query.data;
   const open = useCallback((path: string) => router.push(path as Href), [router]);
 
-  const withBrief = useCallback(async (key: string, audience: 'agent' | 'user', apply: (brief: string) => Promise<void>, failure: string) => {
+  const withBrief = useCallback(async (key: string, apply: (brief: string) => Promise<void>, failure: string) => {
     if (!entry) return;
     setBusy(key);
     try {
-      const brief = await getBlackBoxBrief(entry.id, { audience });
+      const brief = await getBlackBoxBrief(entry.id);
       await apply(brief);
     } catch (e) {
       pushToast('error', t(failure, { message: errorMessage(e, '') }));
@@ -218,14 +219,14 @@ export function BlackBoxPanel({ source, fallback = null, standalone = false, aft
     }
   }
 
-  const copy = () => withBrief('copy', 'agent', async (brief) => {
+  const copy = () => withBrief('copy', async (brief) => {
     await copyText(brief);
     pushToast('success', t('FIX THIS brief copied.'));
   }, 'Copy failed: {{message}}');
-  const share = () => withBrief('share', 'agent', async (brief) => {
+  const share = () => withBrief('share', async (brief) => {
     await shareText(brief, t('Black box: {{id}}', { id: subject.id }));
   }, 'Share failed: {{message}}');
-  const viewReport = () => withBrief('report', 'user', async (brief) => { setReport(brief); }, 'Failed to load the report: {{message}}');
+  const viewReport = () => withBrief('report', async (brief) => { setReport(brief); }, 'Failed to load the report: {{message}}');
   const ask = () => open(askPrefillRoute(blackBoxAskPrompt(entry)));
 
   return (

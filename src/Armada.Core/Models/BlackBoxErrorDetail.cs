@@ -22,7 +22,7 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
-        /// The request field at fault (for example audience, offset or section), or null.
+        /// The request field at fault (for example offset or section), or null.
         /// </summary>
         public string? Field { get; set; } = null;
 

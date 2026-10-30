@@ -33,10 +33,10 @@ describe('black box through the shared client', () => {
     expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/voyages/vyg_1/blackbox?includeRecord=false');
   });
 
-  it('reads the brief for the user audience as Markdown', async () => {
-    fetchMock.mockResolvedValueOnce(response('# What happened', 200, 'text/markdown'));
-    await expect(getBlackBoxBrief('bbx_1', { audience: 'user' })).resolves.toBe('# What happened');
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/blackbox/bbx_1/brief?audience=user');
+  it('reads the single FIX THIS brief as Markdown', async () => {
+    fetchMock.mockResolvedValueOnce(response('# FIX THIS', 200, 'text/markdown'));
+    await expect(getBlackBoxBrief('bbx_1')).resolves.toBe('# FIX THIS');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/blackbox/bbx_1/brief');
   });
 
   it('resolves an entry and dry runs a recovery path', async () => {

@@ -21,7 +21,7 @@ import {
 import { MissionDetail } from '../screens/operations/MissionDetail';
 import { MissionsHubScreen } from '../screens/operations/MissionsHubScreen';
 import { VoyageDetail } from '../screens/operations/VoyageDetail';
-import { AGENT_BRIEF, CANCEL_PATH, MANUAL_PATH, RETRY_PATH, USER_BRIEF, blackBoxEntry, blackBoxSummary } from '../test/blackBoxFixtures';
+import { BRIEF, CANCEL_PATH, MANUAL_PATH, RETRY_PATH, blackBoxEntry, blackBoxSummary } from '../test/blackBoxFixtures';
 import { page } from '../test/operationsClient';
 import { mockRouter, setMockParams } from '../test/routerMock';
 import { renderScreen } from '../test/screen';
@@ -71,7 +71,7 @@ beforeEach(() => {
   api.getMissionBlackBox.mockResolvedValue(blackBoxEntry());
   api.getVoyageBlackBox.mockResolvedValue(blackBoxEntry({ id: 'bbx_v', subjectType: 'Voyage', missionId: null, voyageId: 'vyg_1', phase: 'Voyage', step: 'StageFailed', failureKind: null }));
   api.getBlackBox.mockResolvedValue(blackBoxEntry());
-  api.getBlackBoxBrief.mockImplementation(async (_id, opts) => (opts?.audience === 'user' ? USER_BRIEF : AGENT_BRIEF));
+  api.getBlackBoxBrief.mockResolvedValue(BRIEF);
 });
 
 describe('black box model', () => {
@@ -112,7 +112,7 @@ describe('black box model', () => {
 });
 
 describe('black box panel', () => {
-  it('renders the user-audience summary from a fixture', async () => {
+  it('renders the summary from a fixture', async () => {
     await renderPanel();
     expect(api.getMissionBlackBox).toHaveBeenCalledWith('msn_1');
     expect(screen.getByTestId('bbx-what-happened')).toHaveTextContent('The mission produced work, but landing stopped because the checkout had 52 staged paths.');
@@ -226,11 +226,11 @@ describe('black box panel', () => {
     expect(within(screen.getByTestId('bbx-recovery-result')).getByText('still dirty')).toBeTruthy();
   });
 
-  it('copies the FIX THIS brief (agent audience) to the clipboard', async () => {
+  it('copies the FIX THIS brief to the clipboard', async () => {
     await renderPanel();
     await press('bbx-copy');
-    expect(api.getBlackBoxBrief).toHaveBeenCalledWith('bbx_1', { audience: 'agent' });
-    expect(clipboard.setStringAsync).toHaveBeenCalledWith(AGENT_BRIEF);
+    expect(api.getBlackBoxBrief).toHaveBeenCalledWith('bbx_1');
+    expect(clipboard.setStringAsync).toHaveBeenCalledWith(BRIEF);
     await waitFor(() => expect(screen.getByTestId('toast-success')).toHaveTextContent('FIX THIS brief copied.'));
   });
 
@@ -238,7 +238,7 @@ describe('black box panel', () => {
     const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.sharedAction });
     await renderPanel();
     await press('bbx-share');
-    expect(share).toHaveBeenCalledWith({ message: AGENT_BRIEF, title: 'Black box: msn_1' }, { subject: 'Black box: msn_1', dialogTitle: 'Black box: msn_1' });
+    expect(share).toHaveBeenCalledWith({ message: BRIEF, title: 'Black box: msn_1' }, { subject: 'Black box: msn_1', dialogTitle: 'Black box: msn_1' });
     share.mockRestore();
   });
 
@@ -261,11 +261,11 @@ describe('black box panel', () => {
     expect(mockRouter.push).toHaveBeenCalledWith(`/ask?prompt=${encodeURIComponent(CANONICAL)}`);
   });
 
-  it('shows the full user-audience report', async () => {
+  it('shows the full report: the same single FIX THIS brief', async () => {
     await renderPanel();
     await press('bbx-report');
-    expect(api.getBlackBoxBrief).toHaveBeenCalledWith('bbx_1', { audience: 'user' });
-    expect(within(screen.getByTestId('bbx-report-text')).getByText('What happened')).toBeTruthy();
+    expect(api.getBlackBoxBrief).toHaveBeenCalledWith('bbx_1');
+    expect(within(screen.getByTestId('bbx-report-text')).getByText('FIX THIS')).toBeTruthy();
   });
 
   it('resolves an entry with a note and a link', async () => {

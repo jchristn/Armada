@@ -30,7 +30,7 @@ Part 1, user guide
 
 1. [Concepts](#1-concepts)
 2. [What an entry contains](#2-what-an-entry-contains)
-3. [The FIX THIS brief and its audiences](#3-the-fix-this-brief-and-its-audiences)
+3. [The FIX THIS brief](#3-the-fix-this-brief)
 4. [Where to find entries](#4-where-to-find-entries)
 5. [Recovery paths and recommendations](#5-recovery-paths-and-recommendations)
 6. [Using the black box over MCP](#6-using-the-black-box-over-mcp)
@@ -139,9 +139,7 @@ Objects:
 | Object | Content |
 |---|---|
 | `record.json` | The versioned record (at most 256 KB). |
-| `brief.md` | The FIX THIS brief for an agent. |
-| `brief.user.md` | The plain account for the operator. |
-| `brief.maintainer.md` | The Armada maintainer view. |
+| `brief.md` | The FIX THIS brief. |
 | `evidence/agent-output.txt`, `evidence/mission.log` | The captain's output and the mission log tail (last 256 KB). |
 | `evidence/diff.patch`, `evidence/diffstat.txt` | The mission's diff and its per-file stats. |
 | `evidence/check-<n>.txt`, `evidence/verification-<n>.txt` | Check runs and landing verification receipts. |
@@ -154,19 +152,22 @@ Every object is redacted and bounded: evidence is capped at `blackBox.storage.ma
 the head and tail around a marker line, and an entry at `maxEntryBytes` (8 MB). Downloads (`.zip`) add a
 `manifest.json`. Field-level detail is in [BLACKBOX_SCHEMA.md](BLACKBOX_SCHEMA.md).
 
-## 3. The FIX THIS brief and its audiences
+Entries written by pre-release builds of v1.2.0 may also hold `brief.user.md` and `brief.maintainer.md` (from the
+removed brief audiences). They are not migrated or deleted: they stay readable as ordinary objects (object list, ranged
+reads, `.zip` download) and expire with their entry. New entries never write them.
+
+## 3. The FIX THIS brief
 
 Every entry renders a Markdown brief you can paste into any coding agent with the words "FIX THIS". Briefs are
 rendered live from the record (so renderer improvements apply to old entries), target 12 KB and never exceed 40 KB.
-Three audiences:
+There is one brief per entry, stored as `brief.md` and served by every surface (dashboard, TUI, mobile, VS Code, Helm,
+REST, MCP and WebSocket). It starts with "# FIX THIS: ..." and a preamble for the coding agent (Claude Code, Codex, a
+captain) that reads it: triage the failure first, deciding UserConfig, MissionBrief, Transient, ArmadaDefect or
+External and saying why with the evidence quoted, then fix it with evidence (the exact change, the retry, or the
+failure site in the Armada source with a fix and a test), use only the listed recovery paths, and confirm data-loss
+steps with the user.
 
-| Audience | Object | Starts with | For |
-|---|---|---|---|
-| `agent` (default) | `brief.md` | "# FIX THIS: ..." and a triage instruction: decide UserConfig, MissionBrief, Transient, ArmadaDefect or External, quote evidence, use only the listed recovery paths, confirm data-loss steps with the user | A coding agent fixing the work (Claude Code, Codex, a captain) |
-| `user` | `brief.user.md` | "# What went wrong: ..." and "What you can do" first; no rule ids, source pointers or stack frames | The operator |
-| `maintainer` | `brief.maintainer.md` | "# Armada maintainer brief: ..." with the code site, triage votes, rule ids, fingerprint and occurrences, and the Armada improvement hypotheses | Someone fixing Armada itself |
-
-The agent brief's sections are Summary, Identity, Where it failed, How it failed, Status timeline, Why, Conflict,
+The brief's sections are Summary, Identity, Where it failed, How it failed, Status timeline, Why, Conflict,
 Workspace, Scope, Configuration in effect, What would have prevented it, What Armada could change, Recovery,
 Attempts, Evidence, Related failures, Notes on this record and Your answer. Each recovery step shows its MCP call,
 CLI command and REST request. `redactHosts=true` strips absolute paths, host names and user names, for a brief you
@@ -200,8 +201,7 @@ sections follow the brief: Summary (triage verdict, capture state, a notice for 
 missing objects), Where, How, Why, Conflict (files, directories and conflicting missions), What would have prevented
 it (with **Dry run...** then confirm to apply a recommendation), What Armada could change, Recovery (each path dry runs
 first and runs only after you confirm; data-loss paths are flagged), Configuration (each value with its source),
-Attempts (switch between attempts), Evidence, Similar failures and Notes. Actions: **Copy FIX THIS** (for the
-selected brief audience: User, Agent or Maintainer), **Download .md**, **Download .zip**, **View JSON**, **Ask Armada
+Attempts (switch between attempts), Evidence, Similar failures and Notes. Actions: **Copy FIX THIS**, **Download .md**, **Download .zip**, **View JSON**, **Ask Armada
 about this failure** (opens Ask with the prompt filled in; nothing is sent until you press Send), Resolve (with a
 note and link), Pin or Unpin, Reanalyze, Add note and **Open full page**. The panel updates live from the
 `blackbox.*` events, including while analysis is still running.
@@ -220,8 +220,8 @@ policy. **Inbox** failure rows have Copy FIX THIS and Ask Armada actions, and th
 ### TUI
 
 **Failure tab** (mission and voyage screens; `]` moves to it). It shows the entry's status, where it failed, triage,
-resolution, the ranked recovery paths and the user audience brief. While the tab has focus its keys run before the
-screen's and the status bar lists them: `c` copies the FIX THIS (agent) brief to the clipboard (OSC 52), `x` exports
+resolution, the ranked recovery paths and the FIX THIS brief. While the tab has focus its keys run before the
+screen's and the status bar lists them: `c` copies the FIX THIS brief to the clipboard (OSC 52), `x` exports
 it to a file (default `blackbox-{entryId}.md` in the current directory), `r` lists the recovery paths (choosing one
 dry runs it and shows the plan; confirming runs it with the confirm token, and a data-loss path asks you to type
 `LOSE DATA` first; notes are written as Operator), `a` opens Ask Armada with the prompt filled in, `j` shows the entry
@@ -243,7 +243,7 @@ Storage target credentials are edited in the dashboard or the settings file.
 ### Helm CLI
 
 ```
-armada blackbox show <missionId|voyageId|entryId> [--brief] [--audience agent|user|maintainer] [--redact-hosts] [--json]
+armada blackbox show <missionId|voyageId|entryId> [--brief] [--redact-hosts] [--json]
 armada blackbox list [--vessel] [--voyage] [--mission] [--captain] [--kind] [--triage] [--phase] [--step]
                      [--resolution] [--fingerprint] [--pinned] [--since 30d] [--before 2026-09-01] [--page] [--page-size]
 armada blackbox objects <entryId>
@@ -287,7 +287,7 @@ Note**, **Ask Armada about this failure**, an entry view, `BX` decorations on fi
 
 ### Mobile
 
-The mobile app shows the black box on mission and voyage detail (the user audience summary, recovery paths with a
+The mobile app shows the black box on mission and voyage detail (the summary and the FIX THIS brief, recovery paths with a
 dry run and a confirmation sheet, Resolve, notes, Copy and Share of the brief through the platform share sheet, and
 Ask Armada with the prompt prefilled), and a **Black Box** tab on the Missions hub (filtered by vessel and failure
 kind on the server, paged as you scroll, refreshed on `blackbox.*` events) with a full entry screen at
@@ -296,7 +296,7 @@ kind on the server, paged as you scroll, refreshed on `blackbox.*` events) with 
 ### REST, MCP and WebSocket
 
 - REST (tag `BlackBox`, 39 routes): read a mission's current entry `GET /api/v1/missions/{id}/blackbox`, its brief
-  `.../blackbox/brief?audience=user`, all attempts `.../blackbox/entries`; voyages the same under
+  `.../blackbox/brief`, all attempts `.../blackbox/entries`; voyages the same under
   `/api/v1/voyages/{id}/blackbox`; any entry under `/api/v1/blackbox/{id}` (sections, objects with ranged reads,
   `.zip` download, notes, resolve, pin, recovery, recommendation apply, reanalyze, export-fixture, delete); lists and
   analytics (`GET /api/v1/blackbox`, `POST .../enumerate`, `POST .../search`, `POST .../bundle`,
@@ -369,7 +369,7 @@ Agent: resolve_blackbox {entryId, resolution: "Resolved", note: "...", link: "..
 | Explain it | `get_blackbox` (`format` summary, brief or json), `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object` |
 | Fix it, recover it | `run_blackbox_recovery` with a ranked path: dry run, then confirm |
 | Prevent it | `apply_blackbox_recommendation`: dry run, then confirm |
-| Fix Armada | `get_blackbox {audience: "maintainer", format: "brief"}` or `get_blackbox_bundle`, then a mission on the Armada vessel with that brief |
+| Fix Armada | `get_blackbox {format: "brief"}` or `get_blackbox_bundle`, then a mission on the Armada vessel with that brief |
 | Compare | `list_blackbox_entries {fingerprint}`, `search_blackbox`, `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `list_blackbox_hotspots` |
 | Clean up | `resolve_blackbox`, `annotate_blackbox`, `pin_blackbox`, `delete_blackbox_entries` |
 | Administer | `get_blackbox_retention`, `get_blackbox_storage`, `run_blackbox_gc`, `purge_blackbox`, `reanalyze_blackbox`, `export_blackbox_fixture` |
@@ -389,7 +389,7 @@ Resources and prompts (on the HTTP MCP server, `/mcp`):
 
 | Resource | Content |
 |---|---|
-| `armada://blackbox/{entryId}/brief.md` | The agent brief (`text/markdown`) |
+| `armada://blackbox/{entryId}/brief.md` | The FIX THIS brief (`text/markdown`) |
 | `armada://blackbox/{entryId}/record.json` | The record (camelCase, as stored) |
 | `armada://blackbox/{entryId}/objects/{name}` | The first 64 KB of an object (URL-encode a folder: `evidence%2Fgit-status.txt`); page the rest with `read_blackbox_object` |
 | `armada://missions/{missionId}/blackbox` | The digest of the mission's current entry |
@@ -919,7 +919,7 @@ What a capture does: numbers the attempt and supersedes the previous current ent
 Subject, Status, Site, Mechanism, Classification and Configuration (from the mission, vessel, voyage, captain, dock,
 Harbor and global settings), Workspace, Conflict (with a depth 1 to 3 directory roll-up) and Scope from the context,
 adds the previous attempt, computes the fingerprint and expiry, redacts and bounds the record, writes `record.json`,
-the three briefs and in-memory evidence (`evidence/agent-output.txt`, `evidence/diff.patch`), writes `blackbox_files`
+the brief and in-memory evidence (`evidence/agent-output.txt`, `evidence/diff.patch`), writes `blackbox_files`
 rows (Conflicted, DirtyInCheckout, OutOfScope), sets `missions.last_blackbox_entry_id` with a narrow update (no
 `last_update_utc` change), emits `blackbox.captured` and queues enrichment. Everything beyond the index insert runs
 under `blackBox.captureTimeoutMs` (default 2000); on timeout record.json is rewritten with `truncation.timedOut` and
@@ -978,7 +978,7 @@ Task<string> ResolveEntryIdAsync(AuthContext caller, string? missionId, string? 
 Task<BlackBoxDigest> GetDigestAsync(AuthContext caller, string entryId, CancellationToken token = default);
 Task<BlackBoxRecord> GetRecordAsync(AuthContext caller, string entryId, CancellationToken token = default);
 Task<BlackBoxSectionResult> GetSectionAsync(AuthContext caller, string entryId, BlackBoxSectionEnum section, CancellationToken token = default);
-Task<string> GetBriefAsync(AuthContext caller, string entryId, BlackBoxAudienceEnum audience = BlackBoxAudienceEnum.Agent, bool redactHosts = false, CancellationToken token = default);
+Task<string> GetBriefAsync(AuthContext caller, string entryId, bool redactHosts = false, CancellationToken token = default);
 Task<EnumerationResult<BlackBoxEntrySummary>> EnumerateMissionEntriesAsync(AuthContext caller, string missionId, EnumerationQuery? query, CancellationToken token = default);
 Task<EnumerationResult<BlackBoxEntrySummary>> EnumerateAsync(AuthContext caller, BlackBoxEnumerateRequest? query, CancellationToken token = default);
 Task<EnumerationResult<BlackBoxEntrySummary>> SearchAsync(AuthContext caller, BlackBoxSearchRequest request, CancellationToken token = default);
@@ -1109,7 +1109,7 @@ Other public classes:
 | `BlackBoxSweeper` | `SweepAsync()`, `BackfillAsync(since, maxSubjects)`, `static InferStep(Mission)`, `StaleCapturedAfter` (10 minutes) |
 | `BlackBoxGarbageCollector` | `RunAsync(dryRun)`, `DeleteEntryAsync(entry, reason)` (two-phase), `LastReport`, `NextRunUtc` |
 | `BlackBoxBackgroundService` | `Start()`, `StopAsync()`: queue worker, sweeper loop, GC loop |
-| `BlackBoxBriefRenderer` | `Render(entry, record, audience, redactHosts)`, `static ObjectName(audience)`, `TargetBytes` (12 KB), `MaxBytes` (40 KB), `CutMarker` |
+| `BlackBoxBriefRenderer` | `Render(entry, record, redactHosts)`, `TargetBytes` (12 KB), `MaxBytes` (40 KB), `CutMarker` |
 | `BlackBoxRedactor` | `Redact(text, report)`, `RedactUtf8(bytes, report)`, `RedactRecord(record)`, `RegisterSecrets(values)`, `Rules`, `Marker` |
 | `BlackBoxFingerprint` | `Compute(phase, step, kind, method, reason)`, `NormalizeReason(reason)` |
 | `BlackBoxTaxonomy` | `PhaseOf(step)`, `StepsOf(phase)` |
@@ -1368,7 +1368,6 @@ null (Attempts is an empty list; Redaction and Truncation are always present). F
 All with `[JsonConverter(typeof(JsonStringEnumConverter))]`; every enum has an `Unknown` member (tolerant readers map
 values from a newer Armada to it):
 
-- `BlackBoxAudienceEnum`: Agent, User, Maintainer, Unknown
 - `BlackBoxBundleFormatEnum`: Markdown, Json, Unknown
 - `BlackBoxCaptureModeEnum`: Inline, Sweeper, Backfill, Unknown
 - `BlackBoxConfidenceEnum`: Low, Medium, High, Unknown
@@ -1417,9 +1416,7 @@ reservations off), `SuccessRetentionDays` (7, 0 to 90, 0 turns the success recor
 | Name | Content type | Written by |
 |---|---|---|
 | `record.json` | application/json | capture, rewritten by the pipeline |
-| `brief.md` | text/markdown | agent audience, capture and pipeline |
-| `brief.user.md` | text/markdown | user audience |
-| `brief.maintainer.md` | text/markdown | maintainer audience |
+| `brief.md` | text/markdown | capture and pipeline (the single FIX THIS brief) |
 | `evidence/agent-output.txt` | text/plain | capture (Mission.AgentOutput) |
 | `evidence/diff.patch` | text/x-diff | capture (Mission.DiffSnapshot) |
 | `evidence/mission.log`, `evidence/diffstat.txt`, `evidence/check-<n>.txt`, `evidence/verification-<n>.txt`, `evidence/merge-entry.txt`, `evidence/git-status.txt`, `evidence/target-commits.txt` | text/plain | enrichers (13.17) |
@@ -1459,7 +1456,7 @@ values. Redaction runs on the record, every text evidence object and every rende
 four providers through `scripts/common/run-db-parity-tests.sh`), `Services.BlackBoxCapture`, `Services.BlackBoxSweeper`,
 `Services.BlackBoxGarbageCollector`, `Services.BlackBoxStore`, `Services.BlackBoxService`, `Services.BlackBoxRedactor`,
 `Services.BlackBoxFingerprint`, `Services.BlackBoxBriefRenderer`, `Services.BlackBoxAdvisor` (a golden case per rule,
-coverage, ties, placeholders, empty record, ranking, re-analysis, audiences), `Services.BlackBoxRecovery`,
+coverage, ties, placeholders, empty record, ranking, re-analysis, the brief), `Services.BlackBoxRecovery`,
 `Services.BlackBoxFixtures`, `Services.BlackBoxMaintainer` (bundle, trends), `Services.BlackBoxSummary`,
 `Services.BlackBoxConfiguration`, `Models.BlackBoxSchema` (schema drift and validation). Test helpers: `BlackBoxTestKit`,
 `ScriptedBlackBoxStore`, `RecordingBlackBoxEventSink`, `BlackBoxSchemaValidator`, `BlackBoxGoldenCase`,
@@ -1574,8 +1571,8 @@ request)` run only what the entry recorded:
 - `GetBundleAsync`: up to 50 entries (filters of `BlackBoxEnumerateRequest`, `max` clamped to 1..50), grouped by
   fingerprint, most frequent first. Markdown: the preamble asking the agent to rank Armada improvements, check them
   against the source and write each as an Armada mission brief (with a fixture test, and new rules in catalog format),
-  then per group the fingerprint, first and last seen, Armada versions, triage and rule ids, the newest entry's full
-  maintainer brief and one-liners for the rest (cut at 1 MB). JSON: a `BlackBoxBundleDocument` with
+  then per group the fingerprint, first and last seen, Armada versions, triage and rule ids, the newest entry's FIX THIS
+  brief (headings demoted under the group) and one-liners for the rest (cut at 1 MB). JSON: a `BlackBoxBundleDocument` with
   `BlackBoxBundleGroup`s. `redactHosts` strips host paths; `truncated` is set when more entries matched than were
   bundled.
 - `GetFingerprintTrendAsync`: counts of one fingerprint per Armada version (`BlackBoxFingerprintTrend`, versions ordered

@@ -69,16 +69,6 @@
           "default": "",
           "description": "Armada dashboard URL used by Ask Armada. Empty means armada.url followed by /dashboard."
         },
-        "armada.briefAudience": {
-          "type": "string",
-          "enum": [
-            "agent",
-            "user",
-            "maintainer"
-          ],
-          "default": "agent",
-          "description": "Audience of the FIX THIS brief used by copy, editor and chat commands."
-        },
         "armada.fixThis.openPreview": {
           "type": "boolean",
           "default": true,
