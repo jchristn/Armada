@@ -200,6 +200,14 @@ namespace Armada.Core.Services
                 : await _Database.MergeEntries.ReadAsync(entryId, token).ConfigureAwait(false);
             if (entry != null)
             {
+                if (entry.Status == MergeStatusEnum.Landed ||
+                    entry.Status == MergeStatusEnum.Failed ||
+                    entry.Status == MergeStatusEnum.Cancelled)
+                {
+                    _Logging.Info(_Header + "keeping terminal status " + entry.Status + " for " + entryId);
+                    return;
+                }
+
                 entry.Status = MergeStatusEnum.Cancelled;
                 entry.LastUpdateUtc = DateTime.UtcNow;
                 entry.CompletedUtc = DateTime.UtcNow;
