@@ -14,7 +14,7 @@ interface AskBlackBoxCardProps {
 /**
  * The body of a black box card in an Ask Armada conversation: status chips, where and how it failed, why (the entry's
  * findings), conflicting missions and files, recovery paths and configuration recommendations as buttons that create
- * proposals, Copy FIX THIS, and the follow-ups (Fix it, Apply the configuration change, Draft an Armada fix mission,
+ * proposals, Copy Markdown, and the follow-ups (Fix it, Apply the configuration change, Draft an Armada fix mission,
  * Compare with similar failures). Every value comes from the entry.
  */
 export default function AskBlackBoxCard({ card }: AskBlackBoxCardProps) {
@@ -181,7 +181,7 @@ export default function AskBlackBoxCard({ card }: AskBlackBoxCardProps) {
           </button>
         ))}
         <button type="button" className="btn btn-sm" onClick={() => void copyBrief()} title={t('Copy the FIX THIS brief for an agent to the clipboard.')}>
-          {copyState === 'copied' ? t('Copied') : t('Copy FIX THIS')}
+          {copyState === 'copied' ? t('Copied') : t('Copy Markdown')}
         </button>
         {copyState === 'failed' && <span className="ask-work-failed-text" role="status">{t('Could not copy the brief.')}</span>}
       </div>

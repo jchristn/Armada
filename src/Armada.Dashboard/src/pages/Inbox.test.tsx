@@ -209,7 +209,7 @@ describe('Needs You failure rows: black box actions', () => {
     vi.mocked(getMissionBlackBoxBrief).mockResolvedValue('# FIX THIS');
     renderInbox();
     const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
-    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy FIX THIS' }));
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy Markdown' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('# FIX THIS'));
     expect(getMissionBlackBoxBrief).toHaveBeenCalledWith('msn_1');
     // The row itself was not opened.
@@ -220,7 +220,7 @@ describe('Needs You failure rows: black box actions', () => {
     vi.mocked(getMissionBlackBoxBrief).mockRejectedValue(Object.assign(new Error('nf'), { status: 404, data: { code: 'BlackBoxNotFound' } }));
     renderInbox();
     const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
-    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy FIX THIS' }));
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy Markdown' }));
     await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', 'This mission has no black box entry yet.'));
   });
 
@@ -234,6 +234,6 @@ describe('Needs You failure rows: black box actions', () => {
   it('offers no black box actions on approval rows', async () => {
     renderInbox();
     const approvals = await screen.findByRole('region', { name: 'Waiting for your approval' });
-    expect(within(approvals).queryByRole('button', { name: 'Copy FIX THIS' })).toBeNull();
+    expect(within(approvals).queryByRole('button', { name: 'Copy Markdown' })).toBeNull();
   });
 });

@@ -19,7 +19,6 @@ import {
   diffBlackBoxEntries,
   listBlackBoxNearbySuccesses,
 } from '../../api/client';
-import { browserPlatform } from '../../platform/browserPlatform';
 import { translateTemplate } from '../../i18n/runtime';
 import type { WebSocketMessage } from '../../types/models';
 import { blackBoxAttemptsFixture, blackBoxEntryFixture, page } from '../../test/fixtures/blackbox';
@@ -200,11 +199,11 @@ describe('BlackBoxPanel empty, error and 404 states', () => {
 });
 
 describe('BlackBoxPanel actions', () => {
-  it('copies the single FIX THIS brief', async () => {
+  it('copies the single FIX THIS brief as Markdown', async () => {
     renderPanel();
     await screen.findByTestId('blackbox-summary');
     await waitFor(() => expect(getBlackBoxBrief).toHaveBeenCalledWith('bbx_2'));
-    fireEvent.click(screen.getByRole('button', { name: 'Copy FIX THIS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Markdown' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('# FIX THIS\nbrief body'));
     expect(pushToast).toHaveBeenCalledWith('success', expect.stringContaining('FIX THIS brief copied'));
   });
@@ -224,17 +223,15 @@ describe('BlackBoxPanel actions', () => {
     vi.mocked(getBlackBoxBrief).mockRejectedValue(new Error('boom'));
     renderPanel();
     await screen.findByTestId('blackbox-summary');
-    fireEvent.click(screen.getByRole('button', { name: 'Copy FIX THIS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Markdown' }));
     await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', expect.stringContaining('boom')));
     expect(writeText).not.toHaveBeenCalled();
   });
 
-  it('downloads the brief as .md and the entry as .zip', async () => {
-    const save = vi.spyOn(browserPlatform, 'saveFile').mockResolvedValue();
+  it('downloads the entry as .zip and has no Markdown download', async () => {
     renderPanel();
     await screen.findByTestId('blackbox-summary');
-    fireEvent.click(screen.getByRole('button', { name: 'Download .md' }));
-    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ filename: 'blackbox-bbx_2.md', contentType: 'text/markdown' })));
+    expect(screen.queryByRole('button', { name: 'Download .md' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Download .zip' }));
     await waitFor(() => expect(downloadBlackBox).toHaveBeenCalledWith('bbx_2'));
   });
@@ -247,11 +244,21 @@ describe('BlackBoxPanel actions', () => {
     await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', expect.stringContaining('no adapter')));
   });
 
-  it('shows the JSON record', async () => {
+  it('copies the entry and its record as JSON', async () => {
     renderPanel();
     await screen.findByTestId('blackbox-summary');
-    fireEvent.click(screen.getByRole('button', { name: 'View JSON' }));
-    expect(document.querySelector('.json-viewer-body pre')).toHaveTextContent('"entryId": "bbx_2"');
+    expect(screen.queryByRole('button', { name: 'View JSON' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy JSON' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"entryId": "bbx_2"')));
+    expect(pushToast).toHaveBeenCalledWith('success', 'Black box JSON copied.');
+  });
+
+  it('reports JSON that cannot be copied', async () => {
+    writeText.mockRejectedValueOnce(new Error('denied'));
+    renderPanel();
+    await screen.findByTestId('blackbox-summary');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy JSON' }));
+    await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', expect.stringContaining('The JSON could not be copied')));
   });
 
   it('opens Ask Armada with the prompt in the URL and in router state', async () => {
