@@ -68,7 +68,8 @@ namespace Armada.Tui.Routing
             HubDefinition missions = new HubDefinition("tab",
                 new HubTab("missions", "Missions", "MissionsScreen", "W3.8"),
                 new HubTab("voyages", "Voyages", "VoyagesScreen", "W3.9"),
-                new HubTab("merge-queue", "Merge Queue", "MergeQueueScreen", "W3.10"));
+                new HubTab("merge-queue", "Merge Queue", "MergeQueueScreen", "W3.10"),
+                new HubTab("blackbox", "Black Box", "BlackBoxScreen", "BB"));
             HubDefinition activity = new HubDefinition("source",
                 new HubTab("history", "All Activity", "ActivityScreen", "W7.1"),
                 new HubTab("requests", "API Requests", "RequestHistoryScreen", "W7.2"),
@@ -162,7 +163,8 @@ namespace Armada.Tui.Routing
             r.Add(Screen("/skills/:id", "Skill", "SkillScreen", "W6.3"));
             r.Add(Screen("/ask/:threadId?", "Ask Armada", "AskScreen", "W2"));
             r.Add(Screen("/inbox", "Needs You", "InboxScreen", "W3.2"));
-            r.Add(Screen("/blackbox", "Black Box", "BlackBoxScreen", "BB"));
+            r.Add(new RouteDefinition("/blackbox", "", "", "", TabLinks.BlackBoxPath, null, false, null,
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["tab"] = TabLinks.BlackBoxSectionParam }));
             r.Add(Screen("/blackbox/:id", "Black Box Entry", "BlackBoxEntryScreen", "BB"));
             r.Add(Hub("/delivery", "Delivery", delivery));
             r.Add(Hub("/fleet-actions", "Fleet Actions", fleetActions));

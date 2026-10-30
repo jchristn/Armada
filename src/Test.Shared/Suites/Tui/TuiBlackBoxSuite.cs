@@ -281,7 +281,8 @@ namespace Test.Shared.Suites.Tui
                 using (TuiTestHost host = TuiCase.SignedIn(180, 50, "/blackbox", stub))
                 {
                     AssertTrue(host.WaitForText(fx.Entry.MissionTitle!), "row\n" + host.Screen());
-                    BlackBoxScreen screen = (BlackBoxScreen)host.Tui.Shell.Screen!;
+                    AssertEqual("/missions?tab=blackbox", host.Tui.Context.Router.Current!.FullPath, "/blackbox redirects to the Missions Black Box tab");
+                    BlackBoxScreen screen = (BlackBoxScreen)((Armada.Tui.Screens.HubScreen)host.Tui.Shell.Screen!).Content;
                     BlackBoxEnumerateRequest first = stub.LastBody<BlackBoxEnumerateRequest>("POST", "/api/v1/blackbox/enumerate");
                     AssertNull(first.Fingerprint, "no fingerprint filter yet");
                     TuiCase.Contains(Status(host), "F Fingerprints", "fingerprints key in the hints");
@@ -299,7 +300,7 @@ namespace Test.Shared.Suites.Tui
 
                 StubHttpHandler empty = TuiFixtures.SignedInServer();
                 empty.Json("POST", "/api/v1/blackbox/enumerate", StubHttpHandler.PageJson("[]"));
-                using (TuiTestHost host = TuiCase.SignedIn(180, 50, "/blackbox", empty))
+                using (TuiTestHost host = TuiCase.SignedIn(180, 50, Armada.Tui.Routing.TabLinks.BlackBoxPath, empty))
                 {
                     AssertTrue(host.WaitForText("No failures recorded."), "empty state\n" + host.Screen());
                 }
@@ -407,15 +408,19 @@ namespace Test.Shared.Suites.Tui
                 }
             }));
 
-            cases.Add(TuiCase.Sync(Suite, "navigation_and_prompt", "Black Box has a Go command (g b) and routes; the Ask prompt says voyage for a voyage id", () =>
+            cases.Add(TuiCase.Sync(Suite, "navigation_and_prompt", "Black Box is a Missions tab with a Go command (g b) and routes; the Ask prompt says voyage for a voyage id", () =>
             {
-                AssertTrue(Armada.Tui.Routing.NavCatalog.AllItems().Any(i => i.To == "/blackbox" && i.GoKey == "b"), "sidebar item with go key g b");
+                AssertFalse(Armada.Tui.Routing.NavCatalog.AllItems().Any(i => i.To == "/blackbox"), "no sidebar item");
+                AssertTrue(Armada.Tui.Routing.NavCatalog.Shortcuts.Any(s => s.Item.To == Armada.Tui.Routing.TabLinks.BlackBoxPath && s.Item.GoKey == "b"), "shortcut with go key g b");
+                AssertEqual("/missions", Armada.Tui.Routing.NavCatalog.ItemForPath("/blackbox/bbx_1")?.To, "Missions owns the entry page");
                 using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/inbox"))
                 {
                     Armada.Tui.Input.ArmadaCommand? go = host.Tui.Context.Commands.All().FirstOrDefault(c => c.Id == "go.blackbox");
                     AssertNotNull(go, "go command");
                     go!.Handler();
-                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/blackbox"), "go.blackbox opens the list");
+                    AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == "/missions?tab=blackbox"), "go.blackbox opens the Missions Black Box tab");
+                    AssertEqual("blackbox", host.Tui.Context.Router.Current!.Tab?.Key, "black box tab");
+                    AssertTrue(host.Tui.Context.Commands.All().First(c => c.Id == "go.blackbox").Gestures.Count > 0, "g b kept");
                 }
                 AssertNotNull(Armada.Tui.Routing.RouteTable.Find("/blackbox/:id"), "entry route");
                 TuiCase.Contains(BlackBoxText.AskPrompt("vyg_1"), "for voyage vyg_1", "voyage prompt");

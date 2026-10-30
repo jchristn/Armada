@@ -163,7 +163,7 @@ namespace Armada.Tui.Screens.Operations
             Action("mission", "Open Mission", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Brief.Entry!.MissionId!)), "m", () => Brief.Entry != null && !String.IsNullOrEmpty(Brief.Entry.MissionId), true);
             Action("voyage", "Open Voyage", () => Context.Navigate("/voyages/" + Uri.EscapeDataString(Brief.Entry!.VoyageId!)), "V", () => Brief.Entry != null && !String.IsNullOrEmpty(Brief.Entry.VoyageId), true);
             Action("download", "Download .zip", Download, "w", () => Brief.Entry != null, true);
-            Action("same-fingerprint", "Similar failures", () => Context.Navigate("/blackbox?fingerprint=" + Uri.EscapeDataString(Brief.Entry!.Fingerprint!)), "f", () => Brief.Entry != null && !String.IsNullOrEmpty(Brief.Entry.Fingerprint));
+            Action("same-fingerprint", "Similar failures", () => Context.Navigate(TabLinks.BlackBox(Brief.Entry!.Fingerprint)), "f", () => Brief.Entry != null && !String.IsNullOrEmpty(Brief.Entry.Fingerprint));
             Action("copy-id", "Copy ID", () => Copy(EntryId, "Black box entry ID"), "y");
             Action("delete", "Delete", Delete, "del", () => Brief.Entry != null, false, true);
             MissionScreen.AddFailureActions(this, Brief, "brief");
@@ -526,7 +526,7 @@ namespace Armada.Tui.Screens.Operations
                 Call((c, t) => c.DeleteBlackBoxAsync(EntryId, t), r =>
                 {
                     Toast(NotificationSeverityEnum.Warning, Tr("Black box entry {{id}} deleted.", LocalizationArgs.Of("id", EntryId)));
-                    Context.Navigate("/blackbox");
+                    Context.Navigate(TabLinks.BlackBoxPath);
                 }, "Delete failed");
             }, "Delete");
         }

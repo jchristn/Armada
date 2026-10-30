@@ -99,9 +99,9 @@
       "kind": "route",
       "key": "/blackbox",
       "status": "implemented",
-      "tui": "BlackBoxScreen",
+      "tui": "Router",
       "workstream": "BB",
-      "notes": "Black Box list: server filters (vessel, triage, resolution, phase, fingerprint), paging, fingerprints view (F), row pin, JSON, delete; Go g b"
+      "notes": "redirect to /missions?tab=blackbox (the old tab becomes bbtab, filters kept)"
     },
     {
       "kind": "route",
@@ -966,6 +966,14 @@
       "tui": "FleetActionRunsScreen",
       "workstream": "W3.7",
       "notes": "Runs"
+    },
+    {
+      "kind": "tab",
+      "key": "MissionsHub:blackbox",
+      "status": "implemented",
+      "tui": "BlackBoxScreen",
+      "workstream": "BB",
+      "notes": "Black Box tab: server filters (vessel, triage, resolution, phase, fingerprint), paging, fingerprints view (F), recovery stats (R), row pin, JSON, delete; Go g b"
     },
     {
       "kind": "tab",
