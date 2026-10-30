@@ -14,7 +14,7 @@ import { LocaleProvider } from '../i18n/LocaleContext';
 import { appPathFromLink, isRootLink } from '../navigation/deepLinks';
 import { redirectSystemPath } from '../app/+native-intent';
 import { DASHBOARD_ROUTES } from '../navigation/dashboardRoutes.generated';
-import { cliPermissionsHref, cliPermissionsRedirectTarget, planningHref, planningRedirectTarget } from '../navigation/legacyRedirects';
+import { BLACKBOX_PATH, blackBoxRedirectTarget, cliPermissionsHref, cliPermissionsRedirectTarget, planningHref, planningRedirectTarget } from '../navigation/legacyRedirects';
 import { NAV_SECTIONS, activeNavKey, allNavItems, sectionsForTab } from '../navigation/navItems';
 import { matchRoute } from '../navigation/routeMatch';
 import { SidebarPreferenceProvider } from '../navigation/SidebarPreferenceProvider';
@@ -23,6 +23,7 @@ import { COMPACT_MAX_WIDTH, layoutFor } from '../navigation/useLayout';
 import { ApprovalsProvider } from '../notifications/ApprovalsContext';
 import { NotificationProvider } from '../notifications/NotificationContext';
 import { RoutePlaceholder } from '../screens/RoutePlaceholder';
+import { MISSIONS_HUB_TABS } from '../screens/operations/MissionsHubScreen';
 import { SocketProvider } from '../socket/SocketContext';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { CHROME_MAX_FONT_SCALE } from '../theme/typography';
@@ -54,15 +55,13 @@ describe('navigation model mirrors the dashboard', () => {
     }
   });
 
-  it('lists Black Box once, under OPERATIONS on the Work tab, and it opens a screen', () => {
-    const items = NAV_SECTIONS.flatMap((s) => s.items).filter((x) => x.to === '/blackbox');
-    expect(items).toHaveLength(1);
-    expect(sectionsForTab('work').flatMap((s) => s.items.map((x) => x.to))).toContain('/blackbox');
+  it('reaches Black Box as a Missions tab, not a nav item, and keeps its routes', () => {
+    expect(NAV_SECTIONS.flatMap((s) => s.items).map((x) => x.to)).not.toContain('/blackbox');
+    expect(MISSIONS_HUB_TABS.map((tab) => tab.key)).toEqual(['missions', 'voyages', 'merge-queue', 'blackbox']);
     expect(matchRoute('/blackbox')?.route.file).toBe('(app)/(work)/blackbox/index.tsx');
     expect(matchRoute('/blackbox/bbx_1')?.params).toEqual({ id: 'bbx_1' });
-    // It comes from the shared nav model, directly after Activity.
-    const ops = NAV_SECTIONS.find((s) => s.key === 'operations')!.items.map((x) => x.to);
-    expect(ops.indexOf('/blackbox')).toBe(ops.indexOf('/activity') + 1);
+    expect(blackBoxRedirectTarget({})).toBe(BLACKBOX_PATH);
+    expect(blackBoxRedirectTarget({ tab: 'fingerprints', vesselId: 'vsl_1' })).toBe('/missions?tab=blackbox&bbtab=fingerprints&vesselId=vsl_1');
   });
 
   it('follows the v1.2.0 consolidation: Activity on Work, no ACTIVITY or DELIVERY section, hub tabs are not items', () => {

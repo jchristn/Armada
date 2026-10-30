@@ -1,20 +1,8 @@
 import { DASHBOARD_ROUTES } from './dashboardRoutes.generated';
 import type { DashboardRoute } from './routeTypes';
 
-/**
- * Black box routes (MISSION_BLACKBOX_PLAN.md 11.1 and 11.5), served by the app before the dashboard's App.tsx lists
- * them; once it does, the generated table carries them and these entries are skipped.
- */
-const BLACKBOX_ROUTES: DashboardRoute[] = [
-  { pattern: '/blackbox', dashboard: '/blackbox', tab: 'work', title: 'Black Box', workstream: 'W2.2', redirect: null, file: '(app)/(work)/blackbox/index.tsx' },
-  { pattern: '/blackbox/:id', dashboard: '/blackbox/:id', tab: 'work', title: 'Black Box', workstream: 'W2.2', redirect: null, file: '(app)/(work)/blackbox/[id].tsx' },
-];
-
-/** Every route a link may open: the generated dashboard table plus the black box routes it does not list yet. */
-export const APP_ROUTE_TABLE: DashboardRoute[] = [
-  ...DASHBOARD_ROUTES,
-  ...BLACKBOX_ROUTES.filter((r) => !DASHBOARD_ROUTES.some((d) => d.pattern === r.pattern)),
-];
+/** Every route a link may open: the generated dashboard table (App.tsx lists the black box routes too). */
+export const APP_ROUTE_TABLE: DashboardRoute[] = DASHBOARD_ROUTES;
 
 export interface RouteMatch {
   route: DashboardRoute;

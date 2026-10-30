@@ -1,4 +1,3 @@
-import { Stack, useRouter, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { listBlackBox } from '@dashboard/api/client';
@@ -13,13 +12,13 @@ import { spacing } from '../../theme/typography';
 import { BLACKBOX_FAILURE_KINDS, BLACKBOX_PAGE_SIZE, entryRowSubtitle, resolutionTone, spaced } from './blackBoxModel';
 
 /**
- * Black Box (the dashboard's /blackbox Entries tab, simplified for the app): recent entries newest first, filtered by
- * vessel and failure kind on the server, paged as you scroll. Each row opens the entry. Live: blackbox.* events
- * reload what is shown.
+ * The Missions hub's Black Box tab (the dashboard's Missions > Black Box Entries section, simplified for the app):
+ * recent entries newest first, filtered by vessel and failure kind on the server, paged as you scroll. Choosing a row
+ * calls `onSelect` (the hub shows the entry beside the list or pushes /blackbox/:id). Live: blackbox.* events reload
+ * what is shown.
  */
-export function BlackBoxListScreen() {
+export function BlackBoxList({ onSelect, selectedId }: { onSelect: (id: string) => void; selectedId?: string | null }) {
   const { t, formatRelativeTime } = useLocale();
-  const router = useRouter();
   const names = useNameLookups({ vessels: true });
   const [vesselId, setVesselId] = useState('');
   const [kind, setKind] = useState('');
@@ -64,7 +63,6 @@ export function BlackBoxListScreen() {
 
   return (
     <View style={styles.fill} testID="bbx-list">
-      <Stack.Screen options={{ title: t('Black Box') }} />
       <PagedList
         state={list}
         header={header}
@@ -80,7 +78,8 @@ export function BlackBoxListScreen() {
             subtitle={`${entryRowSubtitle(item)}\n${t(spaced(item.failureKind || item.step))} - ${formatRelativeTime(item.createdUtc)}`}
             accessory={<StatusBadge label={t(spaced(item.resolution))} tone={resolutionTone(item.resolution)} />}
             accessibilityValue={t(spaced(item.resolution))}
-            onPress={() => router.push(`/blackbox/${item.id}` as Href)}
+            selected={item.id === selectedId}
+            onPress={() => onSelect(item.id)}
           />
         )}
       />

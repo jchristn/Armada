@@ -7,13 +7,14 @@ import { BlackBoxPanel } from './BlackBoxPanel';
 
 /**
  * One black box entry (/blackbox/:id): the same panel as mission and voyage detail, with full-page states, then the
- * combined timeline and the nearby successes (each paged).
+ * combined timeline and the nearby successes (each paged). `embedded` (the Missions hub's Black Box detail pane)
+ * leaves the header title to the hub.
  */
-export function BlackBoxEntryScreen({ id }: { id: string }) {
+export function BlackBoxEntryScreen({ id, embedded = false }: { id: string; embedded?: boolean }) {
   const { t } = useLocale();
   return (
     <ScrollView testID="bbx-entry" contentContainerStyle={styles.scroll}>
-      <Stack.Screen options={{ title: t('Black Box') }} />
+      {embedded ? null : <Stack.Screen options={{ title: t('Black Box') }} />}
       <BlackBoxPanel
         source={{ kind: 'entry', id }}
         standalone

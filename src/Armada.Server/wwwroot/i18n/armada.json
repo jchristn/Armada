@@ -6911,7 +6911,8 @@
         "{{scanned}} of {{total}} entries in the window were read.": "Se leyeron {{scanned}} de {{total}} entradas de la ventana.",
         "{{shown}} of {{total}}": "{{shown}} de {{total}}",
         "Landed": "Integrada",
-        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "Unidades de trabajo, con Viajes, la Cola de integración completa y la Caja negra de fallos como pestañas"
+        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "Unidades de trabajo, con Viajes, la Cola de integración completa y la Caja negra de fallos como pestañas",
+        "Select a black box entry": "Selecciona una entrada de la caja negra"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -12766,7 +12767,8 @@
         "{{scanned}} of {{total}} entries in the window were read.": "已读取时间窗口内 {{total}} 条条目中的 {{scanned}} 条。",
         "{{shown}} of {{total}}": "{{shown}} / {{total}}",
         "Landed": "已合并",
-        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "工作单元，另有航程、完整的合并队列和失败黑匣子作为选项卡"
+        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "工作单元，另有航程、完整的合并队列和失败黑匣子作为选项卡",
+        "Select a black box entry": "选择一个黑匣子条目"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -18584,7 +18586,8 @@
         "{{scanned}} of {{total}} entries in the window were read.": "已讀取時間範圍內 {{total}} 個項目中的 {{scanned}} 個。",
         "{{shown}} of {{total}}": "{{shown}} / {{total}}",
         "Landed": "已合併",
-        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "工作單元，另有航程、完整的合併佇列和失敗黑盒子作為分頁"
+        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "工作單元，另有航程、完整的合併佇列和失敗黑盒子作為分頁",
+        "Select a black box entry": "選擇一個黑盒子項目"
       },
       "sections": {}
     },
@@ -24362,7 +24365,8 @@
         "{{scanned}} of {{total}} entries in the window were read.": "已經讀取咗時間範圍內 {{total}} 個項目之中嘅 {{scanned}} 個。",
         "{{shown}} of {{total}}": "{{shown}} / {{total}}",
         "Landed": "已合併",
-        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "工作單元，仲有航程、完整嘅合併佇列同失敗黑盒作為分頁"
+        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "工作單元，仲有航程、完整嘅合併佇列同失敗黑盒作為分頁",
+        "Select a black box entry": "揀一個黑盒項目"
       },
       "sections": {}
     },
@@ -30156,7 +30160,8 @@
         "{{scanned}} of {{total}} entries in the window were read.": "期間内の {{total}} 件のエントリーのうち {{scanned}} 件を読み込みました。",
         "{{shown}} of {{total}}": "{{shown}} / {{total}}",
         "Landed": "反映済み",
-        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "作業単位。航海、マージキュー全体、失敗のブラックボックスをタブで表示"
+        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "作業単位。航海、マージキュー全体、失敗のブラックボックスをタブで表示",
+        "Select a black box entry": "ブラックボックスのエントリを選択"
       },
       "sections": {}
     },
@@ -35941,7 +35946,8 @@
         "{{scanned}} of {{total}} entries in the window were read.": "{{scanned}} von {{total}} Einträgen im Zeitraum wurden gelesen.",
         "{{shown}} of {{total}}": "{{shown}} von {{total}}",
         "Landed": "Gelandet",
-        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "Arbeitseinheiten, dazu Voyages, die vollständige Merge-Warteschlange und die Blackbox der Fehlschläge als Tabs"
+        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "Arbeitseinheiten, dazu Voyages, die vollständige Merge-Warteschlange und die Blackbox der Fehlschläge als Tabs",
+        "Select a black box entry": "Einen Blackbox-Eintrag auswählen"
       },
       "sections": {}
     },
@@ -41726,7 +41732,8 @@
         "{{scanned}} of {{total}} entries in the window were read.": "{{scanned}} entrées sur {{total}} de la fenêtre ont été lues.",
         "{{shown}} of {{total}}": "{{shown}} sur {{total}}",
         "Landed": "Intégrée",
-        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "Unités de travail, avec les Voyages, la file de fusion complète et la boîte noire des échecs en onglets"
+        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "Unités de travail, avec les Voyages, la file de fusion complète et la boîte noire des échecs en onglets",
+        "Select a black box entry": "Sélectionnez une entrée de la boîte noire"
       },
       "sections": {}
     },
@@ -47511,7 +47518,8 @@
         "{{scanned}} of {{total}} entries in the window were read.": "Sono state lette {{scanned}} voci su {{total}} nella finestra.",
         "{{shown}} of {{total}}": "{{shown}} di {{total}}",
         "Landed": "Integrata",
-        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "Unità di lavoro, con Viaggi, la coda di merge completa e la scatola nera dei fallimenti come schede"
+        "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs": "Unità di lavoro, con Viaggi, la coda di merge completa e la scatola nera dei fallimenti come schede",
+        "Select a black box entry": "Seleziona una voce della scatola nera"
       },
       "sections": {}
     }
