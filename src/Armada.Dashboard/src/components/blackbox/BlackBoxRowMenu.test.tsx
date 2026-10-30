@@ -191,7 +191,8 @@ describe('Black box entries row menu', () => {
     await choose('bbx_1', 'Resolve');
     expect(await screen.findByText('Resolve black box entry')).toBeInTheDocument();
     expect(getBlackBox).toHaveBeenCalledWith('bbx_1', false);
-    expect(screen.getByLabelText('Note')).toHaveValue('old note');
+    // The dialog fills its fields from the fetched entry asynchronously.
+    await waitFor(() => expect(screen.getByLabelText('Note')).toHaveValue('old note'));
     fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'fixed in mrg_2' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save resolution' }));
     await waitFor(() => expect(resolveBlackBox).toHaveBeenCalledWith('bbx_1', { resolution: 'Resolved', note: 'fixed in mrg_2', link: null }));
