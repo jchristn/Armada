@@ -84,6 +84,8 @@ namespace Test.Shared.Suites.Services
                 WorkflowProfile profile = new() { BuildCommand = "build", UnitTestCommand = "smoke" };
                 List<string> commands = LandingVerification.Commands(profile, new Vessel("Armada", "https://github.com/jchristn/Armada.git"));
                 AssertTrue(commands.Contains("smoke") && commands.Contains(LandingVerification.ArmadaCommand), "Keep the user's checks and add the integration gate.");
+                AssertEqual("dotnet test \"src/Test.Smoke/Test.Smoke.csproj\" -c Release -f net10.0", LandingVerification.ArmadaCommand, "The Armada gate is the smoke test run, not the Test.Automated suite list.");
+                AssertEqual(LandingVerification.ArmadaCommand, commands[commands.Count - 1], "Workflow profile commands run before the Armada gate.");
                 AssertFalse(LandingVerification.Commands(profile, new Vessel("Other", "https://github.com/example/Other")).Contains(LandingVerification.ArmadaCommand));
                 await Task.CompletedTask;
             }));

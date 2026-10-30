@@ -8,8 +8,8 @@ namespace Armada.Core.Services
     /// <summary>Checks the integrated commit on its owning host and records an immutable verification receipt.</summary>
     public static class LandingVerification
     {
-        /// <summary>The integration gate for Armada itself, in addition to its configured checks.</summary>
-        public const string ArmadaCommand = "dotnet run --project \"src/Test.Automated\" -c Release -f net10.0 -- --suites Services.HandoffResilience,Services.Landing,Services.MergeQueue,Services.ReviewGate,Services.StallRecovery,Services.NoOpCompletion,E2E.LandingPipeline,E2E.WebSocket";
+        /// <summary>The smoke test gate for Armada itself (src/Test.Smoke), run in addition to its configured checks.</summary>
+        public const string ArmadaCommand = "dotnet test \"src/Test.Smoke/Test.Smoke.csproj\" -c Release -f net10.0";
 
         /// <summary>Resolve landing checks without changing the user's workflow profile.</summary>
         public static List<string> Commands(WorkflowProfile? profile, Vessel? vessel)

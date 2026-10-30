@@ -6,6 +6,10 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Landing verification
+
+- Landing verification for the Armada repository now runs the smoke tests (`dotnet test "src/Test.Smoke/Test.Smoke.csproj" -c Release -f net10.0`) instead of the long `src/Test.Automated` suite list, which was being killed (exit 143) and blocking landings.
+
 ### Model profiles (model heterogeneity Phase 5, item 1)
 
 - New advisory **model profile** entity (`mdl_` prefix): the model as served, identified by runtime, provider, model and
