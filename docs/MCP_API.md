@@ -168,6 +168,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [get_blackbox_bundle](#get_blackbox_bundle)
     - [list_blackbox_hotspots](#list_blackbox_hotspots)
     - [list_blackbox_fingerprints](#list_blackbox_fingerprints)
+    - [list_blackbox_resilience_gaps](#list_blackbox_resilience_gaps)
     - [get_blackbox_fingerprint_trend](#get_blackbox_fingerprint_trend)
     - [get_blackbox_retention](#get_blackbox_retention)
     - [get_blackbox_storage](#get_blackbox_storage)
@@ -459,7 +460,7 @@ handler is registered through the Ask gate, which checks that claim:
   `list_ask_work`, `list_ask_work_missions`, `list_ask_work_targets`, `list_ask_proposals`, `list_ask_tool_calls`), and the black box
   readers (`get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object`,
   `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`, `list_blackbox_hotspots`,
-  `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `get_blackbox_retention`, `get_blackbox_storage`). The list lives in
+  `list_blackbox_fingerprints`, `list_blackbox_resilience_gaps`, `get_blackbox_fingerprint_trend`, `get_blackbox_retention`, `get_blackbox_storage`). The list lives in
   `AskToolPolicy`; any tool not on it (including tools added later) is treated as state-changing.
 - **`cli_permission_prompt`** (the captain CLI's own permission prompt) runs without becoming a proposal: an approver
   answers it as a [CLI permission request](#cli-permissions).
@@ -1526,19 +1527,19 @@ or voyage's **current** entry. One of the three is required (`InvalidArgument` o
 
 | Tool | Level |
 |---|---|
-| `get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object`, `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`, `list_blackbox_hotspots`, `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend` | Authenticated |
+| `get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`, `read_blackbox_object`, `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`, `list_blackbox_hotspots`, `list_blackbox_fingerprints`, `list_blackbox_resilience_gaps`, `get_blackbox_fingerprint_trend` | Authenticated |
 | `annotate_blackbox`, `resolve_blackbox`, `pin_blackbox` | Authenticated |
 | `run_blackbox_recovery`, `apply_blackbox_recommendation` | Authenticated; each recorded step is then authorized as its own tool (`restart_mission`, `retry_landing`, `update_vessel` and the other supported tools are TenantAdmin) |
 | `get_blackbox_retention`, `delete_blackbox_entries`, `reanalyze_blackbox` | TenantAdmin |
 | `get_blackbox_storage`, `purge_blackbox`, `run_blackbox_gc`, `export_blackbox_fixture` | AdminOnly |
 
-**Ask Armada.** The 13 read tools (`get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`,
+**Ask Armada.** The 14 read tools (`get_blackbox`, `read_blackbox_section`, `list_blackbox_objects`,
 `read_blackbox_object`, `list_blackbox_entries`, `search_blackbox`, `list_blackbox_notes`, `get_blackbox_bundle`,
-`list_blackbox_hotspots`, `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `get_blackbox_retention`,
-`get_blackbox_storage`) are on the Ask read-only allowlist (`AskToolPolicy`), so they run directly inside an Ask
+`list_blackbox_hotspots`, `list_blackbox_fingerprints`, `list_blackbox_resilience_gaps`, `get_blackbox_fingerprint_trend`,
+`get_blackbox_retention`, `get_blackbox_storage`) are on the Ask read-only allowlist (`AskToolPolicy`), so they run directly inside an Ask
 conversation (still subject to their permission level). The write tools become proposals there.
 
-**Stdio.** `armada mcp stdio` registers the same 23 tools without the service, so each answers `Unavailable`; the
+**Stdio.** `armada mcp stdio` registers the same 24 tools without the service, so each answers `Unavailable`; the
 resources and prompts below are served only by the Admiral's HTTP MCP server.
 
 ### get_blackbox
@@ -1552,8 +1553,13 @@ Start here when asked why something failed.
 | `redactHosts` | boolean | No | Strip absolute paths, host names and user names from the brief (default false) |
 
 **Response:** `summary` returns a `BlackBoxDigest`: where it failed (phase, step, host, source file and method), how
-(mechanism), status before and after, why (the top findings), the triage verdict and confidence, and the top recovery
-paths. `brief` returns `{ EntryId, ContentType, Brief }` (the Markdown FIX THIS brief, rendered live; there is one brief per
+(mechanism), status before and after, why (the top findings), the triage verdict and confidence, the Armada resilience
+angle, and the top recovery paths. The resilience fields: `TriageSuspected` (the `ArmadaDefect` verdict rests on the
+handoff and landing prior `BBX-PRIOR-ARMADA` alone), `ResilienceInScope` (the failure is in Armada's own handoff and
+landing), `SelfHealable` (`Yes`, `No` or `Unknown`: could Armada have healed it by itself), `SelfHealingProposal` (what
+Armada could have done), `DetectionGap` (why Armada did not catch it earlier), `ResilienceSeverity` (escalated by
+recurrence) and `TopProposedChange` (the most impactful proposed Armada change, its `MissionBrief` left out; read the
+`Resilience` section for it). When `ResilienceInScope` is true, first assess whether Armada could have handled it. `brief` returns `{ EntryId, ContentType, Brief }` (the Markdown FIX THIS brief, rendered live; there is one brief per
 entry).
 `json` returns the full `BlackBoxRecord`.
 
@@ -1585,6 +1591,13 @@ entry).
   "StatusAfter": "Failed",
   "Triage": "Transient",
   "TriageConfidence": "Low",
+  "TriageSuspected": false,
+  "ResilienceInScope": false,
+  "SelfHealable": "No",
+  "SelfHealingProposal": null,
+  "DetectionGap": null,
+  "ResilienceSeverity": "Low",
+  "TopProposedChange": null,
   "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
   "Why": [
     { "RuleId": "BBX-EXEC-006", "Statement": "The captain's process exited with code unknown before finishing.", "Confidence": "Medium", "EvidenceRefs": [ "mechanism.exitCode", "evidence/agent-output.txt" ] }
@@ -1637,7 +1650,7 @@ entry).
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `entryId` / `missionId` / `voyageId` | string | One of them | The entry |
-| `section` | string | Yes | `Subject`, `Status`, `Site`, `Mechanism`, `Classification`, `Workspace` (dirty paths, checkout), `Conflict` (conflicted files and the missions that landed them), `Scope`, `Configuration` (each setting and where it came from), `Attempts`, `Evidence` (the object index), `Analysis` (findings, triage, recovery paths, recommendations), `Related`, `Voyage`, `Redaction` or `Truncation` (case-insensitive) |
+| `section` | string | Yes | `Subject`, `Status`, `Site`, `Mechanism`, `Classification`, `Workspace` (dirty paths, checkout), `Conflict` (conflicted files and the missions that landed them), `Scope`, `Configuration` (each setting and where it came from), `Attempts`, `Evidence` (the object index), `Analysis` (findings, triage, recovery paths, recommendations), `Resilience` (the `Analysis` with only `Resilience` and `Triage`: whether Armada could have healed it, the detection gap and invariant, code pointers at the build commit, proposed Armada changes as mission briefs, the regression test), `Handoff` (the handoff and landing trail: ordered steps, automatic recoveries Armada already tried, dock transitions, target movement), `Related`, `Voyage`, `Redaction` or `Truncation` (case-insensitive) |
 
 **Response:** a `BlackBoxSectionResult`: the record with the header fields and the requested section; the other
 sections are null (`Attempts` is an empty list, and `Redaction` and `Truncation` are always present).
@@ -1760,6 +1773,7 @@ base64 otherwise, with `Encoding` `utf-8` or `base64`), `Offset`, `Length` (byte
 | `fingerprint` | string | No | Entries of the same failure mode |
 | `pinned`, `isCurrent` | boolean | No | Pinned or current entries only (true), or the others (false) |
 | `path` | string | No | Repository path recorded in any file role |
+| `resilienceScope` | boolean | No | Entries in Armada's handoff and landing scope (true) or outside it (false) |
 | `createdAfter`, `createdBefore` | string | No | ISO 8601 (inclusive / exclusive) |
 | `pageNumber`, `pageSize`, `order` | | No | Paging (1-1000, default 10), `CreatedDescending` (default) or `CreatedAscending` |
 
@@ -1871,8 +1885,10 @@ query.
 
 ### get_blackbox_bundle
 
-A maintainer bundle: up to `max` of the newest matching entries grouped by fingerprint, to rank Armada improvements and
-write them as mission briefs on the Armada vessel.
+A maintainer bundle: up to `max` of the newest matching entries grouped by fingerprint (highest resilience severity
+first, then most frequent), each group with its brief, proposed Armada changes and regression test, to produce Armada
+missions on the Armada vessel. By default (no `allFailures`, `triage` or `resilienceScope`) it holds the Armada
+resilience gaps: entries in handoff and landing scope triaged `ArmadaDefect`.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -1880,9 +1896,10 @@ write them as mission briefs on the Armada vessel.
 | `max` | integer | No | Entries, 1-50 (default 50) |
 | `format` | string | No | `Markdown` (default) or `Json` |
 | `redactHosts` | boolean | No | Strip absolute paths, host names and user names (default false) |
+| `allFailures` | boolean | No | Bundle every failure instead of the resilience gaps (default false) |
 
 **Response:** `{ Format, EntryCount, FingerprintCount, Content, Truncated }`; `Content` is capped at 1 MB. With
-`format` `Json`, `Content` is a camelCase JSON document (`preamble`, `entryCount`, `fingerprintCount`, `groups`):
+`format` `Json`, `Content` is a camelCase JSON document (`preamble`, `entryCount`, `fingerprintCount`, `groups`; each group adds `severity`, `selfHealable`, `proposedChanges` and `regressionTest`):
 
 ```json
 {
@@ -1949,6 +1966,62 @@ Failure modes (entries grouped by fingerprint), by count, then last seen. Compar
 ```
 
 (Trimmed to one row.)
+
+### list_blackbox_resilience_gaps
+
+Armada resilience gaps: failure modes (fingerprints) in Armada's own handoff and landing that the black box triaged
+`ArmadaDefect`, most severe first within the page (then occurrences, then last seen). Use it to pick the Armada
+missions that make handoff and landing more resilient.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `vesselId` | string | No | Vessel filter |
+| `resolution` | string | No | Count only entries with this resolution |
+| `phase` | string | No | `Handoff`, `Landing`, `MergeQueue`, `Recovery`, `Provision`, `Completion` or `Review` (default: the whole scope) |
+| `createdAfter`, `createdBefore` | string | No | ISO 8601 |
+| `pageNumber`, `pageSize`, `order` | | No | Paging (page size at most 50; larger values are capped) |
+
+**Response:** `EnumerationResult<BlackBoxResilienceGap>`: `Fingerprint`, `Phase`, `Step`, `FailureKind`, `Occurrences`,
+`OpenCount`, `FirstSeenUtc`, `LastSeenUtc`, `LatestEntryId`, `LatestMissionId`, `LatestMissionTitle`, `VesselName`,
+`ArmadaVersions`, `Severity` (escalated by recurrence: 1 Medium, 3 High, 5 or two Armada versions Critical),
+`SelfHealable`, `Suspected`, `DetectionGap`, `TopProposedChange` (its `MissionBrief` left out) and `RuleIds`. Scoped
+to what the caller can see; `InvalidArgument` when `createdAfter` is after `createdBefore`.
+
+```json
+{
+  "Success": true,
+  "PageNumber": 1,
+  "PageSize": 10,
+  "TotalPages": 1,
+  "TotalRecords": 1,
+  "Objects": [
+    {
+      "Fingerprint": "9c1f0e6d2a7b4c3e8f5a1d0b6c2e7f4a9b3d8c1e5f0a2b7c4d9e6f3a8b1c5d2e",
+      "Phase": "Landing",
+      "Step": "TargetIntegration",
+      "FailureKind": "LandingConflict",
+      "Occurrences": 3,
+      "OpenCount": 3,
+      "FirstSeenUtc": "2026-10-27T09:14:02.110000Z",
+      "LastSeenUtc": "2026-10-29T21:11:05.310433Z",
+      "LatestEntryId": "bbx_mvu1ftew_95PyT7WmtrV",
+      "LatestMissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
+      "LatestMissionTitle": "Retry landings deferred on a dirty checkout",
+      "VesselName": "demo-api",
+      "ArmadaVersions": [ "1.2.0" ],
+      "Severity": "High",
+      "SelfHealable": "Yes",
+      "Suspected": false,
+      "TopProposedChange": { "Rank": 1, "Title": "Recreate a missing dock worktree from the branch before landing", "Severity": "High", "RuleId": "BBX-LAND-002", "MissionBrief": null },
+      "DetectionGap": "The dock was reclaimed or its directory removed while the mission still had to land ...",
+      "RuleIds": [ "BBX-LAND-002", "BBX-PRIOR-ARMADA" ]
+    }
+  ],
+  "TotalMs": 0
+}
+```
+
+(`TopProposedChange` trimmed.)
 
 ### get_blackbox_fingerprint_trend
 
@@ -2342,7 +2415,7 @@ prevent, fix Armada, compare or clean up, default explain) and `explain_blackbox
         "role": "user",
         "content": {
           "type": "text",
-          "text": "Review the black box for mission msn_mvu1fjp0_9Wd6Uuyp262 and fix it.\n\n1. Call get_blackbox {missionId: \"msn_mvu1fjp0_9Wd6Uuyp262\", format: \"summary\"} first.\n2. Read only the sections the goal needs with read_blackbox_section (Conflict, Workspace, Analysis), and page evidence with read_blackbox_object instead of loading it whole.\n3. Map the goal to tools: explain (get_blackbox summary or brief, sections, objects); fix or recover (run_blackbox_recovery with a ranked path: dry run, then confirm); prevent (apply_blackbox_recommendation: dry run, then confirm); fix Armada (get_blackbox {format: brief} or get_blackbox_bundle, then a mission on the Armada vessel with that brief); compare (list_blackbox_entries {fingerprint}, search_blackbox); clean up (resolve_blackbox, pin_blackbox, delete_blackbox_entries).\n\nRead the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did.\n"
+          "text": "Review the black box for mission msn_mvu1fjp0_9Wd6Uuyp262 and fix it.\n\n1. Call get_blackbox {missionId: \"msn_mvu1fjp0_9Wd6Uuyp262\", format: \"summary\"} first.\n2. First assess whether Armada's own handoff and landing could have handled the failure: when the summary says ResilienceInScope, read read_blackbox_section {section: \"Resilience\"} (and Handoff for the step timeline and the recoveries Armada already tried), state whether Armada could have healed it, the detection gap and the proposed Armada change with its test, and offer Draft an Armada fix mission, before concluding it is the user's configuration or a transient.\n3. Read only the other sections the goal needs with read_blackbox_section (Conflict, Workspace, Analysis), and page evidence with read_blackbox_object instead of loading it whole.\n4. Map the goal to tools: explain (get_blackbox summary or brief, sections, objects); fix or recover (run_blackbox_recovery with a ranked path: dry run, then confirm); prevent (apply_blackbox_recommendation: dry run, then confirm); fix Armada (the Resilience section's top proposed change as a mission on the Armada vessel, or get_blackbox_bundle and list_blackbox_resilience_gaps for the recurring gaps); compare (list_blackbox_entries {fingerprint}, search_blackbox, list_blackbox_resilience_gaps); clean up (resolve_blackbox, pin_blackbox, delete_blackbox_entries).\n\nRead the black box summary first. Quote evidence, not guesses. State the triage verdict and whether you agree. If you act, use only recovery paths or recommendations from the entry, do a dry run, tell the user what will happen, and confirm before running anything marked dataLossRisk. Annotate the entry with what you did.\n"
         }
       }
     ]
@@ -2351,7 +2424,8 @@ prevent, fix Armada, compare or clean up, default explain) and `explain_blackbox
 }
 ```
 
-`explain_blackbox` asks for what happened, the quoted evidence, the triage verdict and whether you agree, an opinion
+`explain_blackbox` asks for what happened, the quoted evidence, the triage verdict and whether you agree, whether
+Armada's handoff and landing could have handled it (the Resilience section, offering Draft an Armada fix mission), an opinion
 clearly marked as such, and the recorded recovery paths and recommendations, and says "Do not run anything."
 
 ### Reviewing a black box and taking action
@@ -2378,8 +2452,8 @@ Agent: resolve_blackbox {entryId, resolution: "Resolved", note: "...", link: "ms
 | Explain it | `get_blackbox` (summary or brief), `read_blackbox_section`, `read_blackbox_object` |
 | Fix it, recover it | `run_blackbox_recovery` with a ranked path: dry run, then confirm |
 | Prevent it | `apply_blackbox_recommendation` (a configuration patch): dry run, then confirm |
-| Fix Armada | `get_blackbox {format: "brief"}` or `get_blackbox_bundle`, then a mission on the Armada vessel with that brief |
-| Compare | `list_blackbox_entries {fingerprint}`, `list_blackbox_fingerprints`, `get_blackbox_fingerprint_trend`, `search_blackbox` |
+| Fix Armada | `read_blackbox_section {section: "Resilience"}` (the proposed Armada changes as mission briefs), `list_blackbox_resilience_gaps` or `get_blackbox_bundle`, then a mission on the Armada vessel |
+| Compare | `list_blackbox_entries {fingerprint}`, `list_blackbox_fingerprints`, `list_blackbox_resilience_gaps`, `get_blackbox_fingerprint_trend`, `search_blackbox` |
 | Clean up | `resolve_blackbox`, `pin_blackbox`, `delete_blackbox_entries` |
 
 **Safety rules.** `run_blackbox_recovery` and `apply_blackbox_recommendation` run only actions recorded in the entry,

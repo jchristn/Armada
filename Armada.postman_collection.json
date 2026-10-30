@@ -15508,6 +15508,12 @@
                                     "disabled": true
                                 },
                                 {
+                                    "key": "resilienceScope",
+                                    "value": "true",
+                                    "description": "Entries in Armada's handoff and landing scope (true) or outside it (false)",
+                                    "disabled": true
+                                },
+                                {
                                     "key": "order",
                                     "value": "CreatedDescending",
                                     "description": "CreatedDescending (default) or CreatedAscending",
@@ -15515,7 +15521,7 @@
                                 }
                             ]
                         },
-                        "description": "One page of BlackBoxEntrySummary rows, newest first. Filters (all optional, ANDed): fleetId, vesselId, voyageId, missionId, captainId, harborId, subjectType, phase, step, kind, triage, resolution, state, captureMode, fingerprint, pinned, isCurrent, path, createdAfter, createdBefore; plus pageNumber, pageSize (1-1000) and order. Enable the disabled parameters to filter."
+                        "description": "One page of BlackBoxEntrySummary rows, newest first. Filters (all optional, ANDed): fleetId, vesselId, voyageId, missionId, captainId, harborId, subjectType, phase, step, kind, triage, resolution, state, captureMode, fingerprint, pinned, isCurrent, path, resilienceScope, createdAfter, createdBefore; plus pageNumber, pageSize (1-1000) and order. Enable the disabled parameters to filter."
                     },
                     "response": [
                         {
@@ -15714,10 +15720,10 @@
                                 "bundle"
                             ]
                         },
-                        "description": "A maintainer bundle of up to Max entries (filters as enumerate) grouped by fingerprint, as Markdown or Json in Content. RedactHosts replaces host names and home paths. The example Content is trimmed.",
+                        "description": "A maintainer bundle of up to Max entries (filters as enumerate) grouped by fingerprint, highest resilience severity first, as Markdown or Json in Content, each group with its proposed Armada changes and regression test. By default (AllFailures false and no Triage or ResilienceScope) it holds the Armada resilience gaps: entries in handoff and landing scope triaged ArmadaDefect; set AllFailures true for every failure. RedactHosts replaces host names and home paths. The example Content is trimmed.",
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Max\": 5,\n  \"Format\": \"Markdown\",\n  \"RedactHosts\": true\n}",
+                            "raw": "{\n  \"Max\": 5,\n  \"Format\": \"Markdown\",\n  \"AllFailures\": false,\n  \"RedactHosts\": true\n}",
                             "options": {
                                 "raw": {
                                     "language": "json"
@@ -15807,6 +15813,77 @@
                                 }
                             ],
                             "body": "{\n  \"Success\": true,\n  \"PageNumber\": 1,\n  \"PageSize\": 10,\n  \"TotalPages\": 1,\n  \"TotalRecords\": 2,\n  \"Objects\": [\n    {\n      \"VesselId\": \"vsl_mvu1ffz5_4Vb0gY5fhKv\",\n      \"Directory\": \"src/Armada.Server/Routes\",\n      \"FileCount\": 3,\n      \"EntryCount\": 2,\n      \"LastSeenUtc\": \"2026-10-29T21:11:05.310433Z\"\n    },\n    {\n      \"VesselId\": \"vsl_mvu1ffz5_4Vb0gY5fhKv\",\n      \"Directory\": \"docs\",\n      \"FileCount\": 1,\n      \"EntryCount\": 1,\n      \"LastSeenUtc\": \"2026-10-28T17:42:10.118204Z\"\n    }\n  ],\n  \"TotalMs\": 0\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Enumerate Armada resilience gaps",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Status code is 200', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "pm.test('Body is an EnumerationResult of at most 50 gaps', function () {",
+                                    "    const body = pm.response.json();",
+                                    "    pm.expect(body.Success).to.eql(true);",
+                                    "    ['PageNumber', 'PageSize', 'TotalPages', 'TotalRecords'].forEach(function (key) {",
+                                    "        pm.expect(body[key], key).to.be.a('number');",
+                                    "    });",
+                                    "    pm.expect(body.PageSize).to.be.at.most(50);",
+                                    "    pm.expect(body.Objects).to.be.an('array');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/blackbox/resilience-gaps/enumerate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "blackbox",
+                                "resilience-gaps",
+                                "enumerate"
+                            ]
+                        },
+                        "description": "Armada resilience gaps: failure modes (fingerprints) in Armada's own handoff and landing triaged ArmadaDefect, most severe first within the page. Each gap has Occurrences, OpenCount, FirstSeenUtc, LastSeenUtc, ArmadaVersions, Severity (escalated by recurrence), SelfHealable, Suspected, DetectionGap, TopProposedChange and the newest entry. Page size at most 50. Optional filters: VesselId, Resolution, Phase, CreatedAfter, CreatedBefore. Empty when there are no gaps; the example shows a populated page.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 10,\n  \"Resolution\": \"Open\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "Resilience gaps",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"Success\": true,\n  \"PageNumber\": 1,\n  \"PageSize\": 10,\n  \"TotalPages\": 1,\n  \"TotalRecords\": 1,\n  \"Objects\": [\n    {\n      \"Fingerprint\": \"9c1f0e6d2a7b4c3e8f5a1d0b6c2e7f4a9b3d8c1e5f0a2b7c4d9e6f3a8b1c5d2e\",\n      \"Phase\": \"Landing\",\n      \"Step\": \"TargetIntegration\",\n      \"FailureKind\": \"LandingConflict\",\n      \"Occurrences\": 3,\n      \"OpenCount\": 3,\n      \"FirstSeenUtc\": \"2026-10-27T09:14:02.110000Z\",\n      \"LastSeenUtc\": \"2026-10-29T21:11:05.310433Z\",\n      \"LatestEntryId\": \"bbx_mvu1ftew_95PyT7WmtrV\",\n      \"LatestMissionId\": \"msn_mvu1fjp0_9Wd6Uuyp262\",\n      \"LatestMissionTitle\": \"Retry landings deferred on a dirty checkout\",\n      \"VesselName\": \"demo-api\",\n      \"ArmadaVersions\": [\n        \"1.2.0\"\n      ],\n      \"Severity\": \"High\",\n      \"SelfHealable\": \"Yes\",\n      \"Suspected\": false,\n      \"TopProposedChange\": {\n        \"Rank\": 1,\n        \"Title\": \"Recreate a missing dock worktree from the branch before landing\",\n        \"Change\": \"Before landing, EnsureLandingDockAsync should check that the dock worktree exists and is a registered worktree; when it is missing, recreate it from the mission branch and continue.\",\n        \"AcceptanceTest\": \"Services.LandingPipeline: delete the dock directory of a WorkProduced mission, land it, and assert the worktree is recreated from the branch and the mission lands.\",\n        \"Severity\": \"High\",\n        \"RuleId\": \"BBX-LAND-002\",\n        \"CodePointers\": [\n          \"src/Armada.Server/MissionLandingHandler.cs:EnsureLandingDockAsync\",\n          \"src/Armada.Core/Services/DockService.cs:RestoreWorktreeAsync\"\n        ],\n        \"MissionBrief\": null\n      },\n      \"DetectionGap\": \"The dock was reclaimed or its directory removed while the mission still had to land.\",\n      \"RuleIds\": [\n        \"BBX-LAND-002\",\n        \"BBX-PRIOR-ARMADA\"\n      ]\n    }\n  ],\n  \"TotalMs\": 0\n}"
                         }
                     ]
                 },
