@@ -34,8 +34,8 @@ namespace Armada.Core.Services
             "- Stay strictly within the mission scope and listed files\n" +
             "- Do not create, modify, or delete files outside the listed scope unless the mission explicitly requires it\n" +
             "- If you discover a necessary out-of-scope change, report it in your result instead of expanding scope on your own\n" +
-            "- Commit all changes to the current branch\n" +
-            "- Commit and push your changes -- the Admiral will also push if needed\n" +
+            "{MissionCommitInstruction}" +
+            "{MissionPushInstruction}" +
             "- If you encounter a blocking issue, commit what you have and exit\n" +
             "- Exit with code 0 on success\n" +
             "- Do not use extended/Unicode characters (em dashes, smart quotes, etc.) -- use only ASCII characters in all output and commit messages\n" +
@@ -134,6 +134,25 @@ namespace Armada.Core.Services
 
             return result;
         }
+
+        /// <summary>
+        /// Built-in mission rules that always tell the captain to commit and to push. Seeding replaces this exact
+        /// built-in text with <see cref="MissionRulesDefault"/>. An operator edit does not match and stays in place.
+        /// </summary>
+        private const string _MissionRulesUnconditionalPushDefault =
+            "## Rules\n" +
+            "- Work only within this worktree directory\n" +
+            "- Stay strictly within the mission scope and listed files\n" +
+            "- Do not create, modify, or delete files outside the listed scope unless the mission explicitly requires it\n" +
+            "- If you discover a necessary out-of-scope change, report it in your result instead of expanding scope on your own\n" +
+            "- Commit all changes to the current branch\n" +
+            "- Commit and push your changes -- the Admiral will also push if needed\n" +
+            "- If you encounter a blocking issue, commit what you have and exit\n" +
+            "- Exit with code 0 on success\n" +
+            "- Do not use extended/Unicode characters (em dashes, smart quotes, etc.) -- use only ASCII characters in all output and commit messages\n" +
+            "- Do not use ANSI color codes or terminal formatting in output -- keep all output plain text\n" +
+            "- You cannot ask the operator questions during a mission and nobody will answer them: when a choice has a sensible default (for example the newest target framework of a multi-targeted .NET project whose SDK is installed; `dotnet --list-sdks` shows them), make it, say what you chose in your result, and continue\n" +
+            "- Stop and report instead of choosing only when the choice is risky or hard to undo, or the mission could mean materially different things\n";
 
         /// <summary>
         /// The built-in mission rules before the decision-making rules were added. Used to upgrade an untouched built-in
@@ -474,16 +493,19 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Upgrade the built-in mission rules in place when they still hold the content shipped before the
-        /// decision-making rules, so existing deployments stop having mission captains wait on questions nobody answers.
-        /// An operator who has edited the template keeps their version untouched.
+        /// Replace an untouched built-in mission.rules row when its content is exactly a previously shipped default.
+        /// An operator who has edited the template keeps that content.
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         private async Task UpgradeBuiltInMissionRulesAsync(CancellationToken token)
         {
             PromptTemplate? existing = await _Database.PromptTemplates.ReadByNameAsync("mission.rules", token).ConfigureAwait(false);
             if (existing == null || !existing.IsBuiltIn) return;
-            if (!String.Equals(existing.Content, _MissionRulesLegacyDefault, StringComparison.Ordinal)) return;
+            if (!String.Equals(existing.Content, _MissionRulesLegacyDefault, StringComparison.Ordinal)
+                && !String.Equals(existing.Content, _MissionRulesUnconditionalPushDefault, StringComparison.Ordinal))
+            {
+                return;
+            }
 
             existing.Content = MissionRulesDefault;
             existing.LastUpdateUtc = DateTime.UtcNow;

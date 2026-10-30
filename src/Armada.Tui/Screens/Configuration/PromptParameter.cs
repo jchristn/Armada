@@ -33,6 +33,8 @@ namespace Armada.Tui.Screens.Configuration
             new PromptParameter("Mission Context", "{MissionId}", "Mission identifier"),
             new PromptParameter("Mission Context", "{MissionTitle}", "Mission title"),
             new PromptParameter("Mission Context", "{MissionDescription}", "Full mission description"),
+            new PromptParameter("Mission Context", "{MissionCommitInstruction}", "Commit instruction selected for the mission mode"),
+            new PromptParameter("Mission Context", "{MissionPushInstruction}", "Push instruction selected for the landing mode"),
             new PromptParameter("Mission Context", "{MissionPersona}", "Persona assigned to this mission"),
             new PromptParameter("Mission Context", "{VoyageId}", "Parent voyage identifier"),
             new PromptParameter("Mission Context", "{BranchName}", "Git branch for this mission"),

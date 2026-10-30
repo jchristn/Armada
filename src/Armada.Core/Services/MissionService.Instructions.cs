@@ -214,6 +214,23 @@ namespace Armada.Core.Services
             }
 
             // Rules, context conservation, merge conflicts, progress signals -- from templates or hardcoded fallback
+            Voyage? promptVoyage = null;
+            if (!String.IsNullOrEmpty(mission.VoyageId))
+            {
+                promptVoyage = await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
+            }
+            LandingModeEnum landingMode = promptVoyage?.LandingMode ?? vessel.LandingMode ?? _Settings.LandingMode ?? LandingModeEnum.MergeAndPush;
+            bool readOnlyMission = MissionModeContract.IsReadOnly(mission.Mode);
+            templateParams["MissionCommitInstruction"] = readOnlyMission ? String.Empty : "- Commit all changes to the current branch\n";
+            // An undefined landing mode keeps the captain push instruction.
+            templateParams["MissionPushInstruction"] = readOnlyMission
+                ? String.Empty
+                : landingMode switch
+                {
+                    LandingModeEnum.LocalMerge or LandingModeEnum.MergeQueue or LandingModeEnum.None or LandingModeEnum.MergeAndPush => String.Empty,
+                    LandingModeEnum.PullRequest => "- Commit and push your changes -- the Admiral will also push if needed\n",
+                    _ => "- Commit and push your changes -- the Admiral will also push if needed\n"
+                };
             content += await ResolveSectionAsync("mission.rules", templateParams, token).ConfigureAwait(false);
             content += "\n";
             content += await ResolveSectionAsync("mission.context_conservation", templateParams, token).ConfigureAwait(false);
@@ -760,8 +777,8 @@ namespace Armada.Core.Services
                     return
                         "## Rules\n" +
                         "- Work only within this worktree directory\n" +
-                        "- Commit all changes to the current branch\n" +
-                        "- Commit and push your changes -- the Admiral will also push if needed\n" +
+                        "{MissionCommitInstruction}" +
+                        "{MissionPushInstruction}" +
                         "- If you encounter a blocking issue, commit what you have and exit\n" +
                         "- Exit with code 0 on success\n" +
                         "- Do not use extended/Unicode characters (em dashes, smart quotes, etc.) -- use only ASCII characters in all output and commit messages\n" +
