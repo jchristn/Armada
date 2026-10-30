@@ -3,6 +3,7 @@ namespace Armada.Runtimes
     using System.Diagnostics;
     using System.Text;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using SyslogLogging;
     using Armada.Runtimes.Interfaces;
 
@@ -300,6 +301,8 @@ namespace Armada.Runtimes
                 StandardErrorEncoding = Encoding.UTF8,
                 CreateNoWindow = true
             };
+
+            startInfo.Environment.Remove(DefaultCredentialService.InitialAdminPasswordEnvironmentVariable);
 
             // Cross-runtime hardening: captains frequently shell out to `dotnet`, and MSBuild node reuse
             // leaves orphaned build-server processes behind after a mission; disable it at launch. Opt out
