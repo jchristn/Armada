@@ -135,7 +135,9 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Create a git worktree from a bare repository.
+        /// Create a git worktree from a bare repository. A failure removes a directory this call
+        /// created and deletes a branch ref this call created. A directory that already existed stays,
+        /// and the original error propagates.
         /// </summary>
         public async Task CreateWorktreeAsync(string repoPath, string worktreePath, string branchName, string baseBranch = "main", CancellationToken token = default)
         {
@@ -149,9 +151,15 @@ namespace Armada.Core.Services
             SemaphoreSlim repoLock = _RepoLocks.GetOrAdd(normalizedRepoPath, _ => new SemaphoreSlim(1, 1));
             await repoLock.WaitAsync(token).ConfigureAwait(false);
             bool createdBranchRef = false;
+            // Taken before git worktree add. Only a directory this call creates is removed on failure.
+            // A remote executor does not see the path on this machine, so that path keeps the existing
+            // removal attempt.
+            bool worktreeDirectoryExisted = false;
 
             try
             {
+                worktreeDirectoryExisted = _Commands == null && Directory.Exists(worktreePath);
+
                 bool hasBaseBranch = await EnsureLocalBranchAsync(repoPath, baseBranch, token).ConfigureAwait(false);
                 if (!hasBaseBranch)
                 {
@@ -208,7 +216,7 @@ namespace Armada.Core.Services
             {
                 try
                 {
-                    if (_Commands != null || Directory.Exists(worktreePath))
+                    if (!worktreeDirectoryExisted && (_Commands != null || Directory.Exists(worktreePath)))
                     {
                         await RunGitAsync(repoPath, "worktree", "remove", "--force", worktreePath).ConfigureAwait(false);
                     }

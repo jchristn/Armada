@@ -145,6 +145,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
 
+### Worktree creation keeps a path that already existed
+
+- **A failed worktree create removes only a directory that call created.** `CreateWorktreeAsync` records whether the target directory exists before `git worktree add`. On failure it runs `git worktree remove --force` only for a directory this call created. A path that already existed, including a registered worktree, stays. A branch ref this call created is still deleted. The original error still propagates.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.
