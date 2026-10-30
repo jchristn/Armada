@@ -6,7 +6,7 @@ namespace Armada.Core.Services
     /// <summary>
     /// One definition of "secret-shaped value" redaction, shared by the runtime-log formatter and the
     /// request-history capture so both surfaces scrub the same token shapes (Authorization bearer tokens,
-    /// OpenAI/GitHub/AWS keys, and labelled api-key/secret/token/password assignments). Pure.
+    /// OpenAI, GitHub, Slack, GitLab, and AWS keys, and labelled api-key/secret/token/password assignments). Pure.
     /// </summary>
     public static class SecretRedactor
     {
@@ -17,6 +17,9 @@ namespace Armada.Core.Services
             new KeyValuePair<Regex, string>(new Regex(@"(?i)\bBearer\s+[A-Za-z0-9._\-]{8,}", RegexOptions.Compiled), "Bearer [REDACTED]"),
             new KeyValuePair<Regex, string>(new Regex(@"\bsk-[A-Za-z0-9]{16,}", RegexOptions.Compiled), "sk-[REDACTED]"),
             new KeyValuePair<Regex, string>(new Regex(@"\bgh[pousr]_[A-Za-z0-9]{20,}", RegexOptions.Compiled), "gh_[REDACTED]"),
+            new KeyValuePair<Regex, string>(new Regex(@"\bgithub_pat_[A-Za-z0-9_]{82,}", RegexOptions.Compiled), "github_pat_[REDACTED]"),
+            new KeyValuePair<Regex, string>(new Regex(@"\bxox[baprs]-[A-Za-z0-9-]{10,}\b", RegexOptions.Compiled), "xox-[REDACTED]"),
+            new KeyValuePair<Regex, string>(new Regex(@"\bglpat-[A-Za-z0-9_\-]{20,}", RegexOptions.Compiled), "glpat-[REDACTED]"),
             new KeyValuePair<Regex, string>(new Regex(@"\bAKIA[0-9A-Z]{16}\b", RegexOptions.Compiled), "AKIA[REDACTED]"),
             new KeyValuePair<Regex, string>(new Regex(@"(?i)(api[_\-]?key|apikey|secret|token|password)(\s*[=:]\s*)([""']?)[^\s""']{6,}", RegexOptions.Compiled), "$1$2$3[REDACTED]"),
         };

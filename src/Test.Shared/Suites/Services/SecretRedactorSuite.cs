@@ -12,8 +12,8 @@ namespace Test.Shared.Suites.Services
     /// <summary>
     /// Descriptors for <see cref="SecretRedactor"/>, the shared secret-shaped-value redaction used by both
     /// the runtime-log formatter and request-history capture. Positive cases confirm bearer tokens, OpenAI
-    /// and GitHub keys, and labelled assignments are scrubbed; negative cases confirm ordinary text is left
-    /// untouched.
+    /// and GitHub keys, Slack and GitLab tokens, and labelled assignments are scrubbed; negative cases confirm
+    /// ordinary text and short prefixes are left untouched.
     /// </summary>
     public sealed class SecretRedactorSuite : IArmadaTestSuite
     {
@@ -58,6 +58,43 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(input, redacted, "ordinary text should pass through unchanged");
             }));
 
+            cases.Add(Case("redacts_github_fine_grained_pat", "A fine-grained GitHub token is redacted", TestTags.Positive, () =>
+            {
+                string suffix = "zzzzzzzzzz";
+                string token = "github_" + "pat_" + new string('m', 72) + suffix;
+                AssertTokenRemoved(token, suffix, "github_pat_[REDACTED]");
+            }));
+
+            cases.Add(Case("redacts_slack_xox_tokens", "Slack xox token variants are redacted", TestTags.Positive, () =>
+            {
+                string[] kinds = new string[] { "a", "b", "p", "r", "s" };
+                string suffix = "qqqqqqqqqq";
+                foreach (string kind in kinds)
+                {
+                    string token = "xox" + kind + "-" + "1000000001-1000000002-" + new string('n', 14) + suffix;
+                    AssertTokenRemoved(token, suffix, "xox-[REDACTED]");
+                }
+            }));
+
+            cases.Add(Case("redacts_gitlab_personal_access_token", "A GitLab personal access token is redacted", TestTags.Positive, () =>
+            {
+                string suffix = "wwwwwwwwww";
+                string token = "gl" + "pat-" + new string('k', 10) + suffix;
+                AssertTokenRemoved(token, suffix, "glpat-[REDACTED]");
+            }));
+
+            cases.Add(Case("leaves_non_token_prefixes_unchanged", "Short prefixes and an ordinary sign-off stay", TestTags.Negative, () =>
+            {
+                string shortGithub = "github_" + "pat_" + new string('m', 71) + "yyyyyyyyyy";
+                string shortSlack = "xox" + "b-" + "123456789";
+                string shortGitlab = "gl" + "pat-" + new string('k', 9) + "vvvvvvvvvv";
+                string signOff = "xox" + "o-" + "thankyouall";
+                string input = "note " + shortGithub + " " + shortSlack + " " + shortGitlab + " " + signOff + " in prose.";
+                string redacted = SecretRedactor.Redact(input, out bool changed);
+                AssertFalse(changed, "non-token text should not be flagged");
+                AssertEqual(input, redacted, "non-token text should pass through unchanged");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.SecretRedactor",
                 displayName: "Secret Redactor",
@@ -67,6 +104,18 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static void AssertTokenRemoved(string token, string suffix, string marker)
+        {
+            string input = "before " + token + " after";
+            string redacted = SecretRedactor.Redact(input, out bool changed);
+            AssertTrue(changed, "the token should be redacted");
+            AssertFalse(redacted.Contains(suffix, StringComparison.Ordinal), "the secret suffix must not survive");
+            AssertFalse(redacted.Contains(token, StringComparison.Ordinal), "the token must not survive");
+            AssertContains(marker, redacted, "the output should mark the redaction");
+            AssertContains("before", redacted, "text before the token should remain");
+            AssertContains("after", redacted, "text after the token should remain");
+        }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)
         {
