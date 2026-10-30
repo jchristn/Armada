@@ -1108,6 +1108,7 @@ namespace Test.Shared.Suites.Services
                     worker.Persona = "Worker";
                     worker.Status = MissionStatusEnum.Pending;
                     worker.DependsOnMissionId = architect.Id;
+                    worker.Mode = MissionModeEnum.Audit;
                     worker = await testDb.Driver.Missions.CreateAsync(worker).ConfigureAwait(false);
 
                     Mission testEngineer = new Mission("[Test Engineer] Placeholder", "Initial tests");
@@ -1116,6 +1117,7 @@ namespace Test.Shared.Suites.Services
                     testEngineer.Persona = "Test Engineer";
                     testEngineer.Status = MissionStatusEnum.Pending;
                     testEngineer.DependsOnMissionId = worker.Id;
+                    testEngineer.Mode = MissionModeEnum.Audit;
                     testEngineer = await testDb.Driver.Missions.CreateAsync(testEngineer).ConfigureAwait(false);
 
                     Mission judge = new Mission("[Judge] Placeholder", "Initial review");
@@ -1155,6 +1157,14 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(docsWorker, "Secondary worker should exist");
                     AssertNotNull(docsTest, "Secondary test stage should exist");
                     AssertNotNull(docsJudge, "Secondary judge stage should exist");
+                    AssertTrue(apiWorker!.Mode == MissionModeEnum.Audit
+                        && apiTest!.Mode == MissionModeEnum.Audit
+                        && apiJudge!.Mode == MissionModeEnum.Implementation
+                        && docsWorker!.Mode == MissionModeEnum.Audit
+                        && docsTest!.Mode == MissionModeEnum.Audit
+                        && docsJudge!.Mode == MissionModeEnum.Implementation,
+                        "Every Architect-created worker and cloned stage should keep its template mode; actual modes: "
+                        + String.Join(",", new[] { apiWorker.Mode.ToString(), apiTest.Mode.ToString(), apiJudge.Mode.ToString(), docsWorker.Mode.ToString(), docsTest.Mode.ToString(), docsJudge.Mode.ToString() }));
                     AssertEqual(docsWorker!.Id, docsTest!.DependsOnMissionId, "Cloned test stage should depend on cloned worker");
                     AssertEqual(docsTest.Id, docsJudge!.DependsOnMissionId, "Cloned judge stage should depend on cloned test stage");
                     AssertTrue(String.IsNullOrEmpty(docsWorker.BranchName), "Cloned worker should wait for its own branch assignment");
@@ -2129,6 +2139,7 @@ namespace Test.Shared.Suites.Services
                     architect.VoyageId = voyage.Id;
                     architect.Persona = "Architect";
                     architect.Status = MissionStatusEnum.InProgress;
+                    architect.Mode = MissionModeEnum.Audit;
                     architect.CaptainId = architectCaptain.Id;
                     architect.DockId = architectDock.Id;
                     architect.BranchName = architectDock.BranchName;
@@ -2166,6 +2177,10 @@ namespace Test.Shared.Suites.Services
                         .ToList();
 
                     AssertEqual(2, workerMissions.Count, "Architect fan-out should create two worker missions");
+                    AssertTrue(workerMissions.All(m => m.Mode == MissionModeEnum.Implementation), "Generated workers should keep the template worker mode instead of the Architect mode");
+                    Mission? clonedTest = voyageMissions.FirstOrDefault(m => m.Title == "Second task [Test Engineer]");
+                    AssertNotNull(clonedTest, "The downstream test stage should be cloned");
+                    AssertEqual(MissionModeEnum.Implementation, clonedTest!.Mode, "Cloned stages should keep their own template mode");
                     Persona workerPersona = new Persona("Worker", "persona.worker");
                     workerPersona.CaptainPriorities.Add(new PersonaCaptainPriority { Runtime = AgentRuntimeEnum.Mux, Model = "gpt-oss:120b", Endpoint = "fanout" });
                     workerPersona.PriorityAvailability = PersonaPriorityAvailabilityEnum.WaitForFirstPriority;
