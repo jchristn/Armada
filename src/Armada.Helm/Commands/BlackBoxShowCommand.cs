@@ -51,13 +51,12 @@ namespace Armada.Helm.Commands
             bool pure = settings.Brief || settings.Json;
             return await RunBlackBoxAsync(pure, async client =>
             {
-                BlackBoxAudienceEnum audience = BlackBoxCli.ParseEnum<BlackBoxAudienceEnum>("--audience", settings.Audience) ?? BlackBoxAudienceEnum.Agent;
                 BlackBoxSubjectTypeEnum? subject = ForcedSubject ?? BlackBoxCli.SubjectOf(id);
                 if (settings.Brief)
                 {
-                    string? brief = subject == BlackBoxSubjectTypeEnum.Mission ? await client.GetMissionBlackBoxBriefAsync(id, audience, settings.RedactHosts, cancellationToken).ConfigureAwait(false)
-                        : subject == BlackBoxSubjectTypeEnum.Voyage ? await client.GetVoyageBlackBoxBriefAsync(id, audience, settings.RedactHosts, cancellationToken).ConfigureAwait(false)
-                        : await client.GetBlackBoxBriefAsync(id, audience, settings.RedactHosts, cancellationToken).ConfigureAwait(false);
+                    string? brief = subject == BlackBoxSubjectTypeEnum.Mission ? await client.GetMissionBlackBoxBriefAsync(id, settings.RedactHosts, cancellationToken).ConfigureAwait(false)
+                        : subject == BlackBoxSubjectTypeEnum.Voyage ? await client.GetVoyageBlackBoxBriefAsync(id, settings.RedactHosts, cancellationToken).ConfigureAwait(false)
+                        : await client.GetBlackBoxBriefAsync(id, settings.RedactHosts, cancellationToken).ConfigureAwait(false);
                     Console.Out.Write(brief ?? "");
                     if (!String.IsNullOrEmpty(brief) && !brief.EndsWith("\n", StringComparison.Ordinal)) Console.Out.WriteLine();
                     return 0;

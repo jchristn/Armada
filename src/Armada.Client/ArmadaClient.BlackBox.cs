@@ -41,14 +41,13 @@ namespace Armada.Client
         /// the mission's current entry.
         /// </summary>
         /// <param name="missionId">Mission id (msn_ prefix).</param>
-        /// <param name="audience">Audience (default Agent).</param>
         /// <param name="redactHosts">Strip absolute paths, host names and user names.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The Markdown brief.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<string?> GetMissionBlackBoxBriefAsync(string missionId, BlackBoxAudienceEnum audience = BlackBoxAudienceEnum.Agent, bool redactHosts = false, CancellationToken token = default)
+        public Task<string?> GetMissionBlackBoxBriefAsync(string missionId, bool redactHosts = false, CancellationToken token = default)
         {
-            return GetAsync<string>($"/api/v1/missions/{E(missionId)}/blackbox/brief{BriefQuery(audience, redactHosts)}", null, token);
+            return GetAsync<string>($"/api/v1/missions/{E(missionId)}/blackbox/brief{BriefQuery(redactHosts)}", null, token);
         }
 
         /// <summary>
@@ -98,14 +97,13 @@ namespace Armada.Client
         /// current entry.
         /// </summary>
         /// <param name="voyageId">Voyage id (vyg_ prefix).</param>
-        /// <param name="audience">Audience (default Agent).</param>
         /// <param name="redactHosts">Strip absolute paths, host names and user names.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The Markdown brief.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<string?> GetVoyageBlackBoxBriefAsync(string voyageId, BlackBoxAudienceEnum audience = BlackBoxAudienceEnum.Agent, bool redactHosts = false, CancellationToken token = default)
+        public Task<string?> GetVoyageBlackBoxBriefAsync(string voyageId, bool redactHosts = false, CancellationToken token = default)
         {
-            return GetAsync<string>($"/api/v1/voyages/{E(voyageId)}/blackbox/brief{BriefQuery(audience, redactHosts)}", null, token);
+            return GetAsync<string>($"/api/v1/voyages/{E(voyageId)}/blackbox/brief{BriefQuery(redactHosts)}", null, token);
         }
 
         /// <summary>
@@ -122,17 +120,16 @@ namespace Armada.Client
         }
 
         /// <summary>
-        /// Dashboard <c>getBlackBoxBrief</c>: GET /api/v1/blackbox/{id}/brief. The Markdown FIX THIS brief for an audience.
+        /// Dashboard <c>getBlackBoxBrief</c>: GET /api/v1/blackbox/{id}/brief. The Markdown FIX THIS brief.
         /// </summary>
         /// <param name="entryId">Entry id (bbx_ prefix).</param>
-        /// <param name="audience">Audience (default Agent).</param>
         /// <param name="redactHosts">Strip absolute paths, host names and user names.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The Markdown brief.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
-        public Task<string?> GetBlackBoxBriefAsync(string entryId, BlackBoxAudienceEnum audience = BlackBoxAudienceEnum.Agent, bool redactHosts = false, CancellationToken token = default)
+        public Task<string?> GetBlackBoxBriefAsync(string entryId, bool redactHosts = false, CancellationToken token = default)
         {
-            return GetAsync<string>($"/api/v1/blackbox/{E(entryId)}/brief{BriefQuery(audience, redactHosts)}", null, token);
+            return GetAsync<string>($"/api/v1/blackbox/{E(entryId)}/brief{BriefQuery(redactHosts)}", null, token);
         }
 
         /// <summary>
@@ -594,12 +591,9 @@ namespace Armada.Client
             return includeRecord ? String.Empty : "?includeRecord=false";
         }
 
-        private static string BriefQuery(BlackBoxAudienceEnum audience, bool redactHosts)
+        private static string BriefQuery(bool redactHosts)
         {
-            List<string> parts = new List<string>();
-            if (audience != BlackBoxAudienceEnum.Agent && audience != BlackBoxAudienceEnum.Unknown) parts.Add("audience=" + audience.ToString().ToLowerInvariant());
-            if (redactHosts) parts.Add("redactHosts=true");
-            return parts.Count == 0 ? String.Empty : "?" + String.Join("&", parts);
+            return redactHosts ? "?redactHosts=true" : String.Empty;
         }
 
         private static string PageQuery(int? pageNumber, int? pageSize)

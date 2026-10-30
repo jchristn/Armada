@@ -78,13 +78,13 @@ namespace Armada.Server.Mcp.Tools
                     UriTemplate = UriTemplates[0],
                     Name = "blackbox_brief",
                     Title = "Black box brief",
-                    Description = "The FIX THIS brief (agent audience) of a black box entry, as Markdown.",
+                    Description = "The FIX THIS brief of a black box entry, as Markdown.",
                     MimeType = "text/markdown"
                 },
                 (uri, variables, token) => GuardAsync(uri, async () =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    string brief = await service.GetBriefAsync(caller, Variable(variables, "entryId"), BlackBoxAudienceEnum.Agent, false, token).ConfigureAwait(false);
+                    string brief = await service.GetBriefAsync(caller, Variable(variables, "entryId"), false, token).ConfigureAwait(false);
                     return Text(uri, "text/markdown", brief);
                 }));
 
@@ -218,7 +218,7 @@ namespace Armada.Server.Mcp.Tools
             sb.Append("Review the black box for mission ").Append(mission).Append(" and ").Append(target).Append(".\n\n");
             sb.Append("1. Call get_blackbox {missionId: \"").Append(mission).Append("\", format: \"summary\"} first.\n");
             sb.Append("2. Read only the sections the goal needs with read_blackbox_section (Conflict, Workspace, Analysis), and page evidence with read_blackbox_object instead of loading it whole.\n");
-            sb.Append("3. Map the goal to tools: explain (get_blackbox summary or brief, sections, objects); fix or recover (run_blackbox_recovery with a ranked path: dry run, then confirm); prevent (apply_blackbox_recommendation: dry run, then confirm); fix Armada (get_blackbox {audience: maintainer}, then a mission on the Armada vessel with that brief); compare (list_blackbox_entries {fingerprint}, search_blackbox); clean up (resolve_blackbox, pin_blackbox, delete_blackbox_entries).\n\n");
+            sb.Append("3. Map the goal to tools: explain (get_blackbox summary or brief, sections, objects); fix or recover (run_blackbox_recovery with a ranked path: dry run, then confirm); prevent (apply_blackbox_recommendation: dry run, then confirm); fix Armada (get_blackbox {format: brief} or get_blackbox_bundle, then a mission on the Armada vessel with that brief); compare (list_blackbox_entries {fingerprint}, search_blackbox); clean up (resolve_blackbox, pin_blackbox, delete_blackbox_entries).\n\n");
             sb.Append(McpBlackBoxTools.SafetyGuidance).Append('\n');
             return sb.ToString();
         }

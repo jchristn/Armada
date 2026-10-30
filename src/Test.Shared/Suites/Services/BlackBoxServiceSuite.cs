@@ -64,8 +64,9 @@ namespace Test.Shared.Suites.Services
                 BlackBoxSectionResult section = await svc.GetSectionAsync(user, mine.Id, BlackBoxSectionEnum.Site).ConfigureAwait(false);
                 AssertNotNull(section.Record.Site, "requested section"); AssertNull(section.Record.Subject, "other sections left out");
                 await AssertThrowsAsync<ArgumentException>(() => svc.GetSectionAsync(user, mine.Id, BlackBoxSectionEnum.Unknown), "unknown section").ConfigureAwait(false);
-                string brief = await svc.GetBriefAsync(user, mine.Id, BlackBoxAudienceEnum.User).ConfigureAwait(false);
-                AssertStartsWith("# What went wrong", brief);
+                string brief = await svc.GetBriefAsync(user, mine.Id).ConfigureAwait(false);
+                AssertStartsWith("# FIX THIS", brief);
+                AssertContains("You are asked to FIX THIS", brief, "agent preamble");
                 EnumerationResult<BlackBoxEntrySummary> attempts = await svc.EnumerateMissionEntriesAsync(user, mine.MissionId!, null).ConfigureAwait(false);
                 AssertEqual(1L, attempts.TotalRecords, "attempts");
             }));

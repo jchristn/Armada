@@ -24,14 +24,9 @@ namespace Test.Shared.Infrastructure
         public BlackBoxEntry Entry { get; }
 
         /// <summary>
-        /// User audience brief.
+        /// FIX THIS brief.
         /// </summary>
-        public string UserBrief { get; }
-
-        /// <summary>
-        /// Agent audience (FIX THIS) brief.
-        /// </summary>
-        public string AgentBrief { get; }
+        public string Brief { get; }
 
         /// <summary>
         /// Entry id.
@@ -61,11 +56,10 @@ namespace Test.Shared.Infrastructure
 
         #region Constructors-and-Factories
 
-        private BlackBoxUiFixture(BlackBoxEntry entry, string userBrief, string agentBrief)
+        private BlackBoxUiFixture(BlackBoxEntry entry, string brief)
         {
             Entry = entry;
-            UserBrief = userBrief;
-            AgentBrief = agentBrief;
+            Brief = brief;
         }
 
         #endregion
@@ -125,9 +119,7 @@ namespace Test.Shared.Infrastructure
             entry.LastUpdateUtc = entry.CreatedUtc;
             entry.Record = record;
             BlackBoxBriefRenderer renderer = new BlackBoxBriefRenderer();
-            string user = renderer.Render(entry, record, BlackBoxAudienceEnum.User);
-            string agent = renderer.Render(entry, record, BlackBoxAudienceEnum.Agent);
-            return new BlackBoxUiFixture(entry, user, agent);
+            return new BlackBoxUiFixture(entry, renderer.Render(entry, record));
         }
 
         /// <summary>
@@ -177,8 +169,7 @@ namespace Test.Shared.Infrastructure
             string e = EntryId;
             stub.Json("GET", "/api/v1/blackbox/" + e, EntryJson());
             stub.Json("GET", "/api/v1/blackbox/" + e + "?includeRecord=false", EntryJson());
-            stub.Json("GET", "/api/v1/blackbox/" + e + "/brief", AgentBrief);
-            stub.Json("GET", "/api/v1/blackbox/" + e + "/brief?audience=user", UserBrief);
+            stub.Json("GET", "/api/v1/blackbox/" + e + "/brief", Brief);
             stub.Json("POST", "/api/v1/blackbox/" + e + "/pin", EntryJson());
             stub.Json("POST", "/api/v1/blackbox/" + e + "/unpin", EntryJson());
             stub.Json("POST", "/api/v1/blackbox/" + e + "/notes", "{\"Id\":\"bbn_1\",\"EntryId\":\"" + e + "\",\"AuthorKind\":\"Operator\",\"Body\":\"x\"}");
@@ -209,8 +200,7 @@ namespace Test.Shared.Infrastructure
             stub.Json("GET", "/api/v1/missions/" + m, "{\"Id\":\"" + m + "\",\"Title\":\"" + (Entry.MissionTitle ?? "Fixture mission") + "\",\"Status\":\"" + missionStatus + "\",\"VesselId\":\"" + Entry.VesselId
                 + "\",\"Priority\":100,\"LastBlackBoxEntryId\":\"" + EntryId + "\",\"FailureReason\":\"Landing refused\",\"CreatedUtc\":\"2026-10-20T11:00:00Z\",\"LastUpdateUtc\":\"2026-10-20T12:00:00Z\"}");
             stub.Json("GET", "/api/v1/missions/" + m + "/blackbox", EntryJson());
-            stub.Json("GET", "/api/v1/missions/" + m + "/blackbox/brief", AgentBrief);
-            stub.Json("GET", "/api/v1/missions/" + m + "/blackbox/brief?audience=user", UserBrief);
+            stub.Json("GET", "/api/v1/missions/" + m + "/blackbox/brief", Brief);
             return stub;
         }
 

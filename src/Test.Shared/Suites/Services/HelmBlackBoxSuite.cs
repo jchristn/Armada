@@ -44,10 +44,10 @@ namespace Test.Shared.Suites.Services
                 BlackBoxUiFixture fx = BlackBoxUiFixture.Load();
                 using (RecordingAdmiralStub stub = new RecordingAdmiralStub())
                 {
-                    stub.Replies["GET /api/v1/missions/msn_x/blackbox/brief"] = StubAdmiralReply.Text(fx.AgentBrief);
+                    stub.Replies["GET /api/v1/missions/msn_x/blackbox/brief"] = StubAdmiralReply.Text(fx.Brief);
                     HelmCliRun run = await Run(stub, "blackbox", "show", "msn_x", "--brief").ConfigureAwait(false);
                     AssertEqual(0, run.ExitCode, run.StandardError);
-                    AssertEqual(fx.AgentBrief.EndsWith("\n", StringComparison.Ordinal) ? fx.AgentBrief : fx.AgentBrief + Environment.NewLine, run.StandardOutput, "stdout is the brief alone");
+                    AssertEqual(fx.Brief.EndsWith("\n", StringComparison.Ordinal) ? fx.Brief : fx.Brief + Environment.NewLine, run.StandardOutput, "stdout is the brief alone");
                     AssertEqual("", run.Output.Trim(), "nothing on the Spectre console");
                     AssertEqual("", run.StandardError.Trim(), "nothing on stderr");
                     AssertTrue(stub.Requests().Any(r => r.Path == "/api/v1/missions/msn_x/blackbox/brief" && r.Authorization == "Bearer " + Token), "mission brief route with the bearer token");
@@ -69,28 +69,28 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
-            cases.Add(CaseAsync("id_prefix_picks_the_route", "msn_ reads the mission route, vyg_ the voyage route, bbx_ the entry route; the aliases force their subject; --audience goes in the query", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("id_prefix_picks_the_route", "msn_ reads the mission route, vyg_ the voyage route, bbx_ the entry route; the aliases force their subject; --redact-hosts goes in the query; the removed --audience option is rejected", TestTags.Positive, async () =>
             {
                 BlackBoxUiFixture fx = BlackBoxUiFixture.Load();
                 using (RecordingAdmiralStub stub = new RecordingAdmiralStub())
                 {
                     stub.Replies["GET /api/v1/voyages/vyg_1/blackbox/brief"] = StubAdmiralReply.Text("voyage brief");
-                    stub.Replies["GET /api/v1/blackbox/bbx_1/brief?audience=maintainer"] = StubAdmiralReply.Text("maintainer brief");
+                    stub.Replies["GET /api/v1/blackbox/bbx_1/brief?redactHosts=true"] = StubAdmiralReply.Text("redacted brief");
                     stub.Replies["GET /api/v1/missions/msn_1/blackbox"] = StubAdmiralReply.Json(fx.EntryJson());
                     stub.Replies["GET /api/v1/voyages/odd_1/blackbox"] = StubAdmiralReply.Json(fx.EntryJson());
                     HelmCliRun voyage = await Run(stub, "blackbox", "show", "vyg_1", "--brief").ConfigureAwait(false);
                     AssertEqual("voyage brief" + Environment.NewLine, voyage.StandardOutput, "voyage route");
-                    HelmCliRun maintainer = await Run(stub, "blackbox", "show", "bbx_1", "--brief", "--audience", "maintainer").ConfigureAwait(false);
-                    AssertEqual("maintainer brief" + Environment.NewLine, maintainer.StandardOutput, "entry route with the audience");
+                    HelmCliRun redacted = await Run(stub, "blackbox", "show", "bbx_1", "--brief", "--redact-hosts").ConfigureAwait(false);
+                    AssertEqual("redacted brief" + Environment.NewLine, redacted.StandardOutput, "entry route with redactHosts");
                     HelmCliRun json = await Run(stub, "mission", "failure", "msn_1", "--json").ConfigureAwait(false);
                     AssertEqual(0, json.ExitCode, json.StandardError);
                     BlackBoxEntry? parsed = JsonSerializer.Deserialize<BlackBoxEntry>(json.StandardOutput, ArmadaJson.Options);
                     AssertEqual(fx.EntryId, parsed?.Id, "--json prints the entry alone");
                     HelmCliRun forced = await Run(stub, "voyage", "failure", "odd_1", "--json").ConfigureAwait(false);
                     AssertEqual(0, forced.ExitCode, "voyage failure uses the voyage route whatever the prefix: " + forced.StandardError);
-                    HelmCliRun bad = await Run(stub, "blackbox", "show", "bbx_1", "--brief", "--audience", "everyone").ConfigureAwait(false);
-                    AssertEqual(1, bad.ExitCode, "unknown audience");
-                    AssertContains("Agent, User, Maintainer", bad.StandardError, "valid audiences listed");
+                    HelmCliRun bad = await Run(stub, "blackbox", "show", "bbx_1", "--brief", "--audience", "maintainer").ConfigureAwait(false);
+                    AssertNotEqual(0, bad.ExitCode, "--audience is no longer an option");
+                    AssertEqual("", bad.StandardOutput, "nothing printed for the removed option");
                 }
             }));
 

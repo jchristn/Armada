@@ -17,7 +17,7 @@ namespace Armada.Core.BlackBox
     /// <summary>
     /// Captures black box entries at failure sites (docs/BLACKBOX.md, "Capture"). Builds Subject, Status, Site,
     /// Mechanism, Classification and Configuration from the context and the subject rows, Workspace, Conflict and Scope
-    /// from the site's facts, writes the entry as the subject's current attempt, then record.json, the three briefs and
+    /// from the site's facts, writes the entry as the subject's current attempt, then record.json, the brief and
     /// in-memory evidence (agent output, diff), sets the subject's LastBlackBoxEntryId, emits blackbox.captured and queues
     /// enrichment. Everything beyond the index insert runs under BlackBox.CaptureTimeoutMs. Never throws. Thread-safe.
     /// </summary>

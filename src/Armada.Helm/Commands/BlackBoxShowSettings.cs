@@ -16,13 +16,6 @@ namespace Armada.Helm.Commands
         public bool Brief { get; set; } = false;
 
         /// <summary>
-        /// Brief audience.
-        /// </summary>
-        [Description("Brief audience: agent (default), user, or maintainer")]
-        [CommandOption("--audience <AUDIENCE>")]
-        public string? Audience { get; set; }
-
-        /// <summary>
         /// Redact host paths.
         /// </summary>
         [Description("Strip host paths from the brief")]

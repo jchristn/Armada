@@ -33,7 +33,7 @@ namespace Armada.Core.Models
         public string? TenantId { get; set; } = null;
 
         /// <summary>
-        /// Object name, unique per entry: record.json, brief.md, brief.user.md, brief.maintainer.md, evidence/...
+        /// Object name, unique per entry: record.json, brief.md, evidence/... (entries written before v1.2.0 shipped may also hold brief.user.md and brief.maintainer.md)
         /// </summary>
         public string Name { get; set; } = "";
 

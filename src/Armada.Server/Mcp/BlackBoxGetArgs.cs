@@ -11,11 +11,6 @@ namespace Armada.Server.Mcp
         public string? Format { get; set; } = null;
 
         /// <summary>
-        /// Brief audience: agent (default), user or maintainer.
-        /// </summary>
-        public string? Audience { get; set; } = null;
-
-        /// <summary>
         /// Strip absolute paths, host names and user names from the brief.
         /// </summary>
         public bool? RedactHosts { get; set; } = null;

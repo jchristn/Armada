@@ -11228,11 +11228,6 @@
       "resource": "BlackBox:Read",
       "arguments": [
         {
-          "name": "audience",
-          "type": "string",
-          "required": false
-        },
-        {
           "name": "entryId",
           "type": "string",
           "required": false
@@ -11258,7 +11253,7 @@
           "required": false
         }
       ],
-      "description": "Get the black box of a failed mission or voyage: start here when asked why something failed. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry. format summary (default, about 2 KB) returns where it failed (phase, step, host, source file and method), how (mechanism), status before and after, why (top findings), the triage verdict and confidence, and the top recovery paths; brief returns the Markdown FIX THIS brief for an audience (agent, user or maintainer); json returns the full record. Then read only the sections the question needs with read_blackbox_section and page evidence with read_blackbox_object. NotFound (Code BlackBoxNotFound) when there is no entry.",
+      "description": "Get the black box of a failed mission or voyage: start here when asked why something failed. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry. format summary (default, about 2 KB) returns where it failed (phase, step, host, source file and method), how (mechanism), status before and after, why (top findings), the triage verdict and confidence, and the top recovery paths; brief returns the Markdown FIX THIS brief; json returns the full record. Then read only the sections the question needs with read_blackbox_section and page evidence with read_blackbox_object. NotFound (Code BlackBoxNotFound) when there is no entry.",
       "experimental": false
     },
     {
@@ -11372,7 +11367,7 @@
           "required": false
         }
       ],
-      "description": "Build a maintainer bundle: up to max (1-50, default 50) of the newest matching black box entries grouped by fingerprint, as one Markdown document of maintainer briefs (format Markdown, default) or JSON summaries. Use it to rank Armada improvements and write them as mission briefs on the Armada vessel. redactHosts strips absolute paths, host names and user names before sharing outside the installation.",
+      "description": "Build a maintainer bundle: up to max (1-50, default 50) of the newest matching black box entries grouped by fingerprint, as one Markdown document with the brief of each failure mode (format Markdown, default) or JSON summaries. Use it to rank Armada improvements and write them as mission briefs on the Armada vessel. redactHosts strips absolute paths, host names and user names before sharing outside the installation.",
       "experimental": false
     },
     {
@@ -20561,14 +20556,6 @@
         },
         {
           "kind": "option",
-          "name": "audience",
-          "short": null,
-          "valueKind": "scalar",
-          "type": "String",
-          "required": false
-        },
-        {
-          "kind": "option",
           "name": "brief",
           "short": null,
           "valueKind": "flag",
@@ -22900,14 +22887,6 @@
           "valueKind": "scalar",
           "type": "String",
           "required": true
-        },
-        {
-          "kind": "option",
-          "name": "audience",
-          "short": null,
-          "valueKind": "scalar",
-          "type": "String",
-          "required": false
         },
         {
           "kind": "option",
@@ -25314,14 +25293,6 @@
           "valueKind": "scalar",
           "type": "String",
           "required": true
-        },
-        {
-          "kind": "option",
-          "name": "audience",
-          "short": null,
-          "valueKind": "scalar",
-          "type": "String",
-          "required": false
         },
         {
           "kind": "option",

@@ -14,7 +14,7 @@ namespace Armada.Core.BlackBox
     {
         /// <summary>
         /// Capture a mission failure: numbers the attempt and supersedes the previous entry, builds the record from the
-        /// context, redacts and bounds it, writes the entry, record.json, the briefs and in-memory evidence, sets
+        /// context, redacts and bounds it, writes the entry, record.json, the brief and in-memory evidence, sets
         /// Mission.LastBlackBoxEntryId, emits blackbox.captured and queues enrichment.
         /// </summary>
         /// <param name="context">Failure context (Mission required).</param>

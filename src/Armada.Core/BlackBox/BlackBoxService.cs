@@ -250,12 +250,11 @@ namespace Armada.Core.BlackBox
         }
 
         /// <inheritdoc />
-        public async Task<string> GetBriefAsync(AuthContext caller, string entryId, BlackBoxAudienceEnum audience = BlackBoxAudienceEnum.Agent, bool redactHosts = false, CancellationToken token = default)
+        public async Task<string> GetBriefAsync(AuthContext caller, string entryId, bool redactHosts = false, CancellationToken token = default)
         {
             BlackBoxEntry entry = await GetEntryAsync(caller, entryId, true, token).ConfigureAwait(false);
-            if (audience == BlackBoxAudienceEnum.Unknown) audience = BlackBoxAudienceEnum.Agent;
             List<string> notes = await NotesForBriefAsync(entry, token).ConfigureAwait(false);
-            string brief = _Renderer.Render(entry, entry.Record, audience, redactHosts);
+            string brief = _Renderer.Render(entry, entry.Record, redactHosts);
             if (notes.Count == 0) return brief;
             StringBuilder sb = new StringBuilder(brief.TrimEnd()).Append("\n\n## Notes\n\n");
             foreach (string note in notes) sb.Append("- ").Append(note.Replace('\n', ' ')).Append('\n');
@@ -825,7 +824,7 @@ namespace Armada.Core.BlackBox
                 sb.Append("- Armada versions: ").Append(String.Join(", ", group.Select(e => e.ArmadaVersion ?? "unknown").Distinct(StringComparer.Ordinal).Take(BlackBoxLimits.MaxBundleVersions))).Append('\n');
                 if (record.Analysis != null) sb.Append("- Triage: ").Append(record.Analysis.Triage?.Verdict ?? newest.Triage).Append("; rules: ").Append(String.Join(", ", record.Analysis.Why.Select(w => w.RuleId).Distinct(StringComparer.Ordinal))).Append('\n');
                 sb.Append('\n');
-                sb.Append(_Renderer.Render(newest, record, BlackBoxAudienceEnum.Maintainer, r.RedactHosts).Replace("\n# ", "\n### ").Replace("\n## ", "\n#### ").Replace("# Armada maintainer brief", "### Armada maintainer brief")).Append('\n');
+                sb.Append(("\n" + _Renderer.Render(newest, record, r.RedactHosts)).Replace("\n# ", "\n### ").Replace("\n## ", "\n#### ").TrimStart('\n')).Append('\n');
                 if (group.Count > 1)
                 {
                     sb.Append("Other entries with this fingerprint:\n\n");

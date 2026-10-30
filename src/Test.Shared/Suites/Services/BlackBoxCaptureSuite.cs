@@ -32,7 +32,7 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(Case("captures_entry_and_objects", "A capture writes the current entry, record.json, three briefs, evidence and file rows, points the mission at it and emits blackbox.captured", TestTags.Positive, async () =>
+            cases.Add(Case("captures_entry_and_objects", "A capture writes the current entry, record.json, the brief, evidence and file rows, points the mission at it and emits blackbox.captured", TestTags.Positive, async () =>
             {
                 using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 RecordingBlackBoxEventSink sink = new RecordingBlackBoxEventSink();
@@ -52,7 +52,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(BlackBoxPhaseEnum.Completion, entry.Phase); AssertEqual(BlackBoxStepEnum.ScopeViolation, entry.Step);
                 AssertEqual("WorkProduced", entry.StatusBefore); AssertEqual("Failed", entry.StatusAfter); AssertEqual(1, entry.Attempt); AssertTrue(entry.IsCurrent, "current");
                 AssertEqual(64, entry.Fingerprint!.Length, "fingerprint"); AssertNotNull(entry.ExpiresUtc, "expiry computed");
-                AssertTrue(entry.ObjectCount >= 6, "record, three briefs and two evidence objects: " + entry.ObjectCount);
+                AssertTrue(entry.ObjectCount >= 4, "record, the brief and two evidence objects: " + entry.ObjectCount);
                 AssertTrue(entry.TotalBytes > 0, "bytes");
                 AssertEqual(id, (await t.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!.LastBlackBoxEntryId, "mission points at it");
                 AssertEqual(id, mission.LastBlackBoxEntryId, "in-memory mission updated too");
@@ -66,8 +66,10 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("src/b.cs", record.Scope!.OutOfScopeFiles.Single());
                 AssertTrue(record.Configuration!.Values.Any(v => v.Setting == "LandingMode"), "configuration");
                 AssertTrue(record.Evidence!.Objects.Any(o => o.Name == BlackBoxObjectNames.AgentOutput), "evidence listed");
-                foreach (string name in new[] { BlackBoxObjectNames.Record, BlackBoxObjectNames.Brief, BlackBoxObjectNames.UserBrief, BlackBoxObjectNames.MaintainerBrief, BlackBoxObjectNames.AgentOutput, BlackBoxObjectNames.Diff })
+                foreach (string name in new[] { BlackBoxObjectNames.Record, BlackBoxObjectNames.Brief, BlackBoxObjectNames.AgentOutput, BlackBoxObjectNames.Diff })
                     AssertNotNull(await t.Driver.BlackBoxObjects.ReadAsync(id!, name).ConfigureAwait(false), name + " stored");
+                foreach (string name in new[] { "brief.user.md", "brief.maintainer.md" })
+                    AssertNull(await t.Driver.BlackBoxObjects.ReadAsync(id!, name).ConfigureAwait(false), name + " is no longer written (one brief)");
                 BlackBoxObjectReadResult output = await bb.Objects.ReadAsync(entry, BlackBoxObjectNames.AgentOutput).ConfigureAwait(false);
                 AssertFalse(Encoding.UTF8.GetString(output.Data).Contains("supersecretvalue1", StringComparison.Ordinal), "evidence redacted");
                 AssertTrue(output.Verified, "sha verified");

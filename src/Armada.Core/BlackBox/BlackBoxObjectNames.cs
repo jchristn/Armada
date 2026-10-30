@@ -8,14 +8,8 @@ namespace Armada.Core.BlackBox
         /// <summary>The record (application/json).</summary>
         public const string Record = "record.json";
 
-        /// <summary>The FIX THIS brief, agent audience (text/markdown).</summary>
+        /// <summary>The FIX THIS brief (text/markdown).</summary>
         public const string Brief = "brief.md";
-
-        /// <summary>The user-audience brief (text/markdown).</summary>
-        public const string UserBrief = "brief.user.md";
-
-        /// <summary>The maintainer-audience brief (text/markdown).</summary>
-        public const string MaintainerBrief = "brief.maintainer.md";
 
         /// <summary>Tail of the captain's output (text/plain).</summary>
         public const string AgentOutput = "evidence/agent-output.txt";

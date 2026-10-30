@@ -29,7 +29,7 @@ namespace Test.Shared.Suites.E2E
     /// REST route, MCP tool, MCP resource and prompt, and WebSocket command, positive and negative. Entries are captured
     /// through the server's own runtime for a tenant user's failed mission and voyage; a 3 MB evidence object is paged by
     /// REST (1 MB reads) and MCP (64 KB chunks). Negative cases: unknown mission, mission without an entry, unknown entry
-    /// and another tenant's entry are 404 BlackBoxNotFound (no existence leak); invalid section, audience, offset and
+    /// and another tenant's entry are 404 BlackBoxNotFound (no existence leak); invalid section, redactHosts, offset and
     /// length are 400 with the field; page size 0 and 1001 are normalized; 1001 ids are 400 CollectionLimitExceeded; a
     /// regular user calling the admin routes is 403; an entry in the Deleting state is 409 BlackBoxDeleting; recovery and
     /// recommendation runs need a dry run and its confirm token (409 BlackBoxConfirmationRequired without one).
@@ -96,30 +96,31 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(_EntryId, viaPost.Objects.Single().Id, "POST twin");
             }));
 
-            cases.Add(CaseAsync("rest_briefs_by_audience", "Briefs are text/markdown with an ETag, differ by audience, honor If-None-Match, and reject an unknown audience", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("rest_brief", "The brief is one text/markdown FIX THIS document with an ETag, the same from the entry, mission and voyage routes, honors If-None-Match, ignores the removed audience parameter, and rejects a bad redactHosts", TestTags.Positive, async () =>
             {
                 RequireSetup();
                 using HttpClient ua = _UserA!.CreateClient(_Fx!.BaseUrl);
-                Dictionary<string, string> briefs = new Dictionary<string, string>();
-                string? etag = null;
-                foreach (string audience in new[] { "agent", "user", "maintainer" })
+                string brief;
+                string? etag;
+                using (HttpResponseMessage response = await ua.GetAsync("/api/v1/blackbox/" + _EntryId + "/brief").ConfigureAwait(false))
                 {
-                    using HttpResponseMessage response = await ua.GetAsync("/api/v1/blackbox/" + _EntryId + "/brief?audience=" + audience).ConfigureAwait(false);
-                    string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    AssertStatusCode(HttpStatusCode.OK, response, audience + " brief: " + body);
-                    AssertEqual("text/markdown", response.Content.Headers.ContentType?.MediaType, audience + " content type");
-                    AssertTrue(response.Headers.ETag != null, audience + " ETag");
-                    if (audience == "agent") etag = response.Headers.ETag!.Tag;
-                    AssertTrue(body.Length > 50, audience + " brief has content");
-                    briefs[audience] = body;
+                    brief = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    AssertStatusCode(HttpStatusCode.OK, response, "brief: " + brief);
+                    AssertEqual("text/markdown", response.Content.Headers.ContentType?.MediaType, "content type");
+                    AssertTrue(response.Headers.ETag != null, "ETag");
+                    etag = response.Headers.ETag!.Tag;
                 }
 
-                AssertNotEqual(briefs["agent"], briefs["user"], "agent and user briefs differ");
-                AssertNotEqual(briefs["agent"], briefs["maintainer"], "agent and maintainer briefs differ");
-                AssertNotEqual(briefs["user"], briefs["maintainer"], "user and maintainer briefs differ");
+                AssertStartsWith("# FIX THIS", brief);
+                AssertContains("You are asked to FIX THIS", brief, "agent preamble");
+                AssertContains("## Your answer", brief, "answer instruction");
 
                 string missionBrief = await GetTextAsync(ua, "/api/v1/missions/" + _Mission!.Id + "/blackbox/brief").ConfigureAwait(false);
-                AssertEqual(briefs["agent"], missionBrief, "mission brief is the entry's agent brief");
+                AssertEqual(brief, missionBrief, "mission brief is the entry's brief");
+                string voyageBrief = await GetTextAsync(ua, "/api/v1/voyages/" + _Voyage!.Id + "/blackbox/brief").ConfigureAwait(false);
+                AssertStartsWith("# FIX THIS", voyageBrief);
+                string legacy = await GetTextAsync(ua, "/api/v1/blackbox/" + _EntryId + "/brief?audience=user").ConfigureAwait(false);
+                AssertEqual(brief, legacy, "the removed audience parameter is ignored");
 
                 using (HttpRequestMessage conditional = new HttpRequestMessage(HttpMethod.Get, "/api/v1/blackbox/" + _EntryId + "/brief"))
                 {
@@ -128,8 +129,8 @@ namespace Test.Shared.Suites.E2E
                     AssertEqual(HttpStatusCode.NotModified, notModified.StatusCode, "If-None-Match with the current ETag");
                 }
 
-                await ExpectErrorAsync(ua, HttpMethod.Get, "/api/v1/blackbox/" + _EntryId + "/brief?audience=robot", null, HttpStatusCode.BadRequest, "InvalidArgument", "audience").ConfigureAwait(false);
-                await ExpectErrorAsync(ua, HttpMethod.Get, "/api/v1/missions/" + _Mission.Id + "/blackbox/brief?audience=4", null, HttpStatusCode.BadRequest, "InvalidArgument", "audience").ConfigureAwait(false);
+                await ExpectErrorAsync(ua, HttpMethod.Get, "/api/v1/blackbox/" + _EntryId + "/brief?redactHosts=maybe", null, HttpStatusCode.BadRequest, "InvalidArgument", "redactHosts").ConfigureAwait(false);
+                await ExpectErrorAsync(ua, HttpMethod.Get, "/api/v1/missions/" + _Mission.Id + "/blackbox/brief?redactHosts=4", null, HttpStatusCode.BadRequest, "InvalidArgument", "redactHosts").ConfigureAwait(false);
             }));
 
             cases.Add(CaseAsync("rest_sections_objects_download", "Sections, the object list, whole and ranged object reads with ETag, and the zip download with manifest.json", TestTags.Positive, async () =>
@@ -471,14 +472,14 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(BlackBoxStepEnum.ScopeViolation, digest.Step, "summary step");
                 McpToolCallResult raw = await client.CallToolResultAsync("get_blackbox", JsonHelper.Serialize(new { entryId = _EntryId })).ConfigureAwait(false);
                 AssertTrue(Encoding.UTF8.GetByteCount(raw.Text) < 8192, "summary stays small: " + raw.Text.Length);
-                BlackBoxBriefResult agent = await OkAsync<BlackBoxBriefResult>(client, "get_blackbox", new { entryId = _EntryId, format = "brief" }).ConfigureAwait(false);
-                BlackBoxBriefResult user = await OkAsync<BlackBoxBriefResult>(client, "get_blackbox", new { entryId = _EntryId, format = "brief", audience = "user" }).ConfigureAwait(false);
-                AssertEqual(BlackBoxAudienceEnum.User, user.Audience, "audience echoed");
-                AssertNotEqual(agent.Brief, user.Brief, "audiences differ over MCP");
+                BlackBoxBriefResult briefResult = await OkAsync<BlackBoxBriefResult>(client, "get_blackbox", new { entryId = _EntryId, format = "brief" }).ConfigureAwait(false);
+                AssertEqual(_EntryId, briefResult.EntryId, "brief entry id");
+                AssertStartsWith("# FIX THIS", briefResult.Brief);
+                McpToolCallResult rawBrief = await client.CallToolResultAsync("get_blackbox", JsonHelper.Serialize(new { entryId = _EntryId, format = "brief" })).ConfigureAwait(false);
+                AssertFalse(rawBrief.Text.Contains("\"audience\"", StringComparison.OrdinalIgnoreCase), "the brief result has no audience field");
                 BlackBoxRecord record = await OkAsync<BlackBoxRecord>(client, "get_blackbox", new { voyageId = _Voyage!.Id, format = "json" }).ConfigureAwait(false);
                 AssertEqual(_VoyageEntryId, record.EntryId, "json by voyage");
                 await RefusedAsync(client, "get_blackbox", new { entryId = _EntryId, format = "xml" }).ConfigureAwait(false);
-                await RefusedAsync(client, "get_blackbox", new { entryId = _EntryId, format = "brief", audience = "robot" }).ConfigureAwait(false);
                 await ErrorAsync(client, "get_blackbox", new { }, McpToolErrorCodeEnum.InvalidArgument, null).ConfigureAwait(false);
 
                 BlackBoxSectionResult section = await OkAsync<BlackBoxSectionResult>(client, "read_blackbox_section", new { entryId = _EntryId, section = "scope" }).ConfigureAwait(false);
@@ -665,15 +666,16 @@ namespace Test.Shared.Suites.E2E
                 string get = await CommandAsync(ws, "blackbox.get", new { Route = "command", Action = "blackbox.get", Id = _Mission!.Id }).ConfigureAwait(false);
                 AssertContains("command.result", get, "get result");
                 AssertContains(_EntryId, get, "get by mission id");
-                string brief = await CommandAsync(ws, "blackbox.brief", new { Route = "command", Action = "blackbox.brief", Data = new { EntryId = _EntryId, Audience = "maintainer" } }).ConfigureAwait(false);
-                AssertContains("Maintainer", brief, "brief audience");
+                string brief = await CommandAsync(ws, "blackbox.brief", new { Route = "command", Action = "blackbox.brief", Data = new { EntryId = _EntryId } }).ConfigureAwait(false);
+                AssertContains("FIX THIS", brief, "the brief");
+                AssertFalse(brief.Contains("\"audience\"", StringComparison.OrdinalIgnoreCase), "no audience field");
                 string list = await CommandAsync(ws, "blackbox.list", new { Route = "command", Action = "blackbox.list", Data = new { MissionId = _Mission.Id } }).ConfigureAwait(false);
                 AssertContains(_EntryId, list, "list");
                 string missing = await CommandAsync(ws, "blackbox.get", new { Route = "command", Action = "blackbox.get", Id = "bbx_missing" }).ConfigureAwait(false);
                 AssertContains("command.error", missing, "missing entry is an error");
                 AssertContains("NotFound", missing, "NotFound code");
-                string badAudience = await CommandAsync(ws, "blackbox.brief", new { Route = "command", Action = "blackbox.brief", Id = _EntryId, Data = new { Audience = "robot" } }).ConfigureAwait(false);
-                AssertContains("InvalidArgument", badAudience, "invalid audience");
+                string noTarget = await CommandAsync(ws, "blackbox.brief", new { Route = "command", Action = "blackbox.brief", Data = new { } }).ConfigureAwait(false);
+                AssertContains("command.error", noTarget, "a brief without a target is an error");
                 await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None).ConfigureAwait(false);
             }));
 

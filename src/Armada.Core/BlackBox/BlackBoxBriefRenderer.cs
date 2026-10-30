@@ -10,12 +10,9 @@ namespace Armada.Core.BlackBox
     using Armada.Core.Models;
 
     /// <summary>
-    /// Renders the FIX THIS brief of a black box entry as Markdown for an audience: agent (brief.md, a self-contained
-    /// package to paste into a coding agent with the triage instruction, sections in record order), user (brief.user.md,
-    /// plain language: leads with what you can do, then why and how to prevent it; no stack frames, source pointers, rule
-    /// ids, REST commands or improvement hypotheses) and maintainer (brief.maintainer.md: leads with the code site, triage
-    /// and votes, rule ids, fingerprint and occurrences, then the improvement hypotheses with source pointers). Renders
-    /// whatever sections the record has. Size: aims for <see cref="TargetBytes"/> and never
+    /// Renders the FIX THIS brief of a black box entry as Markdown (brief.md): a self-contained package to paste into a
+    /// coding agent, with the triage instruction (decide UserConfig, MissionBrief, Transient, ArmadaDefect or External,
+    /// then fix with evidence) and the sections in record order. Renders whatever sections the record has. Size: aims for <see cref="TargetBytes"/> and never
     /// exceeds <see cref="MaxBytes"/>. Trimming order when over budget: list items (50, 25, 10, 5), then long text
     /// (4000, 1500, 500 characters), then whole sections (Evidence, Related, Attempts, Configuration, Status timeline,
     /// Workspace, Scope), then a hard cut with a marker. The output is redacted again and never contains em-dashes.
@@ -54,9 +51,7 @@ namespace Armada.Core.BlackBox
 
         private static readonly int[] _ListLimits = new int[] { 50, 25, 10, 5 };
         private static readonly int[] _TextLimits = new int[] { 4000, 1500, 500 };
-        private static readonly string[] _AgentOrder = new string[] { "Header", "Summary", "Identity", "Where", "How", "Timeline", "Why", "Conflict", "Workspace", "Scope", "Configuration", "Prevention", "Improvements", "Recovery", "Attempts", "Evidence", "Related", "Footer", "Answer" };
-        private static readonly string[] _UserOrder = new string[] { "Header", "Summary", "Recovery", "Why", "Prevention", "Where", "How", "Conflict", "Workspace", "Scope", "Configuration", "Attempts", "Evidence", "Related", "Identity", "Footer" };
-        private static readonly string[] _MaintainerOrder = new string[] { "Header", "CodeSite", "Improvements", "Summary", "Why", "How", "Where", "Timeline", "Conflict", "Workspace", "Scope", "Configuration", "Prevention", "Recovery", "Attempts", "Evidence", "Related", "Identity", "Footer" };
+        private static readonly string[] _Order = new string[] { "Header", "Summary", "Identity", "Where", "How", "Timeline", "Why", "Conflict", "Workspace", "Scope", "Configuration", "Prevention", "Improvements", "Recovery", "Attempts", "Evidence", "Related", "Footer", "Answer" };
         private static readonly string[] _DropOrder = new string[] { "Evidence", "Related", "Attempts", "Configuration", "Timeline", "Workspace", "Scope" };
         private static readonly Regex _AbsolutePath = new Regex(@"(?:[A-Za-z]:\\|/)(?:Users|home|private|tmp|var|opt|srv|mnt|Volumes)[^\s'""`)\]]*", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private readonly BlackBoxRedactor _Redactor;
@@ -81,30 +76,14 @@ namespace Armada.Core.BlackBox
         #region Public-Methods
 
         /// <summary>
-        /// Object name of the brief for an audience: brief.md (agent), brief.user.md, brief.maintainer.md.
-        /// </summary>
-        /// <param name="audience">Audience.</param>
-        /// <returns>The object name.</returns>
-        public static string ObjectName(BlackBoxAudienceEnum audience)
-        {
-            switch (audience)
-            {
-                case BlackBoxAudienceEnum.User: return BlackBoxObjectNames.UserBrief;
-                case BlackBoxAudienceEnum.Maintainer: return BlackBoxObjectNames.MaintainerBrief;
-                default: return BlackBoxObjectNames.Brief;
-            }
-        }
-
-        /// <summary>
         /// Render a brief.
         /// </summary>
         /// <param name="entry">Entry.</param>
         /// <param name="record">Record (null renders from the entry alone).</param>
-        /// <param name="audience">Audience.</param>
         /// <param name="redactHosts">Strip absolute paths and host names (for sharing outside the installation).</param>
         /// <returns>Markdown, at most MaxBytes UTF-8 bytes.</returns>
         /// <exception cref="ArgumentNullException">Thrown when entry is null.</exception>
-        public string Render(BlackBoxEntry entry, BlackBoxRecord? record, BlackBoxAudienceEnum audience, bool redactHosts = false)
+        public string Render(BlackBoxEntry entry, BlackBoxRecord? record, bool redactHosts = false)
         {
             if (entry == null) throw new ArgumentNullException(nameof(entry));
             BlackBoxRecord rec = record ?? new BlackBoxRecord { EntryId = entry.Id, CreatedUtc = entry.CreatedUtc };
@@ -112,19 +91,19 @@ namespace Armada.Core.BlackBox
             HashSet<string> dropped = new HashSet<string>(StringComparer.Ordinal);
             foreach (int listLimit in _ListLimits)
             {
-                text = Build(entry, rec, audience, redactHosts, listLimit, _TextLimits[0], dropped);
+                text = Build(entry, rec, redactHosts, listLimit, _TextLimits[0], dropped);
                 if (Bytes(text) <= TargetBytes) return text;
             }
             foreach (int textLimit in _TextLimits)
             {
-                text = Build(entry, rec, audience, redactHosts, _ListLimits[_ListLimits.Length - 1], textLimit, dropped);
+                text = Build(entry, rec, redactHosts, _ListLimits[_ListLimits.Length - 1], textLimit, dropped);
                 if (Bytes(text) <= TargetBytes) return text;
             }
             foreach (string section in _DropOrder)
             {
                 if (Bytes(text) <= MaxBytes) return text;
                 dropped.Add(section);
-                text = Build(entry, rec, audience, redactHosts, _ListLimits[_ListLimits.Length - 1], _TextLimits[_TextLimits.Length - 1], dropped);
+                text = Build(entry, rec, redactHosts, _ListLimits[_ListLimits.Length - 1], _TextLimits[_TextLimits.Length - 1], dropped);
             }
             if (Bytes(text) <= MaxBytes) return text;
             return Cut(text, MaxBytes);
@@ -145,42 +124,27 @@ namespace Armada.Core.BlackBox
 
         #region Private-Methods
 
-        private string Build(BlackBoxEntry entry, BlackBoxRecord r, BlackBoxAudienceEnum audience, bool redactHosts, int listLimit, int textLimit, HashSet<string> dropped)
+        private string Build(BlackBoxEntry entry, BlackBoxRecord r, bool redactHosts, int listLimit, int textLimit, HashSet<string> dropped)
         {
-            bool agent = audience == BlackBoxAudienceEnum.Agent;
-            bool user = audience == BlackBoxAudienceEnum.User;
-            bool maintainer = audience == BlackBoxAudienceEnum.Maintainer;
             BlackBoxSubject s = r.Subject ?? new BlackBoxSubject { MissionId = entry.MissionId, VoyageId = entry.VoyageId, Title = entry.MissionTitle, VesselName = entry.VesselName, Attempt = entry.Attempt, SubjectType = entry.SubjectType };
             BlackBoxSite site = r.Site ?? new BlackBoxSite { Phase = entry.Phase, Step = entry.Step, ArmadaVersion = entry.ArmadaVersion, ArmadaCommit = entry.ArmadaCommit };
             string subjectLabel = s.SubjectType == BlackBoxSubjectTypeEnum.Voyage ? "voyage " + (s.VoyageId ?? "?") : "mission " + (s.MissionId ?? "?");
             Dictionary<string, StringBuilder> sections = new Dictionary<string, StringBuilder>(StringComparer.Ordinal);
             StringBuilder sb = Begin(sections, "Header");
 
-            string heading = user ? "What went wrong" : (maintainer ? "Armada maintainer brief" : "FIX THIS");
-            sb.Append("# ").Append(heading).Append(": ").Append(Inline(s.Title ?? entry.MissionTitle ?? "(untitled)")).Append(" (").Append(subjectLabel).Append(")\n\n");
+            sb.Append("# FIX THIS: ").Append(Inline(s.Title ?? entry.MissionTitle ?? "(untitled)")).Append(" (").Append(subjectLabel).Append(")\n\n");
 
-            if (agent)
-            {
-                sb.Append("You are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. ");
-                sb.Append("It records where, how and why a ").Append(s.SubjectType == BlackBoxSubjectTypeEnum.Voyage ? "voyage" : "mission").Append(" failed, with evidence.\n\n");
-                sb.Append("Before changing anything, triage the failure. Decide which one it is, and say why, quoting the evidence below:\n\n");
-                sb.Append("1. **UserConfig**: the user's Armada configuration (vessel, captain, persona, landing mode, commands).\n");
-                sb.Append("2. **MissionBrief**: the mission brief or dependency ordering.\n");
-                sb.Append("3. **Transient**: a transient condition (provider, network, usage limit); retrying is likely to work.\n");
-                sb.Append("4. **ArmadaDefect**: a defect in Armada itself.\n");
-                sb.Append("5. **External**: an operator action or something outside Armada.\n\n");
-                sb.Append("Then act: for UserConfig or MissionBrief, propose the exact change; for Transient, the retry; for ArmadaDefect, locate the failure site");
-                if (!String.IsNullOrEmpty(site.SourceFile)) sb.Append(" (").Append(Inline(site.SourceFile!)).Append(site.SourceLine.HasValue ? ":" + site.SourceLine.Value.ToString(CultureInfo.InvariantCulture) : String.Empty).Append(" in ").Append(Inline(site.Method ?? "?")).Append(")");
-                sb.Append(" in the Armada source at the build commit below and propose a fix with a test. Quote evidence, not guesses. Use only the recovery paths listed here when you act on the Armada installation, and confirm anything marked data-loss risk with the user first.\n\n");
-            }
-            else if (maintainer)
-            {
-                sb.Append("This brief is for an Armada maintainer. Rank the Armada improvements below, check each hypothesis against the source at the build commit, and write each accepted one as an Armada mission brief with a test.\n\n");
-            }
-            else
-            {
-                sb.Append("This is what Armada recorded when the ").Append(s.SubjectType == BlackBoxSubjectTypeEnum.Voyage ? "voyage" : "mission").Append(" failed, and what you can do next.\n\n");
-            }
+            sb.Append("You are asked to FIX THIS. This brief is a self-contained black box entry from Armada, a multi-agent orchestration system. ");
+            sb.Append("It records where, how and why a ").Append(s.SubjectType == BlackBoxSubjectTypeEnum.Voyage ? "voyage" : "mission").Append(" failed, with evidence.\n\n");
+            sb.Append("Before changing anything, triage the failure. Decide which one it is, and say why, quoting the evidence below:\n\n");
+            sb.Append("1. **UserConfig**: the user's Armada configuration (vessel, captain, persona, landing mode, commands).\n");
+            sb.Append("2. **MissionBrief**: the mission brief or dependency ordering.\n");
+            sb.Append("3. **Transient**: a transient condition (provider, network, usage limit); retrying is likely to work.\n");
+            sb.Append("4. **ArmadaDefect**: a defect in Armada itself.\n");
+            sb.Append("5. **External**: an operator action or something outside Armada.\n\n");
+            sb.Append("Then act: for UserConfig or MissionBrief, propose the exact change; for Transient, the retry; for ArmadaDefect, locate the failure site");
+            if (!String.IsNullOrEmpty(site.SourceFile)) sb.Append(" (").Append(Inline(site.SourceFile!)).Append(site.SourceLine.HasValue ? ":" + site.SourceLine.Value.ToString(CultureInfo.InvariantCulture) : String.Empty).Append(" in ").Append(Inline(site.Method ?? "?")).Append(")");
+            sb.Append(" in the Armada source at the build commit below and propose a fix with a test. Quote evidence, not guesses. Use only the recovery paths listed here when you act on the Armada installation, and confirm anything marked data-loss risk with the user first.\n\n");
 
             // Summary
             sb = Begin(sections, "Summary");
@@ -214,7 +178,7 @@ namespace Armada.Core.BlackBox
             Line(sb, "Mission", s.MissionId);
             Line(sb, "Voyage", s.VoyageId == null ? null : s.VoyageId + (s.VoyageTitle != null ? " (" + Inline(s.VoyageTitle) + ")" : String.Empty));
             Line(sb, "Vessel", s.VesselName == null && s.VesselId == null ? null : (s.VesselName ?? "?") + (s.VesselId != null ? " (" + s.VesselId + ")" : String.Empty));
-            if (!user) Line(sb, "Repository", s.VesselRepoUrl);
+            Line(sb, "Repository", s.VesselRepoUrl);
             Line(sb, "Target branch", s.VesselDefaultBranch);
             Line(sb, "Captain", s.CaptainId == null ? null : (s.CaptainName ?? s.CaptainId) + Join(" / ", s.CaptainRuntime, s.CaptainModel));
             Line(sb, "Persona", s.Persona);
@@ -230,11 +194,8 @@ namespace Armada.Core.BlackBox
             sb.Append("## Where it failed\n\n");
             Line(sb, "Phase / step", site.Phase + " / " + site.Step);
             Line(sb, "Host", site.Host ?? site.HostKind.ToString());
-            if (!user)
-            {
-                Line(sb, "Site", site.SourceFile == null ? null : site.SourceFile + (site.SourceLine.HasValue ? ":" + site.SourceLine.Value.ToString(CultureInfo.InvariantCulture) : String.Empty) + (site.Method != null ? " in " + (site.Component != null ? site.Component + "." : String.Empty) + site.Method : String.Empty));
-                Line(sb, "Armada build", (site.ArmadaVersion ?? entry.ArmadaVersion ?? "unknown") + ((site.ArmadaCommit ?? entry.ArmadaCommit) != null ? " (commit " + (site.ArmadaCommit ?? entry.ArmadaCommit) + ")" : String.Empty));
-            }
+            Line(sb, "Site", site.SourceFile == null ? null : site.SourceFile + (site.SourceLine.HasValue ? ":" + site.SourceLine.Value.ToString(CultureInfo.InvariantCulture) : String.Empty) + (site.Method != null ? " in " + (site.Component != null ? site.Component + "." : String.Empty) + site.Method : String.Empty));
+            Line(sb, "Armada build", (site.ArmadaVersion ?? entry.ArmadaVersion ?? "unknown") + ((site.ArmadaCommit ?? entry.ArmadaCommit) != null ? " (commit " + (site.ArmadaCommit ?? entry.ArmadaCommit) + ")" : String.Empty));
             sb.Append('\n');
 
             // How
@@ -250,7 +211,7 @@ namespace Armada.Core.BlackBox
                 Line(sb, "Runtime failure", m.RuntimeFailureKind?.ToString());
                 Line(sb, "Failing command", m.FailingCommand == null ? null : "`" + Inline(m.FailingCommand) + "`" + (m.CommandExitCode.HasValue ? " (exit " + m.CommandExitCode.Value.ToString(CultureInfo.InvariantCulture) + ")" : String.Empty));
                 Line(sb, "Git operation", m.GitOperation);
-                if (!user && m.StackFrames.Count > 0)
+                if (m.StackFrames.Count > 0)
                 {
                     sb.Append("\nArmada stack frames:\n\n").Append(Fence(String.Join("\n", m.StackFrames.Take(listLimit))));
                 }
@@ -262,7 +223,7 @@ namespace Armada.Core.BlackBox
 
             // Status timeline
             sb = Begin(sections, "Timeline");
-            if (!user && !dropped.Contains("Timeline") && r.Status != null && r.Status.Timeline.Count > 0)
+            if (!dropped.Contains("Timeline") && r.Status != null && r.Status.Timeline.Count > 0)
             {
                 sb.Append("## Status timeline\n\n");
                 foreach (BlackBoxStatusTimelineEntry t in r.Status.Timeline.Take(listLimit)) sb.Append("- ").Append(Utc(t.Utc)).Append(" ").Append(t.Status).Append(t.Source != null ? " (" + Inline(t.Source) + ")" : String.Empty).Append('\n');
@@ -278,12 +239,11 @@ namespace Armada.Core.BlackBox
                 foreach (BlackBoxFinding f in r.Analysis.Why.Take(listLimit))
                 {
                     sb.Append("- ").Append(Inline(f.Statement));
-                    if (user) sb.Append(" (").Append(f.Confidence.ToString().ToLowerInvariant()).Append(" confidence)");
-                    else sb.Append(" (rule ").Append(f.RuleId).Append(", confidence ").Append(f.Confidence).Append(")");
-                    if (!user && f.EvidenceRefs.Count > 0) sb.Append(" Evidence: ").Append(String.Join(", ", f.EvidenceRefs.Take(5).Select(Inline)));
+                    sb.Append(" (rule ").Append(f.RuleId).Append(", confidence ").Append(f.Confidence).Append(")");
+                    if (f.EvidenceRefs.Count > 0) sb.Append(" Evidence: ").Append(String.Join(", ", f.EvidenceRefs.Take(5).Select(Inline)));
                     sb.Append('\n');
                 }
-                if (!user && r.Analysis.Triage != null && r.Analysis.Triage.Votes.Count > 0)
+                if (r.Analysis.Triage != null && r.Analysis.Triage.Votes.Count > 0)
                     sb.Append("- Triage votes: ").Append(String.Join(", ", r.Analysis.Triage.Votes.Take(listLimit).Select(v => v.RuleId + "=" + v.Verdict + "x" + v.Weight.ToString(CultureInfo.InvariantCulture)))).Append('\n');
             }
             else
@@ -327,7 +287,7 @@ namespace Armada.Core.BlackBox
                     foreach (BlackBoxConflictingMission cm in c.ConcurrentMissions.Take(listLimit))
                         sb.Append("- ").Append(cm.MissionId ?? "?").Append(cm.Title != null ? " (" + Inline(cm.Title) + ")" : String.Empty).Append(", ").Append(Math.Max(cm.OverlappingFileTotal, cm.OverlappingFiles.Count).ToString(CultureInfo.InvariantCulture)).Append(" overlapping files").Append(cm.LandedUtc.HasValue ? ", landed " + Utc(cm.LandedUtc.Value) : ", not landed").Append('\n');
                 }
-                if (!user && c.TargetCommitsSinceStart.Count > 0)
+                if (c.TargetCommitsSinceStart.Count > 0)
                 {
                     sb.Append("\nTarget commits since the mission started (").Append(Math.Max(c.TargetCommitTotal, c.TargetCommitsSinceStart.Count).ToString(CultureInfo.InvariantCulture)).Append("):\n\n");
                     foreach (BlackBoxCommitRef cr in c.TargetCommitsSinceStart.Take(listLimit)) sb.Append("- ").Append(cr.CommitHash).Append(cr.Subject != null ? " " + Inline(cr.Subject) : String.Empty).Append(cr.MissionId != null ? " (" + cr.MissionId + ")" : String.Empty).Append('\n');
@@ -400,11 +360,11 @@ namespace Armada.Core.BlackBox
                 sb.Append("## What would have prevented it\n\n");
                 foreach (BlackBoxConfigRecommendation rec in r.Analysis.ConfigRecommendations.Take(listLimit))
                 {
-                    sb.Append("- ").Append(user ? "Set " : rec.Id + ": set ").Append(rec.Setting).Append(" on the ").Append(rec.Scope.ToString().ToLowerInvariant());
+                    sb.Append("- ").Append(rec.Id).Append(": set ").Append(rec.Setting).Append(" on the ").Append(rec.Scope.ToString().ToLowerInvariant());
                     if (rec.CurrentValue != null || rec.SuggestedValue != null) sb.Append(" from `").Append(Inline(rec.CurrentValue ?? "unset")).Append("` to `").Append(Inline(rec.SuggestedValue ?? "?")).Append('`');
                     if (rec.Rationale != null) sb.Append(". ").Append(Inline(rec.Rationale));
-                    if (rec.RuleId != null && !user) sb.Append(" (rule ").Append(rec.RuleId).Append(")");
-                    if (rec.HowToApply != null && !user) sb.Append(" How: ").Append(Inline(rec.HowToApply));
+                    if (rec.RuleId != null) sb.Append(" (rule ").Append(rec.RuleId).Append(")");
+                    if (rec.HowToApply != null) sb.Append(" How: ").Append(Inline(rec.HowToApply));
                     sb.Append('\n');
                 }
                 sb.Append('\n');
@@ -412,7 +372,7 @@ namespace Armada.Core.BlackBox
 
             // Improvements
             sb = Begin(sections, "Improvements");
-            if (!user && r.Analysis != null && r.Analysis.ArmadaImprovements.Count > 0)
+            if (r.Analysis != null && r.Analysis.ArmadaImprovements.Count > 0)
             {
                 sb.Append("## What Armada could change\n\n");
                 foreach (BlackBoxImprovement imp in r.Analysis.ArmadaImprovements.Take(listLimit))
@@ -429,12 +389,12 @@ namespace Armada.Core.BlackBox
 
             // Recovery
             sb = Begin(sections, "Recovery");
-            sb.Append(user ? "## What you can do\n\n" : "## Recovery\n\n");
+            sb.Append("## Recovery\n\n");
             if (r.Analysis != null && r.Analysis.RecoveryPaths.Count > 0)
             {
                 foreach (BlackBoxRecoveryPath p in r.Analysis.RecoveryPaths.OrderBy(x => x.Rank).Take(listLimit))
                 {
-                    sb.Append("### ").Append(p.Rank.ToString(CultureInfo.InvariantCulture)).Append(". ").Append(Inline(p.Title)).Append(user ? String.Empty : " (" + p.Id + ")").Append("\n\n");
+                    sb.Append("### ").Append(p.Rank.ToString(CultureInfo.InvariantCulture)).Append(". ").Append(Inline(p.Title)).Append(" (").Append(p.Id).Append(")").Append("\n\n");
                     sb.Append("Risk: ").Append(p.Risk).Append(p.DataLossRisk ? ", data-loss risk (confirm first)" : String.Empty).Append(".");
                     if (p.ExpectedOutcome != null) sb.Append(" Expected: ").Append(Inline(p.ExpectedOutcome));
                     sb.Append("\n\n");
@@ -444,9 +404,9 @@ namespace Armada.Core.BlackBox
                         sb.Append(st.Order.ToString(CultureInfo.InvariantCulture)).Append(". ").Append(Inline(st.Description)).Append(st.DataLossRisk ? " (data-loss risk)" : String.Empty).Append('\n');
                         if (st.McpCommand != null) sb.Append("   - MCP: `").Append(Inline(st.McpCommand)).Append("`\n");
                         if (st.CliCommand != null) sb.Append("   - CLI: `").Append(Inline(st.CliCommand)).Append("`\n");
-                        if (!user && st.RestCommand != null) sb.Append("   - REST: `").Append(Inline(st.RestCommand)).Append("`\n");
+                        if (st.RestCommand != null) sb.Append("   - REST: `").Append(Inline(st.RestCommand)).Append("`\n");
                     }
-                    if (!user && p.Action != null) sb.Append("\nAction: `").Append(p.Action.Tool).Append(' ').Append(Inline(ArgumentsText(p.Action))).Append("` (run it with run_blackbox_recovery, dry run first)\n");
+                    if (p.Action != null) sb.Append("\nAction: `").Append(p.Action.Tool).Append(' ').Append(Inline(ArgumentsText(p.Action))).Append("` (run it with run_blackbox_recovery, dry run first)\n");
                     sb.Append('\n');
                 }
             }
@@ -481,16 +441,13 @@ namespace Armada.Core.BlackBox
                 foreach (BlackBoxEvidenceItem item in r.Evidence.Objects.Take(listLimit))
                 {
                     sb.Append("- `").Append(item.Name).Append("` (").Append(item.UncompressedBytes.ToString(CultureInfo.InvariantCulture)).Append(" bytes").Append(item.Truncated ? ", cut" : String.Empty).Append(")");
-                    if (!user && item.Excerpt != null) sb.Append(": ").Append(Inline(Clip(item.Excerpt, 200)));
+                    if (item.Excerpt != null) sb.Append(": ").Append(Inline(Clip(item.Excerpt, 200)));
                     sb.Append('\n');
                 }
                 foreach (StageCheckResult check in r.Evidence.CheckResults.Take(listLimit))
                     sb.Append("- Check ").Append(check.Status).Append(check.FailedCommand != null ? ": `" + Inline(check.FailedCommand) + "`" : String.Empty).Append(check.ExitCode.HasValue ? " exit " + check.ExitCode.Value.ToString(CultureInfo.InvariantCulture) : String.Empty).Append('\n');
-                if (!user)
-                {
-                    foreach (BlackBoxEventRef ev in r.Evidence.RelevantEvents.Take(Math.Min(listLimit, 20))) sb.Append("- ").Append(Utc(ev.CreatedUtc)).Append(' ').Append(ev.EventType).Append(ev.Message != null ? ": " + Inline(Clip(ev.Message, 200)) : String.Empty).Append('\n');
-                }
-                if (!user) sb.Append("\nRead an object with MCP `read_blackbox_object {\"entryId\": \"").Append(entry.Id).Append("\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/").Append(entry.Id).Append("/objects/<name>`.\n");
+                foreach (BlackBoxEventRef ev in r.Evidence.RelevantEvents.Take(Math.Min(listLimit, 20))) sb.Append("- ").Append(Utc(ev.CreatedUtc)).Append(' ').Append(ev.EventType).Append(ev.Message != null ? ": " + Inline(Clip(ev.Message, 200)) : String.Empty).Append('\n');
+                sb.Append("\nRead an object with MCP `read_blackbox_object {\"entryId\": \"").Append(entry.Id).Append("\", \"name\": \"<name>\"}` (64 KB chunks) or REST `GET /api/v1/blackbox/").Append(entry.Id).Append("/objects/<name>`.\n");
                 sb.Append('\n');
             }
 
@@ -499,7 +456,7 @@ namespace Armada.Core.BlackBox
             if (!dropped.Contains("Related") && r.Related != null && (r.Related.SimilarEntries.Count > 0 || r.Related.OccurrencesLast30Days > 0))
             {
                 sb.Append("## Related failures\n\n");
-                if (!user && r.Related.Fingerprint != null) Line(sb, "Fingerprint", r.Related.Fingerprint);
+                if (r.Related.Fingerprint != null) Line(sb, "Fingerprint", r.Related.Fingerprint);
                 Line(sb, "Same failure in the last 30 days", r.Related.OccurrencesLast30Days.ToString(CultureInfo.InvariantCulture));
                 foreach (BlackBoxSimilarEntry se in r.Related.SimilarEntries.Take(listLimit))
                     sb.Append("- ").Append(se.EntryId).Append(se.MissionTitle != null ? " (" + Inline(se.MissionTitle) + ")" : String.Empty).Append(", ").Append(Utc(se.CreatedUtc)).Append(", ").Append(se.Resolution).Append(se.ResolutionNote != null ? ": " + Inline(Clip(se.ResolutionNote, 200)) : String.Empty).Append('\n');
@@ -518,34 +475,12 @@ namespace Armada.Core.BlackBox
             }
 
             sb = Begin(sections, "Answer");
-            if (agent)
-            {
-                sb.Append("## Your answer\n\n");
-                sb.Append("State the triage verdict (UserConfig, MissionBrief, Transient, ArmadaDefect or External) and the evidence for it, the root cause, the fix, and how to verify it. ");
-                sb.Append("If you change the Armada installation, use the recovery paths above and annotate the entry with `annotate_blackbox` when done.\n");
-            }
+            sb.Append("## Your answer\n\n");
+            sb.Append("State the triage verdict (UserConfig, MissionBrief, Transient, ArmadaDefect or External) and the evidence for it, the root cause, the fix, and how to verify it. ");
+            sb.Append("If you change the Armada installation, use the recovery paths above and annotate the entry with `annotate_blackbox` when done.\n");
 
-            // Maintainer: the code site, triage, rule ids, fingerprint and occurrences come first.
-            sb = Begin(sections, "CodeSite");
-            if (maintainer)
-            {
-                sb.Append("## Code site and triage\n\n");
-                Line(sb, "Site", site.SourceFile == null ? "unknown (no caller site recorded)" : site.SourceFile + (site.SourceLine.HasValue ? ":" + site.SourceLine.Value.ToString(CultureInfo.InvariantCulture) : String.Empty) + (site.Method != null ? " in " + (site.Component != null ? site.Component + "." : String.Empty) + site.Method : String.Empty));
-                Line(sb, "Phase / step", site.Phase + " / " + site.Step + (kind.HasValue ? " (kind " + kind.Value + ")" : String.Empty));
-                Line(sb, "Armada build", (site.ArmadaVersion ?? entry.ArmadaVersion ?? "unknown") + ((site.ArmadaCommit ?? entry.ArmadaCommit) != null ? " (commit " + (site.ArmadaCommit ?? entry.ArmadaCommit) + ")" : String.Empty));
-                BlackBoxTriageVerdict? tv = r.Analysis?.Triage;
-                Line(sb, "Triage", triage + (tv != null ? " (confidence " + tv.Confidence + ")" : String.Empty) + (tv != null && tv.TiedWith.Count > 1 ? ", tie between " + String.Join(" and ", tv.TiedWith) : String.Empty));
-                if (tv != null && tv.Votes.Count > 0) Line(sb, "Votes", String.Join(", ", tv.Votes.Take(listLimit).Select(v => v.RuleId + "=" + v.Verdict + "x" + v.Weight.ToString(CultureInfo.InvariantCulture))));
-                if (r.Analysis != null && r.Analysis.Why.Count > 0) Line(sb, "Rules", String.Join(", ", r.Analysis.Why.Select(f => f.RuleId).Distinct(StringComparer.Ordinal)) + " (rules version " + Math.Max(r.RulesVersion, entry.RulesVersion).ToString(CultureInfo.InvariantCulture) + ")");
-                Line(sb, "Fingerprint", r.Related?.Fingerprint ?? entry.Fingerprint);
-                Line(sb, "Occurrences in the last 30 days", (r.Related?.OccurrencesLast30Days ?? 0).ToString(CultureInfo.InvariantCulture) + ((r.Related?.SimilarEntries.Count ?? 0) > 0 ? ", " + r.Related!.SimilarEntries.Count(e => e.Resolution != BlackBoxResolutionEnum.Open).ToString(CultureInfo.InvariantCulture) + " of the similar entries resolved" : String.Empty));
-                if (m != null && m.StackFrames.Count > 0) Line(sb, "Top Armada frame", m.StackFrames[0]);
-                sb.Append('\n');
-            }
-
-            string[] order = user ? _UserOrder : (maintainer ? _MaintainerOrder : _AgentOrder);
             StringBuilder assembled = new StringBuilder();
-            foreach (string name in order)
+            foreach (string name in _Order)
             {
                 if (sections.TryGetValue(name, out StringBuilder? part)) assembled.Append(part);
             }

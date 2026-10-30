@@ -624,7 +624,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_backlog_planning_session` | Authenticated | `sessionId*: string` |  |
 | `get_backlog_refinement_session` | Authenticated | `sessionId*: string` |  |
 | `get_battery_run` | Authenticated | `id*: string` |  |
-| `get_blackbox` | Authenticated | `audience: string`, `entryId: string`, `format: string`, `missionId: string`, `redactHosts: boolean`, `voyageId: string` |  |
+| `get_blackbox` | Authenticated | `entryId: string`, `format: string`, `missionId: string`, `redactHosts: boolean`, `voyageId: string` |  |
 | `get_blackbox_bundle` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `format: string`, `isCurrent: boolean`, `kind: string`, `max: integer`, `missionId: string`, `path: string`, `phase: string`, `pinned: boolean`, `redactHosts: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
 | `get_blackbox_fingerprint_trend` | Authenticated | `fingerprint*: string` |  |
 | `get_blackbox_recovery_stats` | Authenticated | `pageNumber: integer`, `pageSize: integer`, `ruleId: string`, `vesselId: string` |  |
@@ -920,7 +920,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada blackbox recovery-stats` |  | `--json`, `--page`, `--page-size`, `--profile`, `--rule`, `--server`, `--token`, `--verbose`, `--vessel` |
 | `armada blackbox resolve` | `<id>*` | `--json`, `--link`, `--note`, `--page`, `--page-size`, `--profile`, `--resolution`, `--server`, `--token`, `--verbose` |
 | `armada blackbox retention` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
-| `armada blackbox show` | `<id>*` | `--audience`, `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
+| `armada blackbox show` | `<id>*` | `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
 | `armada blackbox storage migrate` |  | `--batch-size`, `--delete-source`, `--from`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--to`, `--token`, `--verbose` |
 | `armada blackbox storage migration` | `<id>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox storage status` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
@@ -949,7 +949,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada mcp stdio` |  | `--profile`, `--server`, `--token` |
 | `armada mission cancel` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada mission create` | `<title>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--priority\|-p`, `--profile`, `--server`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
-| `armada mission failure` | `<id>*` | `--audience`, `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
+| `armada mission failure` | `<id>*` | `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
 | `armada mission lint-brief` |  | `--brief`, `--brief-file`, `--depends-on`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--title`, `--token`, `--verbose`, `--vessel`, `--voyage` |
 | `armada mission list` |  | `--captain\|-c`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
 | `armada mission restart` | `<mission>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--title\|-t`, `--token`, `--verbose` |
@@ -982,7 +982,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada voyage cancel` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada voyage cascade` | `<voyageId>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada voyage create` | `<title>*` | `--json`, `--mission\|-m`, `--page`, `--page-size`, `--playbook\|-p`, `--profile`, `--server`, `--token`, `--verbose`, `--vessel\|-v` |
-| `armada voyage failure` | `<id>*` | `--audience`, `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
+| `armada voyage failure` | `<id>*` | `--brief`, `--json`, `--page`, `--page-size`, `--profile`, `--redact-hosts`, `--server`, `--token`, `--verbose` |
 | `armada voyage list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose` |
 | `armada voyage retry` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada voyage show` | `<voyage>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |

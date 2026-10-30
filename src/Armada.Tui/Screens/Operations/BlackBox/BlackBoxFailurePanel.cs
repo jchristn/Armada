@@ -17,8 +17,8 @@ namespace Armada.Tui.Screens.Operations
     using TUIKit;
 
     /// <summary>
-    /// The Failure tab of the mission and voyage screens (and the Brief tab of a black box entry): the entry's user
-    /// audience brief with its status, triage, and recovery paths. While the panel has focus its keys run before the
+    /// The Failure tab of the mission and voyage screens (and the Brief tab of a black box entry): the entry's
+    /// FIX THIS brief with its status, triage, and recovery paths. While the panel has focus its keys run before the
     /// screen's and are listed in the status bar: <c>c</c> copies the FIX THIS brief (OSC 52), <c>x</c> exports it to a
     /// file, <c>r</c> runs a recovery path (dry run, confirm, data-loss acknowledgement), <c>a</c> asks Armada about the
     /// failure, <c>j</c> shows the entry as JSON, <c>s</c> resolves it, <c>p</c> pins or unpins it, <c>n</c> adds a note,
@@ -39,14 +39,9 @@ namespace Armada.Tui.Screens.Operations
         public BlackBoxEntry? Entry { get; private set; } = null;
 
         /// <summary>
-        /// The user audience brief shown in the panel, or null.
+        /// The FIX THIS brief shown in the panel, which <c>c</c> copies and <c>x</c> exports, or null.
         /// </summary>
-        public string? UserBrief { get; private set; } = null;
-
-        /// <summary>
-        /// The agent audience (FIX THIS) brief that <c>c</c> copies and <c>x</c> exports, or null.
-        /// </summary>
-        public string? AgentBrief { get; private set; } = null;
+        public string? Brief { get; private set; } = null;
 
         /// <summary>
         /// True while loading.
@@ -147,23 +142,16 @@ namespace Armada.Tui.Screens.Operations
                 BlackBoxEntry? entry = source == BlackBoxPanelSourceEnum.Mission ? await c.GetMissionBlackBoxAsync(id, true, t).ConfigureAwait(false)
                     : source == BlackBoxPanelSourceEnum.Voyage ? await c.GetVoyageBlackBoxAsync(id, true, t).ConfigureAwait(false)
                     : await c.GetBlackBoxAsync(id, true, t).ConfigureAwait(false);
-                string? user = null;
-                string? agent = null;
-                if (entry != null)
-                {
-                    user = await c.GetBlackBoxBriefAsync(entry.Id, BlackBoxAudienceEnum.User, false, t).ConfigureAwait(false);
-                    agent = await c.GetBlackBoxBriefAsync(entry.Id, BlackBoxAudienceEnum.Agent, false, t).ConfigureAwait(false);
-                }
-
-                return new BlackBoxPanelLoad(entry, user, agent);
+                string? brief = null;
+                if (entry != null) brief = await c.GetBlackBoxBriefAsync(entry.Id, false, t).ConfigureAwait(false);
+                return new BlackBoxPanelLoad(entry, brief);
             }, r =>
             {
                 if (generation != _Generation) return;
                 Loading = false;
                 Loaded = true;
                 Entry = r.Entry;
-                UserBrief = r.UserBrief;
-                AgentBrief = r.AgentBrief;
+                Brief = r.Brief;
                 NotFound = r.Entry == null;
                 LoadError = null;
                 Invalidate();
@@ -173,8 +161,7 @@ namespace Armada.Tui.Screens.Operations
                 Loading = false;
                 Loaded = true;
                 Entry = null;
-                UserBrief = null;
-                AgentBrief = null;
+                Brief = null;
                 NotFound = ex is ArmadaApiException api && api.StatusCode == 404;
                 LoadError = NotFound ? null : _Screen.Tr("The black box could not be loaded: {{message}}", LocalizationArgs.Of("message", ex.Message));
                 Invalidate();
@@ -245,12 +232,12 @@ namespace Armada.Tui.Screens.Operations
         }
 
         /// <summary>
-        /// Copy the FIX THIS (agent) brief to the clipboard (OSC 52).
+        /// Copy the FIX THIS brief to the clipboard (OSC 52).
         /// </summary>
         /// <returns>True when something was copied.</returns>
         public bool CopyBrief()
         {
-            string? text = AgentBrief ?? UserBrief;
+            string? text = Brief;
             if (String.IsNullOrEmpty(text))
             {
                 _Screen.Toast(NotificationSeverityEnum.Warning, _Screen.Tr("The brief is not loaded yet."));
@@ -266,7 +253,7 @@ namespace Armada.Tui.Screens.Operations
         public void ExportBrief()
         {
             if (Entry == null) return;
-            string? text = AgentBrief ?? UserBrief;
+            string? text = Brief;
             if (String.IsNullOrEmpty(text))
             {
                 _Screen.Toast(NotificationSeverityEnum.Warning, _Screen.Tr("The brief is not loaded yet."));
@@ -284,7 +271,7 @@ namespace Armada.Tui.Screens.Operations
         /// <returns>The full path, or null when the write failed (a toast says why).</returns>
         public string? ExportTo(string path)
         {
-            string? text = AgentBrief ?? UserBrief;
+            string? text = Brief;
             if (String.IsNullOrEmpty(text)) return null;
             return ExportTo(path, text!);
         }
@@ -625,8 +612,8 @@ namespace Armada.Tui.Screens.Operations
             }
 
             doc.Section("Brief");
-            if (String.IsNullOrEmpty(UserBrief)) doc.Note("The brief is not available.");
-            else doc.Markdown(UserBrief);
+            if (String.IsNullOrEmpty(Brief)) doc.Note("The brief is not available.");
+            else doc.Markdown(Brief);
             return doc;
         }
 

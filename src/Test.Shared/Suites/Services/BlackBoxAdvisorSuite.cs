@@ -18,7 +18,7 @@ namespace Test.Shared.Suites.Services
     /// BlackBoxRuleCatalog and BlackBoxAdvisor: a golden case per rule (finding, triage, recovery paths with stable ids and
     /// runnable actions, no unfilled placeholders), catalog coverage, triage ties, placeholders, the empty record,
     /// determinism, ranking, recommendations, the summary, pipeline registration and background re-analysis, and the brief
-    /// audiences.
+    /// rendered from the analysis.
     /// </summary>
     public sealed class BlackBoxAdvisorSuite : IArmadaTestSuite
     {
@@ -228,7 +228,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, await bb.Reanalyzer.RunOnceAsync().ConfigureAwait(false), "rules version 0 never re-analyzes");
             }));
 
-            cases.Add(Case("brief_audiences", "User leads with what to do and drops rule ids and source pointers; maintainer leads with the code site, triage, rules, fingerprint and occurrences", TestTags.Positive, () =>
+            cases.Add(Case("brief_from_analysis", "The FIX THIS brief carries the analysis in record order: triage, rule ids, the code site and stack frames, fingerprint and occurrences, recovery and the answer instruction", TestTags.Positive, () =>
             {
                 BlackBoxRecord record = DirtyCheckout();
                 record.Site!.SourceLine = 308;
@@ -238,27 +238,18 @@ namespace Test.Shared.Suites.Services
                 record.Analysis = BlackBoxAdvisor.Analyze(record, BlackBoxRuleCatalog.Default);
                 BlackBoxEntry entry = new BlackBoxEntry { Id = "bbx_t", MissionId = "msn_t", Phase = BlackBoxPhaseEnum.Landing, Step = BlackBoxStepEnum.DirtyCheckout, Fingerprint = "fp_golden", RulesVersion = 1 };
                 BlackBoxBriefRenderer renderer = new BlackBoxBriefRenderer();
-                string user = renderer.Render(entry, record, BlackBoxAudienceEnum.User);
-                AssertStartsWith("# What went wrong", user);
-                AssertTrue(user.IndexOf("## What you can do", StringComparison.Ordinal) > 0 && user.IndexOf("## What you can do", StringComparison.Ordinal) < user.IndexOf("## Why", StringComparison.Ordinal), "user leads with recovery");
-                AssertFalse(user.Contains("BBX-"), "no rule ids for the user");
-                AssertFalse(user.Contains("HandleMissionCompleteAsync"), "no source pointers or stack frames for the user");
-                AssertFalse(user.Contains("PUT /api/v1"), "no REST commands for the user");
-                AssertContains("retry_landing", user, "MCP command still shown");
-                string maintainer = renderer.Render(entry, record, BlackBoxAudienceEnum.Maintainer);
-                int codeSite = maintainer.IndexOf("## Code site and triage", StringComparison.Ordinal);
-                AssertTrue(codeSite > 0 && codeSite < maintainer.IndexOf("## Summary", StringComparison.Ordinal), "maintainer leads with the code site");
-                AssertTrue(maintainer.IndexOf("## What Armada could change", StringComparison.Ordinal) < maintainer.IndexOf("## Summary", StringComparison.Ordinal), "improvements before the summary");
-                AssertContains("src/Armada.Server/MissionLandingHandler.cs:308", maintainer, "code site");
-                AssertContains("Rules: BBX-LAND-001", maintainer, "rule ids");
-                AssertContains("Fingerprint: fp_golden", maintainer, "fingerprint");
-                AssertContains("Occurrences in the last 30 days: 4", maintainer, "occurrences");
-                AssertContains("Triage: UserConfig", maintainer, "triage");
-                string agent = renderer.Render(entry, record, BlackBoxAudienceEnum.Agent);
-                AssertStartsWith("# FIX THIS", agent);
-                AssertTrue(agent.IndexOf("## Summary", StringComparison.Ordinal) < agent.IndexOf("## Recovery", StringComparison.Ordinal), "agent keeps record order");
-                AssertContains("## Your answer", agent);
-                foreach (string brief in new[] { user, maintainer, agent }) AssertFalse(brief.Contains('—'), "no em-dashes");
+                string brief = renderer.Render(entry, record);
+                AssertStartsWith("# FIX THIS", brief);
+                AssertTrue(brief.IndexOf("## Summary", StringComparison.Ordinal) < brief.IndexOf("## Recovery", StringComparison.Ordinal), "record order");
+                AssertContains("- Triage: UserConfig", brief, "triage");
+                AssertContains("BBX-LAND-001", brief, "rule ids");
+                AssertContains("src/Armada.Server/MissionLandingHandler.cs:308", brief, "code site");
+                AssertContains("HandleMissionCompleteAsync", brief, "stack frames");
+                AssertContains("Fingerprint: fp_golden", brief, "fingerprint");
+                AssertContains("Same failure in the last 30 days: 4", brief, "occurrences");
+                AssertContains("retry_landing", brief, "MCP command");
+                AssertContains("## Your answer", brief);
+                AssertFalse(brief.Contains('—'), "no em-dashes");
                 return Task.CompletedTask;
             }));
 

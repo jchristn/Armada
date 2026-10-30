@@ -22,11 +22,6 @@ namespace Armada.Server.WebSocket
         public string? VoyageId { get; set; } = null;
 
         /// <summary>
-        /// blackbox.brief audience: agent (default), user or maintainer.
-        /// </summary>
-        public string? Audience { get; set; } = null;
-
-        /// <summary>
         /// blackbox.brief: strip absolute paths, host names and user names.
         /// </summary>
         public bool? RedactHosts { get; set; } = null;

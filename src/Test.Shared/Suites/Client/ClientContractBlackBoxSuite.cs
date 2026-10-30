@@ -45,7 +45,7 @@ namespace Test.Shared.Suites.Client
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(Case("reads", "Mission, voyage and entry reads, briefs by audience, sections, objects in ranges and the download", async (c, fx) =>
+            cases.Add(Case("reads", "Mission, voyage and entry reads, the brief, sections, objects in ranges and the download", async (c, fx) =>
             {
                 BlackBoxSeed seeded = await SeedAsync(fx).ConfigureAwait(false);
                 BlackBoxEntry mission = (await c.GetMissionBlackBoxAsync(seeded.MissionId))!;
@@ -55,13 +55,11 @@ namespace Test.Shared.Suites.Client
                 AssertEqual(seeded.VoyageEntryId, (await c.GetVoyageBlackBoxAsync(seeded.VoyageId))!.Id, "voyage entry");
                 AssertEqual(seeded.EntryId, (await c.GetBlackBoxAsync(seeded.EntryId))!.Id, "entry");
 
-                string agent = (await c.GetBlackBoxBriefAsync(seeded.EntryId))!;
-                string user = (await c.GetBlackBoxBriefAsync(seeded.EntryId, BlackBoxAudienceEnum.User))!;
-                string maintainer = (await c.GetBlackBoxBriefAsync(seeded.EntryId, BlackBoxAudienceEnum.Maintainer, true))!;
-                AssertTrue(agent.Length > 0 && user.Length > 0 && maintainer.Length > 0, "briefs");
-                AssertNotEqual(agent, user, "audience sent");
-                AssertEqual(agent, (await c.GetMissionBlackBoxBriefAsync(seeded.MissionId))!, "mission brief");
-                AssertTrue((await c.GetVoyageBlackBoxBriefAsync(seeded.VoyageId, BlackBoxAudienceEnum.User))!.Length > 0, "voyage brief");
+                string brief = (await c.GetBlackBoxBriefAsync(seeded.EntryId))!;
+                string redacted = (await c.GetBlackBoxBriefAsync(seeded.EntryId, true))!;
+                AssertTrue(brief.StartsWith("# FIX THIS", StringComparison.Ordinal) && redacted.StartsWith("# FIX THIS", StringComparison.Ordinal), "briefs");
+                AssertEqual(brief, (await c.GetMissionBlackBoxBriefAsync(seeded.MissionId))!, "mission brief");
+                AssertTrue((await c.GetVoyageBlackBoxBriefAsync(seeded.VoyageId, true))!.Length > 0, "voyage brief");
 
                 BlackBoxSectionResult section = (await c.GetBlackBoxSectionAsync(seeded.EntryId, BlackBoxSectionEnum.Status))!;
                 AssertNotNull(section.Record.Status, "section");
