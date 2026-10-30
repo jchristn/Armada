@@ -1949,12 +1949,121 @@ namespace Armada.Core.Services
                 evt.MissionId = missionId;
                 evt.VesselId = vesselId;
                 evt.VoyageId = voyageId;
+                await ApplyEventOwnerAsync(evt, entityType, entityId, captainId, missionId, vesselId, voyageId, token).ConfigureAwait(false);
                 await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 _Logging.Warn(_Header + "error emitting event " + eventType + ": " + ex.ToString());
             }
+        }
+
+        private async Task ApplyEventOwnerAsync(ArmadaEvent evt, string? entityType, string? entityId, string? captainId, string? missionId, string? vesselId, string? voyageId, CancellationToken token)
+        {
+            if (!String.IsNullOrEmpty(evt.TenantId) && !String.IsNullOrEmpty(evt.UserId)) return;
+
+            EventOwner owner = await ResolveEventOwnerAsync(entityType, entityId, captainId, missionId, vesselId, voyageId, token).ConfigureAwait(false);
+            if (owner.LookupFailed || String.IsNullOrEmpty(owner.TenantId)) return;
+
+            evt.TenantId = owner.TenantId;
+            evt.UserId = owner.UserId;
+        }
+
+        /// <summary>
+        /// Copy tenant and user from the first referenced record that has a tenant.
+        /// Order is mission, voyage, vessel, captain, then the named fleet, dock, signal,
+        /// merge entry, or planning session. A lookup failure is logged and leaves the owner empty.
+        /// </summary>
+        private async Task<EventOwner> ResolveEventOwnerAsync(string? entityType, string? entityId, string? captainId, string? missionId, string? vesselId, string? voyageId, CancellationToken token)
+        {
+            EventOwner owner = new EventOwner();
+            try
+            {
+                if (!String.IsNullOrEmpty(missionId))
+                {
+                    Mission? mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+                    if (TakeOwner(owner, mission?.TenantId, mission?.UserId)) return owner;
+                }
+
+                if (!String.IsNullOrEmpty(voyageId))
+                {
+                    Voyage? voyage = await _Database.Voyages.ReadAsync(voyageId, token).ConfigureAwait(false);
+                    if (TakeOwner(owner, voyage?.TenantId, voyage?.UserId)) return owner;
+                }
+
+                if (!String.IsNullOrEmpty(vesselId))
+                {
+                    Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
+                    if (TakeOwner(owner, vessel?.TenantId, vessel?.UserId)) return owner;
+                }
+
+                if (!String.IsNullOrEmpty(captainId))
+                {
+                    Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+                    if (TakeOwner(owner, captain?.TenantId, captain?.UserId)) return owner;
+                }
+
+                if (!String.IsNullOrEmpty(entityId))
+                {
+                    string type = (entityType ?? String.Empty).ToLowerInvariant();
+                    if (type == "fleet")
+                    {
+                        Fleet? fleet = await _Database.Fleets.ReadAsync(entityId, token).ConfigureAwait(false);
+                        TakeOwner(owner, fleet?.TenantId, fleet?.UserId);
+                        return owner;
+                    }
+
+                    if (type == "dock")
+                    {
+                        Dock? dock = await _Database.Docks.ReadAsync(entityId, token).ConfigureAwait(false);
+                        TakeOwner(owner, dock?.TenantId, dock?.UserId);
+                        return owner;
+                    }
+
+                    if (type == "signal")
+                    {
+                        Signal? signal = await _Database.Signals.ReadAsync(entityId, token).ConfigureAwait(false);
+                        TakeOwner(owner, signal?.TenantId, signal?.UserId);
+                        return owner;
+                    }
+
+                    if (type == "merge-entry" || type == "merge_entry" || type == "mergeentry")
+                    {
+                        MergeEntry? entry = await _Database.MergeEntries.ReadAsync(entityId, token).ConfigureAwait(false);
+                        TakeOwner(owner, entry?.TenantId, entry?.UserId);
+                        return owner;
+                    }
+
+                    if (type == "planning-session")
+                    {
+                        PlanningSession? session = await _Database.PlanningSessions.ReadAsync(entityId, token).ConfigureAwait(false);
+                        TakeOwner(owner, session?.TenantId, session?.UserId);
+                        return owner;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                owner.LookupFailed = true;
+                _Logging.Warn(_Header + "event owner lookup failed: " + ex.Message);
+            }
+
+            return owner;
+        }
+
+        private static bool TakeOwner(EventOwner owner, string? tenantId, string? userId)
+        {
+            if (String.IsNullOrEmpty(tenantId)) return false;
+            owner.TenantId = tenantId;
+            owner.UserId = userId;
+            return true;
+        }
+
+        private sealed class EventOwner
+        {
+            public string? TenantId { get; set; } = null;
+            public string? UserId { get; set; } = null;
+            public bool LookupFailed { get; set; } = false;
         }
 
         /// <summary>

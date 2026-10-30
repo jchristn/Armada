@@ -7,7 +7,9 @@ namespace Test.Shared.Suites.Services
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Database;
+    using Armada.Core.Database.Interfaces;
     using Armada.Core.Database.Sqlite;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -25,7 +27,9 @@ namespace Test.Shared.Suites.Services
     /// <see cref="GitService.GetConflictedFilesAsync"/> utility and its use by
     /// <see cref="LandingService.RetryLandingAsync"/> to record the conflicting file list on the
     /// mission when a retry fails. Positive cases assert conflict detection and capture; negative cases
-    /// assert clean-tree emptiness and missing-mission handling.
+    /// assert clean-tree emptiness and missing-mission handling. Retry-event cases assert that
+    /// <c>mission.landing_retry</c> is stored in the mission owner's scope, and that a cancelled write
+    /// of that event stops the retry.
     /// </summary>
     public sealed class LandingConflictSuite : IArmadaTestSuite
     {
@@ -313,6 +317,154 @@ namespace Test.Shared.Suites.Services
 
                     Mission? reread = await db.Missions.ReadAsync(mission.Id);
                     AssertEqual(MissionStatusEnum.Review, reread!.Status);
+                }
+            }));
+
+
+            cases.Add(CaseAsync("retry_landing_event_visible_to_owner_only", "RetryLanding event is visible only to the mission owner", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    string repoPath = TestTemp.NewDirectory("landing");
+                    try
+                    {
+                        DatabaseDriver db = testDb.Driver;
+                        await EnsureUserAsync(db, Constants.DefaultTenantId, Constants.DefaultUserId);
+                        await EnsureUserAsync(db, Constants.DefaultTenantId, "usr_retry_peer");
+                        await EnsureUserAsync(db, "ten_retry_other", "usr_retry_other");
+
+                        Mission mission = await CreateRetryMissionAsync(db, repoPath, Constants.DefaultTenantId, Constants.DefaultUserId);
+                        LandingService landing = CreateLanding(db, new StubGitService());
+                        await landing.RetryLandingAsync(mission.Id);
+
+                        List<ArmadaEvent> owned = await db.Events.EnumerateAsync(Constants.DefaultTenantId, Constants.DefaultUserId);
+                        ArmadaEvent? retryEvent = FindRetryEvent(owned, mission.Id);
+                        AssertNotNull(retryEvent, "the owner's scoped list does not contain the landing retry event");
+                        string eventId = retryEvent!.Id;
+
+                        List<ArmadaEvent> peer = await db.Events.EnumerateAsync(Constants.DefaultTenantId, "usr_retry_peer");
+                        AssertFalse(ContainsEventId(peer, eventId), "another user in the same tenant sees the landing retry event");
+
+                        List<ArmadaEvent> otherTenant = await db.Events.EnumerateAsync("ten_retry_other", "usr_retry_other");
+                        AssertFalse(ContainsEventId(otherTenant, eventId), "another tenant sees the landing retry event");
+                    }
+                    finally
+                    {
+                        TestTemp.TryDelete(repoPath);
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("retry_landing_event_keeps_explicit_owner", "An event stored with a tenant and user keeps that owner", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    await EnsureUserAsync(db, Constants.DefaultTenantId, Constants.DefaultUserId);
+                    await EnsureUserAsync(db, Constants.DefaultTenantId, "usr_retry_peer");
+
+                    ArmadaEvent evt = new ArmadaEvent("mission.note", "already scoped");
+                    evt.TenantId = Constants.DefaultTenantId;
+                    evt.UserId = Constants.DefaultUserId;
+                    await db.Events.CreateAsync(evt);
+
+                    List<ArmadaEvent> owned = await db.Events.EnumerateAsync(Constants.DefaultTenantId, Constants.DefaultUserId);
+                    AssertTrue(ContainsEventId(owned, evt.Id), "an event stored with a tenant and user stays in that user's list");
+
+                    List<ArmadaEvent> peer = await db.Events.EnumerateAsync(Constants.DefaultTenantId, "usr_retry_peer");
+                    AssertFalse(ContainsEventId(peer, evt.Id), "the same event stays out of another user's list");
+                }
+            }));
+
+            cases.Add(CaseAsync("retry_landing_event_without_tenant_stays_unscoped", "A retry event for a mission with no tenant stays out of scoped lists", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    string repoPath = TestTemp.NewDirectory("landing");
+                    try
+                    {
+                        DatabaseDriver db = testDb.Driver;
+                        Mission mission = await CreateRetryMissionAsync(db, repoPath, null, null);
+                        LandingService landing = CreateLanding(db, new StubGitService());
+                        await landing.RetryLandingAsync(mission.Id);
+
+                        List<ArmadaEvent> stored = await db.Events.EnumerateByTypeAsync("mission.landing_retry");
+                        ArmadaEvent? written = FindRetryEvent(stored, mission.Id);
+                        AssertNotNull(written, "the retry event is still written when the mission has no tenant");
+
+                        List<ArmadaEvent> scoped = await db.Events.EnumerateAsync(Constants.DefaultTenantId, Constants.DefaultUserId);
+                        AssertFalse(ContainsEventId(scoped, written!.Id), "a retry event with no tenant stays out of the scoped list");
+                    }
+                    finally
+                    {
+                        TestTemp.TryDelete(repoPath);
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("retry_landing_event_write_cancel_stops_retry", "A cancelled landing-retry event write stops the retry", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    string repoPath = TestTemp.NewDirectory("landing");
+                    try
+                    {
+                        using (CancellationTokenSource cts = new CancellationTokenSource())
+                        {
+                            ThrowingEventMethods events = new ThrowingEventMethods(() =>
+                            {
+                                cts.Cancel();
+                                return new OperationCanceledException(cts.Token);
+                            });
+                            EventStandInDriver driver = new EventStandInDriver(testDb.Driver, events);
+                            LandingService landing = CreateLanding(driver, new StubGitService());
+                            bool continued = false;
+                            landing.OnPerformLanding = (m, d) =>
+                            {
+                                continued = true;
+                                return Task.CompletedTask;
+                            };
+
+                            Mission mission = await CreateRetryMissionAsync(testDb.Driver, repoPath, null, null);
+                            await AssertThrowsAsync<OperationCanceledException>(
+                                () => landing.RetryLandingAsync(mission.Id, null, cts.Token),
+                                "a cancelled landing-retry event write must stop the retry");
+                            AssertFalse(continued, "a cancelled landing-retry event write must not continue the retry");
+                        }
+                    }
+                    finally
+                    {
+                        TestTemp.TryDelete(repoPath);
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("retry_landing_event_write_error_continues_retry", "An event write error does not stop the landing retry", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    string repoPath = TestTemp.NewDirectory("landing");
+                    try
+                    {
+                        ThrowingEventMethods events = new ThrowingEventMethods(() => new InvalidOperationException("event write failed"));
+                        EventStandInDriver driver = new EventStandInDriver(testDb.Driver, events);
+                        LandingService landing = CreateLanding(driver, new StubGitService());
+                        bool continued = false;
+                        landing.OnPerformLanding = (m, d) =>
+                        {
+                            continued = true;
+                            return Task.CompletedTask;
+                        };
+
+                        Mission mission = await CreateRetryMissionAsync(testDb.Driver, repoPath, null, null);
+                        bool ok = await landing.RetryLandingAsync(mission.Id);
+                        AssertTrue(continued, "an event write error must not stop the retry");
+                        AssertFalse(ok, "the retry still reports that landing did not complete");
+                    }
+                    finally
+                    {
+                        TestTemp.TryDelete(repoPath);
+                    }
                 }
             }));
 
@@ -653,6 +805,136 @@ namespace Test.Shared.Suites.Services
             settings.DocksDirectory = Path.Combine(Path.GetTempPath(), "armada_test_docks_" + Guid.NewGuid().ToString("N"));
             settings.ReposDirectory = Path.Combine(Path.GetTempPath(), "armada_test_repos_" + Guid.NewGuid().ToString("N"));
             return settings;
+        }
+
+
+        private static LandingService CreateLanding(DatabaseDriver db, StubGitService git)
+        {
+            git.ExistingBranches.Add("feature/retry");
+            return new LandingService(CreateLogging(), db, CreateSettings(), git);
+        }
+
+        private static async Task<Mission> CreateRetryMissionAsync(DatabaseDriver db, string repoPath, string? tenantId, string? userId)
+        {
+            Vessel vessel = new Vessel("Retry Vessel", "https://github.com/test/retry");
+            vessel.LocalPath = repoPath;
+            vessel.TenantId = tenantId;
+            vessel.UserId = userId;
+            await db.Vessels.CreateAsync(vessel);
+
+            Mission mission = new Mission("Retry landing")
+            {
+                Status = MissionStatusEnum.LandingFailed,
+                VesselId = vessel.Id,
+                BranchName = "feature/retry",
+                TenantId = tenantId,
+                UserId = userId
+            };
+            await db.Missions.CreateAsync(mission);
+            return mission;
+        }
+
+        private static async Task EnsureUserAsync(DatabaseDriver db, string tenantId, string userId)
+        {
+            TenantMetadata? tenant = await db.Tenants.ReadAsync(tenantId);
+            if (tenant == null)
+            {
+                TenantMetadata createdTenant = new TenantMetadata();
+                createdTenant.Id = tenantId;
+                createdTenant.Name = tenantId;
+                await db.Tenants.CreateAsync(createdTenant);
+            }
+
+            UserMaster? user = await db.Users.ReadByIdAsync(userId);
+            if (user == null)
+            {
+                UserMaster createdUser = new UserMaster();
+                createdUser.Id = userId;
+                createdUser.TenantId = tenantId;
+                createdUser.Email = userId + "@armada.test";
+                createdUser.PasswordSha256 = UserMaster.ComputePasswordHash("password");
+                await db.Users.CreateAsync(createdUser);
+            }
+        }
+
+        private static ArmadaEvent? FindRetryEvent(List<ArmadaEvent> events, string missionId)
+        {
+            foreach (ArmadaEvent evt in events)
+            {
+                if (evt.EventType == "mission.landing_retry" && evt.MissionId == missionId) return evt;
+            }
+
+            return null;
+        }
+
+        private static bool ContainsEventId(List<ArmadaEvent> events, string eventId)
+        {
+            foreach (ArmadaEvent evt in events)
+            {
+                if (evt.Id == eventId) return true;
+            }
+
+            return false;
+        }
+
+        private sealed class ThrowingEventMethods : IEventMethods
+        {
+            private readonly Func<Exception> _CreateFault;
+
+            public ThrowingEventMethods(Func<Exception> createFault)
+            {
+                _CreateFault = createFault ?? throw new ArgumentNullException(nameof(createFault));
+            }
+
+            public Task<ArmadaEvent> CreateAsync(ArmadaEvent armadaEvent, CancellationToken token = default)
+            {
+                throw _CreateFault();
+            }
+
+            public Task<ArmadaEvent?> ReadAsync(string id, CancellationToken token = default) => throw new NotImplementedException();
+            public Task DeleteAsync(string id, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateRecentAsync(int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByTypeAsync(string eventType, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByEntityAsync(string entityType, string entityId, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByCaptainAsync(string captainId, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByMissionAsync(string missionId, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByVesselAsync(string vesselId, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByVoyageAsync(string voyageId, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<EnumerationResult<ArmadaEvent>> EnumerateAsync(EnumerationQuery query, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<ArmadaEvent?> ReadAsync(string tenantId, string id, CancellationToken token = default) => throw new NotImplementedException();
+            public Task DeleteAsync(string tenantId, string id, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateAsync(string tenantId, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<EnumerationResult<ArmadaEvent>> EnumerateAsync(string tenantId, EnumerationQuery query, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateRecentAsync(string tenantId, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByTypeAsync(string tenantId, string eventType, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByEntityAsync(string tenantId, string entityType, string entityId, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByCaptainAsync(string tenantId, string captainId, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByMissionAsync(string tenantId, string missionId, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByVesselAsync(string tenantId, string vesselId, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateByVoyageAsync(string tenantId, string voyageId, int limit = 50, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<ArmadaEvent?> ReadAsync(string tenantId, string userId, string id, CancellationToken token = default) => throw new NotImplementedException();
+            public Task DeleteAsync(string tenantId, string userId, string id, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<List<ArmadaEvent>> EnumerateAsync(string tenantId, string userId, CancellationToken token = default) => throw new NotImplementedException();
+            public Task<EnumerationResult<ArmadaEvent>> EnumerateAsync(string tenantId, string userId, EnumerationQuery query, CancellationToken token = default) => throw new NotImplementedException();
+        }
+
+        private sealed class EventStandInDriver : DatabaseDriver
+        {
+            public EventStandInDriver(DatabaseDriver inner, IEventMethods events)
+            {
+                if (inner == null) throw new ArgumentNullException(nameof(inner));
+                Missions = inner.Missions;
+                Vessels = inner.Vessels;
+                Docks = inner.Docks;
+                Events = events ?? throw new ArgumentNullException(nameof(events));
+            }
+
+            public override Task InitializeAsync(CancellationToken token = default) => Task.CompletedTask;
+            public override Task<int> GetSchemaVersionAsync(CancellationToken token = default) => Task.FromResult(0);
+            public override int GetLatestSchemaVersion() => 0;
+            public override void Dispose() { }
+            internal override IReadOnlyList<SchemaMigration> GetMigrationsForVerification() => Array.Empty<SchemaMigration>();
+            internal override Task ReplayMigrationsAsync(CancellationToken token = default) => Task.CompletedTask;
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

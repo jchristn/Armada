@@ -144,6 +144,8 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
+- A landing retry stores `mission.landing_retry` with the mission's tenant and user, so the owner's scoped event list includes that event and another tenant or user does not. A cancelled write of that event stops the retry. Any other failure of that write is logged and the retry continues.
+- When the admiral or server event helper writes an event that is missing a tenant or a user, it copies both fields from the first referenced mission, voyage, vessel, captain, fleet, dock, signal, merge entry, or planning session that has a tenant. An event that already has both fields is unchanged. A failed lookup is logged and the event is still written. An event with no owner record stays unscoped.
 
 ### Landing failure prevention
 
