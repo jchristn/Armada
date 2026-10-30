@@ -2,10 +2,12 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Reflection;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
     using Armada.Core.Database.Sqlite;
+    using Armada.Core.Database.Postgresql.Implementations;
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Test.Shared.Infrastructure;
@@ -108,6 +110,20 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("removes_captain_events_when_planning_sessions_are_unsupported", "RemoveDependentsForCaptainAsync continues when the provider does not support planning sessions", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    DatabaseDriver db = new UnsupportedPlanningSessionDatabaseDriver(testDb.Driver);
+                    await CreateEventAsync(db, "captain.assigned", captainId: "cpt_target").ConfigureAwait(false);
+
+                    int removed = await CascadeCleanup.RemoveDependentsForCaptainAsync(db, "cpt_target").ConfigureAwait(false);
+
+                    AssertEqual(1, removed);
+                    AssertEqual(0, (await testDb.Driver.Events.EnumerateByCaptainAsync("cpt_target", 500).ConfigureAwait(false)).Count);
+                }
+            }));
+
             cases.Add(CaseAsync("empty_parent_id_is_a_safe_no_op", "Cleanup with an empty parent id removes nothing", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
@@ -173,6 +189,38 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+        private sealed class UnsupportedPlanningSessionDatabaseDriver : DatabaseDriver
+        {
+            private readonly DatabaseDriver _Inner;
+
+            public UnsupportedPlanningSessionDatabaseDriver(DatabaseDriver inner)
+            {
+                _Inner = inner;
+                foreach (PropertyInfo property in typeof(DatabaseDriver).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    MethodInfo? setter = property.GetSetMethod(true);
+                    if (setter == null || property.GetIndexParameters().Length > 0) continue;
+                    setter.Invoke(this, new object?[] { property.GetValue(inner) });
+                }
+
+                PlanningSessions = new PlanningSessionMethods(null!, null!, null!);
+            }
+
+            public override Task InitializeAsync(CancellationToken token = default) => _Inner.InitializeAsync(token);
+
+            public override Task<int> GetSchemaVersionAsync(CancellationToken token = default) => _Inner.GetSchemaVersionAsync(token);
+
+            public override int GetLatestSchemaVersion() => _Inner.GetLatestSchemaVersion();
+
+            public override void Dispose()
+            {
+            }
+
+            internal override IReadOnlyList<SchemaMigration> GetMigrationsForVerification() => _Inner.GetMigrationsForVerification();
+
+            internal override Task ReplayMigrationsAsync(CancellationToken token = default) => _Inner.ReplayMigrationsAsync(token);
         }
 
         #endregion
