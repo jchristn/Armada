@@ -540,7 +540,26 @@ namespace Armada.Core.Services
             return result;
         }
 
-        private async Task PersistProbeAsync(ModelEndpoint endpoint, ModelEndpointProbeResult result, CancellationToken token)
+        private async Task PersistProbeAsync(ModelEndpoint snapshot, ModelEndpointProbeResult result, CancellationToken token)
+        {
+            bool settled = await TryWriteProbeHealthAsync(snapshot, result, token).ConfigureAwait(false);
+            if (settled) return;
+            await TryWriteProbeHealthAsync(snapshot, result, token).ConfigureAwait(false);
+        }
+
+        private async Task<bool> TryWriteProbeHealthAsync(ModelEndpoint snapshot, ModelEndpointProbeResult result, CancellationToken token)
+        {
+            ModelEndpoint? current = await _Database.ModelEndpoints.ReadAsync(snapshot.Id, token).ConfigureAwait(false);
+            if (current == null) return true;
+            if (ProbeConfigurationChanged(snapshot, current)) return true;
+
+            ApplyProbeResult(current, result);
+            DateTime expected = current.LastUpdateUtc;
+            current.LastUpdateUtc = DateTime.UtcNow;
+            return await _Database.ModelEndpoints.UpdateHealthAsync(current, expected, token).ConfigureAwait(false);
+        }
+
+        private static void ApplyProbeResult(ModelEndpoint endpoint, ModelEndpointProbeResult result)
         {
             endpoint.HealthStatus = result.Success ? EndpointHealthStatusEnum.Healthy : EndpointHealthStatusEnum.Unhealthy;
             endpoint.LastHealthCheckUtc = result.TimestampUtc;
@@ -555,9 +574,79 @@ namespace Armada.Core.Services
             });
             if (endpoint.HealthHistory.Count > _MaxHistoryRecords)
                 endpoint.HealthHistory.RemoveRange(0, endpoint.HealthHistory.Count - _MaxHistoryRecords);
+        }
 
-            endpoint.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.ModelEndpoints.UpdateAsync(endpoint, token).ConfigureAwait(false);
+        private static bool ProbeConfigurationChanged(ModelEndpoint snapshot, ModelEndpoint current)
+        {
+            if (!SameText(snapshot.TenantId, current.TenantId)) return true;
+            if (!SameText(snapshot.UserId, current.UserId)) return true;
+            if (snapshot.Scope != current.Scope) return true;
+            if (!SameText(snapshot.Name, current.Name)) return true;
+            if (snapshot.Kind != current.Kind) return true;
+            if (snapshot.Provider != current.Provider) return true;
+            if (!SameText(snapshot.BaseUrl, current.BaseUrl)) return true;
+            if (!SameText(snapshot.ApiKey, current.ApiKey)) return true;
+            if (!SameText(snapshot.Model, current.Model)) return true;
+            if (!SameText(snapshot.Region, current.Region)) return true;
+            if (!SameText(snapshot.Project, current.Project)) return true;
+            if (!SameText(snapshot.ApiVersion, current.ApiVersion)) return true;
+            if (!SameText(snapshot.AccessKeyId, current.AccessKeyId)) return true;
+            if (snapshot.Dimensionality != current.Dimensionality) return true;
+            if (snapshot.TimeoutMs != current.TimeoutMs) return true;
+            if (snapshot.Enabled != current.Enabled) return true;
+            if (snapshot.AuthType != current.AuthType) return true;
+            if (!SameText(snapshot.AuthUsername, current.AuthUsername)) return true;
+            if (!SameText(snapshot.AuthHeaderName, current.AuthHeaderName)) return true;
+            if (!SameText(snapshot.AuthQueryParameter, current.AuthQueryParameter)) return true;
+            if (!SameHeaders(snapshot.Headers, current.Headers)) return true;
+            return !SameInferenceOptions(snapshot.InferenceOptions, current.InferenceOptions);
+        }
+
+        private static bool SameText(string? left, string? right)
+        {
+            return String.Equals(left, right, StringComparison.Ordinal);
+        }
+
+        private static bool SameHeaders(List<ModelEndpointHeader> left, List<ModelEndpointHeader> right)
+        {
+            if (left.Count != right.Count) return false;
+            for (int i = 0; i < left.Count; i++)
+            {
+                if (!SameText(left[i].Name, right[i].Name)) return false;
+                if (!SameText(left[i].Value, right[i].Value)) return false;
+            }
+
+            return true;
+        }
+
+        private static bool SameInferenceOptions(InferenceOptions left, InferenceOptions right)
+        {
+            if (left.ToolsEnabled != right.ToolsEnabled) return false;
+            if (left.ReadOnlyTools != right.ReadOnlyTools) return false;
+            if (left.McpToolsEnabled != right.McpToolsEnabled) return false;
+            if (left.MaxIterations != right.MaxIterations) return false;
+            if (left.MaxTokens != right.MaxTokens) return false;
+            if (left.Temperature != right.Temperature) return false;
+            if (left.TopP != right.TopP) return false;
+            if (left.RequireHarbor != right.RequireHarbor) return false;
+            if (left.MaxConcurrentMissions != right.MaxConcurrentMissions) return false;
+            if (left.ContextLength != right.ContextLength) return false;
+            if (left.Streaming != right.Streaming) return false;
+            if (left.FirstResponseTimeoutMs != right.FirstResponseTimeoutMs) return false;
+            return SameNames(left.AllowedTools, right.AllowedTools);
+        }
+
+        private static bool SameNames(List<string>? left, List<string>? right)
+        {
+            if (left == null && right == null) return true;
+            if (left == null || right == null) return false;
+            if (left.Count != right.Count) return false;
+            for (int i = 0; i < left.Count; i++)
+            {
+                if (!SameText(left[i], right[i])) return false;
+            }
+
+            return true;
         }
 
         #endregion
