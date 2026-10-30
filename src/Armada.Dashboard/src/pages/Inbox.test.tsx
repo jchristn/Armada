@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import Inbox from './Inbox';
-import { decideCliPermissionRequest, getInbox, getMissionBlackBoxBrief, retryMissionLanding } from '../api/client';
+import { decideCliPermissionRequest, getInbox, getMissionBlackBox, getMissionBlackBoxBrief, retryMissionLanding } from '../api/client';
 import type { CliPermissionRequest, InboxItem, WebSocketMessage } from '../types/models';
+import type { BlackBoxEntry } from '../types/blackbox';
 
-vi.mock('../api/client', () => ({ getInbox: vi.fn(), decideCliPermissionRequest: vi.fn(), retryMissionLanding: vi.fn(), getMissionBlackBoxBrief: vi.fn(), apiErrorMessage: (_e: unknown, f: string) => f }));
+vi.mock('../api/client', () => ({ getInbox: vi.fn(), decideCliPermissionRequest: vi.fn(), retryMissionLanding: vi.fn(), getMissionBlackBoxBrief: vi.fn(), getMissionBlackBox: vi.fn(), apiErrorMessage: (_e: unknown, f: string) => f }));
 const handlers = new Set<(msg: WebSocketMessage) => void>();
 vi.mock('../context/WebSocketContext', () => ({
   useWebSocket: () => ({
@@ -212,6 +213,7 @@ describe('Needs You failure rows: black box actions', () => {
     fireEvent.click(within(interventions).getByRole('button', { name: 'Copy Markdown' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('# FIX THIS'));
     expect(getMissionBlackBoxBrief).toHaveBeenCalledWith('msn_1');
+    expect(pushToast).toHaveBeenCalledWith('success', 'Black box Markdown copied. Paste it into your coding agent.');
     // The row itself was not opened.
     expect(screen.getByTestId('location').textContent).toBe('/inbox');
   });
@@ -235,5 +237,60 @@ describe('Needs You failure rows: black box actions', () => {
     renderInbox();
     const approvals = await screen.findByRole('region', { name: 'Waiting for your approval' });
     expect(within(approvals).queryByRole('button', { name: 'Copy Markdown' })).toBeNull();
+    expect(within(approvals).queryByRole('button', { name: 'Copy JSON' })).toBeNull();
+  });
+
+  it('shows Copy JSON right after Copy Markdown on failed and landing-failed rows only', async () => {
+    vi.mocked(getInbox).mockResolvedValue([
+      { ...item('failed', 'Failed: Append line', '/missions/msn_1', 'Critical'), entityId: 'msn_1' },
+      { ...item('landing_failed', 'Landing failed: Other', '/missions/msn_3', 'Critical'), entityId: 'msn_3' },
+      item('review', 'Review: Docs', '/missions/msn_2'),
+    ]);
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    const jsonButtons = within(interventions).getAllByRole('button', { name: 'Copy JSON' });
+    expect(jsonButtons).toHaveLength(2);
+    for (const button of jsonButtons) {
+      expect(button).toHaveClass('inbox-copy-json');
+      expect(button).toHaveAttribute('title', 'Copy the entry and its versioned record as JSON.');
+      expect(button.previousElementSibling).toHaveClass('inbox-copy-fix-this');
+      expect(button.nextElementSibling).toHaveClass('inbox-ask-armada');
+    }
+    expect(within(interventions).getAllByRole('button', { name: 'Copy Markdown' })[0])
+      .toHaveAttribute('title', 'Copy the black box brief as Markdown, ready to paste into a coding agent.');
+    const approvals = screen.getByRole('region', { name: 'Waiting for your approval' });
+    expect(within(approvals).queryByRole('button', { name: 'Copy JSON' })).toBeNull();
+  });
+
+  it('copies the black box entry as JSON without opening the row', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const entry = { id: 'bbx_1', missionId: 'msn_1', record: { schemaVersion: 1 } } as unknown as BlackBoxEntry;
+    vi.mocked(getMissionBlackBox).mockResolvedValue(entry);
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy JSON' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(JSON.stringify(entry, null, 2)));
+    expect(getMissionBlackBox).toHaveBeenCalledWith('msn_1');
+    expect(pushToast).toHaveBeenCalledWith('success', 'Black box JSON copied.');
+    expect(screen.getByTestId('location').textContent).toBe('/inbox');
+  });
+
+  it('says so when Copy JSON finds no black box entry', async () => {
+    vi.mocked(getMissionBlackBox).mockRejectedValue(Object.assign(new Error('nf'), { status: 404, data: { code: 'BlackBoxNotFound' } }));
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy JSON' }));
+    await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', 'This mission has no black box entry yet.'));
+    expect(screen.getByTestId('location').textContent).toBe('/inbox');
+  });
+
+  it('reports other Copy JSON errors', async () => {
+    vi.mocked(getMissionBlackBox).mockRejectedValue(Object.assign(new Error('Server exploded'), { status: 500 }));
+    renderInbox();
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    fireEvent.click(within(interventions).getByRole('button', { name: 'Copy JSON' }));
+    await waitFor(() => expect(pushToast).toHaveBeenCalledWith('error', 'The JSON could not be copied: Server exploded'));
   });
 });
+

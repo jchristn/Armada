@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiErrorMessage, getInbox, getMissionBlackBoxBrief, retryMissionLanding } from '../api/client';
+import { apiErrorMessage, getInbox, getMissionBlackBox, getMissionBlackBoxBrief, retryMissionLanding } from '../api/client';
 import { copyToClipboard } from '../components/shared/CopyButton';
 import { blackBoxAskHref, blackBoxAskPrompt, blackBoxAskState, blackBoxErrorStatus } from '../lib/blackbox';
 import type { InboxItem, InboxSeverity } from '../types/models';
@@ -75,16 +75,28 @@ export default function Inbox() {
     void load();
   }
 
-  // Failed missions have a black box entry: copy its FIX THIS brief for a coding agent, or ask Armada about it.
+  // Failed missions have a black box entry: copy its brief as Markdown for a coding agent, copy the entry as JSON, or ask Armada about it.
   async function copyFixThis(missionId: string) {
     try {
       const brief = await getMissionBlackBoxBrief(missionId);
       await copyToClipboard(brief);
-      pushToast('success', t('FIX THIS brief copied. Paste it into your coding agent.'));
+      pushToast('success', t('Black box Markdown copied. Paste it into your coding agent.'));
     } catch (err: unknown) {
       pushToast('error', blackBoxErrorStatus(err) === 404
         ? t('This mission has no black box entry yet.')
         : t('The brief could not be copied: {{message}}', { message: err instanceof Error ? err.message : String(err) }));
+    }
+  }
+
+  async function copyJson(missionId: string) {
+    try {
+      const entry = await getMissionBlackBox(missionId);
+      await copyToClipboard(JSON.stringify(entry, null, 2));
+      pushToast('success', t('Black box JSON copied.'));
+    } catch (err: unknown) {
+      pushToast('error', blackBoxErrorStatus(err) === 404
+        ? t('This mission has no black box entry yet.')
+        : t('The JSON could not be copied: {{message}}', { message: err instanceof Error ? err.message : String(err) }));
     }
   }
 
@@ -144,9 +156,17 @@ export default function Inbox() {
                   type="button"
                   className="btn btn-sm inbox-copy-fix-this"
                   onClick={(e) => { e.stopPropagation(); void copyFixThis(item.entityId as string); }}
-                  title={t('Copy the FIX THIS brief, ready to paste into a coding agent.')}
+                  title={t('Copy the black box brief as Markdown, ready to paste into a coding agent.')}
                 >
                   {t('Copy Markdown')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm inbox-copy-json"
+                  onClick={(e) => { e.stopPropagation(); void copyJson(item.entityId as string); }}
+                  title={t('Copy the entry and its versioned record as JSON.')}
+                >
+                  {t('Copy JSON')}
                 </button>
                 <button
                   type="button"

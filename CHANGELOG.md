@@ -26,6 +26,12 @@ All notable changes to Armada are documented in this file.
 - Schema migration 107 adds `model_profiles`, `model_profile_revisions`, `model_profile_revision_compat` and
   `captains.model_profile_id` on SQLite, PostgreSQL, SQL Server and MySQL (additive).
 
+### Dashboard
+
+- Needs You failure cards (Failed and Landing failed) gain **Copy JSON** next to **Copy Markdown**: it copies the
+  mission's black box entry and its versioned record, like the black box panel. The Copy Markdown tooltip and toast no
+  longer say "FIX THIS".
+
 ---
 
 ## v1.2.0 (2026-10-29)

@@ -245,7 +245,7 @@ share outside the installation.
 
 Three ways to get a brief:
 
-1. The dashboard black box panel on the mission page: **Copy Markdown** (also on Inbox failure rows).
+1. The dashboard black box panel on the mission page: **Copy Markdown** (also on Inbox failure rows, next to **Copy JSON**).
 2. A terminal: `curl -s -H "Authorization: Bearer $TOKEN" http://localhost:7890/api/v1/missions/msn_x/blackbox/brief | pbcopy`
    (or `armada blackbox show msn_x --brief | pbcopy`, section 4).
 3. MCP: `get_blackbox {"missionId": "msn_x", "format": "brief"}`.
@@ -292,7 +292,7 @@ in `?bbtab=` (for example `/missions?tab=blackbox&bbtab=fingerprints`), since th
 
 **Settings.** The server settings page has a Black Box section: storage target and its credentials (masked), compress,
 key prefix, fallback to the database, a store health check, **Migrate stored entries** with progress, and the retention
-policy. **Inbox** failure rows have Copy Markdown and Ask Armada actions, and the Storage page counts black box usage.
+policy. **Inbox** failure rows have Copy Markdown, Copy JSON and Ask Armada actions, and the Storage page counts black box usage.
 
 ### TUI
 
