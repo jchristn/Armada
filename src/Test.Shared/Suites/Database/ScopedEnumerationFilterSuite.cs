@@ -71,7 +71,8 @@ namespace Test.Shared.Suites.Database
                         new EnumerationQuery { Status = MissionStatusEnum.Failed.ToString() },
                         new EnumerationQuery { VesselId = v1.Id },
                         new EnumerationQuery { CaptainId = c1.Id },
-                        new EnumerationQuery { VoyageId = y1.Id }
+                        new EnumerationQuery { VoyageId = y1.Id },
+                        new EnumerationQuery { MissionId = m1.Id }
                     };
                     foreach (EnumerationQuery query in queries)
                     {
@@ -207,6 +208,7 @@ namespace Test.Shared.Suites.Database
             EnumerationResult<T> global = await all(query).ConfigureAwait(false);
             AssertEqual(1, global.Objects.Count, label + " (global) with " + filter);
             AssertEqual(expectedId, idOf(global.Objects[0]), label + " (global) match with " + filter);
+            AssertEqual(1L, global.TotalRecords, label + " (global) total with " + filter);
 
             EnumerationResult<T> tenant = await byTenant(owner.TenantId, query).ConfigureAwait(false);
             AssertEqual(1, tenant.Objects.Count, label + " (tenant) with " + filter + ": got [" + String.Join(", ", tenant.Objects.Select(idOf)) + "]");

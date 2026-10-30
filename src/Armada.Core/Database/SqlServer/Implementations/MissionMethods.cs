@@ -311,6 +311,11 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     conditions.Add("captain_id = @captain_id");
                     parameters.Add(new SqlParameter("@captain_id", query.CaptainId));
                 }
+                if (!string.IsNullOrEmpty(query.MissionId))
+                {
+                    conditions.Add("id = @mission_id");
+                    parameters.Add(new SqlParameter("@mission_id", query.MissionId));
+                }
 
                 string whereClause = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : "";
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -695,6 +700,11 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     conditions.Add("captain_id = @captain_id");
                     parameters.Add(new SqlParameter("@captain_id", query.CaptainId));
                 }
+                if (!string.IsNullOrEmpty(query.MissionId))
+                {
+                    conditions.Add("id = @mission_id");
+                    parameters.Add(new SqlParameter("@mission_id", query.MissionId));
+                }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -851,6 +861,11 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 {
                     conditions.Add("captain_id = @captain_id");
                     parameters.Add(new SqlParameter("@captain_id", query.CaptainId));
+                }
+                if (!string.IsNullOrEmpty(query.MissionId))
+                {
+                    conditions.Add("id = @mission_id");
+                    parameters.Add(new SqlParameter("@mission_id", query.MissionId));
                 }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
