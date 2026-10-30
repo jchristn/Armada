@@ -111,8 +111,31 @@ namespace Armada.Core.BlackBox
                 case MissionFailureKindEnum.Blocked: return BlackBoxStepEnum.CaptainBlocked;
                 case MissionFailureKindEnum.DependencyFailed: return BlackBoxStepEnum.DependencyCancelled;
                 case MissionFailureKindEnum.Crash: return BlackBoxStepEnum.ProcessCrash;
-                default: return BlackBoxStepEnum.Unknown;
+                case MissionFailureKindEnum.LandingConflict: return BlackBoxStepEnum.TargetIntegration;
             }
+            // A landing failure captured after the fact keeps its phase (Landing), so the handoff and landing bias and
+            // the resilience gaps see it: the step comes from the reason, else the generic integration step.
+            if (mission.Status == MissionStatusEnum.LandingFailed) return InferLandingStep(mission.FailureReason);
+            return BlackBoxStepEnum.Unknown;
+        }
+
+        /// <summary>
+        /// Best guess of the landing step from a landing failure's reason (TargetIntegration when nothing more specific matches).
+        /// </summary>
+        /// <param name="reason">Failure reason, or null.</param>
+        /// <returns>A Landing phase step.</returns>
+        public static BlackBoxStepEnum InferLandingStep(string? reason)
+        {
+            string r = (reason ?? String.Empty).ToLowerInvariant();
+            if (r.Contains("deferral") && r.Contains("expired")) return BlackBoxStepEnum.DeferralExpired;
+            if (r.Contains("uncommitted") || r.Contains("dirty")) return BlackBoxStepEnum.DirtyCheckout;
+            if (r.Contains("working directory") || r.Contains("no such file") || r.Contains("dock") && (r.Contains("missing") || r.Contains("gone"))) return BlackBoxStepEnum.DockMissing;
+            if (r.Contains("unpublished")) return BlackBoxStepEnum.UnpublishedAncestry;
+            if (r.Contains("pull request") || r.Contains("gh pr")) return BlackBoxStepEnum.PullRequest;
+            if (r.Contains("verification") || r.Contains("verify")) return BlackBoxStepEnum.Verification;
+            if (r.Contains("push") || r.Contains("non-fast-forward")) return BlackBoxStepEnum.Push;
+            if (r.Contains("fast-forward") || r.Contains("fast forward")) return BlackBoxStepEnum.FastForward;
+            return BlackBoxStepEnum.TargetIntegration;
         }
 
         #endregion

@@ -55,6 +55,13 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(BlackBoxResilienceScope.IndexInScope(BlackBoxPhaseEnum.Unknown, BlackBoxStepEnum.Push, null), "index scope: a landing step without a phase");
                 AssertFalse(BlackBoxResilienceScope.IndexInScope(BlackBoxPhaseEnum.Execution, BlackBoxStepEnum.Stall, MissionFailureKindEnum.StallRecoveryExhausted), "index scope: execution");
                 AssertFalse(BlackBoxResilienceScope.InScope(null!), "null record");
+                Mission landing = new Mission { Status = MissionStatusEnum.LandingFailed, FailureKind = MissionFailureKindEnum.Infra, FailureReason = "An error occurred trying to start process 'git' with working directory '/x'. No such file or directory" };
+                AssertEqual(BlackBoxStepEnum.DockMissing, BlackBoxSweeper.InferStep(landing), "a swept landing failure keeps a Landing step");
+                landing.FailureReason = "something odd";
+                AssertEqual(BlackBoxPhaseEnum.Landing, BlackBoxTaxonomy.PhaseOf(BlackBoxSweeper.InferStep(landing)), "an unclassified landing failure stays in the Landing phase");
+                AssertEqual(BlackBoxStepEnum.Push, BlackBoxSweeper.InferLandingStep("push rejected (non-fast-forward)"));
+                AssertEqual(BlackBoxStepEnum.TargetIntegration, BlackBoxSweeper.InferStep(new Mission { Status = MissionStatusEnum.Failed, FailureKind = MissionFailureKindEnum.LandingConflict }), "a landing conflict kind");
+                AssertEqual(BlackBoxStepEnum.Unknown, BlackBoxSweeper.InferStep(new Mission { Status = MissionStatusEnum.Failed, FailureKind = MissionFailureKindEnum.Infra }), "other failures stay Unknown");
                 return Task.CompletedTask;
             }));
 
