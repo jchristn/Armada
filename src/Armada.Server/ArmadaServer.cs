@@ -2327,6 +2327,16 @@ namespace Armada.Server
                 _Logging.Warn(_Header + "startup stale captain cleanup error: " + ex.ToString());
             }
 
+            // Cancel Armada checks left Running by the previous process. Their command died with that process.
+            try
+            {
+                await _CheckRunService.CancelInterruptedRunsAsync(_StartUtc, token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "startup interrupted-check cancellation error: " + ex.Message);
+            }
+
             // Run an immediate health check on startup to dispatch any pending missions
             try
             {

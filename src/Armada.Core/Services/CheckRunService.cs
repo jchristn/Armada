@@ -35,6 +35,7 @@ namespace Armada.Core.Services
         private readonly LoggingModule _Logging;
         private readonly TimeSpan _DefaultTimeout = TimeSpan.FromMinutes(30);
         private const long _MaxArtifactCopyBytes = 16L * 1024L * 1024L;
+        private const string _InterruptedRunSummary = "The command died with the process and this record has no verdict.";
 
         /// <summary>
         /// Instantiate.
@@ -49,6 +50,74 @@ namespace Armada.Core.Services
             _WorkflowProfiles = workflowProfiles ?? throw new ArgumentNullException(nameof(workflowProfiles));
             _Readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+        }
+
+        /// <summary>
+        /// Cancel Armada check runs left <see cref="CheckRunStatusEnum.Running"/> by an earlier process.
+        /// A run executes in this process. A Running Armada row whose start is before
+        /// <paramref name="processStartUtc"/>, or whose start is absent, has no command left and cannot
+        /// reach a verdict. A row started at or after <paramref name="processStartUtc"/> stays Running.
+        /// An imported row stays Running.
+        /// </summary>
+        /// <param name="processStartUtc">The moment this process started. Compared with each row's stored start.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of rows cancelled.</returns>
+        public async Task<int> CancelInterruptedRunsAsync(DateTime processStartUtc, CancellationToken token = default)
+        {
+            List<CheckRun> interrupted = new List<CheckRun>();
+            CheckRunQuery query = new CheckRunQuery
+            {
+                Status = CheckRunStatusEnum.Running,
+                Source = CheckRunSourceEnum.Armada,
+                PageNumber = 1,
+                PageSize = 200
+            };
+
+            while (true)
+            {
+                EnumerationResult<CheckRun> page = await _Database.CheckRuns.EnumerateAsync(query, token).ConfigureAwait(false);
+                foreach (CheckRun run in page.Objects)
+                {
+                    // A start at or after this process belongs to the running process. RunAsync sets the
+                    // start before insert, so a null start was not written by this process and is eligible.
+                    if (run.StartedUtc.HasValue && run.StartedUtc.Value >= processStartUtc) continue;
+                    interrupted.Add(run);
+                }
+
+                if (page.Objects.Count < query.PageSize || query.PageNumber >= page.TotalPages) break;
+                query.PageNumber++;
+            }
+
+            int cancelled = 0;
+            foreach (CheckRun run in interrupted)
+            {
+                // Read again so a row that finished, or that started at or after this process, is not overwritten.
+                CheckRun? current = await _Database.CheckRuns.ReadAsync(run.Id, null, token).ConfigureAwait(false);
+                if (current == null) continue;
+                if (current.Status != CheckRunStatusEnum.Running) continue;
+                if (current.StartedUtc.HasValue && current.StartedUtc.Value >= processStartUtc) continue;
+
+                current.Status = CheckRunStatusEnum.Canceled;
+                current.Summary = _InterruptedRunSummary;
+                if (String.IsNullOrEmpty(current.Output))
+                {
+                    current.Output = _InterruptedRunSummary;
+                }
+
+                current.CompletedUtc = DateTime.UtcNow;
+                current.LastUpdateUtc = DateTime.UtcNow;
+
+                CheckRun updated = await _Database.CheckRuns.UpdateAsync(current, token).ConfigureAwait(false);
+                OnCheckRunChanged?.Invoke(updated);
+                cancelled++;
+            }
+
+            if (cancelled > 0)
+            {
+                _Logging.Warn(_Header + "cancelled " + cancelled + " check run" + (cancelled == 1 ? "" : "s") + " left Running by a stopped process");
+            }
+
+            return cancelled;
         }
 
         /// <summary>
