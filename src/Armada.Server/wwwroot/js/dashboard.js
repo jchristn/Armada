@@ -1605,6 +1605,11 @@ function dashboard() {
         getMcpConfigHttp(client) {
             let rpcUrl = this.getMcpRpcUrl();
 
+            if (client === 'codex') {
+                let port = new URL(rpcUrl).port || '7891';
+                return '[mcp_servers.armada]\nurl = "http://localhost:' + port + '/mcp"\n';
+            }
+
             if (client === 'gemini') {
                 return JSON.stringify({ mcpServers: { armada: { httpUrl: rpcUrl } } }, null, 2);
             }
@@ -1619,6 +1624,10 @@ function dashboard() {
         getMcpConfigStdio(client) {
             if (client === 'claude') {
                 return 'claude mcp add --scope user armada -- armada mcp stdio';
+            }
+
+            if (client === 'codex') {
+                return '[mcp_servers.armada]\ncommand = "armada"\nargs = ["mcp", "stdio"]\n';
             }
 
             if (client === 'cursor') {

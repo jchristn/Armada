@@ -47,7 +47,7 @@ namespace Armada.Tui.Screens.Admin
             switch (client)
             {
                 case "claude": return "~/.claude.json -> mcpServers.armada";
-                case "codex": return "~/.codex/config.json -> mcpServers.armada";
+                case "codex": return "~/.codex/config.toml -> [mcp_servers.armada]";
                 case "gemini": return "~/.gemini/settings.json -> mcpServers.armada";
                 case "cursor": return ".cursor/mcp.json -> mcpServers.armada";
                 default: return "";
@@ -72,6 +72,11 @@ namespace Armada.Tui.Screens.Admin
         /// <returns>Snippet.</returns>
         public static string Http(string client, int mcpPort)
         {
+            if (client == "codex")
+            {
+                return "[mcp_servers.armada]\nurl = \"http://localhost:" + (mcpPort > 0 ? mcpPort : 7891) + "/mcp\"\n";
+            }
+
             string url = RpcUrl(mcpPort);
             switch (client)
             {
@@ -91,6 +96,11 @@ namespace Armada.Tui.Screens.Admin
         /// <returns>Snippet.</returns>
         public static string Stdio(string client)
         {
+            if (client == "codex")
+            {
+                return "[mcp_servers.armada]\ncommand = \"armada\"\nargs = [\"mcp\", \"stdio\"]\n";
+            }
+
             string args = "      \"args\": [\n        \"mcp\",\n        \"stdio\"\n      ]";
             switch (client)
             {

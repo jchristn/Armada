@@ -62,6 +62,18 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertEqual("/data/armada", screen.Values["Data Directory"].Text, "data dir");
                     TuiCase.Contains(screen.Values["mcp.claude.http"].Text, "http://localhost:7891/rpc", "mcp http");
                     AssertEqual("claude mcp add --scope user armada -- armada mcp stdio", screen.Values["mcp.claude.stdio"].Text, "mcp stdio");
+                    TuiCase.Contains(screen.Values["mcp.codex.http"].Text, "[mcp_servers.armada]", "codex http table");
+                    TuiCase.Contains(screen.Values["mcp.codex.http"].Text, "http://localhost:7891/mcp", "codex http url");
+                    TuiCase.Contains(screen.Values["mcp.codex.stdio"].Text, "command = \"armada\"", "codex stdio command");
+                    TextBlock? codexLocation = null;
+                    foreach (FormRow row in screen.Form.Rows)
+                    {
+                        TextBlock? block = row.Field as TextBlock;
+                        if (block != null && block.Text.Contains(".codex/", StringComparison.Ordinal)) codexLocation = block;
+                    }
+
+                    AssertTrue(codexLocation != null, "codex location field");
+                    TuiCase.Contains(codexLocation!.Text, "config.toml", "codex location");
                     foreach (ServerSettingsGroup g in screen.Groups.Values) AssertFalse(g.IsDirty, "clean after load: " + g.Key);
                 }
             }));
