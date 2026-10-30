@@ -215,6 +215,16 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(GitProcessEnvironment.IsGitTool("dotnet"), "dotnet");
             }));
 
+            cases.Add(Case("process_environment_disables_git_credential_prompts", "Git launches do not wait for credential prompts", TestTags.Positive, () =>
+            {
+                ProcessStartInfo startInfo = new ProcessStartInfo("git") { UseShellExecute = false };
+                startInfo.Environment.Remove("GIT_TERMINAL_PROMPT");
+                startInfo.Environment.Remove("GCM_INTERACTIVE");
+                GitProcessEnvironment.Apply(startInfo);
+                AssertEqual("0", startInfo.Environment["GIT_TERMINAL_PROMPT"]);
+                AssertEqual("Never", startInfo.Environment["GCM_INTERACTIVE"]);
+            }));
+
             cases.Add(Case("split_nul_drops_trailing_newline_field", "A newline after the last NUL terminator does not produce a field", TestTags.Negative, () =>
             {
                 List<string> lf = GitMachineOutputParser.SplitNul("a\0b\0\n");
