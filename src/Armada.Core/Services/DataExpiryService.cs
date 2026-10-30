@@ -11,7 +11,10 @@ namespace Armada.Core.Services
     /// <summary>
     /// Background service that purges old completed data from the database.
     /// Removes completed voyages, their missions, old signals, and old events
-    /// that exceed the configured retention period. Each DELETE enters the database's write gate on its own, so other
+    /// that exceed the configured retention period. The newest incident.snapshot
+    /// and the newest runbook-execution.snapshot for each non-empty entity id
+    /// remain. Newest means created_utc, then id. Older snapshots of that same
+    /// type and entity id are deleted. Each DELETE enters the database's write gate on its own, so other
     /// writers interleave between the statements instead of waiting for the whole sweep.
     /// </summary>
     public class DataExpiryService
@@ -66,6 +69,8 @@ namespace Armada.Core.Services
         /// <summary>
         /// Run the data expiry process. Deletes completed voyages (and their missions),
         /// old signals, and old events that are older than the retention period.
+        /// The newest incident.snapshot and the newest runbook-execution.snapshot
+        /// for each non-empty entity id remain.
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Total number of rows deleted.</returns>
@@ -133,10 +138,30 @@ namespace Armada.Core.Services
                     AND created_utc < @cutoff;",
                     cutoffStr, token).ConfigureAwait(false);
 
-                // Delete old events
+                // Keep the newest incident.snapshot and runbook-execution.snapshot for each
+                // non-empty entity id (created_utc, then id). Delete older snapshots of that
+                // pair, a snapshot with an empty entity id, and every other old event.
                 totalDeleted += await ExecuteDeleteAsync(conn,
                     @"DELETE FROM events
-                    WHERE created_utc < @cutoff;",
+                    WHERE created_utc < @cutoff
+                    AND id NOT IN (
+                        SELECT keeper_id FROM (
+                            SELECT e.id AS keeper_id
+                            FROM events e
+                            WHERE e.event_type IN ('incident.snapshot', 'runbook-execution.snapshot')
+                            AND e.entity_id IS NOT NULL
+                            AND length(trim(e.entity_id)) > 0
+                            AND NOT EXISTS (
+                                SELECT 1 FROM events newer
+                                WHERE newer.event_type = e.event_type
+                                AND newer.entity_id = e.entity_id
+                                AND (
+                                    newer.created_utc > e.created_utc
+                                    OR (newer.created_utc = e.created_utc AND newer.id > e.id)
+                                )
+                            )
+                        )
+                    );",
                     cutoffStr, token).ConfigureAwait(false);
 
                 // Delete inactive docks with no captain older than retention
