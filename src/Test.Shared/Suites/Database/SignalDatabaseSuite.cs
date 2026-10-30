@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Database
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Database.Sqlite;
     using Armada.Core.Enums;
@@ -15,7 +16,9 @@ namespace Test.Shared.Suites.Database
     /// <summary>
     /// Descriptors for the signal database methods: create, read, recipient-filtered enumeration
     /// (unread-only and all), recent enumeration with a limit, and marking a signal read. Includes
-    /// a negative case for reading a missing signal. Each case runs against its own fresh SQLite store.
+    /// a negative case for reading a missing signal. Reads also return a stored user id and keep a
+    /// null user id null. A user-scoped read returns only that user's rows. Each case runs against
+    /// its own fresh store.
     /// </summary>
     public sealed class SignalDatabaseSuite : IArmadaTestSuite
     {
@@ -118,6 +121,71 @@ namespace Test.Shared.Suites.Database
 
                     Signal? result = await db.Signals.ReadAsync(signal.Id);
                     AssertTrue(result!.Read);
+                }
+            }));
+
+            cases.Add(CaseAsync("read_async_returns_stored_user_id", "ReadAsync returns stored user id", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    UserMaster owner = await db.Users.CreateAsync(new UserMaster(Constants.DefaultTenantId, "owner-a@example.com", "password"));
+                    UserMaster other = await db.Users.CreateAsync(new UserMaster(Constants.DefaultTenantId, "owner-b@example.com", "password"));
+
+                    Signal owned = new Signal(SignalTypeEnum.Mail, "{\"kind\":\"owner\"}");
+                    owned.TenantId = Constants.DefaultTenantId;
+                    owned.UserId = owner.Id;
+                    await db.Signals.CreateAsync(owned);
+
+                    Signal otherOwned = new Signal(SignalTypeEnum.Mail, "{\"kind\":\"other\"}");
+                    otherOwned.TenantId = Constants.DefaultTenantId;
+                    otherOwned.UserId = other.Id;
+                    await db.Signals.CreateAsync(otherOwned);
+
+                    Signal? read = await db.Signals.ReadAsync(owned.Id);
+                    AssertNotNull(read);
+                    AssertEqual(owner.Id, read!.UserId);
+
+                    Signal? scoped = await db.Signals.ReadAsync(Constants.DefaultTenantId, owner.Id, owned.Id);
+                    AssertNotNull(scoped);
+                    AssertEqual(owner.Id, scoped!.UserId);
+
+                    List<Signal> ownerRows = await db.Signals.EnumerateAsync(Constants.DefaultTenantId, owner.Id);
+                    AssertEqual(1, ownerRows.Count);
+                    AssertEqual(owned.Id, ownerRows[0].Id);
+                    AssertEqual(owner.Id, ownerRows[0].UserId);
+
+                    List<Signal> otherRows = await db.Signals.EnumerateAsync(Constants.DefaultTenantId, other.Id);
+                    AssertEqual(1, otherRows.Count);
+                    AssertEqual(otherOwned.Id, otherRows[0].Id);
+                    AssertEqual(other.Id, otherRows[0].UserId);
+
+                    Signal? hidden = await db.Signals.ReadAsync(Constants.DefaultTenantId, other.Id, owned.Id);
+                    AssertNull(hidden);
+                }
+            }));
+
+            cases.Add(CaseAsync("read_async_null_user_id_stays_null", "ReadAsync null user id stays null", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    Signal signal = new Signal(SignalTypeEnum.Nudge, "{\"kind\":\"unowned\"}");
+                    signal.TenantId = Constants.DefaultTenantId;
+                    signal.UserId = null;
+                    await db.Signals.CreateAsync(signal);
+
+                    Signal? read = await db.Signals.ReadAsync(signal.Id);
+                    AssertNotNull(read);
+                    AssertNull(read!.UserId);
+
+                    List<Signal> defaultUserRows = await db.Signals.EnumerateAsync(Constants.DefaultTenantId, Constants.DefaultUserId);
+                    bool found = false;
+                    foreach (Signal row in defaultUserRows)
+                    {
+                        if (row.Id == signal.Id) found = true;
+                    }
+                    AssertFalse(found);
                 }
             }));
 
