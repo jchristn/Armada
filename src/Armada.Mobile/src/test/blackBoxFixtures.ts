@@ -98,5 +98,4 @@ export function blackBoxSummary(id: string, overrides: Partial<BlackBoxEntrySumm
   return { ...rest, id, missionId: `msn_${id}`, missionTitle: `Mission ${id}`, ...overrides };
 }
 
-export const AGENT_BRIEF = '# FIX THIS\n\nMission msn_1 failed to land: the checkout was dirty.';
-export const USER_BRIEF = '# What happened\n\nLanding stopped because the checkout was dirty.';
+export const BRIEF = '# FIX THIS\n\nMission msn_1 failed to land: the checkout was dirty.';
