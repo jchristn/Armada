@@ -21,6 +21,8 @@ import reservationsCard from '../components/blackbox/VesselReservationsCard.tsx?
 import doctorCard from '../components/blackbox/VesselBlackBoxDoctorCard.tsx?raw';
 import cascadeGraph from '../components/blackbox/VoyageCascadeGraph.tsx?raw';
 import recoveryStatsTab from '../components/blackbox/BlackBoxRecoveryStatsTab.tsx?raw';
+import entryActions from '../components/blackbox/blackBoxEntryActions.ts?raw';
+import rowActions from '../components/blackbox/useBlackBoxRowActions.tsx?raw';
 import type { I18nCatalog } from '../i18n/runtime';
 
 const S = "'((?:[^'\\\\]|\\\\.)*)'";
@@ -31,6 +33,7 @@ const PROP = /\b(?:title|confirmLabel|ariaLabel|refreshTitle)="([^"]+)"/g;
 const SOURCES = [
   panel, actionDialog, evidence, notes, resolveDialog, entriesTab, fingerprintsTab, hotspotsTab, retentionTab, settings, blackBoxPage, entryPage, blackBoxLib,
   dispatchWarnings, timeline, attemptDiff, nearbySuccesses, reservationsCard, doctorCard, cascadeGraph, recoveryStatsTab,
+  entryActions, rowActions,
 ];
 
 /** Label maps (Record<Kind, string>) in the insight components, passed to t() as data. */

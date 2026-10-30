@@ -13,7 +13,7 @@ export type DeleteProgressKind =
   | 'mergeEntry' | 'persona' | 'pipeline' | 'playbook' | 'workflowProfile' | 'projectProfile' | 'skill' | 'harbor'
   | 'modelEndpoint' | 'memory' | 'fleetAction' | 'cliPermissionRule' | 'conversation' | 'planningSession'
   | 'refinementSession' | 'backlogItem' | 'deployment' | 'environment' | 'incident' | 'release' | 'runbook'
-  | 'checkRun' | 'requestHistoryEntry' | 'workspaceEntry' | 'tenant' | 'user' | 'credential';
+  | 'checkRun' | 'requestHistoryEntry' | 'workspaceEntry' | 'tenant' | 'user' | 'credential' | 'blackBoxEntry';
 
 /** The default progress message: plain enough to be true for every kind. */
 export function deleteProgressMessage(t: Translate): string {
@@ -72,6 +72,7 @@ function singular(t: Translate, kind: DeleteProgressKind): string {
     case 'tenant': return t('Deleting tenant');
     case 'user': return t('Deleting user');
     case 'credential': return t('Deleting credential');
+    case 'blackBoxEntry': return t('Deleting black box entry');
   }
 }
 
@@ -114,5 +115,6 @@ function plural(t: Translate, kind: DeleteProgressKind, count: number): string {
     case 'tenant': return t('{count, plural, one {Deleting # tenant} other {Deleting # tenants}}', p);
     case 'user': return t('{count, plural, one {Deleting # user} other {Deleting # users}}', p);
     case 'credential': return t('{count, plural, one {Deleting # credential} other {Deleting # credentials}}', p);
+    case 'blackBoxEntry': return t('{count, plural, one {Deleting # black box entry} other {Deleting # black box entries}}', p);
   }
 }

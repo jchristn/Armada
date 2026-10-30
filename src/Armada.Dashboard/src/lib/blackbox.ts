@@ -60,6 +60,15 @@ export function blackBoxAskPrompt(subjectId: string, kind: 'mission' | 'voyage' 
   return `Show me the pertinent details from the black box for ${kind} ${subjectId} and give me your opinion on why it failed and what could have been done differently`;
 }
 
+/**
+ * The Ask Armada prompt for an entry: the mission wording when the entry has a mission, otherwise the voyage wording
+ * (with the entry id when it names no voyage either).
+ */
+export function blackBoxEntryAskPrompt(subject: { id: string; missionId?: string | null; voyageId?: string | null }): string {
+  if (subject.missionId) return blackBoxAskPrompt(subject.missionId);
+  return blackBoxAskPrompt(subject.voyageId || subject.id, 'voyage');
+}
+
 /** Ask Armada URL with the prompt prefilled (the Ask page reads ?prompt=; router state carries it too). */
 export function blackBoxAskHref(prompt: string): string {
   return `/ask?prompt=${encodeURIComponent(prompt)}`;
@@ -78,6 +87,11 @@ export function isBlackBoxPending(entry: Pick<BlackBoxEntry, 'state'> | null | u
 /** File name of a downloaded brief. */
 export function blackBoxBriefFileName(entryId: string, audience: BlackBoxAudience): string {
   return `${entryId}-${audience}.md`;
+}
+
+/** File name of a brief downloaded from the entries table (the server's default audience). */
+export function blackBoxEntryBriefFileName(entryId: string): string {
+  return `blackbox-${entryId}.md`;
 }
 
 /** Human-readable byte count (B, KB, MB, GB). */

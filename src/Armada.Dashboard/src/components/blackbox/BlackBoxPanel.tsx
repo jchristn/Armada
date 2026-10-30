@@ -7,9 +7,6 @@ import {
   getMissionBlackBox,
   getVoyageBlackBox,
   listMissionBlackBoxEntries,
-  pinBlackBox,
-  reanalyzeBlackBox,
-  unpinBlackBox,
 } from '../../api/client';
 import type { BlackBoxAudience, BlackBoxEntry, BlackBoxEntrySummary, BlackBoxRecord } from '../../types/blackbox';
 import { useAuth } from '../../context/AuthContext';
@@ -18,16 +15,15 @@ import { useNotifications } from '../../context/NotificationContext';
 import {
   BLACKBOX_AUDIENCES,
   blackBoxAskHref,
-  blackBoxAskPrompt,
   blackBoxAskState,
   blackBoxBriefFileName,
   blackBoxErrorCode,
+  blackBoxEntryAskPrompt,
   blackBoxErrorStatus,
   isBlackBoxPending,
 } from '../../lib/blackbox';
 import { useBlackBoxLive } from '../../lib/useBlackBoxLive';
 import { blackBoxHref } from '../../lib/navTargets';
-import { browserPlatform } from '../../platform/browserPlatform';
 import { copyToClipboard } from '../shared/CopyButton';
 import CopyButton from '../shared/CopyButton';
 import JsonViewer from '../shared/JsonViewer';
@@ -40,6 +36,7 @@ import BlackBoxNearbySuccesses from './BlackBoxNearbySuccesses';
 import BlackBoxNotes from './BlackBoxNotes';
 import BlackBoxResolveDialog from './BlackBoxResolveDialog';
 import BlackBoxTimeline from './BlackBoxTimeline';
+import { downloadBlackBoxMarkdown, reanalyzeBlackBoxEntry, toggleBlackBoxPin } from './blackBoxEntryActions';
 import './BlackBox.css';
 
 const ATTEMPT_PAGE_SIZE = 20;
@@ -196,12 +193,7 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
 
   async function downloadMarkdown() {
     if (!entry) return;
-    try {
-      const text = await fetchBrief();
-      await browserPlatform.saveFile({ filename: blackBoxBriefFileName(entry.id, audience), contentType: 'text/markdown', body: new Blob([text], { type: 'text/markdown' }) });
-    } catch (err: unknown) {
-      pushToast('error', t('The download failed: {{message}}', { message: err instanceof Error ? err.message : String(err) }));
-    }
+    await downloadBlackBoxMarkdown(blackBoxBriefFileName(entry.id, audience), fetchBrief, t, pushToast);
   }
 
   async function downloadZip() {
@@ -218,38 +210,25 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
 
   async function togglePin() {
     if (!entry) return;
-    try {
-      setBusy('pin');
-      const updated = entry.pinned ? await unpinBlackBox(entry.id) : await pinBlackBox(entry.id);
-      setEntry({ ...entry, ...updated, record: updated.record ?? entry.record });
-      pushToast('success', updated.pinned ? t('Entry pinned: garbage collection keeps it.') : t('Entry unpinned: it expires with the retention policy.'));
-    } catch (err: unknown) {
-      pushToast('error', t('Failed: {{message}}', { message: err instanceof Error ? err.message : String(err) }));
-    } finally {
-      setBusy('');
-    }
+    setBusy('pin');
+    const updated = await toggleBlackBoxPin(entry, t, pushToast);
+    if (updated) setEntry({ ...entry, ...updated, record: updated.record ?? entry.record });
+    setBusy('');
   }
 
   async function reanalyze() {
     if (!entry) return;
-    try {
-      setBusy('reanalyze');
-      const updated = await reanalyzeBlackBox(entry.id);
+    setBusy('reanalyze');
+    const updated = await reanalyzeBlackBoxEntry(entry.id, t('Reanalysis started. The panel updates when it finishes.'), t, pushToast);
+    if (updated) {
       setEntry({ ...entry, ...updated, record: updated.record ?? entry.record });
       setBrief(null);
-      pushToast('success', t('Reanalysis started. The panel updates when it finishes.'));
-    } catch (err: unknown) {
-      pushToast('error', t('Failed: {{message}}', { message: err instanceof Error ? err.message : String(err) }));
-    } finally {
-      setBusy('');
     }
+    setBusy('');
   }
 
   function askArmada() {
-    const mission = entry?.missionId ?? missionId;
-    const prompt = mission
-      ? blackBoxAskPrompt(mission)
-      : blackBoxAskPrompt(entry?.voyageId ?? voyageId ?? entry?.id ?? '', 'voyage');
+    const prompt = blackBoxEntryAskPrompt({ id: entry?.id ?? '', missionId: entry?.missionId ?? missionId, voyageId: entry?.voyageId ?? voyageId });
     navigate(blackBoxAskHref(prompt), { state: blackBoxAskState(prompt) });
   }
 
