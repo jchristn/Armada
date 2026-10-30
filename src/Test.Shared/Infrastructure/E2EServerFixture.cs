@@ -328,6 +328,10 @@ namespace Test.Shared.Infrastructure
             // itself is covered by E2E.LoginSecurity on a dedicated server.
             settings.LoginRateLimit.MaxFailuresPerAccount = 1000;
             settings.LoginRateLimit.MaxFailuresPerAddress = 100000;
+            // Every case of a suite calls MCP tools as the same principal from the same loopback address, so the
+            // per-client tool-call limit counts a whole suite as one client and refuses calls once the suite runs fast
+            // enough. Lift it here; the suites that test MCP access on a dedicated server already disable it the same way.
+            settings.Mcp.ToolCallsPerSecond = 0;
             // Bind the REST and MCP listeners to IPv4 loopback explicitly. The default "localhost"
             // makes clients resolve ::1 (IPv6) first on Windows, stalling every connection before it
             // falls back to 127.0.0.1 -- which massively inflates E2E time and pushes cases toward the
