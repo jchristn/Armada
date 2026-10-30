@@ -25,8 +25,9 @@ namespace Test.Shared.Suites.Services
     /// <summary>
     /// Descriptors for the <see cref="RemoteDashboardRelayService"/>: loopback host resolution for
     /// self-relay traffic, HTTP relay of GET/POST/PUT/DELETE plus error and oversize-body rejection,
-    /// and WebSocket relay of messages plus remote-close propagation and session cleanup. HTTP/WS
-    /// cases run against an in-process loopback host.
+    /// and WebSocket relay of messages plus remote-close propagation and session cleanup. An error
+    /// event must already have dropped its session, and a replacement opened during close must remain
+    /// after the old receive loop ends. HTTP/WS cases run against an in-process loopback host.
     /// </summary>
     public sealed class RemoteDashboardRelayServiceSuite : IArmadaTestSuite
     {
@@ -310,6 +311,122 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(offered!.Contains(Constants.ProxySessionProtocolPrefix, StringComparison.OrdinalIgnoreCase), "a proxy session entry must never reach the local /ws upgrade: " + offered);
             }));
 
+            cases.Add(CaseAsync("handle_async_error_event_frame_finds_no_session", "HandleAsync ErrorEventFrameFindsNoSession", TestTags.Negative, async () =>
+            {
+                await using LoopbackRelayHost host = await LoopbackRelayHost.StartAsync().ConfigureAwait(false);
+                RelayEventCollector collector = new RelayEventCollector();
+                await using RemoteDashboardRelayService service = new RemoteDashboardRelayService(
+                    CreateLogging(),
+                    CreateSettings(host.Port),
+                    collector.RecordAsync);
+
+                const string proxySocketId = "sock-error-frame";
+                int errorStatus = 0;
+                bool sawError = false;
+                collector.OnEventAsync = async (method, payload, eventToken) =>
+                {
+                    if (String.Equals(method, "armada.ws.message", StringComparison.Ordinal))
+                    {
+                        RemoteTunnelWebSocketMessage? message = payload as RemoteTunnelWebSocketMessage;
+                        if (message != null
+                            && String.Equals(message.ProxySocketId, proxySocketId, StringComparison.Ordinal)
+                            && String.Equals(message.Data, "echo:fault-the-receive-loop", StringComparison.Ordinal))
+                        {
+                            // The receive loop is still inside its message publish. This fault enters the error path
+                            // while the local socket remains open, so the probe does not depend on a socket abort.
+                            throw new InvalidOperationException("relay receive fault");
+                        }
+
+                        return;
+                    }
+
+                    if (!String.Equals(method, "armada.ws.error", StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    RemoteTunnelWebSocketCloseRequest? errorRequest = payload as RemoteTunnelWebSocketCloseRequest;
+                    if (errorRequest == null || !String.Equals(errorRequest.ProxySocketId, proxySocketId, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    sawError = true;
+                    RemoteTunnelRequestResult duringError = await service.HandleAsync(
+                        RemoteTunnelProtocol.CreateRequest(
+                            "armada.ws.message",
+                            new RemoteTunnelWebSocketMessage
+                            {
+                                ProxySocketId = proxySocketId,
+                                Data = "during-error"
+                            }),
+                        eventToken).ConfigureAwait(false);
+                    errorStatus = duringError.StatusCode;
+                };
+
+                RemoteTunnelRequestResult openResult = await OpenSocketAsync(service, proxySocketId).ConfigureAwait(false);
+                AssertEqual(200, openResult.StatusCode, "WebSocket open should succeed before the receive loop faults");
+                Task receiveTask = RequireReceiveTask(service, proxySocketId);
+
+                RemoteTunnelRequestResult faultResult = await SendTextAsync(service, proxySocketId, "fault-the-receive-loop").ConfigureAwait(false);
+                AssertEqual(202, faultResult.StatusCode, "the fault frame should be accepted before the receive loop faults");
+                await WaitForReceiveLoopAsync(receiveTask).ConfigureAwait(false);
+
+                AssertTrue(sawError, "the receive loop should publish armada.ws.error");
+                AssertEqual(404, errorStatus, "a frame sent from the error event should find no relay session");
+            }));
+
+            cases.Add(CaseAsync("handle_async_close_keeps_replacement_session", "HandleAsync CloseKeepsReplacementSession", TestTags.Reliability, async () =>
+            {
+                await using LoopbackRelayHost host = await LoopbackRelayHost.StartAsync().ConfigureAwait(false);
+                RelayEventCollector collector = new RelayEventCollector();
+                await using RemoteDashboardRelayService service = new RemoteDashboardRelayService(
+                    CreateLogging(),
+                    CreateSettings(host.Port),
+                    collector.RecordAsync);
+
+                const string proxySocketId = "sock-replace";
+                int replacementOpenStatus = 0;
+                bool sawClose = false;
+                collector.OnEventAsync = async (method, payload, eventToken) =>
+                {
+                    if (!String.Equals(method, "armada.ws.closed", StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    RemoteTunnelWebSocketCloseRequest? closeRequest = payload as RemoteTunnelWebSocketCloseRequest;
+                    if (closeRequest == null || !String.Equals(closeRequest.ProxySocketId, proxySocketId, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    // The close event runs after the old session is removed and before the receive loop's final removal.
+                    sawClose = true;
+                    RemoteTunnelRequestResult replacement = await OpenSocketAsync(service, proxySocketId, eventToken).ConfigureAwait(false);
+                    replacementOpenStatus = replacement.StatusCode;
+                };
+
+                RemoteTunnelRequestResult openResult = await OpenSocketAsync(service, proxySocketId).ConfigureAwait(false);
+                AssertEqual(200, openResult.StatusCode, "WebSocket open should succeed");
+                Task receiveTask = RequireReceiveTask(service, proxySocketId);
+
+                RemoteTunnelRequestResult closeResult = await SendTextAsync(service, proxySocketId, "close-me").ConfigureAwait(false);
+                AssertEqual(202, closeResult.StatusCode, "the close frame should be accepted");
+                await WaitForReceiveLoopAsync(receiveTask).ConfigureAwait(false);
+
+                AssertTrue(sawClose, "the receive loop should publish armada.ws.closed");
+                AssertEqual(200, replacementOpenStatus, "a replacement session should open while the old session is already removed");
+
+                RemoteTunnelRequestResult messageResult = await SendTextAsync(service, proxySocketId, "still-open").ConfigureAwait(false);
+                AssertEqual(202, messageResult.StatusCode, "a replacement session opened during close should still accept a frame after the old receive loop ends");
+
+                RemoteTunnelWebSocketMessage echoed = await collector.WaitForAsync<RemoteTunnelWebSocketMessage>(
+                    "armada.ws.message",
+                    payload => payload.ProxySocketId == proxySocketId && payload.Data == "echo:still-open").ConfigureAwait(false);
+                AssertEqual("echo:still-open", echoed.Data, "the replacement session should answer");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Remote Dashboard Relay Service",
@@ -354,6 +471,70 @@ namespace Test.Shared.Suites.Services
                 : Convert.FromBase64String(bodyBase64);
         }
 
+        private static async Task<RemoteTunnelRequestResult> OpenSocketAsync(
+            RemoteDashboardRelayService service,
+            string proxySocketId,
+            CancellationToken token = default)
+        {
+            return await service.HandleAsync(
+                RemoteTunnelProtocol.CreateRequest(
+                    "armada.ws.open",
+                    new RemoteTunnelWebSocketOpenRequest
+                    {
+                        ProxySocketId = proxySocketId,
+                        Path = "/ws"
+                    }),
+                token).ConfigureAwait(false);
+        }
+
+        private static async Task<RemoteTunnelRequestResult> SendTextAsync(
+            RemoteDashboardRelayService service,
+            string proxySocketId,
+            string data,
+            CancellationToken token = default)
+        {
+            return await service.HandleAsync(
+                RemoteTunnelProtocol.CreateRequest(
+                    "armada.ws.message",
+                    new RemoteTunnelWebSocketMessage
+                    {
+                        ProxySocketId = proxySocketId,
+                        Data = data
+                    }),
+                token).ConfigureAwait(false);
+        }
+
+        private static Task RequireReceiveTask(RemoteDashboardRelayService service, string proxySocketId)
+        {
+            FieldInfo? sessionsField = typeof(RemoteDashboardRelayService).GetField(
+                "_WebSocketSessions",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            AssertNotNull(sessionsField, "the relay session map must exist");
+            object? sessions = sessionsField!.GetValue(service);
+            AssertNotNull(sessions, "the relay session map must be present");
+
+            MethodInfo? tryGetValue = sessions!.GetType().GetMethod("TryGetValue");
+            AssertNotNull(tryGetValue, "the session map must support lookup");
+            object?[] args = new object?[] { proxySocketId, null };
+            object? found = tryGetValue!.Invoke(sessions, args);
+            AssertTrue(found is bool present && present, "the relay session must be registered");
+
+            object? session = args[1];
+            AssertNotNull(session, "the relay session instance must be present");
+            PropertyInfo? receiveTaskProperty = session!.GetType().GetProperty("ReceiveTask");
+            AssertNotNull(receiveTaskProperty, "the receive loop task must be readable");
+            Task? receiveTask = receiveTaskProperty!.GetValue(session) as Task;
+            AssertNotNull(receiveTask, "the receive loop must be running");
+            return receiveTask!;
+        }
+
+        private static async Task WaitForReceiveLoopAsync(Task receiveTask)
+        {
+            Task finished = await Task.WhenAny(receiveTask, Task.Delay(TimeSpan.FromSeconds(15))).ConfigureAwait(false);
+            AssertTrue(ReferenceEquals(finished, receiveTask), "the old receive loop should finish");
+            await receiveTask.ConfigureAwait(false);
+        }
+
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
         {
             return new TestCaseDescriptor(
@@ -368,10 +549,16 @@ namespace Test.Shared.Suites.Services
         {
             private readonly ConcurrentQueue<KeyValuePair<string, object?>> _Events = new ConcurrentQueue<KeyValuePair<string, object?>>();
 
-            public Task RecordAsync(string method, object? payload, CancellationToken token)
+            public Func<string, object?, CancellationToken, Task>? OnEventAsync { get; set; }
+
+            public async Task RecordAsync(string method, object? payload, CancellationToken token)
             {
+                if (OnEventAsync != null)
+                {
+                    await OnEventAsync(method, payload, token).ConfigureAwait(false);
+                }
+
                 _Events.Enqueue(new KeyValuePair<string, object?>(method, payload));
-                return Task.CompletedTask;
             }
 
             public async Task<T> WaitForAsync<T>(string method, Func<T, bool> predicate, int timeoutMs = 5000) where T : class
