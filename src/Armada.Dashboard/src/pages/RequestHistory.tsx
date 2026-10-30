@@ -41,6 +41,7 @@ import {
   type ActivityRangeId,
   type RequestHistoryFilters,
 } from '../lib/requestHistory';
+import { reconcileServerPage, useListRequestGuard } from '../lib/serverPage';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 
 interface HistoryChartTooltipState {
@@ -275,22 +276,31 @@ export default function RequestHistory() {
 
   const allSelected = entries.length > 0 && entries.length === selectedIds.length;
 
+  const beginListRequest = useListRequestGuard();
+
   const loadEntries = useCallback(async () => {
+    const request = beginListRequest();
     try {
       setLoading(true);
       const result = await listRequestHistory(query);
+      if (!request.isCurrent()) return;
+      const decision = reconcileServerPage(query.pageNumber ?? 1, result.totalPages);
+      if (!decision.accept) {
+        setPageNumber(decision.pageNumber);
+        return;
+      }
       setEntries(result.objects || []);
-      setTotalPages(result.totalPages || 1);
+      setTotalPages(decision.totalPages);
       setTotalRecords(result.totalRecords || 0);
       setTotalMs(result.totalMs || 0);
       setSelectedIds([]);
       setError('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('Failed to load request history.'));
+      if (request.isCurrent()) setError(err instanceof Error ? err.message : t('Failed to load request history.'));
     } finally {
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
     }
-  }, [query, t]);
+  }, [beginListRequest, query, t]);
 
   const loadSummary = useCallback(async () => {
     try {

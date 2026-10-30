@@ -9,6 +9,7 @@ import {
   listVessels, listCaptains, listVoyages, apiErrorMessage,
 } from '../api/client';
 import { listAll } from '../api/paging';
+import { reconcileServerPage, useListRequestGuard } from '../lib/serverPage';
 import type { Mission, MissionSummary, Vessel, Captain, Voyage, MissionMode } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import LoadingIndicator from '../components/shared/LoadingIndicator';
@@ -106,23 +107,32 @@ export default function Missions() {
   const vesselName = useCallback((id: string | null) => (id ? vesselMap.get(id) || id.substring(0, 8) : '-'), [vesselMap]);
   const captainName = useCallback((id: string | null) => (id ? captainMap.get(id) || id.substring(0, 8) : '-'), [captainMap]);
 
+  const beginListRequest = useListRequestGuard();
+
   const load = useCallback(async () => {
+    const request = beginListRequest();
     try {
       setLoading(true);
       const filters: Record<string, string> = {};
       if (statusFilter) filters.status = statusFilter;
       if (userScope) filters.userId = userScope;
       const result = await listMissionSummaries({ pageNumber, pageSize, filters });
+      if (!request.isCurrent()) return;
+      const decision = reconcileServerPage(pageNumber, result.totalPages);
+      if (!decision.accept) {
+        setPageNumber(decision.pageNumber);
+        return;
+      }
       setMissions(result.objects || []);
-      setTotalPages(result.totalPages || 1);
+      setTotalPages(decision.totalPages);
       setTotalRecords(result.totalRecords || 0);
       setError('');
     } catch {
-      setError(t('Failed to load missions.'));
+      if (request.isCurrent()) setError(t('Failed to load missions.'));
     } finally {
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
     }
-  }, [pageNumber, pageSize, statusFilter, userScope, t]);
+  }, [beginListRequest, pageNumber, pageSize, statusFilter, userScope, t]);
 
   useEffect(() => {
     listAll(listVessels).then(r => setVessels(r.objects || [])).catch(() => {});

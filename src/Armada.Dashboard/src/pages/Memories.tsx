@@ -16,6 +16,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import ScopeBadge from '../components/shared/ScopeBadge';
 import { MEMORY_TYPES } from '../lib/configuration';
+import { reconcileServerPage, useListRequestGuard } from '../lib/serverPage';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
 
@@ -89,7 +90,10 @@ export default function Memories() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [colFilters, setColFilters] = useState({ vessel: '', topic: '', summary: '', salience: '', visibility: '' });
 
+  const beginListRequest = useListRequestGuard();
+
   const load = useCallback(async () => {
+    const request = beginListRequest();
     setLoading(true);
     try {
       const query: MemoryEnumerateQuery = {
@@ -107,15 +111,21 @@ export default function Memories() {
       const minSalience = colFilters.salience.trim() === '' ? NaN : Number(colFilters.salience);
       if (!Number.isNaN(minSalience)) query.minSalience = minSalience;
       const result = await enumerateMemories(query);
+      if (!request.isCurrent()) return;
+      const decision = reconcileServerPage(pageNumber, result.totalPages);
+      if (!decision.accept) {
+        setPageNumber(decision.pageNumber);
+        return;
+      }
       setMemories(result.objects ?? []);
-      setTotalPages(result.totalPages ?? 1);
+      setTotalPages(decision.totalPages);
       setTotalRecords(result.totalRecords ?? 0);
     } catch {
-      pushToast('error', t('Failed to load memories.'));
+      if (request.isCurrent()) pushToast('error', t('Failed to load memories.'));
     } finally {
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
     }
-  }, [pageNumber, pageSize, sortField, sortDir, typeFilter, search, colFilters, pushToast, t]);
+  }, [beginListRequest, pageNumber, pageSize, sortField, sortDir, typeFilter, search, colFilters, pushToast, t]);
 
   useEffect(() => { void load(); }, [load]);
 

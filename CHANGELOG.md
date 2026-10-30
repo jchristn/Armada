@@ -145,6 +145,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
 
+### Server-paged lists return to the last page
+
+Events, Memories, Merge Queue, Missions, Request History, Signals, and Voyages ask the server for one page. When rows expire, are deleted, or a filter leaves the requested page past the end, the list moves to the last page that still exists and loads that page. The empty page is discarded. Rows from the previous successful page stay until the valid page returns. A response for an older page leaves the newer page in place. An empty list stays on page 1.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.
