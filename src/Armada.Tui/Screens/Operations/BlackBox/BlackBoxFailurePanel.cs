@@ -8,6 +8,7 @@ namespace Armada.Tui.Screens.Operations
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Client;
+    using Armada.Client.Models;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Tui.Screens.Kit;
@@ -22,7 +23,9 @@ namespace Armada.Tui.Screens.Operations
     /// screen's and are listed in the status bar: <c>c</c> copies the FIX THIS brief (OSC 52), <c>x</c> exports it to a
     /// file, <c>r</c> runs a recovery path (dry run, confirm, data-loss acknowledgement), <c>a</c> asks Armada about the
     /// failure, <c>j</c> shows the entry as JSON, <c>s</c> resolves it, <c>p</c> pins or unpins it, <c>n</c> adds a note,
-    /// and <c>o</c> opens the entry. Not thread-safe; use on the UI loop.
+    /// <c>o</c> opens the entry, and <c>A</c> drafts an Armada fix mission from the top proposed Armada change (opens
+    /// Dispatch prefilled with its mission brief, on the Armada vessel when one exists). The Armada resilience section is
+    /// shown right after the entry's summary fields. Not thread-safe; use on the UI loop.
     /// </summary>
     public class BlackBoxFailurePanel : OpsDocumentView, IPanelKeyHandler
     {
@@ -185,6 +188,7 @@ namespace Armada.Tui.Screens.Operations
                 new KeyHint("n", "Note")
             };
             if (OffersOpen) hints.Add(new KeyHint("o", "Open entry"));
+            if (BlackBoxResilienceText.TopChange(Entry) != null) hints.Add(new KeyHint("A", "Draft Armada fix"));
             hints.Add(new KeyHint(".", "Actions"));
             hints.Add(new KeyHint("[ ]", "Panels"));
             return hints;
@@ -194,7 +198,14 @@ namespace Armada.Tui.Screens.Operations
         public bool HandlePanelKey(KeyEvent key)
         {
             if (Entry == null || Searching) return false;
-            if (key.Code != KeyCode.Character || key.Modifiers != KeyModifiers.None) return false;
+            if (key.Code != KeyCode.Character) return false;
+            if (key.Rune == 'A' && (key.Modifiers == KeyModifiers.None || key.Modifiers == KeyModifiers.Shift))
+            {
+                DraftArmadaFix();
+                return true;
+            }
+
+            if (key.Modifiers != KeyModifiers.None) return false;
             switch (key.Rune)
             {
                 case 'c':
@@ -368,6 +379,33 @@ namespace Armada.Tui.Screens.Operations
         }
 
         /// <summary>
+        /// Draft an Armada fix mission: open Dispatch prefilled with the top proposed Armada change's mission brief, on the
+        /// vessel that holds Armada's own source when one is known (the screen's vessel list, read first when it is not
+        /// loaded yet). Without a proposed change a toast says so.
+        /// </summary>
+        /// <returns>True when a proposed change exists (Dispatch opens once the vessel is known).</returns>
+        public bool DraftArmadaFix()
+        {
+            BlackBoxProposedChange? change = BlackBoxResilienceText.TopChange(Entry);
+            if (Entry == null || change == null)
+            {
+                _Screen.Toast(NotificationSeverityEnum.Warning, _Screen.Tr("No Armada change is proposed for this failure."));
+                return false;
+            }
+
+            if (_Screen.Reference.Loaded.Contains("vessels"))
+            {
+                OpenDispatch(change, BlackBoxResilienceText.ArmadaVesselId(_Screen.Reference.Vessels));
+                return true;
+            }
+
+            ArmadaPageQuery query = new ArmadaPageQuery();
+            query.PageSize = 1000;
+            _Screen.Call((c, t) => c.ListVesselsAsync(query, t), r => OpenDispatch(change, BlackBoxResilienceText.ArmadaVesselId(r?.Objects)), null, ex => OpenDispatch(change, null));
+            return true;
+        }
+
+        /// <summary>
         /// Show the entry (with its record) as JSON.
         /// </summary>
         public void ShowJson()
@@ -476,6 +514,11 @@ namespace Armada.Tui.Screens.Operations
         #endregion
 
         #region Private-Methods
+
+        private void OpenDispatch(BlackBoxProposedChange change, string? vesselId)
+        {
+            _Screen.Context.Navigate(OpsHandoff.Dispatch(OpsHandoff.FromBlackBox, vesselId, null, BlackBoxResilienceText.DraftBrief(change), change.Title, null, null));
+        }
 
         private string? ExportTo(string path, string brief)
         {
@@ -588,18 +631,20 @@ namespace Armada.Tui.Screens.Operations
             }
 
             doc.Note("c " + _Screen.Tr("Copy FIX THIS") + "   x " + _Screen.Tr("Export") + "   r " + _Screen.Tr("Recovery") + "   a " + _Screen.Tr("Ask Armada")
-                + "   j JSON   s " + _Screen.Tr("Resolve") + "   p " + _Screen.Tr(e.Pinned ? "Unpin" : "Pin") + "   n " + _Screen.Tr("Note") + (OffersOpen ? "   o " + _Screen.Tr("Open entry") : ""), doc.Theme.Accent);
+                + "   j JSON   s " + _Screen.Tr("Resolve") + "   p " + _Screen.Tr(e.Pinned ? "Unpin" : "Pin") + "   n " + _Screen.Tr("Note") + (OffersOpen ? "   o " + _Screen.Tr("Open entry") : "")
+                + (BlackBoxResilienceText.TopChange(e) != null ? "   A " + _Screen.Tr("Draft Armada fix") : ""), doc.Theme.Accent);
             doc.Section("Black Box");
             doc.Field("Entry", e.Id);
             doc.Field("Where", BlackBoxText.Where(e.Phase, e.Step));
             doc.Field("Kind", e.FailureKind?.ToString());
             doc.Field("Status", (e.StatusBefore ?? "-") + " -> " + (e.StatusAfter ?? "-"));
-            doc.Field("Triage", e.Triage.ToString());
+            doc.Field("Triage", e.Triage.ToString() + (BlackBoxResilienceText.IsSuspected(e) ? "  (" + _Screen.Tr("suspected Armada defect") + ")" : ""), BlackBoxResilienceText.IsSuspected(e) ? doc.Theme.Warning : null);
             doc.Field("Resolution", e.Resolution.ToString() + (String.IsNullOrEmpty(e.ResolutionNote) ? "" : "  " + e.ResolutionNote));
             doc.Field("Pinned", _Screen.Tr(e.Pinned ? "Yes" : "No"));
             doc.Field("Attempt", e.Attempt.ToString(CultureInfo.InvariantCulture));
             doc.Field("Captured", _Screen.Context.Loc.FormatDateTime(e.CreatedUtc));
             if (!String.IsNullOrEmpty(e.ReasonExcerpt)) doc.Text(e.ReasonExcerpt, doc.Theme.Error);
+            BlackBoxResilienceText.Append(doc, e, BlackBoxResilienceText.TopChange(e) != null ? "A" : null);
 
             List<BlackBoxRecoveryPath> paths = RecoveryPaths;
             doc.Section("Recovery Paths", "  (r)");

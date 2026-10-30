@@ -206,6 +206,36 @@ namespace Armada.Core.BlackBox
         /// <summary>Default attempts before enrichment stops retrying an entry.</summary>
         public const int DefaultMaxEnrichmentAttempts = 5;
 
+        /// <summary>Proposed Armada changes per resilience section.</summary>
+        public const int MaxProposedChanges = 5;
+
+        /// <summary>Code pointers per resilience section.</summary>
+        public const int MaxCodePointers = 12;
+
+        /// <summary>Automatic recoveries Armada already attempted, listed per resilience section.</summary>
+        public const int MaxAttemptedRecoveries = 10;
+
+        /// <summary>Contributing rule ids per resilience section.</summary>
+        public const int MaxResilienceRules = 10;
+
+        /// <summary>Steps in a record's handoff and landing trail.</summary>
+        public const int MaxHandoffSteps = 100;
+
+        /// <summary>Automatic recovery kinds in a record's handoff and landing trail (one per BlackBoxAutoRecoveryKindEnum value).</summary>
+        public const int MaxAutoRecoveries = 16;
+
+        /// <summary>Dock and lease transitions in a record's handoff and landing trail.</summary>
+        public const int MaxDockTransitions = 20;
+
+        /// <summary>Armada versions a fingerprint was seen in, kept on the Related section.</summary>
+        public const int MaxRelatedVersions = 20;
+
+        /// <summary>Resilience gap groups per page (each reads its newest entry's record).</summary>
+        public const int MaxResilienceGapPageSize = 50;
+
+        /// <summary>Weight of the Armada prior vote (BBX-PRIOR-ARMADA) in handoff and landing scope.</summary>
+        public const int ArmadaPriorWeight = 2;
+
         /// <summary>
         /// Cut a string to at most <paramref name="max"/> characters, keeping the head. Null stays null.
         /// </summary>

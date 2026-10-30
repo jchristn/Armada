@@ -82,6 +82,11 @@ namespace Armada.Core.BlackBox
                 RulesVersion = advisor.RulesVersion,
                 ExpectedRuleIds = analysis == null ? new System.Collections.Generic.List<string>() : analysis.Why.Select(w => w.RuleId).Distinct(StringComparer.Ordinal).ToList(),
                 ExpectedTriage = analysis?.Triage?.Verdict ?? Armada.Core.Enums.BlackBoxTriageEnum.Unknown,
+                ExpectedResilience = analysis?.Resilience == null ? null : new BlackBoxFixtureResilience
+                {
+                    InScope = analysis.Resilience.InScope,
+                    SelfHealable = analysis.Resilience.SelfHealable
+                },
                 Record = sanitized
             };
         }

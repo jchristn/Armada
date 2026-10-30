@@ -533,7 +533,7 @@ When a mission or voyage fails, for any reason (dispatch, execution, completion 
 - **Why**: findings from a versioned rule catalog, each with a rule id, confidence and the evidence it rests on, and a triage verdict: your configuration (`UserConfig`), the mission brief (`MissionBrief`), a `Transient` condition, an `ArmadaDefect`, or something `External`.
 - **Conflicts**: the missions that landed on the target since this one started and touched the same files (found by commit trailer), the conflicted files and the directories they cluster in.
 - **Configuration** in effect, with where each value came from, and what would have prevented the failure.
-- **What Armada could change**, with source pointers.
+- **What Armada could change**, with source pointers. For failures in Armada's own handoff and landing the black box is biased toward Armada: it assumes Armada could have been more resilient, says whether Armada could have healed the failure by itself, and writes the Armada change, with the test that would have caught it, as a mission brief (see [Resilience bias](docs/BLACKBOX.md#11-resilience-bias)).
 - **Recovery paths**, ranked, each step with its MCP call, REST request and CLI command.
 - Bounded, redacted **evidence**: agent output, the diff, the mission log tail, check output, `git status` of the worktree and target, the target commits and the events.
 

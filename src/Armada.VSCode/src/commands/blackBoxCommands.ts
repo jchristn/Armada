@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ArmadaApiError, ArmadaBlackBoxClient, askArmadaPrompt, dashboardAskUrl, describeError } from '../api/blackbox';
 import { BlackBoxEntrySummary, BlackBoxRecoveryPath, BlackBoxRecoveryResult, BlackBoxResolution, RESOLUTION_CHOICES } from '../api/types';
 import { ArmadaSettings } from '../config';
+import { changeBrief, rankedChanges } from '../views/entryHtml';
 import { BlackBoxStore } from '../state/blackBoxStore';
 import { entryKind, entryLabel, entrySubjectId, formatAge } from '../util/format';
 
@@ -10,6 +11,9 @@ export const CHAT_OPEN_COMMAND = 'workbench.action.chat.open';
 
 /** Outcome of a recovery run, for callers and tests. */
 export type RecoveryOutcome = 'ran' | 'ranWithErrors' | 'cancelled' | 'noPaths' | 'noToken' | 'refusedDataLoss' | 'conflict' | 'failed';
+
+/** Outcome of "Draft Armada Fix Mission". */
+export type DraftOutcome = 'chat' | 'copied' | 'noChange' | 'cancelled' | 'failed';
 
 /** Outcome of "Send FIX THIS to Chat". */
 export type ChatOutcome = 'chatWithAttachment' | 'chatWithText' | 'copied' | 'cancelled' | 'failed';
@@ -113,6 +117,37 @@ export class BlackBoxCommands {
         void vscode.window.showInformationMessage('Armada: could not open the chat. The FIX THIS brief was copied to the clipboard.');
         return 'copied';
       }
+    }, 'failed');
+  }
+
+  /**
+   * Armada: Draft Armada Fix Mission. Copies the top proposed Armada change of the entry's resilience section as a
+   * mission brief and, when the host has a chat, opens it there; otherwise the brief stays on the clipboard.
+   */
+  public async draftArmadaFixMission(arg?: unknown): Promise<DraftOutcome> {
+    return this.guard<DraftOutcome>(async () => {
+      const summary = await this.pickEntry(arg, 'Draft Armada Fix Mission');
+      if (!summary) return 'cancelled';
+      const entry = await this._Deps.getClient().getEntry(summary.Id);
+      const resilience = entry.Record?.Analysis?.Resilience ?? null;
+      const top = rankedChanges(resilience)[0];
+      if (!top) {
+        void vscode.window.showInformationMessage(`Armada: ${resilience?.NoChangeReason ?? `entry ${entry.Id} proposes no Armada change.`}`);
+        return 'noChange';
+      }
+      const brief = changeBrief(top);
+      await vscode.env.clipboard.writeText(brief);
+      const available = await vscode.commands.getCommands(true);
+      if (available.includes(CHAT_OPEN_COMMAND)) {
+        try {
+          await vscode.commands.executeCommand(CHAT_OPEN_COMMAND, { query: `Draft this Armada fix mission on the Armada vessel:\n\n${brief}`, isPartialQuery: true });
+          return 'chat';
+        } catch {
+          // fall through to the copied message
+        }
+      }
+      void vscode.window.showInformationMessage(`Armada: the Armada fix mission brief "${top.Title}" was copied. Dispatch it on the Armada vessel.`);
+      return 'copied';
     }, 'failed');
   }
 

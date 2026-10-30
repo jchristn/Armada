@@ -16,7 +16,7 @@ namespace Armada.Helm.Commands
     /// <summary>
     /// <c>armada blackbox show &lt;missionId|voyageId|entryId&gt;</c>: the black box entry of a mission, a voyage, or an
     /// entry id. <c>--brief</c> prints only the Markdown FIX THIS brief to stdout (<c>| pbcopy</c> works), <c>--json</c>
-    /// only the entry with its record; otherwise a summary with the recovery paths. Exits
+    /// only the entry with its record; otherwise a summary, the Armada resilience section and the recovery paths. Exits
     /// <see cref="BlackBoxCli.NotFoundExitCode"/> with a message on stderr when there is no entry.
     /// </summary>
     [Description("Show the black box entry of a mission, voyage, or entry id")]
@@ -97,7 +97,7 @@ namespace Armada.Helm.Commands
                 new Markup("[dodgerblue1]Where:[/]       " + Markup.Escape(e.Phase + " / " + e.Step)),
                 new Markup("[dodgerblue1]Kind:[/]        " + Markup.Escape(e.FailureKind?.ToString() ?? "-")),
                 new Markup("[dodgerblue1]Status:[/]      " + Markup.Escape((e.StatusBefore ?? "-") + " -> " + (e.StatusAfter ?? "-"))),
-                new Markup("[dodgerblue1]Triage:[/]      [bold]" + Markup.Escape(e.Triage.ToString()) + "[/]"),
+                new Markup("[dodgerblue1]Triage:[/]      [bold]" + Markup.Escape(e.Triage.ToString()) + "[/]" + (e.Record?.Analysis?.Triage?.Suspected == true ? "  [gold1](suspected Armada defect)[/]" : "")),
                 new Markup("[dodgerblue1]Resolution:[/]  " + Markup.Escape(e.Resolution.ToString()) + (e.Pinned ? "  [gold1](pinned)[/]" : "")),
                 new Markup("[dodgerblue1]Attempt:[/]     " + e.Attempt + (e.IsCurrent ? "" : "  [dim](superseded)[/]")),
                 new Markup("[dodgerblue1]Captured:[/]    " + e.CreatedUtc.ToString("yyyy-MM-dd HH:mm") + " UTC"),
@@ -109,6 +109,9 @@ namespace Armada.Helm.Commands
             panel.Border = BoxBorder.Rounded;
             panel.BorderStyle = new Style(Color.DodgerBlue1);
             AnsiConsole.Write(panel);
+
+            IRenderable? resilience = BlackBoxResilienceRendering.Build(e);
+            if (resilience != null) AnsiConsole.Write(resilience);
 
             List<BlackBoxRecoveryPath> paths = e.Record?.Analysis?.RecoveryPaths?.OrderBy(p => p.Rank).ToList() ?? new List<BlackBoxRecoveryPath>();
             if (paths.Count > 0)

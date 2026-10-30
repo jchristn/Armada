@@ -300,6 +300,7 @@ namespace Armada.Tui.Screens.Operations
             screen.Actions.Add(new OpsScreenAction("failure-resolve", "Resolve failure", () => panel.Resolve(), null, has) { Toolbar = false });
             screen.Actions.Add(new OpsScreenAction("failure-pin", "Pin or unpin black box entry", panel.TogglePin, null, has) { Toolbar = false });
             screen.Actions.Add(new OpsScreenAction("failure-note", "Add failure note", () => panel.AddNote(), null, has) { Toolbar = false });
+            screen.Actions.Add(new OpsScreenAction("failure-armada-fix", "Draft Armada fix mission", () => panel.DraftArmadaFix(), null, () => BlackBoxResilienceText.TopChange(panel.Entry) != null) { Toolbar = false });
         }
 
         #endregion

@@ -119,6 +119,7 @@ namespace Test.Shared.Suites.E2E
             "get_blackbox_bundle",
             "list_blackbox_hotspots",
             "list_blackbox_fingerprints",
+            "list_blackbox_resilience_gaps",
             "purge_blackbox",
             "export_blackbox_fixture"
         };

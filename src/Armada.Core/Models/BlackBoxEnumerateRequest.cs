@@ -84,6 +84,13 @@ namespace Armada.Core.Models
         public string? SearchText { get; set; } = null;
 
         /// <summary>
+        /// True for entries in Armada's handoff and landing scope (phases Handoff, Landing, MergeQueue, Recovery and
+        /// Provision, plus the InvalidOutput and ReviewApprovedDockMissing steps and the InvalidOutput kind); false for the
+        /// rest; null for every entry.
+        /// </summary>
+        public bool? ResilienceScope { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         public BlackBoxEnumerateRequest()

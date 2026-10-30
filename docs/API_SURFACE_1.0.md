@@ -24,12 +24,12 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 489 | 15 |
-| MCP tools | 242 | 8 |
+| REST routes | 490 | 15 |
+| MCP tools | 243 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 76 | 0 |
-| CLI commands | 96 | 0 |
+| CLI commands | 97 | 0 |
 | Settings keys | 285 | 12 |
 
 ## REST API
@@ -94,6 +94,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/blackbox/purge` | AdminOnly | `BlackBoxPurgeRequest` (optional) | 200 `BlackBoxPurgeResult`, 403 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/recovery-stats` | Authenticated |  | 200 `EnumerationResult<BlackBoxRecoveryStat>` |  |
 | POST | `/api/v1/blackbox/recovery-stats/enumerate` | Authenticated | `BlackBoxRecoveryStatsRequest` (optional) | 200 `EnumerationResult<BlackBoxRecoveryStat>`, 400 |  |
+| POST | `/api/v1/blackbox/resilience-gaps/enumerate` | Authenticated | `BlackBoxResilienceGapRequest` (optional) | 200 `EnumerationResult<BlackBoxResilienceGap>`, 400 |  |
 | GET | `/api/v1/blackbox/retention` | TenantAdmin |  | 200 `BlackBoxRetentionStatus`, 403 `ApiErrorResponse` |  |
 | POST | `/api/v1/blackbox/search` | Authenticated | `BlackBoxSearchRequest` | 200 `EnumerationResult<BlackBoxEntrySummary>`, 400 `ApiErrorResponse` |  |
 | GET | `/api/v1/blackbox/storage` | AdminOnly |  | 200 `BlackBoxStorageStatus`, 403 `ApiErrorResponse` |  |
@@ -625,7 +626,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_backlog_refinement_session` | Authenticated | `sessionId*: string` |  |
 | `get_battery_run` | Authenticated | `id*: string` |  |
 | `get_blackbox` | Authenticated | `entryId: string`, `format: string`, `missionId: string`, `redactHosts: boolean`, `voyageId: string` |  |
-| `get_blackbox_bundle` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `format: string`, `isCurrent: boolean`, `kind: string`, `max: integer`, `missionId: string`, `path: string`, `phase: string`, `pinned: boolean`, `redactHosts: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
+| `get_blackbox_bundle` | Authenticated | `allFailures: boolean`, `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `format: string`, `isCurrent: boolean`, `kind: string`, `max: integer`, `missionId: string`, `path: string`, `phase: string`, `pinned: boolean`, `redactHosts: boolean`, `resilienceScope: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
 | `get_blackbox_fingerprint_trend` | Authenticated | `fingerprint*: string` |  |
 | `get_blackbox_recovery_stats` | Authenticated | `pageNumber: integer`, `pageSize: integer`, `ruleId: string`, `vesselId: string` |  |
 | `get_blackbox_retention` | TenantAdmin |  |  |
@@ -679,12 +680,13 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `list_backlog_refinement_sessions` | Authenticated | `objectiveId*: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `list_battery_packs` | Authenticated | `pageNumber: integer`, `pageSize: integer` |  |
 | `list_battery_results` | Authenticated | `order: string`, `pageNumber: integer`, `pageSize: integer`, `runId*: string`, `status: string` |  |
-| `list_blackbox_entries` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `isCurrent: boolean`, `kind: string`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `path: string`, `phase: string`, `pinned: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
+| `list_blackbox_entries` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `isCurrent: boolean`, `kind: string`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `path: string`, `phase: string`, `pinned: boolean`, `resilienceScope: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
 | `list_blackbox_fingerprints` | Authenticated | `createdAfter: string`, `createdBefore: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `resolution: string`, `vesselId: string` |  |
 | `list_blackbox_hotspots` | Authenticated | `createdAfter: string`, `createdBefore: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `role: string`, `vesselId: string` |  |
 | `list_blackbox_nearby_successes` | Authenticated | `entryId*: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `list_blackbox_notes` | Authenticated | `entryId: string`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `voyageId: string` |  |
 | `list_blackbox_objects` | Authenticated | `entryId: string`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `voyageId: string` |  |
+| `list_blackbox_resilience_gaps` | Authenticated | `createdAfter: string`, `createdBefore: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `phase: string`, `resolution: string`, `vesselId: string` |  |
 | `list_failure_cause_rules` | Authenticated | `pageNumber: integer`, `pageSize: integer` |  |
 | `list_handoff_artifacts` | Authenticated | `missionId*: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `list_harbor_jobs` | Authenticated | `harborId*: string`, `openOnly: boolean`, `pageNumber: integer`, `pageSize: integer` | experimental |
@@ -703,7 +705,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `preview_workflow_profile` | Authenticated | `vesselId*: string`, `workflowProfileId: string` |  |
 | `process_merge_entry` | TenantAdmin | `entryId*: string` |  |
 | `process_merge_queue` | TenantAdmin |  |  |
-| `purge_blackbox` | AdminOnly | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `dryRun: boolean`, `fingerprint: string`, `fleetId: string`, `includePinned: boolean`, `isCurrent: boolean`, `kind: string`, `maxEntries: integer`, `missionId: string`, `path: string`, `phase: string`, `pinned: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
+| `purge_blackbox` | AdminOnly | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `dryRun: boolean`, `fingerprint: string`, `fleetId: string`, `includePinned: boolean`, `isCurrent: boolean`, `kind: string`, `maxEntries: integer`, `missionId: string`, `path: string`, `phase: string`, `pinned: boolean`, `resilienceScope: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
 | `purge_dock` | TenantAdmin | `dockId*: string` |  |
 | `purge_merge_entries` | TenantAdmin | `entryIds*: array<string>` |  |
 | `purge_merge_entry` | TenantAdmin | `entryId*: string` |  |
@@ -733,7 +735,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `run_blackbox_recovery` | Authenticated | `acknowledgeDataLoss: boolean`, `confirmToken: string`, `dryRun: boolean`, `entryId: string`, `missionId: string`, `pathId*: string`, `voyageId: string` |  |
 | `run_check` | TenantAdmin | `branchName: string`, `commandOverride: string`, `commitHash: string`, `environmentName: string`, `label: string`, `missionId: string`, `type*: string`, `vesselId*: string`, `voyageId: string`, `workflowProfileId: string` |  |
 | `run_fleet_action` | TenantAdmin | `actionId: string`, `approvalOptions: object`, `commandText: string`, `commandWindows: string`, `concurrency: integer`, `inputValues: object`, `inputs: array<object>`, `kind: string`, `name: string`, `outputParser: string`, `pipelineId: string`, `promptTemplate: string`, `requiredTools: array<string>`, `requiresCleanWorkingTree: boolean`, `requiresNetwork: boolean`, `scanSourceActionKey: string`, `timeoutSeconds: integer`, `vesselIds*: array<string>` |  |
-| `search_blackbox` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `isCurrent: boolean`, `kind: string`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `path: string`, `phase: string`, `pinned: boolean`, `query*: string`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
+| `search_blackbox` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `isCurrent: boolean`, `kind: string`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `path: string`, `phase: string`, `pinned: boolean`, `query*: string`, `resilienceScope: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
 | `search_memory` | Authenticated | `pageNumber: integer`, `pageSize: integer`, `search: string`, `topic: string`, `type: string`, `vesselId: string` |  |
 | `send_ask_message` | Authenticated | `content*: string`, `showThinking: boolean`, `threadId*: string`, `waitSeconds: integer` |  |
 | `send_backlog_refinement_message` | TenantAdmin | `content*: string`, `sessionId*: string` |  |
@@ -909,6 +911,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada blackbox diff` | `<id>*` `<otherId>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox download` | `<id>*` | `--json`, `--output\|-o`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox export-fixture` | `<id>*` | `--json`, `--name`, `--output\|-o`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada blackbox gaps` |  | `--json`, `--page`, `--page-size`, `--phase`, `--profile`, `--resolution`, `--server`, `--since`, `--token`, `--verbose`, `--vessel` |
 | `armada blackbox gc` |  | `--dry-run`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada blackbox list` |  | `--before`, `--captain`, `--fingerprint`, `--json`, `--kind`, `--mission`, `--page`, `--page-size`, `--phase`, `--pinned`, `--profile`, `--resolution`, `--server`, `--since`, `--step`, `--token`, `--triage`, `--verbose`, `--vessel`, `--voyage` |
 | `armada blackbox nearby` | `<id>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |

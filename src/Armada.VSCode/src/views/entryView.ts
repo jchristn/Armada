@@ -16,6 +16,7 @@ const ACTION_COMMANDS: Record<string, string> = {
   askArmada: 'armada.askArmada',
   timeline: 'armada.showBlackBoxTimeline',
   compareAttempts: 'armada.compareBlackBoxAttempts',
+  draftFix: 'armada.draftArmadaFixMission',
 };
 
 /** Shows black box entries in webview panels, one panel per entry. */

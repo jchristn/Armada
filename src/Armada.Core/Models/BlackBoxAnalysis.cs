@@ -67,6 +67,12 @@ namespace Armada.Core.Models
         /// </summary>
         public BlackBoxTriageVerdict? Triage { get; set; } = null;
 
+        /// <summary>
+        /// Resilience analysis: could Armada's handoff and landing have healed it, why Armada did not catch it, where it
+        /// lives in the Armada source and the Armada changes that would prevent it. Filled for every analyzed entry.
+        /// </summary>
+        public BlackBoxResilience? Resilience { get; set; } = null;
+
         private List<BlackBoxFinding> _Why = new List<BlackBoxFinding>();
         private List<BlackBoxConfigRecommendation> _ConfigRecommendations = new List<BlackBoxConfigRecommendation>();
         private List<BlackBoxImprovement> _ArmadaImprovements = new List<BlackBoxImprovement>();

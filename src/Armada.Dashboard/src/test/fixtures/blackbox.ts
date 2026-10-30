@@ -1,4 +1,4 @@
-import type { BlackBoxEntry, BlackBoxEntrySummary } from '../../types/blackbox';
+import type { BlackBoxEntry, BlackBoxEntrySummary, BlackBoxResilience } from '../../types/blackbox';
 
 /** A landing-conflict black box entry with every section filled, for the panel and page tests. */
 export function blackBoxEntryFixture(overrides: Partial<BlackBoxEntry> = {}): BlackBoxEntry {
@@ -81,4 +81,31 @@ export function blackBoxAttemptsFixture(): BlackBoxEntrySummary[] {
 /** An enumeration page. */
 export function page<T>(objects: T[], overrides: Partial<{ pageNumber: number; pageSize: number; totalPages: number; totalRecords: number }> = {}) {
   return { success: true, pageNumber: 1, pageSize: 25, totalPages: 1, totalRecords: objects.length, totalMs: 1, objects, ...overrides };
+}
+
+/** The resilience section of an in-scope landing failure (the dock was deleted before landing). */
+export function blackBoxResilienceFixture(overrides: Partial<BlackBoxResilience> = {}): BlackBoxResilience {
+  return {
+    inScope: true,
+    scopeReason: 'phase Landing (step TargetIntegration) is Armada\'s handoff and landing',
+    selfHealable: 'Yes',
+    selfHealingProposal: 'recreated the worktree from armada/request-logging and retried the landing',
+    detectionGapKind: 'Race',
+    detectionGap: 'The dock was reclaimed while the mission still had to land.',
+    invariant: 'A dock whose mission is WorkProduced stays on disk until the landing finishes.',
+    codePointers: ['src/Armada.Server/MissionLandingHandler.cs:EnsureLandingDockAsync', 'src/Armada.Core/Services/DockService.cs:ReclaimAsync'],
+    armadaVersion: '1.2.0',
+    armadaCommit: 'abc9999',
+    proposedChanges: [
+      { rank: 2, title: 'Never reclaim a dock whose mission still has to land', change: 'Refuse to reclaim leased docks.', acceptanceTest: 'Services.DockLease: reclaim is refused.', severity: 'High', ruleId: 'BBX-LAND-002' },
+      { rank: 1, title: 'Recreate a missing dock worktree from the branch before landing', change: 'Restore the worktree from the branch and continue.', acceptanceTest: 'Services.LandingPipeline: the dock is recreated and the mission lands.', severity: 'Critical', ruleId: 'BBX-LAND-002', missionBrief: 'Recreate a missing dock worktree from the branch before landing\n\nRestore the worktree.' },
+    ],
+    regressionTest: { suite: 'Services.LandingPipeline', description: 'Remove the dock directory before landing and assert it lands.' },
+    severity: 'Critical',
+    occurrences30Days: 5,
+    armadaVersionCount: 2,
+    attemptedRecoveries: ['LandingRetry x2 (Expired)'],
+    ruleIds: ['BBX-LAND-002', 'BBX-PRIOR-ARMADA'],
+    ...overrides,
+  };
 }

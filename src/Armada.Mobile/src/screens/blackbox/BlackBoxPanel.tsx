@@ -36,6 +36,8 @@ import {
 } from './blackBoxModel';
 import { NoteSheet, ResolveSheet } from './EntryFormSheets';
 import { RecoverySheet, type RecoveryStage } from './RecoverySheet';
+import { ResilienceSection } from './ResilienceSection';
+import { armadaFixPrompt, changeBrief, isArmadaDefect, isPriorOnly, resilienceOf, type ResilienceChange } from './resilienceModel';
 
 /** Which entry to show: a mission's or voyage's current entry, or one entry by id. */
 export interface BlackBoxSource {
@@ -67,7 +69,8 @@ export interface BlackBoxPanelProps {
  * happened, where, how, status before and after, why, conflicting missions, files and directories), the recorded
  * recovery paths (dry run, then a confirmation with a data-loss acknowledgement; runs are recorded as Operator),
  * Resolve, Add note, Share, Copy FIX THIS and Full report (all the entry's single FIX THIS brief), and Ask Armada
- * about this failure. Follows the entry
+ * about this failure. The Armada resilience section follows the summary (a "Suspected Armada defect" badge marks an
+ * ArmadaDefect triage), with Draft Armada fix mission (Ask Armada prefilled) and Copy fix brief. Follows the entry
  * live over the socket (blackbox.* events).
  */
 export function BlackBoxPanel({ source, fallback = null, standalone = false, after }: BlackBoxPanelProps) {
@@ -228,6 +231,15 @@ export function BlackBoxPanel({ source, fallback = null, standalone = false, aft
   }, 'Share failed: {{message}}');
   const viewReport = () => withBrief('report', async (brief) => { setReport(brief); }, 'Failed to load the report: {{message}}');
   const ask = () => open(askPrefillRoute(blackBoxAskPrompt(entry)));
+  const draftFix = () => open(askPrefillRoute(armadaFixPrompt(entry, resilienceOf(entry))));
+  const copyFixBrief = async (change: ResilienceChange) => {
+    try {
+      await copyText(changeBrief(change));
+      pushToast('success', t('Armada fix brief copied.'));
+    } catch (e) {
+      pushToast('error', t('Copy failed: {{message}}', { message: errorMessage(e, '') }));
+    }
+  };
 
   return (
     <View testID="bbx-panel">
@@ -238,6 +250,11 @@ export function BlackBoxPanel({ source, fallback = null, standalone = false, aft
             <StatusBadge label={t(spaced(entry.triage))} tone={triageTone(entry.triage)} />
             <StatusBadge label={t(spaced(entry.resolution))} tone={resolutionTone(entry.resolution)} />
             {entry.attempt > 1 ? <StatusBadge label={t('Attempt {{n}}', { n: entry.attempt })} tone="info" /> : null}
+            {isArmadaDefect(entry) ? (
+              <View testID="bbx-suspected-defect">
+                <StatusBadge label={isPriorOnly(entry) ? t('Suspected Armada defect (prior only)') : t('Suspected Armada defect')} tone="failed" />
+              </View>
+            ) : null}
           </View>
           {summary ? <AppText selectable testID="bbx-what-happened">{summary}</AppText> : null}
         </View>
@@ -250,6 +267,8 @@ export function BlackBoxPanel({ source, fallback = null, standalone = false, aft
         <KeyValueRow label={t('Status')} value={`${statusBefore ? t(statusBefore) : '-'} -> ${statusAfter ? t(statusAfter) : '-'}`} testID="bbx-status-change" />
         <KeyValueRow label={t('Captured')} value={formatDateTime(entry.createdUtc)} />
       </Section>
+
+      <ResilienceSection entry={entry} busy={busy !== null} onDraft={draftFix} onCopyBrief={(change) => void copyFixBrief(change)} />
 
       {how.length > 0 || tail ? (
         <Section title={t('How')}>

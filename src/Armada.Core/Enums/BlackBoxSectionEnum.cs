@@ -106,6 +106,18 @@ namespace Armada.Core.Enums
         Truncation,
 
         /// <summary>
+        /// The resilience analysis (analysis.resilience): self-healing, detection gap, code pointers and proposed Armada changes.
+        /// </summary>
+        [EnumMember(Value = "Resilience")]
+        Resilience,
+
+        /// <summary>
+        /// The handoff and landing trail (handoff): ordered steps, automatic recoveries, dock transitions and target movement.
+        /// </summary>
+        [EnumMember(Value = "Handoff")]
+        Handoff,
+
+        /// <summary>
         /// A value this build does not recognize (written by a newer Armada); tolerant readers map unknown values here.
         /// </summary>
         [EnumMember(Value = "Unknown")]

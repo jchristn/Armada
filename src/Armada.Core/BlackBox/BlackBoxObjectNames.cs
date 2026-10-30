@@ -35,6 +35,11 @@ namespace Armada.Core.BlackBox
         /// <summary>Relevant events (application/json).</summary>
         public const string Events = "evidence/events.json";
 
+        /// <summary>
+        /// Handoff and landing trail (record.handoff as JSON): ordered steps, automatic recoveries, dock transitions, target movement.
+        /// </summary>
+        public const string HandoffTimeline = "evidence/handoff-timeline.json";
+
         /// <summary>Download manifest, only inside a .zip download (application/json).</summary>
         public const string Manifest = "manifest.json";
 

@@ -29,7 +29,7 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(Case("every_fixture", "Every fixture still produces its expected rule ids and triage, is sanitized and validates against the record schema", TestTags.Positive, async () =>
+            cases.Add(Case("every_fixture", "Every fixture still produces its expected rule ids, triage and resilience output, is sanitized and validates against the record schema", TestTags.Positive, async () =>
             {
                 string dir = Path.Combine(DashboardSource.RepoRoot(), "src", "Test.Shared", "Fixtures", "BlackBox");
                 List<string> files = Directory.GetFiles(dir, "*.json").OrderBy(f => f, StringComparer.Ordinal).ToList();
@@ -46,6 +46,15 @@ namespace Test.Shared.Suites.Services
                     foreach (string id in fixture.ExpectedRuleIds) AssertTrue(a.Why.Any(w => w.RuleId == id), name + ": expected " + id + ", got " + String.Join(", ", a.Why.Select(w => w.RuleId)));
                     AssertEqual(fixture.ExpectedRuleIds[0], a.Why[0].RuleId, name + ": the first expected rule leads");
                     AssertEqual(fixture.ExpectedTriage, a.Triage!.Verdict, name + " triage");
+                    BlackBoxFixtureResilience? want = fixture.ExpectedResilience;
+                    AssertNotNull(want, name + " records its expected resilience output");
+                    BlackBoxResilience res = a.Resilience!;
+                    AssertEqual(want!.InScope, res.InScope, name + " resilience scope");
+                    AssertEqual(want.SelfHealable, res.SelfHealable, name + " self-healable");
+                    if (want.ProposalContains != null) AssertTrue(res.ProposedChanges.Count > 0 && (res.ProposedChanges[0].Title + " " + res.ProposedChanges[0].Change).Contains(want.ProposalContains, StringComparison.OrdinalIgnoreCase), name + ": top proposed change mentions '" + want.ProposalContains + "', got '" + (res.ProposedChanges.FirstOrDefault()?.Title ?? "none") + "'");
+                    if (want.SelfHealingContains != null) AssertTrue((res.SelfHealingProposal ?? "").Contains(want.SelfHealingContains, StringComparison.OrdinalIgnoreCase), name + ": self-healing mentions '" + want.SelfHealingContains + "', got '" + res.SelfHealingProposal + "'");
+                    if (want.RecommendationId != null) AssertTrue(a.ConfigRecommendations.Any(r => r.Id == want.RecommendationId), name + ": the user-side fix " + want.RecommendationId + " is still offered");
+                    if (res.InScope) AssertTrue(res.CodePointers.Count > 0 && res.DetectionGap != null && res.RegressionTest != null, name + ": complete resilience section in scope");
                     rulesCovered.UnionWith(fixture.ExpectedRuleIds);
                     string json = JsonSerializer.Serialize(fixture.Record, BlackBoxJson.Options);
                     AssertFalse(json.Contains("/Users/", StringComparison.Ordinal) || json.Contains("/home/", StringComparison.Ordinal), name + " has no host paths");

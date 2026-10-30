@@ -18,6 +18,16 @@ namespace Armada.Core.Models
         public BlackBoxResolutionEnum? Resolution { get; set; } = null;
 
         /// <summary>
+        /// Count only entries with this triage verdict.
+        /// </summary>
+        public BlackBoxTriageEnum? Triage { get; set; } = null;
+
+        /// <summary>
+        /// True for entries in Armada's handoff and landing scope, false for the rest, null for every entry.
+        /// </summary>
+        public bool? ResilienceScope { get; set; } = null;
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         public BlackBoxFingerprintEnumerateRequest()

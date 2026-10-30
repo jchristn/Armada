@@ -48,6 +48,11 @@ namespace Armada.Core.Models
         public BlackBoxTriageEnum ExpectedTriage { get; set; } = BlackBoxTriageEnum.Unknown;
 
         /// <summary>
+        /// Expected resilience output, or null when the fixture does not check it.
+        /// </summary>
+        public BlackBoxFixtureResilience? ExpectedResilience { get; set; } = null;
+
+        /// <summary>
         /// The sanitized record.
         /// </summary>
         public BlackBoxRecord Record { get; set; } = new BlackBoxRecord();

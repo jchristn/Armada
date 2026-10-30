@@ -221,6 +221,8 @@ import type {
   BlackBoxEnumerateQuery,
   BlackBoxFingerprintQuery,
   BlackBoxFingerprintSummary,
+  BlackBoxResilienceGap,
+  BlackBoxResilienceGapQuery,
   BlackBoxGcReport,
   BlackBoxHotspot,
   BlackBoxHotspotQuery,
@@ -1414,6 +1416,7 @@ function blackBoxFilterBody(query?: BlackBoxEnumerateQuery): Record<string, unkn
   if (query.pinned !== undefined) body.Pinned = query.pinned;
   if (query.isCurrent !== undefined) body.IsCurrent = query.isCurrent;
   if (query.path) body.Path = query.path;
+  if (query.resilienceScope !== undefined) body.ResilienceScope = query.resilienceScope;
   if (query.createdAfter) body.CreatedAfter = query.createdAfter;
   if (query.createdBefore) body.CreatedBefore = query.createdBefore;
   return body;
@@ -1567,6 +1570,7 @@ export const getBlackBoxBundle = (query?: BlackBoxBundleQuery) =>
     ...(query?.max !== undefined ? { Max: query.max } : {}),
     ...(query?.format ? { Format: query.format } : {}),
     ...(query?.redactHosts ? { RedactHosts: true } : {}),
+    ...(query?.allFailures ? { AllFailures: true } : {}),
   });
 /** One page of directories that recur in black box file rows, most entries first. */
 export const enumerateBlackBoxHotspots = (query?: BlackBoxHotspotQuery) =>
@@ -1575,6 +1579,16 @@ export const enumerateBlackBoxHotspots = (query?: BlackBoxHotspotQuery) =>
     ...(query?.vesselId ? { VesselId: query.vesselId } : {}),
     ...(query?.role ? { Role: query.role } : {}),
     ...(query?.tenantId ? { TenantId: query.tenantId } : {}),
+    ...(query?.createdAfter ? { CreatedAfter: query.createdAfter } : {}),
+    ...(query?.createdBefore ? { CreatedBefore: query.createdBefore } : {}),
+  });
+/** One page (at most 50) of Armada resilience gaps: handoff and landing failure modes triaged ArmadaDefect. */
+export const enumerateBlackBoxResilienceGaps = (query?: BlackBoxResilienceGapQuery) =>
+  post<EnumerationResult<BlackBoxResilienceGap>>(`${BLACKBOX}/resilience-gaps/enumerate`, {
+    ...blackBoxPagedBody(query),
+    ...(query?.vesselId ? { VesselId: query.vesselId } : {}),
+    ...(query?.resolution ? { Resolution: query.resolution } : {}),
+    ...(query?.phase ? { Phase: query.phase } : {}),
     ...(query?.createdAfter ? { CreatedAfter: query.createdAfter } : {}),
     ...(query?.createdBefore ? { CreatedBefore: query.createdBefore } : {}),
   });

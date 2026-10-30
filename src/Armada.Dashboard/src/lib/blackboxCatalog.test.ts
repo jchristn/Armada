@@ -23,6 +23,8 @@ import cascadeGraph from '../components/blackbox/VoyageCascadeGraph.tsx?raw';
 import recoveryStatsTab from '../components/blackbox/BlackBoxRecoveryStatsTab.tsx?raw';
 import entryActions from '../components/blackbox/blackBoxEntryActions.ts?raw';
 import rowActions from '../components/blackbox/useBlackBoxRowActions.tsx?raw';
+import resilienceSection from '../components/blackbox/BlackBoxResilienceSection.tsx?raw';
+import resilienceGapsTab from '../components/blackbox/BlackBoxResilienceGapsTab.tsx?raw';
 import type { I18nCatalog } from '../i18n/runtime';
 
 const S = "'((?:[^'\\\\]|\\\\.)*)'";
@@ -33,7 +35,7 @@ const PROP = /\b(?:title|confirmLabel|ariaLabel|refreshTitle)="([^"]+)"/g;
 const SOURCES = [
   panel, actionDialog, evidence, notes, resolveDialog, entriesTab, fingerprintsTab, hotspotsTab, retentionTab, settings, blackBoxPage, entryPage, blackBoxLib,
   dispatchWarnings, timeline, attemptDiff, nearbySuccesses, reservationsCard, doctorCard, cascadeGraph, recoveryStatsTab,
-  entryActions, rowActions,
+  entryActions, rowActions, resilienceSection, resilienceGapsTab,
 ];
 
 /** Label maps (Record<Kind, string>) in the insight components, passed to t() as data. */
@@ -59,8 +61,18 @@ const SHARED_KEYS = [
   'Access key', 'Secret key', 'Connection string', 'Credentials file path', 'Password', 'Hostname', 'Bucket', 'Port',
 ];
 
+/** Resilience values passed to t() as data: self-healable verdicts, detection gaps, automatic recovery kinds and outcomes,
+ * severities, and the Dispatch prefill notice of Draft Armada fix mission. */
+const RESILIENCE_VALUES = [
+  'Yes', 'No', 'Unknown', 'Low', 'Medium', 'High', 'Critical',
+  'NoPreflightCheck', 'CheckTooLate', 'StateNotPersisted', 'Race', 'MissingInvariant', 'MissingRetry', 'None',
+  'Redispatch', 'OutputRepair', 'LandingRetry', 'DeferralRetry', 'Rescue', 'DockRepair', 'Reconcile', 'OrphanRecovery',
+  'Succeeded', 'Failed', 'Expired', 'Pending', 'RunFailed', 'ArmadaDefect',
+  'Prefilled from a black box entry: an Armada fix mission on the Armada vessel. Review the brief below and dispatch when ready.',
+];
+
 function blackBoxKeys(): string[] {
-  const keys = new Set<string>([...SHARED_KEYS, ...INSIGHT_PAGE_KEYS]);
+  const keys = new Set<string>([...SHARED_KEYS, ...INSIGHT_PAGE_KEYS, ...RESILIENCE_VALUES]);
   for (const source of LABEL_MAPS) {
     for (const block of source.matchAll(MAP_BLOCK)) {
       for (const m of block[1].matchAll(MAP_VALUE)) keys.add(m[1].replace(/\\'/g, "'"));
@@ -95,6 +107,10 @@ describe('Black box i18n catalog', () => {
     expect(keys).toContain('Sibling failure');
     expect(keys).toContain('Merge entry');
     expect(keys).toContain('Serialize Overlapping Missions');
+    expect(keys).toContain('Armada resilience');
+    expect(keys).toContain('Draft Armada fix mission');
+    expect(keys).toContain('Suspected Armada defect');
+    expect(keys).toContain('Armada resilience gaps');
     expect(keys.length).toBeGreaterThan(300);
   });
 

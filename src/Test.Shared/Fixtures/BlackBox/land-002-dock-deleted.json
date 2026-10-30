@@ -2,11 +2,18 @@
   "name": "land-002-dock-deleted",
   "description": "msn_mvsjeweh_tmCfX52gt3z: the dock directory was deleted before landing, so git could not start in it; the process-start error was reported as a landing failure.",
   "source": "msn_mvsjeweh_tmCfX52gt3z (reconstructed from MISSION_BLACKBOX_PLAN.md 16.10; the mission was deleted on 2026-10-29)",
-  "rulesVersion": 1,
+  "rulesVersion": 2,
   "expectedRuleIds": [
     "BBX-LAND-002"
   ],
   "expectedTriage": "ArmadaDefect",
+  "expectedResilience": {
+    "inScope": true,
+    "selfHealable": "Yes",
+    "proposalContains": "Recreate a missing dock worktree from the branch",
+    "selfHealingContains": "recreated the worktree",
+    "recommendationId": null
+  },
   "record": {
     "entryId": "bbx_fixture_land002",
     "schemaVersion": 1,

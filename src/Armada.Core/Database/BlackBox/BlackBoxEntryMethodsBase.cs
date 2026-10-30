@@ -441,6 +441,8 @@ namespace Armada.Core.Database.BlackBox
             if (query.UserId != null) conditions.Add("e.user_id = @user_id");
             if (query.VesselId != null) conditions.Add("e.vessel_id = @vessel_id");
             if (query.Resolution.HasValue) conditions.Add("e.resolution = @resolution");
+            if (query.Triage.HasValue) conditions.Add("e.triage = @triage");
+            if (query.ResilienceScope.HasValue) conditions.Add(ResilienceScopeClause(query.ResilienceScope.Value));
             if (query.CreatedAfter.HasValue) conditions.Add("e.created_utc > @created_after");
             if (query.CreatedBefore.HasValue) conditions.Add("e.created_utc < @created_before");
             Action<DbCommand> bind = cmd =>
@@ -449,6 +451,7 @@ namespace Armada.Core.Database.BlackBox
                 if (query.UserId != null) _Sql.Add(cmd, "@user_id", query.UserId);
                 if (query.VesselId != null) _Sql.Add(cmd, "@vessel_id", query.VesselId);
                 if (query.Resolution.HasValue) _Sql.Add(cmd, "@resolution", query.Resolution.Value.ToString());
+                if (query.Triage.HasValue) _Sql.Add(cmd, "@triage", query.Triage.Value.ToString());
                 if (query.CreatedAfter.HasValue) _Sql.AddDate(cmd, "@created_after", query.CreatedAfter.Value);
                 if (query.CreatedBefore.HasValue) _Sql.AddDate(cmd, "@created_before", query.CreatedBefore.Value);
             };
@@ -635,6 +638,7 @@ namespace Armada.Core.Database.BlackBox
             if (q.Pinned.HasValue) conditions.Add("e.pinned = " + (q.Pinned.Value ? _Sql.True : _Sql.False));
             if (q.IsCurrent.HasValue) conditions.Add("e.is_current = " + (q.IsCurrent.Value ? _Sql.True : _Sql.False));
             if (q.Path != null) conditions.Add("EXISTS (SELECT 1 FROM blackbox_files f WHERE f.entry_id = e.id AND f.path = @path)");
+            if (q.ResilienceScope.HasValue) conditions.Add(ResilienceScopeClause(q.ResilienceScope.Value));
             if (q.CreatedAfter.HasValue) conditions.Add("e.created_utc > @created_after");
             if (q.CreatedBefore.HasValue) conditions.Add("e.created_utc < @created_before");
             if (!String.IsNullOrEmpty(q.SearchText))
@@ -666,6 +670,17 @@ namespace Armada.Core.Database.BlackBox
                 if (q.CreatedBefore.HasValue) _Sql.AddDate(cmd, "@created_before", q.CreatedBefore.Value);
                 if (!String.IsNullOrEmpty(q.SearchText)) _Sql.Add(cmd, "@search", "%" + BlackBoxSqlDialect.EscapeLike(q.SearchText!.ToLowerInvariant()) + "%");
             };
+        }
+
+        private static string ResilienceScopeClause(bool inScope)
+        {
+            // The index-level handoff and landing scope (BlackBoxResilienceScope.IndexInScope): enum names only, no input.
+            List<string> phases = BlackBoxResilienceScope.Phases.Select(p => "'" + p.ToString() + "'").ToList();
+            List<string> steps = BlackBoxResilienceScope.Phases.SelectMany(BlackBoxTaxonomy.StepsOf).Concat(BlackBoxResilienceScope.Steps)
+                .Distinct().Select(st => "'" + st.ToString() + "'").ToList();
+            List<string> kinds = BlackBoxResilienceScope.Kinds.Select(k => "'" + k.ToString() + "'").ToList();
+            string clause = "(e.phase IN (" + String.Join(", ", phases) + ") OR e.step IN (" + String.Join(", ", steps) + ") OR COALESCE(e.failure_kind, '') IN (" + String.Join(", ", kinds) + "))";
+            return inScope ? clause : "NOT " + clause;
         }
 
         private string KeepLatestClause()

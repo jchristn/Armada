@@ -123,6 +123,41 @@ namespace Armada.Core.Models
         public BlackBoxConfidenceEnum? TriageConfidence { get; set; } = null;
 
         /// <summary>
+        /// Whether the ArmadaDefect verdict is suspected (rests on the handoff and landing prior alone).
+        /// </summary>
+        public bool TriageSuspected { get; set; } = false;
+
+        /// <summary>
+        /// Whether the failure is in Armada's handoff and landing scope.
+        /// </summary>
+        public bool ResilienceInScope { get; set; } = false;
+
+        /// <summary>
+        /// Whether Armada could have healed it by itself.
+        /// </summary>
+        public BlackBoxSelfHealableEnum SelfHealable { get; set; } = BlackBoxSelfHealableEnum.Unknown;
+
+        /// <summary>
+        /// What Armada could have done automatically, or null.
+        /// </summary>
+        public string? SelfHealingProposal { get; set; } = null;
+
+        /// <summary>
+        /// Why Armada did not catch it earlier, or null.
+        /// </summary>
+        public string? DetectionGap { get; set; } = null;
+
+        /// <summary>
+        /// Severity of the resilience section.
+        /// </summary>
+        public BlackBoxSeverityEnum ResilienceSeverity { get; set; } = BlackBoxSeverityEnum.Low;
+
+        /// <summary>
+        /// The most impactful proposed Armada change (its mission brief left out; read the Resilience section for it), or null.
+        /// </summary>
+        public BlackBoxProposedChange? TopProposedChange { get; set; } = null;
+
+        /// <summary>
         /// Analysis summary, or null.
         /// </summary>
         public string? Summary { get; set; } = null;

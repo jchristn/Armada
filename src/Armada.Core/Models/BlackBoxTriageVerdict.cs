@@ -42,6 +42,17 @@ namespace Armada.Core.Models
             set => _TiedWith = value ?? new List<BlackBoxTriageEnum>();
         }
 
+        /// <summary>
+        /// Whether the handoff and landing prior (BBX-PRIOR-ARMADA) took part in the vote.
+        /// </summary>
+        public bool PriorApplied { get; set; } = false;
+
+        /// <summary>
+        /// Whether an ArmadaDefect verdict rests on the prior alone (no rule voted ArmadaDefect): a suspected Armada
+        /// defect, reported with Low confidence.
+        /// </summary>
+        public bool Suspected { get; set; } = false;
+
         private List<BlackBoxTriageVote> _Votes = new List<BlackBoxTriageVote>();
         private List<BlackBoxTriageEnum> _TiedWith = new List<BlackBoxTriageEnum>();
 

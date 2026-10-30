@@ -940,6 +940,23 @@
       "experimental": false
     },
     {
+      "method": "POST",
+      "route": "/api/v1/blackbox/resilience-gaps/enumerate",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "requestType": "BlackBoxResilienceGapRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<BlackBoxResilienceGap>",
+        "400": ""
+      },
+      "tags": [
+        "BlackBox"
+      ],
+      "summary": "Enumerate Armada resilience gaps",
+      "experimental": false
+    },
+    {
       "method": "GET",
       "route": "/api/v1/blackbox/retention",
       "auth": "TenantAdmin",
@@ -11253,7 +11270,7 @@
           "required": false
         }
       ],
-      "description": "Get the black box of a failed mission or voyage: start here when asked why something failed. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry. format summary (default, about 2 KB) returns where it failed (phase, step, host, source file and method), how (mechanism), status before and after, why (top findings), the triage verdict and confidence, and the top recovery paths; brief returns the Markdown FIX THIS brief; json returns the full record. Then read only the sections the question needs with read_blackbox_section and page evidence with read_blackbox_object. NotFound (Code BlackBoxNotFound) when there is no entry.",
+      "description": "Get the black box of a failed mission or voyage: start here when asked why something failed. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry. format summary (default, about 2 KB) returns where it failed (phase, step, host, source file and method), how (mechanism), status before and after, why (top findings), the triage verdict and confidence (TriageSuspected when only the handoff and landing prior voted ArmadaDefect), the Armada resilience angle (ResilienceInScope, SelfHealable, SelfHealingProposal, DetectionGap, ResilienceSeverity and TopProposedChange: for a handoff or landing failure, first ask whether Armada could have handled it) and the top recovery paths; brief returns the Markdown FIX THIS brief; json returns the full record. Then read only the sections the question needs with read_blackbox_section and page evidence with read_blackbox_object. NotFound (Code BlackBoxNotFound) when there is no entry.",
       "experimental": false
     },
     {
@@ -11261,6 +11278,11 @@
       "auth": "Authenticated",
       "resource": "BlackBox:Read",
       "arguments": [
+        {
+          "name": "allFailures",
+          "type": "boolean",
+          "required": false
+        },
         {
           "name": "captainId",
           "type": "string",
@@ -11332,6 +11354,11 @@
           "required": false
         },
         {
+          "name": "resilienceScope",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "name": "resolution",
           "type": "string",
           "required": false
@@ -11367,7 +11394,7 @@
           "required": false
         }
       ],
-      "description": "Build a maintainer bundle: up to max (1-50, default 50) of the newest matching black box entries grouped by fingerprint, as one Markdown document with the brief of each failure mode (format Markdown, default) or JSON summaries. Use it to rank Armada improvements and write them as mission briefs on the Armada vessel. redactHosts strips absolute paths, host names and user names before sharing outside the installation.",
+      "description": "Build a maintainer bundle: up to max (1-50, default 50) of the newest matching black box entries grouped by fingerprint (highest resilience severity first, then most frequent), as one Markdown document with the brief, proposed Armada changes and regression test of each failure mode (format Markdown, default) or JSON summaries. By default it holds the Armada resilience gaps (handoff and landing scope, triaged ArmadaDefect); set allFailures, triage or resilienceScope to choose other entries. Use it to produce Armada missions on the Armada vessel. redactHosts strips absolute paths, host names and user names before sharing outside the installation.",
       "experimental": false
     },
     {
@@ -12569,6 +12596,11 @@
           "required": false
         },
         {
+          "name": "resilienceScope",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "name": "resolution",
           "type": "string",
           "required": false
@@ -12604,7 +12636,7 @@
           "required": false
         }
       ],
-      "description": "List one page of black box entries visible to the caller, newest first, filtered by vesselId, voyageId, missionId, captainId, fleetId, phase, step, kind, triage, resolution, state, fingerprint (compare failures of the same mode), pinned, isCurrent, path (any file role) and createdAfter/createdBefore. Returns an enumeration result of entry summaries.",
+      "description": "List one page of black box entries visible to the caller, newest first, filtered by vesselId, voyageId, missionId, captainId, fleetId, phase, step, kind, triage, resolution, state, fingerprint (compare failures of the same mode), pinned, isCurrent, path (any file role), resilienceScope (true for Armada's handoff and landing failures) and createdAfter/createdBefore. Returns an enumeration result of entry summaries.",
       "experimental": false
     },
     {
@@ -12795,6 +12827,55 @@
         }
       ],
       "description": "List one page of a black box entry's objects (record.json, the briefs and evidence such as evidence/git-status.txt or evidence/diff.patch) with content type, sizes and SHA-256. Read one with read_blackbox_object. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
+      "name": "list_blackbox_resilience_gaps",
+      "auth": "Authenticated",
+      "resource": "BlackBox:Read",
+      "arguments": [
+        {
+          "name": "createdAfter",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "createdBefore",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "phase",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "resolution",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List one page of Armada resilience gaps: failure modes (fingerprints) in Armada's own handoff and landing that the black box triaged ArmadaDefect, most severe first within the page, each with occurrences, open count, first and last seen, the Armada versions it was seen in, the severity (escalated by recurrence), whether Armada could have healed it (selfHealable), whether the verdict is only suspected, the detection gap and the top proposed Armada change, and the newest entry. Page size 1-50. Filter by vesselId, resolution, phase and createdAfter/createdBefore. Use it to pick the Armada missions that make handoff and landing more resilient.",
       "experimental": false
     },
     {
@@ -13419,6 +13500,11 @@
           "required": false
         },
         {
+          "name": "resilienceScope",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "name": "resolution",
           "type": "string",
           "required": false
@@ -13611,7 +13697,7 @@
           "required": false
         }
       ],
-      "description": "Read one section of a black box record: Subject, Status, Site, Mechanism, Classification, Workspace (dirty paths, checkout), Conflict (conflicted files and the missions that landed them), Scope, Configuration (each setting and where it came from), Attempts, Evidence (the object index), Analysis (findings, triage, recovery paths, recommendations), Related, Voyage, Redaction or Truncation. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "description": "Read one section of a black box record: Subject, Status, Site, Mechanism, Classification, Workspace (dirty paths, checkout), Conflict (conflicted files and the missions that landed them), Scope, Configuration (each setting and where it came from), Attempts, Evidence (the object index), Analysis (findings, triage, recovery paths, recommendations), Resilience (whether Armada could have healed it, the detection gap, code pointers, proposed Armada changes as mission briefs, the regression test), Handoff (the handoff and landing step timeline, the automatic recoveries Armada already tried, dock transitions, target movement), Related, Voyage, Redaction or Truncation. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
       "experimental": false
     },
     {
@@ -14307,6 +14393,11 @@
           "name": "query",
           "type": "string",
           "required": true
+        },
+        {
+          "name": "resilienceScope",
+          "type": "boolean",
+          "required": false
         },
         {
           "name": "resolution",
@@ -19480,6 +19571,100 @@
           "short": null,
           "valueKind": "flag",
           "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "blackbox gaps",
+      "description": "List Armada resilience gaps (handoff and landing failures triaged ArmadaDefect, by fingerprint)",
+      "parameters": [
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "phase",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "resolution",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "since",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
           "required": false
         }
       ]

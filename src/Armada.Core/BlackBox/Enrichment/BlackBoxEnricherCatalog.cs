@@ -9,8 +9,8 @@ namespace Armada.Core.BlackBox.Enrichment
 
     /// <summary>
     /// The built-in enrichers in the order they run: Workspace, TargetMovement, ConflictAttribution, ConcurrentOverlap,
-    /// DirectoryRollup, Attempts, Evidence, Related, Voyage, FileRows. Later steps read what earlier ones recorded (target
-    /// commits feed attribution; attribution and overlap feed the file rows).
+    /// DirectoryRollup, Attempts, Handoff, Evidence, Related, Voyage, FileRows. Later steps read what earlier ones recorded (target
+    /// commits feed attribution and the handoff trail; attribution and overlap feed the file rows).
     /// </summary>
     public static class BlackBoxEnricherCatalog
     {
@@ -39,6 +39,7 @@ namespace Armada.Core.BlackBox.Enrichment
                 new BlackBoxConcurrentOverlapEnricher(database, inspector, logging),
                 new BlackBoxDirectoryRollupEnricher(logging),
                 new BlackBoxAttemptsEnricher(database, logging),
+                new BlackBoxHandoffEnricher(database, logging),
                 new BlackBoxEvidenceEnricher(database, settings, inspector, logging),
                 new BlackBoxRelatedEnricher(database, logging),
                 new BlackBoxVoyageEnricher(database, logging),

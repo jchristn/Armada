@@ -10,8 +10,13 @@ namespace Armada.Core.BlackBox
     /// <summary>
     /// The black box advisor: runs a <see cref="BlackBoxRuleCatalog"/> over a record and returns why findings (with
     /// confidence and evidence references), configuration recommendations, Armada improvement hypotheses, ranked recovery
-    /// paths with machine-readable actions, a weighted triage verdict (a tie reports Unknown with every tied candidate)
-    /// and a plain-language summary assembled from the findings. Pure and deterministic: no I/O, the same record and
+    /// paths with machine-readable actions, a weighted triage verdict (a tie reports Unknown with every tied candidate),
+    /// the resilience section and a plain-language summary assembled from the findings. In Armada's handoff and landing
+    /// scope (<see cref="BlackBoxResilienceScope"/>) the advisor is biased toward Armada: it adds the
+    /// <c>BBX-PRIOR-ARMADA</c> vote for ArmadaDefect (weight <see cref="BlackBoxLimits.ArmadaPriorWeight"/>), so only a
+    /// rule with strong, specific evidence for another verdict (a total above the prior) wins, a tie goes to
+    /// ArmadaDefect, and a verdict that rests on the prior alone is reported as a suspected defect with Low confidence;
+    /// the summary then leads with what Armada could have done. Pure and deterministic: no I/O, the same record and
     /// catalog always give the same analysis. Rules whose text cannot be filled from the record are skipped and logged.
     /// Thread-safe.
     /// </summary>
@@ -119,7 +124,9 @@ namespace Armada.Core.BlackBox
             analysis.ConfigRecommendations = ordered.SelectMany(o => o.Recommendations).GroupBy(r => r.Id, StringComparer.Ordinal).Select(g => g.First()).Take(BlackBoxLimits.MaxRecommendations).ToList();
             analysis.ArmadaImprovements = ordered.SelectMany(o => o.Improvements).Take(BlackBoxLimits.MaxImprovements).ToList();
             analysis.RecoveryPaths = RankPaths(ordered, pathStats);
-            analysis.Triage = Triage(ordered);
+            bool inScope = BlackBoxResilienceScope.InScope(record, out string? scopeReason);
+            analysis.Triage = Triage(ordered, inScope);
+            analysis.Resilience = BlackBoxResilienceBuilder.Build(record, ordered, analysis.Triage, inScope, scopeReason, analysis.ArmadaImprovements, diagnostics);
             analysis.Summary = Summarize(record, analysis);
             analysis.SummaryIsModelWritten = false;
             return analysis;
@@ -134,6 +141,20 @@ namespace Armada.Core.BlackBox
         /// <exception cref="ArgumentNullException">Thrown when votes is null.</exception>
         public static BlackBoxTriageVerdict Tally(IEnumerable<BlackBoxTriageVote> votes)
         {
+            return Tally(votes, null);
+        }
+
+        /// <summary>
+        /// Compute the triage verdict from votes with a tie-breaker: the highest total weight wins; a tie at the top that
+        /// includes the tie-breaker goes to it with Low confidence; any other tie reports Unknown and lists the tied
+        /// candidates; no votes reports Unknown with Low confidence.
+        /// </summary>
+        /// <param name="votes">Votes.</param>
+        /// <param name="tieBreaker">Verdict that wins a tie it is part of (ArmadaDefect in handoff and landing scope), or null.</param>
+        /// <returns>The verdict.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when votes is null.</exception>
+        public static BlackBoxTriageVerdict Tally(IEnumerable<BlackBoxTriageVote> votes, BlackBoxTriageEnum? tieBreaker)
+        {
             if (votes == null) throw new ArgumentNullException(nameof(votes));
             List<BlackBoxTriageVote> list = votes.Where(v => v != null && v.Weight > 0 && v.Verdict != BlackBoxTriageEnum.Unknown).Take(BlackBoxLimits.MaxTriageVotes).ToList();
             BlackBoxTriageVerdict verdict = new BlackBoxTriageVerdict { Votes = list, Verdict = BlackBoxTriageEnum.Unknown, Confidence = BlackBoxConfidenceEnum.Low };
@@ -145,6 +166,12 @@ namespace Armada.Core.BlackBox
             List<BlackBoxTriageEnum> tied = totals.Where(p => p.Value == top).Select(p => p.Key).ToList();
             if (tied.Count > 1)
             {
+                if (tieBreaker.HasValue && tied.Contains(tieBreaker.Value))
+                {
+                    verdict.Verdict = tieBreaker.Value;
+                    verdict.Confidence = BlackBoxConfidenceEnum.Low;
+                    return verdict;
+                }
                 verdict.TiedWith = tied;
                 return verdict;
             }
@@ -239,6 +266,7 @@ namespace Armada.Core.BlackBox
                 }
                 output.Paths.Add(path);
             }
+            output.Resilience = BlackBoxResilienceBuilder.Render(rule, record, diagnostics);
             return output;
         }
 
@@ -364,10 +392,22 @@ namespace Armada.Core.BlackBox
             return rate;
         }
 
-        private static BlackBoxTriageVerdict Triage(List<BlackBoxRuleOutput> ordered)
+        private static BlackBoxTriageVerdict Triage(List<BlackBoxRuleOutput> ordered, bool inScope)
         {
-            return Tally(ordered.Where(o => o.Rule.Weight > 0 && o.Rule.Vote != BlackBoxTriageEnum.Unknown)
-                .Select(o => new BlackBoxTriageVote { RuleId = o.Rule.Id, Verdict = o.Rule.Vote, Weight = o.Rule.Weight }));
+            List<BlackBoxTriageVote> votes = ordered.Where(o => o.Rule.Weight > 0 && o.Rule.Vote != BlackBoxTriageEnum.Unknown)
+                .Select(o => new BlackBoxTriageVote { RuleId = o.Rule.Id, Verdict = o.Rule.Vote, Weight = o.Rule.Weight }).ToList();
+            if (!inScope) return Tally(votes);
+            // Handoff and landing scope: Armada's own handoff and landing is the default suspect.
+            votes = votes.Take(BlackBoxLimits.MaxTriageVotes - 1).ToList();
+            votes.Add(new BlackBoxTriageVote { RuleId = BlackBoxResilienceScope.PriorRuleId, Verdict = BlackBoxTriageEnum.ArmadaDefect, Weight = BlackBoxLimits.ArmadaPriorWeight });
+            BlackBoxTriageVerdict verdict = Tally(votes, BlackBoxTriageEnum.ArmadaDefect);
+            verdict.PriorApplied = true;
+            if (verdict.Verdict == BlackBoxTriageEnum.ArmadaDefect && !votes.Any(v => v.Verdict == BlackBoxTriageEnum.ArmadaDefect && v.RuleId != BlackBoxResilienceScope.PriorRuleId))
+            {
+                verdict.Suspected = true;
+                verdict.Confidence = BlackBoxConfidenceEnum.Low;
+            }
+            return verdict;
         }
 
         private static string Summarize(BlackBoxRecord record, BlackBoxAnalysis analysis)
@@ -392,13 +432,26 @@ namespace Armada.Core.BlackBox
                 BlackBoxPhaseEnum phase = BlackBoxRuleFacts.Phase(record);
                 BlackBoxStepEnum step = BlackBoxRuleFacts.Step(record);
                 MissionFailureKindEnum? kind = BlackBoxRuleFacts.Kind(record);
-                sentences.Add(label + " failed during " + phase + " at step " + step + (kind.HasValue ? " (kind " + kind.Value + ")" : String.Empty) + ".");
+                BlackBoxResilience? res = analysis.Resilience;
+                if (res != null && res.InScope)
+                {
+                    // Lead with the Armada angle: what Armada's handoff or landing could not do, and what it could have done.
+                    string could = res.SelfHealingProposal != null
+                        ? "Armada could have " + Unsentence(res.SelfHealingProposal)
+                        : res.ProposedChanges.Count > 0 ? "Armada could have prevented it: " + Unsentence(res.ProposedChanges[0].Title) : "Armada could have caught it earlier";
+                    sentences.Add("Armada's " + PhaseNoun(phase) + " could not finish " + label + " at step " + step + (kind.HasValue ? " (kind " + kind.Value + ")" : String.Empty) + "; " + could + ".");
+                }
+                else
+                {
+                    sentences.Add(label + " failed during " + phase + " at step " + step + (kind.HasValue ? " (kind " + kind.Value + ")" : String.Empty) + ".");
+                }
             }
             foreach (BlackBoxFinding f in analysis.Why.Take(2)) sentences.Add(EndSentence(f.Statement));
             BlackBoxTriageVerdict? t = analysis.Triage;
             if (t != null)
             {
-                if (t.Verdict != BlackBoxTriageEnum.Unknown) sentences.Add("Triage: " + t.Verdict + " (" + t.Confidence.ToString().ToLowerInvariant() + " confidence).");
+                if (t.Verdict == BlackBoxTriageEnum.ArmadaDefect && t.Suspected) sentences.Add("Triage: suspected ArmadaDefect (low confidence; the handoff and landing prior decided it, so look for the Armada fix first).");
+                else if (t.Verdict != BlackBoxTriageEnum.Unknown) sentences.Add("Triage: " + t.Verdict + " (" + t.Confidence.ToString().ToLowerInvariant() + " confidence).");
                 else if (t.TiedWith.Count > 1) sentences.Add("Triage is undecided: a tie between " + String.Join(" and ", t.TiedWith) + ".");
                 else sentences.Add("Triage is undecided; judge it from the evidence.");
             }
@@ -408,6 +461,28 @@ namespace Armada.Core.BlackBox
             if (rec != null && sentences.Count < 6) sentences.Add("To prevent it, set " + rec.Setting + " to " + rec.SuggestedValue + " on the " + rec.Scope.ToString().ToLowerInvariant() + ".");
             string summary = String.Join(" ", sentences.Take(6));
             return BlackBoxLimits.Clip(summary.Replace('—', '-').Replace('–', '-'), BlackBoxLimits.MaxSummaryChars) ?? String.Empty;
+        }
+
+        private static string PhaseNoun(BlackBoxPhaseEnum phase)
+        {
+            switch (phase)
+            {
+                case BlackBoxPhaseEnum.Landing: return "landing";
+                case BlackBoxPhaseEnum.MergeQueue: return "merge queue";
+                case BlackBoxPhaseEnum.Handoff: return "handoff";
+                case BlackBoxPhaseEnum.Recovery: return "recovery";
+                case BlackBoxPhaseEnum.Provision: return "dock provisioning";
+                case BlackBoxPhaseEnum.Completion: return "completion handoff";
+                case BlackBoxPhaseEnum.Review: return "review handoff";
+                default: return "handoff and landing";
+            }
+        }
+
+        private static string Unsentence(string text)
+        {
+            string t = OneLine(text).Trim().TrimEnd('.');
+            if (t.Length > 1 && Char.IsUpper(t[0]) && !Char.IsUpper(t[1])) t = Char.ToLowerInvariant(t[0]) + t.Substring(1);
+            return t;
         }
 
         private static string EndSentence(string text)

@@ -297,7 +297,14 @@ namespace Armada.Core.BlackBox
             related.Fingerprint = entry.Fingerprint;
             BlackBoxEnumerateRequest recent = new BlackBoxEnumerateRequest { Fingerprint = entry.Fingerprint, TenantId = entry.TenantId, CreatedAfter = DateTime.UtcNow.AddDays(-30), PageSize = 1 };
             related.OccurrencesLast30Days = (int)await _Database.BlackBoxEntries.CountAsync(recent, token).ConfigureAwait(false);
-            EnumerationResult<BlackBoxEntry> similar = await _Database.BlackBoxEntries.EnumerateByFingerprintAsync(entry.Fingerprint!, entry.TenantId, new EnumerationQuery { PageSize = BlackBoxLimits.MaxSimilarEntries + 1 }, token).ConfigureAwait(false);
+            EnumerationResult<BlackBoxEntry> similar = await _Database.BlackBoxEntries.EnumerateByFingerprintAsync(entry.Fingerprint!, entry.TenantId, new EnumerationQuery { PageSize = 100 }, token).ConfigureAwait(false);
+            // Armada versions this failure mode was seen in (this entry's included): the resilience severity escalates when
+            // it survives an upgrade.
+            related.ArmadaVersions = similar.Objects.Concat(new[] { entry })
+                .Where(e => !String.IsNullOrWhiteSpace(e.ArmadaVersion))
+                .OrderBy(e => e.CreatedUtc)
+                .Select(e => e.ArmadaVersion!.Trim())
+                .Distinct(StringComparer.Ordinal).Take(BlackBoxLimits.MaxRelatedVersions).ToList();
             related.SimilarEntries = similar.Objects.Where(e => e.Id != entry.Id).Take(BlackBoxLimits.MaxSimilarEntries).Select(e => new BlackBoxSimilarEntry
             {
                 EntryId = e.Id,

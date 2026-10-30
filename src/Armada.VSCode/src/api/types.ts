@@ -263,6 +263,73 @@ export interface BlackBoxRecoveryPath {
 export interface BlackBoxTriage {
   Verdict?: string;
   Confidence?: 'Low' | 'Medium' | 'High' | string;
+  /** The handoff and landing prior (BBX-PRIOR-ARMADA) voted. */
+  PriorApplied?: boolean;
+  /** The ArmadaDefect verdict rests on the prior alone. */
+  Suspected?: boolean;
+}
+
+/** A proposed Armada change written as a mission brief (analysis.resilience). */
+export interface BlackBoxProposedChange {
+  Rank: number;
+  Title: string;
+  Change: string;
+  AcceptanceTest?: string | null;
+  Severity?: string;
+  RuleId?: string | null;
+  CodePointers?: string[];
+  MissionBrief?: string | null;
+}
+
+/** The test that would have caught the failure. */
+export interface BlackBoxRegressionTest {
+  Suite: string;
+  Description: string;
+}
+
+/** Resilience analysis: could Armada's handoff and landing have healed the failure, and what should change. */
+export interface BlackBoxResilience {
+  InScope?: boolean;
+  ScopeReason?: string | null;
+  SelfHealable?: 'Yes' | 'No' | 'Unknown' | string;
+  SelfHealingProposal?: string | null;
+  DetectionGapKind?: string;
+  DetectionGap?: string | null;
+  Invariant?: string | null;
+  CodePointers?: string[];
+  ArmadaVersion?: string | null;
+  ArmadaCommit?: string | null;
+  ProposedChanges?: BlackBoxProposedChange[];
+  RegressionTest?: BlackBoxRegressionTest | null;
+  Severity?: string;
+  Occurrences30Days?: number;
+  ArmadaVersionCount?: number;
+  AttemptedRecoveries?: string[];
+  NoChangeReason?: string | null;
+  RuleIds?: string[];
+}
+
+/** One Armada resilience gap (POST /api/v1/blackbox/resilience-gaps/enumerate). */
+export interface BlackBoxResilienceGap {
+  Fingerprint: string;
+  Phase?: string;
+  Step?: string;
+  FailureKind?: string | null;
+  Occurrences: number;
+  OpenCount?: number;
+  FirstSeenUtc?: string;
+  LastSeenUtc?: string;
+  LatestEntryId?: string | null;
+  LatestMissionId?: string | null;
+  LatestMissionTitle?: string | null;
+  VesselName?: string | null;
+  ArmadaVersions?: string[];
+  Severity?: string;
+  SelfHealable?: string;
+  Suspected?: boolean;
+  TopProposedChange?: BlackBoxProposedChange | null;
+  DetectionGap?: string | null;
+  RuleIds?: string[];
 }
 
 export interface BlackBoxAnalysis {
@@ -272,6 +339,7 @@ export interface BlackBoxAnalysis {
   ArmadaImprovements?: BlackBoxArmadaImprovement[];
   RecoveryPaths?: BlackBoxRecoveryPath[];
   Triage?: BlackBoxTriage;
+  Resilience?: BlackBoxResilience | null;
 }
 
 export interface BlackBoxAttempt {
@@ -306,7 +374,7 @@ export interface BlackBoxRecord {
 /** Record section names accepted by `GET /api/v1/blackbox/{id}/sections/{section}`. */
 export type BlackBoxSectionName =
   | 'Subject' | 'Status' | 'Site' | 'Mechanism' | 'Classification' | 'Workspace' | 'Conflict' | 'Scope'
-  | 'Configuration' | 'Attempts' | 'Evidence' | 'Analysis' | 'Related' | 'Voyage' | 'Redaction' | 'Truncation';
+  | 'Configuration' | 'Attempts' | 'Evidence' | 'Analysis' | 'Resilience' | 'Handoff' | 'Related' | 'Voyage' | 'Redaction' | 'Truncation';
 
 /** Response of the section route (BlackBoxSectionResult): a record carrying only the asked section. */
 export interface BlackBoxSectionResult {

@@ -2,11 +2,18 @@
   "name": "land-001-dirty-checkout",
   "description": "msn_mvskboi0_vJGaqsNlGqU: LandingFailed because the vessel's working directory (the operator's own checkout) had 52 staged paths, so the landing refused to overwrite them.",
   "source": "msn_mvskboi0_vJGaqsNlGqU (reconstructed from MISSION_BLACKBOX_PLAN.md 16.10; the mission was deleted on 2026-10-29)",
-  "rulesVersion": 1,
+  "rulesVersion": 2,
   "expectedRuleIds": [
     "BBX-LAND-001"
   ],
   "expectedTriage": "UserConfig",
+  "expectedResilience": {
+    "inScope": true,
+    "selfHealable": "Yes",
+    "proposalContains": "integration worktree",
+    "selfHealingContains": "integration worktree",
+    "recommendationId": "bbx-land-001.landing-mode"
+  },
   "record": {
     "entryId": "bbx_fixture_land001",
     "schemaVersion": 1,

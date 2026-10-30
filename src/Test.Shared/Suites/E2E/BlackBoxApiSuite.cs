@@ -267,11 +267,11 @@ namespace Test.Shared.Suites.E2E
                 EnumerationResult<BlackBoxHotspot> foreignHotspots = await PostJsonAsync<EnumerationResult<BlackBoxHotspot>>(b, "/api/v1/blackbox/hotspots/enumerate", new { PageSize = 10, Role = "OutOfScope" }).ConfigureAwait(false);
                 AssertEqual(0L, foreignHotspots.TotalRecords, "hotspots are tenant scoped");
 
-                BlackBoxBundleResult markdown = await PostJsonAsync<BlackBoxBundleResult>(ua, "/api/v1/blackbox/bundle", new { MissionId = _Mission.Id, Max = 5 }).ConfigureAwait(false);
+                BlackBoxBundleResult markdown = await PostJsonAsync<BlackBoxBundleResult>(ua, "/api/v1/blackbox/bundle", new { MissionId = _Mission.Id, Max = 5, AllFailures = true }).ConfigureAwait(false);
                 AssertEqual(BlackBoxBundleFormatEnum.Markdown, markdown.Format, "Markdown by default");
                 AssertEqual(1, markdown.EntryCount, "one entry");
                 AssertContains("maintainer bundle", markdown.Content, "bundle heading");
-                BlackBoxBundleResult json = await PostJsonAsync<BlackBoxBundleResult>(ua, "/api/v1/blackbox/bundle", new { MissionId = _Mission.Id, Format = "Json" }).ConfigureAwait(false);
+                BlackBoxBundleResult json = await PostJsonAsync<BlackBoxBundleResult>(ua, "/api/v1/blackbox/bundle", new { MissionId = _Mission.Id, Format = "Json", AllFailures = true }).ConfigureAwait(false);
                 AssertContains(_EntryId, json.Content, "JSON bundle lists the entry");
             }));
 
@@ -521,7 +521,7 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(notes.TotalRecords >= 0, "list_blackbox_notes");
                 await OkAsync<EnumerationResult<BlackBoxHotspot>>(client, "list_blackbox_hotspots", new { pageSize = 5 }).ConfigureAwait(false);
                 await OkAsync<EnumerationResult<BlackBoxFingerprintSummary>>(client, "list_blackbox_fingerprints", new { pageSize = 5 }).ConfigureAwait(false);
-                BlackBoxBundleResult bundle = await OkAsync<BlackBoxBundleResult>(client, "get_blackbox_bundle", new { missionId = _Mission.Id, max = 1 }).ConfigureAwait(false);
+                BlackBoxBundleResult bundle = await OkAsync<BlackBoxBundleResult>(client, "get_blackbox_bundle", new { missionId = _Mission.Id, max = 1, allFailures = true }).ConfigureAwait(false);
                 AssertEqual(1, bundle.EntryCount, "bundle");
                 EnumerationResult<BlackBoxEntrySummary> viaEnumerate = await OkAsync<EnumerationResult<BlackBoxEntrySummary>>(client, "enumerate", new { entityType = "blackbox", missionId = _Mission.Id }).ConfigureAwait(false);
                 AssertEqual(_EntryId, viaEnumerate.Objects.Single().Id, "enumerate entityType blackbox");
@@ -827,6 +827,65 @@ namespace Test.Shared.Suites.E2E
                 {
                     _Fx.Settings.BlackBox.Retention.DeleteWithVessel = deleteWithVessel;
                 }
+            }));
+
+            cases.Add(CaseAsync("resilience_gaps_rest_and_mcp", "A landing failure in handoff and landing scope: the digest carries the resilience angle, the Resilience and Handoff sections read, resilienceScope filters, and the resilience gaps route and MCP tool are paged (at most 50), tenant scoped and validated", TestTags.Positive, async () =>
+            {
+                RequireSetup();
+                Mission mission = await CreateMissionAsync("resilience", MissionStatusEnum.LandingFailed, null).ConfigureAwait(false);
+                mission.FailureKind = MissionFailureKindEnum.LandingConflict;
+                mission.FailureReason = "An error occurred trying to start process 'git' with working directory '/work/docks/bbapi-gone'. No such file or directory " + _Marker;
+                string entryId = (await _Fx!.Server.BlackBox!.Capture.CaptureMissionFailureAsync(new BlackBoxCaptureContext { Mission = mission, StatusBefore = MissionStatusEnum.WorkProduced, Step = BlackBoxStepEnum.TargetIntegration }).ConfigureAwait(false))!;
+                await _Fx.Server.BlackBox.Queue.DrainAsync().ConfigureAwait(false);
+                using HttpClient ua = _UserA!.CreateClient(_Fx.BaseUrl);
+                using HttpClient b = _AdminB!.CreateClient(_Fx.BaseUrl);
+
+                EnumerationResult<BlackBoxResilienceGap> gaps = await PostJsonAsync<EnumerationResult<BlackBoxResilienceGap>>(ua, "/api/v1/blackbox/resilience-gaps/enumerate", new { PageSize = 10 }).ConfigureAwait(false);
+                BlackBoxResilienceGap gap = gaps.Objects.Single(g => g.LatestEntryId == entryId);
+                AssertTrue(gap.Occurrences >= 1, "occurrences");
+                AssertEqual(BlackBoxSelfHealableEnum.Yes, gap.SelfHealable, "self-healable");
+                AssertNotNull(gap.TopProposedChange, "top proposed change");
+                AssertFalse(gaps.Objects.Any(g => g.LatestEntryId == _EntryId), "the out-of-scope scope violation is not a gap");
+                EnumerationResult<BlackBoxResilienceGap> capped = await PostJsonAsync<EnumerationResult<BlackBoxResilienceGap>>(ua, "/api/v1/blackbox/resilience-gaps/enumerate", new { PageSize = 500 }).ConfigureAwait(false);
+                AssertTrue(capped.PageSize <= BlackBoxLimits.MaxResilienceGapPageSize, "page size capped at 50: " + capped.PageSize);
+                EnumerationResult<BlackBoxResilienceGap> page2 = await PostJsonAsync<EnumerationResult<BlackBoxResilienceGap>>(ua, "/api/v1/blackbox/resilience-gaps/enumerate", new { PageSize = 1, PageNumber = 2 }).ConfigureAwait(false);
+                AssertEqual(2, page2.PageNumber, "paged");
+                EnumerationResult<BlackBoxResilienceGap> foreign = await PostJsonAsync<EnumerationResult<BlackBoxResilienceGap>>(b, "/api/v1/blackbox/resilience-gaps/enumerate", new { PageSize = 50 }).ConfigureAwait(false);
+                AssertFalse(foreign.Objects.Any(g => g.LatestEntryId == entryId), "another tenant never sees the gap");
+                await ExpectErrorAsync(ua, HttpMethod.Post, "/api/v1/blackbox/resilience-gaps/enumerate", new { CreatedAfter = DateTime.UtcNow, CreatedBefore = DateTime.UtcNow.AddDays(-1) }, HttpStatusCode.BadRequest, "InvalidArgument", null).ConfigureAwait(false);
+
+                EnumerationResult<BlackBoxEntrySummary> inScope = await GetJsonAsync<EnumerationResult<BlackBoxEntrySummary>>(ua, "/api/v1/blackbox?resilienceScope=true&missionId=" + mission.Id).ConfigureAwait(false);
+                AssertEqual(entryId, inScope.Objects.Single().Id, "GET resilienceScope=true");
+                EnumerationResult<BlackBoxEntrySummary> outScope = await GetJsonAsync<EnumerationResult<BlackBoxEntrySummary>>(ua, "/api/v1/blackbox?resilienceScope=false&missionId=" + mission.Id).ConfigureAwait(false);
+                AssertEqual(0L, outScope.TotalRecords, "GET resilienceScope=false");
+                await ExpectErrorAsync(ua, HttpMethod.Get, "/api/v1/blackbox?resilienceScope=maybe", null, HttpStatusCode.BadRequest, "InvalidArgument", "resilienceScope").ConfigureAwait(false);
+                BlackBoxSectionResult section = await GetJsonAsync<BlackBoxSectionResult>(ua, "/api/v1/blackbox/" + entryId + "/sections/Resilience").ConfigureAwait(false);
+                AssertTrue(section.Record.Analysis!.Resilience!.InScope, "REST Resilience section");
+
+                using McpToolClient client = Mcp(_UserA!);
+                using McpToolClient other = Mcp(_AdminB!);
+                await client.InitializeAsync().ConfigureAwait(false);
+                await other.InitializeAsync().ConfigureAwait(false);
+                BlackBoxDigest digest = await OkAsync<BlackBoxDigest>(client, "get_blackbox", new { missionId = mission.Id }).ConfigureAwait(false);
+                AssertTrue(digest.ResilienceInScope, "digest ResilienceInScope");
+                AssertEqual(BlackBoxSelfHealableEnum.Yes, digest.SelfHealable, "digest SelfHealable");
+                AssertNotNull(digest.DetectionGap, "digest DetectionGap");
+                AssertNotNull(digest.TopProposedChange, "digest TopProposedChange");
+                AssertEqual(BlackBoxTriageEnum.ArmadaDefect, digest.Triage, "digest triage");
+                BlackBoxSectionResult resilience = await OkAsync<BlackBoxSectionResult>(client, "read_blackbox_section", new { entryId = entryId, section = "Resilience" }).ConfigureAwait(false);
+                AssertTrue(resilience.Record.Analysis!.Resilience!.ProposedChanges.Count > 0, "MCP Resilience section");
+                BlackBoxSectionResult handoff = await OkAsync<BlackBoxSectionResult>(client, "read_blackbox_section", new { entryId = entryId, section = "handoff" }).ConfigureAwait(false);
+                AssertNotNull(handoff.Record.Handoff, "MCP Handoff section");
+                EnumerationResult<BlackBoxEntrySummary> scoped = await OkAsync<EnumerationResult<BlackBoxEntrySummary>>(client, "list_blackbox_entries", new { missionId = mission.Id, resilienceScope = true }).ConfigureAwait(false);
+                AssertEqual(entryId, scoped.Objects.Single().Id, "list_blackbox_entries resilienceScope");
+                EnumerationResult<BlackBoxResilienceGap> toolGaps = await OkAsync<EnumerationResult<BlackBoxResilienceGap>>(client, "list_blackbox_resilience_gaps", new { pageSize = 200 }).ConfigureAwait(false);
+                AssertTrue(toolGaps.Objects.Any(g => g.LatestEntryId == entryId), "list_blackbox_resilience_gaps");
+                AssertTrue(toolGaps.PageSize <= BlackBoxLimits.MaxResilienceGapPageSize, "MCP page size capped");
+                EnumerationResult<BlackBoxResilienceGap> otherGaps = await OkAsync<EnumerationResult<BlackBoxResilienceGap>>(other, "list_blackbox_resilience_gaps", new { pageSize = 50 }).ConfigureAwait(false);
+                AssertFalse(otherGaps.Objects.Any(g => g.LatestEntryId == entryId), "MCP gaps are tenant scoped");
+                await RefusedAsync(client, "list_blackbox_resilience_gaps", new { resolution = "Maybe" }).ConfigureAwait(false);
+                string review = await RawMcpAsync(_UserA!, "prompts/get", new { name = "review_blackbox", arguments = new { missionId = mission.Id } }).ConfigureAwait(false);
+                AssertContains("Draft an Armada fix mission", review, "review prompt offers the Armada fix mission");
             }));
 
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Black box REST, MCP and WebSocket surfaces", cases: cases);

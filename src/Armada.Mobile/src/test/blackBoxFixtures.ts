@@ -99,3 +99,45 @@ export function blackBoxSummary(id: string, overrides: Partial<BlackBoxEntrySumm
 }
 
 export const BRIEF = '# FIX THIS\n\nMission msn_1 failed to land: the checkout was dirty.';
+
+/** A resilience section shaped like the advisor's output for land-002-dock-deleted (in handoff and landing scope). */
+export const RESILIENCE_IN_SCOPE = {
+  inScope: true,
+  scopeReason: 'phase Landing (step TargetIntegration) is Armada\'s handoff and landing',
+  selfHealable: 'Yes',
+  selfHealingProposal: 'recreated the worktree from armada/msn_1 and retried the landing',
+  detectionGapKind: 'Race',
+  detectionGap: 'The dock was reclaimed while the mission still had to land.',
+  invariant: 'A dock whose mission still has to land stays leased and on disk.',
+  codePointers: ['src/Armada.Server/MissionLandingHandler.cs:EnsureLandingDockAsync', 'src/Armada.Core/Services/DockService.cs:ReclaimAsync'],
+  armadaVersion: '1.2.0',
+  armadaCommit: 'abc9999',
+  proposedChanges: [
+    { rank: 2, title: 'Never reclaim a dock whose mission still has to land', change: 'Refuse reclaims while WorkProduced.', acceptanceTest: 'Services.DockLease: reclaim refused.', severity: 'High', codePointers: [] },
+    { rank: 1, title: 'Recreate a missing dock worktree from the branch before landing', change: 'Recreate the worktree before git runs.', acceptanceTest: 'Services.LandingPipeline: lands after the dock directory is deleted.', severity: 'Critical', codePointers: [], missionBrief: 'Recreate a missing dock worktree from the branch before landing\n\nRecreate the worktree before git runs.' },
+  ],
+  regressionTest: { suite: 'Services.LandingPipeline', description: 'Remove the dock directory and assert the landing recreates it.' },
+  severity: 'Critical',
+  occurrences30Days: 5,
+  armadaVersionCount: 2,
+  attemptedRecoveries: ['LandingRetry x2 (Expired)'],
+  noChangeReason: null,
+  ruleIds: ['BBX-LAND-002', 'BBX-PRIOR-ARMADA'],
+};
+
+/** A short resilience section outside handoff and landing scope. */
+export const RESILIENCE_OUT_OF_SCOPE = {
+  inScope: false,
+  selfHealable: 'No',
+  proposedChanges: [],
+  codePointers: [],
+  severity: 'Low',
+  noChangeReason: 'No Armada change suggested: the failure is outside Armada\'s handoff and landing (phase Execution, step UsageLimit) and the triage is Transient.',
+};
+
+/** An entry whose analysis carries a resilience section and a triage verdict. */
+export function withResilience(entry: BlackBoxEntry, resilience: object, triage: { verdict: string; suspected?: boolean } | null = null): BlackBoxEntry {
+  const record = entry.record ?? { entryId: entry.id, schemaVersion: 1 };
+  const analysis = { ...(record.analysis ?? {}), resilience, ...(triage ? { triage: { confidence: 'Low', ...triage } } : {}) };
+  return { ...entry, triage: (triage?.verdict ?? entry.triage) as BlackBoxEntry['triage'], record: { ...record, analysis: analysis as never } };
+}

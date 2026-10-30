@@ -111,6 +111,19 @@
               ]
             }
           ]
+        },
+        "resilience": {
+          "description": "Resilience analysis: could Armada's handoff and landing have healed it, why Armada did not catch it, where it lives in the Armada source and the Armada changes that would prevent it. Filled for every analyzed entry.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxResilience"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
         }
       },
       "required": [
@@ -314,6 +327,73 @@
       },
       "required": [
         "attempt"
+      ]
+    },
+    "BlackBoxAutoRecovery": {
+      "title": "BlackBoxAutoRecovery",
+      "description": "One kind of automatic recovery Armada attempted before the failure, with its outcome.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "kind": {
+          "description": "Kind of recovery.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Redispatch",
+            "OutputRepair",
+            "LandingRetry",
+            "DeferralRetry",
+            "Rescue",
+            "DockRepair",
+            "Reconcile",
+            "OrphanRecovery",
+            "Unknown"
+          ]
+        },
+        "attempts": {
+          "description": "Attempts recorded.",
+          "type": [
+            "integer"
+          ]
+        },
+        "lastUtc": {
+          "description": "Last attempt (UTC), or null when only a counter recorded it.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "outcome": {
+          "description": "Outcome: Succeeded (it worked, the failure came later), Failed (it ran and did not help), Expired (retries or the deferral ran out) or Unknown.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Pending",
+            "Succeeded",
+            "Failed",
+            "RunFailed",
+            "Expired",
+            "Unknown"
+          ]
+        },
+        "detail": {
+          "description": "Detail (the last attempt's message), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "kind",
+        "attempts",
+        "outcome"
       ]
     },
     "BlackBoxCaptureFailedPayload": {
@@ -1475,6 +1555,69 @@
             null
           ]
         },
+        "triageSuspected": {
+          "description": "Whether the ArmadaDefect verdict is suspected (rests on the handoff and landing prior alone).",
+          "type": [
+            "boolean"
+          ]
+        },
+        "resilienceInScope": {
+          "description": "Whether the failure is in Armada's handoff and landing scope.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "selfHealable": {
+          "description": "Whether Armada could have healed it by itself.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Yes",
+            "No",
+            "Unknown"
+          ]
+        },
+        "selfHealingProposal": {
+          "description": "What Armada could have done automatically, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detectionGap": {
+          "description": "Why Armada did not catch it earlier, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resilienceSeverity": {
+          "description": "Severity of the resilience section.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Low",
+            "Medium",
+            "High",
+            "Critical",
+            "Unknown"
+          ]
+        },
+        "topProposedChange": {
+          "description": "The most impactful proposed Armada change (its mission brief left out; read the Resilience section for it), or null.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxProposedChange"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
         "summary": {
           "description": "Analysis summary, or null.",
           "type": [
@@ -1545,6 +1688,10 @@
         "phase",
         "step",
         "triage",
+        "triageSuspected",
+        "resilienceInScope",
+        "selfHealable",
+        "resilienceSeverity",
         "why",
         "recoveryPaths",
         "conflictedFileTotal",
@@ -2896,6 +3043,186 @@
         "errors"
       ]
     },
+    "BlackBoxHandoffStep": {
+      "title": "BlackBoxHandoffStep",
+      "description": "One step of a record's handoff and landing trail: a mission, dock, merge entry or landing event.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "timestampUtc": {
+          "description": "When (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "source": {
+          "description": "Source (Mission, Dock or MergeEntry).",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Entry",
+            "Note",
+            "Mission",
+            "Voyage",
+            "Dock",
+            "MergeEntry",
+            "Captain",
+            "Harbor",
+            "Unknown"
+          ]
+        },
+        "kind": {
+          "description": "Event type (for example mission.landing_retry or dock.reclaimed).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "message": {
+          "description": "Message (at most 500 characters), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "entityId": {
+          "description": "Entity the step is about (event, dock or merge entry id), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "timestampUtc",
+        "source",
+        "kind"
+      ]
+    },
+    "BlackBoxHandoffTrail": {
+      "title": "BlackBoxHandoffTrail",
+      "description": "Handoff and landing trail of a mission failure (record.handoff): the ordered completion, stage check, handoff, landing attempt, retry, deferral and reconcile steps, the automatic recoveries Armada already attempted, the dock and lease transitions, and how far the target moved. Written by the Handoff enricher for entries in handoff and landing scope (also stored as evidence/handoff-timeline.json); null otherwise.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "steps": {
+          "description": "Steps, oldest first.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxHandoffStep"
+          },
+          "maxItems": 100
+        },
+        "stepTotal": {
+          "description": "Steps found (Steps keeps the newest 100).",
+          "type": [
+            "integer"
+          ]
+        },
+        "truncated": {
+          "description": "Whether steps were cut.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "autoRecoveries": {
+          "description": "Automatic recoveries attempted, one per kind.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxAutoRecovery"
+          },
+          "maxItems": 16
+        },
+        "dockTransitions": {
+          "description": "Dock and lease transitions (provisioned, reclaimed, repaired, unstuck, preserved), oldest first.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxHandoffStep"
+          },
+          "maxItems": 20
+        },
+        "dockStateAtFailure": {
+          "description": "Dock state when the failure was captured, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "landingAttempts": {
+          "description": "Landing attempts seen (the first landing plus retries).",
+          "type": [
+            "integer"
+          ]
+        },
+        "targetBranch": {
+          "description": "Target branch.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "targetTipAtStart": {
+          "description": "Target tip when the mission started, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "targetTipAtFailure": {
+          "description": "Target tip at the failure, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "targetMoved": {
+          "description": "Whether the target moved during the run (null when unknown).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "targetCommitsDuringRun": {
+          "description": "Commits that landed on the target during the run, or null.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "note": {
+          "description": "Why parts are missing, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "steps",
+        "stepTotal",
+        "truncated",
+        "autoRecoveries",
+        "dockTransitions",
+        "landingAttempts"
+      ]
+    },
     "BlackBoxImprovement": {
       "title": "BlackBoxImprovement",
       "description": "An Armada behavior change that could address the failure.",
@@ -3390,6 +3717,92 @@
         "createdUtc"
       ]
     },
+    "BlackBoxProposedChange": {
+      "title": "BlackBoxProposedChange",
+      "description": "A proposed Armada change written as a mission-ready brief: title, one paragraph change and the acceptance test, ranked by impact, with a severity that escalates with recurrence.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "rank": {
+          "description": "Rank by impact, 1 is the most impactful.",
+          "type": [
+            "integer"
+          ]
+        },
+        "title": {
+          "description": "Mission title for the Armada change.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 500
+        },
+        "change": {
+          "description": "One paragraph describing the change, written for the captain that will make it.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "acceptanceTest": {
+          "description": "The test that proves the change (suite and case), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "severity": {
+          "description": "Severity after escalation by recurrence (fingerprint occurrences and Armada versions).",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Low",
+            "Medium",
+            "High",
+            "Critical",
+            "Unknown"
+          ]
+        },
+        "ruleId": {
+          "description": "Rule that proposed it, or null for a scope default.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "codePointers": {
+          "description": "Armada source locations the change touches (repository-relative file:method).",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 10
+        },
+        "missionBrief": {
+          "description": "The change as a mission brief for the Armada vessel (title, change, acceptance test, code pointers and the Armada build commit), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "rank",
+        "title",
+        "change",
+        "severity",
+        "codePointers"
+      ]
+    },
     "BlackBoxRecord": {
       "title": "BlackBoxRecord",
       "description": "The content of a black box entry's record.json: a versioned forensic snapshot of one mission or voyage failure, deserialized into typed classes (never read through JsonElement). A section that was not captured is null; readers render whatever sections exist. Every string is capped and every collection bounded (BlackBoxLimits).",
@@ -3621,6 +4034,19 @@
           "anyOf": [
             {
               "$ref": "#/$defs/BlackBoxVoyageRollup"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "handoff": {
+          "description": "Handoff and landing trail (entries in handoff and landing scope), or null.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxHandoffTrail"
             },
             {
               "type": [
@@ -3981,6 +4407,33 @@
         "count"
       ]
     },
+    "BlackBoxRegressionTest": {
+      "title": "BlackBoxRegressionTest",
+      "description": "The test that would have caught a black box failure.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "suite": {
+          "description": "Test suite (for example Services.LandingService).",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        },
+        "description": {
+          "description": "The case that would have caught the failure.",
+          "type": [
+            "string"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "suite",
+        "description"
+      ]
+    },
     "BlackBoxRelated": {
       "title": "BlackBoxRelated",
       "description": "Related section: fingerprint, similar entries and cascade.",
@@ -4011,6 +4464,19 @@
           "type": [
             "integer"
           ]
+        },
+        "armadaVersions": {
+          "description": "Armada versions the fingerprint was seen in (this entry's included), oldest sighting first.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 20
         },
         "cascadeRootEntryId": {
           "description": "Cascade root entry, or null.",
@@ -4053,9 +4519,482 @@
       "required": [
         "similarEntries",
         "occurrencesLast30Days",
+        "armadaVersions",
         "downstreamMissionIds",
         "nearbySuccesses",
         "nearbySuccessTotal"
+      ]
+    },
+    "BlackBoxResilience": {
+      "title": "BlackBoxResilience",
+      "description": "Resilience analysis of a black box failure (analysis.resilience): could Armada's handoff and landing have healed it by itself, why Armada did not catch it earlier, where in the Armada source it lives, and the Armada changes that would prevent it, as mission briefs. Filled by the advisor for every entry; never empty in handoff and landing scope.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "inScope": {
+          "description": "Whether the failure is in Armada's handoff and landing scope (phases Handoff, Landing, MergeQueue, Recovery and Provision, Armada handoff mechanics in Completion, and dock, worktree, branch or target-sync facts of any phase).",
+          "type": [
+            "boolean"
+          ]
+        },
+        "scopeReason": {
+          "description": "Why the failure is in scope (for example \"phase Landing\" or \"the dock worktree was missing\"), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "selfHealable": {
+          "description": "Whether Armada could have recovered automatically.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Yes",
+            "No",
+            "Unknown"
+          ]
+        },
+        "selfHealingProposal": {
+          "description": "What Armada could have done automatically (retry with backoff, recreate the worktree from the branch, rebase onto the moved target, ...), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "detectionGapKind": {
+          "description": "Kind of detection gap.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "NoPreflightCheck",
+            "CheckTooLate",
+            "StateNotPersisted",
+            "Race",
+            "MissingInvariant",
+            "MissingRetry",
+            "None",
+            "Unknown"
+          ]
+        },
+        "detectionGap": {
+          "description": "Why Armada did not catch or prevent it earlier, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "invariant": {
+          "description": "The invariant that should hold so the failure cannot happen, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "codePointers": {
+          "description": "Armada source locations most likely involved (the failure site first, then the handoff and landing services), as repository-relative file:method.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 12
+        },
+        "armadaVersion": {
+          "description": "Armada version that failed (read the code pointers at this build).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "armadaCommit": {
+          "description": "Armada build commit that failed, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "proposedChanges": {
+          "description": "Proposed Armada changes as mission briefs, most impactful first.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "$ref": "#/$defs/BlackBoxProposedChange"
+          },
+          "maxItems": 5
+        },
+        "regressionTest": {
+          "description": "The test that would have caught it, or null.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxRegressionTest"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "severity": {
+          "description": "Overall severity: the highest proposed change's, escalated by recurrence (1 occurrence Medium, 3 or more High, 5 or more or seen in 2 or more Armada versions Critical).",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Low",
+            "Medium",
+            "High",
+            "Critical",
+            "Unknown"
+          ]
+        },
+        "occurrences30Days": {
+          "description": "Entries with the same fingerprint in the last 30 days (this one included).",
+          "type": [
+            "integer"
+          ]
+        },
+        "armadaVersionCount": {
+          "description": "Armada versions the fingerprint was seen in.",
+          "type": [
+            "integer"
+          ]
+        },
+        "attemptedRecoveries": {
+          "description": "Automatic recoveries Armada already attempted before this failure and their outcome (from the handoff trail).",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 10
+        },
+        "noChangeReason": {
+          "description": "Why no Armada change is suggested (outside the handoff and landing scope), or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "ruleIds": {
+          "description": "Rules that contributed (BBX-PRIOR-ARMADA when the scope prior applied).",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ],
+            "maxLength": 1024
+          },
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "inScope",
+        "selfHealable",
+        "detectionGapKind",
+        "codePointers",
+        "proposedChanges",
+        "severity",
+        "occurrences30Days",
+        "armadaVersionCount",
+        "attemptedRecoveries",
+        "ruleIds"
+      ]
+    },
+    "BlackBoxResilienceGap": {
+      "title": "BlackBoxResilienceGap",
+      "description": "One Armada resilience gap: a failure mode (fingerprint) triaged ArmadaDefect in handoff and landing scope, with its recurrence and the newest entry's resilience analysis.",
+      "type": [
+        "object"
+      ],
+      "properties": {
+        "fingerprint": {
+          "description": "Failure-mode fingerprint.",
+          "type": [
+            "string"
+          ]
+        },
+        "phase": {
+          "description": "Phase of the newest entry.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "Dispatch",
+            "Provision",
+            "Execution",
+            "Completion",
+            "Review",
+            "Handoff",
+            "Landing",
+            "MergeQueue",
+            "Recovery",
+            "Voyage",
+            "External"
+          ]
+        },
+        "step": {
+          "description": "Step of the newest entry.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Unknown",
+            "VoyageParentNotRunnable",
+            "AssignmentFailed",
+            "NoEligibleCaptain",
+            "HarborUnavailable",
+            "MemoryPressure",
+            "DockProvision",
+            "WorktreeCreate",
+            "BranchCreate",
+            "StartCommitRecord",
+            "ProcessCrash",
+            "UsageLimit",
+            "AuthFailure",
+            "ModelUnavailable",
+            "Stall",
+            "MaxRuntime",
+            "RecoveryExhausted",
+            "Interrupted",
+            "OperatorStop",
+            "NoOp",
+            "Unfinished",
+            "CaptainBlocked",
+            "InvalidOutput",
+            "ScopeViolation",
+            "BoundaryViolation",
+            "DefinitionOfDone",
+            "StageCheck",
+            "JudgeRejected",
+            "ReviewDenied",
+            "ReviewTimeout",
+            "ReviewApprovedDockMissing",
+            "PlanParse",
+            "StageBranchHarden",
+            "DependencyCancelled",
+            "IntegrationBarrier",
+            "DockMissing",
+            "TargetIntegration",
+            "Verification",
+            "DirtyCheckout",
+            "UnpublishedAncestry",
+            "Push",
+            "PullRequest",
+            "FastForward",
+            "LocalMerge",
+            "RetryLanding",
+            "DeferralExpired",
+            "QueueResolveRepo",
+            "QueueMergeConflict",
+            "QueueTests",
+            "QueueProcessing",
+            "QueuePush",
+            "RescueFailed",
+            "RedispatchExhausted",
+            "OrphanedExit",
+            "UnconfirmedStop",
+            "MissingMergeHandoff",
+            "SettlementFailed",
+            "Halted",
+            "Cancelled",
+            "StageFailed",
+            "VesselDeleted",
+            "OperatorTransition"
+          ]
+        },
+        "failureKind": {
+          "description": "Failure kind of the newest entry, or null.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Compile",
+            "TestFail",
+            "Timeout",
+            "LandingConflict",
+            "Crash",
+            "NoOp",
+            "Boundary",
+            "ScopeViolation",
+            "JudgeRejected",
+            "Infra",
+            "Unknown",
+            "ReviewDenied",
+            "DependencyFailed",
+            "MaxRuntimeExceeded",
+            "StallRecoveryExhausted",
+            "OperatorAction",
+            "InvalidOutput",
+            "Blocked",
+            null
+          ]
+        },
+        "occurrences": {
+          "description": "Entries with this fingerprint that match the filter.",
+          "type": [
+            "integer"
+          ]
+        },
+        "openCount": {
+          "description": "Open entries among them.",
+          "type": [
+            "integer"
+          ]
+        },
+        "firstSeenUtc": {
+          "description": "First seen (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "lastSeenUtc": {
+          "description": "Last seen (UTC).",
+          "type": [
+            "string"
+          ],
+          "format": "date-time"
+        },
+        "latestEntryId": {
+          "description": "Newest entry.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "latestMissionId": {
+          "description": "Mission of the newest entry, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "latestMissionTitle": {
+          "description": "Title of that mission, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vesselName": {
+          "description": "Vessel of the newest entry, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "armadaVersions": {
+          "description": "Armada versions the fingerprint was seen in.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ]
+          },
+          "maxItems": 20
+        },
+        "severity": {
+          "description": "Severity of the newest entry's resilience section.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Low",
+            "Medium",
+            "High",
+            "Critical",
+            "Unknown"
+          ]
+        },
+        "selfHealable": {
+          "description": "Whether Armada could have healed it by itself.",
+          "type": [
+            "string"
+          ],
+          "enum": [
+            "Yes",
+            "No",
+            "Unknown"
+          ]
+        },
+        "suspected": {
+          "description": "Whether the ArmadaDefect verdict rests on the scope prior alone (suspected, not proven).",
+          "type": [
+            "boolean"
+          ]
+        },
+        "topProposedChange": {
+          "description": "The most impactful proposed Armada change, or null.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlackBoxProposedChange"
+            },
+            {
+              "type": [
+                "null"
+              ]
+            }
+          ]
+        },
+        "detectionGap": {
+          "description": "Why Armada did not catch it earlier, or null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ruleIds": {
+          "description": "Rules behind the newest entry's resilience section.",
+          "type": [
+            "array"
+          ],
+          "items": {
+            "type": [
+              "string"
+            ]
+          },
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "fingerprint",
+        "phase",
+        "step",
+        "occurrences",
+        "openCount",
+        "firstSeenUtc",
+        "lastSeenUtc",
+        "armadaVersions",
+        "severity",
+        "selfHealable",
+        "suspected",
+        "ruleIds"
       ]
     },
     "BlackBoxResolvedPayload": {
@@ -4200,6 +5139,8 @@
             "Voyage",
             "Redaction",
             "Truncation",
+            "Resilience",
+            "Handoff",
             "Unknown"
           ]
         },
@@ -4958,13 +5899,27 @@
             ]
           },
           "maxItems": 6
+        },
+        "priorApplied": {
+          "description": "Whether the handoff and landing prior (BBX-PRIOR-ARMADA) took part in the vote.",
+          "type": [
+            "boolean"
+          ]
+        },
+        "suspected": {
+          "description": "Whether an ArmadaDefect verdict rests on the prior alone (no rule voted ArmadaDefect): a suspected Armada defect, reported with Low confidence.",
+          "type": [
+            "boolean"
+          ]
         }
       },
       "required": [
         "verdict",
         "confidence",
         "votes",
-        "tiedWith"
+        "tiedWith",
+        "priorApplied",
+        "suspected"
       ]
     },
     "BlackBoxTriageVote": {

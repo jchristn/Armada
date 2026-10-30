@@ -58,6 +58,23 @@ namespace Test.Shared.Suites.Services
                         if (p.Steps.Any(s => s.Action != null)) AssertNotNull(p.Action, "path action");
                     }
                     AssertTrue(a.Summary != null && a.Summary.Length > 20 && !a.Summary.Contains('—'), "summary");
+                    BlackBoxResilience? res = a.Resilience;
+                    AssertNotNull(res, g.RuleId + " resilience section");
+                    if (res!.InScope)
+                    {
+                        AssertTrue(a.Triage!.PriorApplied && a.Triage.Votes.Any(v => v.RuleId == BlackBoxResilienceScope.PriorRuleId && v.Verdict == BlackBoxTriageEnum.ArmadaDefect), g.RuleId + ": the Armada prior voted in scope");
+                        AssertFalse(String.IsNullOrWhiteSpace(res.SelfHealingProposal), g.RuleId + ": self-healing proposal");
+                        AssertFalse(String.IsNullOrWhiteSpace(res.DetectionGap), g.RuleId + ": detection gap");
+                        AssertTrue(res.CodePointers.Count > 0, g.RuleId + ": code pointers");
+                        AssertTrue(res.ProposedChanges.Count > 0 && res.ProposedChanges.All(c => !String.IsNullOrWhiteSpace(c.MissionBrief)), g.RuleId + ": proposed changes as mission briefs");
+                        AssertNotNull(res.RegressionTest, g.RuleId + ": regression test");
+                        AssertStartsWith("Armada's ", a.Summary!, g.RuleId + ": the summary leads with the Armada angle");
+                    }
+                    else
+                    {
+                        AssertFalse(a.Triage!.PriorApplied || a.Triage.Votes.Any(v => v.RuleId == BlackBoxResilienceScope.PriorRuleId), g.RuleId + ": no prior outside scope");
+                        AssertTrue(res.ProposedChanges.Count > 0 || res.NoChangeReason != null, g.RuleId + ": outside scope says why there is no Armada change");
+                    }
                     AssertFalse(a.SummaryIsModelWritten, "rules summary");
                     return Task.CompletedTask;
                 }));
@@ -105,8 +122,8 @@ namespace Test.Shared.Suites.Services
                     new BlackBoxRule("T-A", "a", r => true).Because("Config says so.", BlackBoxConfidenceEnum.High).Votes(BlackBoxTriageEnum.UserConfig, 3),
                     new BlackBoxRule("T-B", "b", r => true).Because("Armada says so.", BlackBoxConfidenceEnum.High).Votes(BlackBoxTriageEnum.ArmadaDefect, 3)
                 });
-                BlackBoxAnalysis a = BlackBoxAdvisor.Analyze(Rec(BlackBoxStepEnum.Push), catalog);
-                AssertEqual(BlackBoxTriageEnum.Unknown, a.Triage!.Verdict, "record-level tie");
+                BlackBoxAnalysis a = BlackBoxAdvisor.Analyze(Rec(BlackBoxStepEnum.Stall), catalog);
+                AssertEqual(BlackBoxTriageEnum.Unknown, a.Triage!.Verdict, "record-level tie outside handoff and landing scope");
                 AssertContains("tie between", a.Summary ?? "", "summary names the tie");
                 return Task.CompletedTask;
             }));
@@ -125,7 +142,7 @@ namespace Test.Shared.Suites.Services
                     new BlackBoxRule("T-THROWS", "throws", r => throw new InvalidOperationException("boom")).Because("Never.", BlackBoxConfidenceEnum.Low),
                     new BlackBoxRule("T-FB", "fallback rule", r => true) { IsFallback = true }.Because("Nothing matched.", BlackBoxConfidenceEnum.Low)
                 });
-                BlackBoxRecord record = Rec(BlackBoxStepEnum.DirtyCheckout);
+                BlackBoxRecord record = Rec(BlackBoxStepEnum.Stall);
                 List<string> diagnostics = new List<string>();
                 BlackBoxAnalysis a = BlackBoxAdvisor.Analyze(record, catalog, diagnostics);
                 AssertFalse(a.Why.Any(w => w.RuleId == "T-MISSING"), "rule with a missing placeholder skipped");
@@ -261,21 +278,21 @@ namespace Test.Shared.Suites.Services
             List<BlackBoxGoldenCase> list = new List<BlackBoxGoldenCase>();
             list.Add(new BlackBoxGoldenCase("BBX-LAND-001", BlackBoxTriageEnum.UserConfig, DirtyCheckout) { Statement = "The checkout at /work/checkout has uncommitted tracked changes in 3 files, so the landing refused to overwrite them.", FirstPathId = "bbx-land-001.stash-retry", DoesNotFire = { "BBX-LAND-007" } });
             list.Add(new BlackBoxGoldenCase("BBX-LAND-002", BlackBoxTriageEnum.ArmadaDefect, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.TargetIntegration, MissionFailureKindEnum.LandingConflict, "An error occurred trying to start process '/usr/bin/git' with working directory '/work/docks/msn_t'. No such file or directory"); r.Workspace!.WorktreePath = "/work/docks/msn_t"; return r; }) { Statement = "The dock directory /work/docks/msn_t was removed before landing, so git could not start in it.", FirstPathId = "bbx-land-002.retry-landing" });
-            list.Add(new BlackBoxGoldenCase("BBX-LAND-003", BlackBoxTriageEnum.UserConfig, () => Conflict("src/Armada.Core/Services/MissionService.cs", "src/Armada.Core/Services/DockService.cs")) { Statement = "msn_other (Shared helpers) landed c0ffee1 on main at 2026-10-28 10:00Z, changing 2 of the same files.", FirstPathId = "bbx-land-003.restart-on-target" });
+            list.Add(new BlackBoxGoldenCase("BBX-LAND-003", BlackBoxTriageEnum.ArmadaDefect, () => Conflict("src/Armada.Core/Services/MissionService.cs", "src/Armada.Core/Services/DockService.cs")) { Statement = "msn_other (Shared helpers) landed c0ffee1 on main at 2026-10-28 10:00Z, changing 2 of the same files.", FirstPathId = "bbx-land-003.restart-on-target" });
             list.Add(new BlackBoxGoldenCase("BBX-LAND-004", BlackBoxTriageEnum.ArmadaDefect, () => Conflict("CHANGELOG.md", "docs/api-surface-1.0.json", "src/Armada.Dashboard/src/i18n/armada.json")) { DoesNotFire = { "BBX-LAND-003" } });
             list.Add(new BlackBoxGoldenCase("BBX-LAND-005", BlackBoxTriageEnum.MissionBrief, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.Verification); r.Mechanism!.FailingCommand = "dotnet test"; r.Mechanism.CommandExitCode = 1; return r; }) { Statement = "Post-merge verification `dotnet test` failed with exit 1." });
-            list.Add(new BlackBoxGoldenCase("BBX-LAND-006", BlackBoxTriageEnum.External, () => Rec(BlackBoxStepEnum.Push, MissionFailureKindEnum.Infra, "push rejected")));
-            list.Add(new BlackBoxGoldenCase("BBX-LAND-007", BlackBoxTriageEnum.Unknown, () => Rec(BlackBoxStepEnum.FastForward, MissionFailureKindEnum.Infra, "fast-forward refused")) { FirstPathId = "bbx-land-007.retry-landing" });
+            list.Add(new BlackBoxGoldenCase("BBX-LAND-006", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.Push, MissionFailureKindEnum.Infra, "push rejected")) { DoesNotFire = { "BBX-LAND-008", "BBX-LAND-010" } });
+            list.Add(new BlackBoxGoldenCase("BBX-LAND-007", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.FastForward, MissionFailureKindEnum.Infra, "fast-forward refused")) { FirstPathId = "bbx-land-007.retry-landing" });
             list.Add(new BlackBoxGoldenCase("BBX-MQ-001", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.QueueProcessing, MissionFailureKindEnum.LandingConflict, "merge queue entry failed")) { DoesNotFire = { "BBX-MQ-003" } });
-            list.Add(new BlackBoxGoldenCase("BBX-MQ-002", BlackBoxTriageEnum.MissionBrief, () => Rec(BlackBoxStepEnum.QueueTests, MissionFailureKindEnum.TestFail, "tests failed")) { DoesNotFire = { "BBX-CHECK-001" } });
-            list.Add(new BlackBoxGoldenCase("BBX-MQ-003", BlackBoxTriageEnum.Unknown, () => Rec(BlackBoxStepEnum.QueuePush, MissionFailureKindEnum.Infra, "push failed")));
+            list.Add(new BlackBoxGoldenCase("BBX-MQ-002", BlackBoxTriageEnum.MissionBrief, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.QueueTests, MissionFailureKindEnum.TestFail, "tests failed"); r.Mechanism!.FailingCommand = "dotnet test"; r.Mechanism.CommandExitCode = 1; return r; }) { DoesNotFire = { "BBX-CHECK-001", "BBX-CHECK-002" } });
+            list.Add(new BlackBoxGoldenCase("BBX-MQ-003", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.QueueMergeConflict, MissionFailureKindEnum.Infra, "queue merge failed")));
             list.Add(new BlackBoxGoldenCase("BBX-SCOPE-001", BlackBoxTriageEnum.ArmadaDefect, () => Scope(true, "e4f1a20")) { DoesNotFire = { "BBX-SCOPE-003", "BBX-SCOPE-002" }, FirstPathId = "bbx-scope-001.review-restart" });
-            list.Add(new BlackBoxGoldenCase("BBX-SCOPE-002", BlackBoxTriageEnum.MissionBrief, () => Scope(false, null)) { AlsoFires = { "BBX-SCOPE-003" } });
+            list.Add(new BlackBoxGoldenCase("BBX-SCOPE-002", BlackBoxTriageEnum.ArmadaDefect, () => Scope(false, null)) { AlsoFires = { "BBX-SCOPE-003" } });
             list.Add(new BlackBoxGoldenCase("BBX-SCOPE-003", BlackBoxTriageEnum.MissionBrief, () => Scope(false, "e4f1a20")) { DoesNotFire = { "BBX-SCOPE-002" } });
             list.Add(new BlackBoxGoldenCase("BBX-NOOP-001", BlackBoxTriageEnum.MissionBrief, () => Rec(BlackBoxStepEnum.NoOp, MissionFailureKindEnum.NoOp, "no changes")) { Statement = "The captain finished without producing changes." });
             list.Add(new BlackBoxGoldenCase("BBX-DEP-001", BlackBoxTriageEnum.MissionBrief, () => Rec(BlackBoxStepEnum.CaptainBlocked, MissionFailureKindEnum.Blocked, "Captain reported BLOCKED: mission 3 depends on mission 2, which has not landed; missions 1-4 are running concurrently.")) { DoesNotFire = { "BBX-BLOCK-001" }, Statement = "Missions that depend on each other were dispatched in parallel: the captain reported BLOCKED because mission 2 had not landed." });
             list.Add(new BlackBoxGoldenCase("BBX-BLOCK-001", BlackBoxTriageEnum.MissionBrief, () => Rec(BlackBoxStepEnum.CaptainBlocked, MissionFailureKindEnum.Blocked, "Captain reported BLOCKED: the brief contradicts the vessel's style guide.")) { DoesNotFire = { "BBX-DEP-001" } });
-            list.Add(new BlackBoxGoldenCase("BBX-OUT-001", BlackBoxTriageEnum.UserConfig, () => Rec(BlackBoxStepEnum.InvalidOutput, MissionFailureKindEnum.InvalidOutput, "missing markers")));
+            list.Add(new BlackBoxGoldenCase("BBX-OUT-001", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.InvalidOutput, MissionFailureKindEnum.InvalidOutput, "missing markers")));
             list.Add(new BlackBoxGoldenCase("BBX-BOUND-001", BlackBoxTriageEnum.MissionBrief, () => Rec(BlackBoxStepEnum.BoundaryViolation, MissionFailureKindEnum.Boundary, "changed .github/workflows")));
             list.Add(new BlackBoxGoldenCase("BBX-CHECK-001", BlackBoxTriageEnum.MissionBrief, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.DefinitionOfDone, MissionFailureKindEnum.Compile, "build failed"); r.Mechanism!.FailingCommand = "dotnet build"; r.Mechanism.CommandExitCode = 1; return r; }));
             list.Add(new BlackBoxGoldenCase("BBX-UNFIN-001", BlackBoxTriageEnum.MissionBrief, () => Rec(BlackBoxStepEnum.Unfinished, MissionFailureKindEnum.Unknown, "stopped early")));
@@ -290,14 +307,47 @@ namespace Test.Shared.Suites.Services
             list.Add(new BlackBoxGoldenCase("BBX-INFRA-001", BlackBoxTriageEnum.External, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.Push, MissionFailureKindEnum.Infra, "harbor gone"); r.Workspace!.HarborLinkState = "Disconnected"; r.Subject!.HarborName = "laptop"; return r; }) { Statement = "Harbor laptop was disconnected.", DoesNotFire = { "BBX-LAND-006" }, FirstPathId = "bbx-infra-001.reconnect-retry" });
             list.Add(new BlackBoxGoldenCase("BBX-DISP-001", BlackBoxTriageEnum.UserConfig, () => Rec(BlackBoxStepEnum.NoEligibleCaptain, null, "no idle captain")) { DoesNotFire = { "BBX-DISP-002" } });
             list.Add(new BlackBoxGoldenCase("BBX-DISP-002", BlackBoxTriageEnum.Transient, () => Rec(BlackBoxStepEnum.MemoryPressure, null, "memory pressure")));
-            list.Add(new BlackBoxGoldenCase("BBX-PROV-001", BlackBoxTriageEnum.Transient, () => Rec(BlackBoxStepEnum.WorktreeCreate, MissionFailureKindEnum.Infra, "worktree add failed")) { FirstPathId = "bbx-prov-001.repair-restart" });
+            list.Add(new BlackBoxGoldenCase("BBX-PROV-001", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.WorktreeCreate, MissionFailureKindEnum.Infra, "worktree add failed")) { FirstPathId = "bbx-prov-001.repair-restart" });
             list.Add(new BlackBoxGoldenCase("BBX-REV-001", BlackBoxTriageEnum.External, () => Rec(BlackBoxStepEnum.ReviewDenied, MissionFailureKindEnum.ReviewDenied, "not what I asked for")));
             list.Add(new BlackBoxGoldenCase("BBX-REV-002", BlackBoxTriageEnum.MissionBrief, () => Rec(BlackBoxStepEnum.JudgeRejected, MissionFailureKindEnum.JudgeRejected, "tests missing")));
             list.Add(new BlackBoxGoldenCase("BBX-REV-003", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.ReviewApprovedDockMissing, null, "dock gone")));
             list.Add(new BlackBoxGoldenCase("BBX-REV-004", BlackBoxTriageEnum.External, () => Rec(BlackBoxStepEnum.ReviewTimeout, null, "review timed out")));
             list.Add(new BlackBoxGoldenCase("BBX-DEP-002", BlackBoxTriageEnum.External, () => Rec(BlackBoxStepEnum.DependencyCancelled, MissionFailureKindEnum.DependencyFailed, "dependency failed")) { DoesNotFire = { "BBX-HAND-001" } });
-            list.Add(new BlackBoxGoldenCase("BBX-HAND-001", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.PlanParse, null, "plan block unreadable")));
+            list.Add(new BlackBoxGoldenCase("BBX-HAND-001", BlackBoxTriageEnum.ArmadaDefect, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.Unknown, null, "handoff failed"); r.Site!.Phase = BlackBoxPhaseEnum.Handoff; return r; }));
             list.Add(new BlackBoxGoldenCase("BBX-RECOV-001", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.RescueFailed, null, "rescue failed")));
+            // Handoff and landing rules added with the resilience bias (rules version 2).
+            list.Add(new BlackBoxGoldenCase("BBX-LAND-008", BlackBoxTriageEnum.ArmadaDefect, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.Push, MissionFailureKindEnum.Infra, "push failed"); r.Mechanism!.GitStderrTail = " ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs; Updates were rejected because the remote contains work that you do not have locally."; return r; }) { DoesNotFire = { "BBX-LAND-006", "BBX-LAND-007" }, FirstPathId = "bbx-land-008.retry-landing" });
+            list.Add(new BlackBoxGoldenCase("BBX-LAND-009", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.PullRequest, MissionFailureKindEnum.Infra, "gh pr create returned HTTP 502")) { DoesNotFire = { "BBX-LAND-006" } });
+            list.Add(new BlackBoxGoldenCase("BBX-LAND-010", BlackBoxTriageEnum.UserConfig, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.Push, MissionFailureKindEnum.Infra, "push failed"); r.Mechanism!.GitStderrTail = "remote: Invalid username or password.\nfatal: Authentication failed for 'https://github.com/o/r.git/'"; return r; }) { DoesNotFire = { "BBX-LAND-006" }, FirstPathId = "bbx-land-010.fix-credentials-retry" });
+            list.Add(new BlackBoxGoldenCase("BBX-LAND-011", BlackBoxTriageEnum.ArmadaDefect, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.FastForward, MissionFailureKindEnum.Infra, "fast-forward refused"); r.Workspace!.TargetTipAtStart = "1111111"; r.Workspace.TargetTipAtFailure = "2222222"; return r; }) { Statement = "main moved from 1111111 to 2222222 while Armada integrated armada/msn_t, and the integration did not recover from it.", DoesNotFire = { "BBX-LAND-007" } });
+            list.Add(new BlackBoxGoldenCase("BBX-LAND-012", BlackBoxTriageEnum.ArmadaDefect, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.TargetIntegration, MissionFailureKindEnum.Infra, "merge failed"); r.Workspace!.BranchExists = false; return r; }) { FirstPathId = "bbx-land-012.restore-branch" });
+            list.Add(new BlackBoxGoldenCase("BBX-LAND-013", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.RetryLanding, MissionFailureKindEnum.Infra, "landing retries exhausted after 3 attempts")) { DoesNotFire = { "BBX-LAND-007" } });
+            list.Add(new BlackBoxGoldenCase("BBX-LAND-014", BlackBoxTriageEnum.ArmadaDefect, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.DeferralExpired, null, "landing deferral expired"); r.Workspace!.CheckoutPath = "/work/checkout"; return r; }) { FirstPathId = "bbx-land-014.clean-retry" });
+            list.Add(new BlackBoxGoldenCase("BBX-LAND-015", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.UnpublishedAncestry, MissionFailureKindEnum.Infra, "branch builds on unpublished commits")) { DoesNotFire = { "BBX-LAND-006" } });
+            list.Add(new BlackBoxGoldenCase("BBX-MQ-004", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.QueueProcessing, MissionFailureKindEnum.Infra, "merge entry processing lease expired")) { DoesNotFire = { "BBX-MQ-003" } });
+            list.Add(new BlackBoxGoldenCase("BBX-MQ-005", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.QueueResolveRepo, MissionFailureKindEnum.Infra, "repository path not found")) { DoesNotFire = { "BBX-MQ-003" } });
+            list.Add(new BlackBoxGoldenCase("BBX-MQ-006", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.QueuePush, MissionFailureKindEnum.Infra, "push failed")) { DoesNotFire = { "BBX-MQ-003" } });
+            list.Add(new BlackBoxGoldenCase("BBX-CHECK-002", BlackBoxTriageEnum.ArmadaDefect, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.StageCheck, MissionFailureKindEnum.TestFail, "stage check failed"); r.Site!.Phase = BlackBoxPhaseEnum.Completion; r.Mechanism!.FailingCommand = "dotnet test"; r.Mechanism.CommandExitCode = 127; r.Mechanism.CommandOutputTail = "dotnet: command not found"; return r; }) { DoesNotFire = { "BBX-CHECK-001" } });
+            list.Add(new BlackBoxGoldenCase("BBX-CHECK-003", BlackBoxTriageEnum.ArmadaDefect, () =>
+            {
+                BlackBoxRecord r = Rec(BlackBoxStepEnum.Verification, MissionFailureKindEnum.TestFail, "verification failed");
+                r.Mechanism!.FailingCommand = "dotnet test"; r.Mechanism.CommandExitCode = 1;
+                r.Evidence = new BlackBoxEvidenceIndex();
+                r.Evidence.CheckResults.Add(new StageCheckResult { Status = StageCheckStatusEnum.Passed });
+                r.Evidence.CheckResults.Add(new StageCheckResult { Status = StageCheckStatusEnum.Failed, FailedCommand = "dotnet test", ExitCode = 1 });
+                return r;
+            }) { DoesNotFire = { "BBX-LAND-005" } });
+            list.Add(new BlackBoxGoldenCase("BBX-PROV-002", BlackBoxTriageEnum.ArmadaDefect, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.WorktreeCreate, MissionFailureKindEnum.Infra, "worktree add failed"); r.Mechanism!.GitStderrTail = "fatal: '/work/docks/msn_t' is a missing but already registered worktree; use 'add -f' to override, or 'prune' or 'remove' to clear"; return r; }) { DoesNotFire = { "BBX-PROV-001" } });
+            list.Add(new BlackBoxGoldenCase("BBX-PROV-003", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.BranchCreate, MissionFailureKindEnum.Infra, "a branch named 'armada/msn_t' already exists")) { DoesNotFire = { "BBX-PROV-001" } });
+            list.Add(new BlackBoxGoldenCase("BBX-PROV-004", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.StartCommitRecord, MissionFailureKindEnum.Infra, "could not write the start commit")) { DoesNotFire = { "BBX-PROV-001" } });
+            list.Add(new BlackBoxGoldenCase("BBX-DOCK-001", BlackBoxTriageEnum.ArmadaDefect, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.Stall, MissionFailureKindEnum.StallRecoveryExhausted, "stalled"); r.Workspace!.WorktreeExists = false; return r; }) { AlsoFires = { "BBX-EXEC-002" } });
+            list.Add(new BlackBoxGoldenCase("BBX-HAND-002", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.PlanParse, null, "plan block unreadable")) { DoesNotFire = { "BBX-HAND-001" } });
+            list.Add(new BlackBoxGoldenCase("BBX-HAND-003", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.StageBranchHarden, null, "could not harden the stage branch")) { DoesNotFire = { "BBX-HAND-001" } });
+            list.Add(new BlackBoxGoldenCase("BBX-HAND-004", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.IntegrationBarrier, null, "barrier merge conflicted")) { DoesNotFire = { "BBX-HAND-001" } });
+            list.Add(new BlackBoxGoldenCase("BBX-RECOV-002", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.UnconfirmedStop, null, "stop not confirmed")) { DoesNotFire = { "BBX-RECOV-001" } });
+            list.Add(new BlackBoxGoldenCase("BBX-RECOV-003", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.OrphanedExit, null, "orphaned exit")) { DoesNotFire = { "BBX-RECOV-001" } });
+            list.Add(new BlackBoxGoldenCase("BBX-RECOV-004", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.MissingMergeHandoff, null, "no landing handoff recorded")) { DoesNotFire = { "BBX-RECOV-001" } });
+            list.Add(new BlackBoxGoldenCase("BBX-RECOV-005", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.RedispatchExhausted, null, "redispatch budget exhausted")) { DoesNotFire = { "BBX-RECOV-001" } });
             list.Add(new BlackBoxGoldenCase("BBX-VOY-001", BlackBoxTriageEnum.Unknown, () =>
             {
                 BlackBoxRecord r = Rec(BlackBoxStepEnum.Halted, null, "halted");
@@ -386,6 +436,11 @@ namespace Test.Shared.Suites.Services
             texts.AddRange(a.ConfigRecommendations.SelectMany(r => new[] { r.Rationale ?? "", r.HowToApply ?? "", r.SuggestedValue ?? "" }));
             texts.AddRange(a.ArmadaImprovements.SelectMany(i => new[] { i.Hypothesis, i.Evidence ?? "" }));
             texts.AddRange(a.RecoveryPaths.SelectMany(p => new[] { p.Title, p.ExpectedOutcome ?? "" }.Concat(p.Preconditions).Concat(p.Steps.SelectMany(s => new[] { s.Description, s.CliCommand ?? "", s.McpCommand ?? "" }))));
+            if (a.Resilience != null)
+            {
+                texts.AddRange(new[] { a.Resilience.SelfHealingProposal ?? "", a.Resilience.DetectionGap ?? "", a.Resilience.Invariant ?? "", a.Resilience.RegressionTest?.Description ?? "" });
+                texts.AddRange(a.Resilience.ProposedChanges.SelectMany(c => new[] { c.Title, c.Change, c.AcceptanceTest ?? "", c.MissionBrief ?? "" }));
+            }
             foreach (string text in texts)
             {
                 // JSON in MCP command strings has braces, but never a {name} placeholder.

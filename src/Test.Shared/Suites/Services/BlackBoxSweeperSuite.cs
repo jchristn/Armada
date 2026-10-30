@@ -45,7 +45,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, first.Failed, "no failures");
                 BlackBoxEntry ea = (await t.Driver.BlackBoxEntries.ReadCurrentByMissionAsync(a.Id).ConfigureAwait(false))!;
                 AssertEqual(BlackBoxCaptureModeEnum.Sweeper, ea.CaptureMode); AssertEqual(BlackBoxStepEnum.NoOp, ea.Step, "step inferred from kind");
-                AssertEqual(BlackBoxStepEnum.Unknown, (await t.Driver.BlackBoxEntries.ReadCurrentByMissionAsync(b.Id).ConfigureAwait(false))!.Step, "unknown when ambiguous");
+                AssertEqual(BlackBoxStepEnum.TargetIntegration, (await t.Driver.BlackBoxEntries.ReadCurrentByMissionAsync(b.Id).ConfigureAwait(false))!.Step, "an unclassified landing failure keeps the Landing phase");
                 AssertNotNull(await t.Driver.BlackBoxEntries.ReadCurrentByVoyageAsync(voyage.Id).ConfigureAwait(false), "voyage captured");
                 BlackBoxBackfillResult second = await bb.Sweeper.SweepAsync().ConfigureAwait(false);
                 AssertEqual(0, second.Captured, "nothing captured twice");

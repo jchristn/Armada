@@ -10,3 +10,6 @@
   Attempts** (side-by-side attempt diff), **Armada: Preview Mission Overlap** (overlap and brief lint warnings for a
   brief on the open repository's vessel), and in the entry view each recovery path's success rate, its linked runbook
   and the vessel's recurring configuration recommendations.
+- Armada resilience: the entry view's Armada resilience section (self-healable verdict, detection gap, code pointers
+  at the build commit, proposed Armada changes, regression test), the "Suspected Armada defect" badge, **Armada: Draft
+  Armada Fix Mission** and **Armada: Show Resilience Gaps**.

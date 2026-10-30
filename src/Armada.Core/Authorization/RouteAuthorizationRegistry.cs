@@ -287,6 +287,7 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/blackbox/bundle", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/blackbox/hotspots/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/blackbox/fingerprints/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/blackbox/resilience-gaps/enumerate", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/blackbox/fingerprints/{fingerprint}/trend", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/blackbox/{id}/export-fixture", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
             Add("GET", "/api/v1/blackbox/retention", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);

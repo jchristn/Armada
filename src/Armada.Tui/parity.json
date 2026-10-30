@@ -65,6 +65,22 @@
     },
     {
       "kind": "route",
+      "key": "/blackbox/gaps",
+      "status": "extension",
+      "tui": "BlackBoxGapsScreen",
+      "workstream": "BB",
+      "notes": "TUI route for the Armada resilience gaps view (G on the Black Box tab); the dashboard shows it as a quick view of its Black Box tab"
+    },
+    {
+      "kind": "api",
+      "key": "enumerateBlackBoxResilienceGaps",
+      "status": "implemented",
+      "tui": "ArmadaClient.EnumerateBlackBoxResilienceGapsAsync",
+      "workstream": "BB",
+      "notes": "Missions (Armada resilience gaps)"
+    },
+    {
+      "kind": "route",
       "key": "/approvals",
       "status": "extension",
       "tui": "ApprovalsScreen",

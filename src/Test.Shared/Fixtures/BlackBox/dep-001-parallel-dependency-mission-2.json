@@ -2,11 +2,18 @@
   "name": "dep-001-parallel-dependency-mission-2",
   "description": "Bounded-enumeration voyage, mission 2: the captain reported BLOCKED because missions that depend on each other were dispatched in parallel (signals 2026-10-29T02:26Z).",
   "source": "bounded-enumeration voyage mission 2 (reconstructed from MISSION_BLACKBOX_PLAN.md 16.10 and the captain's BLOCKED signal)",
-  "rulesVersion": 1,
+  "rulesVersion": 2,
   "expectedRuleIds": [
     "BBX-DEP-001"
   ],
   "expectedTriage": "MissionBrief",
+  "expectedResilience": {
+    "inScope": false,
+    "selfHealable": "Unknown",
+    "proposalContains": null,
+    "selfHealingContains": null,
+    "recommendationId": "bbx-dep-001.depends-on"
+  },
   "record": {
     "entryId": "bbx_fixture_dep001_2",
     "schemaVersion": 1,

@@ -15,7 +15,14 @@ brief to your coding agent, and runs recovery paths with a dry run and a confirm
   Paths marked `dataLossRisk` are refused unless you tick an explicit acknowledgement.
 - **Resolve** entries and **add notes**.
 - **Ask Armada about this failure**: opens the dashboard Ask page with the canonical prompt.
-- **Entry view**: Summary, Where, How, Status, Why, Conflict, What would have prevented it, What Armada could change,
+- **Armada resilience**: right after the Summary the entry view shows whether Armada's own handoff and landing could
+  have healed the failure (and what it could have done), the detection gap and invariant, severity with recurrence,
+  the recoveries Armada already attempted, code pointers at the Armada build, the proposed Armada changes with
+  acceptance tests and the regression test; outside handoff and landing, one line saying why no Armada change is
+  suggested. An entry triaged ArmadaDefect carries a "Suspected Armada defect" badge. **Draft Armada Fix Mission**
+  copies the top proposed change as a mission brief and opens it in the editor chat; **Show Resilience Gaps** lists the
+  Armada resilience gaps (failure modes triaged ArmadaDefect in handoff and landing scope) page by page.
+- **Entry view**: Summary, Armada resilience, Where, How, Status, Why, Conflict, What would have prevented it, What Armada could change,
   Recovery (with each path's tracked success rate and, when a runbook is linked, the runbook name linking to the
   dashboard), Attempts, Recurring on this vessel (the vessel's configuration doctor: recommendations that keep
   recurring, with a link to an example entry) and Notes, with buttons for every action, including Timeline and Compare
@@ -93,6 +100,8 @@ Build the package (see [Development](#development)) or take `armada-vscode-<vers
 | Armada: Ask Armada about this failure | Open the dashboard Ask page with the canonical prompt pre-filled |
 | Armada: Show Black Box Timeline | Open the entry's combined timeline as Markdown (100 events per page, with Next Page and Previous Page) |
 | Armada: Compare Black Box Attempts | Pick another attempt of the mission (or enter any entry id) and open the side-by-side diff |
+| Armada: Draft Armada Fix Mission | Copy the entry's top proposed Armada change as a mission brief and open it in the editor chat (copied only when the editor has no chat) |
+| Armada: Show Resilience Gaps | Open the Armada resilience gaps (handoff and landing failure modes triaged ArmadaDefect, most severe first) as Markdown, 25 per page with Next Page and Previous Page; filtered to the open repository's vessel when exactly one matches |
 | Armada: Preview Mission Overlap | For the open repository's vessel (or one you pick), enter a title and brief and see the overlap and brief lint warnings; nothing is dispatched |
 
 Every entry command works from the tree view's context menu, from the entry view, or from the Command Palette (where
@@ -131,6 +140,7 @@ REST routes:
 - `GET /api/v1/blackbox/{id}/diff/{otherId}`, `POST /api/v1/blackbox/{id}/timeline/enumerate`,
   `POST /api/v1/blackbox/{id}/nearby-successes/enumerate`
 - `POST /api/v1/blackbox/recovery-stats/enumerate`, `GET /api/v1/voyages/{id}/blackbox/cascade`
+- `POST /api/v1/blackbox/resilience-gaps/enumerate`
 
 WebSocket (`/ws?token=`): `blackbox.captured`, `blackbox.analyzed`, `blackbox.resolved`, `blackbox.deleted`.
 

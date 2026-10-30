@@ -34,7 +34,7 @@ namespace Test.Shared.Suites.Services
                 await SeedAsync(t.Driver, 35, "fp_often", "1.1.0", null).ConfigureAwait(false);
                 await SeedAsync(t.Driver, 20, "fp_rare", "1.2.0", null).ConfigureAwait(false);
                 AuthContext admin = BlackBoxTestKit.Admin();
-                BlackBoxBundleResult md = await bb.Service.GetBundleAsync(admin, new BlackBoxBundleRequest()).ConfigureAwait(false);
+                BlackBoxBundleResult md = await bb.Service.GetBundleAsync(admin, new BlackBoxBundleRequest { AllFailures = true }).ConfigureAwait(false);
                 AssertEqual(BlackBoxBundleFormatEnum.Markdown, md.Format);
                 AssertEqual(50, md.EntryCount, "capped at 50");
                 AssertTrue(md.Truncated, "55 entries matched, so the bundle says it is truncated");
@@ -48,10 +48,10 @@ namespace Test.Shared.Suites.Services
                 AssertContains("### FIX THIS", md.Content, "each failure mode carries the single brief, demoted under its group");
                 AssertFalse(md.Content.Contains("maintainer brief", StringComparison.Ordinal), "no separate maintainer brief");
                 AssertFalse(md.Content.Contains('—'), "no em-dashes");
-                AssertEqual(5, (await bb.Service.GetBundleAsync(admin, new BlackBoxBundleRequest { Max = 5 }).ConfigureAwait(false)).EntryCount, "max honored");
-                AssertEqual(50, (await bb.Service.GetBundleAsync(admin, new BlackBoxBundleRequest { Max = 500 }).ConfigureAwait(false)).EntryCount, "max clamped to 50");
+                AssertEqual(5, (await bb.Service.GetBundleAsync(admin, new BlackBoxBundleRequest { Max = 5, AllFailures = true }).ConfigureAwait(false)).EntryCount, "max honored");
+                AssertEqual(50, (await bb.Service.GetBundleAsync(admin, new BlackBoxBundleRequest { Max = 500, AllFailures = true }).ConfigureAwait(false)).EntryCount, "max clamped to 50");
 
-                BlackBoxBundleResult json = await bb.Service.GetBundleAsync(admin, new BlackBoxBundleRequest { Format = BlackBoxBundleFormatEnum.Json, Fingerprint = "fp_rare" }).ConfigureAwait(false);
+                BlackBoxBundleResult json = await bb.Service.GetBundleAsync(admin, new BlackBoxBundleRequest { Format = BlackBoxBundleFormatEnum.Json, Fingerprint = "fp_rare", AllFailures = true }).ConfigureAwait(false);
                 BlackBoxBundleDocument doc = JsonSerializer.Deserialize<BlackBoxBundleDocument>(json.Content, BlackBoxJson.Options)!;
                 AssertEqual(1, doc.Groups.Count, "filtered by fingerprint");
                 AssertEqual(20, doc.Groups[0].Count);
@@ -67,11 +67,11 @@ namespace Test.Shared.Suites.Services
                 using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver);
                 await SeedAsync(t.Driver, 3, "fp_mine", "1.2.0", "ten_a").ConfigureAwait(false);
                 await SeedAsync(t.Driver, 4, "fp_theirs", "1.2.0", "ten_z").ConfigureAwait(false);
-                BlackBoxBundleResult mine = await bb.Service.GetBundleAsync(BlackBoxTestKit.User("ten_a", "usr_ten_a"), null).ConfigureAwait(false);
+                BlackBoxBundleResult mine = await bb.Service.GetBundleAsync(BlackBoxTestKit.User("ten_a", "usr_ten_a"), new BlackBoxBundleRequest { AllFailures = true }).ConfigureAwait(false);
                 AssertEqual(3, mine.EntryCount, "tenant-scoped");
                 AssertFalse(mine.Content.Contains("fp_theirs"), "no other tenant's entries");
                 AssertContains("/Users/someone", mine.Content, "host paths kept by default");
-                BlackBoxBundleResult redacted = await bb.Service.GetBundleAsync(BlackBoxTestKit.User("ten_a", "usr_ten_a"), new BlackBoxBundleRequest { RedactHosts = true }).ConfigureAwait(false);
+                BlackBoxBundleResult redacted = await bb.Service.GetBundleAsync(BlackBoxTestKit.User("ten_a", "usr_ten_a"), new BlackBoxBundleRequest { RedactHosts = true, AllFailures = true }).ConfigureAwait(false);
                 AssertFalse(redacted.Content.Contains("/Users/someone"), "redactHosts strips host paths");
                 await AssertThrowsAsync<UnauthorizedAccessException>(() => bb.Service.GetBundleAsync(new AuthContext(), null), "unauthenticated").ConfigureAwait(false);
             }));

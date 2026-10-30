@@ -118,6 +118,11 @@ namespace Armada.Core.Models
         public BlackBoxVoyageRollup? Voyage { get; set; } = null;
 
         /// <summary>
+        /// Handoff and landing trail (entries in handoff and landing scope), or null.
+        /// </summary>
+        public BlackBoxHandoffTrail? Handoff { get; set; } = null;
+
+        /// <summary>
         /// Which redaction rules fired and how often (never the values).
         /// </summary>
         public BlackBoxRedaction Redaction { get; set; } = new BlackBoxRedaction();

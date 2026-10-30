@@ -294,7 +294,7 @@ namespace Armada.Server.Routes
             api => WithEnumerateQueryParameters(api
                     .WithTag(Tag)
                     .WithSummary("List black box entries")
-                    .WithDescription("One page of the black box entries visible to the caller (global admins every tenant, tenant admins their tenant, users their own), newest first. Filters are optional; enum filters take the names of BlackBoxPhaseEnum, BlackBoxStepEnum, MissionFailureKindEnum, BlackBoxTriageEnum, BlackBoxResolutionEnum, BlackBoxStateEnum, BlackBoxCaptureModeEnum and BlackBoxSubjectTypeEnum; path matches any file role."))
+                    .WithDescription("One page of the black box entries visible to the caller (global admins every tenant, tenant admins their tenant, users their own), newest first. Filters are optional; enum filters take the names of BlackBoxPhaseEnum, BlackBoxStepEnum, MissionFailureKindEnum, BlackBoxTriageEnum, BlackBoxResolutionEnum, BlackBoxStateEnum, BlackBoxCaptureModeEnum and BlackBoxSubjectTypeEnum; path matches any file role; resilienceScope selects Armada's handoff and landing failures."))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<BlackBoxEntrySummary>>("One page"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
@@ -352,6 +352,17 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("fingerprint", "Failure fingerprint"))
                 .WithResponse(200, OpenApiJson.For<BlackBoxFingerprintTrend>("The trend"))
                 .WithResponse(400, OpenApiJson.For<ApiErrorResponse>("InvalidArgument"))
+                .WithSecurity("ApiKey"));
+
+            app.Post("/api/v1/blackbox/resilience-gaps/enumerate", Handle(authenticate, authz, async (req, ctx, svc) =>
+                (object?)await svc.EnumerateResilienceGapsAsync(ctx, ReadPagedBody<BlackBoxResilienceGapRequest>(req)).ConfigureAwait(false)),
+            api => api
+                .WithTag(Tag)
+                .WithSummary("Enumerate Armada resilience gaps")
+                .WithDescription("One page (at most 50) of failure modes in Armada's own handoff and landing that the black box triaged ArmadaDefect, grouped by fingerprint and most severe first within the page: occurrences, open count, first and last seen, Armada versions, severity escalated by recurrence, selfHealable, suspected, the detection gap, the top proposed Armada change and the newest entry. Filters: vesselId, resolution, phase, createdAfter, createdBefore.")
+                .WithRequestBody(OpenApiJson.BodyFor<BlackBoxResilienceGapRequest>("Filters and paging", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<BlackBoxResilienceGap>>("One page"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/blackbox/fingerprints/enumerate", Handle(authenticate, authz, async (req, ctx, svc) =>
@@ -666,6 +677,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Query("fingerprint", "Failure fingerprint", false))
                 .WithParameter(OpenApiParameterMetadata.Query("pinned", "Pinned entries only (true) or unpinned only (false)", false, OpenApiSchemaMetadata.Boolean()))
                 .WithParameter(OpenApiParameterMetadata.Query("isCurrent", "Current entries only (true) or superseded only (false)", false, OpenApiSchemaMetadata.Boolean()))
+                .WithParameter(OpenApiParameterMetadata.Query("resilienceScope", "Entries in Armada's handoff and landing scope (true) or outside it (false)", false, OpenApiSchemaMetadata.Boolean()))
                 .WithParameter(OpenApiParameterMetadata.Query("path", "Repository path recorded in any file role", false))
                 .WithParameter(OpenApiParameterMetadata.Query("createdAfter", "Created at or after (ISO 8601 UTC)", false))
                 .WithParameter(OpenApiParameterMetadata.Query("createdBefore", "Created before (ISO 8601 UTC)", false))
@@ -706,6 +718,7 @@ namespace Armada.Server.Routes
                 CaptureMode = ParseEnum<BlackBoxCaptureModeEnum>(value("captureMode"), "captureMode"),
                 Pinned = ParseBool(value("pinned"), "pinned"),
                 IsCurrent = ParseBool(value("isCurrent"), "isCurrent"),
+                ResilienceScope = ParseBool(value("resilienceScope"), "resilienceScope"),
                 CreatedAfter = ParseUtc(value("createdAfter"), "createdAfter"),
                 CreatedBefore = ParseUtc(value("createdBefore"), "createdBefore")
             };

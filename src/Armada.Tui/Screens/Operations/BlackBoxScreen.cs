@@ -18,7 +18,8 @@ namespace Armada.Tui.Screens.Operations
     /// recorded, server paged and filtered by vessel, triage, resolution, phase, and fingerprint (the route query
     /// <c>missionId</c>, <c>voyageId</c>, <c>vesselId</c>, and <c>fingerprint</c> pre-filter it). <c>g</c> opens the
     /// fingerprints view (most frequent failure signatures; choosing one filters the list), <c>R</c> the recovery
-    /// statistics view (each recovery path's tracked runs and success rate, for the vessel filter), Enter opens an entry, and
+    /// statistics view (each recovery path's tracked runs and success rate, for the vessel filter), <c>G</c> the Armada
+    /// resilience gaps view (<c>/blackbox/gaps</c>: handoff and landing failures triaged ArmadaDefect, by fingerprint), Enter opens an entry, and
     /// the row menu pins, copies, opens the mission, and deletes. Refreshes on <c>blackbox.</c> events. Not thread-safe.
     /// </summary>
     public class BlackBoxScreen : OpsListScreen<BlackBoxEntrySummary>
@@ -130,6 +131,7 @@ namespace Armada.Tui.Screens.Operations
 
             ScreenActions.Add(new OpsScreenAction("fingerprints", "Fingerprints", ShowFingerprints, "F"));
             ScreenActions.Add(new OpsScreenAction("recovery-stats", "Recovery stats", ShowRecoveryStats, "R"));
+            ScreenActions.Add(new OpsScreenAction("resilience-gaps", "Armada resilience gaps", ShowResilienceGaps, "G"));
             ScreenActions.Add(new OpsScreenAction("clear-fingerprint", "Clear fingerprint", () => SetFingerprint(""), "X", () => FingerprintFilter.Value.Length > 0));
 
             RowActions.Add(new OpsAction<BlackBoxEntrySummary>("view", "View Entry", e => OpenRow(e), "o"));
@@ -234,6 +236,16 @@ namespace Armada.Tui.Screens.Operations
                 foreach (BlackBoxRecoveryStat stat in RecoveryStats) lines.Add(BlackBoxInsightText.RecoveryStat(stat));
                 ShowText(Tr("Recovery Stats"), String.Join("\n", lines));
             }, "Recovery stats could not be loaded");
+        }
+
+        /// <summary>
+        /// Open the Armada resilience gaps view (<c>/blackbox/gaps</c>), keeping the vessel filter.
+        /// </summary>
+        public void ShowResilienceGaps()
+        {
+            string path = "/blackbox/gaps";
+            if (!String.IsNullOrEmpty(VesselFilter.Value)) path += "?vesselId=" + Uri.EscapeDataString(VesselFilter.Value);
+            Context.Navigate(path);
         }
 
         /// <summary>

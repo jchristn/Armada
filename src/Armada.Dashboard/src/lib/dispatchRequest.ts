@@ -26,6 +26,8 @@ export interface DispatchPrefillState {
   fromIncident?: boolean;
   fromObjective?: boolean;
   fromVessel?: boolean;
+  /** Opened from a black box entry's Draft Armada fix mission. */
+  fromBlackBox?: boolean;
   objectiveId?: string;
   vesselId?: string;
   pipelineName?: string;
@@ -68,11 +70,12 @@ export function seedStepAssignments(
 
 /** Whether a prefill should be applied at all. */
 export function hasDispatchPrefill(prefill: DispatchPrefillState | null | undefined): boolean {
-  return !!(prefill?.fromPlanning || prefill?.fromWorkspace || prefill?.fromIncident || prefill?.fromObjective || prefill?.fromVessel);
+  return !!(prefill?.fromPlanning || prefill?.fromWorkspace || prefill?.fromIncident || prefill?.fromObjective || prefill?.fromVessel || prefill?.fromBlackBox);
 }
 
 /** The English notice shown above a prefilled draft (none for a plain vessel prefill). */
 export function dispatchPrefillNotice(prefill: DispatchPrefillState | null | undefined): string | null {
+  if (prefill?.fromBlackBox) return 'Prefilled from a black box entry: an Armada fix mission on the Armada vessel. Review the brief below and dispatch when ready.';
   if (prefill?.fromObjective) return 'Prefilled from a backlog item. Review the scoped draft below and dispatch when ready.';
   if (prefill?.fromPlanning) return 'Prefilled from a planning session. Review the draft below and dispatch when ready.';
   if (prefill?.fromIncident) return 'Prefilled from an incident. Review the hotfix draft below and dispatch when ready.';
