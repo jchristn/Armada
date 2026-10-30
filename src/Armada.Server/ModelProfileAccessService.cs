@@ -8,6 +8,7 @@ namespace Armada.Server
     using SyslogLogging;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Caller-scoped access to model profiles, shared by REST and MCP. Anyone signed in reads the profiles of their own
@@ -22,6 +23,7 @@ namespace Armada.Server
         private string _Header = "[ModelProfileAccessService] ";
         private readonly DatabaseDriver _Database;
         private readonly LoggingModule _Logging;
+        private readonly ModelScorecardService _Scorecards;
 
         #endregion
 
@@ -37,6 +39,7 @@ namespace Armada.Server
         {
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            _Scorecards = new ModelScorecardService(database, logging);
         }
 
         #endregion
@@ -81,6 +84,25 @@ namespace Armada.Server
             ModelProfile profile = await ReadVisibleAsync(caller, profileId, token).ConfigureAwait(false);
             profile.Revisions = await _Database.ModelProfiles.ReadRevisionsAsync(profile.Id, token).ConfigureAwait(false);
             return profile;
+        }
+
+        /// <summary>
+        /// The read-only scorecard of a profile visible to the caller for one persona, optionally one vessel, over a
+        /// rolling window (default the last 30 days or the last 50 missions, whichever is smaller). The profile is
+        /// resolved before the request is validated.
+        /// </summary>
+        /// <param name="caller">Caller.</param>
+        /// <param name="profileId">Profile identifier.</param>
+        /// <param name="request">Persona, vessel and window.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The scorecard.</returns>
+        /// <exception cref="KeyNotFoundException">Thrown when the profile does not exist or is in another tenant.</exception>
+        /// <exception cref="ArgumentException">Thrown when the persona is missing or a window value is out of range.</exception>
+        public async Task<ModelScorecard> GetScorecardAsync(AuthContext caller, string? profileId, ModelScorecardRequest? request, CancellationToken token = default)
+        {
+            RequirePerson(caller);
+            ModelProfile profile = await ReadVisibleAsync(caller, profileId, token).ConfigureAwait(false);
+            return await _Scorecards.ComputeAsync(profile, request ?? new ModelScorecardRequest(), null, token).ConfigureAwait(false);
         }
 
         /// <summary>

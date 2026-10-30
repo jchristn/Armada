@@ -48,6 +48,7 @@ namespace Test.Shared.Suites.E2E
             ["GET /api/v1/captains/{id}/log"] = "Log read bounded by lines (1-5000) with offset paging",
             ["GET /api/v1/harbors/{id}/metrics"] = "One Harbor's metrics",
             ["GET /api/v1/missions/history"] = "Aggregated summary buckets",
+            ["GET /api/v1/model-profiles/{id}/scorecard"] = "One profile's aggregated scorecard for one persona",
             ["GET /api/v1/missions/{id}/github/pull-request"] = "One pull request",
             ["GET /api/v1/missions/{id}/landing-preview"] = "One preview",
             ["GET /api/v1/missions/{id}/blackbox"] = "The mission's current black box entry (its record is bounded by construction)",

@@ -155,6 +155,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
   - **Model Profiles**
     - [get_model_profile](#get_model_profile)
     - [list_model_profiles](#list_model_profiles)
+    - [get_model_scorecard](#get_model_scorecard)
   - **Fixture Battery**
     - [list_battery_packs](#list_battery_packs)
     - [run_battery](#run_battery)
@@ -1422,13 +1423,13 @@ Evaluate runs) and sets the captain's `modelProfileId`. Each profile keeps immut
 model digest, sampling, tool configuration, `compatibleWith`, `firstSeenUtc`); a new runtime major version, model digest
 or sampling starts a new revision and a runtime minor or patch release pools into the current one. Profiles are advisory:
 they do not set a captain's tier or change routing. Updating the mutable parts (capabilities, rendering overrides, notes)
-and marking revisions compatible are REST only ([REST_API.md](REST_API.md#model-profiles)). Both tools are on the Ask
-read-only list. Errors are `McpToolError`s: `NotFound` (missing, or another tenant's) and `Unavailable` on the stdio
+and marking revisions compatible are REST only ([REST_API.md](REST_API.md#model-profiles)). All three tools are on the
+Ask read-only list. Errors are `McpToolError`s: `NotFound` (missing, or another tenant's) and `Unavailable` on the stdio
 server; a non-integer page argument is refused by the schema before the tool runs.
 
 | Tool | Caller |
 |---|---|
-| `get_model_profile`, `list_model_profiles` | Any authenticated person: global admins every tenant, everyone else their own tenant |
+| `get_model_profile`, `list_model_profiles`, `get_model_scorecard` | Any authenticated person: global admins every tenant, everyone else their own tenant |
 
 ### get_model_profile
 
@@ -1447,6 +1448,26 @@ server; a non-integer page argument is refused by the schema before the tool run
 | `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 25) |
 
 **Response:** `EnumerationResult<ModelProfile>` (without revisions), newest first.
+
+### get_model_scorecard
+
+The read-only scorecard of one (profile, persona), optionally one vessel, computed from stage outcomes, token usage and
+timing. Same rules and shape as `GET /api/v1/model-profiles/{id}/scorecard`
+([REST_API.md](REST_API.md#model-scorecard)): revision groups (pooled only when marked compatible), metrics as count of
+denominator with a 95% Wilson interval, unavailable metrics with a reason, and the exclusions each attribution rule
+applied. The profile is resolved before the other arguments are validated, so another tenant's profile is `NotFound`
+and an out-of-range window on a visible profile is `InvalidArgument`.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Model profile ID (`mdl_`) |
+| `persona` | string | Yes | Persona, for example `Worker` or `Judge` (case-insensitive) |
+| `vesselId` | string | No | Only stages on this vessel |
+| `windowDays` | integer | No | Window length in days (1-365, default 30) |
+| `windowMissions` | integer | No | Window length in missions (1-500, default 50) |
+
+**Response:** a ModelScorecard (`profileId`, `identity`, `persona`, `windowDays`, `windowMissions`, `windowLimitedBy`,
+`windowStartUtc`, `windowEndUtc`, `missions`, `attempts`, `truncated`, `exclusions`, `groups`).
 
 ---
 

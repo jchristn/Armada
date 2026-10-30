@@ -4570,6 +4570,24 @@
       "experimental": false
     },
     {
+      "method": "GET",
+      "route": "/api/v1/model-profiles/{id}/scorecard",
+      "auth": "Authenticated",
+      "resource": "ModelProfile:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "ModelScorecard",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "ModelProfiles"
+      ],
+      "summary": "Get a model scorecard",
+      "experimental": false
+    },
+    {
       "method": "DELETE",
       "route": "/api/v1/objective-refinement-sessions/{id}",
       "auth": "TenantAdmin",
@@ -11888,6 +11906,40 @@
         }
       ],
       "description": "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
+      "experimental": false
+    },
+    {
+      "name": "get_model_scorecard",
+      "auth": "Authenticated",
+      "resource": "ModelProfile:Read",
+      "arguments": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "persona",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "windowDays",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "windowMissions",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "description": "Get the read-only scorecard of one (model profile, persona), optionally one vessel, over a rolling window: the last windowDays days or the last windowMissions missions, whichever is smaller (default 30 days, 50 missions). Every rate is a count with its denominator (count of of) plus a 95% Wilson score interval (lower, upper): first-pass success, accepted results, stage-check status counts (skipped by reason), Judge verdicts on this profile's work, protocol repairs and repairs that ran out, tool failures, resumes in place and stalls, escalations away and what followed, suspected causes (Unknown and Mixed as their own buckets), and tokens and wall time per accepted result. Metrics Armada does not record come back with available false and the reason. Revisions are separate groups unless marked compatible; exclusions lists each attribution rule and how many items it removed. Read-only: nothing changes routing or captains.",
       "experimental": false
     },
     {

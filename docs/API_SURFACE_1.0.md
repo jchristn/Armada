@@ -24,8 +24,8 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 495 | 15 |
-| MCP tools | 245 | 8 |
+| REST routes | 496 | 15 |
+| MCP tools | 246 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 76 | 0 |
@@ -306,6 +306,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/model-profiles/{id}` | Authenticated |  | 200 `ModelProfile`, 404 |  |
 | PUT | `/api/v1/model-profiles/{id}` | TenantAdmin | `ModelProfileUpdateRequest` | 200 `ModelProfile`, 400, 403 `ApiErrorResponse`, 404 |  |
 | PUT | `/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with` | TenantAdmin | `ModelProfileCompatibilityRequest` | 200 `ModelProfileRevision`, 400, 403 `ApiErrorResponse`, 404 |  |
+| GET | `/api/v1/model-profiles/{id}/scorecard` | Authenticated |  | 200 `ModelScorecard`, 400, 404 |  |
 | DELETE | `/api/v1/objective-refinement-sessions/{id}` | TenantAdmin |  | 204, 404, 501 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/objective-refinement-sessions/{id}` | Authenticated |  | 200 `ObjectiveRefinementSessionDetail`, 404, 501 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/objective-refinement-sessions/{id}/apply` | TenantAdmin | `ObjectiveRefinementApplyRequest` (optional) | 200 `ObjectiveRefinementApplyResponse`, 404, 501 `ApiStatusErrorResponse` |  |
@@ -656,6 +657,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_model_endpoint` | Authenticated | `endpointId*: string` |  |
 | `get_model_probe_run` | Authenticated | `id*: string` |  |
 | `get_model_profile` | Authenticated | `id*: string` |  |
+| `get_model_scorecard` | Authenticated | `id*: string`, `persona*: string`, `vesselId: string`, `windowDays: integer`, `windowMissions: integer` |  |
 | `get_objective` | Authenticated | `objectiveId*: string` |  |
 | `get_persona` | Authenticated | `name*: string` |  |
 | `get_pipeline` | Authenticated | `name*: string` |  |

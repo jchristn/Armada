@@ -285,7 +285,7 @@ without a declaration requires a global admin. The complete per-route list is th
 | `/api/v1/captains/{id}/evaluate` | POST | TenantAdmin | Global admin, or a tenant admin of the captain's tenant (`404` for another tenant's captain). Captain sessions get `403` |
 | `/api/v1/model-endpoints/{id}/evaluate` | POST | Authenticated | Anyone who can read the endpoint (the `GET /api/v1/model-endpoints/{id}` rules); `404` otherwise |
 | `/api/v1/model-probe-runs` | GET, POST `.../enumerate`; `GET .../{id}` | Authenticated | Global admins see every tenant; everyone else their own tenant (`404` for another tenant's run). Captain sessions get `403` |
-| `/api/v1/model-profiles` | GET, POST `.../enumerate`; `GET .../{id}` | Authenticated | Global admins see every tenant; everyone else their own tenant (`404` for another tenant's profile) |
+| `/api/v1/model-profiles` | GET, POST `.../enumerate`; `GET .../{id}`, `GET .../{id}/scorecard` | Authenticated | Global admins see every tenant; everyone else their own tenant (`404` for another tenant's profile) |
 | `/api/v1/model-profiles/{id}`, `.../revisions/{revisionId}/compatible-with` | PUT | TenantAdmin | Global admin, or a tenant admin of the profile's tenant (`404` for another tenant's profile). Captain sessions get `403` |
 | `/api/v1/battery/packs` | GET, POST `.../enumerate` | Authenticated | Any signed-in person. Captain sessions get `403` |
 | `/api/v1/battery/runs` | POST | TenantAdmin | Global admin, or a tenant admin of the captain's tenant (`404` for another tenant's captain). Captain sessions get `403` |
@@ -6038,12 +6038,47 @@ never edited. Profile ids use the `mdl_` prefix.
 | GET | `/api/v1/model-profiles/{id}` | | `200` `ModelProfile` with `Identity`, `Capabilities`, `Rendering`, `Notes` and `Revisions` (oldest first); `404` when missing or in another tenant |
 | PUT | `/api/v1/model-profiles/{id}` | `ModelProfileUpdateRequest`: `Capabilities` (`ToolsAvailable`, `McpAvailable`), `Rendering` (`Template`, `RepeatContractAtEnd`, `MaxFilesPerMission` 1 or more; null means no override), `Notes` (empty clears). An omitted section keeps its value | `200` the profile with revisions; `400` invalid value; `403` not an admin; `404` |
 | PUT | `/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with` | `ModelProfileCompatibilityRequest`: `CompatibleWith` (revision ids of the same tenant; empty removes every mark). Symmetric | `200` `ModelProfileRevision` with `CompatibleWith`; `400` missing list or unknown revision; `403`; `404` profile or revision (of that profile) not found |
+| GET | `/api/v1/model-profiles/{id}/scorecard` | | `200` `ModelScorecard` for one persona (see [Model scorecard](#model-scorecard)). Query: `persona` (required), `vesselId`, `windowDays` (1-365, default 30), `windowMissions` (1-500, default 50); `400` missing persona, a window value out of range or not an integer; `404` when missing or in another tenant (checked before the query is validated) |
 
 ```bash
 curl "http://localhost:7890/api/v1/model-profiles?runtime=Mux&pageSize=10" -H "Authorization: Bearer <token>"
 curl -X PUT http://localhost:7890/api/v1/model-profiles/mdl_abc123 \
   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
   -d '{"rendering":{"template":"Compact","maxFilesPerMission":3},"notes":"Keep each mission to one objective."}'
+```
+
+### Model scorecard
+
+`GET /api/v1/model-profiles/{id}/scorecard?persona=Worker` returns a read-only scorecard of one (profile, persona),
+optionally one vessel (docs/MODEL_HETEROGENEITY.md, The scorecard). It is computed on request from existing stage
+outcomes, token usage and timing; nothing is stored and nothing changes routing or captains. There is no fleet-wide
+listing.
+
+- **Window:** the last `windowDays` days or the last `windowMissions` missions (by their latest counted attempt),
+  whichever is smaller; `WindowLimitedBy` says which one applied. `Truncated` is true when more stage outcomes matched
+  than the scorecard reads (20,000).
+- **Groups:** one per revision, oldest first; revisions marked compatible are pooled into one group (`Pooled`). An
+  attempt belongs to the newest revision it pools into that existed when it was recorded; attempts that match no
+  recorded revision form a last group with no `RevisionIds`.
+- **Metrics:** each group has a `Metrics` list of `ModelScorecardMetric` (`Key`, `Description`, `Available`,
+  `UnavailableReason`, `Count`, `Of`, `Rate`, `Lower`, `Upper`, `Total`, `Value`, `Unit`). Rates are a count with its
+  denominator plus the 95% Wilson score interval (`0` to `1` with no trials). Keys: `firstPassSuccess`, `acceptedResults`,
+  `stageCheck.passed|failed|skipped|couldNotRun|notRecorded`, `stageCheck.skipped.<Reason>`,
+  `judge.pass|needsRevision|fail|other`, `repairs.protocol`, `repairs.exhausted`, `toolFailures`, `resumesInPlace`,
+  `stalls.exhausted`, `escalations.away|nextFinished|priorWorkKept|priorWorkReplaced|priorWorkUnknown`,
+  `cause.<Protocol|InstructionFollowing|ToolUse|Context|Capability|Unknown|Mixed|Unclassified>`,
+  `cost.tokensPerAcceptedResult` and `cost.wallTimePerAcceptedResult` (summed over every attempt that led to the
+  accepted result, fallback attempts and earlier rework rounds included). `judge.findingCategories`,
+  `toolFailures.kinds` and `stalls.recovered` are `Available: false` with the reason: Armada does not record them today.
+- **Exclusions:** every attribution rule with the number of items it removed: `Evaluation` (evaluation and battery
+  missions), `NotTheModel` (suspected cause), `Infra`, `OperatorAction` (or cancelled), `RuntimeEnvironment`
+  (interrupted, crash, usage limit, auth, model unavailable, transient) - these three are skipped when a person
+  classified the cause - `NotSettled` (pending), `OtherStage` (this profile's attempts in another persona are charged to
+  that stage), `JudgeVerdictOtherCaptain` (a Judge verdict counts only when the reviewed work is this profile's attempt)
+  and `JudgeVerdictExcluded` (evaluation or NotTheModel Judge verdicts).
+
+```bash
+curl "http://localhost:7890/api/v1/model-profiles/mdl_abc123/scorecard?persona=Worker&windowDays=14" -H "Authorization: Bearer <token>"
 ```
 
 ---
@@ -12119,200 +12154,201 @@ the matrix and each route's section describe. `/openapi.json` and `/swagger` rem
 | 224 | GET | `/api/v1/model-profiles/{id}` | Get a model profile | Authenticated |
 | 225 | PUT | `/api/v1/model-profiles/{id}` | Update a model profile | TenantAdmin |
 | 226 | PUT | `/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with` | Mark model profile revisions compatible | TenantAdmin |
-| 227 | GET | `/api/v1/objective-refinement-sessions/{id}` | Get an objective refinement session | Authenticated |
-| 228 | DELETE | `/api/v1/objective-refinement-sessions/{id}` | Delete an objective refinement session | TenantAdmin |
-| 229 | POST | `/api/v1/objective-refinement-sessions/{id}/apply` | Apply an objective refinement summary | TenantAdmin |
-| 230 | POST | `/api/v1/objective-refinement-sessions/{id}/messages` | Send an objective refinement message | TenantAdmin |
-| 231 | POST | `/api/v1/objective-refinement-sessions/{id}/stop` | Stop an objective refinement session | TenantAdmin |
-| 232 | POST | `/api/v1/objective-refinement-sessions/{id}/summarize` | Summarize an objective refinement session | TenantAdmin |
-| 233 | GET | `/api/v1/objectives` | List objectives | Authenticated |
-| 234 | POST | `/api/v1/objectives` | Create an objective | TenantAdmin |
-| 235 | POST | `/api/v1/objectives/enumerate` | Enumerate objectives | Authenticated |
-| 236 | POST | `/api/v1/objectives/import/github` | Import an objective from GitHub | TenantAdmin |
-| 237 | POST | `/api/v1/objectives/reorder` | Reorder objectives | TenantAdmin |
-| 238 | GET | `/api/v1/objectives/{id}` | Get an objective | Authenticated |
-| 239 | PUT | `/api/v1/objectives/{id}` | Update an objective | TenantAdmin |
-| 240 | DELETE | `/api/v1/objectives/{id}` | Delete an objective | TenantAdmin |
-| 241 | POST | `/api/v1/objectives/{id}/refinement-sessions` | Create an objective refinement session | TenantAdmin |
-| 242 | POST | `/api/v1/objectives/{id}/refinement-sessions/enumerate` | Enumerate refinement sessions for a objective | Authenticated |
-| 243 | POST | `/api/v1/onboarding` | Self-register a new user | NoAuthRequired |
-| 244 | GET | `/api/v1/personas` | List all personas | Authenticated |
-| 245 | POST | `/api/v1/personas` | Create a persona | Authenticated |
-| 246 | POST | `/api/v1/personas/enumerate` | Enumerate personas | Authenticated |
-| 247 | GET | `/api/v1/personas/{name}` | Get a persona by name | Authenticated |
-| 248 | PUT | `/api/v1/personas/{name}` | Update a persona | Authenticated |
-| 249 | DELETE | `/api/v1/personas/{name}` | Delete a persona | Authenticated |
-| 250 | GET | `/api/v1/pipelines` | List all pipelines | Authenticated |
-| 251 | POST | `/api/v1/pipelines` | Create a pipeline | Authenticated |
-| 252 | POST | `/api/v1/pipelines/enumerate` | Enumerate pipelines | Authenticated |
-| 253 | GET | `/api/v1/pipelines/{name}` | Get a pipeline by name | Authenticated |
-| 254 | PUT | `/api/v1/pipelines/{name}` | Update a pipeline | Authenticated |
-| 255 | DELETE | `/api/v1/pipelines/{name}` | Delete a pipeline | Authenticated |
-| 256 | POST | `/api/v1/planning-sessions` | Create a planning session | TenantAdmin |
-| 257 | POST | `/api/v1/planning-sessions/enumerate` | Enumerate planning sessions | Authenticated |
-| 258 | GET | `/api/v1/planning-sessions/{id}` | Get a planning session | Authenticated |
-| 259 | DELETE | `/api/v1/planning-sessions/{id}` | Delete a planning session | TenantAdmin |
-| 260 | POST | `/api/v1/planning-sessions/{id}/dispatch` | Dispatch from a planning session | TenantAdmin |
-| 261 | POST | `/api/v1/planning-sessions/{id}/messages` | Send a planning message | TenantAdmin |
-| 262 | POST | `/api/v1/planning-sessions/{id}/stop` | Stop a planning session | TenantAdmin |
-| 263 | POST | `/api/v1/planning-sessions/{id}/stop-turn` | Stop the current planning turn | TenantAdmin |
-| 264 | POST | `/api/v1/planning-sessions/{id}/summarize` | Summarize planning output into a dispatch draft | TenantAdmin |
-| 265 | GET | `/api/v1/playbooks` | List playbooks | Authenticated |
-| 266 | POST | `/api/v1/playbooks` | Create a playbook | TenantAdmin |
-| 267 | POST | `/api/v1/playbooks/enumerate` | Enumerate playbooks | Authenticated |
-| 268 | GET | `/api/v1/playbooks/{id}` | Get a playbook | Authenticated |
-| 269 | PUT | `/api/v1/playbooks/{id}` | Update a playbook | TenantAdmin |
-| 270 | DELETE | `/api/v1/playbooks/{id}` | Delete a playbook | TenantAdmin |
-| 271 | GET | `/api/v1/project-profiles` | List project profiles | Authenticated |
-| 272 | POST | `/api/v1/project-profiles` | Create a project profile | Authenticated |
-| 273 | POST | `/api/v1/project-profiles/enumerate` | Enumerate project profiles | Authenticated |
-| 274 | GET | `/api/v1/project-profiles/resolve/vessels/{vesselId}` | Resolve the active project profile for a vessel | Authenticated |
-| 275 | POST | `/api/v1/project-profiles/validate` | Validate a project profile | Authenticated |
-| 276 | GET | `/api/v1/project-profiles/{id}` | Get a project profile | Authenticated |
-| 277 | PUT | `/api/v1/project-profiles/{id}` | Update a project profile | Authenticated |
-| 278 | DELETE | `/api/v1/project-profiles/{id}` | Delete a project profile | Authenticated |
-| 279 | GET | `/api/v1/project-profiles/{id}/persona-preview/{persona}` | Preview a persona prompt for a project profile | Authenticated |
-| 280 | GET | `/api/v1/prompt-templates` | List all prompt templates | Authenticated |
-| 281 | POST | `/api/v1/prompt-templates` | Create a prompt template | Authenticated |
-| 282 | POST | `/api/v1/prompt-templates/enumerate` | Enumerate prompt templates | Authenticated |
-| 283 | GET | `/api/v1/prompt-templates/{name}` | Get a prompt template by name | Authenticated |
-| 284 | PUT | `/api/v1/prompt-templates/{name}` | Update a prompt template | Authenticated |
-| 285 | POST | `/api/v1/prompt-templates/{name}/reset` | Reset a prompt template to default | Authenticated |
-| 286 | POST | `/api/v1/push/devices/enumerate` | Enumerate push devices | Authenticated |
-| 287 | GET | `/api/v1/releases` | List releases | Authenticated |
-| 288 | POST | `/api/v1/releases` | Create a release | TenantAdmin |
-| 289 | POST | `/api/v1/releases/enumerate` | Enumerate releases | Authenticated |
-| 290 | GET | `/api/v1/releases/{id}` | Get a release | Authenticated |
-| 291 | PUT | `/api/v1/releases/{id}` | Update a release | TenantAdmin |
-| 292 | POST | `/api/v1/releases/{id}/github/pull-requests/enumerate` | Enumerate a release's GitHub pull requests | Authenticated |
-| 293 | DELETE | `/api/v1/releases/{id}` | Delete a release | TenantAdmin |
-| 294 | POST | `/api/v1/releases/{id}/refresh` | Refresh a release | TenantAdmin |
-| 295 | GET | `/api/v1/request-history` | List request-history entries | Authenticated |
-| 296 | POST | `/api/v1/request-history/delete/by-filter` | Delete filtered request-history entries | TenantAdmin |
-| 297 | POST | `/api/v1/request-history/delete/multiple` | Delete multiple request-history entries | TenantAdmin |
-| 298 | POST | `/api/v1/request-history/enumerate` | Enumerate request-history entries | Authenticated |
-| 299 | GET | `/api/v1/request-history/summary` | Summarize request history | Authenticated |
-| 300 | GET | `/api/v1/request-history/{id}` | Get one request-history entry | Authenticated |
-| 301 | DELETE | `/api/v1/request-history/{id}` | Delete one request-history entry | TenantAdmin |
-| 302 | POST | `/api/v1/restore` | Restore from backup | AdminOnly |
-| 303 | GET | `/api/v1/runbook-executions` | List runbook executions | Authenticated |
-| 304 | POST | `/api/v1/runbook-executions/enumerate` | Enumerate runbook executions | Authenticated |
-| 305 | GET | `/api/v1/runbook-executions/{id}` | Get a runbook execution | Authenticated |
-| 306 | PUT | `/api/v1/runbook-executions/{id}` | Update a runbook execution | TenantAdmin |
-| 307 | DELETE | `/api/v1/runbook-executions/{id}` | Delete a runbook execution | TenantAdmin |
-| 308 | GET | `/api/v1/runbooks` | List runbooks | Authenticated |
-| 309 | POST | `/api/v1/runbooks` | Create a runbook | TenantAdmin |
-| 310 | POST | `/api/v1/runbooks/enumerate` | Enumerate runbooks | Authenticated |
-| 311 | GET | `/api/v1/runbooks/{id}` | Get a runbook | Authenticated |
-| 312 | PUT | `/api/v1/runbooks/{id}` | Update a runbook | TenantAdmin |
-| 313 | DELETE | `/api/v1/runbooks/{id}` | Delete a runbook | TenantAdmin |
-| 314 | POST | `/api/v1/runbooks/{id}/executions` | Start a runbook execution | TenantAdmin |
-| 315 | GET | `/api/v1/runtimes/mux/endpoints` | List saved Mux endpoints | Authenticated |
-| 316 | GET | `/api/v1/runtimes/mux/endpoints/{name}` | Inspect a saved Mux endpoint | Authenticated |
-| 317 | POST | `/api/v1/server/rebuild` | Rebuild the Admiral server (experimental) | AdminOnly |
-| 318 | GET | `/api/v1/server/rebuild/status` | Get the latest rebuild status (experimental) | AdminOnly |
-| 319 | POST | `/api/v1/server/reset` | Factory reset | AdminOnly |
-| 320 | POST | `/api/v1/server/restart` | Restart the Admiral server | AdminOnly |
-| 321 | POST | `/api/v1/server/rollback` | Roll back the last rebuild (experimental) | AdminOnly |
-| 322 | POST | `/api/v1/server/stop` | Stop the Admiral server | AdminOnly |
-| 323 | GET | `/api/v1/settings` | Get server settings | AdminOnly |
-| 324 | PUT | `/api/v1/settings` | Update server settings | AdminOnly |
-| 325 | GET | `/api/v1/signals` | List recent signals | Authenticated |
-| 326 | POST | `/api/v1/signals` | Send a signal | TenantAdmin |
-| 327 | POST | `/api/v1/signals/delete/multiple` | Batch delete multiple signals | TenantAdmin |
-| 328 | POST | `/api/v1/signals/enumerate` | Enumerate signals | Authenticated |
-| 329 | GET | `/api/v1/signals/{id}` | Get a signal | Authenticated |
-| 330 | DELETE | `/api/v1/signals/{id}` | Delete a signal | TenantAdmin |
-| 331 | PUT | `/api/v1/signals/{id}/read` | Mark a signal as read | TenantAdmin |
-| 332 | GET | `/api/v1/skills` | List skills | Authenticated |
-| 333 | POST | `/api/v1/skills` | Create a skill | Authenticated |
-| 334 | POST | `/api/v1/skills/enumerate` | Enumerate skills | Authenticated |
-| 335 | GET | `/api/v1/skills/{id}` | Get a skill | Authenticated |
-| 336 | PUT | `/api/v1/skills/{id}` | Update a skill | Authenticated |
-| 337 | POST | `/api/v1/stage-outcomes/enumerate` | Enumerate stage outcomes | Authenticated |
-| 338 | DELETE | `/api/v1/skills/{id}` | Delete a skill | Authenticated |
-| 339 | GET | `/api/v1/status` | Get Armada status | Authenticated |
-| 340 | GET | `/api/v1/status/health` | Health check | NoAuthRequired |
-| 341 | GET | `/api/v1/tenants` | List tenants (admin only) | AdminOnly |
-| 342 | POST | `/api/v1/tenants` | Create tenant (admin only) | AdminOnly |
-| 343 | POST | `/api/v1/tenants/enumerate` | Enumerate tenants (admin only) | AdminOnly |
-| 344 | POST | `/api/v1/tenants/lookup` | Look up tenants by email | NoAuthRequired |
-| 345 | GET | `/api/v1/tenants/{id}` | Get tenant by ID | Authenticated |
-| 346 | PUT | `/api/v1/tenants/{id}` | Update tenant (admin only) | AdminOnly |
-| 347 | DELETE | `/api/v1/tenants/{id}` | Delete tenant (admin only) | AdminOnly |
-| 348 | GET | `/api/v1/token-usage` | List token-usage records | Authenticated |
-| 349 | POST | `/api/v1/token-usage/delete/by-filter` | Delete filtered token-usage records | Authenticated |
-| 350 | POST | `/api/v1/token-usage/enumerate` | Enumerate token-usage records | Authenticated |
-| 351 | GET | `/api/v1/token-usage/summary` | Summarize token usage | Authenticated |
-| 352 | GET | `/api/v1/users` | List users | Authenticated |
-| 353 | POST | `/api/v1/users` | Create user (admin only) | TenantAdmin |
-| 354 | POST | `/api/v1/users/enumerate` | Enumerate users | Authenticated |
-| 355 | GET | `/api/v1/users/{id}` | Get user by ID | Authenticated |
-| 356 | PUT | `/api/v1/users/{id}` | Update user (admin only) | Authenticated |
-| 357 | DELETE | `/api/v1/users/{id}` | Delete user (admin only) | Authenticated |
-| 358 | POST | `/api/v1/vessel-health/enumerate` | Enumerate vessel health | Authenticated |
-| 359 | POST | `/api/v1/vessel-health/evaluate` | Evaluate vessel health | TenantAdmin |
-| 360 | GET | `/api/v1/vessel-health/summary` | Vessel health summary | Authenticated |
-| 361 | GET | `/api/v1/vessels` | List all vessels | Authenticated |
-| 362 | POST | `/api/v1/vessels` | Create a vessel | TenantAdmin |
-| 363 | POST | `/api/v1/vessels/delete/multiple` | Batch delete multiple vessels | TenantAdmin |
-| 364 | POST | `/api/v1/vessels/enumerate` | Enumerate vessels | Authenticated |
-| 365 | POST | `/api/v1/vessels/import` | Import discovered vessels | TenantAdmin |
-| 366 | POST | `/api/v1/vessels/import/batches/enumerate` | Enumerate import batches | Authenticated |
-| 367 | GET | `/api/v1/vessels/import/batches/{id}` | Get an import batch | Authenticated |
-| 368 | POST | `/api/v1/vessels/import/batches/{id}/categorize` | Run or retry fleet categorization | TenantAdmin |
-| 369 | POST | `/api/v1/vessels/import/batches/{id}/fleet-recommendations/apply` | Apply fleet recommendations | TenantAdmin |
-| 370 | GET | `/api/v1/vessels/import/browse` | Browse directories for import | TenantAdmin |
-| 371 | GET | `/api/v1/vessels/import/categorization/default-prompt` | Get the default fleet categorization prompt | TenantAdmin |
-| 372 | POST | `/api/v1/vessels/import/discover` | Discover vessel import candidates | TenantAdmin |
-| 373 | GET | `/api/v1/vessels/{id}` | Get a vessel | Authenticated |
-| 374 | PUT | `/api/v1/vessels/{id}` | Update a vessel | TenantAdmin |
-| 375 | POST | `/api/v1/vessels/{id}/branches/enumerate` | Enumerate vessel branches | Authenticated |
-| 376 | DELETE | `/api/v1/vessels/{id}` | Delete a vessel | TenantAdmin |
-| 377 | POST | `/api/v1/vessels/{id}/branches/merge` | Merge a vessel branch into another | TenantAdmin |
-| 378 | POST | `/api/v1/vessels/{id}/branches/push` | Push a vessel branch | TenantAdmin |
-| 379 | POST | `/api/v1/vessels/{id}/build-context` | Build or refine the vessel Model Context | TenantAdmin |
-| 380 | PATCH | `/api/v1/vessels/{id}/context` | Update vessel context | TenantAdmin |
-| 381 | GET | `/api/v1/vessels/{id}/git-status` | Get vessel git status | Authenticated |
-| 382 | GET | `/api/v1/vessels/{id}/health` | Get vessel health | Authenticated |
-| 383 | PUT | `/api/v1/vessels/{id}/health/overrides/{criterion}` | Set a vessel health override | TenantAdmin |
-| 384 | DELETE | `/api/v1/vessels/{id}/health/overrides/{criterion}` | Remove a vessel health override | TenantAdmin |
-| 385 | GET | `/api/v1/vessels/{id}/landing-preview` | Preview landing readiness | Authenticated |
-| 386 | GET | `/api/v1/vessels/{id}/readiness` | Get vessel readiness | Authenticated |
-| 387 | GET | `/api/v1/voyages` | List all voyages | Authenticated |
-| 388 | POST | `/api/v1/voyages` | Create a voyage | TenantAdmin |
-| 389 | POST | `/api/v1/voyages/delete/multiple` | Batch delete multiple voyages | TenantAdmin |
-| 390 | POST | `/api/v1/voyages/enumerate` | Enumerate voyages | Authenticated |
-| 391 | GET | `/api/v1/voyages/{id}` | Get a voyage | Authenticated |
-| 392 | DELETE | `/api/v1/voyages/{id}` | Cancel a voyage | TenantAdmin |
-| 393 | GET | `/api/v1/voyages/{id}/blackbox` | Get a voyage's current black box entry | Authenticated |
-| 394 | GET | `/api/v1/voyages/{id}/blackbox/brief` | Get the FIX THIS brief of a voyage's current black box entry | Authenticated |
-| 395 | DELETE | `/api/v1/voyages/{id}/purge` | Permanently delete a voyage | TenantAdmin |
-| 396 | GET | `/api/v1/whoami` | Get current identity | Authenticated |
-| 397 | GET | `/api/v1/workflow-profiles` | List workflow profiles | Authenticated |
-| 398 | POST | `/api/v1/workflow-profiles` | Create a workflow profile | TenantAdmin |
-| 399 | POST | `/api/v1/workflow-profiles/delete/multiple` | Batch delete multiple workflow profiles | TenantAdmin |
-| 400 | POST | `/api/v1/workflow-profiles/enumerate` | Enumerate workflow profiles | Authenticated |
-| 401 | GET | `/api/v1/workflow-profiles/preview/vessels/{vesselId}` | Preview resolved workflow commands for a vessel | Authenticated |
-| 402 | GET | `/api/v1/workflow-profiles/resolve/vessels/{vesselId}` | Resolve the active workflow profile for a vessel | Authenticated |
-| 403 | POST | `/api/v1/workflow-profiles/validate` | Validate a workflow profile | TenantAdmin |
-| 404 | GET | `/api/v1/workflow-profiles/{id}` | Get a workflow profile | Authenticated |
-| 405 | PUT | `/api/v1/workflow-profiles/{id}` | Update a workflow profile | TenantAdmin |
-| 406 | DELETE | `/api/v1/workflow-profiles/{id}` | Delete a workflow profile | TenantAdmin |
-| 407 | GET | `/api/v1/workspace/vessels/{vesselId}/changes` | Get workspace changes | Authenticated |
-| 408 | GET | `/api/v1/workspace/vessels/{vesselId}/diff` | Get a working-tree diff | Authenticated |
-| 409 | POST | `/api/v1/workspace/vessels/{vesselId}/directory` | Create one workspace directory | Authenticated |
-| 410 | DELETE | `/api/v1/workspace/vessels/{vesselId}/entry` | Delete one workspace entry | Authenticated |
-| 411 | POST | `/api/v1/workspace/vessels/{vesselId}/exec` | Run a command in the vessel workspace | TenantAdmin |
-| 412 | GET | `/api/v1/workspace/vessels/{vesselId}/file` | Read one workspace file | Authenticated |
-| 413 | PUT | `/api/v1/workspace/vessels/{vesselId}/file` | Save one workspace file | Authenticated |
-| 414 | POST | `/api/v1/workspace/vessels/{vesselId}/open-terminal` | Open a terminal at the vessel checkout | Authenticated |
-| 415 | POST | `/api/v1/workspace/vessels/{vesselId}/rename` | Rename or move one workspace entry | Authenticated |
-| 416 | GET | `/api/v1/workspace/vessels/{vesselId}/search` | Search one workspace | Authenticated |
-| 417 | GET | `/api/v1/workspace/vessels/{vesselId}/status` | Get workspace status | Authenticated |
-| 418 | GET | `/api/v1/workspace/vessels/{vesselId}/tree` | List one workspace directory | Authenticated |
-| 419 | GET | `/openapi.json` |  | NoAuthRequired |
-| 420 | GET | `/swagger` |  | NoAuthRequired |
+| 227 | GET | `/api/v1/model-profiles/{id}/scorecard` | Get a model scorecard | Authenticated |
+| 228 | GET | `/api/v1/objective-refinement-sessions/{id}` | Get an objective refinement session | Authenticated |
+| 229 | DELETE | `/api/v1/objective-refinement-sessions/{id}` | Delete an objective refinement session | TenantAdmin |
+| 230 | POST | `/api/v1/objective-refinement-sessions/{id}/apply` | Apply an objective refinement summary | TenantAdmin |
+| 231 | POST | `/api/v1/objective-refinement-sessions/{id}/messages` | Send an objective refinement message | TenantAdmin |
+| 232 | POST | `/api/v1/objective-refinement-sessions/{id}/stop` | Stop an objective refinement session | TenantAdmin |
+| 233 | POST | `/api/v1/objective-refinement-sessions/{id}/summarize` | Summarize an objective refinement session | TenantAdmin |
+| 234 | GET | `/api/v1/objectives` | List objectives | Authenticated |
+| 235 | POST | `/api/v1/objectives` | Create an objective | TenantAdmin |
+| 236 | POST | `/api/v1/objectives/enumerate` | Enumerate objectives | Authenticated |
+| 237 | POST | `/api/v1/objectives/import/github` | Import an objective from GitHub | TenantAdmin |
+| 238 | POST | `/api/v1/objectives/reorder` | Reorder objectives | TenantAdmin |
+| 239 | GET | `/api/v1/objectives/{id}` | Get an objective | Authenticated |
+| 240 | PUT | `/api/v1/objectives/{id}` | Update an objective | TenantAdmin |
+| 241 | DELETE | `/api/v1/objectives/{id}` | Delete an objective | TenantAdmin |
+| 242 | POST | `/api/v1/objectives/{id}/refinement-sessions` | Create an objective refinement session | TenantAdmin |
+| 243 | POST | `/api/v1/objectives/{id}/refinement-sessions/enumerate` | Enumerate refinement sessions for a objective | Authenticated |
+| 244 | POST | `/api/v1/onboarding` | Self-register a new user | NoAuthRequired |
+| 245 | GET | `/api/v1/personas` | List all personas | Authenticated |
+| 246 | POST | `/api/v1/personas` | Create a persona | Authenticated |
+| 247 | POST | `/api/v1/personas/enumerate` | Enumerate personas | Authenticated |
+| 248 | GET | `/api/v1/personas/{name}` | Get a persona by name | Authenticated |
+| 249 | PUT | `/api/v1/personas/{name}` | Update a persona | Authenticated |
+| 250 | DELETE | `/api/v1/personas/{name}` | Delete a persona | Authenticated |
+| 251 | GET | `/api/v1/pipelines` | List all pipelines | Authenticated |
+| 252 | POST | `/api/v1/pipelines` | Create a pipeline | Authenticated |
+| 253 | POST | `/api/v1/pipelines/enumerate` | Enumerate pipelines | Authenticated |
+| 254 | GET | `/api/v1/pipelines/{name}` | Get a pipeline by name | Authenticated |
+| 255 | PUT | `/api/v1/pipelines/{name}` | Update a pipeline | Authenticated |
+| 256 | DELETE | `/api/v1/pipelines/{name}` | Delete a pipeline | Authenticated |
+| 257 | POST | `/api/v1/planning-sessions` | Create a planning session | TenantAdmin |
+| 258 | POST | `/api/v1/planning-sessions/enumerate` | Enumerate planning sessions | Authenticated |
+| 259 | GET | `/api/v1/planning-sessions/{id}` | Get a planning session | Authenticated |
+| 260 | DELETE | `/api/v1/planning-sessions/{id}` | Delete a planning session | TenantAdmin |
+| 261 | POST | `/api/v1/planning-sessions/{id}/dispatch` | Dispatch from a planning session | TenantAdmin |
+| 262 | POST | `/api/v1/planning-sessions/{id}/messages` | Send a planning message | TenantAdmin |
+| 263 | POST | `/api/v1/planning-sessions/{id}/stop` | Stop a planning session | TenantAdmin |
+| 264 | POST | `/api/v1/planning-sessions/{id}/stop-turn` | Stop the current planning turn | TenantAdmin |
+| 265 | POST | `/api/v1/planning-sessions/{id}/summarize` | Summarize planning output into a dispatch draft | TenantAdmin |
+| 266 | GET | `/api/v1/playbooks` | List playbooks | Authenticated |
+| 267 | POST | `/api/v1/playbooks` | Create a playbook | TenantAdmin |
+| 268 | POST | `/api/v1/playbooks/enumerate` | Enumerate playbooks | Authenticated |
+| 269 | GET | `/api/v1/playbooks/{id}` | Get a playbook | Authenticated |
+| 270 | PUT | `/api/v1/playbooks/{id}` | Update a playbook | TenantAdmin |
+| 271 | DELETE | `/api/v1/playbooks/{id}` | Delete a playbook | TenantAdmin |
+| 272 | GET | `/api/v1/project-profiles` | List project profiles | Authenticated |
+| 273 | POST | `/api/v1/project-profiles` | Create a project profile | Authenticated |
+| 274 | POST | `/api/v1/project-profiles/enumerate` | Enumerate project profiles | Authenticated |
+| 275 | GET | `/api/v1/project-profiles/resolve/vessels/{vesselId}` | Resolve the active project profile for a vessel | Authenticated |
+| 276 | POST | `/api/v1/project-profiles/validate` | Validate a project profile | Authenticated |
+| 277 | GET | `/api/v1/project-profiles/{id}` | Get a project profile | Authenticated |
+| 278 | PUT | `/api/v1/project-profiles/{id}` | Update a project profile | Authenticated |
+| 279 | DELETE | `/api/v1/project-profiles/{id}` | Delete a project profile | Authenticated |
+| 280 | GET | `/api/v1/project-profiles/{id}/persona-preview/{persona}` | Preview a persona prompt for a project profile | Authenticated |
+| 281 | GET | `/api/v1/prompt-templates` | List all prompt templates | Authenticated |
+| 282 | POST | `/api/v1/prompt-templates` | Create a prompt template | Authenticated |
+| 283 | POST | `/api/v1/prompt-templates/enumerate` | Enumerate prompt templates | Authenticated |
+| 284 | GET | `/api/v1/prompt-templates/{name}` | Get a prompt template by name | Authenticated |
+| 285 | PUT | `/api/v1/prompt-templates/{name}` | Update a prompt template | Authenticated |
+| 286 | POST | `/api/v1/prompt-templates/{name}/reset` | Reset a prompt template to default | Authenticated |
+| 287 | POST | `/api/v1/push/devices/enumerate` | Enumerate push devices | Authenticated |
+| 288 | GET | `/api/v1/releases` | List releases | Authenticated |
+| 289 | POST | `/api/v1/releases` | Create a release | TenantAdmin |
+| 290 | POST | `/api/v1/releases/enumerate` | Enumerate releases | Authenticated |
+| 291 | GET | `/api/v1/releases/{id}` | Get a release | Authenticated |
+| 292 | PUT | `/api/v1/releases/{id}` | Update a release | TenantAdmin |
+| 293 | POST | `/api/v1/releases/{id}/github/pull-requests/enumerate` | Enumerate a release's GitHub pull requests | Authenticated |
+| 294 | DELETE | `/api/v1/releases/{id}` | Delete a release | TenantAdmin |
+| 295 | POST | `/api/v1/releases/{id}/refresh` | Refresh a release | TenantAdmin |
+| 296 | GET | `/api/v1/request-history` | List request-history entries | Authenticated |
+| 297 | POST | `/api/v1/request-history/delete/by-filter` | Delete filtered request-history entries | TenantAdmin |
+| 298 | POST | `/api/v1/request-history/delete/multiple` | Delete multiple request-history entries | TenantAdmin |
+| 299 | POST | `/api/v1/request-history/enumerate` | Enumerate request-history entries | Authenticated |
+| 300 | GET | `/api/v1/request-history/summary` | Summarize request history | Authenticated |
+| 301 | GET | `/api/v1/request-history/{id}` | Get one request-history entry | Authenticated |
+| 302 | DELETE | `/api/v1/request-history/{id}` | Delete one request-history entry | TenantAdmin |
+| 303 | POST | `/api/v1/restore` | Restore from backup | AdminOnly |
+| 304 | GET | `/api/v1/runbook-executions` | List runbook executions | Authenticated |
+| 305 | POST | `/api/v1/runbook-executions/enumerate` | Enumerate runbook executions | Authenticated |
+| 306 | GET | `/api/v1/runbook-executions/{id}` | Get a runbook execution | Authenticated |
+| 307 | PUT | `/api/v1/runbook-executions/{id}` | Update a runbook execution | TenantAdmin |
+| 308 | DELETE | `/api/v1/runbook-executions/{id}` | Delete a runbook execution | TenantAdmin |
+| 309 | GET | `/api/v1/runbooks` | List runbooks | Authenticated |
+| 310 | POST | `/api/v1/runbooks` | Create a runbook | TenantAdmin |
+| 311 | POST | `/api/v1/runbooks/enumerate` | Enumerate runbooks | Authenticated |
+| 312 | GET | `/api/v1/runbooks/{id}` | Get a runbook | Authenticated |
+| 313 | PUT | `/api/v1/runbooks/{id}` | Update a runbook | TenantAdmin |
+| 314 | DELETE | `/api/v1/runbooks/{id}` | Delete a runbook | TenantAdmin |
+| 315 | POST | `/api/v1/runbooks/{id}/executions` | Start a runbook execution | TenantAdmin |
+| 316 | GET | `/api/v1/runtimes/mux/endpoints` | List saved Mux endpoints | Authenticated |
+| 317 | GET | `/api/v1/runtimes/mux/endpoints/{name}` | Inspect a saved Mux endpoint | Authenticated |
+| 318 | POST | `/api/v1/server/rebuild` | Rebuild the Admiral server (experimental) | AdminOnly |
+| 319 | GET | `/api/v1/server/rebuild/status` | Get the latest rebuild status (experimental) | AdminOnly |
+| 320 | POST | `/api/v1/server/reset` | Factory reset | AdminOnly |
+| 321 | POST | `/api/v1/server/restart` | Restart the Admiral server | AdminOnly |
+| 322 | POST | `/api/v1/server/rollback` | Roll back the last rebuild (experimental) | AdminOnly |
+| 323 | POST | `/api/v1/server/stop` | Stop the Admiral server | AdminOnly |
+| 324 | GET | `/api/v1/settings` | Get server settings | AdminOnly |
+| 325 | PUT | `/api/v1/settings` | Update server settings | AdminOnly |
+| 326 | GET | `/api/v1/signals` | List recent signals | Authenticated |
+| 327 | POST | `/api/v1/signals` | Send a signal | TenantAdmin |
+| 328 | POST | `/api/v1/signals/delete/multiple` | Batch delete multiple signals | TenantAdmin |
+| 329 | POST | `/api/v1/signals/enumerate` | Enumerate signals | Authenticated |
+| 330 | GET | `/api/v1/signals/{id}` | Get a signal | Authenticated |
+| 331 | DELETE | `/api/v1/signals/{id}` | Delete a signal | TenantAdmin |
+| 332 | PUT | `/api/v1/signals/{id}/read` | Mark a signal as read | TenantAdmin |
+| 333 | GET | `/api/v1/skills` | List skills | Authenticated |
+| 334 | POST | `/api/v1/skills` | Create a skill | Authenticated |
+| 335 | POST | `/api/v1/skills/enumerate` | Enumerate skills | Authenticated |
+| 336 | GET | `/api/v1/skills/{id}` | Get a skill | Authenticated |
+| 337 | PUT | `/api/v1/skills/{id}` | Update a skill | Authenticated |
+| 338 | POST | `/api/v1/stage-outcomes/enumerate` | Enumerate stage outcomes | Authenticated |
+| 339 | DELETE | `/api/v1/skills/{id}` | Delete a skill | Authenticated |
+| 340 | GET | `/api/v1/status` | Get Armada status | Authenticated |
+| 341 | GET | `/api/v1/status/health` | Health check | NoAuthRequired |
+| 342 | GET | `/api/v1/tenants` | List tenants (admin only) | AdminOnly |
+| 343 | POST | `/api/v1/tenants` | Create tenant (admin only) | AdminOnly |
+| 344 | POST | `/api/v1/tenants/enumerate` | Enumerate tenants (admin only) | AdminOnly |
+| 345 | POST | `/api/v1/tenants/lookup` | Look up tenants by email | NoAuthRequired |
+| 346 | GET | `/api/v1/tenants/{id}` | Get tenant by ID | Authenticated |
+| 347 | PUT | `/api/v1/tenants/{id}` | Update tenant (admin only) | AdminOnly |
+| 348 | DELETE | `/api/v1/tenants/{id}` | Delete tenant (admin only) | AdminOnly |
+| 349 | GET | `/api/v1/token-usage` | List token-usage records | Authenticated |
+| 350 | POST | `/api/v1/token-usage/delete/by-filter` | Delete filtered token-usage records | Authenticated |
+| 351 | POST | `/api/v1/token-usage/enumerate` | Enumerate token-usage records | Authenticated |
+| 352 | GET | `/api/v1/token-usage/summary` | Summarize token usage | Authenticated |
+| 353 | GET | `/api/v1/users` | List users | Authenticated |
+| 354 | POST | `/api/v1/users` | Create user (admin only) | TenantAdmin |
+| 355 | POST | `/api/v1/users/enumerate` | Enumerate users | Authenticated |
+| 356 | GET | `/api/v1/users/{id}` | Get user by ID | Authenticated |
+| 357 | PUT | `/api/v1/users/{id}` | Update user (admin only) | Authenticated |
+| 358 | DELETE | `/api/v1/users/{id}` | Delete user (admin only) | Authenticated |
+| 359 | POST | `/api/v1/vessel-health/enumerate` | Enumerate vessel health | Authenticated |
+| 360 | POST | `/api/v1/vessel-health/evaluate` | Evaluate vessel health | TenantAdmin |
+| 361 | GET | `/api/v1/vessel-health/summary` | Vessel health summary | Authenticated |
+| 362 | GET | `/api/v1/vessels` | List all vessels | Authenticated |
+| 363 | POST | `/api/v1/vessels` | Create a vessel | TenantAdmin |
+| 364 | POST | `/api/v1/vessels/delete/multiple` | Batch delete multiple vessels | TenantAdmin |
+| 365 | POST | `/api/v1/vessels/enumerate` | Enumerate vessels | Authenticated |
+| 366 | POST | `/api/v1/vessels/import` | Import discovered vessels | TenantAdmin |
+| 367 | POST | `/api/v1/vessels/import/batches/enumerate` | Enumerate import batches | Authenticated |
+| 368 | GET | `/api/v1/vessels/import/batches/{id}` | Get an import batch | Authenticated |
+| 369 | POST | `/api/v1/vessels/import/batches/{id}/categorize` | Run or retry fleet categorization | TenantAdmin |
+| 370 | POST | `/api/v1/vessels/import/batches/{id}/fleet-recommendations/apply` | Apply fleet recommendations | TenantAdmin |
+| 371 | GET | `/api/v1/vessels/import/browse` | Browse directories for import | TenantAdmin |
+| 372 | GET | `/api/v1/vessels/import/categorization/default-prompt` | Get the default fleet categorization prompt | TenantAdmin |
+| 373 | POST | `/api/v1/vessels/import/discover` | Discover vessel import candidates | TenantAdmin |
+| 374 | GET | `/api/v1/vessels/{id}` | Get a vessel | Authenticated |
+| 375 | PUT | `/api/v1/vessels/{id}` | Update a vessel | TenantAdmin |
+| 376 | POST | `/api/v1/vessels/{id}/branches/enumerate` | Enumerate vessel branches | Authenticated |
+| 377 | DELETE | `/api/v1/vessels/{id}` | Delete a vessel | TenantAdmin |
+| 378 | POST | `/api/v1/vessels/{id}/branches/merge` | Merge a vessel branch into another | TenantAdmin |
+| 379 | POST | `/api/v1/vessels/{id}/branches/push` | Push a vessel branch | TenantAdmin |
+| 380 | POST | `/api/v1/vessels/{id}/build-context` | Build or refine the vessel Model Context | TenantAdmin |
+| 381 | PATCH | `/api/v1/vessels/{id}/context` | Update vessel context | TenantAdmin |
+| 382 | GET | `/api/v1/vessels/{id}/git-status` | Get vessel git status | Authenticated |
+| 383 | GET | `/api/v1/vessels/{id}/health` | Get vessel health | Authenticated |
+| 384 | PUT | `/api/v1/vessels/{id}/health/overrides/{criterion}` | Set a vessel health override | TenantAdmin |
+| 385 | DELETE | `/api/v1/vessels/{id}/health/overrides/{criterion}` | Remove a vessel health override | TenantAdmin |
+| 386 | GET | `/api/v1/vessels/{id}/landing-preview` | Preview landing readiness | Authenticated |
+| 387 | GET | `/api/v1/vessels/{id}/readiness` | Get vessel readiness | Authenticated |
+| 388 | GET | `/api/v1/voyages` | List all voyages | Authenticated |
+| 389 | POST | `/api/v1/voyages` | Create a voyage | TenantAdmin |
+| 390 | POST | `/api/v1/voyages/delete/multiple` | Batch delete multiple voyages | TenantAdmin |
+| 391 | POST | `/api/v1/voyages/enumerate` | Enumerate voyages | Authenticated |
+| 392 | GET | `/api/v1/voyages/{id}` | Get a voyage | Authenticated |
+| 393 | DELETE | `/api/v1/voyages/{id}` | Cancel a voyage | TenantAdmin |
+| 394 | GET | `/api/v1/voyages/{id}/blackbox` | Get a voyage's current black box entry | Authenticated |
+| 395 | GET | `/api/v1/voyages/{id}/blackbox/brief` | Get the FIX THIS brief of a voyage's current black box entry | Authenticated |
+| 396 | DELETE | `/api/v1/voyages/{id}/purge` | Permanently delete a voyage | TenantAdmin |
+| 397 | GET | `/api/v1/whoami` | Get current identity | Authenticated |
+| 398 | GET | `/api/v1/workflow-profiles` | List workflow profiles | Authenticated |
+| 399 | POST | `/api/v1/workflow-profiles` | Create a workflow profile | TenantAdmin |
+| 400 | POST | `/api/v1/workflow-profiles/delete/multiple` | Batch delete multiple workflow profiles | TenantAdmin |
+| 401 | POST | `/api/v1/workflow-profiles/enumerate` | Enumerate workflow profiles | Authenticated |
+| 402 | GET | `/api/v1/workflow-profiles/preview/vessels/{vesselId}` | Preview resolved workflow commands for a vessel | Authenticated |
+| 403 | GET | `/api/v1/workflow-profiles/resolve/vessels/{vesselId}` | Resolve the active workflow profile for a vessel | Authenticated |
+| 404 | POST | `/api/v1/workflow-profiles/validate` | Validate a workflow profile | TenantAdmin |
+| 405 | GET | `/api/v1/workflow-profiles/{id}` | Get a workflow profile | Authenticated |
+| 406 | PUT | `/api/v1/workflow-profiles/{id}` | Update a workflow profile | TenantAdmin |
+| 407 | DELETE | `/api/v1/workflow-profiles/{id}` | Delete a workflow profile | TenantAdmin |
+| 408 | GET | `/api/v1/workspace/vessels/{vesselId}/changes` | Get workspace changes | Authenticated |
+| 409 | GET | `/api/v1/workspace/vessels/{vesselId}/diff` | Get a working-tree diff | Authenticated |
+| 410 | POST | `/api/v1/workspace/vessels/{vesselId}/directory` | Create one workspace directory | Authenticated |
+| 411 | DELETE | `/api/v1/workspace/vessels/{vesselId}/entry` | Delete one workspace entry | Authenticated |
+| 412 | POST | `/api/v1/workspace/vessels/{vesselId}/exec` | Run a command in the vessel workspace | TenantAdmin |
+| 413 | GET | `/api/v1/workspace/vessels/{vesselId}/file` | Read one workspace file | Authenticated |
+| 414 | PUT | `/api/v1/workspace/vessels/{vesselId}/file` | Save one workspace file | Authenticated |
+| 415 | POST | `/api/v1/workspace/vessels/{vesselId}/open-terminal` | Open a terminal at the vessel checkout | Authenticated |
+| 416 | POST | `/api/v1/workspace/vessels/{vesselId}/rename` | Rename or move one workspace entry | Authenticated |
+| 417 | GET | `/api/v1/workspace/vessels/{vesselId}/search` | Search one workspace | Authenticated |
+| 418 | GET | `/api/v1/workspace/vessels/{vesselId}/status` | Get workspace status | Authenticated |
+| 419 | GET | `/api/v1/workspace/vessels/{vesselId}/tree` | List one workspace directory | Authenticated |
+| 420 | GET | `/openapi.json` |  | NoAuthRequired |
+| 421 | GET | `/swagger` |  | NoAuthRequired |
 
 ---
 

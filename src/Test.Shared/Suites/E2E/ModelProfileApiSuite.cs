@@ -197,6 +197,76 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("scorecard", "REST and MCP: the scorecard of one (profile, persona) with revision groups, exclusions, validation and tenant isolation", async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                E2ETenantUser adminA = await E2ETenantUser.CreateAsync(fx.AuthClient, "mds-admin-a", true).ConfigureAwait(false);
+                E2ETenantUser userA = await E2ETenantUser.CreateAsync(fx.AuthClient, "mds-user-a", false, adminA.TenantId).ConfigureAwait(false);
+                E2ETenantUser adminB = await E2ETenantUser.CreateAsync(fx.AuthClient, "mds-admin-b", true).ConfigureAwait(false);
+                Seeded seeded = await SeedAsync(fx, adminA.TenantId).ConfigureAwait(false);
+                using (DatabaseDriver db = await OpenDatabaseAsync(fx).ConfigureAwait(false))
+                {
+                    foreach (string version in new string[] { "1.4.1", "2.0.0" })
+                    {
+                        await db.StageOutcomes.CreateAsync(new StageOutcome
+                        {
+                            TenantId = adminA.TenantId, MissionId = "msn_sc_" + version, CaptainId = seeded.CaptainId, Persona = "Worker",
+                            Runtime = AgentRuntimeEnum.Mux, ModelProvider = "Ollama", Model = "qwen3.8:27b", ContextTokens = 131072,
+                            RuntimeVersion = version, ModelDigest = "sha256:aaa", Disposition = StageDispositionEnum.Completed,
+                            StageCheckStatus = StageCheckStatusEnum.Passed, EndedUtc = DateTime.UtcNow.AddHours(-1)
+                        }).ConfigureAwait(false);
+                    }
+                    await db.StageOutcomes.CreateAsync(new StageOutcome
+                    {
+                        TenantId = adminA.TenantId, MissionId = "msn_sc_eval", CaptainId = seeded.CaptainId, Persona = "Worker",
+                        Runtime = AgentRuntimeEnum.Mux, ModelProvider = "Ollama", Model = "qwen3.8:27b", ContextTokens = 131072,
+                        RuntimeVersion = "1.4.1", ModelDigest = "sha256:aaa", Disposition = StageDispositionEnum.Completed,
+                        IsEvaluation = true, EndedUtc = DateTime.UtcNow.AddHours(-1)
+                    }).ConfigureAwait(false);
+                }
+
+                using HttpClient u = userA.CreateClient(fx.BaseUrl);
+                using HttpClient b = adminB.CreateClient(fx.BaseUrl);
+                string path = "/api/v1/model-profiles/" + seeded.Profile.Id + "/scorecard";
+                ModelScorecard card = await GetAsync<ModelScorecard>(u, path + "?persona=Worker").ConfigureAwait(false);
+                AssertEqual(seeded.Profile.Id, card.ProfileId, "profile");
+                AssertEqual(30, card.WindowDays, "default days");
+                AssertEqual(50, card.WindowMissions, "default missions");
+                AssertEqual(2, card.Groups.Count, "two revisions shown separately");
+                AssertEqual(seeded.First.Id, card.Groups[0].RevisionIds.Single(), "first revision group");
+                AssertEqual(1, card.Groups[0].Missions, "1.x mission");
+                AssertEqual(1, card.Groups[1].Missions, "2.x mission");
+                ModelScorecardMetric firstPass = card.Groups[0].Metrics.Single(m => m.Key == "firstPassSuccess");
+                AssertEqual((int?)1, firstPass.Count, "count");
+                AssertEqual((int?)1, firstPass.Of, "of");
+                AssertEqual((double?)1.0, firstPass.Upper, "Wilson upper at n");
+                AssertEqual(1, card.Exclusions.Single(e => e.Rule == "Evaluation").Removed, "evaluation removed");
+                AssertFalse(card.Groups[0].Metrics.Single(m => m.Key == "judge.findingCategories").Available, "unavailable metric");
+
+                ModelScorecard narrow = await GetAsync<ModelScorecard>(u, path + "?persona=worker&windowDays=7&windowMissions=1&vesselId=vsl_none").ConfigureAwait(false);
+                AssertEqual(7, narrow.WindowDays, "explicit days");
+                AssertEqual(1, narrow.WindowMissions, "explicit missions");
+                AssertEqual(0, narrow.Missions, "no missions on that vessel");
+                AssertStatusCode(HttpStatusCode.BadRequest, await u.GetAsync(path).ConfigureAwait(false), "persona required");
+                AssertStatusCode(HttpStatusCode.BadRequest, await u.GetAsync(path + "?persona=Worker&windowDays=0").ConfigureAwait(false), "windowDays range");
+                AssertStatusCode(HttpStatusCode.BadRequest, await u.GetAsync(path + "?persona=Worker&windowMissions=x").ConfigureAwait(false), "windowMissions integer");
+                AssertStatusCode(HttpStatusCode.NotFound, await b.GetAsync(path + "?persona=Worker").ConfigureAwait(false), "another tenant");
+                AssertStatusCode(HttpStatusCode.NotFound, await b.GetAsync(path + "?windowDays=x").ConfigureAwait(false), "another tenant before validation");
+                AssertStatusCode(HttpStatusCode.NotFound, await u.GetAsync("/api/v1/model-profiles/mdl_missing/scorecard?persona=Worker").ConfigureAwait(false), "missing profile");
+
+                using (McpToolClient user = Mcp(fx, userA))
+                using (McpToolClient other = Mcp(fx, adminB))
+                {
+                    await user.InitializeAsync().ConfigureAwait(false);
+                    await other.InitializeAsync().ConfigureAwait(false);
+                    ModelScorecard viaMcp = await OkAsync<ModelScorecard>(user, "get_model_scorecard", new { id = seeded.Profile.Id, persona = "Worker", windowDays = 10 }).ConfigureAwait(false);
+                    AssertEqual(10, viaMcp.WindowDays, "MCP window");
+                    AssertEqual(2, viaMcp.Groups.Count, "MCP groups");
+                    await ErrorAsync(other, "get_model_scorecard", new { id = seeded.Profile.Id, persona = "Worker", windowDays = 0 }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
+                    await ErrorAsync(user, "get_model_scorecard", new { id = seeded.Profile.Id, persona = "Worker", windowMissions = 0 }, McpToolErrorCodeEnum.InvalidArgument).ConfigureAwait(false);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "E2E: model profiles (REST and MCP)",

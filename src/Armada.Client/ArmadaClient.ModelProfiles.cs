@@ -67,6 +67,30 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// GET /api/v1/model-profiles/{id}/scorecard: the read-only scorecard of one (profile, persona), optionally one
+        /// vessel, over the last WindowDays days or WindowMissions missions, whichever is smaller (defaults 30 and 50).
+        /// </summary>
+        /// <param name="id">Profile id (mdl_ prefix).</param>
+        /// <param name="request">Persona (required), vessel and window.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The scorecard.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when id or request is null.</exception>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<ModelScorecard?> GetModelScorecardAsync(string id, ModelScorecardRequest request, CancellationToken token = default)
+        {
+            if (id == null) throw new ArgumentNullException(nameof(id));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            string querystring = ArmadaQueryString.FromPairs(new List<KeyValuePair<string, string?>>
+            {
+                new KeyValuePair<string, string?>("persona", request.Persona),
+                new KeyValuePair<string, string?>("vesselId", request.VesselId),
+                new KeyValuePair<string, string?>("windowDays", request.WindowDays?.ToString(CultureInfo.InvariantCulture)),
+                new KeyValuePair<string, string?>("windowMissions", request.WindowMissions?.ToString(CultureInfo.InvariantCulture))
+            });
+            return GetAsync<ModelScorecard>($"/api/v1/model-profiles/{E(id)}/scorecard{querystring}", null, token);
+        }
+
+        /// <summary>
         /// PUT /api/v1/model-profiles/{id}: update capabilities, rendering overrides and notes (admins only). A section the
         /// request leaves null keeps its value.
         /// </summary>

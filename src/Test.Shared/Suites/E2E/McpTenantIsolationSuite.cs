@@ -76,6 +76,7 @@ namespace Test.Shared.Suites.E2E
             ["evaluate_captain"] = "Captain or model endpoint (ModelProbeAccessService scopes by caller; starts an Evaluate run, so tenant isolation is covered by E2E.ModelProbes with canned probe answers)",
             ["get_model_probe_run"] = "Evaluate run (ModelProbeAccessService scopes by caller; tenant isolation covered by E2E.ModelProbes)",
             ["get_model_profile"] = "Model profile (ModelProfileAccessService scopes by caller; tenant isolation covered by E2E.ModelProfiles)",
+            ["get_model_scorecard"] = "Model profile scorecard (ModelProfileAccessService resolves the profile by caller first; tenant isolation covered by E2E.ModelProfiles)",
             ["get_battery_run"] = "Battery run (BatteryAccessService scopes by caller; tenant isolation covered by E2E.Battery)",
             ["list_battery_results"] = "Battery run results (BatteryAccessService scopes the run by caller; tenant isolation covered by E2E.Battery)",
             ["approve_ask_proposal"] = "Ask conversation (AskThreadService scopes by owning user; covered by E2E.AskThreads)",
@@ -184,7 +185,9 @@ namespace Test.Shared.Suites.E2E
                     foreach (McpRemoteTool tool in tools.Where(t => IsOwnerReadControl(t.Name)))
                     {
                         string? args = BuildArguments(tool, out List<string> unmapped, out bool usesId);
-                        if (args == null || !usesId) continue;
+                        // An unseeded tool can still map an optional id (get_model_scorecard's vesselId) while its own
+                        // required id stays unmapped; its service suite covers the owner read.
+                        if (args == null || !usesId || _UnseededIdTools.ContainsKey(tool.Name)) continue;
                         Armada.Runtimes.Mcp.McpToolCallResult result;
                         try
                         {

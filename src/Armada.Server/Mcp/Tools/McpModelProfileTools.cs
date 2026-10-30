@@ -8,7 +8,7 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Server.Routes;
 
     /// <summary>
-    /// Registers the model profile MCP tools: get_model_profile and list_model_profiles. Every tool enforces the same
+    /// Registers the model profile MCP tools: get_model_profile, list_model_profiles and get_model_scorecard. Every tool enforces the same
     /// rules as REST through <see cref="ModelProfileAccessService"/>; its typed exceptions become typed tool errors.
     /// </summary>
     public static class McpModelProfileTools
@@ -53,6 +53,37 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     ModelProfileIdArgs request = Read<ModelProfileIdArgs>(args);
                     return (object)await service.GetAsync(caller, request.Id).ConfigureAwait(false);
+                });
+
+            register(
+                "get_model_scorecard",
+                "Get the read-only scorecard of one (model profile, persona), optionally one vessel, over a rolling window: the last windowDays days or the last windowMissions missions, whichever is smaller (default 30 days, 50 missions). Every rate is a count with its denominator (count of of) plus a 95% Wilson score interval (lower, upper): first-pass success, accepted results, stage-check status counts (skipped by reason), Judge verdicts on this profile's work, protocol repairs and repairs that ran out, tool failures, resumes in place and stalls, escalations away and what followed, suspected causes (Unknown and Mixed as their own buckets), and tokens and wall time per accepted result. Metrics Armada does not record come back with available false and the reason. Revisions are separate groups unless marked compatible; exclusions lists each attribution rule and how many items it removed. Read-only: nothing changes routing or captains.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        id = new { type = "string", description = "Model profile ID (mdl_ prefix)" },
+                        persona = new { type = "string", description = "Persona, for example Worker or Judge" },
+                        vesselId = new { type = "string", description = "Only stages on this vessel" },
+                        windowDays = new { type = "integer", description = "Window length in days (1-365, default 30)" },
+                        windowMissions = new { type = "integer", description = "Window length in missions (1-500, default 50)" }
+                    },
+                    required = new[] { "id", "persona" }
+                },
+                async (args) =>
+                {
+                    if (service == null) return (object)McpToolError.Unavailable(UnavailableMessage);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    ModelScorecardArgs request = Read<ModelScorecardArgs>(args);
+                    ModelScorecardRequest scorecard = new ModelScorecardRequest
+                    {
+                        Persona = request.Persona,
+                        VesselId = request.VesselId,
+                        WindowDays = request.WindowDays,
+                        WindowMissions = request.WindowMissions
+                    };
+                    return (object)await service.GetScorecardAsync(caller, request.Id, scorecard).ConfigureAwait(false);
                 });
 
             register(

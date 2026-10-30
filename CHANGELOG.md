@@ -30,6 +30,21 @@ All notable changes to Armada are documented in this file.
 - Schema migration 107 adds `model_profiles`, `model_profile_revisions`, `model_profile_revision_compat` and
   `captains.model_profile_id` on SQLite, PostgreSQL, SQL Server and MySQL (additive).
 
+### Model scorecard (model heterogeneity Phase 5, item 2)
+
+- New read-only scorecard per (model profile, persona), optionally per vessel, computed from existing stage outcomes,
+  token usage and timing over the last 30 days or 50 missions, whichever is smaller (both configurable): first-pass
+  success, accepted results, stage-check status counts (skipped by reason), Judge verdicts on the profile's work,
+  protocol repairs and repairs that ran out, tool failures, resumes in place and stalls, escalations away and what
+  followed, suspected causes (Unknown and Mixed as their own buckets), and tokens and wall time per accepted result
+  summed over every attempt that led to it. Every rate is a count of a denominator with a 95% Wilson interval; metrics
+  Armada does not record (finding categories, tool failure kinds, recovered stalls) are returned as unavailable with the
+  reason. Revisions are shown separately unless marked compatible. The attribution rules applied (evaluation and battery
+  missions, NotTheModel, Infra, OperatorAction, runtime environment, unsettled, other stages, Judge verdicts on other
+  captains' work) are listed with how many items each removed. No routing or captain change and no schema migration.
+- REST `GET /api/v1/model-profiles/{id}/scorecard` (query `persona`, `vesselId`, `windowDays`, `windowMissions`), MCP
+  `get_model_scorecard` (Ask read-only), .NET client `GetModelScorecardAsync`.
+
 ### Dashboard
 
 - Needs You failure cards (Failed and Landing failed) gain **Copy JSON** next to **Copy Markdown**: it copies the

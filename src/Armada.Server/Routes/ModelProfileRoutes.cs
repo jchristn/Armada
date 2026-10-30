@@ -125,6 +125,36 @@ namespace Armada.Server.Routes
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
 
+            app.Get("/api/v1/model-profiles/{id}/scorecard", async (ApiRequest req) =>
+            {
+                AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
+                ApiErrorResponse? denied = Deny(req, ctx, authz);
+                if (denied != null) return denied;
+                try
+                {
+                    string? id = req.Parameters["id"];
+                    await _Service.GetAsync(ctx, id).ConfigureAwait(false);
+                    return await _Service.GetScorecardAsync(ctx, id, ParseScorecardRequest(key => req.Query.GetValueOrDefault(key))).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
+                {
+                    return RouteErrorMapper.ToResponse(req, ex);
+                }
+            },
+            api => api
+                .WithTag("ModelProfiles")
+                .WithSummary("Get a model scorecard")
+                .WithDescription("The read-only scorecard of one (model profile, persona), optionally one vessel, computed from stage outcomes, token usage and timing over a rolling window: the last windowDays days or the last windowMissions missions, whichever is smaller (default 30 days, 50 missions). Every rate is a count with its denominator plus a 95% Wilson score interval: first-pass success, accepted results, stage-check status counts (skipped by reason), Judge verdicts on this profile's work, protocol repairs and repairs that ran out, tool failures, resumes in place and stalls, escalations away and what followed, suspected causes (Unknown and Mixed as their own buckets), and tokens and wall time per accepted result summed over every attempt that led to it. Metrics Armada does not record are returned with available false and the reason. Revisions are separate groups unless marked compatible. Exclusions lists every attribution rule and how many items it removed (evaluation and battery missions, NotTheModel, Infra, OperatorAction, runtime environment, unsettled, other stages, Judge verdicts on other captains' work). Nothing changes routing or captains. 400 when persona is missing or a window value is out of range; 404 when the profile does not exist or belongs to another tenant.")
+                .WithParameter(OpenApiParameterMetadata.Path("id", "Model profile ID (mdl_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("persona", "Persona (required), for example Worker or Judge", true))
+                .WithParameter(OpenApiParameterMetadata.Query("vesselId", "Only stages on this vessel", false))
+                .WithParameter(OpenApiParameterMetadata.Query("windowDays", "Window length in days (1-365, default 30)", false, OpenApiSchemaMetadata.Integer()))
+                .WithParameter(OpenApiParameterMetadata.Query("windowMissions", "Window length in missions (1-500, default 50)", false, OpenApiSchemaMetadata.Integer()))
+                .WithResponse(200, OpenApiJson.For<ModelScorecard>("The scorecard"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithSecurity("ApiKey"));
+
             app.Put("/api/v1/model-profiles/{id}", async (ApiRequest req) =>
             {
                 AuthContext ctx = await authenticate(req.Http).ConfigureAwait(false);
@@ -202,6 +232,26 @@ namespace Armada.Server.Routes
             int? pageSize = ParseInt(value("pageSize"), "pageSize");
             if (pageSize.HasValue) query.PageSize = pageSize.Value;
             return query;
+        }
+
+        /// <summary>
+        /// Parse scorecard parameters from name/value pairs (querystring); shared with MCP. Range checks happen when the
+        /// scorecard is computed, after the profile is resolved.
+        /// </summary>
+        /// <param name="value">Reads one value by name, or null.</param>
+        /// <returns>The request.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when value is null.</exception>
+        /// <exception cref="ArgumentException">Thrown for a window value that is not an integer.</exception>
+        public static ModelScorecardRequest ParseScorecardRequest(Func<string, string?> value)
+        {
+            if (value == null) throw new ArgumentNullException(nameof(value));
+            return new ModelScorecardRequest
+            {
+                Persona = Blank(value("persona")),
+                VesselId = Blank(value("vesselId")),
+                WindowDays = ParseInt(value("windowDays"), "windowDays"),
+                WindowMissions = ParseInt(value("windowMissions"), "windowMissions")
+            };
         }
 
         #endregion

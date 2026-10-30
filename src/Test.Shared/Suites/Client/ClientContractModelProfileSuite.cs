@@ -80,6 +80,14 @@ namespace Test.Shared.Suites.Client
                     new ModelProfileCompatibilityRequest { CompatibleWith = new List<string> { second.Revision.Id } }))!;
                 AssertTrue(marked.CompatibleWith.SequenceEqual(new[] { second.Revision.Id }), "marked");
 
+                ModelScorecard scorecard = (await c.GetModelScorecardAsync(first.Profile.Id, new ModelScorecardRequest { Persona = "Worker", WindowDays = 7, WindowMissions = 5 }))!;
+                AssertEqual(first.Profile.Id, scorecard.ProfileId, "scorecard profile");
+                AssertEqual(7, scorecard.WindowDays, "scorecard days");
+                AssertEqual(5, scorecard.WindowMissions, "scorecard missions");
+                AssertEqual(1, scorecard.Groups.Count, "the two revisions were just marked compatible, so they pool");
+                AssertTrue(scorecard.Groups[0].Pooled && scorecard.Groups[0].RevisionIds.Count == 2, "pooled group");
+                await ClientContract.ExpectErrorAsync(() => c.GetModelScorecardAsync(first.Profile.Id, new ModelScorecardRequest()), "scorecard without persona", 400, 400);
+                await ClientContract.ExpectErrorAsync(() => c.GetModelScorecardAsync("mdl_missing", new ModelScorecardRequest { Persona = "Worker" }), "unknown profile scorecard", 404, 404);
                 await ClientContract.ExpectErrorAsync(() => c.GetModelProfileAsync("mdl_missing"), "unknown profile", 404, 404);
                 await ClientContract.ExpectErrorAsync(() => c.UpdateModelProfileAsync("mdl_missing", new ModelProfileUpdateRequest()), "unknown profile update", 404, 404);
                 await ClientContract.ExpectErrorAsync(() => c.SetModelProfileRevisionCompatibilityAsync(first.Profile.Id, "mdv_missing", new ModelProfileCompatibilityRequest { CompatibleWith = new List<string>() }), "unknown revision", 404, 404);
