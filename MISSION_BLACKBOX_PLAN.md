@@ -26,6 +26,9 @@ Where this plan and the code differ, the code and docs/BLACKBOX.md are authorita
 - **Ask Armada:** the quick action catalog had 5 actions, not 10; `/blackbox` makes 6. Admin-level reads
   (`get_blackbox_retention`, `get_blackbox_storage`, `export_blackbox_fixture`) stay on the read-only allowlist because
   the call runs as the thread owner and is refused without the role.
+- **Navigation:** the Black Box is a tab of the Missions page (`/missions?tab=blackbox`, its own sections in
+  `?bbtab=`), not an Operations nav item as 11.1 planned; `/blackbox` redirects there. The TUI (`g b`) and the mobile
+  app follow the same shape.
 - **Object ETags** are the SHA-256 of the returned bytes; the stored hash is in `X-BlackBox-Stored-Sha256`.
 - **Doctor** has 12 checks (the new "Black Box Storage" check).
 - **`MaxLandingRetries`** is now read: a landing deferred on a dirty checkout retries automatically at most this many

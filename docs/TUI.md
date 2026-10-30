@@ -2,7 +2,7 @@
 
 The Armada TUI is the web dashboard in a terminal. It talks to the same Admiral over the same REST API and WebSocket, enforces nothing the server does not, and is meant for people who live in a shell, work over SSH, or are on a machine without a browser. It ships inside the `armada` CLI, so one install gives you both.
 
-This page covers what exists today: installing and starting it, server profiles, signing in, getting around, Ask Armada, the Approvals center, notifications, the Operations screens (Home, Needs You, Dispatch with its Planning and Backlog tabs, Fleet Actions, Missions, Voyages, Merge Queue, and Activity's Jobs tab), the Build screens (Vessels, the import wizard, Vessel Health, the vessel page, onboarding, and history, Fleets, the Workspace, Captains, and Docks), the Delivery, Configuration, Activity, and System screens, the keys, and troubleshooting. Ask Armada is the screen the TUI opens into. Every dashboard route now opens a real screen; progress on the remaining quality and documentation work is tracked in `archive/TUI_APP_PLAN.md`.
+This page covers what exists today: installing and starting it, server profiles, signing in, getting around, Ask Armada, the Approvals center, notifications, the Operations screens (Home, Needs You, Dispatch with its Planning and Backlog tabs, Fleet Actions, Missions, Voyages, Merge Queue, the Black Box tab, and Activity's Jobs tab), the Build screens (Vessels, the import wizard, Vessel Health, the vessel page, onboarding, and history, Fleets, the Workspace, Captains, and Docks), the Delivery, Configuration, Activity, and System screens, the keys, and troubleshooting. Ask Armada is the screen the TUI opens into. Every dashboard route now opens a real screen; progress on the remaining quality and documentation work is tracked in `archive/TUI_APP_PLAN.md`.
 
 ## Install and start
 
@@ -166,7 +166,7 @@ Running an action opens a vessel picker that filters by name or path and by flee
 
 The Runs tab lists runs with a status filter, a progress bar and summary, created (sortable), started, completed, and duration; `Enter` opens a run and `x` cancels an active one after the confirmation. A run's page shows the progress bar (`#` succeeded, `x` failed, `-` skipped, `/` cancelled, `.` remaining) and counts, timing, the timeout and clean-tree check, the command or prompt snapshot, and the targets table with its status filter (`F`). While the run is active the page refreshes every five seconds, pausing while a drawer or dialog is open. `R` re-runs failed targets and `x` cancels the run. `Enter` on a Command target opens a drawer with status, reason, exit code, timing, the rendered command (`y` copies it), and the tail of stdout and stderr (`o` and `e` open the full streams); Mission targets open their voyage.
 
-### Missions, Voyages, and the Merge Queue
+### Missions, Voyages, the Merge Queue, and the Black Box
 
 The Missions tab pages on the server and filters by status and, for admins, by user; the title, status, and branch filters narrow the page. Title, status, and priority sort. `n` opens Create Mission (title, description, vessel, mode, priority), `Space` marks rows for Delete Selected (`D`, a purge per mission), and the row menu has View Detail, Edit, Restart (`r`), Retry Landing (`L`, for missions that produced work or failed to land), View Diff (`d`), View Log (`l`), Transition Status (`t`), View JSON (`j`), the vessel, captain, and voyage links, Cancel (`x`), and Purge (`Del`).
 
@@ -175,6 +175,8 @@ The Mission screen shows the header buttons that apply: Resolve Review (`R`) whi
 The Voyages tab pages on the server with the title and status filters and the user filter for admins; Cancel Selected (`X`) cancels the marked voyages, and the row menu has View Detail, View Status (`u`), View JSON, Copy ID, Cancel (`x`), and Purge (`Del`). A voyage's page has Run Check (`k`), Draft Release (`R`), Cancel Voyage (`x`), Retry Failed (`F`), View JSON, and Delete once it has finished; it shows the fields, captain assignments with fallback tiers, a progress bar, playbook snapshots, and the missions, where `d`, `l`, and `Enter` open a mission's diff, log, and page. Create Voyage (`/voyages/create`, or `V` on Home) takes the title, description, vessel, pipeline, the three auto flags, playbooks, and the missions (`Ctrl+N` adds one, `Ctrl+D` removes the focused one).
 
 The Merge Queue tab filters by branch, target, status, vessel, and user, and sorts by branch, target, status, and priority. Process All (`P`) confirms first, Enqueue (`n`) takes branch, target, mission id, vessel, test command, and priority, and Delete Selected (`D`) removes the marked entries. The row menu has View Detail, Process (`p`), Cancel (`x`), Mission Diff (`d`) and Mission Log (`l`) when the entry has a mission, links, copy actions, View JSON, and Delete. An entry's page shows the Landing Preview for its branch, every field, and the test output in the log viewer.
+
+The Black Box tab (`/missions?tab=blackbox`, `g b`; the old `/blackbox` route redirects there) lists the failure entries the black box recorded, the dashboard's tab of the same name; see [BLACKBOX.md](BLACKBOX.md#tui) for its keys.
 
 ### Handoffs between screens
 
