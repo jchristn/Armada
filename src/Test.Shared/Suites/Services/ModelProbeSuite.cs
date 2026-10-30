@@ -486,7 +486,15 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(5, run.PassedCount, Describe(run));
                 AssertEqual(0, run.FailedCount);
                 AssertEqual(1, run.CouldNotRunCount);
-                AssertEqual(before, JsonSerializer.Serialize(await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false)), "nothing changes the captain");
+                // The run records the model profile (advisory, Phase 5.1) and points the captain at it; nothing else on the
+                // captain changes (no tier, routing or settings).
+                Captain after = (await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!;
+                AssertNotNull(after.ModelProfileId, "the captain references its model profile");
+                ModelProfile profile = (await db.ModelProfiles.ReadAsync(after.ModelProfileId!).ConfigureAwait(false))!;
+                AssertEqual("ClaudeCode", profile.Identity.Runtime, "profile runtime");
+                AssertEqual(captain.Model, profile.Identity.Model, "profile model");
+                after.ModelProfileId = null;
+                AssertEqual(before, JsonSerializer.Serialize(after), "nothing else changes the captain");
             }));
 
             cases.Add(CaseAsync("run_could_not_launch", "A runtime that cannot launch makes every probe could-not-run with the reason, and the run completes", TestTags.Negative, async () =>

@@ -2227,7 +2227,49 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_successes_expires') CREATE INDEX idx_blackbox_successes_expires ON blackbox_successes(expires_utc);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_recovery_outcomes_outcome_created') CREATE INDEX idx_blackbox_recovery_outcomes_outcome_created ON blackbox_recovery_outcomes(outcome, created_utc);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_recovery_outcomes_tenant_rule_path') CREATE INDEX idx_blackbox_recovery_outcomes_tenant_rule_path ON blackbox_recovery_outcomes(tenant_id, rule_id, path_id);",
-                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_recovery_outcomes_entry') CREATE INDEX idx_blackbox_recovery_outcomes_entry ON blackbox_recovery_outcomes(entry_id);")
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_blackbox_recovery_outcomes_entry') CREATE INDEX idx_blackbox_recovery_outcomes_entry ON blackbox_recovery_outcomes(entry_id);"),
+
+                new SchemaMigration(107, "Add model profiles: model_profiles (the model as served, keyed by a unique identity of runtime, provider, model and served context, with editable capabilities, rendering overrides and notes), model_profile_revisions (immutable runtime version, model digest, sampling and tool configuration), model_profile_revision_compat (administrator compatibility marks between revisions) and captains.model_profile_id",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'model_profiles') CREATE TABLE model_profiles (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64),
+                        identity_key NVARCHAR(64) NOT NULL,
+                        runtime NVARCHAR(256) NOT NULL,
+                        provider NVARCHAR(256),
+                        model NVARCHAR(512),
+                        served_context_tokens INT,
+                        tools_available BIT,
+                        mcp_available BIT,
+                        rendering_template NVARCHAR(256),
+                        rendering_repeat_contract_at_end BIT,
+                        rendering_max_files_per_mission INT,
+                        notes NVARCHAR(MAX),
+                        created_utc DATETIME2 NOT NULL,
+                        last_update_utc DATETIME2 NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'model_profile_revisions') CREATE TABLE model_profile_revisions (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        profile_id NVARCHAR(64) NOT NULL,
+                        tenant_id NVARCHAR(64),
+                        runtime_version NVARCHAR(256),
+                        model_digest NVARCHAR(256),
+                        sampling_temperature FLOAT,
+                        sampling_top_p FLOAT,
+                        tool_tools BIT,
+                        tool_mcp BIT,
+                        first_seen_utc DATETIME2 NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'model_profile_revision_compat') CREATE TABLE model_profile_revision_compat (
+                        revision_id NVARCHAR(64) NOT NULL,
+                        compatible_revision_id NVARCHAR(64) NOT NULL,
+                        created_utc DATETIME2 NOT NULL,
+                        PRIMARY KEY (revision_id, compatible_revision_id)
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_profiles_identity_key') CREATE UNIQUE INDEX idx_model_profiles_identity_key ON model_profiles(identity_key);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_profiles_tenant_created') CREATE INDEX idx_model_profiles_tenant_created ON model_profiles(tenant_id, created_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_profile_revisions_profile_seen') CREATE INDEX idx_model_profile_revisions_profile_seen ON model_profile_revisions(profile_id, first_seen_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_profile_revision_compat_other') CREATE INDEX idx_model_profile_revision_compat_other ON model_profile_revision_compat(compatible_revision_id);",
+                    @"IF COL_LENGTH('captains', 'model_profile_id') IS NULL ALTER TABLE captains ADD model_profile_id NVARCHAR(64) NULL;")
 
 
             };

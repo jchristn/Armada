@@ -1111,6 +1111,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
             try { captain.Model = NullableString(reader["model"]); } catch { }
             try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
+            try { captain.ModelProfileId = NullableString(reader["model_profile_id"]); } catch { }
             try
             {
                 string? reasoningEffort = NullableString(reader["reasoning_effort"]);

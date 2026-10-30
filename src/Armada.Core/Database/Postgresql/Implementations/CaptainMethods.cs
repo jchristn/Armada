@@ -1071,6 +1071,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
             try { captain.Model = NullableString(reader["model"]); } catch { }
             try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
+            try { captain.ModelProfileId = NullableString(reader["model_profile_id"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
             captain.CurrentMissionId = NullableString(reader["current_mission_id"]);

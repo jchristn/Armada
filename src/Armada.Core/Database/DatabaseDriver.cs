@@ -520,6 +520,15 @@ namespace Armada.Core.Database
         }
 
         /// <summary>
+        /// Model profile methods (the model as served, its immutable revisions, and the captain reference).
+        /// </summary>
+        public IModelProfileMethods ModelProfiles
+        {
+            get => _ModelProfiles;
+            protected set => _ModelProfiles = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
         /// Model probe run methods (one row per probe-only Evaluate).
         /// </summary>
         public IModelProbeRunMethods ModelProbeRuns
@@ -743,6 +752,7 @@ namespace Armada.Core.Database
         private IBlackBoxRecoveryOutcomeMethods _BlackBoxRecoveryOutcomes = null!;
         private IFailureCauseRuleMethods _FailureCauseRules = null!;
         private IModelProbeRunMethods _ModelProbeRuns = null!;
+        private IModelProfileMethods _ModelProfiles = null!;
         private IModelProbeResultMethods _ModelProbeResults = null!;
         private IBatteryRunMethods _BatteryRuns = null!;
         private IBatteryTaskResultMethods _BatteryTaskResults = null!;

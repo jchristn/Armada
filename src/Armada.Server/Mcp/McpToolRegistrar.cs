@@ -75,6 +75,7 @@ namespace Armada.Server.Mcp
         /// <param name="missionService">Optional mission service; with it the review gate tools (approve_mission_review, deny_mission_review) decide gates, without it they answer Unavailable.</param>
         /// <param name="harborJobs">Optional Harbor job control; without it list_harbor_jobs and stop_harbor_job answer Unavailable.</param>
         /// <param name="stageOutcomes">Optional stage outcome access service; without it the stage outcome and failure-cause rule tools answer Unavailable.</param>
+        /// <param name="modelProfiles">Optional model profile access service; without it get_model_profile and list_model_profiles answer Unavailable.</param>
         /// <param name="modelProbes">Optional model probe (Evaluate) access service; without it evaluate_captain, get_model_probe_run and list_model_probe_runs answer Unavailable.</param>
         /// <param name="battery">Optional fixture battery access service; without it list_battery_packs, run_battery and get_battery_run answer Unavailable.</param>
         /// <param name="cliPermissionService">Optional CLI permission service; without it the CLI permission tools are
@@ -128,7 +129,8 @@ namespace Armada.Server.Mcp
             Armada.Core.BlackBox.IBlackBoxService? blackBox = null,
             Armada.Core.BlackBox.IBlackBoxCapture? blackBoxCapture = null,
             Armada.Core.BlackBox.IBlackBoxLifecycleHooks? blackBoxHooks = null,
-            Armada.Core.BlackBox.BlackBoxInsightService? blackBoxInsights = null)
+            Armada.Core.BlackBox.BlackBoxInsightService? blackBoxInsights = null,
+            ModelProfileAccessService? modelProfiles = null)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
             register = MapToolExceptions(MarkExperimental(register));
@@ -169,6 +171,7 @@ namespace Armada.Server.Mcp
             McpStageOutcomeTools.Register(register, stageOutcomes);
             McpHandoffArtifactTools.Register(register, new HandoffArtifactAccessService(database));
             McpModelProbeTools.Register(register, modelProbes);
+            McpModelProfileTools.Register(register, modelProfiles);
             McpBatteryTools.Register(register, battery);
             McpBlackBoxTools.Register(register, blackBox);
             McpBlackBoxInsightTools.Register(register, blackBoxInsights);
@@ -261,6 +264,7 @@ namespace Armada.Server.Mcp
             RegisterCatalogGroup("Armada MCP / Stage Outcomes", register => McpStageOutcomeTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Handoff Artifacts", register => McpHandoffArtifactTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Evaluate", register => McpModelProbeTools.Register(register, null));
+            RegisterCatalogGroup("Armada MCP / Model Profiles", register => McpModelProfileTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Battery", register => McpBatteryTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Black Box", register => McpBlackBoxTools.Register(register, null));
             RegisterCatalogGroup("Armada MCP / Black Box Insights", register => McpBlackBoxInsightTools.Register(register, null));

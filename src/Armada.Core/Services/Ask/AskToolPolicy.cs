@@ -101,6 +101,8 @@ namespace Armada.Core.Services.Ask
             // Evaluate run readers
             "get_model_probe_run",
             "list_model_probe_runs",
+            "get_model_profile",
+            "list_model_profiles",
 
             // Fixture battery readers
             "list_battery_packs",

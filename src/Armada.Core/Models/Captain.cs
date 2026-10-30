@@ -88,6 +88,17 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Model profile (mdl_ prefix) of the model this captain runs as served, or null until Armada has observed it.
+        /// Advisory and server-owned: Armada sets it when it records the captain's runtime and model (a stage outcome or a
+        /// Quick probe run). It does not set <see cref="Tier"/> or change routing. Harbor-specific facts stay on the captain.
+        /// </summary>
+        public string? ModelProfileId
+        {
+            get => _ModelProfileId;
+            set => _ModelProfileId = String.IsNullOrEmpty(value) ? null : value;
+        }
+
+        /// <summary>
         /// User-supplied system instructions for this captain. Injected into every mission's
         /// instructions before vessel context and mission details. Use this to specialize
         /// captain behavior, add guardrails, or provide persistent context.
@@ -204,6 +215,7 @@ namespace Armada.Core.Models
         private string _Name = "Captain";
         private string? _Model = null;
         private string? _ModelEndpointId = null;
+        private string? _ModelProfileId = null;
 
         #endregion
 

@@ -285,6 +285,17 @@ namespace Armada.Core
         public static readonly string ModelProbeResultIdPrefix = "mpo_";
 
         /// <summary>
+        /// ID prefix for model profiles (the model as served: runtime, provider, model and served context; mpr_ is taken by
+        /// model probe runs).
+        /// </summary>
+        public static readonly string ModelProfileIdPrefix = "mdl_";
+
+        /// <summary>
+        /// ID prefix for model profile revisions (one immutable runtime version, model digest and sampling of a profile).
+        /// </summary>
+        public static readonly string ModelProfileRevisionIdPrefix = "mdv_";
+
+        /// <summary>
         /// ID prefix for battery runs (one run of the fixture battery against a captain).
         /// </summary>
         public static readonly string BatteryRunIdPrefix = "bat_";

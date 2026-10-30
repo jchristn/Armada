@@ -24,8 +24,8 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 490 | 15 |
-| MCP tools | 243 | 8 |
+| REST routes | 495 | 15 |
+| MCP tools | 245 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 76 | 0 |
@@ -301,6 +301,11 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/model-probe-runs` | Authenticated |  | 200 `EnumerationResult<ModelProbeRun>`, 400 |  |
 | POST | `/api/v1/model-probe-runs/enumerate` | Authenticated | `ModelProbeRunQuery` (optional) | 200 `EnumerationResult<ModelProbeRun>`, 400 |  |
 | GET | `/api/v1/model-probe-runs/{id}` | Authenticated |  | 200 `ModelProbeRun`, 404 |  |
+| GET | `/api/v1/model-profiles` | Authenticated |  | 200 `EnumerationResult<ModelProfile>`, 400 |  |
+| POST | `/api/v1/model-profiles/enumerate` | Authenticated | `ModelProfileQuery` (optional) | 200 `EnumerationResult<ModelProfile>`, 400 |  |
+| GET | `/api/v1/model-profiles/{id}` | Authenticated |  | 200 `ModelProfile`, 404 |  |
+| PUT | `/api/v1/model-profiles/{id}` | TenantAdmin | `ModelProfileUpdateRequest` | 200 `ModelProfile`, 400, 403 `ApiErrorResponse`, 404 |  |
+| PUT | `/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with` | TenantAdmin | `ModelProfileCompatibilityRequest` | 200 `ModelProfileRevision`, 400, 403 `ApiErrorResponse`, 404 |  |
 | DELETE | `/api/v1/objective-refinement-sessions/{id}` | TenantAdmin |  | 204, 404, 501 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/objective-refinement-sessions/{id}` | Authenticated |  | 200 `ObjectiveRefinementSessionDetail`, 404, 501 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/objective-refinement-sessions/{id}/apply` | TenantAdmin | `ObjectiveRefinementApplyRequest` (optional) | 200 `ObjectiveRefinementApplyResponse`, 404, 501 `ApiStatusErrorResponse` |  |
@@ -650,6 +655,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_mission_log` | Authenticated | `formatted: boolean`, `lines: integer`, `missionId*: string`, `offset: integer` |  |
 | `get_model_endpoint` | Authenticated | `endpointId*: string` |  |
 | `get_model_probe_run` | Authenticated | `id*: string` |  |
+| `get_model_profile` | Authenticated | `id*: string` |  |
 | `get_objective` | Authenticated | `objectiveId*: string` |  |
 | `get_persona` | Authenticated | `name*: string` |  |
 | `get_pipeline` | Authenticated | `name*: string` |  |
@@ -691,6 +697,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `list_handoff_artifacts` | Authenticated | `missionId*: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `list_harbor_jobs` | Authenticated | `harborId*: string`, `openOnly: boolean`, `pageNumber: integer`, `pageSize: integer` | experimental |
 | `list_model_probe_runs` | Authenticated | `captainId: string`, `modelEndpointId: string`, `pageNumber: integer`, `pageSize: integer`, `status: string` |  |
+| `list_model_profiles` | Authenticated | `model: string`, `pageNumber: integer`, `pageSize: integer`, `provider: string`, `runtime: string` |  |
 | `list_objectives` | Authenticated | `backlogState: string`, `category: string`, `effort: string`, `fleetId: string`, `kind: string`, `owner: string`, `pageNumber: integer`, `pageSize: integer`, `parentObjectiveId: string`, `priority: string`, `search: string`, `status: string`, `targetVersion: string`, `vesselId: string` |  |
 | `list_prompt_templates` | Authenticated | `category: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `list_stage_outcomes` | Authenticated | `captainId: string`, `causeSource: string`, `disposition: string`, `fromUtc: string`, `isEvaluation: boolean`, `missionId: string`, `model: string`, `pageNumber: integer`, `pageSize: integer`, `persona: string`, `suspectedCause: string`, `tenantId: string`, `toUtc: string`, `vesselId: string`, `voyageId: string` |  |

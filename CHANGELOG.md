@@ -4,6 +4,30 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## Unreleased
+
+### Model profiles (model heterogeneity Phase 5, item 1)
+
+- New advisory **model profile** entity (`mdl_` prefix): the model as served, identified by runtime, provider, model and
+  served context, shared by every captain and Harbor that runs it, with editable capabilities (`ToolsAvailable`,
+  `McpAvailable`), explicit rendering overrides (`Template`, `RepeatContractAtEnd`, `MaxFilesPerMission`) and notes.
+  Profiles do not set `Captain.Tier` and do not change routing or dispatch.
+- Immutable **revisions** (`mdv_` prefix) record the runtime version, model digest, sampling, tool configuration and first
+  seen time. A new runtime major version, a new model digest or a change in sampling starts a new revision; a runtime
+  minor or patch release pools into the current one; a change in served context is a new profile. Administrators can
+  mark revisions compatible; revisions are never edited.
+- Armada finds or creates the profile and revision whenever it records a captain's runtime and model (every stage
+  outcome and every Quick Evaluate run), best effort, and sets the new server-owned `Captain.ModelProfileId`. Vendor CLI
+  captains are profiled too.
+- REST: `GET /api/v1/model-profiles`, `POST /api/v1/model-profiles/enumerate`, `GET /api/v1/model-profiles/{id}`,
+  `PUT /api/v1/model-profiles/{id}` and `PUT /api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with`. MCP:
+  `get_model_profile` and `list_model_profiles`. .NET client: `ListModelProfilesAsync`, `EnumerateModelProfilesAsync`,
+  `GetModelProfileAsync`, `UpdateModelProfileAsync`, `SetModelProfileRevisionCompatibilityAsync`.
+- Schema migration 107 adds `model_profiles`, `model_profile_revisions`, `model_profile_revision_compat` and
+  `captains.model_profile_id` on SQLite, PostgreSQL, SQL Server and MySQL (additive).
+
+---
+
 ## v1.2.0 (2026-10-29)
 
 v1.2.0 adds the mission and voyage black box: every failure writes an entry that says where, how and why it

@@ -185,6 +185,7 @@ namespace Armada.Server
         private StageOutcomeAccessService _StageOutcomeAccess = null!;
         private ModelProbeService _ModelProbeService = null!;
         private ModelProbeAccessService _ModelProbeAccess = null!;
+        private ModelProfileAccessService _ModelProfileAccess = null!;
         private BatteryRunService _BatteryRunService = null!;
         private BatteryAccessService _BatteryAccess = null!;
         private CheckRunService _CheckRunService = null!;
@@ -583,6 +584,7 @@ namespace Armada.Server
             });
             _ModelProbeService = new ModelProbeService(_Database, _Logging, modelProbeExecutor, () => _Settings.Evaluation, modelProbeProvenance);
             _ModelProbeAccess = new ModelProbeAccessService(_Database, _ModelProbeService, _ModelEndpointService, _Logging);
+            _ModelProfileAccess = new ModelProfileAccessService(_Database, _Logging);
             try
             {
                 int interrupted = await _ModelProbeService.RecoverInterruptedAsync().ConfigureAwait(false);
@@ -1530,6 +1532,10 @@ namespace Armada.Server
             new ModelProbeRoutes(_ModelProbeAccess, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
+            // Model profiles (the model as served, with immutable revisions; advisory)
+            new ModelProfileRoutes(_ModelProfileAccess, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
             // Fixture battery packs and runs
             new BatteryRoutes(_BatteryAccess, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
@@ -2114,7 +2120,8 @@ namespace Armada.Server
                 _BlackBox?.Service,
                 _BlackBox?.Capture,
                 _BlackBox?.Hooks,
-                _BlackBox?.Insights.Service);
+                _BlackBox?.Insights.Service,
+                _ModelProfileAccess);
         }
 
         /// <summary>

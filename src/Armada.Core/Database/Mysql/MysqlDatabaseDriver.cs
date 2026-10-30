@@ -86,6 +86,7 @@ namespace Armada.Core.Database.Mysql
             HandoffArtifacts = new HandoffArtifactMethods(_ConnectionString);
             FailureCauseRules = new FailureCauseRuleMethods(_ConnectionString);
             ModelProbeRuns = new ModelProbeRunMethods(_ConnectionString);
+            ModelProfiles = new ModelProfileMethods(_ConnectionString);
             ModelProbeResults = new ModelProbeResultMethods(_ConnectionString);
             BatteryRuns = new BatteryRunMethods(_ConnectionString);
             BatteryTaskResults = new BatteryTaskResultMethods(_ConnectionString);
@@ -1262,7 +1263,49 @@ namespace Armada.Core.Database.Mysql
                     @"CREATE INDEX idx_blackbox_successes_expires ON blackbox_successes(expires_utc);",
                     @"CREATE INDEX idx_blackbox_recovery_outcomes_outcome_created ON blackbox_recovery_outcomes(outcome, created_utc);",
                     @"CREATE INDEX idx_blackbox_recovery_outcomes_tenant_rule_path ON blackbox_recovery_outcomes(tenant_id, rule_id, path_id);",
-                    @"CREATE INDEX idx_blackbox_recovery_outcomes_entry ON blackbox_recovery_outcomes(entry_id);")
+                    @"CREATE INDEX idx_blackbox_recovery_outcomes_entry ON blackbox_recovery_outcomes(entry_id);"),
+
+                new SchemaMigration(107, "Add model profiles: model_profiles (the model as served, keyed by a unique identity of runtime, provider, model and served context, with editable capabilities, rendering overrides and notes), model_profile_revisions (immutable runtime version, model digest, sampling and tool configuration), model_profile_revision_compat (administrator compatibility marks between revisions) and captains.model_profile_id",
+                    @"CREATE TABLE IF NOT EXISTS model_profiles (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        identity_key VARCHAR(64) NOT NULL,
+                        runtime VARCHAR(256) NOT NULL,
+                        provider VARCHAR(256),
+                        model VARCHAR(512),
+                        served_context_tokens INT,
+                        tools_available TINYINT(1),
+                        mcp_available TINYINT(1),
+                        rendering_template VARCHAR(256),
+                        rendering_repeat_contract_at_end TINYINT(1),
+                        rendering_max_files_per_mission INT,
+                        notes LONGTEXT,
+                        created_utc DATETIME(6) NOT NULL,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS model_profile_revisions (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        profile_id VARCHAR(64) NOT NULL,
+                        tenant_id VARCHAR(64),
+                        runtime_version VARCHAR(256),
+                        model_digest VARCHAR(256),
+                        sampling_temperature DOUBLE,
+                        sampling_top_p DOUBLE,
+                        tool_tools TINYINT(1),
+                        tool_mcp TINYINT(1),
+                        first_seen_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS model_profile_revision_compat (
+                        revision_id VARCHAR(64) NOT NULL,
+                        compatible_revision_id VARCHAR(64) NOT NULL,
+                        created_utc DATETIME(6) NOT NULL,
+                        PRIMARY KEY (revision_id, compatible_revision_id)
+                    );",
+                    @"CREATE UNIQUE INDEX idx_model_profiles_identity_key ON model_profiles(identity_key);",
+                    @"CREATE INDEX idx_model_profiles_tenant_created ON model_profiles(tenant_id, created_utc);",
+                    @"CREATE INDEX idx_model_profile_revisions_profile_seen ON model_profile_revisions(profile_id, first_seen_utc);",
+                    @"CREATE INDEX idx_model_profile_revision_compat_other ON model_profile_revision_compat(compatible_revision_id);",
+                    @"ALTER TABLE captains ADD COLUMN model_profile_id VARCHAR(64) NULL;")
 
 
             };

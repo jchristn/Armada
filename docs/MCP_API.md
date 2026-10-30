@@ -152,6 +152,9 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [evaluate_captain](#evaluate_captain)
     - [get_model_probe_run](#get_model_probe_run)
     - [list_model_probe_runs](#list_model_probe_runs)
+  - **Model Profiles**
+    - [get_model_profile](#get_model_profile)
+    - [list_model_profiles](#list_model_profiles)
   - **Fixture Battery**
     - [list_battery_packs](#list_battery_packs)
     - [run_battery](#run_battery)
@@ -1408,6 +1411,42 @@ Ask read-only list; `evaluate_captain` becomes a proposal inside an Ask conversa
 | `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 25) |
 
 **Response:** `EnumerationResult<ModelProbeRun>` (without results), newest first.
+
+---
+
+## Model Profiles
+
+A model profile (`mdl_`) is the model as served: runtime, provider, model and served context, shared by every captain and
+Harbor that runs it. Armada creates profiles when it records a captain's runtime and model (stage outcomes and Quick
+Evaluate runs) and sets the captain's `modelProfileId`. Each profile keeps immutable revisions (`mdv_`: runtime version,
+model digest, sampling, tool configuration, `compatibleWith`, `firstSeenUtc`); a new runtime major version, model digest
+or sampling starts a new revision and a runtime minor or patch release pools into the current one. Profiles are advisory:
+they do not set a captain's tier or change routing. Updating the mutable parts (capabilities, rendering overrides, notes)
+and marking revisions compatible are REST only ([REST_API.md](REST_API.md#model-profiles)). Both tools are on the Ask
+read-only list. Errors are `McpToolError`s: `NotFound` (missing, or another tenant's) and `Unavailable` on the stdio
+server; a non-integer page argument is refused by the schema before the tool runs.
+
+| Tool | Caller |
+|---|---|
+| `get_model_profile`, `list_model_profiles` | Any authenticated person: global admins every tenant, everyone else their own tenant |
+
+### get_model_profile
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Model profile ID (`mdl_`) |
+
+**Response:** the ModelProfile with `identity`, `capabilities`, `rendering`, `notes` and `revisions` (oldest first).
+
+### list_model_profiles
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `runtime`, `provider` | string | No | Filters (case-insensitive) |
+| `model` | string | No | Only models whose name contains this text (case-insensitive) |
+| `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 25) |
+
+**Response:** `EnumerationResult<ModelProfile>` (without revisions), newest first.
 
 ---
 

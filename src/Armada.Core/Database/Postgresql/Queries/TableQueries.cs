@@ -2264,7 +2264,49 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"CREATE INDEX IF NOT EXISTS idx_blackbox_successes_expires ON blackbox_successes(expires_utc);",
                     @"CREATE INDEX IF NOT EXISTS idx_blackbox_recovery_outcomes_outcome_created ON blackbox_recovery_outcomes(outcome, created_utc);",
                     @"CREATE INDEX IF NOT EXISTS idx_blackbox_recovery_outcomes_tenant_rule_path ON blackbox_recovery_outcomes(tenant_id, rule_id, path_id);",
-                    @"CREATE INDEX IF NOT EXISTS idx_blackbox_recovery_outcomes_entry ON blackbox_recovery_outcomes(entry_id);")
+                    @"CREATE INDEX IF NOT EXISTS idx_blackbox_recovery_outcomes_entry ON blackbox_recovery_outcomes(entry_id);"),
+
+                new SchemaMigration(107, "Add model profiles: model_profiles (the model as served, keyed by a unique identity of runtime, provider, model and served context, with editable capabilities, rendering overrides and notes), model_profile_revisions (immutable runtime version, model digest, sampling and tool configuration), model_profile_revision_compat (administrator compatibility marks between revisions) and captains.model_profile_id",
+                    @"CREATE TABLE IF NOT EXISTS model_profiles (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        tenant_id TEXT,
+                        identity_key TEXT NOT NULL,
+                        runtime TEXT NOT NULL,
+                        provider TEXT,
+                        model TEXT,
+                        served_context_tokens INTEGER,
+                        tools_available BOOLEAN,
+                        mcp_available BOOLEAN,
+                        rendering_template TEXT,
+                        rendering_repeat_contract_at_end BOOLEAN,
+                        rendering_max_files_per_mission INTEGER,
+                        notes TEXT,
+                        created_utc TIMESTAMP NOT NULL,
+                        last_update_utc TIMESTAMP NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS model_profile_revisions (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        profile_id TEXT NOT NULL,
+                        tenant_id TEXT,
+                        runtime_version TEXT,
+                        model_digest TEXT,
+                        sampling_temperature DOUBLE PRECISION,
+                        sampling_top_p DOUBLE PRECISION,
+                        tool_tools BOOLEAN,
+                        tool_mcp BOOLEAN,
+                        first_seen_utc TIMESTAMP NOT NULL
+                    );",
+                    @"CREATE TABLE IF NOT EXISTS model_profile_revision_compat (
+                        revision_id TEXT NOT NULL,
+                        compatible_revision_id TEXT NOT NULL,
+                        created_utc TIMESTAMP NOT NULL,
+                        PRIMARY KEY (revision_id, compatible_revision_id)
+                    );",
+                    @"CREATE UNIQUE INDEX IF NOT EXISTS idx_model_profiles_identity_key ON model_profiles(identity_key);",
+                    @"CREATE INDEX IF NOT EXISTS idx_model_profiles_tenant_created ON model_profiles(tenant_id, created_utc);",
+                    @"CREATE INDEX IF NOT EXISTS idx_model_profile_revisions_profile_seen ON model_profile_revisions(profile_id, first_seen_utc);",
+                    @"CREATE INDEX IF NOT EXISTS idx_model_profile_revision_compat_other ON model_profile_revision_compat(compatible_revision_id);",
+                    @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS model_profile_id TEXT;")
 
 
             };

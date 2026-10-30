@@ -75,6 +75,7 @@ namespace Test.Shared.Suites.E2E
             ["delete_failure_cause_rule"] = "Failure-cause rule (StageOutcomeAccessService scopes by caller; tenant isolation covered by E2E.StageOutcomes)",
             ["evaluate_captain"] = "Captain or model endpoint (ModelProbeAccessService scopes by caller; starts an Evaluate run, so tenant isolation is covered by E2E.ModelProbes with canned probe answers)",
             ["get_model_probe_run"] = "Evaluate run (ModelProbeAccessService scopes by caller; tenant isolation covered by E2E.ModelProbes)",
+            ["get_model_profile"] = "Model profile (ModelProfileAccessService scopes by caller; tenant isolation covered by E2E.ModelProfiles)",
             ["get_battery_run"] = "Battery run (BatteryAccessService scopes by caller; tenant isolation covered by E2E.Battery)",
             ["list_battery_results"] = "Battery run results (BatteryAccessService scopes the run by caller; tenant isolation covered by E2E.Battery)",
             ["approve_ask_proposal"] = "Ask conversation (AskThreadService scopes by owning user; covered by E2E.AskThreads)",
@@ -111,6 +112,7 @@ namespace Test.Shared.Suites.E2E
             "list_stage_outcomes",
             "reclassify_stage_outcomes",
             "list_model_probe_runs",
+            "list_model_profiles",
             "discover_vessels",
             // vesselId only filters the caller's own recovery runs
             "get_blackbox_recovery_stats",

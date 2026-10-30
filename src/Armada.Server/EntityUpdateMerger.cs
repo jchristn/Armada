@@ -141,6 +141,8 @@ namespace Armada.Server
             incoming.QuarantineReason = existing.QuarantineReason;
             // The CLI permission policy changes only through its own endpoint (PUT /api/v1/captains/{id}/cli-permission-policy).
             incoming.CliPermissionPolicy = existing.CliPermissionPolicy;
+            // The model profile reference is set by Armada when it observes the captain's model, never by a client.
+            incoming.ModelProfileId = existing.ModelProfileId;
             incoming.LastHeartbeatUtc = existing.LastHeartbeatUtc;
             incoming.LastProcessAliveUtc = existing.LastProcessAliveUtc;
             incoming.CreatedUtc = existing.CreatedUtc;

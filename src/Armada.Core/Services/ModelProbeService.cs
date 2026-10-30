@@ -65,6 +65,7 @@ namespace Armada.Core.Services
         private readonly IModelProbeExecutor _Executor;
         private readonly Func<EvaluationSettings> _Settings;
         private readonly StageProvenanceProbe? _Provenance;
+        private readonly ModelProfileService _ModelProfiles;
         private readonly ConcurrentDictionary<string, Task<ModelProbeRun>> _Running = new ConcurrentDictionary<string, Task<ModelProbeRun>>(StringComparer.Ordinal);
         private Func<ModelEndpoint, string?, CancellationToken, Task<int?>> _ServedContextReader = ModelProbeServedContext.ReadOllamaAsync;
         private Func<ModelProbeToolTask> _ToolTaskFactory = ModelProbeToolTask.CreateRandom;
@@ -90,6 +91,7 @@ namespace Armada.Core.Services
             _Executor = executor ?? throw new ArgumentNullException(nameof(executor));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Provenance = provenance;
+            _ModelProfiles = new ModelProfileService(database, logging);
             Gate = new EvaluationConcurrencyGate(() => CurrentSettings().MaxConcurrentRuns, () => CurrentSettings().MaxConcurrentRunsPerHost);
         }
 
@@ -289,6 +291,9 @@ namespace Armada.Core.Services
                     run = await _Database.ModelProbeRuns.UpdateAsync(run).ConfigureAwait(false);
                     _Logging.Info(_Header + run.Id + " completed: " + run.PassedCount + " passed, " + run.FailedCount + " failed, "
                         + run.CouldNotRunCount + " could not run");
+
+                    // The run names the model as served: find or create its profile and revision (best effort).
+                    await _ModelProfiles.TryResolveAsync(ModelProfileService.ObservationFrom(run, endpoint)).ConfigureAwait(false);
                     return run;
                 }
             }

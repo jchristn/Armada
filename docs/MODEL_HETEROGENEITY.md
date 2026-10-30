@@ -476,12 +476,13 @@ When a threshold is crossed:
 
 ## The model profile
 
-A first sketch. Field names are up for discussion. The profile is advisory: it informs rendering, the eligibility
+A first sketch. Field names are up for discussion. Profile ids use the `mdl_` prefix and revision ids `mdv_` (`mpr_` is
+taken by model probe runs). The profile is advisory: it informs rendering, the eligibility
 envelope and the administrator; it does not set `Captain.Tier` or change routing automatically.
 
 ```json
 {
-  "id": "mpr_...",
+  "id": "mdl_...",
   "identity": {
     "runtime": "Mux",
     "provider": "Ollama",
@@ -490,7 +491,7 @@ envelope and the administrator; it does not set `Captain.Tier` or change routing
   },
   "revisions": [
     {
-      "id": "mpv_...",
+      "id": "mdv_...",
       "runtimeVersion": "1.4.1",
       "modelDigest": "sha256:...",
       "sampling": { "temperature": 0.1 },
@@ -510,7 +511,7 @@ envelope and the administrator; it does not set `Captain.Tier` or change routing
   },
   "measured": [
     {
-      "revisionId": "mpv_...",
+      "revisionId": "mdv_...",
       "source": "battery",
       "batteryVersion": 1,
       "promptVersion": "...",
@@ -622,6 +623,11 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
 ### Phase 5: advisory profiles, scorecard and Evaluate
 
 1. Profile entity with a stable identity and immutable revisions; captains reference it.
+   Status: implemented (migration 107). `ModelProfile` (`mdl_`) keyed by tenant, runtime, provider, model and served
+   context; immutable `ModelProfileRevision`s (`mdv_`) with the Decision 6 pooling rules (a served context change is a
+   new profile); compatibility marks stored beside the revisions; `Captain.ModelProfileId` set best effort from stage
+   outcomes and Quick probe runs; REST `/api/v1/model-profiles` and MCP `get_model_profile` / `list_model_profiles`.
+   The `measured` block, the scorecard and Full Evaluate are not part of it.
 2. Scorecard with counts, uncertainty, repair frequency and cost per accepted result, using the attribution rules.
 3. Inbox alerts and suggested actions. No automatic changes.
 4. Full Evaluate: the fixture battery on top of the Quick probes from Phase 2, with the evaluator grading only the
@@ -676,3 +682,4 @@ Still open: the exact field names, alert defaults after real data, and the per-v
 | 2026-10-26 | Questions answered; plan adopted | The 14 open questions settled (see [Decisions](#decisions)): profile per model, not per Harbor; Quick probes moved to Phase 2; per-language battery packs defined as data; amendable failure classification; envelope as vessel default with escalation; separate evaluation budget. Phase 1 started under v1.1.0. |
 | 2026-10-26 | Phase 2 step 1: Quick probes as a probe-only Evaluate | Six probes (served context, output contract, ASCII and format rules, tool calling, speed, determinism) run as ModelProbe Harbor jobs through the captain's own runtime; vendor CLIs are probed and inapplicable probes are recorded as could-not-run with the reason. Runs persist as ModelProbeRun with ModelProbeResult rows (probe set quick-1, Phase 1 provenance), are tagged as evaluations and write no stage outcome. Separate Evaluation settings: run and daily token budgets (overall and per inference host) and concurrency limits (overall, and one run per host by default). evaluate_captain (Quick only; Full is rejected until Phase 5), get_model_probe_run and list_model_probe_runs over REST, MCP and the clients; a minimal dashboard Evaluate button. Nothing changes routing or captain settings. |
 | 2026-10-27 | Phase 2 step 2: fixture battery pack format and the C# pack | Packs are data (battery/<pack>/battery-pack.json, schema in battery/README.md): fixture, tasks, persona per task, grader (command, byteComparison, mutation, seededSet, rubric) and toolchain. The C# pack implements the ten template tasks. The runner resets the fixture (a forward commit) before each task, dispatches it on a fixture vessel created on request under the built-in ModelEvaluation pipeline (no landing), and grades it in its worktree; a missing toolchain is could-not-run, rubric tasks are pending evaluation with the raw output. Runs (BatteryRun, BatteryTaskResult) record seed, sampling settings, run count (default 3), battery version and configuration revision, share Evaluate's concurrency gate, and tag their stage outcomes IsEvaluation. list_battery_packs, run_battery and get_battery_run over REST, MCP and the .NET client. |
+| 2026-10-30 | Phase 5 step 1: model profiles | ModelProfile (mdl_; mpr_ is taken by model probe runs) keyed by tenant, runtime, provider, model and served context, with editable capabilities, rendering overrides and notes; immutable ModelProfileRevision (mdv_) with runtime version, model digest, sampling, tool configuration and first seen. A new runtime major version, digest or sampling starts a revision; minor and patch releases pool; a served context change is a new profile. Compatibility marks are kept beside the revisions so revisions are never edited. Captain.ModelProfileId is set best effort from stage outcomes and Quick probe runs. REST /api/v1/model-profiles, MCP get_model_profile and list_model_profiles; migration 107. No routing change. |

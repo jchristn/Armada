@@ -4481,6 +4481,95 @@
       "experimental": false
     },
     {
+      "method": "GET",
+      "route": "/api/v1/model-profiles",
+      "auth": "Authenticated",
+      "resource": "ModelProfile:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<ModelProfile>",
+        "400": ""
+      },
+      "tags": [
+        "ModelProfiles"
+      ],
+      "summary": "List model profiles",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/model-profiles/enumerate",
+      "auth": "Authenticated",
+      "resource": "ModelProfile:Read",
+      "requestType": "ModelProfileQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<ModelProfile>",
+        "400": ""
+      },
+      "tags": [
+        "ModelProfiles"
+      ],
+      "summary": "Enumerate model profiles",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/model-profiles/{id}",
+      "auth": "Authenticated",
+      "resource": "ModelProfile:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "ModelProfile",
+        "404": ""
+      },
+      "tags": [
+        "ModelProfiles"
+      ],
+      "summary": "Get a model profile",
+      "experimental": false
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v1/model-profiles/{id}",
+      "auth": "TenantAdmin",
+      "resource": "ModelProfile:Update",
+      "requestType": "ModelProfileUpdateRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "ModelProfile",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": ""
+      },
+      "tags": [
+        "ModelProfiles"
+      ],
+      "summary": "Update a model profile",
+      "experimental": false
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with",
+      "auth": "TenantAdmin",
+      "resource": "ModelProfile:Update",
+      "requestType": "ModelProfileCompatibilityRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "ModelProfileRevision",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": ""
+      },
+      "tags": [
+        "ModelProfiles"
+      ],
+      "summary": "Mark model profile revisions compatible",
+      "experimental": false
+    },
+    {
       "method": "DELETE",
       "route": "/api/v1/objective-refinement-sessions/{id}",
       "auth": "TenantAdmin",
@@ -11788,6 +11877,20 @@
       "experimental": false
     },
     {
+      "name": "get_model_profile",
+      "auth": "Authenticated",
+      "resource": "ModelProfile:Read",
+      "arguments": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get one model profile visible to the caller (the model as served: runtime, provider, model and served context) with its capabilities, rendering overrides, notes and immutable revisions (runtime version, model digest, sampling, tool configuration, compatibleWith, firstSeenUtc), oldest first. Profiles are advisory: they do not set a captain's tier or change routing. A captain's modelProfileId points at its profile.",
+      "experimental": false
+    },
+    {
       "name": "get_objective",
       "auth": "Authenticated",
       "resource": "Objective:Read",
@@ -12982,6 +13085,40 @@
         }
       ],
       "description": "List Evaluate runs, newest first, one page at a time, without their per-probe results. A global admin sees every tenant; everyone else sees their own tenant. Returns an enumeration result (objects, totalRecords, totalPages).",
+      "experimental": false
+    },
+    {
+      "name": "list_model_profiles",
+      "auth": "Authenticated",
+      "resource": "ModelProfile:Read",
+      "arguments": [
+        {
+          "name": "model",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "provider",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "runtime",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List model profiles, newest first, one page at a time, without their revisions. A global admin sees every tenant; everyone else sees their own tenant. Returns an enumeration result (objects, totalRecords, totalPages).",
       "experimental": false
     },
     {

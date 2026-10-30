@@ -413,6 +413,14 @@
             "value": "bbx_doesnotexist_0000000000",
             "type": "string",
             "description": "Entry ID the Black Box delete requests target. The default names no entry, so a folder run deletes nothing."
+        },
+        {
+            "key": "modelProfileId",
+            "value": ""
+        },
+        {
+            "key": "modelProfileRevisionId",
+            "value": ""
         }
     ],
     "item": [
@@ -13807,6 +13815,151 @@
                             "body": ""
                         }
                     ]
+                }
+            ]
+        },
+        {
+            "name": "Model Profiles",
+            "description": "Model profiles (mdl_): the model as served (runtime, provider, model, served context) with immutable revisions (mdv_). Advisory only: they do not set a captain's tier or change routing. Armada creates them when it records a captain's runtime and model.",
+            "item": [
+                {
+                    "name": "List Model Profiles",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/model-profiles?runtime=Mux&pageSize=25",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "model-profiles"
+                            ],
+                            "query": [
+                                {
+                                    "key": "runtime",
+                                    "value": "Mux"
+                                },
+                                {
+                                    "key": "pageSize",
+                                    "value": "25"
+                                }
+                            ]
+                        },
+                        "description": "One page of model profiles visible to the caller, newest first, without revisions. Query: tenantId (global admins), runtime, provider, model (contains), pageNumber, pageSize (1-1000, default 100)."
+                    }
+                },
+                {
+                    "name": "Enumerate Model Profiles",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"Runtime\": null,\n  \"Provider\": null,\n  \"ModelContains\": null\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/model-profiles/enumerate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "model-profiles",
+                                "enumerate"
+                            ]
+                        },
+                        "description": "One page of model profiles. Body: ModelProfileQuery (TenantId for global admins, Runtime, Provider, ModelContains, PageNumber, PageSize)."
+                    }
+                },
+                {
+                    "name": "Get Model Profile",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/model-profiles/{{modelProfileId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "model-profiles",
+                                "{{modelProfileId}}"
+                            ]
+                        },
+                        "description": "The profile with its revisions, oldest first. 404 when missing or in another tenant."
+                    }
+                },
+                {
+                    "name": "Update Model Profile",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"Capabilities\": {\n    \"ToolsAvailable\": true,\n    \"McpAvailable\": false\n  },\n  \"Rendering\": {\n    \"Template\": \"Compact\",\n    \"RepeatContractAtEnd\": true,\n    \"MaxFilesPerMission\": 3\n  },\n  \"Notes\": \"Keep each mission to one objective.\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/model-profiles/{{modelProfileId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "model-profiles",
+                                "{{modelProfileId}}"
+                            ]
+                        },
+                        "description": "Update Capabilities, Rendering (explicit overrides; null means no override) and Notes (empty clears). An omitted section keeps its value. Global admin or tenant admin."
+                    }
+                },
+                {
+                    "name": "Mark Model Profile Revisions Compatible",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"CompatibleWith\": [\n    \"mdv_...\"\n  ]\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/model-profiles/{{modelProfileId}}/revisions/{{modelProfileRevisionId}}/compatible-with",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "model-profiles",
+                                "{{modelProfileId}}",
+                                "revisions",
+                                "{{modelProfileRevisionId}}",
+                                "compatible-with"
+                            ]
+                        },
+                        "description": "Replace the revisions marked compatible with this revision (symmetric; an empty list removes every mark). Revisions are never edited. Global admin or tenant admin."
+                    }
                 }
             ]
         },

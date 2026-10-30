@@ -136,6 +136,7 @@ namespace Armada.Core.Database.Sqlite
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);
             FailureCauseRules = new FailureCauseRuleMethods(this, _Settings, _Logging);
             ModelProbeRuns = new ModelProbeRunMethods(this, _Settings, _Logging);
+            ModelProfiles = new ModelProfileMethods(this, _Settings, _Logging);
             ModelProbeResults = new ModelProbeResultMethods(this, _Settings, _Logging);
             BatteryRuns = new BatteryRunMethods(this, _Settings, _Logging);
             BatteryTaskResults = new BatteryTaskResultMethods(this, _Settings, _Logging);
@@ -226,6 +227,7 @@ namespace Armada.Core.Database.Sqlite
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);
             FailureCauseRules = new FailureCauseRuleMethods(this, _Settings, _Logging);
             ModelProbeRuns = new ModelProbeRunMethods(this, _Settings, _Logging);
+            ModelProfiles = new ModelProfileMethods(this, _Settings, _Logging);
             ModelProbeResults = new ModelProbeResultMethods(this, _Settings, _Logging);
             BatteryRuns = new BatteryRunMethods(this, _Settings, _Logging);
             BatteryTaskResults = new BatteryTaskResultMethods(this, _Settings, _Logging);
@@ -691,6 +693,7 @@ namespace Armada.Core.Database.Sqlite
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
             try { captain.Model = NullableString(reader["model"]); } catch { }
             try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
+            try { captain.ModelProfileId = NullableString(reader["model_profile_id"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
             captain.CurrentMissionId = NullableString(reader["current_mission_id"]);

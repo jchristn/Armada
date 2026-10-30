@@ -39,6 +39,7 @@ namespace Armada.Core.Services
         private readonly StageProvenanceProbe? _Provenance;
         private readonly Func<DockHostResolver?>? _DockHosts;
         private readonly HandoffArtifactService _HandoffArtifacts;
+        private readonly ModelProfileService _ModelProfiles;
         private static readonly string _ArmadaVersion = ReadArmadaVersion();
 
         #endregion
@@ -61,6 +62,7 @@ namespace Armada.Core.Services
             _Provenance = provenance;
             _DockHosts = dockHosts;
             _HandoffArtifacts = new HandoffArtifactService(database, logging);
+            _ModelProfiles = new ModelProfileService(database, logging);
         }
 
         #endregion
@@ -115,6 +117,10 @@ namespace Armada.Core.Services
                 StageOutcome stored = await _Database.StageOutcomes.CreateAsync(outcome, token).ConfigureAwait(false);
                 if (stored.Disposition == StageDispositionEnum.Completed)
                     await LinkEscalationsAsync(stored, mission, capture.DockId, token).ConfigureAwait(false);
+
+                // The provenance names the model as served: find or create its profile and revision and point the captain
+                // at it. Best effort; a failure is logged and never fails the mission.
+                await _ModelProfiles.TryResolveAsync(ModelProfileService.ObservationFrom(stored), token).ConfigureAwait(false);
 
                 // Every attempt also leaves its handoff artifact for the next stage, linked to this outcome.
                 await _HandoffArtifacts.RecordAttemptAsync(mission, capture.StageCheck, capture.Captain, stored, token).ConfigureAwait(false);
