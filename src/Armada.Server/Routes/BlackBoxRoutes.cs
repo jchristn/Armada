@@ -354,6 +354,17 @@ namespace Armada.Server.Routes
                 .WithResponse(400, OpenApiJson.For<ApiErrorResponse>("InvalidArgument"))
                 .WithSecurity("ApiKey"));
 
+            app.Post("/api/v1/blackbox/resilience-gaps/enumerate", Handle(authenticate, authz, async (req, ctx, svc) =>
+                (object?)await svc.EnumerateResilienceGapsAsync(ctx, ReadPagedBody<BlackBoxResilienceGapRequest>(req)).ConfigureAwait(false)),
+            api => api
+                .WithTag(Tag)
+                .WithSummary("Enumerate Armada resilience gaps")
+                .WithDescription("One page (at most 50) of failure modes in Armada's own handoff and landing that the black box triaged ArmadaDefect, grouped by fingerprint and most severe first within the page: occurrences, open count, first and last seen, Armada versions, severity escalated by recurrence, selfHealable, suspected, the detection gap, the top proposed Armada change and the newest entry. Filters: vesselId, resolution, phase, createdAfter, createdBefore.")
+                .WithRequestBody(OpenApiJson.BodyFor<BlackBoxResilienceGapRequest>("Filters and paging", false))
+                .WithResponse(200, OpenApiJson.For<EnumerationResult<BlackBoxResilienceGap>>("One page"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
+                .WithSecurity("ApiKey"));
+
             app.Post("/api/v1/blackbox/fingerprints/enumerate", Handle(authenticate, authz, async (req, ctx, svc) =>
                 (object?)await svc.EnumerateFingerprintsAsync(ctx, ReadPagedBody<BlackBoxFingerprintEnumerateRequest>(req)).ConfigureAwait(false)),
             api => api

@@ -181,7 +181,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0L, (await svc.EnumerateHotspotsAsync(user, null).ConfigureAwait(false)).TotalRecords, "no conflicted files yet");
                 BlackBoxGcReport gc = await svc.RunGcAsync(BlackBoxTestKit.Admin(), new BlackBoxGcRunRequest { DryRun = true }).ConfigureAwait(false);
                 AssertTrue(gc.DryRun, "gc dry run");
-                BlackBoxBundleResult bundle = await svc.GetBundleAsync(user, new BlackBoxBundleRequest()).ConfigureAwait(false);
+                BlackBoxBundleResult bundle = await svc.GetBundleAsync(user, new BlackBoxBundleRequest { AllFailures = true }).ConfigureAwait(false);
                 AssertEqual(1, bundle.EntryCount); AssertContains("maintainer bundle", bundle.Content);
                 await AssertThrowsAsync<BlackBoxNotFoundException>(() => svc.RunRecoveryAsync(user, "bbx_x", "rp1", new BlackBoxRecoveryRunRequest()), "recovery on an unknown entry (Services.BlackBoxRecovery covers runs)").ConfigureAwait(false);
                 await AssertThrowsAsync<BlackBoxNotFoundException>(() => svc.ApplyRecommendationAsync(user, "bbx_x", "cr1", new BlackBoxRecommendationApplyRequest()), "recommendation on an unknown entry").ConfigureAwait(false);

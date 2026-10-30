@@ -196,6 +196,13 @@ namespace Armada.Core.BlackBox
                 StatusAfter = entry.StatusAfter,
                 Triage = r.Analysis?.Triage?.Verdict ?? entry.Triage,
                 TriageConfidence = r.Analysis?.Triage?.Confidence,
+                TriageSuspected = r.Analysis?.Triage?.Suspected ?? false,
+                ResilienceInScope = r.Analysis?.Resilience?.InScope ?? BlackBoxResilienceScope.InScope(r),
+                SelfHealable = r.Analysis?.Resilience?.SelfHealable ?? BlackBoxSelfHealableEnum.Unknown,
+                SelfHealingProposal = BlackBoxLimits.Clip(r.Analysis?.Resilience?.SelfHealingProposal, BlackBoxLimits.MaxReasonExcerptChars),
+                DetectionGap = BlackBoxLimits.Clip(r.Analysis?.Resilience?.DetectionGap, BlackBoxLimits.MaxReasonExcerptChars),
+                ResilienceSeverity = r.Analysis?.Resilience?.Severity ?? BlackBoxSeverityEnum.Low,
+                TopProposedChange = CompactChange(r.Analysis?.Resilience?.ProposedChanges.OrderBy(c => c.Rank).FirstOrDefault()),
                 Summary = r.Analysis?.Summary,
                 Why = r.Analysis?.Why.Take(3).ToList() ?? new List<BlackBoxFinding>(),
                 RecoveryPaths = r.Analysis?.RecoveryPaths.OrderBy(p => p.Rank).Take(3).ToList() ?? new List<BlackBoxRecoveryPath>(),
@@ -245,6 +252,8 @@ namespace Armada.Core.BlackBox
                 case BlackBoxSectionEnum.Voyage: part.Voyage = full.Voyage; break;
                 case BlackBoxSectionEnum.Redaction: part.Redaction = full.Redaction; break;
                 case BlackBoxSectionEnum.Truncation: part.Truncation = full.Truncation; break;
+                case BlackBoxSectionEnum.Resilience: part.Analysis = new BlackBoxAnalysis { Resilience = full.Analysis?.Resilience, Triage = full.Analysis?.Triage }; break;
+                case BlackBoxSectionEnum.Handoff: part.Handoff = full.Handoff; break;
             }
             return new BlackBoxSectionResult { EntryId = full.EntryId, Section = section, Record = part };
         }
@@ -768,14 +777,26 @@ namespace Armada.Core.BlackBox
             BlackBoxBundleRequest r = request ?? new BlackBoxBundleRequest();
             int max = Math.Clamp(r.Max, 1, BlackBoxLimits.MaxBundleEntries);
             BlackBoxEnumerateRequest filter = Scope(caller, r);
+            bool gapsOnly = !r.AllFailures && !r.Triage.HasValue && !r.ResilienceScope.HasValue;
+            if (gapsOnly)
+            {
+                // Default: the Armada resilience gaps (handoff and landing scope, triaged ArmadaDefect).
+                filter.Triage = BlackBoxTriageEnum.ArmadaDefect;
+                filter.ResilienceScope = true;
+            }
             filter.PageNumber = 1;
             filter.PageSize = max;
             filter.Order = EnumerationOrderEnum.CreatedDescending;
             EnumerationResult<BlackBoxEntry> page = await _Database.BlackBoxEntries.EnumerateAsync(filter, token).ConfigureAwait(false);
             List<BlackBoxEntry> entries = page.Objects.Take(max).ToList();
-            List<List<BlackBoxEntry>> groups = entries.GroupBy(e => e.Fingerprint ?? e.Id, StringComparer.Ordinal)
-                .Select(g => g.OrderByDescending(e => e.CreatedUtc).ToList())
-                .OrderByDescending(g => g.Count).ThenByDescending(g => g[0].CreatedUtc).ToList();
+            List<List<BlackBoxEntry>> unranked = entries.GroupBy(e => e.Fingerprint ?? e.Id, StringComparer.Ordinal)
+                .Select(g => g.OrderByDescending(e => e.CreatedUtc).ToList()).ToList();
+            // Rank groups by the newest entry's resilience severity (escalated by recurrence), then occurrences, then recency.
+            Dictionary<string, BlackBoxRecord> newestRecords = new Dictionary<string, BlackBoxRecord>(StringComparer.Ordinal);
+            foreach (List<BlackBoxEntry> g in unranked) newestRecords[g[0].Id] = await _Pipeline.LoadRecordAsync(g[0], token).ConfigureAwait(false);
+            List<List<BlackBoxEntry>> groups = unranked
+                .OrderByDescending(g => BlackBoxResilienceSeverity.Order(newestRecords[g[0].Id].Analysis?.Resilience?.Severity ?? BlackBoxSeverityEnum.Low))
+                .ThenByDescending(g => g.Count).ThenByDescending(g => g[0].CreatedUtc).ToList();
             BlackBoxBundleResult result = new BlackBoxBundleResult
             {
                 Format = r.Format == BlackBoxBundleFormatEnum.Json ? BlackBoxBundleFormatEnum.Json : BlackBoxBundleFormatEnum.Markdown,
@@ -790,7 +811,7 @@ namespace Armada.Core.BlackBox
                 foreach (List<BlackBoxEntry> group in groups)
                 {
                     BlackBoxEntry newest = group[0];
-                    BlackBoxRecord record = await _Pipeline.LoadRecordAsync(newest, token).ConfigureAwait(false);
+                    BlackBoxRecord record = newestRecords[newest.Id];
                     jsonGroups.Add(new BlackBoxBundleGroup
                     {
                         Fingerprint = newest.Fingerprint ?? newest.Id,
@@ -803,26 +824,43 @@ namespace Armada.Core.BlackBox
                         Newest = Summarize(newest),
                         Improvements = record.Analysis?.ArmadaImprovements.Take(BlackBoxLimits.MaxImprovements).ToList() ?? new List<BlackBoxImprovement>(),
                         Site = record.Site,
+                        Severity = record.Analysis?.Resilience?.Severity ?? BlackBoxSeverityEnum.Low,
+                        SelfHealable = record.Analysis?.Resilience?.SelfHealable ?? BlackBoxSelfHealableEnum.Unknown,
+                        ProposedChanges = record.Analysis?.Resilience?.ProposedChanges.Take(BlackBoxLimits.MaxProposedChanges).ToList() ?? new List<BlackBoxProposedChange>(),
+                        RegressionTest = record.Analysis?.Resilience?.RegressionTest,
                         Others = group.Skip(1).Select(Summarize).ToList()
                     });
                 }
-                BlackBoxBundleDocument doc = new BlackBoxBundleDocument { Preamble = BundlePreamble(entries.Count, groups.Count), EntryCount = entries.Count, FingerprintCount = groups.Count, Groups = jsonGroups };
+                BlackBoxBundleDocument doc = new BlackBoxBundleDocument { Preamble = BundlePreamble(entries.Count, groups.Count, gapsOnly), EntryCount = entries.Count, FingerprintCount = groups.Count, Groups = jsonGroups };
                 result.Content = JsonSerializer.Serialize(doc, BlackBoxJson.Options).Replace('—', '-');
                 return result;
             }
 
             StringBuilder sb = new StringBuilder();
             sb.Append("# Armada black box maintainer bundle\n\n");
-            sb.Append(BundlePreamble(entries.Count, groups.Count)).Append("\n\n");
+            sb.Append(BundlePreamble(entries.Count, groups.Count, gapsOnly)).Append("\n\n");
             foreach (List<BlackBoxEntry> group in groups)
             {
                 BlackBoxEntry newest = group[0];
-                BlackBoxRecord record = await _Pipeline.LoadRecordAsync(newest, token).ConfigureAwait(false);
+                BlackBoxRecord record = newestRecords[newest.Id];
+                BlackBoxResilience? res = record.Analysis?.Resilience;
                 sb.Append("## ").Append(newest.Phase).Append(" / ").Append(newest.Step).Append(newest.FailureKind.HasValue ? " / " + newest.FailureKind.Value : String.Empty).Append(" (").Append(group.Count).Append(group.Count == 1 ? " entry" : " entries").Append(")\n\n");
                 sb.Append("- Fingerprint: ").Append(newest.Fingerprint ?? "none").Append('\n');
                 sb.Append("- First seen ").Append(group[group.Count - 1].CreatedUtc.ToString("u")).Append(", last seen ").Append(newest.CreatedUtc.ToString("u")).Append('\n');
                 sb.Append("- Armada versions: ").Append(String.Join(", ", group.Select(e => e.ArmadaVersion ?? "unknown").Distinct(StringComparer.Ordinal).Take(BlackBoxLimits.MaxBundleVersions))).Append('\n');
-                if (record.Analysis != null) sb.Append("- Triage: ").Append(record.Analysis.Triage?.Verdict ?? newest.Triage).Append("; rules: ").Append(String.Join(", ", record.Analysis.Why.Select(w => w.RuleId).Distinct(StringComparer.Ordinal))).Append('\n');
+                if (record.Analysis != null) sb.Append("- Triage: ").Append(record.Analysis.Triage?.Verdict ?? newest.Triage).Append(record.Analysis.Triage?.Suspected == true ? " (suspected)" : String.Empty).Append("; rules: ").Append(String.Join(", ", record.Analysis.Why.Select(w => w.RuleId).Distinct(StringComparer.Ordinal))).Append('\n');
+                if (res != null)
+                {
+                    sb.Append("- Resilience: severity ").Append(res.Severity).Append(", self-healable ").Append(res.SelfHealable).Append(res.InScope ? ", handoff and landing scope" : String.Empty).Append('\n');
+                    if (res.DetectionGap != null) sb.Append("- Detection gap: ").Append(OneLine(res.DetectionGap)).Append('\n');
+                    if (res.ProposedChanges.Count > 0)
+                    {
+                        sb.Append("\nProposed Armada changes (write each as an Armada mission):\n\n");
+                        foreach (BlackBoxProposedChange c in res.ProposedChanges.OrderBy(x => x.Rank))
+                            sb.Append(c.Rank).Append(". **").Append(OneLine(c.Title)).Append("** (severity ").Append(c.Severity).Append("): ").Append(OneLine(c.Change)).Append(c.AcceptanceTest != null ? " Acceptance test: " + OneLine(c.AcceptanceTest) : String.Empty).Append('\n');
+                    }
+                    if (res.RegressionTest != null) sb.Append("\nRegression test: ").Append(res.RegressionTest.Suite).Append(": ").Append(OneLine(res.RegressionTest.Description)).Append('\n');
+                }
                 sb.Append('\n');
                 sb.Append(("\n" + _Renderer.Render(newest, record, r.RedactHosts)).Replace("\n# ", "\n### ").Replace("\n## ", "\n#### ").TrimStart('\n')).Append('\n');
                 if (group.Count > 1)
@@ -900,6 +938,84 @@ namespace Armada.Core.BlackBox
             BlackBoxFingerprintEnumerateRequest r = request ?? new BlackBoxFingerprintEnumerateRequest();
             ScopeBase(caller, r);
             return _Database.BlackBoxEntries.EnumerateFingerprintsAsync(r, token);
+        }
+
+        /// <inheritdoc />
+        public async Task<EnumerationResult<BlackBoxResilienceGap>> EnumerateResilienceGapsAsync(AuthContext caller, BlackBoxResilienceGapRequest? request, CancellationToken token = default)
+        {
+            RequireCaller(caller);
+            BlackBoxResilienceGapRequest r = request ?? new BlackBoxResilienceGapRequest();
+            if (r.CreatedAfter.HasValue && r.CreatedBefore.HasValue && r.CreatedAfter.Value > r.CreatedBefore.Value)
+                throw new ArgumentException("createdAfter must not be after createdBefore.");
+            BlackBoxFingerprintEnumerateRequest q = new BlackBoxFingerprintEnumerateRequest
+            {
+                PageNumber = r.PageNumber,
+                PageSize = Math.Min(r.PageSize, BlackBoxLimits.MaxResilienceGapPageSize),
+                CreatedAfter = r.CreatedAfter,
+                CreatedBefore = r.CreatedBefore,
+                VesselId = Blank(r.VesselId),
+                TenantId = Blank(r.TenantId),
+                UserId = Blank(r.UserId),
+                Resolution = r.Resolution,
+                Triage = BlackBoxTriageEnum.ArmadaDefect,
+                ResilienceScope = true
+            };
+            ScopeBase(caller, q);
+            EnumerationResult<BlackBoxFingerprintSummary> page = await _Database.BlackBoxEntries.EnumerateFingerprintsAsync(q, token).ConfigureAwait(false);
+            List<BlackBoxResilienceGap> gaps = new List<BlackBoxResilienceGap>();
+            foreach (BlackBoxFingerprintSummary f in page.Objects)
+            {
+                if (r.Phase.HasValue && f.Phase != r.Phase.Value) continue;
+                BlackBoxResilienceGap gap = new BlackBoxResilienceGap
+                {
+                    Fingerprint = f.Fingerprint,
+                    Phase = f.Phase,
+                    Step = f.Step,
+                    FailureKind = f.FailureKind,
+                    Occurrences = f.Count,
+                    OpenCount = f.OpenCount,
+                    FirstSeenUtc = f.FirstSeenUtc,
+                    LastSeenUtc = f.LastSeenUtc,
+                    LatestEntryId = f.LatestEntryId
+                };
+                if (!String.IsNullOrEmpty(f.LatestEntryId))
+                {
+                    BlackBoxEntry? newest = await _Database.BlackBoxEntries.ReadAsync(f.LatestEntryId!, caller.IsAdmin ? null : caller.TenantId, false, token).ConfigureAwait(false);
+                    if (newest != null && Visible(caller, newest))
+                    {
+                        gap.LatestMissionId = newest.MissionId;
+                        gap.LatestMissionTitle = newest.MissionTitle;
+                        gap.VesselName = newest.VesselName;
+                        BlackBoxRecord record = await _Pipeline.LoadRecordAsync(newest, token).ConfigureAwait(false);
+                        BlackBoxResilience? res = record.Analysis?.Resilience;
+                        List<string> versions = record.Related?.ArmadaVersions.ToList() ?? new List<string>();
+                        if (versions.Count == 0 && !String.IsNullOrWhiteSpace(newest.ArmadaVersion)) versions.Add(newest.ArmadaVersion!);
+                        gap.ArmadaVersions = versions.Take(BlackBoxLimits.MaxRelatedVersions).ToList();
+                        if (res != null)
+                        {
+                            // Recurrence over the whole fingerprint (not just the newest entry's 30 days) escalates the severity.
+                            gap.Severity = BlackBoxResilienceSeverity.Max(res.Severity, BlackBoxResilienceSeverity.FromRecurrence((int)Math.Min(int.MaxValue, f.Count), gap.ArmadaVersions.Count));
+                            gap.SelfHealable = res.SelfHealable;
+                            gap.DetectionGap = BlackBoxLimits.Clip(res.DetectionGap, BlackBoxLimits.MaxReasonExcerptChars);
+                            gap.TopProposedChange = CompactChange(res.ProposedChanges.OrderBy(c => c.Rank).FirstOrDefault());
+                            gap.RuleIds = res.RuleIds.Take(BlackBoxLimits.MaxResilienceRules).ToList();
+                        }
+                        else
+                        {
+                            gap.Severity = BlackBoxResilienceSeverity.FromRecurrence((int)Math.Min(int.MaxValue, f.Count), gap.ArmadaVersions.Count);
+                        }
+                        gap.Suspected = record.Analysis?.Triage?.Suspected ?? false;
+                    }
+                }
+                gaps.Add(gap);
+            }
+            EnumerationResult<BlackBoxResilienceGap> result = new EnumerationResult<BlackBoxResilienceGap>();
+            result.PageNumber = page.PageNumber;
+            result.PageSize = page.PageSize;
+            result.TotalRecords = page.TotalRecords;
+            result.TotalPages = page.TotalPages;
+            result.Objects = gaps.OrderByDescending(g => BlackBoxResilienceSeverity.Order(g.Severity)).ThenByDescending(g => g.Occurrences).ThenByDescending(g => g.LastSeenUtc).ToList();
+            return result;
         }
 
         /// <summary>
@@ -1091,14 +1207,32 @@ namespace Armada.Core.BlackBox
                 new BlackBoxRecoveryRunPayload { EntryId = entry.Id, PathId = pathId, RecommendationId = recommendationId, DryRun = dryRun, Succeeded = succeeded, StepsRun = stepsRun, StepsFailed = stepsFailed, UserId = caller.UserId }, token).ConfigureAwait(false);
         }
 
-        private static string BundlePreamble(int entries, int groups)
+        private static string BundlePreamble(int entries, int groups, bool gapsOnly)
         {
-            return "These are " + entries + " Armada black box entries in " + groups + " failure modes, grouped by fingerprint (most frequent first). "
+            return "These are " + entries + " Armada black box entries in " + groups + " failure modes, grouped by fingerprint (highest resilience severity first, then most frequent). "
+                + (gapsOnly ? "They are Armada resilience gaps: failures in Armada's own handoff and landing that the black box triaged as Armada defects. " : String.Empty)
+                + "Produce Armada missions: for each group, start from its proposed Armada changes and regression test, confirm them against the source, and dispatch them as missions on the Armada vessel. "
                 + "You are asked to improve Armada itself. Rank the Armada improvements these failures suggest by impact (occurrences, severity, triage ArmadaDefect first), "
                 + "check each hypothesis against the Armada source at the build commits listed, and discard the ones the evidence does not support. "
                 + "Write each accepted improvement as an Armada mission brief: a title, the failure modes and entry ids it fixes, the code sites (file and method), "
                 + "the change, and a test that reproduces the failure (a black box fixture under src/Test.Shared/Fixtures/BlackBox when it fits). "
                 + "If a failure needs a new advisor rule, write it in BlackBoxRuleCatalog format (id, match, why, recommendation, recovery paths, triage vote).";
+        }
+
+        private static BlackBoxProposedChange? CompactChange(BlackBoxProposedChange? change)
+        {
+            if (change == null) return null;
+            return new BlackBoxProposedChange
+            {
+                Rank = change.Rank,
+                Title = change.Title,
+                Change = BlackBoxLimits.Clip(change.Change, BlackBoxLimits.MaxReasonExcerptChars) ?? String.Empty,
+                AcceptanceTest = BlackBoxLimits.Clip(change.AcceptanceTest, BlackBoxLimits.MaxReasonExcerptChars),
+                Severity = change.Severity,
+                RuleId = change.RuleId,
+                CodePointers = change.CodePointers.Take(3).ToList(),
+                MissionBrief = null
+            };
         }
 
         private static string OneLine(string value)
@@ -1174,7 +1308,8 @@ namespace Armada.Core.BlackBox
                 Pinned = source.Pinned,
                 IsCurrent = source.IsCurrent,
                 HarborId = Blank(source.HarborId),
-                Path = Blank(source.Path)
+                Path = Blank(source.Path),
+                ResilienceScope = source.ResilienceScope
             };
             ScopeBase(caller, q);
             return q;

@@ -26,7 +26,7 @@ namespace Armada.Server.Mcp.Tools
         {
             "get_blackbox", "read_blackbox_section", "list_blackbox_objects", "read_blackbox_object", "list_blackbox_entries",
             "search_blackbox", "list_blackbox_notes", "get_blackbox_bundle", "list_blackbox_hotspots", "list_blackbox_fingerprints",
-            "get_blackbox_fingerprint_trend", "get_blackbox_retention", "get_blackbox_storage"
+            "get_blackbox_fingerprint_trend", "get_blackbox_retention", "get_blackbox_storage", "list_blackbox_resilience_gaps"
         };
 
         /// <summary>
@@ -104,7 +104,7 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "get_blackbox",
-                "Get the black box of a failed mission or voyage: start here when asked why something failed. " + TargetHint + " format summary (default, about 2 KB) returns where it failed (phase, step, host, source file and method), how (mechanism), status before and after, why (top findings), the triage verdict and confidence, and the top recovery paths; brief returns the Markdown FIX THIS brief; json returns the full record. Then read only the sections the question needs with read_blackbox_section and page evidence with read_blackbox_object. NotFound (Code BlackBoxNotFound) when there is no entry.",
+                "Get the black box of a failed mission or voyage: start here when asked why something failed. " + TargetHint + " format summary (default, about 2 KB) returns where it failed (phase, step, host, source file and method), how (mechanism), status before and after, why (top findings), the triage verdict and confidence (TriageSuspected when only the handoff and landing prior voted ArmadaDefect), the Armada resilience angle (ResilienceInScope, SelfHealable, SelfHealingProposal, DetectionGap, ResilienceSeverity and TopProposedChange: for a handoff or landing failure, first ask whether Armada could have handled it) and the top recovery paths; brief returns the Markdown FIX THIS brief; json returns the full record. Then read only the sections the question needs with read_blackbox_section and page evidence with read_blackbox_object. NotFound (Code BlackBoxNotFound) when there is no entry.",
                 Schema(TargetProperties(new Dictionary<string, object>
                 {
                     ["format"] = new { type = "string", @enum = new[] { "summary", "brief", "json" }, description = "summary (default), brief or json" },
@@ -129,7 +129,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "read_blackbox_section",
-                "Read one section of a black box record: Subject, Status, Site, Mechanism, Classification, Workspace (dirty paths, checkout), Conflict (conflicted files and the missions that landed them), Scope, Configuration (each setting and where it came from), Attempts, Evidence (the object index), Analysis (findings, triage, recovery paths, recommendations), Related, Voyage, Redaction or Truncation. " + TargetHint,
+                "Read one section of a black box record: Subject, Status, Site, Mechanism, Classification, Workspace (dirty paths, checkout), Conflict (conflicted files and the missions that landed them), Scope, Configuration (each setting and where it came from), Attempts, Evidence (the object index), Analysis (findings, triage, recovery paths, recommendations), Resilience (whether Armada could have healed it, the detection gap, code pointers, proposed Armada changes as mission briefs, the regression test), Handoff (the handoff and landing step timeline, the automatic recoveries Armada already tried, dock transitions, target movement), Related, Voyage, Redaction or Truncation. " + TargetHint,
                 Schema(TargetProperties(new Dictionary<string, object>
                 {
                     ["section"] = new { type = "string", description = "Section name (case-insensitive)" }
@@ -139,7 +139,7 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     BlackBoxSectionArgs request = Read<BlackBoxSectionArgs>(args);
                     if (!EnumNames.TryParse(request.Section, true, out BlackBoxSectionEnum section) || section == BlackBoxSectionEnum.Unknown)
-                        return McpToolError.InvalidArgument("section must be one of Subject, Status, Site, Mechanism, Classification, Workspace, Conflict, Scope, Configuration, Attempts, Evidence, Analysis, Related, Voyage, Redaction or Truncation.");
+                        return McpToolError.InvalidArgument("section must be one of Subject, Status, Site, Mechanism, Classification, Workspace, Conflict, Scope, Configuration, Attempts, Evidence, Analysis, Resilience, Handoff, Related, Voyage, Redaction or Truncation.");
                     string entryId = await ResolveAsync(svc, caller, request).ConfigureAwait(false);
                     return await svc.GetSectionAsync(caller, entryId, section).ConfigureAwait(false);
                 }));
@@ -180,7 +180,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "list_blackbox_entries",
-                "List one page of black box entries visible to the caller, newest first, filtered by vesselId, voyageId, missionId, captainId, fleetId, phase, step, kind, triage, resolution, state, fingerprint (compare failures of the same mode), pinned, isCurrent, path (any file role) and createdAfter/createdBefore. Returns an enumeration result of entry summaries.",
+                "List one page of black box entries visible to the caller, newest first, filtered by vesselId, voyageId, missionId, captainId, fleetId, phase, step, kind, triage, resolution, state, fingerprint (compare failures of the same mode), pinned, isCurrent, path (any file role), resilienceScope (true for Armada's handoff and landing failures) and createdAfter/createdBefore. Returns an enumeration result of entry summaries.",
                 Schema(PageProperties(FilterProperties(new Dictionary<string, object>()))),
                 (args) => Run(service, async svc =>
                 {
@@ -218,10 +218,11 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "get_blackbox_bundle",
-                "Build a maintainer bundle: up to max (1-50, default 50) of the newest matching black box entries grouped by fingerprint, as one Markdown document with the brief of each failure mode (format Markdown, default) or JSON summaries. Use it to rank Armada improvements and write them as mission briefs on the Armada vessel. redactHosts strips absolute paths, host names and user names before sharing outside the installation.",
+                "Build a maintainer bundle: up to max (1-50, default 50) of the newest matching black box entries grouped by fingerprint (highest resilience severity first, then most frequent), as one Markdown document with the brief, proposed Armada changes and regression test of each failure mode (format Markdown, default) or JSON summaries. By default it holds the Armada resilience gaps (handoff and landing scope, triaged ArmadaDefect); set allFailures, triage or resilienceScope to choose other entries. Use it to produce Armada missions on the Armada vessel. redactHosts strips absolute paths, host names and user names before sharing outside the installation.",
                 Schema(FilterProperties(new Dictionary<string, object>
                 {
                     ["max"] = new { type = "integer", description = "Entries (1-50, default 50)" },
+                    ["allFailures"] = new { type = "boolean", description = "Bundle every failure instead of the Armada resilience gaps (default false)" },
                     ["format"] = new { type = "string", @enum = new[] { "Markdown", "Json" }, description = "Markdown (default) or Json" },
                     ["redactHosts"] = new { type = "boolean", description = "Strip absolute paths, host names and user names (default false)" }
                 })),
@@ -264,6 +265,24 @@ namespace Armada.Server.Mcp.Tools
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     BlackBoxFingerprintEnumerateRequest request = Read<BlackBoxFingerprintEnumerateRequest>(args);
                     return await svc.EnumerateFingerprintsAsync(caller, request).ConfigureAwait(false);
+                }));
+
+            register(
+                "list_blackbox_resilience_gaps",
+                "List one page of Armada resilience gaps: failure modes (fingerprints) in Armada's own handoff and landing that the black box triaged ArmadaDefect, most severe first within the page, each with occurrences, open count, first and last seen, the Armada versions it was seen in, the severity (escalated by recurrence), whether Armada could have healed it (selfHealable), whether the verdict is only suspected, the detection gap and the top proposed Armada change, and the newest entry. Page size 1-50. Filter by vesselId, resolution, phase and createdAfter/createdBefore. Use it to pick the Armada missions that make handoff and landing more resilient.",
+                Schema(PageProperties(new Dictionary<string, object>
+                {
+                    ["vesselId"] = new { type = "string", description = "Vessel filter (vsl_ prefix)" },
+                    ["resolution"] = new { type = "string", @enum = new[] { "Open", "Resolved", "Duplicate", "WontFix", "ArmadaFixed" }, description = "Resolution filter" },
+                    ["phase"] = new { type = "string", @enum = new[] { "Handoff", "Landing", "MergeQueue", "Recovery", "Provision", "Completion", "Review" }, description = "Phase filter (default: the whole handoff and landing scope)" },
+                    ["createdAfter"] = new { type = "string", description = "ISO 8601 timestamp (inclusive)" },
+                    ["createdBefore"] = new { type = "string", description = "ISO 8601 timestamp (exclusive)" }
+                })),
+                (args) => Run(service, async svc =>
+                {
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    BlackBoxResilienceGapRequest request = Read<BlackBoxResilienceGapRequest>(args);
+                    return await svc.EnumerateResilienceGapsAsync(caller, request).ConfigureAwait(false);
                 }));
 
             register(
@@ -555,6 +574,7 @@ namespace Armada.Server.Mcp.Tools
                 ["pinned"] = new { type = "boolean", description = "Pinned only (true) or unpinned only (false)" },
                 ["isCurrent"] = new { type = "boolean", description = "Current entries only (true) or superseded only (false)" },
                 ["path"] = new { type = "string", description = "Repository path recorded in any file role" },
+                ["resilienceScope"] = new { type = "boolean", description = "Entries in Armada's handoff and landing scope (true) or outside it (false)" },
                 ["createdAfter"] = new { type = "string", description = "ISO 8601 timestamp (inclusive)" },
                 ["createdBefore"] = new { type = "string", description = "ISO 8601 timestamp (exclusive)" }
             };

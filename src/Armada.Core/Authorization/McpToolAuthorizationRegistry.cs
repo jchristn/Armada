@@ -150,6 +150,7 @@ namespace Armada.Core.Authorization
             Add("get_blackbox_bundle", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_blackbox_hotspots", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_blackbox_fingerprints", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_blackbox_resilience_gaps", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_blackbox_retention", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.TenantAdmin);
             Add("get_blackbox_storage", "BlackBox", ResourceOperationEnum.Read, PermissionLevel.AdminOnly);
             Add("annotate_blackbox", "BlackBox", ResourceOperationEnum.Create, PermissionLevel.Authenticated);

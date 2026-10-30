@@ -331,5 +331,17 @@ namespace Armada.Core.BlackBox
         /// <param name="token">Cancellation token.</param>
         /// <returns>The page.</returns>
         Task<EnumerationResult<BlackBoxFingerprintSummary>> EnumerateFingerprintsAsync(AuthContext caller, BlackBoxFingerprintEnumerateRequest? request, CancellationToken token = default);
+
+        /// <summary>Armada resilience gaps: failure modes (fingerprints) triaged ArmadaDefect in Armada's handoff and
+        /// landing scope, with occurrences, Armada versions, severity escalated by recurrence and the newest entry's
+        /// self-healing verdict, detection gap and top proposed Armada change. Paged (at most 50 per page), most severe first
+        /// within the page, scoped to what the caller can see.</summary>
+        /// <param name="caller">Caller.</param>
+        /// <param name="request">Filters and paging.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The page.</returns>
+        /// <exception cref="UnauthorizedAccessException">Thrown when the caller is not authenticated or has no tenant.</exception>
+        /// <exception cref="ArgumentException">Thrown when createdAfter is after createdBefore.</exception>
+        Task<EnumerationResult<BlackBoxResilienceGap>> EnumerateResilienceGapsAsync(AuthContext caller, BlackBoxResilienceGapRequest? request, CancellationToken token = default);
     }
 }

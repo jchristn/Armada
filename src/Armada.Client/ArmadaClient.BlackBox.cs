@@ -413,6 +413,19 @@ namespace Armada.Client
         }
 
         /// <summary>
+        /// Dashboard <c>enumerateBlackBoxResilienceGaps</c>: POST /api/v1/blackbox/resilience-gaps/enumerate. One page (at
+        /// most 50) of Armada resilience gaps: handoff and landing failure modes triaged ArmadaDefect, grouped by fingerprint.
+        /// </summary>
+        /// <param name="request">Filters and paging, or null.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>One page.</returns>
+        /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
+        public Task<EnumerationResult<BlackBoxResilienceGap>?> EnumerateBlackBoxResilienceGapsAsync(BlackBoxResilienceGapRequest? request = null, CancellationToken token = default)
+        {
+            return PostAsync<EnumerationResult<BlackBoxResilienceGap>>("/api/v1/blackbox/resilience-gaps/enumerate", request ?? new BlackBoxResilienceGapRequest(), null, token);
+        }
+
+        /// <summary>
         /// Dashboard <c>getBlackBoxFingerprintTrend</c>: GET /api/v1/blackbox/fingerprints/{fingerprint}/trend. Occurrences of
         /// one failure mode per Armada version.
         /// </summary>

@@ -267,11 +267,11 @@ namespace Test.Shared.Suites.E2E
                 EnumerationResult<BlackBoxHotspot> foreignHotspots = await PostJsonAsync<EnumerationResult<BlackBoxHotspot>>(b, "/api/v1/blackbox/hotspots/enumerate", new { PageSize = 10, Role = "OutOfScope" }).ConfigureAwait(false);
                 AssertEqual(0L, foreignHotspots.TotalRecords, "hotspots are tenant scoped");
 
-                BlackBoxBundleResult markdown = await PostJsonAsync<BlackBoxBundleResult>(ua, "/api/v1/blackbox/bundle", new { MissionId = _Mission.Id, Max = 5 }).ConfigureAwait(false);
+                BlackBoxBundleResult markdown = await PostJsonAsync<BlackBoxBundleResult>(ua, "/api/v1/blackbox/bundle", new { MissionId = _Mission.Id, Max = 5, AllFailures = true }).ConfigureAwait(false);
                 AssertEqual(BlackBoxBundleFormatEnum.Markdown, markdown.Format, "Markdown by default");
                 AssertEqual(1, markdown.EntryCount, "one entry");
                 AssertContains("maintainer bundle", markdown.Content, "bundle heading");
-                BlackBoxBundleResult json = await PostJsonAsync<BlackBoxBundleResult>(ua, "/api/v1/blackbox/bundle", new { MissionId = _Mission.Id, Format = "Json" }).ConfigureAwait(false);
+                BlackBoxBundleResult json = await PostJsonAsync<BlackBoxBundleResult>(ua, "/api/v1/blackbox/bundle", new { MissionId = _Mission.Id, Format = "Json", AllFailures = true }).ConfigureAwait(false);
                 AssertContains(_EntryId, json.Content, "JSON bundle lists the entry");
             }));
 
@@ -521,7 +521,7 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(notes.TotalRecords >= 0, "list_blackbox_notes");
                 await OkAsync<EnumerationResult<BlackBoxHotspot>>(client, "list_blackbox_hotspots", new { pageSize = 5 }).ConfigureAwait(false);
                 await OkAsync<EnumerationResult<BlackBoxFingerprintSummary>>(client, "list_blackbox_fingerprints", new { pageSize = 5 }).ConfigureAwait(false);
-                BlackBoxBundleResult bundle = await OkAsync<BlackBoxBundleResult>(client, "get_blackbox_bundle", new { missionId = _Mission.Id, max = 1 }).ConfigureAwait(false);
+                BlackBoxBundleResult bundle = await OkAsync<BlackBoxBundleResult>(client, "get_blackbox_bundle", new { missionId = _Mission.Id, max = 1, allFailures = true }).ConfigureAwait(false);
                 AssertEqual(1, bundle.EntryCount, "bundle");
                 EnumerationResult<BlackBoxEntrySummary> viaEnumerate = await OkAsync<EnumerationResult<BlackBoxEntrySummary>>(client, "enumerate", new { entityType = "blackbox", missionId = _Mission.Id }).ConfigureAwait(false);
                 AssertEqual(_EntryId, viaEnumerate.Objects.Single().Id, "enumerate entityType blackbox");
