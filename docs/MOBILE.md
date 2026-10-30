@@ -30,6 +30,15 @@ Return or **Send** runs it, or runs the command you typed with its arguments (`/
 command shows a short hint under the message box and keeps your text. **New conversation**, `/new`, and `/clear`
 always start with an empty message box; each conversation keeps its own unsent draft while the app runs.
 
+The black box of a failed mission or voyage (its detail page and the entry screen) puts an **Armada resilience**
+section right after the summary: whether Armada's own handoff and landing could have healed the failure (and what it
+could have done), the detection gap, severity and recurrence, the recoveries Armada already attempted, code pointers
+at the Armada build, the proposed Armada changes with their acceptance tests, and the regression test. An entry
+triaged ArmadaDefect carries a **Suspected Armada defect** badge. **Draft Armada fix mission** opens Ask Armada with
+the top proposed change filled in (nothing is sent until you press Send), and **Copy fix brief** copies one change as
+a mission brief. Outside handoff and landing the section is one line saying why no Armada change is suggested. See
+"Resilience bias" in [BLACKBOX.md](BLACKBOX.md).
+
 On a tablet (768 dp and wider) the tabs become the dashboard's sidebar and lists open their detail side by side.
 Links work both ways: `armada://` links and pasted dashboard URLs (`https://admiral.example.com/dashboard/missions/msn_...`)
 open the same screen in the app, and every screen can open its page on the web dashboard.
