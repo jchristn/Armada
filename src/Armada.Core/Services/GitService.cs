@@ -159,7 +159,11 @@ namespace Armada.Core.Services
                 }
 
                 bool branchExists = await BranchExistsAsync(repoPath, branchName, token).ConfigureAwait(false);
-                if (!branchExists)
+                if (branchExists)
+                {
+                    await SyncLocalBranchFromRemoteAsync(repoPath, branchName).ConfigureAwait(false);
+                }
+                else
                 {
                     branchExists = await SyncLocalBranchFromRemoteAsync(repoPath, branchName).ConfigureAwait(false);
                 }
@@ -1881,7 +1885,16 @@ namespace Armada.Core.Services
 
             if (await BranchExistsAsync(repoPath, branchName).ConfigureAwait(false))
             {
-                await RunGitAsync(repoPath, "branch", "-f", branchName, "refs/remotes/origin/" + branchName).ConfigureAwait(false);
+                GitDivergenceCounts? divergence = await GetDivergenceAsync(
+                    repoPath,
+                    "refs/heads/" + branchName,
+                    "refs/remotes/origin/" + branchName,
+                    CancellationToken.None).ConfigureAwait(false);
+
+                if (divergence != null && divergence.Behind == 0 && divergence.Ahead > 0)
+                {
+                    await RunGitAsync(repoPath, "branch", "-f", branchName, "refs/remotes/origin/" + branchName).ConfigureAwait(false);
+                }
             }
             else
             {

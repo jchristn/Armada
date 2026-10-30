@@ -281,6 +281,81 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("create_worktree_async_existing_branch_fast_forwards_to_remote_descendant", "CreateWorktreeAsync ExistingBranch FastForwards To Remote Descendant", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                WorktreeBranchFixture fixture = await CreateWorktreeBranchFixtureAsync().ConfigureAwait(false);
+
+                try
+                {
+                    await RunGitAsync(fixture.SourceDir, "checkout", "-q", "-b", fixture.BranchName, fixture.StartingCommit).ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(fixture.SourceDir, "remote-update.txt"), "remote update\n").ConfigureAwait(false);
+                    await RunGitAsync(fixture.SourceDir, "add", "-A").ConfigureAwait(false);
+                    await RunGitAsync(fixture.SourceDir, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "remote update").ConfigureAwait(false);
+                    string remoteCommit = (await RunGitAsync(fixture.SourceDir, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();
+                    await RunGitAsync(fixture.SourceDir, "push", "test-origin", fixture.BranchName).ConfigureAwait(false);
+
+                    await service.CreateWorktreeAsync(fixture.BareDir, fixture.WorktreeDir, fixture.BranchName, "main").ConfigureAwait(false);
+
+                    string worktreeHead = (await RunGitAsync(fixture.WorktreeDir, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();
+                    AssertEqual(remoteCommit, worktreeHead, "An existing branch should advance to its fetched remote descendant");
+                }
+                finally
+                {
+                    if (Directory.Exists(fixture.RootDir))
+                    {
+                        Directory.Delete(fixture.RootDir, true);
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("create_worktree_async_existing_branch_preserves_local_commit", "CreateWorktreeAsync ExistingBranch Preserves Local Commit", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                WorktreeBranchFixture fixture = await CreateWorktreeBranchFixtureAsync().ConfigureAwait(false);
+
+                try
+                {
+                    string localCommit = await CreateLocalOnlyBranchCommitAsync(fixture).ConfigureAwait(false);
+
+                    await service.CreateWorktreeAsync(fixture.BareDir, fixture.WorktreeDir, fixture.BranchName, "main").ConfigureAwait(false);
+
+                    string worktreeHead = (await RunGitAsync(fixture.WorktreeDir, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();
+                    AssertEqual(localCommit, worktreeHead, "An existing branch with a local-only commit should keep that commit");
+                }
+                finally
+                {
+                    if (Directory.Exists(fixture.RootDir))
+                    {
+                        Directory.Delete(fixture.RootDir, true);
+                    }
+                }
+            }));
+
+            cases.Add(CaseAsync("ensure_local_branch_async_preserves_local_commit", "EnsureLocalBranchAsync Preserves Local Commit", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                WorktreeBranchFixture fixture = await CreateWorktreeBranchFixtureAsync().ConfigureAwait(false);
+
+                try
+                {
+                    string localCommit = await CreateLocalOnlyBranchCommitAsync(fixture).ConfigureAwait(false);
+
+                    bool ensured = await service.EnsureLocalBranchAsync(fixture.BareDir, fixture.BranchName).ConfigureAwait(false);
+
+                    string branchHead = (await RunGitAsync(fixture.BareDir, "rev-parse", "refs/heads/" + fixture.BranchName).ConfigureAwait(false)).Trim();
+                    AssertTrue(ensured, "The existing branch should remain available");
+                    AssertEqual(localCommit, branchHead, "Ensuring a branch should preserve a local-only commit");
+                }
+                finally
+                {
+                    if (Directory.Exists(fixture.RootDir))
+                    {
+                        Directory.Delete(fixture.RootDir, true);
+                    }
+                }
+            }));
+
             cases.Add(CaseAsync("create_worktree_async_dirty_tracked_files_throws_and_cleans_up", "CreateWorktreeAsync DirtyTrackedFiles Throws And Cleans Up", TestTags.Negative, async () =>
             {
                 GitService service = CreateService();
@@ -1348,6 +1423,58 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static async Task<WorktreeBranchFixture> CreateWorktreeBranchFixtureAsync()
+        {
+            string rootDir = TestTemp.NewDirectory("gitservice_branch_sync");
+            string sourceDir = TestGitRepoHelper.CreateWorkingRepoCopy();
+            string originDir = Path.Combine(rootDir, "origin.git");
+            string bareDir = Path.Combine(rootDir, "repo.git");
+            string branchName = "armada/sync-target";
+
+            await RunGitAsync(rootDir, "clone", "--bare", sourceDir, originDir).ConfigureAwait(false);
+            string startingCommit = (await RunGitAsync(originDir, "rev-parse", "refs/heads/main").ConfigureAwait(false)).Trim();
+            await RunGitAsync(originDir, "branch", branchName, startingCommit).ConfigureAwait(false);
+            await RunGitAsync(rootDir, "clone", "--bare", originDir, bareDir).ConfigureAwait(false);
+            await RunGitAsync(bareDir, "config", "remote.origin.url", originDir).ConfigureAwait(false);
+            await RunGitAsync(bareDir, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*").ConfigureAwait(false);
+            await RunGitAsync(bareDir, "fetch", "origin").ConfigureAwait(false);
+            await RunGitAsync(sourceDir, "remote", "add", "test-origin", originDir).ConfigureAwait(false);
+
+            return new WorktreeBranchFixture(rootDir, sourceDir, bareDir, Path.Combine(rootDir, "worktree"), branchName, startingCommit);
+        }
+
+        private static async Task<string> CreateLocalOnlyBranchCommitAsync(WorktreeBranchFixture fixture)
+        {
+            await RunGitAsync(fixture.SourceDir, "checkout", "-q", "-b", fixture.BranchName, fixture.StartingCommit).ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(fixture.SourceDir, "local-only.txt"), "local commit\n").ConfigureAwait(false);
+            await RunGitAsync(fixture.SourceDir, "add", "-A").ConfigureAwait(false);
+            await RunGitAsync(fixture.SourceDir, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "local commit").ConfigureAwait(false);
+            string localCommit = (await RunGitAsync(fixture.SourceDir, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();
+            await RunGitAsync(fixture.SourceDir, "remote", "add", "test-local", fixture.BareDir).ConfigureAwait(false);
+            await RunGitAsync(fixture.SourceDir, "push", "test-local", fixture.BranchName + ":refs/heads/" + fixture.BranchName).ConfigureAwait(false);
+            return localCommit;
+        }
+
+        private sealed class WorktreeBranchFixture
+        {
+            public string RootDir { get; }
+            public string SourceDir { get; }
+            public string BareDir { get; }
+            public string WorktreeDir { get; }
+            public string BranchName { get; }
+            public string StartingCommit { get; }
+
+            public WorktreeBranchFixture(string rootDir, string sourceDir, string bareDir, string worktreeDir, string branchName, string startingCommit)
+            {
+                RootDir = rootDir;
+                SourceDir = sourceDir;
+                BareDir = bareDir;
+                WorktreeDir = worktreeDir;
+                BranchName = branchName;
+                StartingCommit = startingCommit;
+            }
+        }
 
         private static GitService CreateService()
         {
