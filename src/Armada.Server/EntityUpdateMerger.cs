@@ -87,6 +87,38 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// Prepare a captain create request by copying its configuration and keeping server-owned fields at their
+        /// defaults.
+        /// </summary>
+        /// <param name="incoming">Client-supplied captain.</param>
+        /// <returns>A new captain with configuration fields and optional id copied from the request.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="incoming"/> is null.</exception>
+        public static Captain PrepareCaptainForCreate(Captain incoming)
+        {
+            if (incoming == null) throw new ArgumentNullException(nameof(incoming));
+
+            Captain prepared = new Captain(incoming.Name, incoming.Runtime)
+            {
+                TenantId = incoming.TenantId,
+                UserId = incoming.UserId,
+                Model = incoming.Model,
+                ModelEndpointId = incoming.ModelEndpointId,
+                SystemInstructions = incoming.SystemInstructions,
+                AllowedPersonas = incoming.AllowedPersonas,
+                PreferredPersona = incoming.PreferredPersona,
+                ReasoningEffort = incoming.ReasoningEffort,
+                Tier = incoming.Tier,
+                RuntimeOptionsJson = incoming.RuntimeOptionsJson,
+                CliPermissionPolicy = incoming.CliPermissionPolicy
+            };
+
+            if (!String.IsNullOrEmpty(incoming.Id))
+                prepared.Id = incoming.Id;
+
+            return prepared;
+        }
+
+        /// <summary>
         /// Apply a captain replacement body: the body supplies the configuration fields (name, runtime, model, persona
         /// and runtime options); id, tenant, owner, operational state (state, current mission and dock, process,
         /// recovery attempts, quarantine, heartbeats), and creation time come from the stored record. Runtime options

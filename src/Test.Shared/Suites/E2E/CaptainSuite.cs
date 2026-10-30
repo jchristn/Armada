@@ -8,6 +8,7 @@ namespace Test.Shared.Suites.E2E
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -60,6 +61,83 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual("ClaudeCode", captain.Runtime.ToString());
                 AssertEqual("Idle", captain.State.ToString());
                 AssertEqual(0, captain.RecoveryAttempts);
+            }));
+
+            cases.Add(CaseAsync("create_captain_discards_operational_fields", "Create Captain Discards Operational Fields", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                E2ETenantUser caller = await E2ETenantUser.CreateAsync(fx.AuthClient, "captain-create-caller").ConfigureAwait(false);
+                E2ETenantUser other = await E2ETenantUser.CreateAsync(fx.AuthClient, "captain-create-other").ConfigureAwait(false);
+                using HttpClient callerClient = caller.CreateClient(fx.BaseUrl);
+                string captainId = "cpt_test_" + Guid.NewGuid().ToString("N");
+                string captainName = "create-operational-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                DateTime oldCreatedUtc = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                DateTime futureUtc = DateTime.UtcNow.AddDays(1);
+                // Above the operating-system process-id limit. Stop and the health check signal a stored
+                // process id, so the value must not be this test process.
+                int suppliedProcessId = 1900000001;
+                Captain request = new Captain(captainName, AgentRuntimeEnum.ClaudeCode)
+                {
+                    Id = captainId,
+                    TenantId = other.TenantId,
+                    UserId = other.UserId,
+                    AllowedPersonas = "Worker,Judge",
+                    PreferredPersona = "Worker",
+                    ReasoningEffort = ReasoningEffortEnum.High,
+                    Tier = CaptainTierEnum.Premium,
+                    RuntimeOptionsJson = "{\"autoApprove\":true}",
+                    CliPermissionPolicy = CliPermissionPolicyEnum.ApproveInArmada,
+                    State = CaptainStateEnum.Working,
+                    CurrentMissionId = "msn_test_assignment",
+                    CurrentDockId = "dck_test_assignment",
+                    ProcessId = suppliedProcessId,
+                    RecoveryAttempts = 3,
+                    QuarantineUntilUtc = futureUtc,
+                    QuarantineReason = "test quarantine",
+                    LastHeartbeatUtc = oldCreatedUtc,
+                    LastProcessAliveUtc = oldCreatedUtc,
+                    CreatedUtc = oldCreatedUtc
+                };
+
+                try
+                {
+                    HttpResponseMessage response = await callerClient.PostAsync("/api/v1/captains", JsonHelper.ToJsonContent(request)).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.Created, response.StatusCode);
+                    Captain created = await JsonHelper.DeserializeAsync<Captain>(response).ConfigureAwait(false);
+                    HttpResponseMessage readResponse = await callerClient.GetAsync("/api/v1/captains/" + captainId).ConfigureAwait(false);
+                    AssertEqual(HttpStatusCode.OK, readResponse.StatusCode);
+                    Captain stored = await JsonHelper.DeserializeAsync<Captain>(readResponse).ConfigureAwait(false);
+
+                    AssertEqual(captainId, created.Id);
+                    AssertEqual(caller.TenantId, stored.TenantId);
+                    AssertEqual(caller.UserId, stored.UserId);
+                    AssertEqual(captainName, stored.Name);
+                    AssertEqual(AgentRuntimeEnum.ClaudeCode, stored.Runtime);
+                    AssertEqual("Worker,Judge", stored.AllowedPersonas);
+                    AssertEqual("Worker", stored.PreferredPersona);
+                    AssertEqual(ReasoningEffortEnum.High, stored.ReasoningEffort);
+                    AssertEqual(CaptainTierEnum.Premium, stored.Tier);
+                    AssertEqual("{\"autoApprove\":true}", stored.RuntimeOptionsJson);
+                    AssertEqual(CliPermissionPolicyEnum.ApproveInArmada, stored.CliPermissionPolicy);
+                    AssertEqual(CaptainStateEnum.Idle, stored.State);
+                    Assert(string.IsNullOrEmpty(stored.CurrentMissionId), "CurrentMissionId should be empty on create");
+                    Assert(string.IsNullOrEmpty(stored.CurrentDockId), "CurrentDockId should be empty on create");
+                    Assert(stored.ProcessId == null, "ProcessId should be empty on create");
+                    AssertEqual(0, stored.RecoveryAttempts);
+                    Assert(stored.QuarantineUntilUtc == null, "QuarantineUntilUtc should be empty on create");
+                    Assert(stored.QuarantineReason == null, "QuarantineReason should be empty on create");
+                    Assert(stored.LastHeartbeatUtc == null, "LastHeartbeatUtc should be empty on create");
+                    Assert(stored.LastProcessAliveUtc == null, "LastProcessAliveUtc should be empty on create");
+                    Assert(stored.CreatedUtc > oldCreatedUtc, "CreatedUtc should be set by the server");
+                }
+                finally
+                {
+                    HttpResponseMessage stopResponse = await callerClient.PostAsync("/api/v1/captains/" + captainId + "/stop", null).ConfigureAwait(false);
+                    if (stopResponse.IsSuccessStatusCode)
+                    {
+                        await callerClient.DeleteAsync("/api/v1/captains/" + captainId).ConfigureAwait(false);
+                    }
+                }
             }));
 
             cases.Add(CaseAsync("create_captain_default_runtime_is_claudecode", "Create Captain Default Runtime Is ClaudeCode", TestTags.Positive, async () =>

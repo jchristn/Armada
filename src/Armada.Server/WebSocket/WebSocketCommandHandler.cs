@@ -838,6 +838,7 @@ namespace Armada.Server.WebSocket
 
                 case "create_captain":
                     Captain newCaptain = JsonSerializer.Deserialize<WebSocketDataCommand<Captain>>(rawBody, _JsonOptions)?.Data!;
+                    newCaptain = EntityUpdateMerger.PrepareCaptainForCreate(newCaptain);
                     await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_Database, newCaptain).ConfigureAwait(false);
                     newCaptain = await _Database.Captains.CreateAsync(newCaptain).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_captain", data = (object)newCaptain };

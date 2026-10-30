@@ -176,6 +176,7 @@ namespace Armada.Server.Routes
                 }
                 Captain captain = JsonSerializer.Deserialize<Captain>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
+                captain = EntityUpdateMerger.PrepareCaptainForCreate(captain);
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
                 EntityUpdateMerger.NormalizeCaptainRuntimeOptions(captain);
