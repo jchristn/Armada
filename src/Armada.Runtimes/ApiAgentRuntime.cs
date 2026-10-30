@@ -7,6 +7,7 @@ namespace Armada.Runtimes
     using System.Linq;
     using System.Runtime.CompilerServices;
     using System.Text.Json;
+    using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Models;
@@ -149,6 +150,11 @@ namespace Armada.Runtimes
         private readonly string _Header = "[ApiAgentRuntime] ";
         private StreamWriter? _LogWriter;
         private readonly object _LogLock = new object();
+        // A complete think block is <think> or <think ...> through </think>. The name must end at the tag
+        // boundary, so a longer name and an unmatched tag stay in the text.
+        private static readonly Regex _CompleteThinkBlock = new Regex(
+            @"<think(?:\s[^>]*)?>.*?</think\s*>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         #endregion
 
@@ -514,7 +520,7 @@ namespace Armada.Runtimes
                         WriteFinalMessage(finalMessageFilePath, String.Empty);
                         return;
                     }
-                    finalText = reply.Text ?? String.Empty;
+                    finalText = RemoveCompleteThinkBlocks(reply.Text);
                     if (!IsCompleteResponse(finalText, reply.FinishReason, prompt.Contains("[ARMADA:RESULT] COMPLETE", StringComparison.Ordinal)))
                     {
                         exitCode = 1;
@@ -667,10 +673,11 @@ namespace Armada.Runtimes
                         break;
                     }
 
-                    if (!String.IsNullOrEmpty(response.Text))
+                    string visibleText = RemoveCompleteThinkBlocks(response.Text);
+                    if (!String.IsNullOrEmpty(visibleText))
                     {
-                        finalText = response.Text!;
-                        Emit(processId, response.Text!);
+                        finalText = visibleText;
+                        Emit(processId, visibleText);
                     }
 
                     messages.Add(response.ToAssistantMessage());
@@ -685,7 +692,7 @@ namespace Armada.Runtimes
                                 + "; completion tokens: " + response.Usage?.CompletionTokens + "). The mission did not finish."
                         };
                         // Only this terminal response can finish the run; earlier narration is not a result.
-                        finalText = response.Text ?? String.Empty;
+                        finalText = RemoveCompleteThinkBlocks(response.Text);
                         bool complete = IsCompleteResponse(finalText, response.FinishReason, requiresCompletion);
                         if (complete) break;
                         incompleteResponses++;
@@ -1010,6 +1017,19 @@ namespace Armada.Runtimes
         }
 
         private static bool IsTokenLimit(string? reason) => String.Equals(reason, "length", StringComparison.OrdinalIgnoreCase) || String.Equals(reason, "max_tokens", StringComparison.OrdinalIgnoreCase) || String.Equals(reason, "max_output_tokens", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Remove every complete think block from assistant text before that text is emitted or stored.
+        /// A block opens with a think tag whose name ends at the tag boundary and closes with the matching end tag.
+        /// A longer name, an unmatched tag, and text with no complete block stay as they were.
+        /// </summary>
+        /// <param name="text">Assistant text from the inference client.</param>
+        /// <returns>The text with complete think blocks removed.</returns>
+        private static string RemoveCompleteThinkBlocks(string? text)
+        {
+            if (String.IsNullOrEmpty(text)) return String.Empty;
+            return _CompleteThinkBlock.Replace(text, String.Empty);
+        }
 
         private static bool IsCompleteResponse(string text, string? finishReason, bool requiresCompletion)
         {

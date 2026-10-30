@@ -145,6 +145,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
 
+### API-endpoint replies drop a complete think block
+
+- **A complete think block in assistant text is removed before the reply is emitted or stored.** The tool loop and plain chat both keep the remaining text for the reply event, the final text, and the final message file. The opening tag must be `think` with a tag boundary, so a longer name such as `thinking` stays. An unmatched tag stays. Text with no complete block is unchanged. The Judge parser is unchanged: one distinct standalone verdict line is a verdict, and two different lines are not.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.
