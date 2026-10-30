@@ -140,6 +140,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Armada
   register('armada.showBlackBoxTimeline', (arg) => insights.showTimeline(arg));
   register('armada.compareBlackBoxAttempts', (arg, otherId) => insights.compareAttempts(arg, typeof otherId === 'string' ? otherId : undefined));
   register('armada.previewMissionOverlap', (arg) => insights.previewOverlap(arg));
+  register('armada.draftArmadaFixMission', (arg) => commands.draftArmadaFixMission(arg));
+  register('armada.showResilienceGaps', () => insights.showResilienceGaps());
 
   context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void store.refresh()));
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {

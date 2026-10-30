@@ -1,9 +1,9 @@
 import { Routes } from '../api/blackbox';
-import { BlackBoxDoctorPage, BlackBoxEntry, BlackBoxNote, BlackBoxRecord, BlackBoxRecoveryPath } from '../api/types';
+import { BlackBoxDoctorPage, BlackBoxEntry, BlackBoxNote, BlackBoxProposedChange, BlackBoxRecord, BlackBoxRecoveryPath, BlackBoxResilience } from '../api/types';
 import { directoryPath, entryKind, entryLabel, filePath, formatDate, isOpen } from '../util/format';
 
 /** Actions the entry view can post back to the extension. */
-export type EntryViewAction = 'copyFixThis' | 'openFixThis' | 'sendToChat' | 'runRecovery' | 'resolve' | 'addNote' | 'askArmada' | 'timeline' | 'compareAttempts' | 'refresh';
+export type EntryViewAction = 'copyFixThis' | 'openFixThis' | 'sendToChat' | 'runRecovery' | 'resolve' | 'addNote' | 'askArmada' | 'timeline' | 'compareAttempts' | 'draftFix' | 'refresh';
 
 /** Optional extras for the entry page. */
 export interface EntryHtmlOptions {
@@ -30,7 +30,7 @@ export function escapeHtml(value: unknown): string {
 }
 
 /**
- * Renders the entry summary page: Summary, Where, How, Status, Why, Conflict, What would have prevented it, What
+ * Renders the entry summary page: Summary, Armada resilience (right after the summary), Where, How, Status, Why, Conflict, What would have prevented it, What
  * Armada could change, Recovery, Attempts and Notes. Pure; all values are escaped. The nonce gates the inline script
  * under the page's Content-Security-Policy.
  */
@@ -59,6 +59,9 @@ export function renderEntryHtml(entry: BlackBoxEntry, notes: BlackBoxNote[], non
       ['Capture mode', entry.CaptureMode ?? record.CaptureMode],
     ]),
   ]));
+
+  const resilience = analysis.Resilience ?? null;
+  if (resilience) sections.push(section('Armada resilience', [renderResilience(resilience, entry, record)]));
 
   sections.push(section('Where', [table([
     ['Phase', site.Phase ?? entry.Phase],
@@ -156,6 +159,7 @@ h1 { font-size: 1.3em; } h2 { font-size: 1.1em; border-bottom: 1px solid var(--v
 h3 { font-size: 1em; margin-bottom: 4px; }
 table { border-collapse: collapse; } td { padding: 2px 12px 2px 0; vertical-align: top; } td:first-child { color: var(--vscode-descriptionForeground); white-space: nowrap; }
 pre { background: var(--vscode-textCodeBlock-background); padding: 8px; overflow-x: auto; max-height: 320px; }
+.badge { font-size: 0.75em; padding: 1px 6px; border-radius: 8px; background: var(--vscode-inputValidation-errorBackground); color: var(--vscode-foreground); border: 1px solid var(--vscode-errorForeground); vertical-align: middle; }
 .muted { color: var(--vscode-descriptionForeground); } .danger { color: var(--vscode-errorForeground); font-weight: 600; }
 .toolbar { position: sticky; top: 0; background: var(--vscode-editor-background); padding: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; }
 button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 4px 10px; cursor: pointer; }
@@ -163,7 +167,7 @@ button.secondary { background: var(--vscode-button-secondaryBackground); color: 
 </style>
 </head>
 <body>
-<h1>${escapeHtml(entryLabel(entry))}</h1>
+<h1>${escapeHtml(entryLabel(entry))}${suspectedDefect(entry) ? ` <span class="badge">${escapeHtml(analysis.Triage?.Suspected ? 'Suspected Armada defect (prior only)' : 'Suspected Armada defect')}</span>` : ''}</h1>
 <div class="toolbar">
 <button data-action="copyFixThis">Copy FIX THIS</button>
 <button data-action="openFixThis" class="secondary">Open FIX THIS in Editor</button>
@@ -172,6 +176,7 @@ button.secondary { background: var(--vscode-button-secondaryBackground); color: 
 ${open ? '<button data-action="resolve" class="secondary">Resolve</button>' : ''}
 <button data-action="addNote" class="secondary">Add Note</button>
 <button data-action="askArmada" class="secondary">Ask Armada about this failure</button>
+${(resilience?.ProposedChanges ?? []).length ? '<button data-action="draftFix" class="secondary">Draft Armada Fix Mission</button>' : ''}
 <button data-action="timeline" class="secondary">Timeline</button>
 <button data-action="compareAttempts" class="secondary">Compare Attempts</button>
 <button data-action="refresh" class="secondary">Refresh</button>
@@ -187,6 +192,55 @@ document.addEventListener('click', (event) => {
 </script>
 </body>
 </html>`;
+}
+
+/** True when the entry is triaged ArmadaDefect (the "Suspected Armada defect" badge). */
+export function suspectedDefect(entry: BlackBoxEntry): boolean {
+  return (entry.Record?.Analysis?.Triage?.Verdict ?? entry.Triage) === 'ArmadaDefect';
+}
+
+/** Proposed Armada changes, most impactful first. */
+export function rankedChanges(resilience: BlackBoxResilience | null | undefined): BlackBoxProposedChange[] {
+  return [...(resilience?.ProposedChanges ?? [])].sort((a, b) => a.Rank - b.Rank);
+}
+
+/** The mission brief of a change (the server's MissionBrief, or one built from the title, change and test). */
+export function changeBrief(change: BlackBoxProposedChange): string {
+  if (change.MissionBrief) return change.MissionBrief;
+  return [change.Title, change.Change, change.AcceptanceTest ? `Acceptance test: ${change.AcceptanceTest}` : ''].filter(Boolean).join('\n\n');
+}
+
+/**
+ * The Armada resilience section: in handoff and landing scope the self-healable verdict and what Armada could have
+ * done, the detection gap and invariant, severity and recurrence, recoveries already attempted, code pointers at the
+ * build commit, proposed Armada changes with acceptance tests and the regression test; outside the scope the short
+ * reason no Armada change is suggested.
+ */
+export function renderResilience(res: BlackBoxResilience, entry: BlackBoxEntry, record: BlackBoxRecord): string {
+  const changes = rankedChanges(res);
+  if (!res.InScope && !changes.length) {
+    return `<p class="muted">${escapeHtml(res.NoChangeReason || 'No Armada change suggested: the failure is outside Armada\'s handoff and landing.')}</p>`;
+  }
+  const build = [res.ArmadaVersion ?? record.Site?.ArmadaVersion ?? entry.ArmadaVersion, (res.ArmadaCommit ?? record.Site?.ArmadaCommit ?? entry.ArmadaCommit) ? `commit ${res.ArmadaCommit ?? record.Site?.ArmadaCommit ?? entry.ArmadaCommit}` : ''].filter(Boolean).join(' ');
+  const occurrences = res.Occurrences30Days ?? 1;
+  const parts: string[] = [];
+  if (res.InScope) parts.push('<p class="muted">Armada\'s handoff and landing could have been more resilient here: look for the Armada fix (with a test) first.</p>');
+  parts.push(table([
+    ['Scope', res.InScope ? `Handoff and landing${res.ScopeReason ? ` (${res.ScopeReason})` : ''}` : 'Outside handoff and landing'],
+    ['Self-healable', res.SelfHealable ?? 'Unknown'],
+    ['Armada could have', res.SelfHealingProposal ?? undefined],
+    ['Detection gap', res.DetectionGap ? `${res.DetectionGapKind ? `${res.DetectionGapKind}: ` : ''}${res.DetectionGap}` : undefined],
+    ['Invariant', res.Invariant ?? undefined],
+    ['Severity', res.Severity ? `${res.Severity} (${occurrences} in 30 days${(res.ArmadaVersionCount ?? 0) > 1 ? `, ${res.ArmadaVersionCount} Armada versions` : ''})` : undefined],
+    ['Armada already attempted', (res.AttemptedRecoveries ?? []).join('; ') || undefined],
+    ['Regression test', res.RegressionTest ? `${res.RegressionTest.Suite}: ${res.RegressionTest.Description}` : undefined],
+  ]));
+  const pointers = res.CodePointers ?? [];
+  if (pointers.length) parts.push(`<h3>Code pointers${build ? ` (Armada ${escapeHtml(build)})` : ''}</h3><ul>${pointers.map((p) => `<li><code>${escapeHtml(p)}</code></li>`).join('')}</ul>`);
+  if (changes.length) {
+    parts.push(`<h3>Proposed Armada changes</h3><ol>${changes.map((c) => `<li><strong>${escapeHtml(c.Title)}</strong>${c.Severity ? ` <span class="muted">(${escapeHtml(c.Severity)})</span>` : ''}<br>${escapeHtml(c.Change)}${c.AcceptanceTest ? `<br><span class="muted">Acceptance test: ${escapeHtml(c.AcceptanceTest)}</span>` : ''}</li>`).join('')}</ol>`);
+  }
+  return parts.join('');
 }
 
 /** Success rate and runbook link of a recovery path. */
@@ -216,7 +270,7 @@ function table(rows: Array<[string, unknown]>): string {
 export function isEntryViewMessage(value: unknown): value is EntryViewMessage {
   if (!value || typeof value !== 'object') return false;
   const action = (value as { action?: unknown }).action;
-  const allowed: EntryViewAction[] = ['copyFixThis', 'openFixThis', 'sendToChat', 'runRecovery', 'resolve', 'addNote', 'askArmada', 'timeline', 'compareAttempts', 'refresh'];
+  const allowed: EntryViewAction[] = ['copyFixThis', 'openFixThis', 'sendToChat', 'runRecovery', 'resolve', 'addNote', 'askArmada', 'timeline', 'compareAttempts', 'draftFix', 'refresh'];
   if (typeof action !== 'string' || !allowed.includes(action as EntryViewAction)) return false;
   const pathId = (value as { pathId?: unknown }).pathId;
   return pathId === undefined || pathId === null || typeof pathId === 'string';

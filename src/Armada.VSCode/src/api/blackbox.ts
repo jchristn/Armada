@@ -27,6 +27,7 @@ import {
   BlackBoxDoctorPage,
   BlackBoxNearbySuccess,
   BlackBoxRecoveryStat,
+  BlackBoxResilienceGap,
   BlackBoxTimelinePage,
   BriefLintRequest,
   BriefLintResult,
@@ -70,6 +71,7 @@ export const Routes = {
   lintBrief: (): string => '/api/v1/missions/lint-brief',
   doctor: (vesselId: string): string => `/api/v1/vessels/${enc(vesselId)}/blackbox-doctor/enumerate`,
   recoveryStats: (): string => '/api/v1/blackbox/recovery-stats/enumerate',
+  resilienceGaps: (): string => '/api/v1/blackbox/resilience-gaps/enumerate',
   diff: (entryId: string, otherEntryId: string): string => `/api/v1/blackbox/${enc(entryId)}/diff/${enc(otherEntryId)}`,
   nearbySuccesses: (entryId: string): string => `/api/v1/blackbox/${enc(entryId)}/nearby-successes/enumerate`,
   timeline: (entryId: string): string => `/api/v1/blackbox/${enc(entryId)}/timeline/enumerate`,
@@ -431,6 +433,14 @@ export class ArmadaBlackBoxClient {
     if (filter.ruleId) body.RuleId = filter.ruleId;
     if (filter.vesselId) body.VesselId = filter.vesselId;
     return this.requestEnumeration<BlackBoxRecoveryStat>('POST', Routes.recoveryStats(), body);
+  }
+
+  /** One page (at most 50) of Armada resilience gaps: handoff and landing failure modes triaged ArmadaDefect. */
+  public getResilienceGaps(filter: { vesselId?: string; resolution?: string } = {}, pageNumber = 1, pageSize = 25): Promise<EnumerationResult<BlackBoxResilienceGap>> {
+    const body: Record<string, unknown> = { PageNumber: pageNumber, PageSize: Math.min(Math.max(1, pageSize), 50) };
+    if (filter.vesselId) body.VesselId = filter.vesselId;
+    if (filter.resolution) body.Resolution = filter.resolution;
+    return this.requestEnumeration<BlackBoxResilienceGap>('POST', Routes.resilienceGaps(), body);
   }
 
   /**

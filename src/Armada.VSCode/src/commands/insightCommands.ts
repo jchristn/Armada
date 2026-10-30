@@ -1,12 +1,15 @@
 import * as vscode from 'vscode';
 import { ArmadaApiError, ArmadaBlackBoxClient, describeError } from '../api/blackbox';
-import { BlackBoxAttemptDiff, BlackBoxEntrySummary, BlackBoxTimelinePage, MissionOverlapPreview, Vessel } from '../api/types';
+import { BlackBoxAttemptDiff, BlackBoxEntrySummary, BlackBoxResilienceGap, BlackBoxTimelinePage, EnumerationResult, MissionOverlapPreview, Vessel } from '../api/types';
 import { BlackBoxStore } from '../state/blackBoxStore';
 import { entryLabel, formatAge } from '../util/format';
-import { renderDiffMarkdown, renderOverlapMarkdown, renderTimelineMarkdown } from '../views/insightMarkdown';
+import { renderDiffMarkdown, renderGapsMarkdown, renderOverlapMarkdown, renderTimelineMarkdown } from '../views/insightMarkdown';
 
 /** Timeline events per page. */
 export const TIMELINE_PAGE_SIZE = 100;
+
+/** Resilience gaps per page (the server caps it at 50). */
+export const GAPS_PAGE_SIZE = 25;
 
 /** Navigation buttons offered after a timeline page. */
 export const TIMELINE_NEXT = 'Next Page';
@@ -54,6 +57,32 @@ export class InsightCommands {
         if (page.PageNumber < page.TotalPages) buttons.push(TIMELINE_NEXT);
         if (!buttons.length) return;
         const choice = await vscode.window.showInformationMessage(`Armada: timeline page ${page.PageNumber} of ${page.TotalPages} for ${entryLabel(entry)}.`, ...buttons);
+        if (choice === TIMELINE_NEXT) pageNumber = page.PageNumber + 1;
+        else if (choice === TIMELINE_PREVIOUS) pageNumber = page.PageNumber - 1;
+        else return;
+      }
+    }, undefined);
+    return shown;
+  }
+
+  /** Armada: Show Resilience Gaps. Opens one Markdown page per page of gaps (filtered to the open repository's vessel when
+   * exactly one matches); offers next and previous pages. */
+  public async showResilienceGaps(): Promise<Array<EnumerationResult<BlackBoxResilienceGap>>> {
+    const shown: Array<EnumerationResult<BlackBoxResilienceGap>> = [];
+    await this.guard(async () => {
+      const client = this._Deps.getClient();
+      const vessels = Array.from(new Map(this._Deps.store.matches.map((m) => [m.vessel.Id, m.vessel])).values());
+      const vesselId = vessels.length === 1 ? vessels[0].Id : undefined;
+      let pageNumber = 1;
+      for (let guard = 0; guard < 1000; guard++) {
+        const page = await client.getResilienceGaps({ vesselId }, pageNumber, GAPS_PAGE_SIZE);
+        shown.push(page);
+        await this.openMarkdown(renderGapsMarkdown(page));
+        const buttons: string[] = [];
+        if (page.PageNumber > 1) buttons.push(TIMELINE_PREVIOUS);
+        if (page.PageNumber < page.TotalPages) buttons.push(TIMELINE_NEXT);
+        if (!buttons.length) return;
+        const choice = await vscode.window.showInformationMessage(`Armada: resilience gaps page ${page.PageNumber} of ${page.TotalPages}.`, ...buttons);
         if (choice === TIMELINE_NEXT) pageNumber = page.PageNumber + 1;
         else if (choice === TIMELINE_PREVIOUS) pageNumber = page.PageNumber - 1;
         else return;

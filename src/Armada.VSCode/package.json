@@ -233,6 +233,18 @@
         "title": "Preview Mission Overlap",
         "category": "Armada",
         "icon": "$(warning)"
+      },
+      {
+        "command": "armada.draftArmadaFixMission",
+        "title": "Draft Armada Fix Mission",
+        "category": "Armada",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "armada.showResilienceGaps",
+        "title": "Show Resilience Gaps",
+        "category": "Armada",
+        "icon": "$(shield)"
       }
     ],
     "menus": {
@@ -266,6 +278,11 @@
           "command": "armada.previewMissionOverlap",
           "when": "view == armadaFailures && armada.connected",
           "group": "navigation@4"
+        },
+        {
+          "command": "armada.showResilienceGaps",
+          "when": "view == armadaFailures && armada.connected",
+          "group": "navigation@5"
         },
         {
           "command": "armada.connect",
@@ -313,6 +330,11 @@
           "command": "armada.askArmada",
           "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
           "group": "2_fixthis@4"
+        },
+        {
+          "command": "armada.draftArmadaFixMission",
+          "when": "view == armadaFailures && viewItem =~ /^armadaEntry/",
+          "group": "2_fixthis@5"
         },
         {
           "command": "armada.runRecoveryPath",

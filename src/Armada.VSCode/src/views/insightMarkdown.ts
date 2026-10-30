@@ -1,12 +1,14 @@
 /*
- * Markdown renderings of the black box insight results (timeline, attempt diff, overlap preview). Pure: no `vscode`
+ * Markdown renderings of the black box insight results (timeline, attempt diff, overlap preview, resilience gaps). Pure: no `vscode`
  * import, every server value escaped for Markdown tables, so they are unit tested directly.
  */
 
 import {
   BlackBoxAttemptDiff,
   BlackBoxEntrySummary,
+  BlackBoxResilienceGap,
   BlackBoxTimelinePage,
+  EnumerationResult,
   BriefLintFinding,
   MissionOverlapPreview,
   MissionOverlapWarning,
@@ -54,6 +56,37 @@ export function renderTimelineMarkdown(entry: BlackBoxEntrySummary, page: BlackB
   if (sources.length) {
     lines.push('', '## Sources', '', '| Source | Events | Capped |', '|---|---|---|');
     for (const s of sources) lines.push(`| ${cell(s.Source)} | ${cell(s.Count)} | ${s.Truncated ? 'yes' : 'no'} |`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+/** One page of Armada resilience gaps as a Markdown table, most severe first, with the top proposed change of each. */
+export function renderGapsMarkdown(page: EnumerationResult<BlackBoxResilienceGap>): string {
+  const lines: string[] = ['# Armada resilience gaps', ''];
+  lines.push('Failure modes in Armada\'s own handoff and landing that the black box triaged as Armada defects, grouped by fingerprint.');
+  lines.push(`Page ${page.PageNumber} of ${Math.max(1, page.TotalPages)}, ${page.TotalRecords} failure modes in all.`, '');
+  if (!page.Objects.length) {
+    lines.push('_No Armada resilience gaps were recorded._');
+    return lines.join('\n') + '\n';
+  }
+  lines.push('| Severity | Where | Occurrences | Self-healable | Top proposed change | Versions | Newest entry |', '|---|---|---|---|---|---|---|');
+  for (const g of page.Objects) {
+    const where = `${g.Phase ?? '?'} / ${g.Step ?? '?'}${g.FailureKind ? ` (${g.FailureKind})` : ''}`;
+    const healable = `${g.SelfHealable ?? 'Unknown'}${g.Suspected ? ' (suspected)' : ''}`;
+    lines.push(`| ${cell(g.Severity)} | ${cell(where)} | ${cell(`${g.Occurrences} (${g.OpenCount ?? 0} open)`)} | ${cell(healable)} | ${cell(g.TopProposedChange?.Title)} | ${cell((g.ArmadaVersions ?? []).join(', '))} | ${cell(g.LatestEntryId)} |`);
+  }
+  const details = page.Objects.filter((g) => g.TopProposedChange || g.DetectionGap);
+  if (details.length) {
+    lines.push('', '## Proposed Armada changes');
+    for (const g of details) {
+      lines.push('', `### ${inline(g.TopProposedChange?.Title ?? g.Fingerprint)}`, '');
+      lines.push(`Fingerprint ${code(g.Fingerprint)}, newest entry ${code(g.LatestEntryId ?? '?')}${g.LatestMissionId ? ` (mission ${code(g.LatestMissionId)})` : ''}.`);
+      if (g.DetectionGap) lines.push('', `Detection gap: ${inline(g.DetectionGap)}`);
+      if (g.TopProposedChange) {
+        lines.push('', inline(g.TopProposedChange.Change));
+        if (g.TopProposedChange.AcceptanceTest) lines.push('', `Acceptance test: ${inline(g.TopProposedChange.AcceptanceTest)}`);
+      }
+    }
   }
   return lines.join('\n') + '\n';
 }
