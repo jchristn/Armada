@@ -117,6 +117,7 @@ namespace Armada.Helm
             HelpRow("blackbox nearby <id>", "Successful landings near a failure on the same files");
             HelpRow("blackbox cascade <voyageId>", "Voyage cascade graph (alias of voyage cascade)");
             HelpRow("blackbox recovery-stats", "Recovery path success rates (--rule, --vessel)");
+            HelpRow("blackbox gaps", "Armada resilience gaps by fingerprint (--vessel, --phase, --since)");
 
             HelpHeading("Fleet actions (armada action ...)");
             HelpRow("action list [--runs]", "List fleet actions (or their runs)");
@@ -385,6 +386,9 @@ namespace Armada.Helm
                 blackbox.AddCommand<BlackBoxRecoveryStatsCommand>("recovery-stats")
                     .WithDescription("Show recovery path success rates")
                     .WithExample("blackbox", "recovery-stats", "--rule", "BBX-LAND-001");
+                blackbox.AddCommand<BlackBoxGapsCommand>("gaps")
+                    .WithDescription("List Armada resilience gaps (handoff and landing failures triaged ArmadaDefect, by fingerprint)")
+                    .WithExample("blackbox", "gaps", "--phase", "Landing", "--since", "30d");
             });
 
             config.AddBranch("action", action =>
