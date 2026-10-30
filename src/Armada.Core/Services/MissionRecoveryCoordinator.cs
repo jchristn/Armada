@@ -41,6 +41,8 @@ namespace Armada.Core.Services
 
         private static readonly TimeSpan _FailureLookback = TimeSpan.FromHours(24);
         private const int MaxDiffExcerptChars = 4000;
+        private const int MaxRescueTaskChars = 3000;
+        private const string PriorStageHandoffMarker = "\n\n---\n## Prior Stage Output\nMission: ";
         private const string ExhaustedNote = "Autonomous rescue exhausted the attempt budget; needs a human.";
 
         private static readonly MissionStatusEnum[] _ActiveStatuses = new[]
@@ -377,7 +379,7 @@ namespace Armada.Core.Services
                 "Re-implement the change correctly, addressing the failure, and stay strictly in scope.\n\n" +
                 "## Original Mission\n" +
                 original.Title + "\n\n" +
-                (String.IsNullOrWhiteSpace(original.Description) ? "" : Trim(original.Description, 3000) + "\n\n") +
+                (String.IsNullOrWhiteSpace(original.Description) ? "" : BoundRescueDescription(original.Description) + "\n\n") +
                 "## Failure To Fix\n" +
                 "Classified kind: " + (incident.FailureKind ?? "Unknown") + "\n" +
                 "Reason: " + Trim(original.FailureReason, 1500) + "\n\n";
@@ -437,6 +439,21 @@ namespace Armada.Core.Services
                 RecoveryAttempts = incident.RecoveryAttempts,
                 RescueMissionIds = incident.RescueMissionIds
             }, token).ConfigureAwait(false);
+        }
+
+        private static string BoundRescueDescription(string? description)
+        {
+            // The handoff block is appended after the task. Bound the task and keep the block.
+            if (String.IsNullOrEmpty(description)) return String.Empty;
+            string text = description!;
+
+            int handoffAt = text.IndexOf(PriorStageHandoffMarker, StringComparison.Ordinal);
+            if (handoffAt < 0) return Trim(text, MaxRescueTaskChars);
+
+            string task = text.Substring(0, handoffAt);
+            string handoff = text.Substring(handoffAt);
+            if (task.Length > MaxRescueTaskChars) task = task.Substring(0, MaxRescueTaskChars);
+            return task + handoff;
         }
 
         private static string Trim(string? value, int maxChars)
