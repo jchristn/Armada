@@ -7,8 +7,11 @@ namespace Test.Shared.Suites.Services
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
+    using Armada.Core.Harbor;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Core.Settings;
+    using Armada.Runtimes;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -776,6 +779,64 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("run_async_timeout_keeps_host_output", "A timed out host check keeps captured output", TestTags.Negative, async () =>
+            {
+                using (HarborDockGitFixture git = await HarborDockGitFixture.CreateAsync().ConfigureAwait(false))
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = new ArmadaSettings
+                    {
+                        LogDirectory = Path.Combine(git.AdmiralData, "logs"),
+                        DocksDirectory = Path.Combine(git.AdmiralData, "docks"),
+                        ReposDirectory = Path.Combine(git.AdmiralData, "repos")
+                    };
+                    HarborConnectionManager manager = new HarborConnectionManager(new HarborService(testDb.Driver, logging), logging, null);
+                    HarborDockSettings harborSettings = git.Settings.Clone();
+                    harborSettings.Repositories.Add(new HarborRepositoryMapping("Workflow Vessel", git.Checkout));
+                    HarborDockManager docks = new HarborDockManager(() => harborSettings, logging);
+                    await EnsureTenantAndUserAsync(testDb, "ten_check_timeout", "usr_check_timeout").ConfigureAwait(false);
+                    using (InProcessHarbor harbor = await InProcessHarbor.ConnectAsync(
+                        manager,
+                        "hbr_check_timeout",
+                        "ten_check_timeout",
+                        "usr_check_timeout",
+                        new AgentRuntimeFactory(logging),
+                        new List<string> { "ClaudeCode", "git" },
+                        logging,
+                        new CheckTimeoutExecutor(),
+                        null,
+                        docks).ConfigureAwait(false))
+                    {
+                        Vessel vessel = CreateVessel("ten_check_timeout", "usr_check_timeout", null);
+                        vessel.RepoUrl = git.Origin;
+                        await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                        WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                        VesselHostResolver hosts = new VesselHostResolver(testDb.Driver, settings, logging, manager);
+                        VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging) { Hosts = hosts };
+                        CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging) { Hosts = hosts };
+
+                        CheckRun result = await checkRuns.RunAsync(
+                            AuthContext.Authenticated("ten_check_timeout", "usr_check_timeout", false, false, "UnitTest"),
+                            new CheckRunRequest { VesselId = vessel.Id, CommandOverride = "check timeout" }).ConfigureAwait(false);
+
+                        AssertEqual(CheckRunStatusEnum.Failed, result.Status);
+                        AssertTrue(result.ExitCode.HasValue && result.ExitCode.Value != 0, "A timeout must fail the check.");
+                        AssertContains("check stdout marker", result.Output);
+                        AssertContains("check stderr marker", result.Output);
+                        AssertEqual(1, result.Output.Split("timed out", StringSplitOptions.None).Length - 1, "one timeout message");
+
+                        CheckRun cancelled = await checkRuns.RunAsync(
+                            AuthContext.Authenticated("ten_check_timeout", "usr_check_timeout", false, false, "UnitTest"),
+                            new CheckRunRequest { VesselId = vessel.Id, CommandOverride = "check cancel" }).ConfigureAwait(false);
+
+                        AssertEqual(CheckRunStatusEnum.Failed, cancelled.Status);
+                        AssertContains("caller cancelled", cancelled.Output);
+                        AssertFalse(cancelled.Output.Contains("timed out", StringComparison.OrdinalIgnoreCase), "Cancellation must not become a timeout.");
+                    }
+                }
+            }));
+
             cases.Add(CaseAsync("missing_profile_is_actionable", "With no workflow profile, readiness says dispatch still works and links to creating one for the vessel", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -891,6 +952,45 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+        private sealed class CheckTimeoutExecutor : IHostCommandExecutor
+        {
+            /// <inheritdoc />
+            public Task<HostCommandResult> RunAsync(HostCommandRequest request, CancellationToken token = default)
+            {
+                if (request == null) throw new ArgumentNullException(nameof(request));
+
+                // The Harbor link rebuilds the host request from the executable and arguments. Kind and Label do not
+                // arrive here, so the shell command text identifies the check.
+                if (HasArgument(request, "check timeout"))
+                {
+                    return Task.FromResult(new HostCommandResult
+                    {
+                        ExitCode = 0,
+                        StandardOutput = "check stdout marker",
+                        StandardError = "check stderr marker",
+                        TimedOut = true
+                    });
+                }
+
+                if (HasArgument(request, "check cancel"))
+                    return Task.FromException<HostCommandResult>(new InvalidOperationException("caller cancelled"));
+
+                return Task.FromResult(new HostCommandResult { ExitCode = 0 });
+            }
+
+            private static bool HasArgument(HostCommandRequest request, string text)
+            {
+                if (request.Arguments == null) return false;
+                foreach (string argument in request.Arguments)
+                {
+                    if (String.Equals(argument, text, StringComparison.Ordinal))
+                        return true;
+                }
+
+                return false;
+            }
         }
 
         #endregion
