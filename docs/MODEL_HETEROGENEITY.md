@@ -561,11 +561,24 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
    cover real work beside `README.md.backup` and `.orig`, scratch-only leftovers, and tracked-file preservation.
 3. Change `VerifyStageWorkAsync` to return a result that distinguishes passed, failed, skipped (with the reason) and
    could not run, and record it on the mission. Addresses E1.
+   Status: done through `CheckStageWorkAsync` returning `StageCheckResult` (the legacy `VerifyStageWorkAsync`
+   remains a failure-message wrapper). `AdmiralService.RecordStageCheckAsync` records the result in a
+   mission-linked `mission.stage_check` event. `Services.HandoffResilience` covers passed, failed, skipped
+   with reasons (`stage_check_result_says_why_a_frontier_stage_was_skipped`) and could-not-run event
+   round trips (`stage_check_event_round_trips_the_result`); `Services.StageCheckResumeSafety`
+   `timeout_check_never_completes_without_landing` asserts a recorded CouldNotRun timeout.
 4. Record attempt-level provenance: runtime version, model digest, sampling, context, tool configuration, prompt
    version, and the escalation record. Record the observed failure and suspected cause on every failed, reworked or
    escalated stage.
+   Status: done in `StageOutcomeService.RecordAttemptAsync`, storing attempt-level `StageOutcome` provenance,
+   observed failure, suspected cause and escalation links. `Services.StageOutcomes`
+   `record_attempt_provenance_and_classification` and `provenance_recorded_and_cached_per_captain_and_harbor`
+   cover persistence and runtime/model probes; unavailable provenance is recorded as null.
 5. Start the failure classification (observed failure, suspected cause, amendable rules) so data accumulates while
    the rest is built.
+   Status: done through `FailureCauseClassifier`, persisted amendable rules and `classify_stage_outcome` /
+   `reclassify_stage_outcomes`. `Services.StageOutcomes` `manual_classification_survives_reclassify` and
+   `reclassify_applies_new_rule_to_past_outcomes`, plus `E2E.StageOutcomes` `mcp_tools`, cover this.
 6. Rerun the Timestamps baseline from HYBRID_DEVELOPMENT_RESULTS.md on the current build, with the same models
    (gpt-oss:20b, gpt-oss:120b, qwen3-coder:30b, qwen3.8:27b), 2 to 3 runs each, and publish it next to the old
    results. The four models share one GB10, so the runs go one at a time.
