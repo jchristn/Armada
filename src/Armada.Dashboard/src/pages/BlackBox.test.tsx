@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import BlackBox from './BlackBox';
 import BlackBoxEntry from './BlackBoxEntry';
+import { BlackBoxRedirect } from '../components/LegacyNavRedirects';
 import {
   enumerateBlackBox,
   enumerateBlackBoxFingerprints,
@@ -67,7 +68,8 @@ function renderAt(url: string) {
   return render(
     <MemoryRouter initialEntries={[url]}>
       <Routes>
-        <Route path="/blackbox" element={<BlackBox />} />
+        <Route path="/missions" element={<BlackBox />} />
+        <Route path="/blackbox" element={<BlackBoxRedirect />} />
         <Route path="/blackbox/:id" element={<BlackBoxEntry />} />
       </Routes>
     </MemoryRouter>,
@@ -142,7 +144,7 @@ describe('Black Box page: entries', () => {
   });
 
   it('reads the fingerprint filter from the URL', async () => {
-    renderAt('/blackbox?tab=entries&fingerprint=fp_1');
+    renderAt('/missions?tab=blackbox&bbtab=entries&fingerprint=fp_1');
     await waitFor(() => expect(enumerateBlackBox).toHaveBeenCalledWith({ fingerprint: 'fp_1', pageNumber: 1, pageSize: 25 }));
   });
 
@@ -204,8 +206,8 @@ describe('Black Box page: fingerprints, hotspots and retention', () => {
       { armadaVersion: '1.1.0', count: 4, openCount: 1, armadaFixedCount: 0, firstSeenUtc: '2026-09-01T00:00:00Z', lastSeenUtc: '2026-09-30T00:00:00Z' },
       { armadaVersion: '1.2.0', count: 1, openCount: 1, armadaFixedCount: 0, firstSeenUtc: '2026-10-01T00:00:00Z', lastSeenUtc: '2026-10-28T00:00:00Z' },
     ] });
-    renderAt('/blackbox?tab=fingerprints');
-    expect(await screen.findByRole('link', { name: 'fp_abc' })).toHaveAttribute('href', '/blackbox?tab=entries&fingerprint=fp_abc');
+    renderAt('/missions?tab=blackbox&bbtab=fingerprints');
+    expect(await screen.findByRole('link', { name: 'fp_abc' })).toHaveAttribute('href', '/missions?tab=blackbox&bbtab=entries&fingerprint=fp_abc');
     const spark = await screen.findByTestId('sparkline-fp_abc');
     expect(spark).toHaveAttribute('aria-label', '1.1.0: 4 (1 open); 1.2.0: 1 (1 open)');
     expect(spark.querySelector('polyline')).not.toBeNull();
@@ -215,15 +217,15 @@ describe('Black Box page: fingerprints, hotspots and retention', () => {
   it('shows a dash when a trend cannot be read', async () => {
     vi.mocked(enumerateBlackBoxFingerprints).mockResolvedValue(page([{ fingerprint: 'fp_x', count: 1, openCount: 1, firstSeenUtc: '', lastSeenUtc: '', phase: 'Execution', step: 'Stall' }]) as never);
     vi.mocked(getBlackBoxFingerprintTrend).mockRejectedValue(new Error('nope'));
-    renderAt('/blackbox?tab=fingerprints');
+    renderAt('/missions?tab=blackbox&bbtab=fingerprints');
     await screen.findByRole('link', { name: 'fp_x' });
     await waitFor(() => expect(screen.queryByTestId('sparkline-fp_x')).toBeNull());
   });
 
   it('lists hotspots per vessel and filters by vessel', async () => {
     vi.mocked(enumerateBlackBoxHotspots).mockResolvedValue(page([{ vesselId: 'vsl_1', directory: 'src/middleware', fileCount: 4, entryCount: 3 }]) as never);
-    renderAt('/blackbox?tab=hotspots');
-    expect(await screen.findByRole('link', { name: 'src/middleware' })).toHaveAttribute('href', '/blackbox?tab=entries&path=src%2Fmiddleware&vesselId=vsl_1');
+    renderAt('/missions?tab=blackbox&bbtab=hotspots');
+    expect(await screen.findByRole('link', { name: 'src/middleware' })).toHaveAttribute('href', '/missions?tab=blackbox&bbtab=entries&path=src%2Fmiddleware&vesselId=vsl_1');
     await waitFor(() => expect(screen.getByRole('link', { name: 'api-server' })).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText('Vessel'), { target: { value: 'vsl_1' } });
     await waitFor(() => expect(enumerateBlackBoxHotspots).toHaveBeenLastCalledWith({ pageNumber: 1, pageSize: 25, vesselId: 'vsl_1', role: undefined }));
@@ -233,7 +235,7 @@ describe('Black Box page: fingerprints, hotspots and retention', () => {
     vi.mocked(getBlackBoxRetention).mockResolvedValue(retention);
     vi.mocked(getBlackBoxStorage).mockResolvedValue({ target: 'Database', fallbackToDatabase: true, health: { target: 'Database', healthy: true, checkedUtc: '' }, usage: [{ target: 'Database', entries: 42, bytes: 1048576 }] });
     vi.mocked(runBlackBoxGc).mockResolvedValue(gcReport);
-    renderAt('/blackbox?tab=retention');
+    renderAt('/missions?tab=blackbox&bbtab=retention');
     expect(await screen.findByText('180 days')).toBeInTheDocument();
     expect(screen.getByRole('table', { name: 'Usage by storage target' })).toHaveTextContent('Database');
     expect(screen.getByTestId('blackbox-gc-report')).toBeInTheDocument();
@@ -248,7 +250,7 @@ describe('Black Box page: fingerprints, hotspots and retention', () => {
     vi.mocked(purgeBlackBox)
       .mockResolvedValueOnce({ dryRun: true, matched: 7, deleted: 0, pending: 0, skippedPinned: 1, bytesFreed: 0, sampleEntryIds: ['bbx_a'] })
       .mockResolvedValueOnce({ dryRun: false, matched: 7, deleted: 6, pending: 0, skippedPinned: 1, bytesFreed: 4096 });
-    renderAt('/blackbox?tab=retention');
+    renderAt('/missions?tab=blackbox&bbtab=retention');
     await screen.findByText('180 days');
     expect(screen.getByRole('button', { name: 'Purge' })).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Purge created before'), { target: { value: '2026-09-01' } });
@@ -268,7 +270,7 @@ describe('Black Box page: fingerprints, hotspots and retention', () => {
     vi.mocked(getBlackBoxRetention).mockResolvedValue(retention);
     vi.mocked(getBlackBoxStorage).mockResolvedValue({ target: 'Database', fallbackToDatabase: true });
     vi.mocked(purgeBlackBox).mockResolvedValue({ dryRun: true, matched: 2, deleted: 0, pending: 0, skippedPinned: 0, bytesFreed: 0 });
-    renderAt('/blackbox?tab=retention');
+    renderAt('/missions?tab=blackbox&bbtab=retention');
     await screen.findByText('180 days');
     fireEvent.click(screen.getByRole('button', { name: 'Dry run purge' }));
     expect(await screen.findByRole('button', { name: 'Purge 2 entries' })).toBeEnabled();
@@ -279,7 +281,7 @@ describe('Black Box page: fingerprints, hotspots and retention', () => {
   it('hides GC and purge controls from tenant admins and explains a refusal', async () => {
     auth.isAdmin = false;
     vi.mocked(getBlackBoxRetention).mockResolvedValue(retention);
-    renderAt('/blackbox?tab=retention');
+    renderAt('/missions?tab=blackbox&bbtab=retention');
     await screen.findByText('180 days');
     expect(screen.queryByRole('button', { name: 'Preview garbage collection' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Dry run purge' })).toBeNull();
@@ -290,7 +292,7 @@ describe('Black Box page: fingerprints, hotspots and retention', () => {
     auth.isAdmin = false;
     auth.isTenantAdmin = false;
     vi.mocked(getBlackBoxRetention).mockRejectedValue(apiError(403));
-    renderAt('/blackbox?tab=retention');
+    renderAt('/missions?tab=blackbox&bbtab=retention');
     expect(await screen.findByText('Retention status is available to tenant administrators.')).toBeInTheDocument();
   });
 });
@@ -300,7 +302,15 @@ describe('Black box entry page', () => {
     vi.mocked(getBlackBox).mockRejectedValue(apiError(404, 'BlackBoxNotFound'));
     renderAt('/blackbox/bbx_nope');
     expect(await screen.findByText(/Black box entry not found/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Black Box' })).toHaveAttribute('href', '/blackbox');
+    expect(screen.getByRole('link', { name: 'Black Box' })).toHaveAttribute('href', '/missions?tab=blackbox');
+  });
+});
+
+describe('Black Box page: old /blackbox links', () => {
+  it('redirect to the Missions Black Box tab, keeping the section and the filters', async () => {
+    vi.mocked(enumerateBlackBoxFingerprints).mockResolvedValue(page([]) as never);
+    renderAt('/blackbox?tab=fingerprints&vesselId=vsl_1');
+    expect(await screen.findByRole('tab', { name: 'Fingerprints' })).toHaveAttribute('aria-selected', 'true');
   });
 });
 
@@ -308,7 +318,7 @@ describe('Black Box page: Recovery stats tab', () => {
   it('opens the recovery stats tab from the URL and lists the paths', async () => {
     vi.mocked(listVessels).mockResolvedValue(page([{ id: 'vsl_1', name: 'api-server' }]) as never);
     vi.mocked(getBlackBoxRecoveryStats).mockResolvedValue(page([{ ruleId: 'BBX-LAND-001', pathId: 'bbx-land-001.retry', runs: 3, succeeded: 3, failed: 0, pending: 0, expired: 0, successRate: 1 }]) as never);
-    renderAt('/blackbox?tab=recovery');
+    renderAt('/missions?tab=blackbox&bbtab=recovery');
     expect(await screen.findByText('bbx-land-001.retry')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Recovery stats' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText('100% success')).toBeInTheDocument();

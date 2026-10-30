@@ -1,4 +1,5 @@
 import { Navigate, useLocation, useParams } from 'react-router-dom';
+import { BLACKBOX_SECTION_PARAM } from '../lib/navTargets';
 
 /**
  * Redirects for pages that became hub tabs (v1.2.0 nav consolidation). Plain `<Navigate>` drops the query string and
@@ -28,4 +29,16 @@ export function PlanningRedirect() {
   if (id) next.set('session', id);
   params.forEach((value, key) => next.set(key, value));
   return <Navigate to={`/dispatch?${next.toString()}`} state={location.state} replace />;
+}
+
+/** `/blackbox[?tab=fingerprints&vesselId=...]` -> Missions > Black Box; the old `tab` becomes `bbtab`, filters are kept. */
+export function BlackBoxRedirect() {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const section = params.get('tab');
+  params.delete('tab');
+  const next = new URLSearchParams({ tab: 'blackbox' });
+  if (section) next.set(BLACKBOX_SECTION_PARAM, section);
+  params.forEach((value, key) => { if (!next.has(key)) next.set(key, value); });
+  return <Navigate to={`/missions?${next.toString()}`} state={location.state} replace />;
 }

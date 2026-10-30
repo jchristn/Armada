@@ -22,47 +22,48 @@ describe('navConfig', () => {
     const present = [
       '/', '/ask', '/inbox', '/dispatch', '/missions',
       '/delivery', '/fleet-actions', '/vessels', '/captains', '/configuration', '/activity',
-      '/api-explorer', '/server', '/blackbox',
+      '/api-explorer', '/server',
     ];
     const sidebarTargets = [dashboardItem, askArmadaItem, ...navSections.flatMap((s) => s.items)].map((i) => i.to);
     expect(sidebarTargets).toEqual(expect.arrayContaining(present));
-    // 14 sidebar destinations (Black Box joined OPERATIONS in v1.2.0); Planning, Jobs, Storage and CLI Tool
-    // Permissions are hub tabs since v1.2.0.
-    expect(sidebarTargets).toHaveLength(14);
+    // 13 sidebar destinations; Planning, Jobs, Storage, CLI Tool Permissions and Black Box are hub tabs since v1.2.0.
+    expect(sidebarTargets).toHaveLength(13);
   });
 
   it('lays out the v1.2.0 sections: Activity under Missions, Delivery in BUILD, no ACTIVITY or DELIVERY section', () => {
     expect(navSections.map((s) => s.label)).toEqual(['OPERATIONS', 'BUILD', 'CONFIGURATION', 'SYSTEM']);
     const byKey = Object.fromEntries(navSections.map((s) => [s.key, s.items.map((i) => i.to)]));
-    expect(byKey.operations).toEqual(['/inbox', '/dispatch', '/fleet-actions', '/missions', '/activity', '/blackbox']);
+    expect(byKey.operations).toEqual(['/inbox', '/dispatch', '/fleet-actions', '/missions', '/activity']);
     expect(byKey.fleet).toEqual(['/vessels', '/captains', '/delivery']);
     expect(byKey.system).toEqual(['/api-explorer', '/server']);
     const operations = navSections.find((s) => s.key === 'operations')!;
     // Old Activity and Delivery child routes still highlight the section that now hosts them.
-    for (const route of ['/activity', '/jobs', '/events', '/signals', '/requests', '/history', '/planning']) {
+    for (const route of ['/activity', '/jobs', '/events', '/signals', '/requests', '/history', '/planning', '/blackbox']) {
       expect(operations.matchers).toContain(route);
     }
     expect(navSections.find((s) => s.key === 'fleet')!.matchers).toEqual(expect.arrayContaining(['/delivery', '/deployments', '/checks']));
     expect(Object.keys(DEFAULT_EXPANDED_SECTIONS).sort()).toEqual(navSections.map((s) => s.key).sort());
   });
 
-  it('mentions the new tabs in the Activity, Dispatch, and Settings tooltips', () => {
+  it('mentions the new tabs in the Activity, Dispatch, Missions, and Settings tooltips', () => {
     const items = navSections.flatMap((s) => s.items);
     expect(items.find((i) => i.to === '/activity')!.tooltip).toContain('Jobs tab');
     expect(items.find((i) => i.to === '/dispatch')!.tooltip).toContain('Planning tab');
+    expect(items.find((i) => i.to === '/missions')!.tooltip).toContain('Black Box');
     const settings = items.find((i) => i.to === '/server')!.tooltip!;
     expect(settings).toContain('Storage');
     expect(settings).toContain('CLI Tool Permissions');
   });
 
   it('keeps the folded pages searchable in the command palette, pointing at their new tabs', () => {
-    expect(commands.slice(-4)).toEqual([
+    expect(commands.slice(-5)).toEqual([
       { to: '/dispatch?tab=planning', label: 'Planning', section: 'OPERATIONS' },
       { to: '/activity?source=jobs', label: 'Jobs', section: 'OPERATIONS' },
+      { to: '/missions?tab=blackbox', label: 'Black Box', section: 'OPERATIONS' },
       { to: '/server?tab=storage', label: 'Storage', section: 'SYSTEM' },
       { to: '/server?tab=cli-permissions', label: 'CLI Tool Permissions', section: 'SYSTEM' },
     ]);
-    for (const old of ['/planning', '/jobs', '/storage', '/cli-permissions']) {
+    for (const old of ['/planning', '/jobs', '/storage', '/cli-permissions', '/blackbox']) {
       expect(allTargets).not.toContain(old);
     }
   });
