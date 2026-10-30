@@ -145,6 +145,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
 
+### Stored objective fields that cannot be decoded fail the read
+
+- **A damaged objective field is no longer read as an empty list or a default enum.** Non-empty list or playbook JSON that cannot be decoded, and a non-empty objective enum name that is not a defined member, throw `StoredObjectiveDataException` with the objective id and the field name. A single-row read and an enumeration both fail. The stored text stays as it was, so a later update of another field cannot replace it. Empty or null text still reads as an empty list or the existing enum fallback. A numeric enum string that `Enum.TryParse` accepts is unchanged. Refinement-session enum reads keep their own fallback.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.
