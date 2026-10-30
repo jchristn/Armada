@@ -104,7 +104,8 @@ namespace Armada.Core.Services
             InboxItemKinds.AskProposal,
             InboxItemKinds.CliPermission,
             InboxItemKinds.Failed,
-            InboxItemKinds.StalledCaptain
+            InboxItemKinds.StalledCaptain,
+            InboxItemKinds.ModelAlert
         };
 
         /// <summary>
@@ -181,6 +182,9 @@ namespace Armada.Core.Services
                     case InboxItemKinds.CliPermission:
                         sections.Add(MemorySection(kind, async t => (await PendingCliPermissionsAsync(auth, t).ConfigureAwait(false)).Select(r => CliPermissionItem(auth, r)).ToList()));
                         break;
+                    case InboxItemKinds.ModelAlert:
+                        sections.Add(ModelAlertSection(auth));
+                        break;
                     case InboxItemKinds.StalledCaptain:
                         // Captains are a registered set (not operational rows that accumulate), so the stalled ones are read
                         // together and paged here.
@@ -253,6 +257,52 @@ namespace Armada.Core.Services
                 List<InboxItem> items = page.Objects.Select(d => status == DeploymentStatusEnum.PendingApproval ? DeploymentApprovalItem(d) : DeploymentFailedItem(d)).ToList();
                 return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, items, page.TotalRecords);
             });
+        }
+
+        private PagedSection<InboxItem> ModelAlertSection(AuthContext auth)
+        {
+            // Model alerts are advisory and only an admin can apply their suggested actions, so only admins see them.
+            return Guarded(InboxItemKinds.ModelAlert, async (pageNumber, pageSize, token) =>
+            {
+                EnumerationQuery paging = new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize };
+                if (!auth.IsAdmin && !(auth.IsTenantAdmin && !String.IsNullOrEmpty(auth.TenantId)))
+                    return EnumerationResult<InboxItem>.Create(paging, new List<InboxItem>(), 0);
+                DateTime now = DateTime.UtcNow;
+                ModelAlertQuery query = new ModelAlertQuery
+                {
+                    TenantId = auth.IsAdmin ? null : auth.TenantId,
+                    Status = ModelAlertStatusEnum.Open,
+                    NotIgnoredAtUtc = now,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
+                EnumerationResult<ModelAlert> page = await _Database.ModelAlerts.EnumerateAsync(query, token).ConfigureAwait(false);
+                ModelAlertActionPlanner planner = new ModelAlertActionPlanner(_Database);
+                int ignoreDays = _Settings?.ModelAlerts.DefaultIgnoreDays ?? 7;
+                List<InboxItem> items = new List<InboxItem>();
+                foreach (ModelAlert alert in page.Objects)
+                {
+                    alert.SuggestedActions = (await planner.PlanAsync(alert, auth, ignoreDays, token).ConfigureAwait(false)).Actions;
+                    items.Add(ModelAlertItem(alert));
+                }
+                return EnumerationResult<InboxItem>.Create(paging, items, page.TotalRecords);
+            });
+        }
+
+        private static InboxItem ModelAlertItem(ModelAlert alert)
+        {
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.ModelAlert,
+                Severity = InboxSeverityEnum.Info,
+                Title = alert.Title,
+                EntityName = String.IsNullOrWhiteSpace(alert.Model) ? alert.ProfileId : alert.Model,
+                Detail = alert.Detail,
+                EntityType = "model_alert",
+                EntityId = alert.Id,
+                Href = "/inbox?modelAlert=" + alert.Id,
+                ModelAlert = alert
+            };
         }
 
         private PagedSection<InboxItem> MemorySection(string kind, Func<CancellationToken, Task<List<InboxItem>>> load)

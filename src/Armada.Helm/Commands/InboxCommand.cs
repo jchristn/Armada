@@ -1,5 +1,6 @@
 namespace Armada.Helm.Commands
 {
+    using System;
     using System.Collections.Generic;
     using System.ComponentModel;
     using System.Linq;
@@ -55,14 +56,42 @@ namespace Armada.Helm.Commands
                     InboxSeverityEnum.Warning => "yellow",
                     _ => "dim"
                 };
+                string detail = $"[dim]{Markup.Escape(item.Detail)}[/]";
+                List<string> actions = ModelAlertActionLines(item);
+                if (actions.Count > 0) detail += "\n" + String.Join("\n", actions.Select(Markup.Escape));
                 table.AddRow(
                     $"[{color}]{item.Severity}[/]",
                     Markup.Escape(item.Title),
-                    $"[dim]{Markup.Escape(item.Detail)}[/]");
+                    detail);
             }
 
             AnsiConsole.Write(table);
+            if (items.Any(i => ModelAlertActionLines(i).Count > 0))
+                AnsiConsole.MarkupLine("[dim]Model alerts are advisory: nothing changes until a suggested action is applied (dashboard, TUI, POST /api/v1/model-alerts/{id}/apply, or MCP).[/]");
             return 0;
+        }
+
+        /// <summary>
+        /// Plain-text lines describing a model alert item's suggested actions (label, then available or the reason it is
+        /// unavailable) and its latest applied action; empty for other kinds.
+        /// </summary>
+        /// <param name="item">Inbox item.</param>
+        /// <returns>Lines, unescaped.</returns>
+        public static List<string> ModelAlertActionLines(InboxItem item)
+        {
+            List<string> lines = new List<string>();
+            if (item == null || item.Kind != InboxItemKinds.ModelAlert || item.ModelAlert == null) return lines;
+            foreach (ModelAlertSuggestedAction action in item.ModelAlert.SuggestedActions ?? new List<ModelAlertSuggestedAction>())
+            {
+                string state = action.Available
+                    ? "available"
+                    : "unavailable: " + (String.IsNullOrEmpty(action.UnavailableReason) ? "no reason given" : action.UnavailableReason);
+                lines.Add("- " + action.Label + " [" + action.Action + "] " + (action.Recommended ? "(recommended) " : "") + "(" + state + ")");
+            }
+
+            ModelAlertActionRecord? last = item.ModelAlert.Actions?.LastOrDefault();
+            if (last != null && !String.IsNullOrEmpty(last.Result)) lines.Add("Last action: " + last.Result);
+            return lines;
         }
     }
 }

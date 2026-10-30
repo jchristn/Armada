@@ -209,6 +209,8 @@ import type {
   ModelProbeDepth,
   ModelProbeRun,
   ModelProbeRunQuery,
+  ModelAlertAction,
+  ModelAlertApplyResult,
 } from '../types/models';
 import type {
   BlackBoxBackfillRequest,
@@ -2183,6 +2185,16 @@ export const listModelProbeRuns = (query?: ModelProbeRunQuery) =>
     captainId: query?.captainId, modelEndpointId: query?.modelEndpointId, status: query?.status,
     pageNumber: query?.pageNumber, pageSize: query?.pageSize,
   })}`);
+
+// Model alerts (scorecard thresholds) are advisory inbox items: their suggested actions change nothing until applied.
+
+/** Apply one suggested action of a model alert; days only applies to Ignore. Returns the record and the updated alert. */
+export const applyModelAlertAction = (id: string, action: ModelAlertAction, days?: number | null) =>
+  post<ModelAlertApplyResult>(`/api/v1/model-alerts/${encodeURIComponent(id)}/apply`, { Action: action, Days: days ?? null });
+
+/** Ignore a model alert for a number of days (the server default is 7 when days is omitted). */
+export const ignoreModelAlert = (id: string, days?: number | null) =>
+  post<ModelAlertApplyResult>(`/api/v1/model-alerts/${encodeURIComponent(id)}/ignore`, { Days: days ?? null });
 
 // Workspace terminal
 export const execWorkspaceCommand = (vesselId: string, command: string, timeoutSeconds?: number) =>

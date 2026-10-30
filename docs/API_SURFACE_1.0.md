@@ -24,13 +24,13 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 496 | 15 |
-| MCP tools | 246 | 8 |
+| REST routes | 504 | 15 |
+| MCP tools | 253 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 76 | 0 |
 | CLI commands | 97 | 0 |
-| Settings keys | 285 | 12 |
+| Settings keys | 310 | 12 |
 
 ## REST API
 
@@ -289,6 +289,14 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/missions/{id}/review/approve` | TenantAdmin | `MissionReviewDecisionRequest` (optional) | 200 `Mission`, 400, 404 |  |
 | POST | `/api/v1/missions/{id}/review/deny` | TenantAdmin | `MissionReviewDecisionRequest` (optional) | 200 `Mission`, 400, 404 |  |
 | PUT | `/api/v1/missions/{id}/status` | TenantAdmin | `StatusTransitionRequest` | 200 `Mission`, 400, 404 |  |
+| GET | `/api/v1/model-alerts` | Authenticated |  | 200 `EnumerationResult<ModelAlert>`, 400 |  |
+| POST | `/api/v1/model-alerts/enumerate` | Authenticated | `ModelAlertQuery` (optional) | 200 `EnumerationResult<ModelAlert>`, 400 |  |
+| POST | `/api/v1/model-alerts/evaluate` | Authenticated |  | 200 `ModelAlertEvaluation`, 403 `ApiErrorResponse` |  |
+| GET | `/api/v1/model-alerts/thresholds` | Authenticated |  | 200 `ModelAlertThresholds` |  |
+| PUT | `/api/v1/model-alerts/thresholds` | Authenticated | `ModelAlertThresholds` | 200 `ModelAlertThresholds`, 400, 403 `ApiErrorResponse` |  |
+| GET | `/api/v1/model-alerts/{id}` | Authenticated |  | 200 `ModelAlert`, 404 |  |
+| POST | `/api/v1/model-alerts/{id}/apply` | Authenticated | `ModelAlertApplyRequest` | 200 `ModelAlertApplyResult`, 400, 403 `ApiErrorResponse`, 404 |  |
+| POST | `/api/v1/model-alerts/{id}/ignore` | Authenticated | `ModelAlertIgnoreRequest` (optional) | 200 `ModelAlertApplyResult`, 400, 403 `ApiErrorResponse`, 404 |  |
 | POST | `/api/v1/model-endpoints` | Authenticated | `ModelEndpoint` | 201 `ModelEndpoint`, 400 |  |
 | POST | `/api/v1/model-endpoints/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<ModelEndpoint>` |  |
 | POST | `/api/v1/model-endpoints/health-check` | Authenticated |  | 200 `ModelEndpointHealthSweepResponse` |  |
@@ -547,6 +555,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `apply_backlog_refinement_summary` | TenantAdmin | `endSession: boolean`, `markMessageSelected: boolean`, `messageId: string`, `promoteBacklogState: boolean`, `sessionId*: string` |  |
 | `apply_blackbox_recommendation` | Authenticated | `confirmToken: string`, `dryRun: boolean`, `entryId: string`, `missionId: string`, `recommendationId*: string`, `voyageId: string` |  |
 | `apply_fleet_recommendations` | TenantAdmin | `batchId*: string`, `fleets: array<object>` |  |
+| `apply_model_alert_action` | Authenticated | `action*: string`, `days: integer`, `id*: string` |  |
 | `approve_ask_proposal` | Authenticated | `proposalId*: string`, `threadId*: string` |  |
 | `approve_deployment` | TenantAdmin | `comment: string`, `deploymentId*: string` |  |
 | `approve_mission_review` | TenantAdmin | `comment: string`, `conditional: boolean`, `missionId*: string` |  |
@@ -622,6 +631,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `enumerate` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `entityType*: string`, `eventType: string`, `fleetId: string`, `includeContext: boolean`, `includeDescription: boolean`, `includeInactive: boolean`, `includeMessage: boolean`, `includeOutput: boolean`, `includePayload: boolean`, `includeTestOutput: boolean`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `runId: string`, `search: string`, `signalType: string`, `status: string`, `threadId: string`, `toCaptainId: string`, `unreadOnly: boolean`, `vesselId: string`, `voyageId: string` |  |
 | `evaluate_autoland` | Authenticated | `missionId*: string` |  |
 | `evaluate_captain` | Authenticated | `captainId: string`, `depth: string`, `modelEndpointId: string` |  |
+| `evaluate_model_alerts` | Authenticated |  |  |
 | `evaluate_vessel_health` | TenantAdmin | `fleetId: string`, `force: boolean`, `vesselIds: array<string>` |  |
 | `export_blackbox_fixture` | AdminOnly | `entryId: string`, `missionId: string`, `name: string`, `voyageId: string` |  |
 | `fleet_action_run_status` | Authenticated | `runId*: string` |  |
@@ -654,6 +664,8 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_merge_entry` | Authenticated | `entryId*: string` |  |
 | `get_mission_diff` | Authenticated | `missionId*: string` |  |
 | `get_mission_log` | Authenticated | `formatted: boolean`, `lines: integer`, `missionId*: string`, `offset: integer` |  |
+| `get_model_alert` | Authenticated | `id*: string` |  |
+| `get_model_alert_thresholds` | Authenticated |  |  |
 | `get_model_endpoint` | Authenticated | `endpointId*: string` |  |
 | `get_model_probe_run` | Authenticated | `id*: string` |  |
 | `get_model_profile` | Authenticated | `id*: string` |  |
@@ -672,6 +684,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_voyage_blackbox_cascade` | Authenticated | `voyageId*: string` |  |
 | `get_workflow_profile` | Authenticated | `id*: string` |  |
 | `health_check_model_endpoints` | Authenticated |  |  |
+| `ignore_model_alert` | Authenticated | `days: integer`, `id*: string` |  |
 | `import_vessels` | TenantAdmin | `allNew: boolean`, `applyFleetsAutomatically: boolean`, `batchId*: string`, `captainId: string`, `categorize: boolean`, `defaultPipelineId: string`, `fleetId: string`, `landingMode: string`, `paths: array<string>`, `prompt: string` |  |
 | `lint_mission_brief` | Authenticated | `dependsOnMissionId: string`, `description: string`, `title: string`, `vesselId: string` |  |
 | `list_ask_messages` | Authenticated | `beforeSequence: integer`, `pageSize: integer`, `threadId*: string` |  |
@@ -698,6 +711,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `list_failure_cause_rules` | Authenticated | `pageNumber: integer`, `pageSize: integer` |  |
 | `list_handoff_artifacts` | Authenticated | `missionId*: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `list_harbor_jobs` | Authenticated | `harborId*: string`, `openOnly: boolean`, `pageNumber: integer`, `pageSize: integer` | experimental |
+| `list_model_alerts` | Authenticated | `includeIgnored: boolean`, `pageNumber: integer`, `pageSize: integer`, `persona: string`, `profileId: string`, `status: string` |  |
 | `list_model_probe_runs` | Authenticated | `captainId: string`, `modelEndpointId: string`, `pageNumber: integer`, `pageSize: integer`, `status: string` |  |
 | `list_model_profiles` | Authenticated | `model: string`, `pageNumber: integer`, `pageSize: integer`, `provider: string`, `runtime: string` |  |
 | `list_objectives` | Authenticated | `backlogState: string`, `category: string`, `effort: string`, `fleetId: string`, `kind: string`, `owner: string`, `pageNumber: integer`, `pageSize: integer`, `parentObjectiveId: string`, `priority: string`, `search: string`, `status: string`, `targetVersion: string`, `vesselId: string` |  |
@@ -774,6 +788,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `update_harbor` | Authenticated | `enabled: boolean`, `harborId*: string`, `maxConcurrentJobs: integer`, `name: string` | experimental |
 | `update_memory` | Authenticated | `content: string`, `key: string`, `memoryId*: string`, `salience: number`, `scope: string`, `sourceDetail: string`, `summary: string`, `tags: array<string>`, `topic: string`, `type: string`, `vesselId: string` |  |
 | `update_mission` | TenantAdmin | `branchName: string`, `description: string`, `missionId*: string`, `mode: string`, `parentMissionId: string`, `persona: string`, `prUrl: string`, `priority: integer`, `title: string`, `vesselId: string`, `voyageId: string` |  |
+| `update_model_alert_thresholds` | Authenticated | `defaults: object`, `overrides: array<object>` |  |
 | `update_model_endpoint` | Authenticated | `apiKey: string`, `authHeaderName: string`, `authQueryParameter: string`, `authType: string`, `authUsername: string`, `baseUrl: string`, `dimensionality: integer`, `enabled: boolean`, `endpointId*: string`, `headers: array<object>`, `inferenceOptions: object`, `kind: string`, `model: string`, `name: string`, `provider: string`, `timeoutMs: integer` |  |
 | `update_objective` | TenantAdmin | `acceptanceCriteria: array<string>`, `backlogState: string`, `blockedByObjectiveIds: array<string>`, `category: string`, `checkRunIds: array<string>`, `deploymentIds: array<string>`, `description: string`, `dueUtc: string`, `effort: string`, `evidenceLinks: array<string>`, `fleetIds: array<string>`, `incidentIds: array<string>`, `kind: string`, `missionIds: array<string>`, `nonGoals: array<string>`, `objectiveId*: string`, `owner: string`, `parentObjectiveId: string`, `planningSessionIds: array<string>`, `priority: string`, `rank: integer`, `refinementSessionIds: array<string>`, `refinementSummary: string`, `releaseIds: array<string>`, `rolloutConstraints: array<string>`, `status: string`, `suggestedPipelineId: string`, `tags: array<string>`, `targetVersion: string`, `title: string`, `vesselIds: array<string>`, `voyageIds: array<string>` |  |
 | `update_persona` | Authenticated | `captainPriorities: array<object>`, `defaultCaptainId: string`, `description: string`, `name*: string`, `priorityAvailability: string`, `priorityExhaustion: string`, `promptTemplateName: string`, `scope: string` |  |
@@ -1201,6 +1216,31 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `messageTemplates.prDescriptionTemplate` | string | `"\n\n---\nCommitted by [Armada](https://github.com/jchristn/armada)\n- Missio...` |  |
 | `minAvailableMemoryBytesForLaunch` | long | `0` |  |
 | `minIdleCaptains` | int | `0` |  |
+| `modelAlerts` | object |  |  |
+| `modelAlerts.defaultIgnoreDays` | int | `7` |  |
+| `modelAlerts.enabled` | bool | `true` |  |
+| `modelAlerts.includeVessels` | bool | `false` |  |
+| `modelAlerts.intervalMinutes` | int | `60` |  |
+| `modelAlerts.pushEnabled` | bool | `false` |  |
+| `modelAlerts.thresholds` | object |  |  |
+| `modelAlerts.thresholds.defaults` | object |  |  |
+| `modelAlerts.thresholds.defaults.costMedianMultiplier` | double? | `null` |  |
+| `modelAlerts.thresholds.defaults.costMinAccepted` | int? | `null` |  |
+| `modelAlerts.thresholds.defaults.escalationsInARow` | int? | `null` |  |
+| `modelAlerts.thresholds.defaults.firstPassMinMissions` | int? | `null` |  |
+| `modelAlerts.thresholds.defaults.firstPassMinRate` | double? | `null` |  |
+| `modelAlerts.thresholds.defaults.persona` | string | `null` |  |
+| `modelAlerts.thresholds.defaults.protocolRepairMaxRate` | double? | `null` |  |
+| `modelAlerts.thresholds.defaults.protocolRepairMinAttempts` | int? | `null` |  |
+| `modelAlerts.thresholds.overrides` | array<object> | `[]` |  |
+| `modelAlerts.thresholds.overrides[].costMedianMultiplier` | double? | `null` |  |
+| `modelAlerts.thresholds.overrides[].costMinAccepted` | int? | `null` |  |
+| `modelAlerts.thresholds.overrides[].escalationsInARow` | int? | `null` |  |
+| `modelAlerts.thresholds.overrides[].firstPassMinMissions` | int? | `null` |  |
+| `modelAlerts.thresholds.overrides[].firstPassMinRate` | double? | `null` |  |
+| `modelAlerts.thresholds.overrides[].persona` | string | `null` |  |
+| `modelAlerts.thresholds.overrides[].protocolRepairMaxRate` | double? | `null` |  |
+| `modelAlerts.thresholds.overrides[].protocolRepairMinAttempts` | int? | `null` |  |
 | `notifications` | bool | `true` |  |
 | `permissions` | object |  |  |
 | `permissions.allowOwnerApproval` | bool | `false` |  |
@@ -1212,7 +1252,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `planningSessionInactivityTimeoutMinutes` | int | `60` |  |
 | `planningSessionRetentionDays` | int | `0` |  |
 | `push` | object |  |  |
-| `push.categories` | array<enum PushCategoryEnum (AskProposal\|CliPermission\|MissionReview\|DeploymentApproval\|MissionFailed\|LandingFailed\|CaptainStalled\|VoyageFinished)> | `["AskProposal","CliPermission","MissionReview","DeploymentApproval","MissionF...` |  |
+| `push.categories` | array<enum PushCategoryEnum (AskProposal\|CliPermission\|MissionReview\|DeploymentApproval\|MissionFailed\|LandingFailed\|CaptainStalled\|VoyageFinished\|ModelAlert)> | `["AskProposal","CliPermission","MissionReview","DeploymentApproval","MissionF...` |  |
 | `push.dedupeWindowSeconds` | int | `300` |  |
 | `push.enabled` | bool | `true` |  |
 | `push.expoAccessToken` | string | `null` |  |

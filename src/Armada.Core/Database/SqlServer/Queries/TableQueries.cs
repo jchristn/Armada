@@ -2269,7 +2269,38 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_profiles_tenant_created') CREATE INDEX idx_model_profiles_tenant_created ON model_profiles(tenant_id, created_utc);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_profile_revisions_profile_seen') CREATE INDEX idx_model_profile_revisions_profile_seen ON model_profile_revisions(profile_id, first_seen_utc);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_profile_revision_compat_other') CREATE INDEX idx_model_profile_revision_compat_other ON model_profile_revision_compat(compatible_revision_id);",
-                    @"IF COL_LENGTH('captains', 'model_profile_id') IS NULL ALTER TABLE captains ADD model_profile_id NVARCHAR(64) NULL;")
+                    @"IF COL_LENGTH('captains', 'model_profile_id') IS NULL ALTER TABLE captains ADD model_profile_id NVARCHAR(64) NULL;"),
+
+                new SchemaMigration(108, "Add model_alerts: one row per scorecard alert condition (tenant, model profile, revision group, persona, vessel scope, rule) with a unique alert key, open/resolved status, the counts, ignore-until and the applied-action audit record",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'model_alerts') CREATE TABLE model_alerts (
+                        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id NVARCHAR(64),
+                        alert_key NVARCHAR(64) NOT NULL,
+                        profile_id NVARCHAR(64) NOT NULL,
+                        model NVARCHAR(512),
+                        revision_group NVARCHAR(MAX) NOT NULL,
+                        persona NVARCHAR(256) NOT NULL,
+                        vessel_id NVARCHAR(64),
+                        vessel_name NVARCHAR(512),
+                        [rule] NVARCHAR(64) NOT NULL,
+                        status NVARCHAR(32) NOT NULL,
+                        title NVARCHAR(MAX) NOT NULL,
+                        detail NVARCHAR(MAX),
+                        metric_count INT,
+                        metric_of INT,
+                        metric_value FLOAT,
+                        threshold_value FLOAT,
+                        created_utc DATETIME2 NOT NULL,
+                        last_raised_utc DATETIME2 NOT NULL,
+                        last_evaluated_utc DATETIME2 NOT NULL,
+                        resolved_utc DATETIME2,
+                        ignored_until_utc DATETIME2,
+                        actions_json NVARCHAR(MAX),
+                        last_update_utc DATETIME2 NOT NULL
+                    );",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_alerts_alert_key') CREATE UNIQUE INDEX idx_model_alerts_alert_key ON model_alerts(alert_key);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_alerts_tenant_status_raised') CREATE INDEX idx_model_alerts_tenant_status_raised ON model_alerts(tenant_id, status, last_raised_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_alerts_profile') CREATE INDEX idx_model_alerts_profile ON model_alerts(profile_id);")
 
 
             };

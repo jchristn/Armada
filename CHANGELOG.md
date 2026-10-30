@@ -10,6 +10,14 @@ All notable changes to Armada are documented in this file.
 
 - Landing verification for the Armada repository now runs the smoke tests (`dotnet test "src/Test.Smoke/Test.Smoke.csproj" -c Release -f net10.0`) instead of the long `src/Test.Automated` suite list, which was being killed (exit 143) and blocking landings.
 
+### Model alerts (model heterogeneity Phase 5, item 3)
+
+- Scorecard alerts as inbox items (kind `model_alert`, admins only) with suggested actions; advisory, no automatic changes. A periodic pass (`ModelAlerts.IntervalMinutes`, default 60; `ModelAlerts.Enabled`) and on-demand evaluation check every (model profile, persona) with recent production attempts against Decision 13's thresholds (first pass below 50% over 8+ missions, 3 escalations away in a row, protocol repairs above 30% over 8+ attempts, tokens per accepted result above 2x the persona median across other profiles with 5+ accepted results on each side), with per-persona overrides in `ModelAlerts.Thresholds`. Unavailable metrics make a rule inactive and are reported.
+- One alert per (profile, revision group, persona, vessel or all, rule), stored in `model_alerts` (migration 108 on SQLite, PostgreSQL, SQL Server and MySQL), kept while the condition holds, resolved when it clears and reopened when it returns.
+- Suggested actions, applied only on request and recorded on the alert: move down in the persona's priorities, remove from the persona, re-evaluate (Quick Evaluate), ignore for N days (default 7). The compact template is listed as unavailable (no prompt variant per profile and persona).
+- REST `/api/v1/model-alerts` (list, enumerate, get, evaluate, thresholds get/put, apply, ignore), MCP `list_model_alerts`, `get_model_alert`, `evaluate_model_alerts`, `get_model_alert_thresholds`, `update_model_alert_thresholds`, `apply_model_alert_action`, `ignore_model_alert`, and `Armada.Client` methods. The scorecard adds `escalations.inARow`.
+- Optional push (`ModelAlerts.PushEnabled`, default false) under the new push category `ModelAlert`.
+
 ### Model profiles (model heterogeneity Phase 5, item 1)
 
 - New advisory **model profile** entity (`mdl_` prefix): the model as served, identified by runtime, provider, model and

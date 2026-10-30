@@ -1,11 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import Inbox from './Inbox';
-import { decideCliPermissionRequest, getInbox, getMissionBlackBox, getMissionBlackBoxBrief, retryMissionLanding } from '../api/client';
-import type { CliPermissionRequest, InboxItem, WebSocketMessage } from '../types/models';
+import { applyModelAlertAction, decideCliPermissionRequest, getInbox, getMissionBlackBox, getMissionBlackBoxBrief, ignoreModelAlert, retryMissionLanding } from '../api/client';
+import type { CliPermissionRequest, InboxItem, ModelAlert, WebSocketMessage } from '../types/models';
 import type { BlackBoxEntry } from '../types/blackbox';
 
-vi.mock('../api/client', () => ({ getInbox: vi.fn(), decideCliPermissionRequest: vi.fn(), retryMissionLanding: vi.fn(), getMissionBlackBoxBrief: vi.fn(), getMissionBlackBox: vi.fn(), apiErrorMessage: (_e: unknown, f: string) => f }));
+vi.mock('../api/client', () => ({ getInbox: vi.fn(), decideCliPermissionRequest: vi.fn(), retryMissionLanding: vi.fn(), getMissionBlackBoxBrief: vi.fn(), getMissionBlackBox: vi.fn(), applyModelAlertAction: vi.fn(), ignoreModelAlert: vi.fn(), apiErrorMessage: (_e: unknown, f: string) => f }));
 const handlers = new Set<(msg: WebSocketMessage) => void>();
 vi.mock('../context/WebSocketContext', () => ({
   useWebSocket: () => ({
@@ -294,3 +294,90 @@ describe('Needs You failure rows: black box actions', () => {
   });
 });
 
+
+describe('Needs You model scorecard alerts', () => {
+  const alert: ModelAlert = {
+    id: 'mal_1', profileId: 'mdl_1', model: 'qwen3-coder:30b', revisionGroup: 'g1', persona: 'Worker', vesselId: 'vsl_1', vesselName: 'Armada',
+    rule: 'FirstPassSuccess', status: 'Open', title: 'qwen3-coder:30b as Worker on Armada: first pass 4 of 11',
+    detail: 'First-pass success 36% (4 of 11) is below 50%.', count: 4, of: 11, value: 0.36, threshold: 0.5,
+    createdUtc: '2026-10-30T00:00:00Z', lastRaisedUtc: '2026-10-30T00:00:00Z', lastEvaluatedUtc: '2026-10-30T00:00:00Z',
+    actions: [{ action: 'Reevaluate', appliedUtc: '2026-10-30T00:05:00Z', changed: true, result: 'Queued probe run mpr_1.' }],
+    suggestedActions: [
+      { action: 'MoveDown', label: 'Move captains down', description: 'Move the captains on this profile down.', available: true, recommended: true },
+      { action: 'CompactTemplate', label: 'Use the compact template', description: 'Switch to the compact template.', available: false, unavailableReason: 'No compact variant exists.', recommended: false },
+      { action: 'Ignore', label: 'Ignore for 7 days', description: 'Hide this alert.', available: true, recommended: false },
+    ],
+  };
+  const alertItem = (): InboxItem => ({
+    ...item('model_alert', alert.title, '/inbox?modelAlert=mal_1'), severity: 'Info', entityId: 'mal_1', modelAlert: alert,
+  });
+
+  function renderInbox() {
+    render(
+      <MemoryRouter initialEntries={['/inbox']}>
+        <Routes>
+          <Route path="*" element={<><Inbox /><Probe /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  beforeEach(() => {
+    vi.mocked(applyModelAlertAction).mockReset();
+    vi.mocked(ignoreModelAlert).mockReset();
+    vi.mocked(getInbox).mockReset();
+  });
+
+  it('lists a model alert under interventions with its suggested actions; nothing is applied until a click', async () => {
+    vi.mocked(getInbox).mockResolvedValue([alertItem()]);
+    renderInbox();
+
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    expect(within(interventions).getByText(alert.title)).toBeInTheDocument();
+    expect(within(interventions).getByText('Last action: Queued probe run mpr_1.')).toBeInTheDocument();
+    const unavailable = within(interventions).getByRole('button', { name: 'Use the compact template' });
+    expect(unavailable).toBeDisabled();
+    expect(unavailable).toHaveAttribute('title', 'No compact variant exists.');
+    fireEvent.click(unavailable);
+    expect(applyModelAlertAction).not.toHaveBeenCalled();
+    expect(ignoreModelAlert).not.toHaveBeenCalled();
+  });
+
+  it('applies an available action through the client and reloads the inbox, staying on the page', async () => {
+    vi.mocked(getInbox).mockResolvedValue([alertItem()]);
+    vi.mocked(applyModelAlertAction).mockResolvedValue({ record: { action: 'MoveDown', appliedUtc: '2026-10-30T01:00:00Z', changed: true, result: 'Moved captain cpt_1 down.' }, alert });
+    renderInbox();
+
+    const button = await screen.findByRole('button', { name: 'Move captains down (Recommended)' });
+    expect(button).toBeEnabled();
+    const loadsBefore = vi.mocked(getInbox).mock.calls.length;
+    await act(async () => { fireEvent.click(button); });
+
+    expect(applyModelAlertAction).toHaveBeenCalledWith('mal_1', 'MoveDown');
+    expect(ignoreModelAlert).not.toHaveBeenCalled();
+    await waitFor(() => expect(vi.mocked(getInbox).mock.calls.length).toBeGreaterThan(loadsBefore));
+    expect(pushToast).toHaveBeenCalledWith('success', 'Moved captain cpt_1 down.');
+    expect(screen.getByTestId('location').textContent).toBe('/inbox');
+  });
+
+  it('routes Ignore through ignoreModelAlert', async () => {
+    vi.mocked(getInbox).mockResolvedValue([alertItem()]);
+    vi.mocked(ignoreModelAlert).mockResolvedValue({ record: { action: 'Ignore', appliedUtc: '2026-10-30T01:00:00Z', changed: true, result: 'Ignored for 7 days.' }, alert });
+    renderInbox();
+
+    const ignore = await screen.findByRole('button', { name: 'Ignore for 7 days' });
+    await act(async () => { fireEvent.click(ignore); });
+    expect(ignoreModelAlert).toHaveBeenCalledWith('mal_1');
+    expect(applyModelAlertAction).not.toHaveBeenCalled();
+  });
+
+  it('shows the error when an action fails', async () => {
+    vi.mocked(getInbox).mockResolvedValue([alertItem()]);
+    vi.mocked(applyModelAlertAction).mockRejectedValue(new Error('boom'));
+    renderInbox();
+
+    const move = await screen.findByRole('button', { name: 'Move captains down (Recommended)' });
+    await act(async () => { fireEvent.click(move); });
+    expect(await screen.findByRole('alert')).toHaveTextContent('The action could not be applied:');
+  });
+});

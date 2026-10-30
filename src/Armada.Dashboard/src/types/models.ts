@@ -1518,7 +1518,71 @@ export interface InboxItem {
   cliPermission?: CliPermissionRequest | null;
   /** cli_permission items: when the pending request expires (UTC). */
   expiresUtc?: string | null;
+  /** model_alert items: the scorecard alert with its suggested actions (Armada.Core.Models.ModelAlert). */
+  modelAlert?: ModelAlert | null;
   href: string;
+}
+
+/** Scorecard threshold a model alert crossed (Armada.Core.Enums.ModelAlertRuleEnum). */
+export type ModelAlertRule = 'FirstPassSuccess' | 'EscalationsInARow' | 'ProtocolRepairRate' | 'CostPerAcceptedResult';
+
+/** Whether a model alert still holds (Armada.Core.Enums.ModelAlertStatusEnum). */
+export type ModelAlertStatus = 'Open' | 'Resolved';
+
+/** Suggested action an operator can apply to a model alert (Armada.Core.Enums.ModelAlertActionEnum). */
+export type ModelAlertAction = 'MoveDown' | 'RemoveFromPersona' | 'CompactTemplate' | 'Reevaluate' | 'Ignore';
+
+/** One suggested action of a model alert; nothing changes until the operator applies it. */
+export interface ModelAlertSuggestedAction {
+  action: ModelAlertAction;
+  label: string;
+  description: string;
+  available: boolean;
+  unavailableReason?: string | null;
+  recommended: boolean;
+}
+
+/** A suggested action the operator applied, as recorded on the alert. */
+export interface ModelAlertActionRecord {
+  action: ModelAlertAction;
+  appliedUtc: string;
+  userId?: string | null;
+  changed: boolean;
+  result: string;
+  targetId?: string | null;
+}
+
+/** An advisory alert raised when a (profile, persona) scorecard crosses a threshold. */
+export interface ModelAlert {
+  id: string;
+  tenantId?: string | null;
+  profileId: string;
+  model?: string | null;
+  revisionGroup: string;
+  persona: string;
+  vesselId?: string | null;
+  vesselName?: string | null;
+  rule: ModelAlertRule;
+  status: ModelAlertStatus;
+  title: string;
+  detail: string;
+  count?: number | null;
+  of?: number | null;
+  value?: number | null;
+  threshold?: number | null;
+  createdUtc: string;
+  lastRaisedUtc: string;
+  lastEvaluatedUtc: string;
+  resolvedUtc?: string | null;
+  ignoredUntilUtc?: string | null;
+  actions?: ModelAlertActionRecord[] | null;
+  suggestedActions?: ModelAlertSuggestedAction[] | null;
+}
+
+/** Result of applying a model alert's suggested action. */
+export interface ModelAlertApplyResult {
+  record: ModelAlertActionRecord;
+  alert: ModelAlert;
 }
 
 export type WorkflowProfileResolutionMode = 'Explicit' | 'Vessel' | 'Fleet' | 'Global';

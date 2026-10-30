@@ -186,6 +186,8 @@ namespace Armada.Server
         private ModelProbeService _ModelProbeService = null!;
         private ModelProbeAccessService _ModelProbeAccess = null!;
         private ModelProfileAccessService _ModelProfileAccess = null!;
+        private ModelAlertService _ModelAlertService = null!;
+        private ModelAlertAccessService _ModelAlertAccess = null!;
         private BatteryRunService _BatteryRunService = null!;
         private BatteryAccessService _BatteryAccess = null!;
         private CheckRunService _CheckRunService = null!;
@@ -585,6 +587,8 @@ namespace Armada.Server
             _ModelProbeService = new ModelProbeService(_Database, _Logging, modelProbeExecutor, () => _Settings.Evaluation, modelProbeProvenance);
             _ModelProbeAccess = new ModelProbeAccessService(_Database, _ModelProbeService, _ModelEndpointService, _Logging);
             _ModelProfileAccess = new ModelProfileAccessService(_Database, _Logging);
+            _ModelAlertService = new ModelAlertService(_Database, _Logging, () => _Settings.ModelAlerts);
+            _ModelAlertAccess = new ModelAlertAccessService(_Database, _ModelAlertService, () => _Settings.ModelAlerts, () => _Settings.SaveAsync(), _ModelProbeAccess, _Logging);
             try
             {
                 int interrupted = await _ModelProbeService.RecoverInterruptedAsync().ConfigureAwait(false);
@@ -839,6 +843,10 @@ namespace Armada.Server
             _PushDevices = new Armada.Core.Services.Push.PushDeviceService(_Database, _Settings, _Logging);
             _WebSocketHub.SetPushNotificationService(_PushNotifications);
             Armada.Core.Services.Push.PushNotificationService pushNotifications = _PushNotifications;
+            _ModelAlertService.AlertRaised = alert =>
+            {
+                if (_Settings.ModelAlerts.PushEnabled) pushNotifications.OnModelAlertRaised(alert);
+            };
             _AskThreads.OnProposalCreated = proposal => pushNotifications.OnAskProposalCreated(proposal);
             _PushNotifications.Start();
             _AskTracker.ExpireProposals = async (CancellationToken expireToken) =>
@@ -974,6 +982,7 @@ namespace Armada.Server
             _StorageInventory.Start();
             _BlackBox?.Background.Start();
             _BlackBox?.Insights.Background.Start();
+            _ModelAlertService.Start();
 
             // Start health check loop
             _HealthCheckTask = HealthCheckLoopAsync(_TokenSource.Token);
@@ -1024,6 +1033,7 @@ namespace Armada.Server
             {
                 _BlackBox?.Background.StopAsync().GetAwaiter().GetResult();
                 _BlackBox?.Insights.Background.StopAsync().GetAwaiter().GetResult();
+                _ModelAlertService?.StopAsync().GetAwaiter().GetResult();
                 _BlackBox?.Dispose();
             }
             catch (Exception ex)
@@ -1534,6 +1544,10 @@ namespace Armada.Server
 
             // Model profiles (the model as served, with immutable revisions; advisory)
             new ModelProfileRoutes(_ModelProfileAccess, _JsonOptions)
+                .Register(_App, authenticate, _AuthorizationService);
+
+            // Model alerts (scorecard thresholds crossed, with suggested actions; advisory)
+            new ModelAlertRoutes(_ModelAlertAccess, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Fixture battery packs and runs
@@ -2121,7 +2135,8 @@ namespace Armada.Server
                 _BlackBox?.Capture,
                 _BlackBox?.Hooks,
                 _BlackBox?.Insights.Service,
-                _ModelProfileAccess);
+                _ModelProfileAccess,
+                _ModelAlertAccess);
         }
 
         /// <summary>

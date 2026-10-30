@@ -23,6 +23,8 @@ export const PUSH_KINDS = [
   'landing_failed',
   'stalled_captain',
   'voyage_finished',
+  // Advisory model scorecard alert: opens Needs You; never Approve / Deny (not in ACTIONABLE_KINDS).
+  'model_alert',
   'test',
 ] as const;
 

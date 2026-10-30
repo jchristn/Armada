@@ -395,6 +395,13 @@ namespace Armada.Core.Services
             List<StageOutcome> escalated = attempts.Where(o => o.Disposition == StageDispositionEnum.Escalated).ToList();
             List<StageOutcome> known = escalated.Where(o => o.PriorWorkKept.HasValue).ToList();
             metrics.Add(Rate("escalations.away", "Attempts escalated to a different captain, of attempts.", escalated.Count, n));
+            int inARow = 0;
+            foreach (StageOutcome attempt in attempts.OrderByDescending(o => o.EndedUtc).ThenByDescending(o => o.Id, StringComparer.Ordinal))
+            {
+                if (attempt.Disposition != StageDispositionEnum.Escalated) break;
+                inARow++;
+            }
+            metrics.Add(Rate("escalations.inARow", "The most recent attempts that were escalated to a different captain in a row (newest first, stopping at the first attempt that was not escalated), of attempts.", inARow, n));
             metrics.Add(Rate("escalations.nextFinished", "Escalations whose mission was later finished by the next captain (FinishedByOutcomeId set), of escalations.", escalated.Count(o => !String.IsNullOrEmpty(o.FinishedByOutcomeId)), escalated.Count));
             metrics.Add(Rate("escalations.priorWorkKept", "Finished escalations where the finishing captain kept this work (PriorWorkKept true), of escalations where it is known.", known.Count(o => o.PriorWorkKept == true), known.Count));
             metrics.Add(Rate("escalations.priorWorkReplaced", "Finished escalations where the finishing captain replaced this work (PriorWorkKept false), of escalations where it is known.", known.Count(o => o.PriorWorkKept == false), known.Count));

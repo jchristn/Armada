@@ -93,6 +93,49 @@ namespace Test.Shared.Suites.Client
                 await ClientContract.ExpectErrorAsync(() => c.SetModelProfileRevisionCompatibilityAsync(first.Profile.Id, "mdv_missing", new ModelProfileCompatibilityRequest { CompatibleWith = new List<string>() }), "unknown revision", 404, 404);
             }));
 
+            cases.Add(ClientContract.Case(Suite, this, "alerts", "Evaluate, list, enumerate, get, apply, ignore and thresholds of model alerts; unknown ids fail", async (c, fx) =>
+            {
+                ModelAlertEvaluation evaluation = (await c.EvaluateModelAlertsAsync())!;
+                AssertTrue(evaluation.Pairs >= 0, "evaluation returned");
+
+                ModelAlert seeded;
+                LoggingModule quiet = new LoggingModule();
+                quiet.Settings.EnableConsole = false;
+                DatabaseSettings settings = new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(fx.TempDir, "armada.db") };
+                using (DatabaseDriver db = DatabaseDriverFactory.Create(settings, quiet))
+                {
+                    await db.InitializeAsync().ConfigureAwait(false);
+                    ModelProfileResolution resolved = await new ModelProfileService(db, quiet).ResolveAsync(new ModelProfileObservation
+                    {
+                        TenantId = Armada.Core.Constants.DefaultTenantId, Runtime = "AlertRuntime" + ClientContract.Suffix(), Provider = "Ollama", Model = "alert-model", RuntimeVersion = "1.0.0"
+                    }).ConfigureAwait(false);
+                    ModelAlert alert = new ModelAlert
+                    {
+                        TenantId = Armada.Core.Constants.DefaultTenantId, ProfileId = resolved.Profile.Id, Model = "alert-model", RevisionGroup = resolved.Revision.Id,
+                        Persona = "Worker", Rule = ModelAlertRuleEnum.FirstPassSuccess, Title = "alert-model as Worker on all vessels: first pass 1 of 9", Detail = "contract"
+                    };
+                    seeded = await db.ModelAlerts.CreateAsync(alert, ModelAlertRules.Key(alert.TenantId, alert.ProfileId, alert.RevisionGroup, alert.Persona, null, alert.Rule)).ConfigureAwait(false);
+                }
+
+                EnumerationResult<ModelAlert> listed = (await c.ListModelAlertsAsync(new ModelAlertQuery { ProfileId = seeded.ProfileId, Status = ModelAlertStatusEnum.Open, PageSize = 5 }))!;
+                AssertEqual(seeded.Id, listed.Objects.Single().Id, "list with filters");
+                AssertTrue((await c.ListModelAlertsAsync())!.TotalRecords >= 1, "list without a query");
+                AssertEqual(seeded.Id, (await c.EnumerateModelAlertsAsync(new ModelAlertQuery { ProfileId = seeded.ProfileId }))!.Objects.Single().Id, "enumerate");
+                ModelAlert read = (await c.GetModelAlertAsync(seeded.Id))!;
+                AssertEqual(5, read.SuggestedActions.Count, "suggested actions");
+                ModelAlertApplyResult applied = (await c.ApplyModelAlertActionAsync(seeded.Id, new ModelAlertApplyRequest { Action = ModelAlertActionEnum.Ignore, Days = 1 }))!;
+                AssertEqual(ModelAlertActionEnum.Ignore, applied.Record.Action, "applied");
+                ModelAlertApplyResult ignored = (await c.IgnoreModelAlertAsync(seeded.Id, 2))!;
+                AssertEqual(2, ignored.Alert.Actions.Count, "both recorded");
+                ModelAlertThresholds thresholds = (await c.GetModelAlertThresholdsAsync())!;
+                AssertEqual((int?)3, thresholds.Defaults.EscalationsInARow, "defaults");
+                ModelAlertThresholds stored = (await c.UpdateModelAlertThresholdsAsync(new ModelAlertThresholds()))!;
+                AssertEqual((double?)0.3, stored.Defaults.ProtocolRepairMaxRate, "stored defaults");
+                await ClientContract.ExpectErrorAsync(() => c.GetModelAlertAsync("mal_missing"), "unknown alert", 404, 404);
+                await ClientContract.ExpectErrorAsync(() => c.ApplyModelAlertActionAsync(seeded.Id, new ModelAlertApplyRequest { Action = ModelAlertActionEnum.CompactTemplate }), "unavailable action", 400, 400);
+                await ClientContract.ExpectErrorAsync(() => c.IgnoreModelAlertAsync("mal_missing", 1), "unknown alert ignore", 404, 404);
+            }));
+
             return new TestSuiteDescriptor(suiteId: Suite, displayName: "Armada.Client contract: model profiles", cases: cases);
         }
 

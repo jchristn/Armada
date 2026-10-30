@@ -94,6 +94,14 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/model-profiles/enumerate", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/model-profiles/{id}", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/model-profiles/{id}/scorecard", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/model-alerts", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/model-alerts/enumerate", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/model-alerts/evaluate", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/model-alerts/thresholds", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("PUT", "/api/v1/model-alerts/thresholds", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/model-alerts/{id}", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/model-alerts/{id}/apply", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/model-alerts/{id}/ignore", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
             Add("PUT", "/api/v1/model-profiles/{id}", "ModelProfile", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("PUT", "/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with", "ModelProfile", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/battery/packs", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

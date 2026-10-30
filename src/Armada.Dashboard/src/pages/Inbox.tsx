@@ -17,6 +17,7 @@ import { useLiveRefresh } from '../lib/useLiveRefresh';
 import { CLI_PERMISSION_EVENT_PREFIX, isPendingRequest } from '../lib/cliPermissions';
 import CliPermissionDecisionControls from '../components/cliPermissions/CliPermissionDecisionControls';
 import CliPermissionCountdown from '../components/cliPermissions/CliPermissionCountdown';
+import ModelAlertActions from '../components/ModelAlertActions';
 import { APPROVAL_KINDS, CLI_PERMISSION_KIND, INBOX_KINDS, inboxActionLabel, inboxItemKey, splitInbox } from '../lib/inboxKinds';
 
 
@@ -125,6 +126,12 @@ export default function Inbox() {
               <div className="text-dim" style={{ marginTop: '0.2rem' }}>{item.detail}</div>
             )}
             {cli && cli.summaryText && <code className="inbox-cli-command">{cli.summaryText}</code>}
+            {item.kind === INBOX_KINDS.modelAlert && item.modelAlert && (
+              <ModelAlertActions alert={item.modelAlert} onApplied={(result) => {
+                if (result?.record?.result) pushToast('success', result.record.result);
+                void load();
+              }} />
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span

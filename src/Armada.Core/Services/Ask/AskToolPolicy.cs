@@ -104,6 +104,9 @@ namespace Armada.Core.Services.Ask
             "get_model_profile",
             "list_model_profiles",
             "get_model_scorecard",
+            "list_model_alerts",
+            "get_model_alert",
+            "get_model_alert_thresholds",
 
             // Fixture battery readers
             "list_battery_packs",

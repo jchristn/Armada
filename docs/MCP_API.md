@@ -156,6 +156,14 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [get_model_profile](#get_model_profile)
     - [list_model_profiles](#list_model_profiles)
     - [get_model_scorecard](#get_model_scorecard)
+  - **Model Alerts**
+    - [list_model_alerts](#list_model_alerts)
+    - [get_model_alert](#get_model_alert)
+    - [evaluate_model_alerts](#evaluate_model_alerts)
+    - [get_model_alert_thresholds](#get_model_alert_thresholds)
+    - [update_model_alert_thresholds](#update_model_alert_thresholds)
+    - [apply_model_alert_action](#apply_model_alert_action)
+    - [ignore_model_alert](#ignore_model_alert)
   - **Fixture Battery**
     - [list_battery_packs](#list_battery_packs)
     - [run_battery](#run_battery)
@@ -1468,6 +1476,83 @@ and an out-of-range window on a visible profile is `InvalidArgument`.
 
 **Response:** a ModelScorecard (`profileId`, `identity`, `persona`, `windowDays`, `windowMissions`, `windowLimitedBy`,
 `windowStartUtc`, `windowEndUtc`, `missions`, `attempts`, `truncated`, `exclusions`, `groups`).
+
+---
+
+## Model Alerts
+
+Scorecard thresholds crossed for a (model profile, revision group, persona, vessel or all vessels, rule), raised as inbox
+items (kind `model_alert`) with suggested actions. Same rules, defaults and shapes as REST `/api/v1/model-alerts`
+([REST_API.md](REST_API.md#model-alerts)): evaluation reads scorecard data only, alerts are deduplicated per condition and
+resolve themselves when the condition no longer holds, and a suggested action changes something only when applied. The
+alert is resolved before the other arguments are validated, so another tenant's alert is `NotFound`. `list_model_alerts`,
+`get_model_alert` and `get_model_alert_thresholds` are on the Ask read-only list.
+
+| Tool | Caller |
+|---|---|
+| `list_model_alerts`, `get_model_alert`, `get_model_alert_thresholds` | Any authenticated person: global admins every tenant, everyone else their own tenant |
+| `evaluate_model_alerts`, `apply_model_alert_action`, `ignore_model_alert` | A global admin, or a tenant admin of the alert's tenant (`Forbidden` otherwise) |
+| `update_model_alert_thresholds` | Global admins only (the thresholds are server settings) |
+
+### list_model_alerts
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `status` | string | No | `Open` or `Resolved` (default both) |
+| `profileId` | string | No | Model profile ID (`mdl_`) |
+| `persona` | string | No | Persona (case-insensitive) |
+| `includeIgnored` | boolean | No | Include alerts hidden by Ignore (default true) |
+| `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 25) |
+
+**Response:** `EnumerationResult<ModelAlert>`, most recently raised first, each with `suggestedActions` and `actions`.
+
+### get_model_alert
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Model alert ID (`mal_`) |
+
+**Response:** the ModelAlert (`rule`, `status`, `title`, `detail`, `count`, `of`, `value`, `threshold`, `revisionGroup`,
+`persona`, `vesselId`, `ignoredUntilUtc`, `actions`, `suggestedActions`).
+
+### evaluate_model_alerts
+
+No parameters. Runs one evaluation pass now (a tenant admin's tenant, or every tenant for a global admin).
+
+**Response:** a ModelAlertEvaluation (`pairs`, `targets` with every rule's `state`, counts, threshold and reason - inactive
+rules are `Unavailable`, rules below their minimum `MinimumNotMet` - `raised`, `stillOpen`, `resolved`).
+
+### get_model_alert_thresholds
+
+No parameters. **Response:** `defaults` (every value set) and per-persona `overrides`.
+
+### update_model_alert_thresholds
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `defaults` | object | No | `firstPassMinRate`, `firstPassMinMissions`, `escalationsInARow`, `protocolRepairMaxRate`, `protocolRepairMinAttempts`, `costMedianMultiplier`, `costMinAccepted` (null uses the built-in default) |
+| `overrides` | array | No | Per-persona overrides: `persona` plus any of the default fields (null keeps the default) |
+
+**Response:** the stored thresholds. `InvalidArgument` for a value out of range or a persona listed twice.
+
+### apply_model_alert_action
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Model alert ID (`mal_`) |
+| `action` | string | Yes | `MoveDown`, `RemoveFromPersona`, `CompactTemplate` (always unavailable), `Reevaluate` or `Ignore` |
+| `days` | integer | No | For `Ignore`: days to hide the alert (1-365, default 7) |
+
+**Response:** a ModelAlertApplyResult (`record`, `alert`). `InvalidArgument` for an unknown or unavailable action.
+
+### ignore_model_alert
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Model alert ID (`mal_`) |
+| `days` | integer | No | Days to hide the alert (1-365, default 7) |
+
+**Response:** a ModelAlertApplyResult.
 
 ---
 

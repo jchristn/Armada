@@ -77,6 +77,9 @@ namespace Test.Shared.Suites.E2E
             ["get_model_probe_run"] = "Evaluate run (ModelProbeAccessService scopes by caller; tenant isolation covered by E2E.ModelProbes)",
             ["get_model_profile"] = "Model profile (ModelProfileAccessService scopes by caller; tenant isolation covered by E2E.ModelProfiles)",
             ["get_model_scorecard"] = "Model profile scorecard (ModelProfileAccessService resolves the profile by caller first; tenant isolation covered by E2E.ModelProfiles)",
+            ["get_model_alert"] = "Model alert (ModelAlertAccessService resolves the alert by caller first; tenant isolation covered by E2E.ModelProfiles model_alerts and Services.ModelAlerts tenant_scoping)",
+            ["apply_model_alert_action"] = "Model alert action (the alert is resolved by caller before the action is validated; covered by E2E.ModelProfiles model_alerts)",
+            ["ignore_model_alert"] = "Model alert ignore (the alert is resolved by caller before days are validated; covered by E2E.ModelProfiles model_alerts)",
             ["get_battery_run"] = "Battery run (BatteryAccessService scopes by caller; tenant isolation covered by E2E.Battery)",
             ["list_battery_results"] = "Battery run results (BatteryAccessService scopes the run by caller; tenant isolation covered by E2E.Battery)",
             ["approve_ask_proposal"] = "Ask conversation (AskThreadService scopes by owning user; covered by E2E.AskThreads)",
@@ -114,6 +117,7 @@ namespace Test.Shared.Suites.E2E
             "reclassify_stage_outcomes",
             "list_model_probe_runs",
             "list_model_profiles",
+            "list_model_alerts",
             "discover_vessels",
             // vesselId only filters the caller's own recovery runs
             "get_blackbox_recovery_stats",

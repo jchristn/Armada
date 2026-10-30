@@ -136,6 +136,13 @@ namespace Armada.Core.Authorization
             Add("get_model_profile", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_model_profiles", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_model_scorecard", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("list_model_alerts", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("get_model_alert", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("evaluate_model_alerts", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("get_model_alert_thresholds", "ModelAlert", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("update_model_alert_thresholds", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("apply_model_alert_action", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("ignore_model_alert", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
             Add("list_battery_packs", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("run_battery", "BatteryRun", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
             Add("get_battery_run", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

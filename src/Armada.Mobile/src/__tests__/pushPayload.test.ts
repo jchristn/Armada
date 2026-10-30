@@ -109,6 +109,9 @@ describe('push payload parsing', () => {
     expect(canAct(parsePushData({ url: '/cli-permissions?request=cpr_1', kind: 'cli_permission', entityId: 'cpr_1', category: 'CliPermission' })!)).toBe(true);
     expect(canAct(parsePushData({ url: '/cli-permissions?request=cpr_1', kind: 'cli_permission', entityId: 'msn_1', category: 'CliPermission' })!)).toBe(false);
     expect(canAct(parsePushData({ url: '/missions/msn_1', kind: 'failed', entityId: 'msn_1', category: 'MissionFailed' })!)).toBe(false);
+    const alert = parsePushData({ url: '/inbox?modelAlert=mal_1', kind: 'model_alert', entityId: 'mal_1', category: 'ModelAlert' });
+    expect(alert).not.toBeNull();
+    expect(canAct(alert!)).toBe(false);
   });
 });
 

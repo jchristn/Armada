@@ -1161,6 +1161,14 @@
     },
     {
       "kind": "api",
+      "key": "applyModelAlertAction",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "model alerts are advisory; the app lists model_alert items in Needs You as interventions (with the ModelAlert push category) but applying or ignoring their suggested actions is a dashboard, TUI and MCP surface (MODEL_HETEROGENEITY.md Phase 5.3)"
+    },
+    {
+      "kind": "api",
       "key": "applyObjectiveRefinementSummary",
       "status": "implemented",
       "mobile": "src/screens/objectives/useRefinement.ts",
@@ -3198,6 +3206,14 @@
       "mobile": "src/screens/configuration/EndpointsTab",
       "workstream": "W4.2",
       "notes": "Model endpoints (embedding/inference)"
+    },
+    {
+      "kind": "api",
+      "key": "ignoreModelAlert",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "model alerts are advisory; the app lists model_alert items in Needs You as interventions (with the ModelAlert push category) but applying or ignoring their suggested actions is a dashboard, TUI and MCP surface (MODEL_HETEROGENEITY.md Phase 5.3)"
     },
     {
       "kind": "api",

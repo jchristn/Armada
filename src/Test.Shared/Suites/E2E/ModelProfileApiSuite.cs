@@ -267,6 +267,101 @@ namespace Test.Shared.Suites.E2E
                 }
             }));
 
+            cases.Add(CaseAsync("model_alerts", "REST and MCP: model alerts evaluate, list, get, apply, ignore and thresholds with the same rules, admin checks and tenant isolation", async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                E2ETenantUser adminA = await E2ETenantUser.CreateAsync(fx.AuthClient, "mda-admin-a", true).ConfigureAwait(false);
+                E2ETenantUser userA = await E2ETenantUser.CreateAsync(fx.AuthClient, "mda-user-a", false, adminA.TenantId).ConfigureAwait(false);
+                E2ETenantUser adminB = await E2ETenantUser.CreateAsync(fx.AuthClient, "mda-admin-b", true).ConfigureAwait(false);
+                Seeded seeded = await SeedAsync(fx, adminA.TenantId).ConfigureAwait(false);
+                using (DatabaseDriver db = await OpenDatabaseAsync(fx).ConfigureAwait(false))
+                {
+                    for (int i = 0; i < 8; i++)
+                    {
+                        bool passed = i < 3;
+                        await db.StageOutcomes.CreateAsync(new StageOutcome
+                        {
+                            TenantId = adminA.TenantId, MissionId = "msn_ma_" + i, CaptainId = seeded.CaptainId, Persona = "Worker",
+                            Runtime = AgentRuntimeEnum.Mux, ModelProvider = "Ollama", Model = "qwen3.8:27b", ContextTokens = 131072,
+                            RuntimeVersion = "1.4.1", ModelDigest = "sha256:aaa",
+                            Disposition = passed ? StageDispositionEnum.Completed : StageDispositionEnum.Failed,
+                            StageCheckStatus = passed ? StageCheckStatusEnum.Passed : StageCheckStatusEnum.Failed,
+                            EndedUtc = DateTime.UtcNow.AddHours(-1 - i)
+                        }).ConfigureAwait(false);
+                    }
+                }
+
+                using HttpClient a = adminA.CreateClient(fx.BaseUrl);
+                using HttpClient u = userA.CreateClient(fx.BaseUrl);
+                using HttpClient b = adminB.CreateClient(fx.BaseUrl);
+                AssertStatusCode(HttpStatusCode.Forbidden, await u.PostAsync("/api/v1/model-alerts/evaluate", null).ConfigureAwait(false), "a regular user cannot evaluate");
+                HttpResponseMessage evaluated = await a.PostAsync("/api/v1/model-alerts/evaluate", null).ConfigureAwait(false);
+                AssertStatusCode(HttpStatusCode.OK, evaluated, "evaluate");
+                ModelAlertEvaluation evaluation = await JsonHelper.DeserializeAsync<ModelAlertEvaluation>(evaluated).ConfigureAwait(false);
+                AssertEqual(adminA.TenantId, evaluation.TenantId, "a tenant admin evaluates their tenant");
+                ModelAlert raised = evaluation.Raised.Single(r => r.ProfileId == seeded.Profile.Id);
+                AssertEqual(ModelAlertRuleEnum.FirstPassSuccess, raised.Rule, "first pass 3 of 8");
+                AssertEqual((int?)3, raised.Count, "count");
+                AssertEqual((int?)8, raised.Of, "of");
+                ModelAlertTarget target = evaluation.Targets.Single(t => t.ProfileId == seeded.Profile.Id);
+                AssertEqual(ModelAlertRuleStateEnum.MinimumNotMet, target.Rules.Single(r => r.Rule == ModelAlertRuleEnum.CostPerAcceptedResult).State, "inactive rules are reported");
+
+                string path = "/api/v1/model-alerts/" + raised.Id;
+                EnumerationResult<ModelAlert> listed = await GetAsync<EnumerationResult<ModelAlert>>(u, "/api/v1/model-alerts?status=Open&persona=worker").ConfigureAwait(false);
+                AssertEqual(raised.Id, listed.Objects.Single().Id, "listed for a member of the tenant");
+                AssertEqual(5, listed.Objects.Single().SuggestedActions.Count, "with suggested actions");
+                AssertStatusCode(HttpStatusCode.BadRequest, await u.GetAsync("/api/v1/model-alerts?status=Bogus").ConfigureAwait(false), "invalid status");
+                HttpResponseMessage enumerated = await u.PostAsync("/api/v1/model-alerts/enumerate", JsonHelper.ToJsonContent(new { ProfileId = seeded.Profile.Id })).ConfigureAwait(false);
+                AssertStatusCode(HttpStatusCode.OK, enumerated, "enumerate");
+                AssertEqual(1L, (await JsonHelper.DeserializeAsync<EnumerationResult<ModelAlert>>(enumerated).ConfigureAwait(false)).TotalRecords, "enumerate twin");
+                ModelAlert read = await GetAsync<ModelAlert>(u, path).ConfigureAwait(false);
+                AssertFalse(read.SuggestedActions.Single(x => x.Action == ModelAlertActionEnum.CompactTemplate).Available, "compact unavailable");
+                AssertEqual(0L, (await GetAsync<EnumerationResult<ModelAlert>>(b, "/api/v1/model-alerts").ConfigureAwait(false)).Objects.Count(x => x.Id == raised.Id), "not listed for another tenant");
+                AssertStatusCode(HttpStatusCode.NotFound, await b.GetAsync(path).ConfigureAwait(false), "another tenant");
+                AssertStatusCode(HttpStatusCode.NotFound, await b.PostAsync(path + "/apply", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false), "another tenant before validation");
+                AssertStatusCode(HttpStatusCode.NotFound, await b.PostAsync(path + "/ignore", JsonHelper.ToJsonContent(new { Days = 0 })).ConfigureAwait(false), "another tenant ignore");
+                AssertStatusCode(HttpStatusCode.Forbidden, await u.PostAsync(path + "/apply", JsonHelper.ToJsonContent(new { Action = "Ignore" })).ConfigureAwait(false), "a regular user cannot apply");
+                AssertStatusCode(HttpStatusCode.BadRequest, await a.PostAsync(path + "/apply", JsonHelper.ToJsonContent(new { Action = "CompactTemplate" })).ConfigureAwait(false), "unavailable action");
+                AssertStatusCode(HttpStatusCode.BadRequest, await a.PostAsync(path + "/apply", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false), "action required");
+                AssertStatusCode(HttpStatusCode.BadRequest, await a.PostAsync(path + "/ignore", JsonHelper.ToJsonContent(new { Days = 0 })).ConfigureAwait(false), "days range");
+                HttpResponseMessage ignoredResponse = await a.PostAsync(path + "/ignore", JsonHelper.ToJsonContent(new { Days = 2 })).ConfigureAwait(false);
+                AssertStatusCode(HttpStatusCode.OK, ignoredResponse, "ignore");
+                ModelAlertApplyResult ignored = await JsonHelper.DeserializeAsync<ModelAlertApplyResult>(ignoredResponse).ConfigureAwait(false);
+                AssertNotNull(ignored.Alert.IgnoredUntilUtc, "ignored until");
+                AssertEqual(ModelAlertActionEnum.Ignore, ignored.Record.Action, "recorded");
+                AssertEqual(0L, (await GetAsync<EnumerationResult<ModelAlert>>(u, "/api/v1/model-alerts?includeIgnored=false&profileId=" + seeded.Profile.Id).ConfigureAwait(false)).TotalRecords, "hidden when ignored are excluded");
+
+                ModelAlertThresholds thresholds = await GetAsync<ModelAlertThresholds>(u, "/api/v1/model-alerts/thresholds").ConfigureAwait(false);
+                AssertEqual((int?)8, thresholds.Defaults.FirstPassMinMissions, "built-in default");
+                AssertStatusCode(HttpStatusCode.Forbidden, await a.PutAsync("/api/v1/model-alerts/thresholds", JsonHelper.ToJsonContent(new { })).ConfigureAwait(false), "a tenant admin cannot change server settings");
+
+                using (McpToolClient user = Mcp(fx, userA))
+                using (McpToolClient admin = Mcp(fx, adminA))
+                using (McpToolClient other = Mcp(fx, adminB))
+                {
+                    await user.InitializeAsync().ConfigureAwait(false);
+                    await admin.InitializeAsync().ConfigureAwait(false);
+                    await other.InitializeAsync().ConfigureAwait(false);
+                    EnumerationResult<ModelAlert> viaMcp = await OkAsync<EnumerationResult<ModelAlert>>(user, "list_model_alerts", new { profileId = seeded.Profile.Id }).ConfigureAwait(false);
+                    AssertEqual(raised.Id, viaMcp.Objects.Single().Id, "MCP list");
+                    AssertEqual(raised.Id, (await OkAsync<ModelAlert>(user, "get_model_alert", new { id = raised.Id }).ConfigureAwait(false)).Id, "MCP get");
+                    await ErrorAsync(other, "get_model_alert", new { id = raised.Id }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
+                    await ErrorAsync(other, "apply_model_alert_action", new { id = raised.Id, action = "Bogus" }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
+                    await ErrorAsync(other, "ignore_model_alert", new { id = raised.Id, days = 0 }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
+                    await ErrorAsync(admin, "apply_model_alert_action", new { id = raised.Id, action = "Bogus" }, McpToolErrorCodeEnum.InvalidArgument).ConfigureAwait(false);
+                    await ErrorAsync(admin, "apply_model_alert_action", new { id = raised.Id, action = "CompactTemplate" }, McpToolErrorCodeEnum.InvalidArgument).ConfigureAwait(false);
+                    await ErrorAsync(user, "ignore_model_alert", new { id = raised.Id, days = 1 }, McpToolErrorCodeEnum.Forbidden).ConfigureAwait(false);
+                    await ErrorAsync(user, "evaluate_model_alerts", new { }, McpToolErrorCodeEnum.Forbidden).ConfigureAwait(false);
+                    ModelAlertApplyResult viaMcpIgnore = await OkAsync<ModelAlertApplyResult>(admin, "apply_model_alert_action", new { id = raised.Id, action = "ignore", days = 1 }).ConfigureAwait(false);
+                    AssertEqual(2, viaMcpIgnore.Alert.Actions.Count, "REST and MCP actions recorded on the same alert");
+                    ModelAlertEvaluation again = await OkAsync<ModelAlertEvaluation>(admin, "evaluate_model_alerts", new { }).ConfigureAwait(false);
+                    AssertEqual(0, again.Raised.Count(r => r.Id == raised.Id), "not raised twice");
+                    ModelAlertThresholds viaMcpThresholds = await OkAsync<ModelAlertThresholds>(user, "get_model_alert_thresholds", new { }).ConfigureAwait(false);
+                    AssertEqual((double?)0.5, viaMcpThresholds.Defaults.FirstPassMinRate, "MCP thresholds");
+                    await ErrorAsync(admin, "update_model_alert_thresholds", new { overrides = new object[] { new { persona = "Worker", firstPassMinRate = 0.4 } } }, McpToolErrorCodeEnum.Forbidden).ConfigureAwait(false);
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "E2E: model profiles (REST and MCP)",

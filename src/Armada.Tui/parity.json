@@ -1129,6 +1129,14 @@
     },
     {
       "kind": "api",
+      "key": "applyModelAlertAction",
+      "status": "implemented",
+      "tui": "ArmadaClient.ApplyModelAlertActionAsync",
+      "workstream": "W0.2",
+      "notes": "Model Probes (model alert suggested actions on the Needs You inbox)"
+    },
+    {
+      "kind": "api",
       "key": "applyObjectiveRefinementSummary",
       "status": "implemented",
       "tui": "ArmadaClient.ApplyObjectiveRefinementSummaryAsync",
@@ -3166,6 +3174,14 @@
       "tui": "ArmadaClient.HealthCheckModelEndpointsAsync",
       "workstream": "W0.2",
       "notes": "Model endpoints (embedding/inference)"
+    },
+    {
+      "kind": "api",
+      "key": "ignoreModelAlert",
+      "status": "implemented",
+      "tui": "ArmadaClient.IgnoreModelAlertAsync",
+      "workstream": "W0.2",
+      "notes": "Model Probes (ignore a model alert from the Needs You inbox)"
     },
     {
       "kind": "api",

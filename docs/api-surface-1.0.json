@@ -4274,6 +4274,146 @@
       "experimental": false
     },
     {
+      "method": "GET",
+      "route": "/api/v1/model-alerts",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<ModelAlert>",
+        "400": ""
+      },
+      "tags": [
+        "ModelAlerts"
+      ],
+      "summary": "List model alerts",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/model-alerts/enumerate",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Read",
+      "requestType": "ModelAlertQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<ModelAlert>",
+        "400": ""
+      },
+      "tags": [
+        "ModelAlerts"
+      ],
+      "summary": "Enumerate model alerts",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/model-alerts/evaluate",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Update",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "ModelAlertEvaluation",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "ModelAlerts"
+      ],
+      "summary": "Evaluate model alerts now",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/model-alerts/thresholds",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "ModelAlertThresholds"
+      },
+      "tags": [
+        "ModelAlerts"
+      ],
+      "summary": "Get model alert thresholds",
+      "experimental": false
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v1/model-alerts/thresholds",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Update",
+      "requestType": "ModelAlertThresholds",
+      "requestRequired": true,
+      "responses": {
+        "200": "ModelAlertThresholds",
+        "400": "",
+        "403": "ApiErrorResponse"
+      },
+      "tags": [
+        "ModelAlerts"
+      ],
+      "summary": "Update model alert thresholds",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/model-alerts/{id}",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "ModelAlert",
+        "404": ""
+      },
+      "tags": [
+        "ModelAlerts"
+      ],
+      "summary": "Get a model alert",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/model-alerts/{id}/apply",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Update",
+      "requestType": "ModelAlertApplyRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "ModelAlertApplyResult",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": ""
+      },
+      "tags": [
+        "ModelAlerts"
+      ],
+      "summary": "Apply a model alert suggested action",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/model-alerts/{id}/ignore",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Update",
+      "requestType": "ModelAlertIgnoreRequest",
+      "requestRequired": false,
+      "responses": {
+        "200": "ModelAlertApplyResult",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": ""
+      },
+      "tags": [
+        "ModelAlerts"
+      ],
+      "summary": "Ignore a model alert",
+      "experimental": false
+    },
+    {
       "method": "POST",
       "route": "/api/v1/model-endpoints",
       "auth": "Authenticated",
@@ -8691,6 +8831,30 @@
       "experimental": false
     },
     {
+      "name": "apply_model_alert_action",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Update",
+      "arguments": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "days",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Apply one suggested action of a model alert, only now and only this one: MoveDown moves the persona captain priority entries that select only this profile's captains to the bottom; RemoveFromPersona removes them and clears the default captain when it is on this profile; Reevaluate starts a Quick Evaluate of a captain on this profile within the evaluation budgets; Ignore hides the alert for days (1-365, default 7); CompactTemplate is unavailable (no prompt variant per profile and persona). The result is recorded on the alert. Tenant admins of the alert's tenant and global admins only.",
+      "experimental": false
+    },
+    {
       "name": "approve_ask_proposal",
       "auth": "Authenticated",
       "resource": "AskThread:Execute",
@@ -11191,6 +11355,14 @@
       "experimental": false
     },
     {
+      "name": "evaluate_model_alerts",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Update",
+      "arguments": [],
+      "description": "Run one model alert evaluation pass now: the scorecard of every (model profile, persona) with production attempts in the last 30 days is checked against the thresholds; crossed conditions raise or keep one alert each and conditions that no longer hold are resolved. Targets lists every rule result, including inactive (Unavailable) rules and rules whose minimum count is not met, with the reason. Reads scorecard data only; never changes captains, personas, templates or routing. Tenant admins evaluate their tenant, global admins every tenant.",
+      "experimental": false
+    },
+    {
       "name": "evaluate_vessel_health",
       "auth": "TenantAdmin",
       "resource": "VesselHealth:Execute",
@@ -11867,6 +12039,28 @@
       "experimental": false
     },
     {
+      "name": "get_model_alert",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Read",
+      "arguments": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get one model alert visible to the caller with its counts, applied-action record and suggested actions (MoveDown, RemoveFromPersona, CompactTemplate, Reevaluate, Ignore), each with availability and the reason when unavailable.",
+      "experimental": false
+    },
+    {
+      "name": "get_model_alert_thresholds",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Read",
+      "arguments": [],
+      "description": "Get the model alert thresholds: defaults (every value set; built-in: first pass below 0.5 over at least 8 missions, 3 escalations away in a row, protocol repairs above 0.3 over at least 8 attempts, tokens per accepted result above 2x the persona median across other profiles with at least 5 accepted results on each side) and per-persona overrides (a null value keeps the default).",
+      "experimental": false
+    },
+    {
       "name": "get_model_endpoint",
       "auth": "Authenticated",
       "resource": "ModelEndpoint:Read",
@@ -12145,6 +12339,25 @@
       "resource": "ModelEndpoint:Execute",
       "arguments": [],
       "description": "Run a health sweep across all enabled model endpoints, deduplicated by base URL, and refresh their health status. Returns the number of distinct base URLs probed.",
+      "experimental": false
+    },
+    {
+      "name": "ignore_model_alert",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Update",
+      "arguments": [
+        {
+          "name": "days",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Hide a model alert from the inbox for a number of days (1-365, default 7); it shows again afterwards if the condition still holds. Recorded on the alert. Tenant admins of the alert's tenant and global admins only.",
       "experimental": false
     },
     {
@@ -13104,6 +13317,45 @@
       ],
       "description": "[Experimental] One page of the captain launches recorded on a Harbor, newest first: job ID, mission, captain, runtime, launch and end times, outcome, and whether a stop was requested. openOnly lists only jobs that have not ended; use it to find an agent left running after its mission was cancelled.",
       "experimental": true
+    },
+    {
+      "name": "list_model_alerts",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Read",
+      "arguments": [
+        {
+          "name": "includeIgnored",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "persona",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "profileId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "List model alerts (a scorecard threshold crossed for a model profile, revision group, persona and vessel scope), most recently raised first, one page at a time, each with its counts, applied-action record and suggested actions (with availability and the reason when unavailable). A global admin sees every tenant; everyone else sees their own tenant. Alerts are advisory: nothing changes until a suggested action is applied. Returns an enumeration result (objects, totalRecords, totalPages).",
+      "experimental": false
     },
     {
       "name": "list_model_probe_runs",
@@ -15738,6 +15990,25 @@
         }
       ],
       "description": "Update an existing mission's title, description, priority, vessel, voyage, branch, or PR URL. Operational fields (status, timestamps, captain) are managed by the system.",
+      "experimental": false
+    },
+    {
+      "name": "update_model_alert_thresholds",
+      "auth": "Authenticated",
+      "resource": "ModelAlert:Update",
+      "arguments": [
+        {
+          "name": "defaults",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "overrides",
+          "type": "array<object>",
+          "required": false
+        }
+      ],
+      "description": "Replace the model alert thresholds (defaults and per-persona overrides) in the server settings; the next evaluation pass uses them. Rates are 0 to 1, minimum counts 1 to 1000, the cost multiplier 1 to 100; each persona may have one override. Global admins only.",
       "experimental": false
     },
     {
@@ -27259,6 +27530,156 @@
       "experimental": false
     },
     {
+      "key": "modelAlerts",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.defaultIgnoreDays",
+      "type": "int",
+      "default": "7",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.enabled",
+      "type": "bool",
+      "default": "true",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.includeVessels",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.intervalMinutes",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.pushEnabled",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.defaults",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.defaults.costMedianMultiplier",
+      "type": "double?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.defaults.costMinAccepted",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.defaults.escalationsInARow",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.defaults.firstPassMinMissions",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.defaults.firstPassMinRate",
+      "type": "double?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.defaults.persona",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.defaults.protocolRepairMaxRate",
+      "type": "double?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.defaults.protocolRepairMinAttempts",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.overrides",
+      "type": "array<object>",
+      "default": "[]",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.overrides[].costMedianMultiplier",
+      "type": "double?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.overrides[].costMinAccepted",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.overrides[].escalationsInARow",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.overrides[].firstPassMinMissions",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.overrides[].firstPassMinRate",
+      "type": "double?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.overrides[].persona",
+      "type": "string",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.overrides[].protocolRepairMaxRate",
+      "type": "double?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "modelAlerts.thresholds.overrides[].protocolRepairMinAttempts",
+      "type": "int?",
+      "default": "null",
+      "experimental": false
+    },
+    {
       "key": "notifications",
       "type": "bool",
       "default": "true",
@@ -27343,8 +27764,8 @@
     },
     {
       "key": "push.categories",
-      "type": "array<enum PushCategoryEnum (AskProposal|CliPermission|MissionReview|DeploymentApproval|MissionFailed|LandingFailed|CaptainStalled|VoyageFinished)>",
-      "default": "[\"AskProposal\",\"CliPermission\",\"MissionReview\",\"DeploymentApproval\",\"MissionFailed\",\"LandingFailed\",\"CaptainStalled\",\"VoyageFinished\"]",
+      "type": "array<enum PushCategoryEnum (AskProposal|CliPermission|MissionReview|DeploymentApproval|MissionFailed|LandingFailed|CaptainStalled|VoyageFinished|ModelAlert)>",
+      "default": "[\"AskProposal\",\"CliPermission\",\"MissionReview\",\"DeploymentApproval\",\"MissionFailed\",\"LandingFailed\",\"CaptainStalled\",\"VoyageFinished\",\"ModelAlert\"]",
       "experimental": false
     },
     {

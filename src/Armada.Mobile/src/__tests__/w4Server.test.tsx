@@ -69,7 +69,7 @@ describe('settings model (secrets are never shown; the redacted value keeps them
     expect(pushPayload(push, secretDraft(REDACTED_SECRET)).expoAccessToken).toBe(REDACTED_SECRET);
     expect(pushPayload(push, { ...secretDraft(REDACTED_SECRET), clear: true }).expoAccessToken).toBe('');
     expect(mergePush({ categories: ['MissionFailed', 'Bogus' as never] }).categories).toEqual(['MissionFailed']);
-    expect(mergePush(null).categories).toHaveLength(8);
+    expect(mergePush(null).categories).toHaveLength(9);
   });
 
   it('parses numbers like the dashboard (blank or 0 gives the fallback)', () => {

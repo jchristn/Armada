@@ -87,6 +87,7 @@ namespace Armada.Core.Database.Mysql
             FailureCauseRules = new FailureCauseRuleMethods(_ConnectionString);
             ModelProbeRuns = new ModelProbeRunMethods(_ConnectionString);
             ModelProfiles = new ModelProfileMethods(_ConnectionString);
+            ModelAlerts = new ModelAlertMethods(_ConnectionString);
             ModelProbeResults = new ModelProbeResultMethods(_ConnectionString);
             BatteryRuns = new BatteryRunMethods(_ConnectionString);
             BatteryTaskResults = new BatteryTaskResultMethods(_ConnectionString);
@@ -1305,7 +1306,38 @@ namespace Armada.Core.Database.Mysql
                     @"CREATE INDEX idx_model_profiles_tenant_created ON model_profiles(tenant_id, created_utc);",
                     @"CREATE INDEX idx_model_profile_revisions_profile_seen ON model_profile_revisions(profile_id, first_seen_utc);",
                     @"CREATE INDEX idx_model_profile_revision_compat_other ON model_profile_revision_compat(compatible_revision_id);",
-                    @"ALTER TABLE captains ADD COLUMN model_profile_id VARCHAR(64) NULL;")
+                    @"ALTER TABLE captains ADD COLUMN model_profile_id VARCHAR(64) NULL;"),
+
+                new SchemaMigration(108, "Add model_alerts: one row per scorecard alert condition (tenant, model profile, revision group, persona, vessel scope, rule) with a unique alert key, open/resolved status, the counts, ignore-until and the applied-action audit record",
+                    @"CREATE TABLE IF NOT EXISTS model_alerts (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64),
+                        alert_key VARCHAR(64) NOT NULL,
+                        profile_id VARCHAR(64) NOT NULL,
+                        model VARCHAR(512),
+                        revision_group LONGTEXT NOT NULL,
+                        persona VARCHAR(256) NOT NULL,
+                        vessel_id VARCHAR(64),
+                        vessel_name VARCHAR(512),
+                        rule VARCHAR(64) NOT NULL,
+                        status VARCHAR(32) NOT NULL,
+                        title LONGTEXT NOT NULL,
+                        detail LONGTEXT,
+                        metric_count INT,
+                        metric_of INT,
+                        metric_value DOUBLE,
+                        threshold_value DOUBLE,
+                        created_utc DATETIME(6) NOT NULL,
+                        last_raised_utc DATETIME(6) NOT NULL,
+                        last_evaluated_utc DATETIME(6) NOT NULL,
+                        resolved_utc DATETIME(6),
+                        ignored_until_utc DATETIME(6),
+                        actions_json LONGTEXT,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE UNIQUE INDEX idx_model_alerts_alert_key ON model_alerts(alert_key);",
+                    @"CREATE INDEX idx_model_alerts_tenant_status_raised ON model_alerts(tenant_id, status, last_raised_utc);",
+                    @"CREATE INDEX idx_model_alerts_profile ON model_alerts(profile_id);")
 
 
             };

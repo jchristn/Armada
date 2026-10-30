@@ -49,6 +49,7 @@ namespace Test.Shared.Suites.E2E
             ["GET /api/v1/harbors/{id}/metrics"] = "One Harbor's metrics",
             ["GET /api/v1/missions/history"] = "Aggregated summary buckets",
             ["GET /api/v1/model-profiles/{id}/scorecard"] = "One profile's aggregated scorecard for one persona",
+            ["GET /api/v1/model-alerts/thresholds"] = "The alert thresholds (defaults and per-persona overrides), one settings object",
             ["GET /api/v1/missions/{id}/github/pull-request"] = "One pull request",
             ["GET /api/v1/missions/{id}/landing-preview"] = "One preview",
             ["GET /api/v1/missions/{id}/blackbox"] = "The mission's current black box entry (its record is bounded by construction)",

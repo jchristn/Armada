@@ -2598,7 +2598,38 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"CREATE INDEX IF NOT EXISTS idx_model_profiles_tenant_created ON model_profiles(tenant_id, created_utc);",
                     @"CREATE INDEX IF NOT EXISTS idx_model_profile_revisions_profile_seen ON model_profile_revisions(profile_id, first_seen_utc);",
                     @"CREATE INDEX IF NOT EXISTS idx_model_profile_revision_compat_other ON model_profile_revision_compat(compatible_revision_id);",
-                    @"ALTER TABLE captains ADD COLUMN model_profile_id TEXT;")
+                    @"ALTER TABLE captains ADD COLUMN model_profile_id TEXT;"),
+
+                new SchemaMigration(108, "Add model_alerts: one row per scorecard alert condition (tenant, model profile, revision group, persona, vessel scope, rule) with a unique alert key, open/resolved status, the counts, ignore-until and the applied-action audit record",
+                    @"CREATE TABLE IF NOT EXISTS model_alerts (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        tenant_id TEXT,
+                        alert_key TEXT NOT NULL,
+                        profile_id TEXT NOT NULL,
+                        model TEXT,
+                        revision_group TEXT NOT NULL,
+                        persona TEXT NOT NULL,
+                        vessel_id TEXT,
+                        vessel_name TEXT,
+                        rule TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        detail TEXT,
+                        metric_count INTEGER,
+                        metric_of INTEGER,
+                        metric_value REAL,
+                        threshold_value REAL,
+                        created_utc TEXT NOT NULL,
+                        last_raised_utc TEXT NOT NULL,
+                        last_evaluated_utc TEXT NOT NULL,
+                        resolved_utc TEXT,
+                        ignored_until_utc TEXT,
+                        actions_json TEXT,
+                        last_update_utc TEXT NOT NULL
+                    );",
+                    @"CREATE UNIQUE INDEX IF NOT EXISTS idx_model_alerts_alert_key ON model_alerts(alert_key);",
+                    @"CREATE INDEX IF NOT EXISTS idx_model_alerts_tenant_status_raised ON model_alerts(tenant_id, status, last_raised_utc);",
+                    @"CREATE INDEX IF NOT EXISTS idx_model_alerts_profile ON model_alerts(profile_id);")
 
 
 

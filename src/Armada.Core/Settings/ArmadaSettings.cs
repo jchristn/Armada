@@ -890,6 +890,16 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Model alert settings: the periodic scorecard evaluation pass, the optional push and the thresholds (defaults
+        /// and per-persona overrides). Never null; setting null restores the defaults.
+        /// </summary>
+        public ModelAlertSettings ModelAlerts
+        {
+            get => _ModelAlerts;
+            set => _ModelAlerts = value ?? new ModelAlertSettings();
+        }
+
+        /// <summary>
         /// Vessel health evaluation settings (schedule, concurrency, freshness, scored criteria, thresholds).
         /// Never null; setting null restores the defaults.
         /// </summary>
@@ -1021,6 +1031,7 @@ namespace Armada.Core.Settings
         private VesselImportSettings _Import = new VesselImportSettings();
         private FleetActionSettings _FleetActions = new FleetActionSettings();
         private EvaluationSettings _Evaluation = new EvaluationSettings();
+        private ModelAlertSettings _ModelAlerts = new ModelAlertSettings();
         private AskSettings _Ask = new AskSettings();
         private CliPermissionSettings _Permissions = new CliPermissionSettings();
         private RepositoryHealthSettings _RepositoryHealth = new RepositoryHealthSettings();

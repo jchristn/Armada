@@ -15,6 +15,8 @@ export const INBOX_KINDS = {
   deploymentFailed: 'deployment_failed',
   askProposal: 'ask_proposal',
   cliPermission: 'cli_permission',
+  /** A model scorecard threshold was crossed; advisory, with suggested actions (not an approval). */
+  modelAlert: 'model_alert',
 } as const;
 
 /** Inbox kind of a pending CLI tool permission request (InboxItemKinds.CliPermission). */

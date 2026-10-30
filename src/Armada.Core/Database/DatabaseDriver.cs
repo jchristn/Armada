@@ -520,6 +520,15 @@ namespace Armada.Core.Database
         }
 
         /// <summary>
+        /// Model alert methods (one row per scorecard alert condition, with its applied-action audit record).
+        /// </summary>
+        public IModelAlertMethods ModelAlerts
+        {
+            get => _ModelAlerts;
+            protected set => _ModelAlerts = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
         /// Model profile methods (the model as served, its immutable revisions, and the captain reference).
         /// </summary>
         public IModelProfileMethods ModelProfiles
@@ -753,6 +762,7 @@ namespace Armada.Core.Database
         private IFailureCauseRuleMethods _FailureCauseRules = null!;
         private IModelProbeRunMethods _ModelProbeRuns = null!;
         private IModelProfileMethods _ModelProfiles = null!;
+        private IModelAlertMethods _ModelAlerts = null!;
         private IModelProbeResultMethods _ModelProbeResults = null!;
         private IBatteryRunMethods _BatteryRuns = null!;
         private IBatteryTaskResultMethods _BatteryTaskResults = null!;

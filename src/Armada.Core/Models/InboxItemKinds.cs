@@ -35,6 +35,9 @@ namespace Armada.Core.Models
         /// <summary>A CLI captain's permission prompt (for example a shell command) is waiting for an approver.</summary>
         public const string CliPermission = "cli_permission";
 
+        /// <summary>A model scorecard alert threshold was crossed (advisory; carries suggested actions).</summary>
+        public const string ModelAlert = "model_alert";
+
         #endregion
     }
 }

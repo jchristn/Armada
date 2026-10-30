@@ -296,6 +296,11 @@ namespace Armada.Core
         public static readonly string ModelProfileRevisionIdPrefix = "mdv_";
 
         /// <summary>
+        /// ID prefix for model alerts (one scorecard threshold crossed for a profile, revision group, persona and vessel).
+        /// </summary>
+        public static readonly string ModelAlertIdPrefix = "mal_";
+
+        /// <summary>
         /// ID prefix for battery runs (one run of the fixture battery against a captain).
         /// </summary>
         public static readonly string BatteryRunIdPrefix = "bat_";
