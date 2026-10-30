@@ -48,6 +48,7 @@ type RemoteSecretField = 'enrollmentToken' | 'password';
 import LogViewer from '../components/shared/LogViewer';
 import RefreshButton from '../components/shared/RefreshButton';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
+import { baseAfterSave, mergeDraft } from '../lib/settingsDraft';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import PageHeader from '../components/shared/PageHeader';
 import { useWebSocket } from '../context/WebSocketContext';
@@ -67,6 +68,8 @@ export default function Server() {
 
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [settings, setSettings] = useState<ServerSettings | null>(null);
+  // Server copy the form was last merged against. Edited fields differ from this copy and are kept.
+  const savedSettingsRef = useRef<ServerSettings | null>(null);
   const [proxyContext, setProxyContext] = useState<ProxySessionContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -168,7 +171,21 @@ export default function Server() {
     setRevealedRemoteField(null);
   }
 
-  const loadData = useCallback(async () => {
+  const applyIncomingSettings = useCallback((data: ServerSettings, sent?: Partial<ServerSettings>, replaceDraft = false) => {
+    const next = mergeServerSettings(data);
+    if (!next) return;
+    const previous = savedSettingsRef.current;
+    if (replaceDraft || previous === null) {
+      savedSettingsRef.current = next;
+      setSettings(next);
+      return;
+    }
+    const base = sent ? baseAfterSave(previous, sent) : previous;
+    savedSettingsRef.current = next;
+    setSettings((current) => (current ? mergeDraft(base, current, next) : next));
+  }, []);
+
+  const loadData = useCallback(async (replaceDraft = false) => {
     try {
       setError('');
       const [h, s, proxy] = await Promise.all([
@@ -177,7 +194,7 @@ export default function Server() {
         getProxySessionContext().catch(() => null),
       ]);
       if (h) setHealth(h as unknown as HealthInfo);
-      if (s) setSettings(mergeServerSettings(s as unknown as ServerSettings));
+      if (s) applyIncomingSettings(s as unknown as ServerSettings, undefined, replaceDraft);
       setProxyContext(proxy);
       if (!h && !s) setError(t('Failed to load server data.'));
       else if (!s) setError(t('Failed to load server settings. Health data is available, but configuration and backup sections could not be loaded.'));
@@ -186,23 +203,24 @@ export default function Server() {
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, applyIncomingSettings]);
 
   useEffect(() => {
-    loadData();
+    void loadData(true);
   }, [loadData]);
 
-  const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('server', loadData);
+  const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('server', () => { void loadData(false); });
 
   const handleSaveServerConfig = async () => {
     if (!settings) return;
     try {
-      const updated = await updateSettings({
+      const sent = {
         admiralPort: settings.admiralPort,
         mcpPort: settings.mcpPort,
         maxCaptains: settings.maxCaptains,
-      });
-      setSettings(mergeServerSettings(updated as unknown as ServerSettings));
+      };
+      const updated = await updateSettings(sent);
+      applyIncomingSettings(updated as unknown as ServerSettings, sent);
       showToast('success', t('Server configuration saved'));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('Unknown error');
@@ -213,11 +231,12 @@ export default function Server() {
   const handleSaveRebuildSettings = async () => {
     if (!settings) return;
     try {
-      const updated = await updateSettings({
+      const sent = {
         selfVesselId: settings.selfVesselId ?? '',
         rebuildSlotRetentionCount: settings.rebuildSlotRetentionCount ?? 3,
-      });
-      setSettings(mergeServerSettings(updated as unknown as ServerSettings));
+      };
+      const updated = await updateSettings(sent);
+      applyIncomingSettings(updated as unknown as ServerSettings, sent);
       showToast('success', t('Rebuild settings saved'));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('Unknown error');
@@ -228,7 +247,7 @@ export default function Server() {
   const handleSaveAgentSettings = async () => {
     if (!settings) return;
     try {
-      const updated = await updateSettings({
+      const sent = {
         heartbeatIntervalSeconds: settings.heartbeatIntervalSeconds,
         stallThresholdMinutes: settings.stallThresholdMinutes,
         ...(settings.stageCheckTimeoutMinutes !== undefined ? { stageCheckTimeoutMinutes: settings.stageCheckTimeoutMinutes } : {}),
@@ -236,8 +255,9 @@ export default function Server() {
         landingMode: settings.landingMode || DEFAULT_GLOBAL_LANDING_MODE,
         ...(settings.requireHarborForLaunch !== undefined ? { requireHarborForLaunch: settings.requireHarborForLaunch } : {}),
         ...(settings.blockDependentsOfFailedStages !== undefined ? { blockDependentsOfFailedStages: settings.blockDependentsOfFailedStages } : {}),
-      });
-      setSettings(mergeServerSettings(updated as unknown as ServerSettings));
+      };
+      const updated = await updateSettings(sent);
+      applyIncomingSettings(updated as unknown as ServerSettings, sent);
       showToast('success', t('Agent settings saved'));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('Unknown error');
@@ -248,12 +268,13 @@ export default function Server() {
   const handleSavePlanningSessionSettings = async () => {
     if (!settings) return;
     try {
-      const updated = await updateSettings({
+      const sent = {
         planningSessionInactivityTimeoutMinutes: settings.planningSessionInactivityTimeoutMinutes,
         planningSessionAbandonmentTimeoutMinutes: settings.planningSessionAbandonmentTimeoutMinutes,
         planningSessionRetentionDays: settings.planningSessionRetentionDays,
-      });
-      setSettings(mergeServerSettings(updated as unknown as ServerSettings));
+      };
+      const updated = await updateSettings(sent);
+      applyIncomingSettings(updated as unknown as ServerSettings, sent);
       showToast('success', t('Planning session settings saved'));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('Unknown error');
@@ -264,10 +285,11 @@ export default function Server() {
   const handleSaveRemoteControlSettings = async () => {
     if (!settings) return;
     try {
-      const updated = await updateSettings({
+      const sent = {
         remoteControl: settings.remoteControl,
-      });
-      setSettings(mergeServerSettings(updated as unknown as ServerSettings));
+      };
+      const updated = await updateSettings(sent);
+      applyIncomingSettings(updated as unknown as ServerSettings, sent);
       showToast('success', t('Remote control settings saved'));
       const refreshedHealth = (await getHealth()) as unknown as HealthInfo;
       setHealth(refreshedHealth);
@@ -538,7 +560,7 @@ export default function Server() {
         actions={(
           <>
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={loadData} title={t('Reload health, settings, and tunnel status from the Admiral. Unsaved edits on this page are replaced.')} />
+            <RefreshButton onRefresh={() => loadData(true)} title={t('Reload health, settings, and tunnel status from the Admiral. Unsaved edits on this page are replaced.')} />
           </>
         )}
       />
@@ -893,7 +915,7 @@ export default function Server() {
           importSettings={settings.import}
           fleetActionSettings={settings.fleetActions}
           locked={remoteSettingsLocked}
-          onSaved={(updated) => setSettings(mergeServerSettings(updated as unknown as ServerSettings))}
+          onSaved={(updated) => applyIncomingSettings(updated as unknown as ServerSettings)}
           notify={showToast}
         />
       )}
@@ -902,7 +924,7 @@ export default function Server() {
         <CliPermissionSettings
           permissions={settings.permissions}
           locked={remoteSettingsLocked}
-          onSaved={(updated) => setSettings(mergeServerSettings(updated as unknown as ServerSettings))}
+          onSaved={(updated) => applyIncomingSettings(updated as unknown as ServerSettings)}
           notify={showToast}
         />
       )}
@@ -911,7 +933,7 @@ export default function Server() {
         <RetentionSettings
           retention={settings.retention}
           locked={remoteSettingsLocked}
-          onSaved={(updated) => setSettings(mergeServerSettings(updated as unknown as ServerSettings))}
+          onSaved={(updated) => applyIncomingSettings(updated as unknown as ServerSettings)}
           notify={showToast}
         />
       )}
@@ -929,7 +951,7 @@ export default function Server() {
         <AskSettings
           ask={settings.ask}
           locked={remoteSettingsLocked}
-          onSaved={(updated) => setSettings(mergeServerSettings(updated as unknown as ServerSettings))}
+          onSaved={(updated) => applyIncomingSettings(updated as unknown as ServerSettings)}
           notify={showToast}
         />
       )}
