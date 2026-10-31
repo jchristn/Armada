@@ -207,6 +207,8 @@ import type {
   StageOutcomeQuery,
   StageOutcomeReclassifyResult,
   BatteryPackInfo,
+  BatteryPackDetail,
+  BatteryPackTextFile,
   ModelEvaluationOptions,
   ModelProbeDepth,
   ModelProbeRun,
@@ -2188,8 +2190,8 @@ export const evaluateModelEndpoint = (endpointId: string, depth: ModelProbeDepth
   post<ModelProbeRun>(`/api/v1/model-endpoints/${encodeURIComponent(endpointId)}/evaluate`, evaluateBody(depth, options));
 
 /** One page of the installed fixture battery packs (the Full Evaluate dialog's pack list), with validation errors. */
-export const listBatteryPacks = (pageSize = 1000) =>
-  get<EnumerationResult<BatteryPackInfo>>(`/api/v1/battery/packs${cliQuery({ pageSize })}`);
+export const listBatteryPacks = (pageSize = 1000, pageNumber = 1) =>
+  get<EnumerationResult<BatteryPackInfo>>(`/api/v1/battery/packs${cliQuery({ pageSize, pageNumber })}`);
 
 /** Cancel a running Evaluate; a Full run keeps a partial report marked incomplete. A finished run comes back unchanged. */
 export const cancelModelProbeRun = (id: string) =>
@@ -2609,3 +2611,14 @@ export async function listAllStorageHosts(): Promise<import('../types/storage').
   }
   return all;
 }
+
+// ==================== Battery packs ====================
+/** Server-wide battery pack management. Mutation calls require a global admin. */
+export const getBatteryPack = (id: string) => get<BatteryPackDetail>(`/api/v1/battery/packs/${encodeURIComponent(id)}`);
+export const readBatteryPackFile = (id: string, path: string) => get<BatteryPackTextFile>(`/api/v1/battery/packs/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`);
+export const createBatteryPack = (packId: string, manifestJson: string) => post<BatteryPackDetail>('/api/v1/battery/packs', { PackId: packId, ManifestJson: manifestJson });
+export const updateBatteryPackManifest = (id: string, manifestJson: string) => put<BatteryPackDetail>(`/api/v1/battery/packs/${encodeURIComponent(id)}/manifest`, { ManifestJson: manifestJson });
+export const writeBatteryPackFile = (id: string, path: string, content: string) => put<BatteryPackDetail>(`/api/v1/battery/packs/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`, { Content: content });
+export const deleteBatteryPackFile = (id: string, path: string) => del<BatteryPackDetail>(`/api/v1/battery/packs/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`);
+export const deleteBatteryPack = (id: string) => del<{ deleted: boolean }>(`/api/v1/battery/packs/${encodeURIComponent(id)}`);
+export const validateBatteryPack = (id: string) => post<BatteryPackInfo>(`/api/v1/battery/packs/${encodeURIComponent(id)}/validate`, {});

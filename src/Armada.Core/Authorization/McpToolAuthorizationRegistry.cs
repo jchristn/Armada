@@ -145,6 +145,14 @@ namespace Armada.Core.Authorization
             Add("update_model_alert_thresholds", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
             Add("apply_model_alert_action", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
             Add("ignore_model_alert", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
+            Add("get_battery_pack", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("read_battery_pack_file", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("write_battery_pack_file", "BatteryPack", ResourceOperationEnum.Update, PermissionLevel.AdminOnly);
+            Add("delete_battery_pack_file", "BatteryPack", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("create_battery_pack", "BatteryPack", ResourceOperationEnum.Create, PermissionLevel.AdminOnly);
+            Add("update_battery_pack_manifest", "BatteryPack", ResourceOperationEnum.Update, PermissionLevel.AdminOnly);
+            Add("delete_battery_pack", "BatteryPack", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("validate_battery_pack", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("list_battery_packs", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("run_battery", "BatteryRun", ResourceOperationEnum.Execute, PermissionLevel.Authenticated);
             Add("get_battery_run", "BatteryRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

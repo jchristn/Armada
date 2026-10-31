@@ -105,6 +105,14 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/model-alerts/{id}/ignore", "ModelAlert", ResourceOperationEnum.Update, PermissionLevel.Authenticated);
             Add("PUT", "/api/v1/model-profiles/{id}", "ModelProfile", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("PUT", "/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with", "ModelProfile", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
+            Add("GET", "/api/v1/battery/packs/{packId}", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/battery/packs/{packId}/files", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/battery/packs", "BatteryPack", ResourceOperationEnum.Create, PermissionLevel.AdminOnly);
+            Add("PUT", "/api/v1/battery/packs/{packId}/manifest", "BatteryPack", ResourceOperationEnum.Update, PermissionLevel.AdminOnly);
+            Add("PUT", "/api/v1/battery/packs/{packId}/files", "BatteryPack", ResourceOperationEnum.Update, PermissionLevel.AdminOnly);
+            Add("DELETE", "/api/v1/battery/packs/{packId}/files", "BatteryPack", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("DELETE", "/api/v1/battery/packs/{packId}", "BatteryPack", ResourceOperationEnum.Delete, PermissionLevel.AdminOnly);
+            Add("POST", "/api/v1/battery/packs/{packId}/validate", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/battery/packs", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/battery/packs/enumerate", "BatteryPack", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/battery/runs", "BatteryRun", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);

@@ -65,22 +65,6 @@
     },
     {
       "kind": "route",
-      "key": "/blackbox/gaps",
-      "status": "extension",
-      "tui": "BlackBoxGapsScreen",
-      "workstream": "BB",
-      "notes": "TUI route for the Armada resilience gaps view (G on the Black Box tab); the dashboard shows it as a quick view of its Black Box tab"
-    },
-    {
-      "kind": "api",
-      "key": "enumerateBlackBoxResilienceGaps",
-      "status": "implemented",
-      "tui": "ArmadaClient.EnumerateBlackBoxResilienceGapsAsync",
-      "workstream": "BB",
-      "notes": "Missions (Armada resilience gaps)"
-    },
-    {
-      "kind": "route",
       "key": "/approvals",
       "status": "extension",
       "tui": "ApprovalsScreen",
@@ -110,6 +94,14 @@
       "tui": "BacklogItemScreen",
       "workstream": "W3.6",
       "notes": "form, links, GitHub source, refinement panel"
+    },
+    {
+      "kind": "route",
+      "key": "/battery",
+      "status": "not-applicable",
+      "tui": "",
+      "workstream": "",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
     },
     {
       "kind": "route",
@@ -1321,6 +1313,14 @@
     },
     {
       "kind": "api",
+      "key": "createBatteryPack",
+      "status": "implemented",
+      "tui": "ArmadaClient.CreateBatteryPackAsync",
+      "workstream": "W0.2",
+      "notes": "Battery packs"
+    },
+    {
+      "kind": "api",
       "key": "createCaptain",
       "status": "implemented",
       "tui": "ArmadaClient.CreateCaptainAsync",
@@ -1590,6 +1590,22 @@
       "tui": "ArmadaClient.DeleteBacklogItemAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
+    },
+    {
+      "kind": "api",
+      "key": "deleteBatteryPack",
+      "status": "implemented",
+      "tui": "ArmadaClient.DeleteBatteryPackAsync",
+      "workstream": "W0.2",
+      "notes": "Battery packs"
+    },
+    {
+      "kind": "api",
+      "key": "deleteBatteryPackFile",
+      "status": "implemented",
+      "tui": "ArmadaClient.DeleteBatteryPackFileAsync",
+      "workstream": "W0.2",
+      "notes": "Battery packs"
     },
     {
       "kind": "api",
@@ -2145,6 +2161,14 @@
     },
     {
       "kind": "api",
+      "key": "enumerateBlackBoxResilienceGaps",
+      "status": "implemented",
+      "tui": "ArmadaClient.EnumerateBlackBoxResilienceGapsAsync",
+      "workstream": "BB",
+      "notes": "Missions (Armada resilience gaps)"
+    },
+    {
+      "kind": "api",
       "key": "enumerateCliPermissionRules",
       "status": "implemented",
       "tui": "ArmadaClient.EnumerateCliPermissionRulesAsync",
@@ -2406,6 +2430,14 @@
       "tui": "ArmadaClient.GetBacklogItemAsync",
       "workstream": "W0.2",
       "notes": "Objectives"
+    },
+    {
+      "kind": "api",
+      "key": "getBatteryPack",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetBatteryPackAsync",
+      "workstream": "W0.2",
+      "notes": "Battery packs"
     },
     {
       "kind": "api",
@@ -3881,6 +3913,14 @@
     },
     {
       "kind": "api",
+      "key": "readBatteryPackFile",
+      "status": "implemented",
+      "tui": "ArmadaClient.ReadBatteryPackFileAsync",
+      "workstream": "W0.2",
+      "notes": "Battery packs"
+    },
+    {
+      "kind": "api",
       "key": "readBlackBoxObject",
       "status": "implemented",
       "tui": "ArmadaClient.ReadBlackBoxObjectAsync",
@@ -4369,6 +4409,14 @@
     },
     {
       "kind": "api",
+      "key": "updateBatteryPackManifest",
+      "status": "implemented",
+      "tui": "ArmadaClient.UpdateBatteryPackManifestAsync",
+      "workstream": "W0.2",
+      "notes": "Battery packs"
+    },
+    {
+      "kind": "api",
       "key": "updateCaptain",
       "status": "implemented",
       "tui": "ArmadaClient.UpdateCaptainAsync",
@@ -4593,6 +4641,14 @@
     },
     {
       "kind": "api",
+      "key": "validateBatteryPack",
+      "status": "implemented",
+      "tui": "ArmadaClient.ValidateBatteryPackAsync",
+      "workstream": "W0.2",
+      "notes": "Battery packs"
+    },
+    {
+      "kind": "api",
       "key": "validateModelEndpoint",
       "status": "implemented",
       "tui": "ArmadaClient.ValidateModelEndpointAsync",
@@ -4630,6 +4686,14 @@
       "tui": "ArmadaClient.WhoamiAsync",
       "workstream": "W0.2",
       "notes": "Auth"
+    },
+    {
+      "kind": "api",
+      "key": "writeBatteryPackFile",
+      "status": "implemented",
+      "tui": "ArmadaClient.WriteBatteryPackFileAsync",
+      "workstream": "W0.2",
+      "notes": "Battery packs"
     },
     {
       "kind": "event",

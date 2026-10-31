@@ -6209,10 +6209,25 @@ and `Evaluation.BatteryTaskTimeoutMinutes` (default 60) bounds each task's missi
 |---|---|---|---|
 | GET | `/api/v1/battery/packs` | | `200` `EnumerationResult<BatteryPackInfo>` ordered by pack directory name (only the page's manifests are read): `Id`, `Version`, `Valid`, `Errors` (validation errors of a malformed manifest, at most 256), `Toolchain`, `ToolchainCount`, `Tasks` (`Id`, `Persona`, `Grader`, `Toolchain`), `TaskCount`, `ManifestHash`. Every list in a manifest holds at most 256 entries; a manifest with more is malformed, and its info lists the first 256 with the true count. Query: `pageNumber`, `pageSize` (default 100) |
 | POST | `/api/v1/battery/packs/enumerate` | `EnumerationQuery` (optional): `PageNumber`, `PageSize` (1-1000, default 10) | `200` `EnumerationResult<BatteryPackInfo>`, the same page as the GET; querystring paging overrides the body |
+| GET | `/api/v1/battery/packs/{packId}` | | `200` `BatteryPackDetail`: directory `Id`, raw `ManifestJson`, validated `Info`, and `Files` (relative `Path`, byte `Size`) |
+| GET | `/api/v1/battery/packs/{packId}/files` | Query `path` | `200` `BatteryPackTextFile` (`Path`, `Content`); UTF-8 text up to 1 MiB, binary refused |
+| POST | `/api/v1/battery/packs` | `BatteryPackEditRequest`: `PackId`, `ManifestJson` | `200` `BatteryPackDetail`; creates folder, manifest, empty fixture/ and tasks/; `409` exists |
+| PUT | `/api/v1/battery/packs/{packId}/manifest` | `BatteryPackEditRequest`: `ManifestJson` | `200` `BatteryPackDetail`; saves parseable JSON even when validation errors remain; `400` invalid JSON |
+| PUT | `/api/v1/battery/packs/{packId}/files` | Query `path`; `BatteryPackTextFile`: `Content` | `200` updated `BatteryPackDetail`; create/overwrite text under fixture/ or tasks/ |
+| DELETE | `/api/v1/battery/packs/{packId}/files` | Query `path` | `200` updated `BatteryPackDetail`; manifest deletion refused |
+| DELETE | `/api/v1/battery/packs/{packId}` | | `200` `{ Deleted: true }`; recursively deletes the pack |
+| POST | `/api/v1/battery/packs/{packId}/validate` | | `200` `BatteryPackInfo` with validation errors, without writing |
 | POST | `/api/v1/battery/runs` | `BatteryRunRequest`: `Packs` (required, at most 256), `CaptainId` (required), `RunCount` (1-10, default 3), `Seed` (optional), `CreateFixtureVessel` (default false) | `201` `BatteryRun` (queued; the tasks run in the background); `400` for no packs, an unknown or malformed pack, a bad run count, or a missing fixture vessel without `CreateFixtureVessel`; `403` not an admin; `404` unknown captain |
 | GET | `/api/v1/battery/runs/{id}` | | `200` `BatteryRun` with its outcome counts (`TotalTasks`, `PassedCount`, `FailedCount`, `CouldNotRunCount`, `PendingEvaluationCount`). The per-task results are not embedded; page them with the routes below. `404` |
 | GET | `/api/v1/battery/runs/{id}/results` | | `200` `EnumerationResult<BatteryTaskResult>` paged in the database, one per task attempt: `PackId`, `TaskId`, `Persona`, `Grader`, `Attempt`, `Outcome` (`Passed`/`Failed`/`CouldNotRun`/`PendingEvaluation`), `Score`, `Summary`, `Reason`, `Details` (commands, files, mutants, matched/missed seeded items, the first 256 false positives with `FalsePositiveCount`, verdict, schema error, rubric), `Output`, `VoyageId`, `MissionId`, `FixtureCommit`. Query: `pageNumber`, `pageSize` (1-1000, default 10), `status` (outcome filter), `order` (`CreatedDescending` default, `CreatedAscending`); `400` unknown outcome; `404` |
 | POST | `/api/v1/battery/runs/{id}/results/enumerate` | `EnumerationQuery` (optional): `PageNumber`, `PageSize`, `Order`, `Status` (outcome) | `200` the same page as the GET; querystring values override the body |
+
+Pack management reads and validation require an authenticated person; all writes require a global admin (403 for
+regular users and tenant admins). Pack ids must match `[a-z0-9][a-z0-9._-]*`. File paths must stay inside the pack:
+absolute paths, dot segments, backslashes and symlinks are refused (400). Missing packs/files return 404. The
+management tree is capped at 256 files/directories. Editing/deleting an in-process queued/running pack returns
+409. The guard is best effort: concurrent run startup, external writers and other Admirals sharing the directory
+are not locked. Configure `Evaluation.BatteryDirectory` to a writable mounted volume for durable container edits.
 
 A run is `Failed` only when the run itself could not finish (for example the Admiral restarted while it ran). Poll
 `GET /api/v1/battery/runs/{id}` until `Status` is `Completed` or `Failed`, then page
@@ -12458,6 +12473,14 @@ the matrix and each route's section describe. `/openapi.json` and `/swagger` rem
 | 427 | GET | `/api/v1/workspace/vessels/{vesselId}/tree` | List one workspace directory | Authenticated |
 | 428 | GET | `/openapi.json` |  | NoAuthRequired |
 | 429 | GET | `/swagger` |  | NoAuthRequired |
+| 430 | GET | `/api/v1/battery/packs/{packId}` | Get battery pack | Authenticated |
+| 431 | GET | `/api/v1/battery/packs/{packId}/files` | Read battery pack file | Authenticated |
+| 432 | POST | `/api/v1/battery/packs` | Create battery pack | AdminOnly |
+| 433 | PUT | `/api/v1/battery/packs/{packId}/manifest` | Update battery pack manifest | AdminOnly |
+| 434 | PUT | `/api/v1/battery/packs/{packId}/files` | Write battery pack file | AdminOnly |
+| 435 | DELETE | `/api/v1/battery/packs/{packId}/files` | Delete battery pack file | AdminOnly |
+| 436 | DELETE | `/api/v1/battery/packs/{packId}` | Delete battery pack | AdminOnly |
+| 437 | POST | `/api/v1/battery/packs/{packId}/validate` | Validate battery pack | Authenticated |
 
 ---
 

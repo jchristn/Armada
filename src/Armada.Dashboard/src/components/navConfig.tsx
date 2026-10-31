@@ -36,5 +36,9 @@ export const askArmadaItem: NavItem = withIcon(askArmadaModelItem);
 
 export const navSections: NavSection[] = navModelSections.map((section) => ({
   ...section,
-  items: section.items.map(withIcon),
+  matchers: section.key === 'fleet' ? [...section.matchers, '/battery'] : section.matchers,
+  // The filesystem pack editor is a dashboard administration surface. Keep it out of the mobile nav.
+  items: section.items.flatMap(item => item.to === '/captains'
+    ? [withIcon(item), withIcon({ to: '/battery', label: 'Battery packs', tooltip: 'Manage fixture battery packs', icon: 'captains' })]
+    : [withIcon(item)]),
 }));

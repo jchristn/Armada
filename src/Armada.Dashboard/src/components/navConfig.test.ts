@@ -21,20 +21,20 @@ describe('navConfig', () => {
   it('exposes exactly the consolidated destinations', () => {
     const present = [
       '/', '/ask', '/inbox', '/dispatch', '/missions',
-      '/delivery', '/fleet-actions', '/vessels', '/captains', '/configuration', '/activity',
+      '/delivery', '/fleet-actions', '/vessels', '/captains', '/battery', '/configuration', '/activity',
       '/api-explorer', '/server',
     ];
     const sidebarTargets = [dashboardItem, askArmadaItem, ...navSections.flatMap((s) => s.items)].map((i) => i.to);
     expect(sidebarTargets).toEqual(expect.arrayContaining(present));
-    // 13 sidebar destinations; Planning, Jobs, Storage, CLI Tool Permissions and Black Box are hub tabs since v1.2.0.
-    expect(sidebarTargets).toHaveLength(13);
+    // 14 sidebar destinations; Planning, Jobs, Storage, CLI Tool Permissions and Black Box are hub tabs since v1.2.0.
+    expect(sidebarTargets).toHaveLength(14);
   });
 
   it('lays out the v1.2.0 sections: Activity under Missions, Delivery in BUILD, no ACTIVITY or DELIVERY section', () => {
     expect(navSections.map((s) => s.label)).toEqual(['OPERATIONS', 'BUILD', 'CONFIGURATION', 'SYSTEM']);
     const byKey = Object.fromEntries(navSections.map((s) => [s.key, s.items.map((i) => i.to)]));
     expect(byKey.operations).toEqual(['/inbox', '/dispatch', '/fleet-actions', '/missions', '/activity']);
-    expect(byKey.fleet).toEqual(['/vessels', '/captains', '/delivery']);
+    expect(byKey.fleet).toEqual(['/vessels', '/captains', '/battery', '/delivery']);
     expect(byKey.system).toEqual(['/api-explorer', '/server']);
     const operations = navSections.find((s) => s.key === 'operations')!;
     // Old Activity and Delivery child routes still highlight the section that now hosts them.

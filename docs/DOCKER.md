@@ -469,3 +469,11 @@ The standalone dashboard proxies API and WebSocket calls to `ARMADA_SERVER_URL` 
 **CORS errors:**
 The Armada server enables CORS on all routes by default. If you see CORS errors, verify you're accessing the correct port (7890 for the API).
 
+
+## Persistent battery pack edits
+
+Set `Evaluation.BatteryDirectory` to a writable mounted volume, for example `/app/data/battery`, before managing
+packs from the dashboard. Mount a host battery directory there (for example `../../battery:/app/data/battery` in
+`docker/armada/compose.yaml`), and grant the container user (UID 1654) write access. Pack edits otherwise live in
+the container's writable layer and disappear when it is replaced. Source publishing includes battery packs when
+`battery/` is present; the server Dockerfile currently copies only `src/`, so mount your pack directory explicitly.

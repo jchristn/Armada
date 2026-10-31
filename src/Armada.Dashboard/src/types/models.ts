@@ -4549,3 +4549,12 @@ export interface ModelProbeRunQuery {
   pageNumber?: number;
   pageSize?: number;
 }
+
+/** Pack management returns raw JSON so invalid manifests remain editable. */
+export interface BatteryPackDetail {
+  id: string;
+  manifestJson: string;
+  info: BatteryPackInfo;
+  files: { path: string; size: number }[];
+}
+export interface BatteryPackTextFile { path: string; content: string; }

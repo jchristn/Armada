@@ -58,6 +58,7 @@ namespace Armada.Core.Services
         private readonly Func<EvaluationSettings> _Settings;
         private readonly EvaluationConcurrencyGate _Gate;
         private readonly string _ArmadaVersion;
+        private readonly ConcurrentDictionary<string, string[]> _ActivePackDirectories = new ConcurrentDictionary<string, string[]>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, Task<BatteryRun>> _Running = new ConcurrentDictionary<string, Task<BatteryRun>>(StringComparer.Ordinal);
 
         private static readonly JsonSerializerOptions _Json = new JsonSerializerOptions
@@ -106,6 +107,12 @@ namespace Armada.Core.Services
         #endregion
 
         #region Public-Methods
+
+        /// <summary>The resolved server-wide battery directory used by pack management.</summary>
+        public string? BatteryDirectory => _Catalog.ResolveDirectory();
+
+        /// <summary>Whether an in-process queued or running battery uses this pack folder.</summary>
+        public bool IsPackInUse(string directory) => _ActivePackDirectories.Values.Any(paths => paths.Contains(directory, StringComparer.Ordinal));
 
         /// <summary>
         /// One page of packs, valid or not, ordered by pack directory name. Only the page's manifests are read.
@@ -307,9 +314,14 @@ namespace Armada.Core.Services
 
             BatteryRun returned = await _Database.BatteryRuns.ReadAsync(run.Id, token).ConfigureAwait(false) ?? run;
             BatteryRun created = run;
+            _ActivePackDirectories[run.Id] = packs.Select(p => p.Directory).ToArray();
             Task<BatteryRun> execution = Task.Run(() => ExecuteAsync(created, captain, packs, vessels, promptVariant, options ?? new BatteryRunOptions()));
             _Running[run.Id] = execution;
-            _ = execution.ContinueWith(t => _Running.TryRemove(created.Id, out Task<BatteryRun>? _), TaskScheduler.Default);
+            _ = execution.ContinueWith(t =>
+            {
+                _Running.TryRemove(created.Id, out Task<BatteryRun>? _);
+                _ActivePackDirectories.TryRemove(created.Id, out string[]? _);
+            }, TaskScheduler.Default);
             return returned;
         }
 

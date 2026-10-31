@@ -97,6 +97,14 @@
     },
     {
       "kind": "route",
+      "key": "/battery",
+      "status": "not-applicable",
+      "mobile": "src/app/(app)/(work)/battery.tsx",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "route",
       "key": "/blackbox",
       "status": "implemented",
       "mobile": "src/app/(app)/(work)/blackbox/index.tsx",
@@ -1353,6 +1361,14 @@
     },
     {
       "kind": "api",
+      "key": "createBatteryPack",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "api",
       "key": "createCaptain",
       "status": "implemented",
       "mobile": "src/screens/captains",
@@ -1622,6 +1638,22 @@
       "mobile": "src/screens/objectives",
       "workstream": "W3.3",
       "notes": "Objectives (backlog)"
+    },
+    {
+      "kind": "api",
+      "key": "deleteBatteryPack",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "api",
+      "key": "deleteBatteryPackFile",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
     },
     {
       "kind": "api",
@@ -2446,6 +2478,14 @@
       "mobile": "src/screens/objectives",
       "workstream": "W3.3",
       "notes": "Objectives (backlog)"
+    },
+    {
+      "kind": "api",
+      "key": "getBatteryPack",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
     },
     {
       "kind": "api",
@@ -3953,6 +3993,14 @@
     },
     {
       "kind": "api",
+      "key": "readBatteryPackFile",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "api",
       "key": "readBlackBoxObject",
       "status": "not-applicable",
       "mobile": "",
@@ -4417,6 +4465,14 @@
     },
     {
       "kind": "api",
+      "key": "updateBatteryPackManifest",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "api",
       "key": "updateCaptain",
       "status": "implemented",
       "mobile": "src/screens/captains",
@@ -4641,6 +4697,14 @@
     },
     {
       "kind": "api",
+      "key": "validateBatteryPack",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "api",
       "key": "validateModelEndpoint",
       "status": "implemented",
       "mobile": "src/screens/configuration/EndpointsTab",
@@ -4678,6 +4742,14 @@
       "mobile": "AuthContext",
       "workstream": "W0.4",
       "notes": "session validation, admin flags, password-change state"
+    },
+    {
+      "kind": "api",
+      "key": "writeBatteryPackFile",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
     },
     {
       "kind": "event",

@@ -1609,6 +1609,30 @@ Ask conversation.
 | `run_battery` | Global admin, or a tenant admin of the captain's tenant |
 | `get_battery_run`, `list_battery_results` | Any authenticated person: global admins every tenant, everyone else their own tenant |
 
+### Battery pack management
+
+These tools share the REST pack management service and return the same typed payloads and errors.
+All arguments below are required strings. Reads and validation require an authenticated person; writes require
+a global admin. Captain sessions cannot use battery tools. Ask allows the three readers without approval;
+all five write/delete tools remain proposal-gated.
+
+| Tool | Arguments | Result |
+|------|-----------|--------|
+| `get_battery_pack` | `packId` | `BatteryPackDetail`: raw `ManifestJson`, validated `Info`, relative file tree |
+| `read_battery_pack_file` | `packId`, `path` | `BatteryPackTextFile`: path and UTF-8 content |
+| `write_battery_pack_file` | `packId`, `path`, `content` | Updated `BatteryPackDetail` |
+| `delete_battery_pack_file` | `packId`, `path` | Updated `BatteryPackDetail` |
+| `create_battery_pack` | `packId`, `manifestJson` | New `BatteryPackDetail`; creates fixture/ and tasks/ |
+| `update_battery_pack_manifest` | `packId`, `manifestJson` | Updated `BatteryPackDetail`, including validation errors |
+| `delete_battery_pack` | `packId` | `{ Deleted: true }` |
+| `validate_battery_pack` | `packId` | `BatteryPackInfo`, without writing |
+
+Pack ids are lowercase safe slugs (`[a-z0-9][a-z0-9._-]*`). Paths cannot be absolute, contain dot segments, or
+follow symlinks. Editable files must be under fixture/ or tasks/; battery-pack.json uses the manifest tool and
+cannot be deleted separately. UTF-8 text is capped at 1 MiB and the management tree at 256 entries. Parseable
+manifest JSON is saved even when validation fails; invalid JSON is refused. In-process active packs refuse
+mutation with Conflict; the guard cannot lock external writers or concurrent run startup.
+
 ### list_battery_packs
 
 | Parameter | Type | Required | Description |

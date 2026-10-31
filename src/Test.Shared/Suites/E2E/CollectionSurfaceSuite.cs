@@ -38,6 +38,7 @@ namespace Test.Shared.Suites.E2E
         // single object, a summary, or a bounded read rather than a collection of stored rows.
         private static readonly Dictionary<string, string> _SingleObjectReads = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
+            ["GET /api/v1/battery/packs/{packId}/files"] = "One text file selected by the required path query; UTF-8 content capped at 1 MiB",
             ["GET /openapi.json"] = "API document",
             ["GET /swagger"] = "API document viewer",
             ["GET /api/v1/ask/quick-actions"] = "Fixed catalog defined in code",

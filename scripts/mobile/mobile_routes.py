@@ -29,7 +29,7 @@ WORKSTREAMS = {
     "missions": "W2.2", "voyages": "W2.3", "blackbox": "W2.2",
     "dispatch": "W2.4", "merge-queue": "W2.4", "docks": "W2.4", "signals": "W2.4", "events": "W2.4",
     "vessels": "W3.1", "workspace": "W3.1",
-    "fleets": "W3.2", "captains": "W3.2", "fleet-actions": "W3.2",
+    "battery": "W3.2", "fleets": "W3.2", "captains": "W3.2", "fleet-actions": "W3.2",
     "planning": "W3.3", "backlog": "W3.3", "objectives": "W3.3",
     "delivery": "W4.1", "checks": "W4.1", "environments": "W4.1", "deployments": "W4.1", "releases": "W4.1",
     "incidents": "W4.1", "runbooks": "W4.1",
@@ -52,7 +52,7 @@ SECTION_TABS = {
 }
 
 # Checked before the nav sections (Needs You lives in OPERATIONS on the dashboard, but in Approvals on mobile).
-TAB_OVERRIDES = {"/ask": "ask", "/inbox": "approvals", "/notifications": "approvals", "/": "work", "/dashboard": "work"}
+TAB_OVERRIDES = {"/battery": "work", "/ask": "ask", "/inbox": "approvals", "/notifications": "approvals", "/": "work", "/dashboard": "work"}
 
 # Mobile-only routes (status "extension" in the manifest): pattern -> (tab, file, note).
 EXTENSION_ROUTES = {

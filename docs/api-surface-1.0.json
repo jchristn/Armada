@@ -648,6 +648,26 @@
     },
     {
       "method": "POST",
+      "route": "/api/v1/battery/packs",
+      "auth": "AdminOnly",
+      "resource": "BatteryPack:Create",
+      "requestType": "BatteryPackEditRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BatteryPackDetail",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": "",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "Create battery pack",
+      "experimental": false
+    },
+    {
+      "method": "POST",
       "route": "/api/v1/battery/packs/enumerate",
       "auth": "Authenticated",
       "resource": "BatteryPack:Read",
@@ -661,6 +681,146 @@
         "Battery"
       ],
       "summary": "Enumerate fixture battery packs",
+      "experimental": false
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v1/battery/packs/{packId}",
+      "auth": "AdminOnly",
+      "resource": "BatteryPack:Delete",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "Object",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": "",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "Delete battery pack",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/battery/packs/{packId}",
+      "auth": "Authenticated",
+      "resource": "BatteryPack:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BatteryPackDetail",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": "",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "Get battery pack",
+      "experimental": false
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/v1/battery/packs/{packId}/files",
+      "auth": "AdminOnly",
+      "resource": "BatteryPack:Delete",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BatteryPackDetail",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": "",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "Delete battery pack file",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/battery/packs/{packId}/files",
+      "auth": "Authenticated",
+      "resource": "BatteryPack:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BatteryPackTextFile",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": "",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "Read battery pack file",
+      "experimental": false
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v1/battery/packs/{packId}/files",
+      "auth": "AdminOnly",
+      "resource": "BatteryPack:Update",
+      "requestType": "BatteryPackTextFile",
+      "requestRequired": true,
+      "responses": {
+        "200": "BatteryPackDetail",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": "",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "Write battery pack file",
+      "experimental": false
+    },
+    {
+      "method": "PUT",
+      "route": "/api/v1/battery/packs/{packId}/manifest",
+      "auth": "AdminOnly",
+      "resource": "BatteryPack:Update",
+      "requestType": "BatteryPackEditRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "BatteryPackDetail",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": "",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "Update battery pack manifest",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/battery/packs/{packId}/validate",
+      "auth": "Authenticated",
+      "resource": "BatteryPack:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "BatteryPackInfo",
+        "400": "",
+        "403": "ApiErrorResponse",
+        "404": "",
+        "409": "ApiErrorResponse"
+      },
+      "tags": [
+        "Battery"
+      ],
+      "summary": "Validate battery pack",
       "experimental": false
     },
     {
@@ -9390,6 +9550,25 @@
       "experimental": false
     },
     {
+      "name": "create_battery_pack",
+      "auth": "AdminOnly",
+      "resource": "BatteryPack:Create",
+      "arguments": [
+        {
+          "name": "manifestJson",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "packId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Create battery pack. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+      "experimental": false
+    },
+    {
       "name": "create_captain",
       "auth": "TenantAdmin",
       "resource": "Captain:Create",
@@ -10604,6 +10783,39 @@
       "experimental": false
     },
     {
+      "name": "delete_battery_pack",
+      "auth": "AdminOnly",
+      "resource": "BatteryPack:Delete",
+      "arguments": [
+        {
+          "name": "packId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Delete battery pack. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+      "experimental": false
+    },
+    {
+      "name": "delete_battery_pack_file",
+      "auth": "AdminOnly",
+      "resource": "BatteryPack:Delete",
+      "arguments": [
+        {
+          "name": "packId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Delete battery pack text file. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+      "experimental": false
+    },
+    {
       "name": "delete_blackbox_entries",
       "auth": "TenantAdmin",
       "resource": "BlackBox:Delete",
@@ -11568,6 +11780,20 @@
         }
       ],
       "description": "Inspect one backlog refinement session: the session, its captain, vessel, and linked backlog item, and messageCount. Read the transcript with list_backlog_refinement_session_messages.",
+      "experimental": false
+    },
+    {
+      "name": "get_battery_pack",
+      "auth": "Authenticated",
+      "resource": "BatteryPack:Read",
+      "arguments": [
+        {
+          "name": "packId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get battery pack. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
       "experimental": false
     },
     {
@@ -14140,6 +14366,25 @@
       "experimental": false
     },
     {
+      "name": "read_battery_pack_file",
+      "auth": "Authenticated",
+      "resource": "BatteryPack:Read",
+      "arguments": [
+        {
+          "name": "packId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Read battery pack text file. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+      "experimental": false
+    },
+    {
       "name": "read_blackbox_object",
       "auth": "Authenticated",
       "resource": "BlackBox:Read",
@@ -15602,6 +15847,25 @@
       "experimental": false
     },
     {
+      "name": "update_battery_pack_manifest",
+      "auth": "AdminOnly",
+      "resource": "BatteryPack:Update",
+      "arguments": [
+        {
+          "name": "manifestJson",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "packId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Update battery pack manifest. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+      "experimental": false
+    },
+    {
       "name": "update_captain",
       "auth": "TenantAdmin",
       "resource": "Captain:Update",
@@ -16804,6 +17068,20 @@
       "experimental": false
     },
     {
+      "name": "validate_battery_pack",
+      "auth": "Authenticated",
+      "resource": "BatteryPack:Read",
+      "arguments": [
+        {
+          "name": "packId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Validate battery pack without writing. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
+      "experimental": false
+    },
+    {
       "name": "validate_model_endpoint",
       "auth": "Authenticated",
       "resource": "ModelEndpoint:Execute",
@@ -17006,6 +17284,30 @@
         }
       ],
       "description": "Get status of a specific voyage: the voyage with its mission counts (TotalMissions, MissionCountsByStatus) and LastBlackBoxEntryId (its current black box entry, read it with get_blackbox). Missions are never embedded; read them one page at a time with enumerate (entityType missions, voyageId).",
+      "experimental": false
+    },
+    {
+      "name": "write_battery_pack_file",
+      "auth": "AdminOnly",
+      "resource": "BatteryPack:Update",
+      "arguments": [
+        {
+          "name": "content",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "packId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Write battery pack text file. Writes require a global admin; paths cannot traverse or follow symlinks; text is limited to 1 MiB.",
       "experimental": false
     }
   ],

@@ -14,6 +14,7 @@ import './App.css';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Fleets = lazy(() => import('./pages/Fleets'));
 const Vessels = lazy(() => import('./pages/Vessels'));
+const BatteryPacks = lazy(() => import('./pages/BatteryPacks'));
 const Captains = lazy(() => import('./pages/Captains'));
 const Missions = lazy(() => import('./pages/Missions'));
 const Voyages = lazy(() => import('./pages/Voyages'));
@@ -123,6 +124,7 @@ export default function App() {
                       <Route path="workspace/:vesselId" element={<Workspace />} />
                       <Route path="workspace/:vesselId/:panel" element={<Workspace />} />
 
+                      <Route path="battery" element={<BatteryPacks />} />
                       <Route path="captains" element={<CaptainsHub />} />
                       <Route path="captains/:id" element={<CaptainDetail />} />
 

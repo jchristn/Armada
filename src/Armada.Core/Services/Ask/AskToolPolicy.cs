@@ -108,6 +108,11 @@ namespace Armada.Core.Services.Ask
             "get_model_alert",
             "get_model_alert_thresholds",
 
+            // Pack mutations intentionally stay proposal-gated.
+            "get_battery_pack",
+            "read_battery_pack_file",
+            "validate_battery_pack",
+
             // Fixture battery readers
             "list_battery_packs",
             "get_battery_run",

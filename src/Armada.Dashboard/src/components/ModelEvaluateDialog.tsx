@@ -165,6 +165,7 @@ export default function ModelEvaluateDialog({ open, captainId, submitting = fals
 
         <div style={{ marginTop: '0.75rem' }}>
           <strong>{t('Battery packs')}</strong>{' '}
+          <a href="/battery" onClick={onClose}>{t('Manage packs')}</a>{' '}
           <span className="text-dim">{t('None selected: the packs matching your repositories\' languages.')}</span>
           {!loading && installedPacks.length === 0 && <p className="text-dim">{t('No battery packs are installed.')}</p>}
           <ul style={{ listStyle: 'none', margin: '0.25rem 0 0', padding: 0 }}>

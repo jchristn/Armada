@@ -24,8 +24,8 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 505 | 15 |
-| MCP tools | 254 | 8 |
+| REST routes | 513 | 15 |
+| MCP tools | 262 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 76 | 0 |
@@ -77,7 +77,15 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/backlog/{id}/refinement-sessions/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<ObjectiveRefinementSession>`, 404 |  |
 | GET | `/api/v1/backup` | AdminOnly |  | 200, 400 |  |
 | GET | `/api/v1/battery/packs` | Authenticated |  | 200 `EnumerationResult<BatteryPackInfo>`, 400 |  |
+| POST | `/api/v1/battery/packs` | AdminOnly | `BatteryPackEditRequest` | 200 `BatteryPackDetail`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/battery/packs/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<BatteryPackInfo>`, 400 |  |
+| DELETE | `/api/v1/battery/packs/{packId}` | AdminOnly |  | 200 `Object`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
+| GET | `/api/v1/battery/packs/{packId}` | Authenticated |  | 200 `BatteryPackDetail`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
+| DELETE | `/api/v1/battery/packs/{packId}/files` | AdminOnly |  | 200 `BatteryPackDetail`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
+| GET | `/api/v1/battery/packs/{packId}/files` | Authenticated |  | 200 `BatteryPackTextFile`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
+| PUT | `/api/v1/battery/packs/{packId}/files` | AdminOnly | `BatteryPackTextFile` | 200 `BatteryPackDetail`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
+| PUT | `/api/v1/battery/packs/{packId}/manifest` | AdminOnly | `BatteryPackEditRequest` | 200 `BatteryPackDetail`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
+| POST | `/api/v1/battery/packs/{packId}/validate` | Authenticated |  | 200 `BatteryPackInfo`, 400, 403 `ApiErrorResponse`, 404, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/battery/runs` | TenantAdmin | `BatteryRunRequest` | 201 `BatteryRun`, 400, 403 `ApiErrorResponse`, 404 |  |
 | GET | `/api/v1/battery/runs/{id}` | Authenticated |  | 200 `BatteryRun`, 404 |  |
 | GET | `/api/v1/battery/runs/{id}/results` | Authenticated |  | 200 `EnumerationResult<BatteryTaskResult>`, 400, 404 |  |
@@ -574,6 +582,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `create_backlog_item` | TenantAdmin | `acceptanceCriteria: array<string>`, `backlogState: string`, `blockedByObjectiveIds: array<string>`, `category: string`, `checkRunIds: array<string>`, `deploymentIds: array<string>`, `description: string`, `dueUtc: string`, `effort: string`, `evidenceLinks: array<string>`, `fleetIds: array<string>`, `incidentIds: array<string>`, `kind: string`, `missionIds: array<string>`, `nonGoals: array<string>`, `owner: string`, `parentObjectiveId: string`, `planningSessionIds: array<string>`, `priority: string`, `rank: integer`, `refinementSessionIds: array<string>`, `refinementSummary: string`, `releaseIds: array<string>`, `rolloutConstraints: array<string>`, `status: string`, `suggestedPipelineId: string`, `tags: array<string>`, `targetVersion: string`, `title*: string`, `vesselIds: array<string>`, `voyageIds: array<string>` |  |
 | `create_backlog_planning_session` | TenantAdmin | `captainId*: string`, `fleetId: string`, `objectiveId*: string`, `pipelineId: string`, `selectedPlaybooks: array<object>`, `title: string`, `vesselId*: string` |  |
 | `create_backlog_refinement_session` | TenantAdmin | `captainId*: string`, `fleetId: string`, `initialMessage: string`, `objectiveId*: string`, `title: string`, `vesselId: string` |  |
+| `create_battery_pack` | AdminOnly | `manifestJson*: string`, `packId*: string` |  |
 | `create_captain` | TenantAdmin | `allowedPersonas: string`, `autoApprove: boolean`, `model: string`, `modelEndpointId: string`, `muxAdapterType: string`, `muxApprovalPolicy: string`, `muxBaseUrl: string`, `muxConfigDirectory: string`, `muxEndpoint: string`, `muxMaxTokens: integer`, `muxSystemPromptPath: string`, `muxTemperature: number`, `name*: string`, `preferredPersona: string`, `reasoningEffort: string`, `runtime: string`, `systemInstructions: string`, `tier: string` |  |
 | `create_cli_permission_rule` | TenantAdmin | `action*: string`, `captainId: string`, `description: string`, `pattern*: string`, `scope: string`, `tenantId: string`, `vesselId: string` |  |
 | `create_deployment` | TenantAdmin | `autoExecute: boolean`, `environmentId: string`, `environmentName: string`, `missionId: string`, `notes: string`, `releaseId: string`, `sourceRef: string`, `summary: string`, `title: string`, `vesselId: string`, `voyageId: string`, `workflowProfileId: string` |  |
@@ -595,6 +604,8 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `delete_ask_thread` | Authenticated | `threadId*: string` |  |
 | `delete_ask_threads` | Authenticated | `threadIds*: array<string>` |  |
 | `delete_backlog_item` | TenantAdmin | `objectiveId*: string` |  |
+| `delete_battery_pack` | AdminOnly | `packId*: string` |  |
+| `delete_battery_pack_file` | AdminOnly | `packId*: string`, `path*: string` |  |
 | `delete_blackbox_entries` | TenantAdmin | `entryIds*: array<string>` |  |
 | `delete_captain` | TenantAdmin | `captainId*: string` |  |
 | `delete_captains` | TenantAdmin | `ids*: array<string>` |  |
@@ -642,6 +653,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_backlog_item` | Authenticated | `objectiveId*: string` |  |
 | `get_backlog_planning_session` | Authenticated | `sessionId*: string` |  |
 | `get_backlog_refinement_session` | Authenticated | `sessionId*: string` |  |
+| `get_battery_pack` | Authenticated | `packId*: string` |  |
 | `get_battery_run` | Authenticated | `id*: string` |  |
 | `get_blackbox` | Authenticated | `entryId: string`, `format: string`, `missionId: string`, `redactHosts: boolean`, `voyageId: string` |  |
 | `get_blackbox_bundle` | Authenticated | `allFailures: boolean`, `captainId: string`, `createdAfter: string`, `createdBefore: string`, `fingerprint: string`, `fleetId: string`, `format: string`, `isCurrent: boolean`, `kind: string`, `max: integer`, `missionId: string`, `path: string`, `phase: string`, `pinned: boolean`, `redactHosts: boolean`, `resilienceScope: boolean`, `resolution: string`, `state: string`, `step: string`, `subjectType: string`, `triage: string`, `vesselId: string`, `voyageId: string` |  |
@@ -737,6 +749,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `purge_merge_queue` | TenantAdmin | `status: string`, `vesselId: string` |  |
 | `purge_mission` | TenantAdmin | `missionId*: string` |  |
 | `purge_voyage` | TenantAdmin | `voyageId*: string` |  |
+| `read_battery_pack_file` | Authenticated | `packId*: string`, `path*: string` |  |
 | `read_blackbox_object` | Authenticated | `entryId: string`, `length: integer`, `missionId: string`, `name*: string`, `offset: integer`, `voyageId: string` |  |
 | `read_blackbox_section` | Authenticated | `entryId: string`, `missionId: string`, `section*: string`, `voyageId: string` |  |
 | `reanalyze_blackbox` | TenantAdmin | `entryId: string`, `missionId: string`, `voyageId: string` |  |
@@ -782,6 +795,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `unstick_dock` | TenantAdmin | `dockId*: string` |  |
 | `update_ask_thread` | Authenticated | `archived: boolean`, `autoApprove: boolean`, `captainId: string`, `clearCaptain: boolean`, `pinned: boolean`, `threadId*: string`, `title: string` |  |
 | `update_backlog_item` | TenantAdmin | `acceptanceCriteria: array<string>`, `backlogState: string`, `blockedByObjectiveIds: array<string>`, `category: string`, `checkRunIds: array<string>`, `deploymentIds: array<string>`, `description: string`, `dueUtc: string`, `effort: string`, `evidenceLinks: array<string>`, `fleetIds: array<string>`, `incidentIds: array<string>`, `kind: string`, `missionIds: array<string>`, `nonGoals: array<string>`, `objectiveId*: string`, `owner: string`, `parentObjectiveId: string`, `planningSessionIds: array<string>`, `priority: string`, `rank: integer`, `refinementSessionIds: array<string>`, `refinementSummary: string`, `releaseIds: array<string>`, `rolloutConstraints: array<string>`, `status: string`, `suggestedPipelineId: string`, `tags: array<string>`, `targetVersion: string`, `title: string`, `vesselIds: array<string>`, `voyageIds: array<string>` |  |
+| `update_battery_pack_manifest` | AdminOnly | `manifestJson*: string`, `packId*: string` |  |
 | `update_captain` | TenantAdmin | `allowedPersonas: string`, `autoApprove: boolean`, `captainId*: string`, `model: string`, `modelEndpointId: string`, `muxAdapterType: string`, `muxApprovalPolicy: string`, `muxBaseUrl: string`, `muxConfigDirectory: string`, `muxEndpoint: string`, `muxMaxTokens: integer`, `muxSystemPromptPath: string`, `muxTemperature: number`, `name: string`, `preferredPersona: string`, `reasoningEffort: string`, `runtime: string`, `systemInstructions: string`, `tier: string` |  |
 | `update_cli_permission_rule` | TenantAdmin | `action*: string`, `description: string`, `pattern*: string`, `ruleId*: string` |  |
 | `update_failure_cause_rule` | Authenticated | `cause: string`, `description: string`, `enabled: boolean`, `match: object`, `name: string`, `priority: integer`, `ruleId*: string` |  |
@@ -800,11 +814,13 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `update_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `auditCommand: string`, `autoApprove: boolean`, `autoLandEnabled: boolean`, `autoLandMaxFiles: integer`, `autoLandMaxLines: integer`, `autoLandPathAllowGlobs: array<string>`, `autoLandPathDenyGlobs: array<string>`, `clearAutoApprove: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `definitionOfDoneBuildCommand: string`, `definitionOfDoneEnabled: boolean`, `definitionOfDoneTestCommand: string`, `definitionOfDoneTimeoutSeconds: integer`, `enableModelContext: boolean`, `gitHubTokenOverride: string`, `landingMode: string`, `lintCommand: string`, `modelContext: string`, `name: string`, `projectContext: string`, `repoUrl: string`, `serializeOverlappingMissions: boolean`, `styleGuide: string`, `testCommand: string`, `vesselId*: string`, `workerEnvelope: object`, `workingDirectory: string` |  |
 | `update_vessel_context` | TenantAdmin | `modelContext: string`, `projectContext: string`, `styleGuide: string`, `vesselId*: string` |  |
 | `update_workflow_profile` | TenantAdmin | `abbreviatedUnitTestCommand: string`, `active: boolean`, `buildCommand: string`, `changelogGenerationCommand: string`, `deploymentVerificationCommand: string`, `description: string`, `e2eTestCommand: string`, `environments: array<object>`, `expectedArtifacts: array<string>`, `fleetId: string`, `id*: string`, `integrationTestCommand: string`, `isDefault: boolean`, `languageHints: array<string>`, `lintCommand: string`, `migrationCommand: string`, `name: string`, `ownershipScope: string`, `packageCommand: string`, `performanceCommand: string`, `publishArtifactCommand: string`, `releaseVersioningCommand: string`, `requiredInputs: array<object>`, `rollbackVerificationCommand: string`, `scope: string`, `securityScanCommand: string`, `unitTestCommand: string`, `vesselId: string` |  |
+| `validate_battery_pack` | Authenticated | `packId*: string` |  |
 | `validate_model_endpoint` | Authenticated | `endpointId*: string` |  |
 | `validate_workflow_profile` | TenantAdmin | `abbreviatedUnitTestCommand: string`, `active: boolean`, `buildCommand: string`, `changelogGenerationCommand: string`, `deploymentVerificationCommand: string`, `description: string`, `e2eTestCommand: string`, `environments: array<object>`, `expectedArtifacts: array<string>`, `fleetId: string`, `integrationTestCommand: string`, `isDefault: boolean`, `languageHints: array<string>`, `lintCommand: string`, `migrationCommand: string`, `name*: string`, `ownershipScope: string`, `packageCommand: string`, `performanceCommand: string`, `publishArtifactCommand: string`, `releaseVersioningCommand: string`, `requiredInputs: array<object>`, `rollbackVerificationCommand: string`, `scope: string`, `securityScanCommand: string`, `unitTestCommand: string`, `vesselId: string` |  |
 | `verify_deployment` | TenantAdmin | `deploymentId*: string` |  |
 | `vessel_health` | Authenticated | `vesselId*: string` |  |
 | `voyage_status` | Authenticated | `summary: boolean`, `voyageId*: string` |  |
+| `write_battery_pack_file` | AdminOnly | `content*: string`, `packId*: string`, `path*: string` |  |
 
 ## WebSocket
 
