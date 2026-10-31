@@ -10956,7 +10956,11 @@ A recorded event representing a state change in the system.
 - `mission.failed` - Mission failed
 - `captain.launched` - Captain agent process started
 - `captain.stopped` - Captain agent process stopped
-- `captain.stalled` - Captain detected as stalled
+- `captain.stalled` - Captain detected as stalled, once per recovery attempt. `Payload` is a `CaptainStalledPayload` (`IdleMinutes`, `StallThresholdMinutes`, `Attempt`, `MaxAttempts`, `WaitingOnStop`, `RetryDelayMinutes`, `NextRetryUtc`)
+- `captain.unreachable` - The captain's Harbor lost its link; the captain is held as unreachable, not stalled, once per outage. `Payload` is a `CaptainUnreachablePayload` (`HarborId`, `ProcessId`, `Since`, `DetectedUtc`, `LastActivityUtc`, `GraceMinutes`)
+- `captain.stop_unconfirmed` - Recovery could not confirm the captain's stop and waits, once per episode. `Payload` is a `CaptainStopUnconfirmedPayload` (`HarborId`, `Purpose`, `Attempt`, `MaxAttempts`, `StopRequestedUtc`, `RetryDelayMinutes`, `NextRetryUtc`, `Reason`)
+- `captain.stop_redelivered` - A pending stop was re-sent after the Harbor reconnected. `Payload` is a `CaptainStopRedeliveredPayload` (`HarborId`, `StopRequestedUtc`, `ReconnectedUtc`, `Confirmed`)
+- `captain.reconciled` - An unreachable or stop-pending captain was settled. `Payload` is a `CaptainReconciledPayload` (`Outcome`: `Resumed`, `Stopped`, `Exited` or `Superseded`; `UnreachableSinceUtc`, `StopRequestedUtc`, `ReconnectedUtc`, `LastActivityUtc`)
 - `voyage.created` - Voyage was created
 - `voyage.completed` - All missions in voyage completed
 - `voyage.deleted` - Voyage permanently deleted

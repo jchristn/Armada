@@ -71,7 +71,10 @@ branch, dock, start time and `RedispatchAttempts` remain unchanged when no new a
 records an explicit reattachment note rather than another “Agent starting” entry. Explicit captain stop and recall
 operations still stop remote agents.
 
-Startup allows restored jobs `harbor.heartbeatTimeoutSeconds` to reconnect before normal stall recovery applies.
+Startup allows restored jobs `harbor.heartbeatTimeoutSeconds` to reconnect before normal stall recovery applies;
+after that, a captain whose Harbor is still not linked is held as unreachable for `harborDisconnectGraceMinutes` (see
+[HARBOR.md](HARBOR.md#unreachable-is-not-stalled)), and an unreachable or stop-pending episode that began before the
+restart continues from its recorded events instead of starting over.
 If the Harbor reports that a job disappeared, Armada waits for its replayed exit, then handles a missing job as an
 interruption. A real recovery launch retains the existing worktree and its uncommitted changes, adds continuation
 instructions, and increments `RedispatchAttempts` before attempting the launch. Recovery limits still apply;
@@ -604,6 +607,17 @@ the mission fails with `StallRecoveryExhausted` when `maxRecoveryAttempts` run o
 `stallThresholdMinutes` and attempts recovery up to `maxRecoveryAttempts` times. Read `captains/` and
 `missions/<missionId>.log` for the last thing the agent printed; an expired agent login or a usage limit is the most
 common cause, and the captain is quarantined for `captainQuarantineMinutes` after one.
+
+**A captain shows `captain.unreachable` instead of `captain.stalled`.** Its process runs on a Harbor whose link is down
+(a network or DNS outage between the Harbor and the Admiral, a sleeping laptop). The captain may still be working, so
+it is not judged stalled: no recovery starts, no attempt is counted, and the mission stays `InProgress` for up to
+`harborDisconnectGraceMinutes` (default 60; `0` turns the grace off). Fix the link (check that the Harbor can resolve
+and reach the Admiral's address); when it reconnects the Admiral reconciles the captain (`captain.reconciled`): a
+working captain resumes with its stall clock restarted at the reconnect, a stuck one gets its pending stop
+(`captain.stop_redelivered`) and is recovered, and one that already exited goes through the normal exit path. Past the
+grace, normal stall recovery applies. A stop the owning host cannot confirm is recorded once
+(`captain.stop_unconfirmed`) and retried with a backoff of 1, 2, 4, 8 and then 15 minutes rather than on every health
+check. See [HARBOR.md](HARBOR.md#unreachable-is-not-stalled).
 
 **The Docker container exits with database permission errors.** The container user (UID 1654) must be able to
 write `docker/armada/db` and `docker/armada/logs`. Fix the ownership on the host (`sudo chown -R 1654:1654

@@ -30,7 +30,7 @@ administrator).
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 76 | 0 |
 | CLI commands | 97 | 0 |
-| Settings keys | 312 | 12 |
+| Settings keys | 313 | 12 |
 
 ## REST API
 
@@ -1177,6 +1177,7 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `harbor.heartbeatTimeoutSeconds` | int | `45` | experimental |
 | `harbor.linkPath` | string | `"/v1.0/harbor/connect"` | experimental |
 | `harbor.requireAuth` | bool | `false` | experimental |
+| `harborDisconnectGraceMinutes` | int | `60` |  |
 | `heartbeatIntervalSeconds` | int | `10` |  |
 | `idleCaptainTimeoutSeconds` | int | `0` |  |
 | `import` | object |  |  |

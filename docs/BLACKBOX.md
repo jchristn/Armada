@@ -111,6 +111,15 @@ includes the `BBX-PRIOR-ARMADA` prior for ArmadaDefect (section 1.1); a verdict 
 **Resolution.** `Open` until someone resolves it: `Resolved`, `Duplicate`, `WontFix` or `ArmadaFixed`, with an
 optional note and link. Resolving shortens the entry's life (section 9).
 
+**Auto-resolution.** When a mission with an `Open` entry later reaches `Complete` (a `mission.completed` event from any
+landing path, or a `mission.landing_reconciled` event when its work is proven landed), the insight worker
+(`BlackBoxCompletionResolver`, every `blackBox.insightIntervalSeconds`) resolves each Open entry of that mission captured
+before the completion: resolution `Resolved`, note `Mission completed after this failure at <utc>; commit <sha>` (plus
+`; landed as <sha>` when the reconciliation names the landed commit), a `System` note with the same text, and the expiry
+recomputed for a resolved entry. This covers non-terminal entries (an `UnconfirmedStop` the mission recovered from) and
+terminal ones the mission later got past (a `LandingFailed` reconciled to `Complete`). Entries an operator already
+resolved are left alone; a pinned entry is resolved and stays pinned. Each resolution emits `blackbox.resolved`.
+
 **Fingerprint.** A hash of phase, step, kind, failure site and the normalized reason, so the same failure mode groups
 across missions and Armada versions (lists, hotspots, trends, the maintainer bundle).
 
@@ -416,6 +425,13 @@ steps:
    carries a `ConfirmToken` (`bbc_...`) valid for 10 minutes.
 2. **Confirm**: the same call with `{"DryRun": false, "ConfirmToken": "bbc_..."}`. For a path marked `DataLossRisk`
    (a step such as `cancel_mission` or `unstick_dock`) also pass `"AcknowledgeDataLoss": true`, after the user agreed.
+
+**Not applicable paths.** When an entry is read (entry, record, section, digest or brief), each recovery path is checked
+against the mission as it is now with the same preconditions a run checks. A path whose actions cannot apply, such as a
+restart of a mission that is `Complete` or still `InProgress`, carries `notApplicableReason` (for example
+`Not applicable: the mission is Complete.`): the brief lists it without its steps or action, the summary's suggested
+next step reads `none; not applicable: ...` instead of recommending it, and the dashboard shows the reason and disables
+its dry run.
 
 Rules the server enforces:
 
@@ -1196,6 +1212,7 @@ Other public classes:
 | `BlackBoxRuleTemplate`, `BlackBoxRulePlaceholders`, `BlackBoxRuleFacts` | Placeholder rendering, placeholder values, derived facts shared by rule predicates |
 | `BlackBoxActionCommands` | `SupportedTools`, `DataLossTools`, `IsSupported`, `Rest(action)`, `Cli(action)` |
 | `BlackBoxReanalyzer` | `RunOnceAsync()`: re-analyzes entries with an older rules version (`PageSize` 100, `MaxPagesPerRun` 5, `MaxPerRun` 100) |
+| `BlackBoxCompletionResolver` | `RunOnceAsync()`: resolves the Open entries of missions announced complete by the newest 200 `mission.completed` and `mission.landing_reconciled` events; `ResolveMissionAsync(missionId, landingCommit)` for one mission; `static Note(mission, completedUtc, landingCommit)` |
 | `BlackBoxConfigurationResolver` | `Resolve(inputs)`, `LoadAsync(...)` (persona, workflow profile), `Merge(target, extra)`; `BlackBoxConfigurationInputs`; `BlackBoxConfigurationEnricher` |
 | `BlackBoxConfirmationStore` | `Issue`, `Consume`, `Lifetime` (10 minutes), `MaxPending` (10000), `Clock`; `BlackBoxPendingConfirmation` |
 | `BlackBoxFixtureExporter` | `Sanitize(record)`, `Build(record, advisor, ...)`, `Serialize`, `Parse`, `WriteAsync(fixture, directory)` |
@@ -1581,7 +1598,7 @@ with a missing placeholder skips the rule; a recommendation, improvement or reco
 left out (both logged at debug). Stable ids: a recovery path is `rule id lower case + "." + key` (for example
 `bbx-land-001.stash-retry`), a recommendation the same (for example `bbx-land-001.landing-mode`).
 
-`BlackBoxRuleCatalog.CurrentRulesVersion` (2; 1 before the resilience bias) is stored on every analyzed entry and record. Bump it when a rule's match,
+`BlackBoxRuleCatalog.CurrentRulesVersion` (3; 2 before BBX-RECOV-006, 1 before the resilience bias) is stored on every analyzed entry and record. Bump it when a rule's match,
 text, vote or recovery changes: `BlackBoxReanalyzer` (run after each sweep) re-analyzes Analyzed entries with an older
 version through `BlackBoxPipeline.ReanalyzeAsync` (advisor and summary only, no enrichers).
 
@@ -1661,6 +1678,7 @@ content; `Services.BlackBoxResilience/every_scope_rule_heals` enforces it.
 | BBX-HAND-004 | Handoff | step IntegrationBarrier | ArmadaDefect 2 |
 | BBX-RECOV-001 | Recovery | any other failure of Armada's recovery | ArmadaDefect 2 |
 | BBX-RECOV-002 | Recovery | step UnconfirmedStop | ArmadaDefect 2 |
+| BBX-RECOV-006 | Recovery | step UnconfirmedStop while the Harbor link was down (`workspace.harborLinkState` NotLinked or Disconnected): "Harbor link lost; the captain may still be working", path `reconnect-reconcile` | External 2 |
 | BBX-RECOV-003 | Recovery | step OrphanedExit | ArmadaDefect 2 |
 | BBX-RECOV-004 | Recovery | step MissingMergeHandoff | ArmadaDefect 3 |
 | BBX-RECOV-005 | Recovery | step RedispatchExhausted | ArmadaDefect 2 |

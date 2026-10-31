@@ -27329,6 +27329,12 @@
       "experimental": true
     },
     {
+      "key": "harborDisconnectGraceMinutes",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
       "key": "heartbeatIntervalSeconds",
       "type": "int",
       "default": "10",
