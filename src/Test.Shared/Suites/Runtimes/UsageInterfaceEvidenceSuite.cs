@@ -41,6 +41,10 @@ namespace Test.Shared.Suites.Runtimes
 
         private static readonly string[] RequiredEvidenceFields =
         {
+            "- Binary:",
+            "- Version:",
+            "- Host OS:",
+            "- Fields:",
             "- Interface:",
             "- Timestamps:",
             "- Auth mode:",
@@ -135,7 +139,7 @@ namespace Test.Shared.Suites.Runtimes
 
                     foreach (string field in RequiredEvidenceFields)
                     {
-                        if (!body.Contains(field, StringComparison.Ordinal)) problems.Add(runtime + ": missing evidence line '" + field + "'");
+                        if (String.IsNullOrWhiteSpace(ReadFieldLine(body, field))) problems.Add(runtime + ": missing or empty evidence line '" + field + "'");
                     }
 
                     string? confidence = ReadFieldLine(body, "- Confidence:");
@@ -199,6 +203,38 @@ namespace Test.Shared.Suites.Runtimes
                 }
 
                 AssertTrue(problems.Count == 0, "usage fixtures are not sanitized or inventoried:\n" + String.Join("\n", problems));
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(new TestCaseDescriptor(SuiteId, "fixture_inventory_matches_documented_interfaces", "AC0/D4: each fixture is unique, valid JSON and referenced by its runtime evidence; unavailable sources never claim verified data", (CancellationToken ct) =>
+            {
+                UsageFixtureManifest manifest = ReadManifest();
+                Dictionary<string, string> sections = ReadDocSections();
+                HashSet<string> names = new HashSet<string>(StringComparer.Ordinal);
+
+                foreach (UsageFixtureEntry entry in manifest.Fixtures)
+                {
+                    AssertTrue(names.Add(entry.File), "duplicate fixture inventory entry: " + entry.File);
+                    AssertEqual(Path.GetFileName(entry.File), entry.File, "fixture names must stay inside the fixture directory");
+                    AssertTrue(sections.TryGetValue(entry.Runtime, out string? section)
+                        && section.Contains(entry.File, StringComparison.Ordinal), entry.File + " is not referenced by its runtime evidence");
+                    if (UnavailableRuntimes.Contains(entry.Runtime))
+                    {
+                        AssertFalse(entry.Verified, entry.Runtime + " cannot claim verified account-limit evidence");
+                    }
+
+                    string path = Path.Combine(FixtureDirectory(), entry.File);
+                    string[] records = entry.File.EndsWith(".jsonl", StringComparison.Ordinal)
+                        ? File.ReadAllLines(path).Where(line => !String.IsNullOrWhiteSpace(line)).ToArray()
+                        : new[] { File.ReadAllText(path) };
+                    AssertTrue(records.Length > 0, entry.File + " contains no evidence records");
+                    foreach (string record in records)
+                    {
+                        // Deserialization validates syntax without inspecting untyped JSON fields.
+                        AssertNotNull(JsonSerializer.Deserialize<object>(record), entry.File + " contains a null evidence record");
+                    }
+                }
+
                 return Task.CompletedTask;
             }));
 
