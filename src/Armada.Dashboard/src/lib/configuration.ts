@@ -86,6 +86,7 @@ export const PROMPT_TEMPLATE_PARAMETER_GROUPS: PromptTemplateParameterGroup[] = 
       { name: '{Diff}', description: 'Diff from the prior pipeline stage' },
       { name: '{PreviousStageOutput}', description: 'Agent output from the prior pipeline stage' },
       { name: '{SelectedPlaybooksMarkdown}', description: 'Rendered content of the selected playbooks' },
+      { name: '{WorkerEnvelope}', description: 'Worker eligibility envelope for the mission (empty when none)' },
       { name: '{ExistingClaudeMd}', description: "Contents of repo's existing CLAUDE.md" },
     ],
   },

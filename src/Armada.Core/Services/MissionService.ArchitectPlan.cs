@@ -43,6 +43,7 @@ namespace Armada.Core.Services
                 clonedStage.VoyageId = templateChild.VoyageId;
                 clonedStage.VesselId = templateChild.VesselId;
                 clonedStage.IsEvaluation = templateChild.IsEvaluation;
+                clonedStage.WorkerEnvelope = templateChild.WorkerEnvelope;
                 clonedStage.Persona = childPersona;
                 clonedStage.DependsOnMissionId = newDependency.Id;
                 clonedStage.RequiresReview = templateChild.RequiresReview;
@@ -237,6 +238,7 @@ namespace Armada.Core.Services
                     parsed.Description = ArchitectPlanParser.DescribeMission(plan, planned);
                     parsed.DependsOnIndex = planned.DependsOn;
                     parsed.WaitForOtherMissions = planned.WaitForOtherMissions;
+                    parsed.WorkerEnvelope = planned.WorkerEnvelope;
                     results.Add(parsed);
                 }
 

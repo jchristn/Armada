@@ -3281,6 +3281,14 @@
     },
     {
       "kind": "api",
+      "key": "listBatteryPacks",
+      "status": "implemented",
+      "tui": "ArmadaClient.ListBatteryPacksAsync",
+      "workstream": "W0.2",
+      "notes": "Model Probes"
+    },
+    {
+      "kind": "api",
       "key": "listBlackBox",
       "status": "implemented",
       "tui": "ArmadaClient.ListBlackBoxAsync",

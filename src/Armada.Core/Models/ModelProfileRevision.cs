@@ -87,6 +87,17 @@ namespace Armada.Core.Models
         /// </summary>
         public ModelEvaluationReport? EvaluationReport { get; set; } = null;
 
+        /// <summary>
+        /// True when this advisory revision carries an incomplete Full Evaluate report (the run was cancelled or timed
+        /// out). Derived from the stored report, so it cannot drift from it. An incomplete report never overwrites or is
+        /// preferred over a complete one: it never fills the profile's measured block, and observations never pool
+        /// into it.
+        /// </summary>
+        public bool EvaluationIncomplete
+        {
+            get => EvaluationReport != null && !EvaluationReport.Complete;
+        }
+
         #endregion
 
         #region Private-Members

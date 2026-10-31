@@ -3552,8 +3552,10 @@ Update mission fields (title, description, priority, etc.). Does not change stat
 
 **Request Body:** [Mission](#mission) (fields to update)
 
+`workerEnvelope`: omitted or `null` keeps the stored envelope and `{}` clears it. A changed envelope is validated like dispatch (it may only tighten the vessel default; invalid or looser is `400` with the reason) and may only change while the mission is `Pending`, or `Assigned` and not started (otherwise `409`). Sending the stored value back is accepted on any status.
+
 **Response:** `200 OK` - [Mission](#mission)
-**Error:** `404` - Mission not found
+**Error:** `400` - Invalid or loosened `workerEnvelope`; `404` - Mission not found; `409` - `workerEnvelope` changed on a started mission
 
 ---
 
@@ -6014,9 +6016,9 @@ all skips the subjective grading with the reason) grades the battery attempts th
 strengths and weaknesses that must cite the mechanical counts exactly, plus observed problems and a short "how to work
 with this model" note. A reply that does not parse or cites a wrong count is kept out (`Narrative.Status` `Rejected`
 with the reason); the mechanical counts always stand. The run's `Report` carries per-persona counts (total and per task),
-probe counts, packs, personas, evaluator, warnings, notes, the narrative and `Complete`; a complete report is also
-recorded as a new advisory model profile revision (`EvaluationRunId`, `EvaluationReport`, marked compatible with the
-revision it was recorded on). Nothing changes routing, persona captain lists or prompts. A Full run holds the evaluation
+probe counts, packs, personas, evaluator, warnings, notes, the narrative and `Complete`; the report is also recorded as
+a new advisory model profile revision (`EvaluationRunId`, `EvaluationReport`, marked compatible with the revision it was
+recorded on; an incomplete report sets `EvaluationIncomplete` and never fills the profile's `Measured` block). Nothing changes routing, persona captain lists or prompts. A Full run holds the evaluation
 slot of its inference host for the probes, the battery and the grading, spends at most `Evaluation.FullRunTokenBudget`
 estimated battery tokens (default 3,000,000, within the daily budgets), and stops after
 `Evaluation.FullRunTimeoutMinutes` (default 720). Battery missions are flagged `IsEvaluation`, so their stage outcomes
@@ -6063,10 +6065,18 @@ never edited. Profile ids use the `mdl_` prefix.
 |---|---|---|---|
 | GET | `/api/v1/model-profiles` | | `200` `EnumerationResult<ModelProfile>` (without revisions), newest first. Query: `tenantId` (global admins), `runtime`, `provider` (case-insensitive), `model` (contains, case-insensitive), `pageNumber`, `pageSize` (1-1000, default 100); `400` for a page value that does not parse |
 | POST | `/api/v1/model-profiles/enumerate` | `ModelProfileQuery` (optional): `TenantId` (global admins), `Runtime`, `Provider`, `ModelContains`, `PageNumber`, `PageSize` | `200` the same page as the GET; `400` for a body that does not parse |
-| GET | `/api/v1/model-profiles/{id}` | | `200` `ModelProfile` with `Identity`, `Capabilities`, `Rendering`, `Notes` and `Revisions` (oldest first); `404` when missing or in another tenant |
+| GET | `/api/v1/model-profiles/{id}` | | `200` `ModelProfile` with `Identity`, `Capabilities`, `Rendering`, `Notes`, `Revisions` (oldest first) and `Measured` (see below); `404` when missing or in another tenant |
 | PUT | `/api/v1/model-profiles/{id}` | `ModelProfileUpdateRequest`: `Capabilities` (`ToolsAvailable`, `McpAvailable`), `Rendering` (`Template`, `RepeatContractAtEnd`, `MaxFilesPerMission` 1 or more; null means no override), `Notes` (empty clears). An omitted section keeps its value | `200` the profile with revisions; `400` invalid value; `403` not an admin; `404` |
 | PUT | `/api/v1/model-profiles/{id}/revisions/{revisionId}/compatible-with` | `ModelProfileCompatibilityRequest`: `CompatibleWith` (revision ids of the same tenant; empty removes every mark). Symmetric | `200` `ModelProfileRevision` with `CompatibleWith`; `400` missing list or unknown revision; `403`; `404` profile or revision (of that profile) not found |
 | GET | `/api/v1/model-profiles/{id}/scorecard` | | `200` `ModelScorecard` for one persona (see [Model scorecard](#model-scorecard)). Query: `persona` (required), `vesselId`, `windowDays` (1-365, default 30), `windowMissions` (1-500, default 50); `400` missing persona, a window value out of range or not an integer; `404` when missing or in another tenant (checked before the query is validated) |
+
+`Measured` is null until a complete Full Evaluate report is recorded on the profile; it then holds counts from the latest
+complete report only, never a derived score: `RunId`, `RevisionId` (the advisory revision that carries the report),
+`BatteryRunId`, `MeasuredUtc` (report time), `PackIds`, `Probes` (one per probe kind: `Key`, `Passed`, `Failed`,
+`CouldNotRun`, `PendingEvaluation`, `Attempted`) and `Personas` (`Persona`, `Packs`: the same counts with `Key` the pack
+id). An incomplete report (a cancelled or timed-out run) is also recorded as an advisory revision, with
+`EvaluationIncomplete` true, but it never fills `Measured`, never replaces a complete report, and observations never
+pool into it. The list routes leave `Measured` null. MCP `get_model_profile` returns the same shape.
 
 ```bash
 curl "http://localhost:7890/api/v1/model-profiles?runtime=Mux&pageSize=10" -H "Authorization: Bearer <token>"
@@ -10602,6 +10612,7 @@ A git repository registered with Armada.
 | `DefinitionOfDoneBuildCommand` | string? | null | Shell command that builds the project inside the mission checkout (e.g. `dotnet build`); a non-zero exit classifies as Compile |
 | `DefinitionOfDoneTestCommand` | string? | null | Shell command that runs unit tests inside the mission checkout (e.g. `dotnet test`); a non-zero exit classifies as TestFail |
 | `DefinitionOfDoneTimeoutSeconds` | int | 1800 | Per-phase timeout in seconds (clamped to [30, 7200]); exceeding it classifies as Timeout |
+| `WorkerEnvelope` | object? | null | Default Worker eligibility envelope for this vessel's Worker missions (docs/MODEL_HETEROGENEITY.md 3.3); null means no envelope and routing is unchanged. Fields (all optional): `maxFiles` (1-1000) and `maxSteps` (1-1000) guide the Architect's slicing and the Judge; `minServedContextTokens` (1-100,000,000) and `requiredTools` (`tools`, `mcp`) restrict which captains may run the Worker stage (only captains whose model profile records at least that served context and those capabilities are eligible). An envelope that sets nothing is stored as null. Out-of-range values or unknown tools are rejected on create/update with `400`. Missions may tighten it, never loosen it |
 | `Active` | bool | true | Whether vessel is active |
 | `DefaultPipelineId` | string? | null | Default pipeline for dispatches to this vessel (overrides the fleet setting; null uses `WorkerOnly`) |
 | `PreferredHarborId` | string? | null | Preferred Harbor (host runner) for this vessel's missions; null lets the router choose |

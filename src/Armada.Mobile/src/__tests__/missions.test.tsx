@@ -89,7 +89,9 @@ describe('Missions list', () => {
 
     await fireEvent.press(screen.getByTestId('missions-filters'));
     await fireEvent.press(screen.getByTestId('missions-filter-status'));
-    await fireEvent.press(screen.getByTestId('missions-filter-status-option-Failed'));
+    // Search the virtualized options so Failed is rendered beyond the initial list window.
+    await fireEvent.changeText(screen.getByTestId('missions-filter-status-search'), 'Failed');
+    await fireEvent.press(await screen.findByTestId('missions-filter-status-option-Failed'));
     expect(await screen.findByTestId('mission-row-msn_f')).toBeTruthy();
     expect(api.listMissionSummaries).toHaveBeenLastCalledWith({ pageNumber: 1, pageSize: 25, filters: { status: 'Failed' } });
   });

@@ -6,6 +6,43 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+- Captain evaluation panels resume existing runs, show live probe and battery progress, expose failures inline, and provide the last ten runs with reports and profile revision links.
+### Captains list Evaluate action
+
+- **Evaluate... in the captain row menu.** The Captains list Actions menu has an Evaluate... item (after View Tools, shown to global and tenant admins) that opens the same Evaluate dialog as the captain page. Submitting starts the run through `POST /api/v1/captains/{id}/evaluate` and opens `/captains/{id}?evaluationRun=<run id>` with a toast naming the run. No server change.
+
+### Full Evaluate follow-up (model heterogeneity Phase 5, item 4)
+
+- **Incomplete reports on the profile.** A cancelled or timed-out Full Evaluate (or one whose battery could not run) is now also recorded as an advisory model profile revision, marked `EvaluationIncomplete`. It never changes an earlier revision, never fills `measured`, is never preferred over a complete report, and observations never pool into it. Nothing reads it for routing. No migration.
+- **`measured` block.** `GET /api/v1/model-profiles/{id}` and MCP `get_model_profile` return `Measured`: the counts from the latest complete Full report (run, revision and battery run ids, report time, packs, one count per probe kind, and per persona one count per pack with passed, failed, could not run, pending evaluation and attempted). Counts only, no derived scores; null until a complete report exists.
+- **Dashboard Evaluate dialog.** The captain page's Full Evaluate control opens a dialog with depth (Full by default), the evaluator captain (idle captains, with a note when one shares the evaluated captain's model family), battery packs, personas and run count, and submits to `POST /api/v1/captains/{id}/evaluate`. The report view is unchanged. New client helper `listBatteryPacks`.
+- **TUI Evaluate view.** The TUI captain page has an Evaluate action (`v`) with the same options, then a viewer that polls the run, shows its probe results and report, and cancels it with `c`.
+
+---
+
+## v1.2.0 (2026-10-29)
+
+v1.2.0 adds the mission and voyage black box: every failure writes an entry that says where, how and why it
+failed, which missions and files it collided with, and how to recover, with a FIX THIS brief for any coding agent (see
+the first section below). It also adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
+its section below). The rest of the release is about model evaluation: knowing how well each model does the work
+it is given, and handing work to it in a form it can use. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
+digest, escalation record) and a suspected cause; Quick probes give a captain or model endpoint a probe-only
+**Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
+are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
+mobile interfaces for the new surfaces. Since v1.1.0 was cut it also includes the `ExcludeReviewAuthorsFromJudge`
+setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 to 106 apply automatically at
+startup; see [UPGRADING.md](docs/UPGRADING.md#v110-to-v120).
+
+### Worker eligibility envelope (model heterogeneity Phase 6, item 1)
+
+- **Vessel default.** A vessel may carry a default `WorkerEnvelope` (`maxFiles`, `maxSteps`, `minServedContextTokens`, `requiredTools` of `tools`/`mcp`), set through REST vessel create/update, WebSocket `create_vessel`/`update_vessel`, MCP `add_vessel`/`update_vessel` (`workerEnvelope`; `{}` clears it, omitted keeps it) and the dashboard and TUI vessel forms; `get_vessel` returns it. Out-of-range values or unknown tools are rejected (`400`, MCP `InvalidArgument`). No envelope is the default, so routing is unchanged until a vessel sets one. Stored in a new column (migration 110 on SQLite, PostgreSQL, SQL Server and MySQL).
+- **Missions may only tighten it.** A mission may carry a tighter envelope (fewer files or steps, a larger context minimum, more required tools). REST dispatch rejects a loosened envelope with `400`; a `workerEnvelope` on a mission in the Architect's plan is clamped to the vessel default and an event `mission.worker_envelope_clamped` is recorded.
+- **Dispatch enforces it for the Worker stage.** Only captains whose model profile records at least the minimum served context and the required tools are eligible; a captain with no profile, or a profile missing a needed field, is excluded. When no idle eligible captain exists, the mission escalates to a stronger compatible captain within the Worker persona's allowed captains; when none exists it stays Pending with a visible reason. Each decision (which captains were excluded and why) is recorded as event `mission.worker_envelope`, shown in the mission timeline and the black box.
+- **Prompts.** New prompt template placeholder `{WorkerEnvelope}`, used in the Architect and Judge templates, renders a short description of the envelope (empty when none). Listed in the dashboard and TUI placeholder panels.
+- **Mission update and creation.** REST `PUT /api/v1/missions/{id}` and MCP/WebSocket `update_mission` set or clear a mission's envelope (`{}` clears, omitted keeps) with the dispatch validation (`400` / `InvalidArgument` when invalid or looser than the vessel default); a change is only accepted while the mission is Pending, or Assigned and not started (`409` / `Conflict` otherwise). MCP `create_mission` takes an optional `workerEnvelope` and `armada mission create` takes `--max-files`, `--max-steps`, `--min-context-tokens` and `--require-tool`.
+- **Customized templates.** An Architect or Judge template customized before `{WorkerEnvelope}` existed is not rewritten; when it lacks the placeholder and an envelope applies, the rendered envelope section is appended after it and a warning is logged once per template.
+
 ### Landing verification
 
 - Landing verification for the Armada repository now runs the smoke tests (`dotnet test "src/Test.Smoke/Test.Smoke.csproj" -c Release -f net10.0`) instead of the long `src/Test.Automated` suite list, which was being killed (exit 143) and blocking landings.
@@ -68,22 +105,6 @@ All notable changes to Armada are documented in this file.
 - Needs You failure cards (Failed and Landing failed) gain **Copy JSON** next to **Copy Markdown**: it copies the
   mission's black box entry and its versioned record, like the black box panel. The Copy Markdown tooltip and toast no
   longer say "FIX THIS".
-
----
-
-## v1.2.0 (2026-10-29)
-
-v1.2.0 adds the mission and voyage black box: every failure writes an entry that says where, how and why it
-failed, which missions and files it collided with, and how to recover, with a FIX THIS brief for any coding agent (see
-the first section below). It also adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
-its section below). The rest of the release is about model evaluation: knowing how well each model does the work
-it is given, and handing work to it in a form it can use. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
-digest, escalation record) and a suspected cause; Quick probes give a captain or model endpoint a probe-only
-**Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
-are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
-mobile interfaces for the new surfaces. Since v1.1.0 was cut it also includes the `ExcludeReviewAuthorsFromJudge`
-setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 to 106 apply automatically at
-startup; see [UPGRADING.md](docs/UPGRADING.md#v110-to-v120).
 
 ### Mission and voyage black box
 

@@ -102,6 +102,7 @@ namespace Armada.Server.Mcp.Tools
                         mode = new { type = "string", description = "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success." },
                         tier = new { type = "string", description = "Optional minimum captain tier for this mission (Economy, Standard, or Premium); only captains at or above it are assigned" },
                         isEvaluation = new { type = "boolean", description = "True for evaluation work: the mission's stage outcomes never count as production data. A mission added to an evaluation voyage is flagged regardless. Default false." },
+                        workerEnvelope = McpVesselTools.WorkerEnvelopeSchema("Optional Worker eligibility envelope for this mission. It may only tighten the vessel's default envelope (fewer files or steps, a larger context minimum, more required tools); a looser or invalid one is rejected with InvalidArgument. Omit or pass {} to use the vessel default."),
                         selectedPlaybooks = new
                         {
                             type = "array",
@@ -143,6 +144,19 @@ namespace Armada.Server.Mcp.Tools
                         mission.Mode = missionMode;
                     mission.SelectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>();
                     mission.IsEvaluation = request.IsEvaluation;
+                    if (request.WorkerEnvelope != null)
+                    {
+                        // Same rule as REST dispatch: a mission may only tighten its vessel's Worker envelope.
+                        Vessel? envelopeVessel = await McpCallerScope.ReadVesselAsync(database, caller, request.VesselId).ConfigureAwait(false);
+                        try
+                        {
+                            mission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelope(envelopeVessel?.WorkerEnvelope, request.WorkerEnvelope);
+                        }
+                        catch (ArgumentException ex)
+                        {
+                            return (object)McpToolError.InvalidArgument(ex.Message);
+                        }
+                    }
                     mission = await admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
                     if (mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending)
                     {
@@ -157,7 +171,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "update_mission",
-                "Update an existing mission's title, description, priority, vessel, voyage, branch, or PR URL. Operational fields (status, timestamps, captain) are managed by the system.",
+                "Update an existing mission's title, description, priority, vessel, voyage, branch, PR URL, or Worker envelope. Operational fields (status, timestamps, captain) are managed by the system.",
                 new
                 {
                     type = "object",
@@ -173,7 +187,8 @@ namespace Armada.Server.Mcp.Tools
                         prUrl = new { type = "string", description = "Pull request URL" },
                         parentMissionId = new { type = "string", description = "Parent mission ID for sub-tasks (msn_ prefix)" },
                         persona = new { type = "string", description = "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
-                        mode = new { type = "string", description = "Execution mode: Implementation, Audit, or Research (read-only report modes)" }
+                        mode = new { type = "string", description = "Execution mode: Implementation, Audit, or Research (read-only report modes)" },
+                        workerEnvelope = McpVesselTools.WorkerEnvelopeSchema("Worker eligibility envelope for this mission. The object replaces the mission's envelope; pass {} to clear it; omit it to keep the stored value. It may only tighten the vessel default (InvalidArgument otherwise) and may only change while the mission is Pending or Assigned and not started (Conflict otherwise).")
                     },
                     required = new[] { "missionId" }
                 },
@@ -210,6 +225,22 @@ namespace Armada.Server.Mcp.Tools
                         mission.Persona = request.Persona;
                     if (!String.IsNullOrWhiteSpace(request.Mode) && Enum.TryParse<MissionModeEnum>(request.Mode.Trim(), true, out MissionModeEnum updatedMode))
                         mission.Mode = updatedMode;
+                    if (request.WorkerEnvelope != null)
+                    {
+                        Vessel? envelopeVessel = String.IsNullOrEmpty(mission.VesselId) ? null : await McpCallerScope.ReadVesselAsync(database, caller, mission.VesselId).ConfigureAwait(false);
+                        try
+                        {
+                            mission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(mission, envelopeVessel?.WorkerEnvelope, request.WorkerEnvelope);
+                        }
+                        catch (ArgumentException ex)
+                        {
+                            return (object)McpToolError.InvalidArgument(ex.Message);
+                        }
+                        catch (InvalidOperationException ex)
+                        {
+                            return (object)McpToolError.Conflict(ex.Message);
+                        }
+                    }
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     mission = await database.Missions.UpdateAsync(mission).ConfigureAwait(false);
                     return (object)mission;

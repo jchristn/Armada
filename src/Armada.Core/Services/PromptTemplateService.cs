@@ -47,6 +47,7 @@ namespace Armada.Core.Services
 
         #region Private-Members
 
+        private const string WorkerEnvelopePlaceholder = "{WorkerEnvelope}";
         private string _Header = "[PromptTemplateService] ";
         private DatabaseDriver _Database;
         private LoggingModule _Logging;
@@ -77,6 +78,7 @@ namespace Armada.Core.Services
                     .Replace("Use decisionIndexes for the 1-based indexes of only this slice's relevant decisions ([] if none).", String.Empty)
                     + "\nPrint progress before long commands; skip the full test suite when Armada runs post-stage checks.\n";
             }
+            AddWorkerEnvelopePlaceholder(_EmbeddedDefaults);
         }
 
         #endregion
@@ -132,6 +134,8 @@ namespace Armada.Core.Services
                 }
             }
 
+            // A caller that does not supply the Worker envelope (planning, previews) renders it as no envelope.
+            result = result.Replace(WorkerEnvelopePlaceholder, String.Empty);
             return result;
         }
 
@@ -424,6 +428,43 @@ namespace Armada.Core.Services
             await UpgradeBuiltInMissionRulesAsync(token).ConfigureAwait(false);
             await UpgradeBuiltInContextCompletionAsync(token).ConfigureAwait(false);
             await UpgradeBuiltInProgressSignalsAsync(token).ConfigureAwait(false);
+            await UpgradeBuiltInWorkerEnvelopeAsync(token).ConfigureAwait(false);
+        }
+
+        private static void AddWorkerEnvelopePlaceholder(Dictionary<string, EmbeddedTemplate> defaults)
+        {
+            // The Architect and Judge get the Worker eligibility envelope (docs/MODEL_HETEROGENEITY.md, 3.3). The value is
+            // empty when no envelope is set, so the rendered prompt is unchanged. The Lean and Compact variants carry the
+            // placeholder in PersonaPromptVariants.
+            foreach (string name in new[] { "persona.architect", "persona.judge" })
+            {
+                if (!defaults.TryGetValue(name, out EmbeddedTemplate? embedded) || embedded.Content.Contains(WorkerEnvelopePlaceholder, StringComparison.Ordinal)) continue;
+                const string judgeEvidence = "\n\n## Prior stage evidence";
+                if (embedded.Content.Contains(judgeEvidence, StringComparison.Ordinal))
+                    embedded.Content = embedded.Content.Replace(judgeEvidence, WorkerEnvelopePlaceholder + judgeEvidence);
+                else
+                    embedded.Content = embedded.Content.TrimEnd('\n') + WorkerEnvelopePlaceholder + "\n";
+            }
+        }
+
+        private async Task UpgradeBuiltInWorkerEnvelopeAsync(CancellationToken token)
+        {
+            // An untouched built-in copy picks up the {WorkerEnvelope} placeholder; an edited one is kept as is.
+            foreach (KeyValuePair<string, EmbeddedTemplate> entry in _EmbeddedDefaults)
+            {
+                token.ThrowIfCancellationRequested();
+                string current = entry.Value.Content;
+                if (!current.Contains(WorkerEnvelopePlaceholder, StringComparison.Ordinal)) continue;
+                PromptTemplate? existing = await _Database.PromptTemplates.ReadByNameAsync(entry.Key, token).ConfigureAwait(false);
+                if (existing == null || !existing.IsBuiltIn) continue;
+                string previous = NormalizeLineEndings(current.Replace(WorkerEnvelopePlaceholder, String.Empty));
+                string stored = NormalizeLineEndings(existing.Content);
+                if (stored != previous) continue;
+                existing.Content = current;
+                existing.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.PromptTemplates.UpdateAsync(existing, token).ConfigureAwait(false);
+                _Logging.Debug(_Header + "added the Worker envelope placeholder to built-in template '" + entry.Key + "'");
+            }
         }
 
         private async Task UpgradeBuiltInProgressSignalsAsync(CancellationToken token)

@@ -55,6 +55,7 @@ namespace Armada.Core.Services
             "Diff",
             "PreviousStageOutput",
             "SelectedPlaybooksMarkdown",
+            "WorkerEnvelope",
             "ExistingClaudeMd",
             "Timestamp"
         };
@@ -156,6 +157,7 @@ namespace Armada.Core.Services
                 ["StyleGuide"] = vessel.StyleGuide ?? "",
                 ["ModelContext"] = vessel.EnableModelContext ? vessel.ModelContext ?? "" : "",
                 ["SelectedPlaybooksMarkdown"] = "",
+                ["WorkerEnvelope"] = WorkerEnvelopeRules.PromptSection(WorkerEnvelopeRules.Effective(vessel.WorkerEnvelope, mission.WorkerEnvelope, previousStage?.WorkerEnvelope), mission.Persona),
                 ["CaptainId"] = captain?.Id ?? "",
                 ["CaptainName"] = captain?.Name ?? "",
                 ["CaptainInstructions"] = BuildCaptainInstructions(captain?.SystemInstructions, mission.Persona),

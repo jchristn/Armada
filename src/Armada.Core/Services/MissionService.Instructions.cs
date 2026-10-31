@@ -134,6 +134,10 @@ namespace Armada.Core.Services
                 personaPrompt = await MissionPromptBuilder.ResolvePersonaPromptAsync(mission.Persona, personaTemplateName, promptVariant, templateParams, _PromptTemplates, personaOverride, token).ConfigureAwait(false);
             }
 
+            string personaTemplateLabel = personaOverride != null && personaOverride.Enabled && !String.IsNullOrWhiteSpace(personaOverride.PromptTemplateName)
+                ? personaOverride.PromptTemplateName!.Trim()
+                : !String.IsNullOrWhiteSpace(personaTemplateName) ? personaTemplateName!.Trim() : MissionPromptBuilder.GetPersonaVariantTemplateName(mission.Persona, promptVariant);
+            personaPrompt = EnsureWorkerEnvelopeSection(personaPrompt, mission, personaTemplateLabel, templateParams);
             templateParams["PersonaPrompt"] = personaPrompt;
             content += await ResolveSectionAsync("mission.metadata", templateParams, token).ConfigureAwait(false);
             content += "\n";

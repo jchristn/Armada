@@ -50,6 +50,7 @@ namespace Armada.Tui.Screens.Configuration
             new PromptParameter("Pipeline Context", "{Diff}", "Diff from the prior pipeline stage"),
             new PromptParameter("Pipeline Context", "{PreviousStageOutput}", "Agent output from the prior pipeline stage"),
             new PromptParameter("Pipeline Context", "{SelectedPlaybooksMarkdown}", "Rendered content of the selected playbooks"),
+            new PromptParameter("Pipeline Context", "{WorkerEnvelope}", "Worker eligibility envelope for the mission (empty when none)"),
             new PromptParameter("Pipeline Context", "{ExistingClaudeMd}", "Contents of repo's existing CLAUDE.md"),
             new PromptParameter("System", "{Timestamp}", "Current UTC timestamp")
         };

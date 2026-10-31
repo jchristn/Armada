@@ -556,6 +556,7 @@ namespace Armada.Core.Database.SqlServer
             catch { vessel.LintCommand = null; }
             try { vessel.AuditCommand = NullableString(reader["audit_command"]); }
             catch { vessel.AuditCommand = null; }
+            try { vessel.WorkerEnvelope = Armada.Core.Services.WorkerEnvelopeRules.FromJson(NullableString(reader["worker_envelope_json"])); } catch { }
             try { vessel.BlackBoxRetentionDays = reader["blackbox_retention_days"] == DBNull.Value ? null : Convert.ToInt32(reader["blackbox_retention_days"]); } catch { }
             try { vessel.SerializeOverlappingMissions = Convert.ToBoolean(reader["serialize_overlapping_missions"]); } catch { vessel.SerializeOverlappingMissions = false; }
             try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); }
@@ -653,6 +654,7 @@ namespace Armada.Core.Database.SqlServer
             try { mission.NoOpRedispatchAttempts = Convert.ToInt32(reader["noop_redispatch_attempts"]); } catch { }
             try { mission.IsRescue = reader["is_rescue"] != DBNull.Value && Convert.ToBoolean(reader["is_rescue"]); } catch { }
             try { mission.IsEvaluation = reader["is_evaluation"] != DBNull.Value && Convert.ToBoolean(reader["is_evaluation"]); } catch { }
+            try { mission.WorkerEnvelope = Armada.Core.Services.WorkerEnvelopeRules.FromJson(NullableString(reader["worker_envelope_json"])); } catch { }
             try { mission.ReworkRound = reader["rework_round"] != DBNull.Value ? Convert.ToInt32(reader["rework_round"]) : 0; } catch { }
             try { mission.ReworkEscalated = reader["rework_escalated"] != DBNull.Value && Convert.ToBoolean(reader["rework_escalated"]); } catch { }
             try

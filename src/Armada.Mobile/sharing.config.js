@@ -21,6 +21,8 @@ const dashboardOnly = [
   'lib/useAutoRefresh.ts', // per-table interval persisted in localStorage
   'lib/useTablePrefs.ts', // table preferences persisted in localStorage
   'lib/useColumnVisibility.ts', // table column choice persisted in localStorage
+  'lib/askListResize.ts', // HTML element sizing and localStorage; native layouts do not use the web sidebar
+  'lib/useAskUnreadCount.ts', // dashboard WebSocketContext and window timers; native uses its own unread state
   'lib/useInboxCount.ts', // bound to the dashboard WebSocketContext; mobile uses lib/inboxSummary.ts
   'lib/useLiveRefresh.ts', // bound to the dashboard WebSocketContext
 ];

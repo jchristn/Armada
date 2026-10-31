@@ -394,22 +394,10 @@ namespace Armada.Core.Services
                     _Logging.Info(_Header + run.Id + " " + run.Status.ToString().ToLowerInvariant() + ": " + run.PassedCount + " passed, " + run.FailedCount + " failed, "
                         + run.CouldNotRunCount + " could not run");
 
-                    // The run names the model as served: find or create its profile and revision (best effort). A complete
-                    // Full report becomes an advisory revision of that profile; nothing else changes.
-                    ModelProfileResolution? resolution = await _ModelProfiles.TryResolveAsync(ModelProfileService.ObservationFrom(run, endpoint)).ConfigureAwait(false);
-                    if (plan != null && run.Report != null && run.Report.Complete && resolution != null)
-                    {
-                        try
-                        {
-                            await _ModelProfiles.RecordEvaluationAsync(resolution, run.Report).ConfigureAwait(false);
-                            run = await _Database.ModelProbeRuns.UpdateAsync(run).ConfigureAwait(false);
-                        }
-                        catch (Exception ex)
-                        {
-                            _Logging.Warn(_Header + "could not record the Full Evaluate report of " + run.Id + " on profile " + resolution.Profile.Id + ": " + ex.Message);
-                        }
-                    }
-
+                    // The run names the model as served: find or create its profile and revision (best effort). A Full
+                    // report, complete or not, becomes an advisory revision of that profile; nothing else changes.
+                    if (plan != null) run = await RecordReportAsync(run, endpoint).ConfigureAwait(false);
+                    else await _ModelProfiles.TryResolveAsync(ModelProfileService.ObservationFrom(run, endpoint)).ConfigureAwait(false);
                     return run;
                 }
             }
@@ -423,6 +411,7 @@ namespace Armada.Core.Services
                     run.CompletedUtc = DateTime.UtcNow;
                     if (plan != null) run.Report = IncompleteReport(run, plan, stop.Reason + " (before it started)");
                     run = await _Database.ModelProbeRuns.UpdateAsync(run).ConfigureAwait(false);
+                    if (plan != null) run = await RecordReportAsync(run, endpoint).ConfigureAwait(false);
                 }
                 catch (Exception update)
                 {
@@ -766,6 +755,24 @@ namespace Armada.Core.Services
             };
             report.Notes.AddRange(plan.Notes);
             return report;
+        }
+
+        private async Task<ModelProbeRun> RecordReportAsync(ModelProbeRun run, ModelEndpoint? endpoint)
+        {
+            // An incomplete report (cancel or timeout) is recorded too, marked incomplete; it never fills the measured
+            // block and never becomes the current revision.
+            ModelProfileResolution? resolution = await _ModelProfiles.TryResolveAsync(ModelProfileService.ObservationFrom(run, endpoint)).ConfigureAwait(false);
+            if (run.Report == null || resolution == null) return run;
+            try
+            {
+                await _ModelProfiles.RecordEvaluationAsync(resolution, run.Report).ConfigureAwait(false);
+                return await _Database.ModelProbeRuns.UpdateAsync(run).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "could not record the Full Evaluate report of " + run.Id + " on profile " + resolution.Profile.Id + ": " + ex.Message);
+                return run;
+            }
         }
 
         private static ModelEvaluationReport IncompleteReport(ModelProbeRun run, FullPlan plan, string reason)

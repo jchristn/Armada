@@ -209,6 +209,15 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "repoUrl is required when creating a vessel" };
                 }
+                try
+                {
+                    vessel.WorkerEnvelope = WorkerEnvelopeRules.Normalize(vessel.WorkerEnvelope);
+                }
+                catch (ArgumentException ex)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                }
                 vessel.TenantId = ctx.TenantId;
                 vessel.UserId = ctx.UserId;
                 vessel = await _VesselService.CreateAsync(vessel, false).ConfigureAwait(false);
@@ -269,6 +278,15 @@ namespace Armada.Server.Routes
                 Vessel updated = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
                 updated = EntityUpdateMerger.MergeVessel(existing, updated);
+                try
+                {
+                    updated.WorkerEnvelope = WorkerEnvelopeRules.Normalize(updated.WorkerEnvelope);
+                }
+                catch (ArgumentException ex)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = ex.Message };
+                }
                 await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_database, updated).ConfigureAwait(false);
                 updated = await _database.Vessels.UpdateAsync(updated).ConfigureAwait(false);
                 if (BlackBoxHooks != null && existing.BlackBoxRetentionDays != updated.BlackBoxRetentionDays) await BlackBoxHooks.OnVesselUpdatedAsync(updated.Id).ConfigureAwait(false);
@@ -281,6 +299,7 @@ namespace Armada.Server.Routes
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Vessel ID (vsl_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<Vessel>("Updated vessel data", true))
                 .WithResponse(200, OpenApiJson.For<Vessel>("Updated vessel"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("A vessel with that name already exists (Data: DuplicateEntityErrorDetail)"))
                 .WithSecurity("ApiKey"));

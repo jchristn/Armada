@@ -15,6 +15,7 @@ namespace Test.Shared.Suites.Services
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Server;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -319,10 +320,139 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(recorder.Cancelled.Contains(open.Id), "the open mission was cancelled (its dock and captain are released)");
                 BatteryRun battery = (await db.BatteryRuns.ReadAsync(run.BatteryRunId!).ConfigureAwait(false))!;
                 AssertEqual(BatteryRunStatusEnum.Cancelled, battery.Status, "battery cancelled");
-                AssertNull(run.Report.ProfileRevisionId, "an incomplete report is not recorded on the profile");
+                AssertNotNull(run.Report.ProfileRevisionId, "an incomplete report is recorded on the profile");
+                ModelProfileRevision incomplete = (await db.ModelProfiles.ReadRevisionAsync(run.Report.ProfileRevisionId!).ConfigureAwait(false))!;
+                AssertTrue(incomplete.EvaluationIncomplete, "the advisory revision is marked incomplete");
+                AssertEqual(run.Id, incomplete.EvaluationRunId, "revision names the run");
+                AssertFalse(incomplete.EvaluationReport!.Complete, "the stored report says incomplete");
+                AssertEqual(1, incomplete.CompatibleWith.Count, "pooled with the observed revision");
+                AssertNull(ModelProfileMeasured.From(await db.ModelProfiles.ReadRevisionsAsync(incomplete.ProfileId).ConfigureAwait(false)), "an incomplete report never fills the measured block");
                 AssertFalse(h.Executor.Requests.Any(r => r.Label == EvaluatorLabel), "the evaluator never ran");
                 AssertEqual(0, h.Probes.Gate.ActiveCount, "slot released");
                 AssertFalse(h.Probes.Cancel(queued.Id), "a finished run is not running");
+            }));
+
+            cases.Add(Case("measured_block_from_latest_complete_report", "The measured block holds counts per persona per pack and per probe from the latest complete Full report; a newer incomplete report never fills or replaces it; no report or only incomplete ones give null", TestTags.Positive, () =>
+            {
+                AssertFalse(new ModelProfileRevision().EvaluationIncomplete, "an observed revision is not an incomplete evaluation");
+                ModelProfileRevision minimal = JsonSerializer.Deserialize<ModelProfileRevision>("{\"id\":\"mdv_min\"}")!;
+                AssertFalse(minimal.EvaluationIncomplete, "a minimally deserialized revision is not incomplete");
+                AssertNull(ModelProfileMeasured.From(new List<ModelProfileRevision>()), "no revisions");
+                AssertNull(ModelProfileMeasured.From(new List<ModelProfileRevision> { minimal }), "no report");
+                AssertThrows<ArgumentNullException>(() => ModelProfileMeasured.From(null!));
+
+                DateTime t0 = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+                ModelEvaluationReport older = SampleReport();
+                older.RunId = "mpr_older";
+                older.Complete = true;
+                older.CreatedUtc = t0;
+                ModelEvaluationReport latest = SampleReport();
+                latest.RunId = "mpr_latest";
+                latest.Complete = true;
+                latest.BatteryRunId = "bat_latest";
+                latest.Packs = new List<string> { "evalsyn", "other" };
+                latest.CreatedUtc = t0.AddDays(1);
+                latest.PersonaOutcomes[0].Tasks.Add(new ModelEvaluationCount { Key = "task:other/fix", Passed = 1, CouldNotRun = 1, PendingEvaluation = 1 });
+                latest.PersonaOutcomes.Insert(0, new ModelEvaluationPersonaOutcome { Persona = "Judge", Tasks = new List<ModelEvaluationCount> { new ModelEvaluationCount { Key = "task:evalsyn/review", Passed = 2, Failed = 1 } } });
+                ModelEvaluationReport cancelled = SampleReport();
+                cancelled.RunId = "mpr_cancelled";
+                cancelled.Complete = false;
+                cancelled.IncompleteReason = "The Full Evaluate was cancelled.";
+                cancelled.CreatedUtc = t0.AddDays(2);
+                cancelled.PersonaOutcomes[0].Tasks[0].Passed = 99;
+
+                ModelProfileRevision incomplete = new ModelProfileRevision { Id = "mdv_c", EvaluationRunId = "mpr_cancelled", EvaluationReport = cancelled, FirstSeenUtc = t0.AddDays(2) };
+                AssertTrue(incomplete.EvaluationIncomplete, "flag derived from the report");
+                List<ModelProfileRevision> revisions = new List<ModelProfileRevision>
+                {
+                    new ModelProfileRevision { Id = "mdv_obs", FirstSeenUtc = t0.AddDays(-1) },
+                    incomplete,
+                    new ModelProfileRevision { Id = "mdv_l", EvaluationRunId = "mpr_latest", EvaluationReport = latest, FirstSeenUtc = t0.AddDays(1) },
+                    new ModelProfileRevision { Id = "mdv_o", EvaluationRunId = "mpr_older", EvaluationReport = older, FirstSeenUtc = t0 }
+                };
+
+                ModelProfileMeasured measured = ModelProfileMeasured.From(revisions)!;
+                AssertNotNull(measured, "a complete report fills the block");
+                AssertEqual("mpr_latest", measured.RunId, "the latest complete report, not the newer incomplete one");
+                AssertEqual("mdv_l", measured.RevisionId, "revision");
+                AssertEqual("bat_latest", measured.BatteryRunId, "battery run");
+                AssertEqual(t0.AddDays(1), measured.MeasuredUtc, "time of the report");
+                AssertEqual("evalsyn,other", String.Join(",", measured.PackIds), "packs");
+                AssertEqual("OutputContract", measured.Probes.Single().Key, "probe kind without the key prefix");
+                AssertEqual(1, measured.Probes.Single().Passed, "probe passed");
+                AssertEqual(1, measured.Probes.Single().Attempted, "probe attempted");
+                AssertEqual("Judge,Worker", String.Join(",", measured.Personas.Select(p => p.Persona)), "personas ordered");
+                ModelProfileMeasuredPersona worker = measured.Personas.Single(p => p.Persona == "Worker");
+                AssertEqual("evalsyn,other", String.Join(",", worker.Packs.Select(p => p.Key)), "one count per pack");
+                ModelProfileMeasuredCount evalsyn = worker.Packs.Single(p => p.Key == "evalsyn");
+                AssertEqual(3, evalsyn.Passed, "evalsyn passed (two tasks summed)");
+                AssertEqual(3, evalsyn.Failed, "evalsyn failed");
+                AssertEqual(6, evalsyn.Attempted, "evalsyn attempted");
+                ModelProfileMeasuredCount other = worker.Packs.Single(p => p.Key == "other");
+                AssertEqual(1, other.Passed, "other passed");
+                AssertEqual(1, other.CouldNotRun, "other could not run");
+                AssertEqual(1, other.PendingEvaluation, "other pending");
+                AssertEqual(3, other.Attempted, "every attempt counts as attempted");
+                AssertEqual(3, measured.Personas.Single(p => p.Persona == "Judge").Packs.Single().Attempted, "judge attempted");
+
+                AssertNull(ModelProfileMeasured.From(new List<ModelProfileRevision> { incomplete }), "only an incomplete report gives no measured block");
+                string json = JsonSerializer.Serialize(measured);
+                AssertFalse(json.Contains("Rate", StringComparison.OrdinalIgnoreCase) || json.Contains("Score", StringComparison.OrdinalIgnoreCase), "counts only, no derived scores");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(DbCase("full_evaluate_incomplete_not_preferred", "A cancelled Full Evaluate after a complete one is recorded as an incomplete advisory revision; the complete report keeps filling the measured block (REST/MCP profile read), and observations never pool into the incomplete revision", async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using TempDir dir = new TempDir();
+                DatabaseDriver db = testDb.Driver;
+                ScriptedDispatcher dispatcher = new ScriptedDispatcher();
+                Harness h = await HarnessAsync(db, dir, dispatcher, EvaluatorExecutor.Correct()).ConfigureAwait(false);
+                Captain candidate = await SaveCaptainAsync(db, "cpt_cand_pref", "qwen3:32b", CaptainTierEnum.Economy, allowed: "[\"Judge\",\"Architect\"]").ConfigureAwait(false);
+                ModelEvaluationOptions options = new ModelEvaluationOptions { Packs = new List<string> { PackId }, RunCount = 1 };
+
+                ModelProbeRun complete = (await h.Probes.WaitAsync((await h.Probes.StartCaptainAsync(candidate, null, ModelProbeDepthEnum.Full, options, null, null).ConfigureAwait(false)).Id).ConfigureAwait(false))!;
+                AssertTrue(complete.Report!.Complete, "first report complete: " + complete.Report.IncompleteReason);
+                AssertNotNull(complete.Report.ProfileRevisionId, "complete report recorded");
+
+                dispatcher.Block = true;
+                int before = dispatcher.Requests.Count;
+                ModelProbeRun queued = await h.Probes.StartCaptainAsync(candidate, null, ModelProbeDepthEnum.Full, options, null, null).ConfigureAwait(false);
+                await dispatcher.WaitForRequestsAsync(before + 1).ConfigureAwait(false);
+                AssertTrue(h.Probes.Cancel(queued.Id), "cancel the second run");
+                ModelProbeRun cancelled = (await h.Probes.WaitAsync(queued.Id).ConfigureAwait(false))!;
+                AssertFalse(cancelled.Report!.Complete, "second report incomplete");
+                AssertNotNull(cancelled.Report.ProfileRevisionId, "incomplete report recorded");
+                AssertNotEqual(complete.Report.ProfileRevisionId, cancelled.Report.ProfileRevisionId, "a new revision, nothing overwritten");
+
+                ModelProfileRevision completeRevision = (await db.ModelProfiles.ReadRevisionAsync(complete.Report.ProfileRevisionId!).ConfigureAwait(false))!;
+                AssertFalse(completeRevision.EvaluationIncomplete, "complete revision unchanged");
+                AssertTrue(completeRevision.EvaluationReport!.Complete, "complete report unchanged");
+                ModelProfileRevision incompleteRevision = (await db.ModelProfiles.ReadRevisionAsync(cancelled.Report.ProfileRevisionId!).ConfigureAwait(false))!;
+                AssertTrue(incompleteRevision.EvaluationIncomplete, "incomplete revision flagged");
+
+                // The profile read used by REST GET /api/v1/model-profiles/{id} and MCP get_model_profile.
+                ModelProfileAccessService access = new ModelProfileAccessService(db, Quiet());
+                ModelProfile profile = await access.GetAsync(AuthContext.Authenticated(Constants.DefaultTenantId, "usr_admin", true, true, "Test"), completeRevision.ProfileId).ConfigureAwait(false);
+                AssertNotNull(profile.Measured, "measured block filled");
+                AssertEqual(complete.Id, profile.Measured!.RunId, "the complete report, not the newer incomplete one");
+                AssertEqual(completeRevision.Id, profile.Measured.RevisionId, "revision of the complete report");
+                AssertEqual(complete.Report.CreatedUtc, profile.Measured.MeasuredUtc, "time of the complete report");
+                AssertEqual(6, profile.Measured.Probes.Count, "one count per probe");
+                ModelProfileMeasuredCount judge = profile.Measured.Personas.Single(p => p.Persona == "Judge").Packs.Single();
+                AssertEqual(PackId, judge.Key, "pack");
+                AssertEqual(1, judge.Passed, "judge passed");
+                AssertEqual(1, judge.Attempted, "judge attempted");
+                AssertTrue(profile.Revisions.Any(r => r.EvaluationIncomplete), "the incomplete revision is listed and marked");
+
+                // A later observation of the same model pools into the latest revision that is not an incomplete one.
+                ModelProfileResolution resolution = await new ModelProfileService(db, Quiet()).ResolveAsync(ModelProfileService.ObservationFrom(cancelled, null)!).ConfigureAwait(false);
+                AssertFalse(resolution.RevisionCreated, "same provenance pools");
+                AssertFalse(resolution.Revision.EvaluationIncomplete, "never the incomplete revision");
+                AssertEqual(completeRevision.Id, resolution.Revision.Id, "the latest revision that is not incomplete");
+                Captain after = (await db.Captains.ReadAsync(candidate.Id).ConfigureAwait(false))!;
+                AssertEqual(candidate.Tier, after.Tier, "tier unchanged");
+                AssertEqual(candidate.AllowedPersonas, after.AllowedPersonas, "allowed personas unchanged");
             }));
 
             cases.Add(DbCase("full_evaluate_timeout_incomplete", "A Full Evaluate that outlives its timeout stops like a cancel: the open mission is cancelled and the partial report says it timed out", async () =>

@@ -1,5 +1,7 @@
 namespace Armada.Server.Mcp
 {
+    using Armada.Core.Models;
+
     /// <summary>
     /// MCP tool arguments for updating a vessel.
     /// </summary>
@@ -146,5 +148,10 @@ namespace Armada.Server.Mcp
         /// clear it so the global setting applies.
         /// </summary>
         public string? LandingMode { get; set; }
+
+        /// <summary>
+        /// Replacement Worker eligibility envelope for the vessel; an empty object clears it and null keeps the stored value.
+        /// </summary>
+        public WorkerEnvelope? WorkerEnvelope { get; set; }
     }
 }

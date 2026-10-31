@@ -57,6 +57,13 @@ namespace Armada.Core.Models
         [JsonPropertyName("waitForOtherMissions")]
         public bool WaitForOtherMissions { get; set; } = false;
 
+        /// <summary>
+        /// Worker eligibility envelope tightened for this mission, or null to use the vessel default. It may only tighten
+        /// the vessel default; a looser field is clamped to the default and the clamp is recorded.
+        /// </summary>
+        [JsonPropertyName("workerEnvelope")]
+        public WorkerEnvelope? WorkerEnvelope { get; set; } = null;
+
         #endregion
     }
 }

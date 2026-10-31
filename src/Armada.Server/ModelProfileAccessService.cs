@@ -71,7 +71,8 @@ namespace Armada.Server
         }
 
         /// <summary>
-        /// One profile visible to the caller, with its revisions oldest first.
+        /// One profile visible to the caller, with its revisions oldest first and the measured block from the latest
+        /// complete Full Evaluate report.
         /// </summary>
         /// <param name="caller">Caller.</param>
         /// <param name="profileId">Profile identifier.</param>
@@ -83,6 +84,7 @@ namespace Armada.Server
             RequirePerson(caller);
             ModelProfile profile = await ReadVisibleAsync(caller, profileId, token).ConfigureAwait(false);
             profile.Revisions = await _Database.ModelProfiles.ReadRevisionsAsync(profile.Id, token).ConfigureAwait(false);
+            profile.Measured = ModelProfileMeasured.From(profile.Revisions);
             return profile;
         }
 

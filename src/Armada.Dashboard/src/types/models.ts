@@ -155,6 +155,21 @@ export interface FleetDetailResponse {
   vesselCount: number;
 }
 
+/**
+ * Worker eligibility envelope (docs/MODEL_HETEROGENEITY.md 3.3): the size a Worker mission is sliced for and the model
+ * profile a captain needs to run it. Every field is optional.
+ */
+export interface WorkerEnvelope {
+  /** Most files one Worker mission should change (1 to 1000), or null for no limit. */
+  maxFiles?: number | null;
+  /** Most steps one Worker mission should take (1 to 1000), or null for no limit. */
+  maxSteps?: number | null;
+  /** Smallest served context in tokens a captain's model profile must record, or null for no minimum. */
+  minServedContextTokens?: number | null;
+  /** Capabilities the profile must record as available: 'tools' (tool calls) and 'mcp' (MCP tools). */
+  requiredTools?: string[];
+}
+
 export interface Vessel {
   id: string;
   tenantId: string | null;
@@ -196,6 +211,8 @@ export interface Vessel {
   lintCommand?: string | null;
   /** Per-vessel override for the Audit intent. */
   auditCommand?: string | null;
+  /** Default Worker eligibility envelope for missions on this vessel; null or absent means none (routing unchanged). */
+  workerEnvelope?: WorkerEnvelope | null;
   allowConcurrentMissions: boolean;
   /** Chain a mission that overlaps an active one after it (DependsOnMissionId) at dispatch. */
   serializeOverlappingMissions?: boolean;
@@ -4401,6 +4418,19 @@ export interface ModelProbeRun {
   lastUpdateUtc: string;
   /** Battery run a Full Evaluate started (bat_ prefix), or null. */
   batteryRunId?: string | null;
+  profileRevision?: Record<string, unknown>;
+  profileError?: string;
+  batteryError?: string;
+  /** Client-enriched battery snapshot, requested by the evaluation progress panel. */
+  batteryProgress?: {
+    status: string;
+    totalTasks: number;
+    passedCount: number;
+    failedCount: number;
+    couldNotRunCount: number;
+    pendingEvaluationCount: number;
+    failureReason?: string | null;
+  };
   /** Full Evaluate report, or null for Quick; a cancelled or timed-out Full run keeps a partial report (complete false). */
   report?: ModelEvaluationReport | null;
   /** Filled by getModelProbeRun; empty in list rows. */
@@ -4408,6 +4438,26 @@ export interface ModelProbeRun {
 }
 
 /** Optional parameters of a Full Evaluate; every value has a server default. */
+/** One task of a fixture battery pack. */
+export interface BatteryTaskInfo {
+  id: string;
+  title?: string | null;
+  persona?: string | null;
+}
+
+/** An installed fixture battery pack (GET /api/v1/battery/packs). */
+export interface BatteryPackInfo {
+  id: string;
+  name?: string | null;
+  version: number;
+  domain?: string | null;
+  description?: string | null;
+  valid: boolean;
+  errors: string[];
+  tasks: BatteryTaskInfo[];
+  taskCount: number;
+}
+
 export interface ModelEvaluationOptions {
   evaluatorCaptainId?: string | null;
   packs?: string[] | null;

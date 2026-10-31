@@ -87,7 +87,11 @@ namespace Armada.Core.Services
                 }
 
                 List<ModelProfileRevision> revisions = await _Database.ModelProfiles.ReadRevisionsAsync(profile.Id, token).ConfigureAwait(false);
-                ModelProfileRevision? current = revisions.Count > 0 ? revisions[revisions.Count - 1] : null;
+                // An advisory revision carrying an incomplete Full Evaluate report is never the current revision:
+                // observations do not pool into it.
+                ModelProfileRevision? current = null;
+                for (int i = revisions.Count - 1; i >= 0 && current == null; i--)
+                    if (!revisions[i].EvaluationIncomplete) current = revisions[i];
                 if (ModelProfileRules.StartsNewRevision(current, observation))
                 {
                     current = await _Database.ModelProfiles.CreateRevisionAsync(ModelProfileRules.RevisionFor(profile, observation), token).ConfigureAwait(false);
@@ -112,7 +116,10 @@ namespace Armada.Core.Services
         /// <summary>
         /// Record a Full Evaluate report as an advisory profile update: a new immutable revision that repeats the
         /// provenance of the revision the run was recorded on, carries the report, and is marked compatible with that
-        /// revision so the scorecard pools the two. Nothing reads it for routing, persona captain lists or prompts.
+        /// revision so the scorecard pools the two. Nothing reads it for routing, persona captain lists or prompts. An
+        /// incomplete report (cancelled or timed out) is recorded the same way and marked
+        /// <see cref="ModelProfileRevision.EvaluationIncomplete"/>: it never changes an earlier revision, never fills
+        /// the measured block and is never preferred over a complete report.
         /// </summary>
         /// <param name="resolution">The profile and revision the run was recorded on.</param>
         /// <param name="report">The report.</param>
@@ -156,7 +163,8 @@ namespace Armada.Core.Services
                 _Gate.Release();
             }
 
-            _Logging.Info(_Header + "profile " + resolution.Profile.Id + " has advisory revision " + advisory.Id + " from Full Evaluate " + report.RunId);
+            _Logging.Info(_Header + "profile " + resolution.Profile.Id + " has advisory revision " + advisory.Id + " from "
+                + (report.Complete ? String.Empty : "incomplete ") + "Full Evaluate " + report.RunId);
             return advisory;
         }
 

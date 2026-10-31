@@ -24,6 +24,35 @@ describe('model probe client', () => {
     setAuthToken(null);
   });
 
+  it('enriches progress with an authenticated battery read and the exact profile revision', async () => {
+    setAuthToken('tok_1');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, { ...RUN, BatteryRunId: 'bat 1', Report: { ProfileId: 'mdl_1', ProfileRevisionId: 'mdv_1' } }))
+      .mockResolvedValueOnce(jsonResponse(200, { Status: 'Running', TotalTasks: 12, PendingEvaluationCount: 2 }))
+      .mockResolvedValueOnce(jsonResponse(200, { Revisions: [{ Id: 'mdv_0' }, { Id: 'mdv_1', Runtime: 'Mux' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await getModelProbeRun('mpr_1', true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(new URL(fetchMock.mock.calls[0][0], 'http://localhost').pathname).toBe('/api/v1/model-probe-runs/mpr_1');
+    expect(new URL(fetchMock.mock.calls[1][0], 'http://localhost').pathname).toBe('/api/v1/battery/runs/bat%201');
+    expect(fetchMock.mock.calls[1][1].headers['X-Token']).toBe('tok_1');
+    expect(new URL(fetchMock.mock.calls[2][0], 'http://localhost').pathname).toBe('/api/v1/model-profiles/mdl_1');
+    expect(result.batteryProgress).toMatchObject({ totalTasks: 12, pendingEvaluationCount: 2 });
+    expect(result.profileRevision).toEqual({ id: 'mdv_1', runtime: 'Mux' });
+  });
+
+  it('keeps probe results when the auxiliary battery read fails', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, { ...RUN, BatteryRunId: 'bat_1' }))
+      .mockResolvedValueOnce(jsonResponse(404, { Message: 'Battery not found' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await getModelProbeRun('mpr_1', true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.id).toBe('mpr_1');
+    expect(result.batteryError).toBeTruthy();
+    expect(result.batteryProgress).toBeUndefined();
+  });
+
   it('evaluates a captain with a PascalCase Quick depth and the session token', async () => {
     setAuthToken('tok_1');
     const fetchMock = stub(201, RUN);

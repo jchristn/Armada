@@ -69,6 +69,13 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Counts from the latest complete Full Evaluate report on the profile's revisions, or null when there is none.
+        /// Filled only by single-profile reads (from <see cref="Revisions"/>); list pages leave it null. An incomplete
+        /// report never fills it.
+        /// </summary>
+        public ModelProfileMeasured? Measured { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

@@ -664,6 +664,7 @@ namespace Armada.Core.Database.Sqlite
             try { vessel.TestCommand = NullableString(reader["test_command"]); } catch { }
             try { vessel.LintCommand = NullableString(reader["lint_command"]); } catch { }
             try { vessel.AuditCommand = NullableString(reader["audit_command"]); } catch { }
+            try { vessel.WorkerEnvelope = Armada.Core.Services.WorkerEnvelopeRules.FromJson(NullableString(reader["worker_envelope_json"])); } catch { }
             try { vessel.BlackBoxRetentionDays = reader["blackbox_retention_days"] == DBNull.Value ? null : Convert.ToInt32(reader["blackbox_retention_days"]); } catch { }
             try { vessel.SerializeOverlappingMissions = Convert.ToInt64(reader["serialize_overlapping_missions"]) == 1; } catch { vessel.SerializeOverlappingMissions = false; }
             try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); } catch { }
@@ -772,6 +773,7 @@ namespace Armada.Core.Database.Sqlite
             try { object v = reader["noop_redispatch_attempts"]; if (v != DBNull.Value) mission.NoOpRedispatchAttempts = Convert.ToInt32(v); } catch { }
             try { mission.IsRescue = reader["is_rescue"] != DBNull.Value && Convert.ToInt64(reader["is_rescue"]) == 1; } catch { }
             try { mission.IsEvaluation = reader["is_evaluation"] != DBNull.Value && Convert.ToInt64(reader["is_evaluation"]) == 1; } catch { }
+            try { mission.WorkerEnvelope = Armada.Core.Services.WorkerEnvelopeRules.FromJson(NullableString(reader["worker_envelope_json"])); } catch { }
             try { mission.ReworkRound = reader["rework_round"] != DBNull.Value ? Convert.ToInt32(reader["rework_round"]) : 0; } catch { }
             try { mission.ReworkEscalated = reader["rework_escalated"] != DBNull.Value && Convert.ToInt64(reader["rework_escalated"]) == 1; } catch { }
             try
