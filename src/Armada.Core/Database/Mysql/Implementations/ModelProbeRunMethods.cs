@@ -22,12 +22,12 @@ namespace Armada.Core.Database.Mysql.Implementations
             (id, tenant_id, user_id, target_kind, captain_id, captain_name, model_endpoint_id, depth, status, is_evaluation,
              probe_set_version, runtime, runtime_version, model_provider, model, model_digest, configured_context_tokens,
              served_context_tokens, harbor_id, inference_host, token_budget, tokens_used, passed_count, failed_count,
-             could_not_run_count, failure_reason, created_utc, started_utc, completed_utc, last_update_utc)
+             could_not_run_count, failure_reason, battery_run_id, report_json, created_utc, started_utc, completed_utc, last_update_utc)
             VALUES
             (@id, @tenant_id, @user_id, @target_kind, @captain_id, @captain_name, @model_endpoint_id, @depth, @status, @is_evaluation,
              @probe_set_version, @runtime, @runtime_version, @model_provider, @model, @model_digest, @configured_context_tokens,
              @served_context_tokens, @harbor_id, @inference_host, @token_budget, @tokens_used, @passed_count, @failed_count,
-             @could_not_run_count, @failure_reason, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
+             @could_not_run_count, @failure_reason, @battery_run_id, @report_json, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
 
         private static readonly string _Update = @"UPDATE model_probe_runs SET
             target_kind = @target_kind, captain_id = @captain_id, captain_name = @captain_name, model_endpoint_id = @model_endpoint_id,
@@ -36,7 +36,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             model_digest = @model_digest, configured_context_tokens = @configured_context_tokens,
             served_context_tokens = @served_context_tokens, harbor_id = @harbor_id, inference_host = @inference_host,
             token_budget = @token_budget, tokens_used = @tokens_used, passed_count = @passed_count, failed_count = @failed_count,
-            could_not_run_count = @could_not_run_count, failure_reason = @failure_reason, started_utc = @started_utc,
+            could_not_run_count = @could_not_run_count, failure_reason = @failure_reason, battery_run_id = @battery_run_id, report_json = @report_json, started_utc = @started_utc,
             completed_utc = @completed_utc, last_update_utc = @last_update_utc
             WHERE id = @id;";
 
@@ -208,6 +208,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             MysqlCommandHelper.Add(cmd, "@failed_count", run.FailedCount);
             MysqlCommandHelper.Add(cmd, "@could_not_run_count", run.CouldNotRunCount);
             MysqlCommandHelper.Add(cmd, "@failure_reason", run.FailureReason);
+            MysqlCommandHelper.Add(cmd, "@battery_run_id", run.BatteryRunId);
+            MysqlCommandHelper.Add(cmd, "@report_json", ModelEvaluationReport.ToJson(run.Report));
             MysqlCommandHelper.AddDate(cmd, "@started_utc", run.StartedUtc);
             MysqlCommandHelper.AddDate(cmd, "@completed_utc", run.CompletedUtc);
             MysqlCommandHelper.AddDate(cmd, "@last_update_utc", run.LastUpdateUtc);
@@ -242,6 +244,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             run.FailedCount = MysqlCommandHelper.ReadInt(reader["failed_count"], 0);
             run.CouldNotRunCount = MysqlCommandHelper.ReadInt(reader["could_not_run_count"], 0);
             run.FailureReason = MysqlCommandHelper.ReadString(reader["failure_reason"]);
+            run.BatteryRunId = MysqlCommandHelper.ReadString(reader["battery_run_id"]);
+            run.Report = ModelEvaluationReport.FromJson(MysqlCommandHelper.ReadString(reader["report_json"]));
             run.CreatedUtc = MysqlCommandHelper.ReadDate(reader["created_utc"]);
             run.StartedUtc = MysqlCommandHelper.ReadNullableDate(reader["started_utc"]);
             run.CompletedUtc = MysqlCommandHelper.ReadNullableDate(reader["completed_utc"]);

@@ -152,6 +152,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [evaluate_captain](#evaluate_captain)
     - [get_model_probe_run](#get_model_probe_run)
     - [list_model_probe_runs](#list_model_probe_runs)
+    - [cancel_model_probe_run](#cancel_model_probe_run)
   - **Model Profiles**
     - [get_model_profile](#get_model_profile)
     - [list_model_profiles](#list_model_profiles)
@@ -1379,19 +1380,31 @@ many more there were (a `completionLines` marker starts with `[ARMADA:TRUNCATED]
 Evaluate runs probe-only mechanical probes (output contract, served context, ASCII and format rules, tool calling,
 speed, determinism) against a captain through its own runtime, or against a model endpoint through the API endpoint
 runtime, and records a run (`mpr_`) with one result per probe: `Passed`, `Failed`, or `CouldNotRun` with the reason (a
-probe a runtime cannot run is never `Failed`). Only depth `Quick` is implemented; `Full` is refused ("not implemented until
-Phase 5"). Runs are tagged as evaluation, never count in stage outcomes, and change no routing or captain settings. The
+probe a runtime cannot run is never `Failed`). Depth `Quick` (the default) runs only those probes. Depth `Full` adds a
+fixture battery run (packs default to those matching the languages of the tenant's repositories; personas default to all
+the captain is allowed), then an evaluator captain (default: the highest-tier idle captain of a different model family; a
+same-family one only when no other is idle, with a warning in the report) grades the battery attempts that need a
+subjective grade and writes strengths and weaknesses from the mechanical counts only. Every count the evaluator cites
+must match; a reply that does not parse or cites a wrong count is rejected with the reason and the mechanical report is
+kept. The run carries a `report` (per-persona counts, the narrative, evaluator, warnings, `complete`); a complete report
+is also recorded as an advisory model profile revision. A cancelled or timed-out Full run ends `Cancelled` with a partial
+report marked incomplete and its open battery mission cancelled. Full has its own token budget
+(`evaluation.fullRunTokenBudget`) and timeout (`evaluation.fullRunTimeoutMinutes`) and holds the per-inference-host
+evaluation slot for its whole run. Runs are tagged as evaluation, never count in stage outcomes, scorecards or alerts,
+and change no routing, persona captain lists, prompts or captain settings. The
 REST equivalents and the run shape are in [REST_API.md](REST_API.md#evaluate-model-probe-runs); the tools enforce the
 same access rules through the same service. Errors are `McpToolError`s: `NotFound` (missing, or another tenant's),
-`Forbidden` (not an admin for a captain, or a captain session), `InvalidArgument` (not exactly one id, an unknown depth or
-status, depth `Full`), and `Unavailable` on the stdio server. `get_model_probe_run` and `list_model_probe_runs` are on the
+`Forbidden` (not an admin for a captain, a Full Evaluate or a cancel, or a captain session), `InvalidArgument` (not
+exactly one id, an unknown depth or status, an unknown pack, a persona the captain is not allowed, a run count outside 1
+to 10), and `Unavailable` on the stdio server. `get_model_probe_run` and `list_model_probe_runs` are on the
 Ask read-only list; `evaluate_captain` becomes a proposal inside an Ask conversation.
 
 | Tool | Caller |
 |---|---|
 | `evaluate_captain` with `captainId` | Global admin, or a tenant admin of the captain's tenant |
-| `evaluate_captain` with `modelEndpointId` | Anyone who can read the endpoint |
+| `evaluate_captain` with `modelEndpointId` | Quick: anyone who can read the endpoint; Full: a global admin or a tenant admin |
 | `get_model_probe_run`, `list_model_probe_runs` | Any authenticated person: global admins every tenant, everyone else their own tenant |
+| `cancel_model_probe_run` | Global admin, or a tenant admin of the run's tenant |
 
 ### evaluate_captain
 
@@ -1399,7 +1412,11 @@ Ask read-only list; `evaluate_captain` becomes a proposal inside an Ask conversa
 |---|---|---|---|
 | `captainId` | string | One of | Captain to evaluate (`cpt_`) |
 | `modelEndpointId` | string | One of | Model endpoint to evaluate (`mep_`) |
-| `depth` | string | No | `Quick` (default); `Full` is not implemented until Phase 5 |
+| `depth` | string | No | `Quick` (default) or `Full` |
+| `evaluatorCaptainId` | string | No | Full only: evaluator captain (`cpt_`, same tenant); default the highest-tier idle captain of another model family |
+| `packs` | string[] | No | Full only: battery packs; default those matching the tenant's repository languages |
+| `personas` | string[] | No | Full only: personas to score; default all the captain is allowed |
+| `runCount` | integer | No | Full only: runs of each battery task (1-10, default 3) |
 
 **Response:** the queued ModelProbeRun; the probes run in the background. Poll `get_model_probe_run`.
 
@@ -1416,10 +1433,18 @@ Ask read-only list; `evaluate_captain` becomes a proposal inside an Ask conversa
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `captainId`, `modelEndpointId` | string | No | Filters |
-| `status` | string | No | `Queued`, `Running`, `Completed`, or `Failed` |
+| `status` | string | No | `Queued`, `Running`, `Completed`, `Failed`, or `Cancelled` |
 | `pageNumber`, `pageSize` | integer | No | Paging (page size 1-1000, default 25) |
 
 **Response:** `EnumerationResult<ModelProbeRun>` (without results), newest first.
+
+### cancel_model_probe_run
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Run ID (`mpr_`) |
+
+**Response:** the ModelProbeRun after the cancellation (it may still be stopping); a finished run is returned unchanged.
 
 ---
 

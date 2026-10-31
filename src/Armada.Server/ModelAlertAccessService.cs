@@ -285,7 +285,7 @@ namespace Armada.Server
         {
             if (_Probes == null) throw new ArgumentException("Evaluate is not available on this server.");
             Captain captain = plan.ProfileCaptains[0];
-            ModelProbeRun run = await _Probes.EvaluateCaptainAsync(caller, captain.Id, ModelProbeDepthEnum.Quick, token).ConfigureAwait(false);
+            ModelProbeRun run = await _Probes.EvaluateCaptainAsync(caller, captain.Id, ModelProbeDepthEnum.Quick, null, token).ConfigureAwait(false);
             record.Changed = true;
             record.TargetId = run.Id;
             record.Result = "Started Quick Evaluate " + run.Id + " of captain " + captain.Name + " (" + captain.Id + "); status " + run.Status + ".";

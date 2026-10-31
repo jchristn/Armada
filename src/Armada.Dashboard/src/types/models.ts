@@ -4312,7 +4312,7 @@ export type ModelProbeKind = 'ServedContext' | 'OutputContract' | 'AsciiFormat' 
 export type ModelProbeOutcome = 'Passed' | 'Failed' | 'CouldNotRun';
 
 /** Lifecycle of a probe run. */
-export type ModelProbeRunStatus = 'Queued' | 'Running' | 'Completed' | 'Failed';
+export type ModelProbeRunStatus = 'Queued' | 'Running' | 'Completed' | 'Failed' | 'Cancelled';
 
 /** What an evaluation targets. */
 export type ModelProbeTarget = 'Captain' | 'ModelEndpoint';
@@ -4399,8 +4399,96 @@ export interface ModelProbeRun {
   startedUtc?: string | null;
   completedUtc?: string | null;
   lastUpdateUtc: string;
+  /** Battery run a Full Evaluate started (bat_ prefix), or null. */
+  batteryRunId?: string | null;
+  /** Full Evaluate report, or null for Quick; a cancelled or timed-out Full run keeps a partial report (complete false). */
+  report?: ModelEvaluationReport | null;
   /** Filled by getModelProbeRun; empty in list rows. */
   results: ModelProbeResult[];
+}
+
+/** Optional parameters of a Full Evaluate; every value has a server default. */
+export interface ModelEvaluationOptions {
+  evaluatorCaptainId?: string | null;
+  packs?: string[] | null;
+  personas?: string[] | null;
+  runCount?: number | null;
+}
+
+/** One mechanical count of a Full Evaluate report (the source of truth the narrative may cite). */
+export interface ModelEvaluationCount {
+  key: string;
+  label: string;
+  persona?: string | null;
+  passed: number;
+  failed: number;
+  couldNotRun: number;
+  pendingEvaluation: number;
+  graded: number;
+}
+
+/** Per-persona battery outcomes: the total and one count per task. */
+export interface ModelEvaluationPersonaOutcome {
+  persona: string;
+  totals: ModelEvaluationCount;
+  tasks: ModelEvaluationCount[];
+}
+
+/** A strength or weakness the evaluator wrote; its numbers equal the cited count. */
+export interface ModelEvaluationFinding {
+  text: string;
+  key: string;
+  passed: number;
+  total: number;
+}
+
+/** The evaluator's grade of one battery attempt that needed subjective grading. */
+export interface ModelEvaluationSubjectiveGrade {
+  resultId: string;
+  taskKey?: string | null;
+  passed: boolean;
+  note?: string | null;
+}
+
+/** Whether the evaluator's narrative was skipped, accepted after validation, or rejected. */
+export type ModelEvaluationNarrativeStatus = 'Skipped' | 'Accepted' | 'Rejected';
+
+/** The evaluator's narrative (only from the counts) and subjective grades. */
+export interface ModelEvaluationNarrative {
+  status: ModelEvaluationNarrativeStatus;
+  reason?: string | null;
+  strengths: ModelEvaluationFinding[];
+  weaknesses: ModelEvaluationFinding[];
+  observedProblems: string[];
+  howToWork?: string | null;
+  subjectiveGrades: ModelEvaluationSubjectiveGrade[];
+  rejectedOutput?: string | null;
+}
+
+/** The report of a Full Evaluate. Advisory: nothing changes routing, persona captain lists or prompts. */
+export interface ModelEvaluationReport {
+  runId: string;
+  complete: boolean;
+  incompleteReason?: string | null;
+  candidateFamily?: string | null;
+  batteryRunId?: string | null;
+  batteryCaptainId?: string | null;
+  batteryStatus?: string | null;
+  batteryTokensUsed: number;
+  packs: string[];
+  personas: string[];
+  evaluatorCaptainId?: string | null;
+  evaluatorCaptainName?: string | null;
+  evaluatorFamily?: string | null;
+  evaluatorExplicit: boolean;
+  warnings: string[];
+  notes: string[];
+  probes: ModelEvaluationCount[];
+  personaOutcomes: ModelEvaluationPersonaOutcome[];
+  narrative: ModelEvaluationNarrative;
+  profileId?: string | null;
+  profileRevisionId?: string | null;
+  createdUtc: string;
 }
 
 /** Filters for listModelProbeRuns. */

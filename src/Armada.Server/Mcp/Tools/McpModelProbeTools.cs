@@ -12,8 +12,8 @@ namespace Armada.Server.Mcp.Tools
     using Armada.Server.Routes;
 
     /// <summary>
-    /// Registers the Evaluate MCP tools: evaluate_captain (a Quick probe-only Evaluate of a captain or a model endpoint),
-    /// get_model_probe_run and list_model_probe_runs. Every tool enforces the same rules as REST through
+    /// Registers the Evaluate MCP tools: evaluate_captain (a Quick or Full Evaluate of a captain or a model endpoint),
+    /// get_model_probe_run, list_model_probe_runs and cancel_model_probe_run. Every tool enforces the same rules as REST through
     /// <see cref="ModelProbeAccessService"/>; its typed exceptions become typed tool errors.
     /// </summary>
     public static class McpModelProbeTools
@@ -45,7 +45,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "evaluate_captain",
-                "Start a Quick Evaluate: probe-only mechanical probes (output contract, served context, ASCII and format rules, tool calling, speed, determinism) through the captain's own runtime, or through the API endpoint runtime for a model endpoint. Give exactly one of captainId or modelEndpointId. Returns the queued run at once; poll get_model_probe_run. Probes record observations; a probe a runtime cannot run is CouldNotRun with the reason. Nothing changes routing or captain settings. Evaluating a captain needs a global admin or a tenant admin of its tenant; evaluating an endpoint needs read access to it. Depth Full is not implemented until Phase 5.",
+                "Start an Evaluate. Quick (default): mechanical probes (output contract, served context, ASCII and format rules, tool calling, speed, determinism) through the captain's own runtime, or through the API endpoint runtime for a model endpoint. Full (only when asked): the Quick probes plus a fixture battery run (packs default to those matching the tenant's repository languages; personas default to all the captain is allowed), then an evaluator captain (default: highest-tier idle captain of a different model family; same family only when no other is idle, with a warning) grades the subjective attempts and writes strengths and weaknesses citing the mechanical counts; a narrative that does not parse or cites wrong counts is rejected with the reason and the mechanical report kept. A complete Full report becomes an advisory model profile revision; nothing changes routing, persona captain lists or prompts. Give exactly one of captainId or modelEndpointId. Returns the queued run at once; poll get_model_probe_run, stop with cancel_model_probe_run. Evaluating a captain, or any Full Evaluate, needs a global admin or a tenant admin; a Quick Evaluate of an endpoint needs read access to it.",
                 new
                 {
                     type = "object",
@@ -53,7 +53,11 @@ namespace Armada.Server.Mcp.Tools
                     {
                         captainId = new { type = "string", description = "Captain to evaluate (cpt_ prefix)" },
                         modelEndpointId = new { type = "string", description = "Model endpoint to evaluate (mep_ prefix)" },
-                        depth = new { type = "string", description = "Quick (default); Full is not implemented until Phase 5" }
+                        depth = new { type = "string", description = "Quick (default) or Full" },
+                        evaluatorCaptainId = new { type = "string", description = "Full only: evaluator captain (cpt_ prefix); default the highest-tier idle captain of a different model family" },
+                        packs = new { type = "array", items = new { type = "string" }, description = "Full only: battery packs to run; default the packs matching the languages of the tenant's repositories" },
+                        personas = new { type = "array", items = new { type = "string" }, description = "Full only: personas to score; default all the captain is allowed" },
+                        runCount = new { type = "integer", description = "Full only: runs of each battery task (1-10, default 3)" }
                     }
                 },
                 async (args) =>
@@ -69,11 +73,16 @@ namespace Armada.Server.Mcp.Tools
                     ModelProbeDepthEnum depth = ModelProbeDepthEnum.Quick;
                     if (!String.IsNullOrWhiteSpace(request.Depth) && !EnumNames.TryParse(request.Depth, true, out depth))
                         return (object)McpToolError.InvalidArgument("depth must be one of " + McpToolHelpers.EnumNames<ModelProbeDepthEnum>() + ".");
-                    if (depth == ModelProbeDepthEnum.Full)
-                        return (object)McpToolError.InvalidArgument(ModelProbeService.FullNotImplementedMessage);
+                    ModelEvaluationOptions options = new ModelEvaluationOptions
+                    {
+                        EvaluatorCaptainId = request.EvaluatorCaptainId,
+                        Packs = request.Packs,
+                        Personas = request.Personas,
+                        RunCount = request.RunCount
+                    };
 
-                    if (hasCaptain) return (object)await service.EvaluateCaptainAsync(caller, request.CaptainId, depth).ConfigureAwait(false);
-                    return (object)await service.EvaluateEndpointAsync(caller, request.ModelEndpointId, depth).ConfigureAwait(false);
+                    if (hasCaptain) return (object)await service.EvaluateCaptainAsync(caller, request.CaptainId, depth, options).ConfigureAwait(false);
+                    return (object)await service.EvaluateEndpointAsync(caller, request.ModelEndpointId, depth, options).ConfigureAwait(false);
                 });
 
             register(
@@ -103,7 +112,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         captainId = new { type = "string", description = "Captain filter (cpt_ prefix)" },
                         modelEndpointId = new { type = "string", description = "Model endpoint filter (mep_ prefix)" },
-                        status = new { type = "string", description = "Queued, Running, Completed, or Failed" },
+                        status = new { type = "string", description = "Queued, Running, Completed, Failed, or Cancelled" },
                         pageNumber = new { type = "integer", description = "Page number (default 1)" },
                         pageSize = new { type = "integer", description = "Page size (1-1000, default 25)" }
                     }
@@ -123,6 +132,23 @@ namespace Armada.Server.Mcp.Tools
                     };
                     ModelProbeRunQuery query = ModelProbeRoutes.ParseQuery(key => values.TryGetValue(key, out string? v) ? v : null);
                     return (object)await service.ListRunsAsync(caller, query).ConfigureAwait(false);
+                });
+
+            register(
+                "cancel_model_probe_run",
+                "Cancel a running Evaluate (Quick or Full): no further probe, battery task or grading starts, the open battery mission is cancelled (releasing its dock and captain), and the run ends Cancelled with what finished kept; a Full run keeps a partial report marked incomplete. A finished run is returned unchanged. Needs a global admin or a tenant admin of the run's tenant.",
+                new
+                {
+                    type = "object",
+                    properties = new { id = new { type = "string", description = "Run ID" } },
+                    required = new[] { "id" }
+                },
+                async (args) =>
+                {
+                    if (service == null) return (object)McpToolError.Unavailable(UnavailableMessage);
+                    AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    ModelProbeRunIdArgs request = Read<ModelProbeRunIdArgs>(args);
+                    return (object)await service.CancelRunAsync(caller, request.Id).ConfigureAwait(false);
                 });
         }
 

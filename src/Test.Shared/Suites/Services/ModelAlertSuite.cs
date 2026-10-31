@@ -200,6 +200,28 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, otherTenant.Resolved, "evaluating another tenant does not resolve this tenant's alerts");
             }));
 
+            cases.Add(DbCase("evaluation_outcomes_never_alert", "Failing evaluation outcomes (Full Evaluate and battery missions, isEvaluation) raise no alert and are not a production pair; the same failures in production raise one", async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                await CreateProfileAsync(db, Tenant).ConfigureAwait(false);
+                if (await db.Personas.ReadByNameAsync("Worker").ConfigureAwait(false) == null) await CreatePersonaAsync(db, "Worker", null).ConfigureAwait(false);
+                for (int i = 0; i < 10; i++)
+                    await db.StageOutcomes.CreateAsync(Outcome("msn_eval" + i, false, 2 + i * 0.1, o => o.IsEvaluation = true)).ConfigureAwait(false);
+
+                ModelAlertSettings settings = new ModelAlertSettings();
+                ModelAlertService service = new ModelAlertService(db, Quiet(), () => settings);
+                ModelAlertEvaluation evaluationOnly = await service.EvaluateAsync(null, _Now).ConfigureAwait(false);
+                AssertEqual(0, evaluationOnly.Pairs, "evaluation outcomes make no production pair");
+                AssertEqual(0, evaluationOnly.Raised.Count, "no alert from evaluation work");
+
+                for (int i = 0; i < 8; i++)
+                    await db.StageOutcomes.CreateAsync(Outcome("msn_prod" + i, i < 3, 2 + i * 0.1)).ConfigureAwait(false);
+                ModelAlertEvaluation production = await service.EvaluateAsync(null, _Now).ConfigureAwait(false);
+                AssertEqual(1, production.Raised.Count, "the same failures in production raise an alert");
+                AssertStartsWith(ModelName + " as Worker on all vessels: first pass 3 of 8 ", production.Raised[0].Title, "only the production outcomes are counted");
+            }));
+
             cases.Add(DbCase("streak_metric_and_per_vessel", "The scorecard reports escalations in a row; three escalations in a row raise their own alert, and IncludeVessels adds a per-vessel alert", async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

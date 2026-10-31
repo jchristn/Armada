@@ -110,6 +110,57 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Record a Full Evaluate report as an advisory profile update: a new immutable revision that repeats the
+        /// provenance of the revision the run was recorded on, carries the report, and is marked compatible with that
+        /// revision so the scorecard pools the two. Nothing reads it for routing, persona captain lists or prompts.
+        /// </summary>
+        /// <param name="resolution">The profile and revision the run was recorded on.</param>
+        /// <param name="report">The report.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The new revision.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when resolution or report is null.</exception>
+        public async Task<ModelProfileRevision> RecordEvaluationAsync(ModelProfileResolution resolution, ModelEvaluationReport report, CancellationToken token = default)
+        {
+            if (resolution == null) throw new ArgumentNullException(nameof(resolution));
+            if (report == null) throw new ArgumentNullException(nameof(report));
+            ModelProfileRevision basis = resolution.Revision;
+            report.ProfileId = resolution.Profile.Id;
+            ModelProfileRevision advisory = new ModelProfileRevision
+            {
+                ProfileId = resolution.Profile.Id,
+                TenantId = resolution.Profile.TenantId,
+                RuntimeVersion = basis.RuntimeVersion,
+                ModelDigest = basis.ModelDigest,
+                Sampling = new ModelProfileSampling { Temperature = basis.Sampling.Temperature, TopP = basis.Sampling.TopP },
+                ToolConfiguration = new ModelProfileToolConfiguration { Tools = basis.ToolConfiguration.Tools, Mcp = basis.ToolConfiguration.Mcp },
+                FirstSeenUtc = DateTime.UtcNow,
+                EvaluationRunId = report.RunId
+            };
+            report.ProfileRevisionId = advisory.Id;
+            advisory.EvaluationReport = report;
+
+            await _Gate.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                advisory = await _Database.ModelProfiles.CreateRevisionAsync(advisory, token).ConfigureAwait(false);
+                if (!String.IsNullOrEmpty(basis.Id))
+                {
+                    List<string> compatible = new List<string>(basis.CompatibleWith);
+                    if (!compatible.Contains(basis.Id)) compatible.Add(basis.Id);
+                    await _Database.ModelProfiles.SetCompatibleWithAsync(advisory.Id, compatible, token).ConfigureAwait(false);
+                    advisory.CompatibleWith = compatible;
+                }
+            }
+            finally
+            {
+                _Gate.Release();
+            }
+
+            _Logging.Info(_Header + "profile " + resolution.Profile.Id + " has advisory revision " + advisory.Id + " from Full Evaluate " + report.RunId);
+            return advisory;
+        }
+
+        /// <summary>
         /// <see cref="ResolveAsync"/> for callers that only observe in passing: any failure is logged and gives null, so
         /// it never fails a mission or a probe run. An observation without a runtime gives null.
         /// </summary>

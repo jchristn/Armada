@@ -4,9 +4,10 @@ namespace Armada.Core.Models
 
     /// <summary>
     /// Request to start an Evaluate of a captain or a model endpoint. Exactly one of <see cref="CaptainId"/> and
-    /// <see cref="ModelEndpointId"/> is set.
+    /// <see cref="ModelEndpointId"/> is set. The inherited Full Evaluate parameters (evaluator, packs, personas, run count)
+    /// apply only to depth Full.
     /// </summary>
-    public class EvaluateCaptainRequest
+    public class EvaluateCaptainRequest : ModelEvaluationOptions
     {
         #region Public-Members
 
@@ -21,7 +22,8 @@ namespace Armada.Core.Models
         public string? ModelEndpointId { get; set; } = null;
 
         /// <summary>
-        /// Depth; default Quick. Full is rejected until Phase 5.
+        /// Depth; default Quick (the mechanical probes). Full adds the fixture battery, the evaluator's subjective grading and
+        /// an advisory model profile revision carrying the report; it runs only when asked for.
         /// </summary>
         public ModelProbeDepthEnum Depth { get; set; } = ModelProbeDepthEnum.Quick;
 

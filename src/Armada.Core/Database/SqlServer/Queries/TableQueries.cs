@@ -2300,7 +2300,13 @@ namespace Armada.Core.Database.SqlServer.Queries
                     );",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_alerts_alert_key') CREATE UNIQUE INDEX idx_model_alerts_alert_key ON model_alerts(alert_key);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_alerts_tenant_status_raised') CREATE INDEX idx_model_alerts_tenant_status_raised ON model_alerts(tenant_id, status, last_raised_utc);",
-                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_alerts_profile') CREATE INDEX idx_model_alerts_profile ON model_alerts(profile_id);")
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_model_alerts_profile') CREATE INDEX idx_model_alerts_profile ON model_alerts(profile_id);"),
+
+                new SchemaMigration(109, "Add Full Evaluate results: model_probe_runs.battery_run_id and report_json (the Full report), model_profile_revisions.evaluation_run_id and evaluation_report_json (the advisory revision a Full Evaluate records)",
+                    @"IF COL_LENGTH('model_probe_runs', 'battery_run_id') IS NULL ALTER TABLE model_probe_runs ADD battery_run_id NVARCHAR(64) NULL;",
+                    @"IF COL_LENGTH('model_probe_runs', 'report_json') IS NULL ALTER TABLE model_probe_runs ADD report_json NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('model_profile_revisions', 'evaluation_run_id') IS NULL ALTER TABLE model_profile_revisions ADD evaluation_run_id NVARCHAR(64) NULL;",
+                    @"IF COL_LENGTH('model_profile_revisions', 'evaluation_report_json') IS NULL ALTER TABLE model_profile_revisions ADD evaluation_report_json NVARCHAR(MAX) NULL;")
 
 
             };

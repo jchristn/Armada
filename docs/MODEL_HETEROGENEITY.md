@@ -667,6 +667,26 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
    `ignore_model_alert`. The persona-scoped quarantine stays in Phase 6.
 4. Full Evaluate: the fixture battery on top of the Quick probes from Phase 2, with the evaluator grading only the
    subjective parts and writing the strengths and weaknesses summary from the counts.
+   Status: implemented (migration 109). `evaluate_captain` and `POST /api/v1/captains/{id}/evaluate` (and the model
+   endpoint route) accept depth `Full` with `evaluatorCaptainId`, `packs` (default: packs matching the primary languages
+   of the tenant's repositories, else the first installed pack with a note), `personas` (default: all the captain is
+   allowed) and `runCount`; Quick stays the default. `ModelProbeService` runs the probes, then a battery run through
+   `BatteryRunService` under the same per-inference-host evaluation slot, then one evaluator exchange through the probe
+   executor. `EvaluatorSelector` picks the highest-tier idle captain of another `ModelFamily` (same family only as a
+   fallback, with a warning; none skips the narrative with the reason). The report (`ModelProbeRun.Report`) holds probe
+   counts and per-persona counts per task; `EvaluationNarrativeValidator` rejects a reply that does not parse, names an
+   unknown count, misquotes one or cites any "N of M" that is not a count, keeping the mechanical report. Subjective grades
+   of PendingEvaluation attempts are listed beside the counts and never change them. A complete report becomes an advisory
+   `ModelProfileRevision` (`EvaluationRunId`, `EvaluationReport`) marked compatible with the observed revision; nothing
+   reads it for routing. Battery missions are `IsEvaluation`; settings `evaluation.fullRunTokenBudget` (3,000,000) and
+   `evaluation.fullRunTimeoutMinutes` (720). Cancel (`POST /api/v1/model-probe-runs/{id}/cancel`, MCP
+   `cancel_model_probe_run`) and the timeout cancel the open battery mission and leave a partial report marked
+   incomplete. The dashboard Evaluate control starts Full with the defaults and shows the report. Gaps: the `ModelEvaluation`
+   pipeline still runs one mission per battery task (no separate Evaluate pipeline stage); the evaluator runs as a single
+   probe-executor exchange, not a mission; a model endpoint's battery needs a saved captain that drives it; battery token
+   use is estimated from prompt and output length; an incomplete report is not recorded on the profile; the dashboard has
+   no dialog for evaluator, packs or personas (REST and MCP only), and the TUI has no Evaluate view; the `measured`
+   profile block is still not filled from the report.
 
 ### Phase 6: sizing and routing
 

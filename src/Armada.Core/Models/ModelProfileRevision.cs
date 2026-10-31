@@ -75,6 +75,18 @@ namespace Armada.Core.Models
         /// </summary>
         public DateTime FirstSeenUtc { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// Full Evaluate run whose report this advisory revision carries (mpr_ prefix), or null for a revision recorded
+        /// from an observation. Such a revision repeats the provenance of the revision it was recorded on and is marked
+        /// compatible with it, so it never splits the scorecard.
+        /// </summary>
+        public string? EvaluationRunId { get; set; } = null;
+
+        /// <summary>
+        /// The Full Evaluate report this revision carries, or null. Advisory only: nothing reads it for routing.
+        /// </summary>
+        public ModelEvaluationReport? EvaluationReport { get; set; } = null;
+
         #endregion
 
         #region Private-Members

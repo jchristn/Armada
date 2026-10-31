@@ -4544,6 +4544,7 @@
       "responses": {
         "201": "ModelProbeRun",
         "400": "",
+        "403": "ApiErrorResponse",
         "404": ""
       },
       "tags": [
@@ -4618,6 +4619,24 @@
         "ModelProbes"
       ],
       "summary": "Get an Evaluate run",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/model-probe-runs/{id}/cancel",
+      "auth": "TenantAdmin",
+      "resource": "ModelProbeRun:Execute",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "ModelProbeRun",
+        "403": "ApiErrorResponse",
+        "404": ""
+      },
+      "tags": [
+        "ModelProbes"
+      ],
+      "summary": "Cancel an Evaluate run",
       "experimental": false
     },
     {
@@ -8987,6 +9006,20 @@
       "experimental": false
     },
     {
+      "name": "cancel_model_probe_run",
+      "auth": "TenantAdmin",
+      "resource": "ModelProbeRun:Execute",
+      "arguments": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Cancel a running Evaluate (Quick or Full): no further probe, battery task or grading starts, the open battery mission is cancelled (releasing its dock and captain), and the run ends Cancelled with what finished kept; a Full run keeps a partial report marked incomplete. A finished run is returned unchanged. Needs a global admin or a tenant admin of the run's tenant.",
+      "experimental": false
+    },
+    {
       "name": "cancel_voyage",
       "auth": "TenantAdmin",
       "resource": "Voyage:Execute",
@@ -11346,12 +11379,32 @@
           "required": false
         },
         {
+          "name": "evaluatorCaptainId",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "modelEndpointId",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "packs",
+          "type": "array<string>",
+          "required": false
+        },
+        {
+          "name": "personas",
+          "type": "array<string>",
+          "required": false
+        },
+        {
+          "name": "runCount",
+          "type": "integer",
+          "required": false
         }
       ],
-      "description": "Start a Quick Evaluate: probe-only mechanical probes (output contract, served context, ASCII and format rules, tool calling, speed, determinism) through the captain's own runtime, or through the API endpoint runtime for a model endpoint. Give exactly one of captainId or modelEndpointId. Returns the queued run at once; poll get_model_probe_run. Probes record observations; a probe a runtime cannot run is CouldNotRun with the reason. Nothing changes routing or captain settings. Evaluating a captain needs a global admin or a tenant admin of its tenant; evaluating an endpoint needs read access to it. Depth Full is not implemented until Phase 5.",
+      "description": "Start an Evaluate. Quick (default): mechanical probes (output contract, served context, ASCII and format rules, tool calling, speed, determinism) through the captain's own runtime, or through the API endpoint runtime for a model endpoint. Full (only when asked): the Quick probes plus a fixture battery run (packs default to those matching the tenant's repository languages; personas default to all the captain is allowed), then an evaluator captain (default: highest-tier idle captain of a different model family; same family only when no other is idle, with a warning) grades the subjective attempts and writes strengths and weaknesses citing the mechanical counts; a narrative that does not parse or cites wrong counts is rejected with the reason and the mechanical report kept. A complete Full report becomes an advisory model profile revision; nothing changes routing, persona captain lists or prompts. Give exactly one of captainId or modelEndpointId. Returns the queued run at once; poll get_model_probe_run, stop with cancel_model_probe_run. Evaluating a captain, or any Full Evaluate, needs a global admin or a tenant admin; a Quick Evaluate of an endpoint needs read access to it.",
       "experimental": false
     },
     {
@@ -27135,6 +27188,18 @@
       "key": "evaluation.dailyTokenBudgetPerHost",
       "type": "long",
       "default": "1000000",
+      "experimental": false
+    },
+    {
+      "key": "evaluation.fullRunTimeoutMinutes",
+      "type": "int",
+      "default": "720",
+      "experimental": false
+    },
+    {
+      "key": "evaluation.fullRunTokenBudget",
+      "type": "long",
+      "default": "3000000",
       "experimental": false
     },
     {

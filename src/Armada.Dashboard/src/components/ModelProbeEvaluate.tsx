@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { evaluateCaptain, evaluateModelEndpoint, getModelProbeRun } from '../api/client';
-import type { ModelProbeKind, ModelProbeOutcome, ModelProbeRun } from '../types/models';
+import { cancelModelProbeRun, evaluateCaptain, evaluateModelEndpoint, getModelProbeRun } from '../api/client';
+import type { ModelEvaluationReport, ModelProbeDepth, ModelProbeKind, ModelProbeOutcome, ModelProbeRun } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import StatusBadge from './shared/StatusBadge';
 
@@ -33,10 +33,56 @@ interface ModelProbeEvaluateProps {
 }
 
 function isFinished(run: ModelProbeRun | null): boolean {
-  return !!run && (run.status === 'Completed' || run.status === 'Failed');
+  return !!run && (run.status === 'Completed' || run.status === 'Failed' || run.status === 'Cancelled');
 }
 
-/** Evaluate button: starts a Quick probe run, polls it until it finishes, and shows the result counts. */
+/** The Full Evaluate report: completeness, evaluator, per-persona counts (the source of truth) and the narrative. */
+function FullReport({ report }: { report: ModelEvaluationReport }) {
+  const { t } = useLocale();
+  const narrative = report.narrative;
+  return (
+    <div className="model-evaluation-report" data-testid="model-evaluation-report" style={{ marginTop: '0.5rem' }}>
+      <p className={report.complete ? 'text-dim' : 'text-danger'}>
+        {report.complete ? t('Report complete') : t('Incomplete: {{reason}}', { reason: report.incompleteReason ?? '' })}
+        {report.evaluatorCaptainName && <span className="text-dim">{' '}{t('Evaluator: {{name}}', { name: report.evaluatorCaptainName })}</span>}
+      </p>
+      {report.warnings.map((warning) => <p key={warning} className="text-warning">{warning}</p>)}
+      {report.personaOutcomes.length > 0 && (
+        <ul className="model-evaluation-personas" style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem' }}>
+          {report.personaOutcomes.map((outcome) => (
+            <li key={outcome.persona}>
+              {t('{{persona}}: {{passed}} of {{graded}} passed, {{pending}} pending, {{couldNotRun}} could not run', {
+                persona: outcome.persona, passed: outcome.totals.passed, graded: outcome.totals.graded,
+                pending: outcome.totals.pendingEvaluation, couldNotRun: outcome.totals.couldNotRun,
+              })}
+            </li>
+          ))}
+        </ul>
+      )}
+      {narrative.status === 'Accepted' && (
+        <>
+          {narrative.strengths.length > 0 && (
+            <><strong>{t('Strengths')}</strong><ul>{narrative.strengths.map((f) => <li key={f.key + f.text}>{f.text}</li>)}</ul></>
+          )}
+          {narrative.weaknesses.length > 0 && (
+            <><strong>{t('Weaknesses')}</strong><ul>{narrative.weaknesses.map((f) => <li key={f.key + f.text}>{f.text}</li>)}</ul></>
+          )}
+          {narrative.observedProblems.length > 0 && (
+            <><strong>{t('Observed problems')}</strong><ul>{narrative.observedProblems.map((p) => <li key={p}>{p}</li>)}</ul></>
+          )}
+          {narrative.howToWork && <p><strong>{t('How to work with this model')}</strong>{' '}{narrative.howToWork}</p>}
+        </>
+      )}
+      {narrative.status === 'Skipped' && <p className="text-dim">{t('Subjective grading skipped: {{reason}}', { reason: narrative.reason ?? '' })}</p>}
+      {narrative.status === 'Rejected' && <p className="text-warning">{t('Narrative rejected: {{reason}}', { reason: narrative.reason ?? '' })}</p>}
+    </div>
+  );
+}
+
+/**
+ * Evaluate buttons: Evaluate starts a Quick probe run, Full Evaluate adds the fixture battery and the evaluator's grading
+ * (with the server defaults); either is polled until it finishes and can be cancelled while it runs.
+ */
 export default function ModelProbeEvaluate({ target, targetId, onError, pollMs = MODEL_PROBE_POLL_MS }: ModelProbeEvaluateProps) {
   const { t } = useLocale();
   const [run, setRun] = useState<ModelProbeRun | null>(null);
@@ -60,7 +106,8 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
       try {
         const latest = await getModelProbeRun(runId);
         if (cancelled) return;
-        setRun(latest);
+        // A poll answered before a cancel must not replace the finished run the cancel returned.
+        setRun((previous) => (previous && previous.id === latest.id && isFinished(previous) && !isFinished(latest) ? previous : latest));
         if (isFinished(latest)) { setPolling(false); return; }
         timer = setTimeout(tick, pollMs);
       } catch (err) {
@@ -78,19 +125,30 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [polling, runId, pollMs]);
 
-  async function handleEvaluate() {
+  async function handleEvaluate(depth: ModelProbeDepth) {
     setStarting(true);
     setInlineError('');
     try {
       const started = target === 'captain'
-        ? await evaluateCaptain(targetId, 'Quick')
-        : await evaluateModelEndpoint(targetId, 'Quick');
+        ? await evaluateCaptain(targetId, depth)
+        : await evaluateModelEndpoint(targetId, depth);
       setRun(started);
       setPolling(!isFinished(started));
     } catch (err) {
       report(err instanceof Error ? err.message : t('Evaluate failed.'));
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function handleCancel() {
+    if (!run) return;
+    try {
+      const latest = await cancelModelProbeRun(run.id);
+      setRun(latest);
+      if (isFinished(latest)) setPolling(false);
+    } catch (err) {
+      report(err instanceof Error ? err.message : t('Evaluate failed.'));
     }
   }
 
@@ -103,12 +161,24 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
         <button
           type="button"
           className="btn btn-sm"
-          onClick={handleEvaluate}
+          onClick={() => handleEvaluate('Quick')}
           disabled={busy}
           title={t('Run the Quick mechanical probes against this target as an evaluation. Results are observations only: they never change routing or settings and never count in production stage outcomes.')}
         >
           {busy ? t('Evaluating...') : t('Evaluate')}
         </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={() => handleEvaluate('Full')}
+          disabled={busy}
+          title={t('Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.')}
+        >
+          {t('Full Evaluate')}
+        </button>
+        {polling && run && (
+          <button type="button" className="btn btn-sm" onClick={handleCancel}>{t('Cancel')}</button>
+        )}
         {run && (
           <span data-testid="model-probe-counts">
             <StatusBadge status={run.status} />{' '}
@@ -134,6 +204,7 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
           ))}
         </ul>
       )}
+      {finished && run?.report && <FullReport report={run.report} />}
     </div>
   );
 }

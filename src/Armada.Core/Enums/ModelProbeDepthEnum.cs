@@ -16,7 +16,7 @@ namespace Armada.Core.Enums
         Quick,
 
         /// <summary>
-        /// Adds the fixture battery and the evaluator's grading (not implemented until Phase 5).
+        /// Adds the fixture battery, the evaluator's grading and an advisory model profile revision (only when asked for).
         /// </summary>
         [EnumMember(Value = "Full")]
         Full
