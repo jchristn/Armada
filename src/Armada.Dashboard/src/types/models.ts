@@ -4561,6 +4561,8 @@ export interface BatteryPackTextFile { path: string; content: string; }
 
 /** One per-task battery result of a Full Evaluate (GET /api/v1/battery/runs/{id}/results), with its mission and voyage. */
 export interface BatteryTaskResultInfo {
+  output?: string | null;
+  details?: Record<string, unknown> | null;
   id: string;
   runId: string;
   packId: string;
@@ -4585,5 +4587,6 @@ export interface BatteryTaskResultInfo {
 /** A model probe run with its battery task results, as the Evaluations detail page reads it. */
 export interface ModelProbeRunWithBattery extends ModelProbeRun {
   batteryResults?: BatteryTaskResultInfo[];
+  batteryResultsPage?: EnumerationResult<BatteryTaskResultInfo>;
   batteryResultsError?: string;
 }

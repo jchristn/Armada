@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import catalogSource from '../../../Armada.Server/wwwroot/i18n/armada.json?raw';
@@ -167,7 +167,7 @@ describe('Evaluation detail', () => {
     });
     renderDetail();
     expect(await screen.findByRole('heading', { name: 'Evaluation mpr_1' })).toBeInTheDocument();
-    expect(getModelProbeRun).toHaveBeenCalledWith('mpr_1', true, true);
+    expect(getModelProbeRun).toHaveBeenCalledWith('mpr_1', true, true, 1);
     expect(screen.getByTestId('evaluation-summary')).toHaveTextContent('4 passed, 1 failed, 1 could not run');
     expect(screen.getByRole('link', { name: 'qwen-one' })).toHaveAttribute('href', '/captains/cpt_1');
     expect(screen.getByRole('link', { name: 'All evaluations of this captain' })).toHaveAttribute('href', '/evaluations?captainId=cpt_1');
@@ -212,6 +212,77 @@ describe('Evaluation detail', () => {
     const calls = vi.mocked(getModelProbeRun).mock.calls.length;
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(vi.mocked(getModelProbeRun).mock.calls.length).toBe(calls);
+  });
+
+  it('pages results with boundaries and renders safe collapsible output and formatted details', async () => {
+    const user = userEvent.setup();
+    const result = { id: 'task_1', runId: 'bat_1', packId: 'pack', packVersion: 1, taskId: 'task', attempt: 1, outcome: 'Passed', durationMs: 1, createdUtc: '', output: '<b>raw output</b>', details: { score: 7 } };
+    vi.mocked(getModelProbeRun).mockImplementation(async (_id, _details, _results, number) => ({
+      ...FULL, batteryResults: number === 2 ? [] : [result], batteryResultsPage: page([], 2),
+    }));
+    renderDetail();
+    expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    expect(screen.getByText(/"score": 7/).textContent).toBe('{\n  "score": 7\n}');
+    const output = screen.getByText('Output');
+    expect(output.parentElement).not.toHaveAttribute('open');
+    await user.click(output);
+    expect(output.parentElement).toHaveAttribute('open');
+    expect(screen.getByText('<b>raw output</b>').tagName).toBe('PRE');
+    await user.click(output);
+    expect(output.parentElement).not.toHaveAttribute('open');
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled());
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+    expect(screen.queryByText('Output')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Previous' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled());
+    expect(getModelProbeRun).toHaveBeenLastCalledWith('mpr_1', true, true, 1);
+  });
+
+  it('disables both controls for empty results and omits empty task details and output', async () => {
+    vi.mocked(getModelProbeRun).mockResolvedValue({ ...FULL, batteryResults: [], batteryResultsPage: page([], 0) });
+    const view = renderDetail();
+    await screen.findByText('Page 1 of 1');
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    view.unmount();
+    vi.mocked(getModelProbeRun).mockResolvedValue({
+      ...FULL, batteryResultsPage: page([], 1),
+      batteryResults: [{ id: 'empty', runId: 'bat_1', packId: 'pack', packVersion: 1, taskId: 'task', attempt: 1, outcome: 'Passed', durationMs: 0, createdUtc: '', details: {}, output: '' }],
+    });
+    renderDetail();
+    await screen.findByRole('table');
+    expect(screen.queryByText('Output')).not.toBeInTheDocument();
+    expect(document.querySelector('td pre')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+  });
+
+  it('preserves the selected page while polling and ignores an old page response', async () => {
+    const user = userEvent.setup();
+    let resolveOld!: (value: ModelProbeRunWithBattery) => void;
+    const oldResponse = new Promise<ModelProbeRunWithBattery>(resolve => { resolveOld = resolve; });
+    let firstPageCalls = 0;
+    let secondPageCalls = 0;
+    vi.mocked(getModelProbeRun).mockImplementation(async (_id, _details, _results, number) => {
+      if (number === 1) {
+        firstPageCalls++;
+        if (firstPageCalls > 1) return oldResponse;
+      } else {
+        secondPageCalls++;
+      }
+      return { ...FULL, status: 'Running', batteryResultsPage: page([], 3) };
+    });
+    renderDetail();
+    await screen.findByText('Page 1 of 3');
+    await waitFor(() => expect(firstPageCalls).toBe(2));
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(secondPageCalls).toBeGreaterThan(1));
+    await act(async () => { resolveOld({ ...FULL, batteryResultsError: 'stale response' }); });
+    expect(screen.queryByText('stale response')).not.toBeInTheDocument();
+    expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
+    expect(getModelProbeRun).toHaveBeenLastCalledWith('mpr_1', true, true, 2);
   });
 
   it('shows a load error for an unknown run', async () => {

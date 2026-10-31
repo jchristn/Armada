@@ -36,15 +36,22 @@ export default function EvaluationDetail({ pollMs = MODEL_PROBE_POLL_MS }: Evalu
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [pageSelection, setPageSelection] = useState({ id, page: 1 });
+  const page = pageSelection.id === id ? pageSelection.page : 1;
+
+  useEffect(() => {
+    setRun(null);
+    setPageSelection({ id, page: 1 });
+  }, [id]);
+
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    setRun(null);
     setLoading(true);
     setError('');
     const load = async () => {
       try {
-        const latest = await getModelProbeRun(id, true, true);
+        const latest = await getModelProbeRun(id, true, true, page);
         if (disposed) return;
         setRun(latest);
         setError('');
@@ -60,13 +67,14 @@ export default function EvaluationDetail({ pollMs = MODEL_PROBE_POLL_MS }: Evalu
       disposed = true;
       if (timer) clearTimeout(timer);
     };
-    // t is stable for a locale; the run id and poll interval define the polling lifetime.
+    // Each run, page and poll interval owns its requests; cleanup ignores stale responses.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, pollMs]);
+  }, [id, pollMs, page]);
 
   const breadcrumb = <Link to={evaluationsListPath(run?.captainId)}>{t('Evaluations')}</Link>;
   const battery = run?.batteryProgress;
   const batteryResults = run?.batteryResults ?? [];
+  const totalPages = Math.max(1, run?.batteryResultsPage?.totalPages ?? 1);
 
   return (
     <div>
@@ -131,6 +139,13 @@ export default function EvaluationDetail({ pollMs = MODEL_PROBE_POLL_MS }: Evalu
                 </p>
               )}
               {!run.batteryRunId && <p className="text-dim">{t('The battery has not started yet.')}</p>}
+              {run.batteryResultsPage && (
+                <div>
+                  <button className="btn" disabled={loading || page <= 1} onClick={() => setPageSelection({ id, page: page - 1 })}>{t('Previous')}</button>{' '}
+                  <span>{t('Page {{page}} of {{total}}', { page, total: totalPages })}</span>{' '}
+                  <button className="btn" disabled={loading || page >= totalPages} onClick={() => setPageSelection({ id, page: page + 1 })}>{t('Next')}</button>
+                </div>
+              )}
               {batteryResults.length > 0 && (
                 <table className="data-table" aria-label={t('Battery results')}>
                   <thead>
@@ -144,7 +159,11 @@ export default function EvaluationDetail({ pollMs = MODEL_PROBE_POLL_MS }: Evalu
                         <td>{result.persona || '-'}</td>
                         <td>{result.attempt}</td>
                         <td><span className={`tag ${String(result.outcome).toLowerCase()}`}>{t(BATTERY_OUTCOME_LABELS[result.outcome] ?? result.outcome)}</span></td>
-                        <td>{result.summary || result.reason || ''}</td>
+                        <td>
+                          {result.summary || result.reason || ''}
+                          {result.details && Object.keys(result.details).length > 0 && <pre>{JSON.stringify(result.details, null, 2)}</pre>}
+                          {result.output && <details key={result.id}><summary>{t('Output')}</summary><pre>{result.output}</pre></details>}
+                        </td>
                         <td>{result.missionId ? <Link to={`/missions/${encodeURIComponent(result.missionId)}`}>{result.missionId}</Link> : '-'}</td>
                         <td>{result.voyageId ? <Link to={`/voyages/${encodeURIComponent(result.voyageId)}`}>{result.voyageId}</Link> : '-'}</td>
                       </tr>
