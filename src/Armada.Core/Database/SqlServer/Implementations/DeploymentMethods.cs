@@ -417,17 +417,21 @@ namespace Armada.Core.Database.SqlServer.Implementations
             if (Enum.TryParse(reader["verification_status"].ToString(), true, out DeploymentVerificationStatusEnum verificationStatus))
                 deployment.VerificationStatus = verificationStatus;
 
-            deployment.CheckRunIds = Deserialize<List<string>>(SqlServerDatabaseDriver.NullableString(reader["check_run_ids_json"])) ?? new List<string>();
-            deployment.RequestHistorySummary = Deserialize<RequestHistorySummaryResult>(SqlServerDatabaseDriver.NullableString(reader["request_history_summary_json"]));
+            deployment.CheckRunIds = Deserialize<List<string>>(SqlServerDatabaseDriver.NullableString(reader["check_run_ids_json"]), deployment.Id, "check_run_ids_json") ?? new List<string>();
+            deployment.RequestHistorySummary = Deserialize<RequestHistorySummaryResult>(SqlServerDatabaseDriver.NullableString(reader["request_history_summary_json"]), deployment.Id, "request_history_summary_json");
             return deployment;
         }
 
-        private static T? Deserialize<T>(string? json)
+        private static T? Deserialize<T>(string? json, string entityId, string columnName)
         {
             if (String.IsNullOrWhiteSpace(json)) return default;
             try
             {
                 return JsonSerializer.Deserialize<T>(json, _Json);
+            }
+            catch (JsonException exception)
+            {
+                throw new InvalidOperationException("Invalid JSON in " + columnName + " for row " + entityId + ".", exception);
             }
             catch
             {

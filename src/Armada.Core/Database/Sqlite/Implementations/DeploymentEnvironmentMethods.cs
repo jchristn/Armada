@@ -292,17 +292,21 @@ namespace Armada.Core.Database.Sqlite.Implementations
 
             if (Enum.TryParse(reader["kind"].ToString(), true, out EnvironmentKindEnum kind))
                 environment.Kind = kind;
-            environment.VerificationDefinitions = Deserialize<List<DeploymentVerificationDefinition>>(SqliteDatabaseDriver.NullableString(reader["verification_definitions_json"])) ?? new List<DeploymentVerificationDefinition>();
+            environment.VerificationDefinitions = Deserialize<List<DeploymentVerificationDefinition>>(SqliteDatabaseDriver.NullableString(reader["verification_definitions_json"]), environment.Id, "verification_definitions_json") ?? new List<DeploymentVerificationDefinition>();
 
             return environment;
         }
 
-        private static T? Deserialize<T>(string? json)
+        private static T? Deserialize<T>(string? json, string entityId, string columnName)
         {
             if (String.IsNullOrWhiteSpace(json)) return default;
             try
             {
                 return JsonSerializer.Deserialize<T>(json, _Json);
+            }
+            catch (JsonException exception)
+            {
+                throw new InvalidOperationException("Invalid JSON in " + columnName + " for row " + entityId + ".", exception);
             }
             catch
             {

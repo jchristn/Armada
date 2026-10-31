@@ -780,6 +780,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (!String.IsNullOrWhiteSpace(protectedPatternsJson))
                     vessel.ProtectedBranchPatterns = JsonSerializer.Deserialize<List<string>>(protectedPatternsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in protected_branch_patterns_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.ReleaseBranchPrefix = NullableString(reader["release_branch_prefix"]) ?? "release/"; } catch { vessel.ReleaseBranchPrefix = "release/"; }
             try { vessel.HotfixBranchPrefix = NullableString(reader["hotfix_branch_prefix"]) ?? "hotfix/"; } catch { vessel.HotfixBranchPrefix = "hotfix/"; }
@@ -793,6 +794,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (!String.IsNullOrWhiteSpace(protectedPathPatternsJson))
                     vessel.ProtectedPathPatterns = JsonSerializer.Deserialize<List<string>>(protectedPathPatternsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in protected_path_patterns_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try
             {
@@ -800,6 +802,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (!String.IsNullOrWhiteSpace(privateIdentifierDenylistJson))
                     vessel.PrivateIdentifierDenylist = JsonSerializer.Deserialize<List<string>>(privateIdentifierDenylistJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in private_identifier_denylist_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.AutoLandEnabled = Convert.ToBoolean(reader["auto_land_enabled"]); }
             catch { vessel.AutoLandEnabled = false; }
@@ -811,6 +814,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (!String.IsNullOrWhiteSpace(autoLandPathAllowGlobsJson))
                     vessel.AutoLandPathAllowGlobs = JsonSerializer.Deserialize<List<string>>(autoLandPathAllowGlobsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in auto_land_path_allow_globs_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try
             {
@@ -818,6 +822,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (!String.IsNullOrWhiteSpace(autoLandPathDenyGlobsJson))
                     vessel.AutoLandPathDenyGlobs = JsonSerializer.Deserialize<List<string>>(autoLandPathDenyGlobsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in auto_land_path_deny_globs_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.DefinitionOfDoneEnabled = Convert.ToBoolean(reader["definition_of_done_enabled"]); }
             catch { vessel.DefinitionOfDoneEnabled = false; }

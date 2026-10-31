@@ -1477,6 +1477,7 @@ namespace Armada.Core.Database.Mysql
                 if (!String.IsNullOrWhiteSpace(protectedPatternsJson))
                     vessel.ProtectedBranchPatterns = JsonSerializer.Deserialize<List<string>>(protectedPatternsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in protected_branch_patterns_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.ReleaseBranchPrefix = NullableString(reader["release_branch_prefix"]) ?? "release/"; }
             catch { vessel.ReleaseBranchPrefix = "release/"; }

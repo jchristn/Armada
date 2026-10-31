@@ -319,8 +319,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 profile.Scope = scope;
                 profile.OwnershipScope = System.Enum.TryParse<Armada.Core.Enums.ScopeEnum>(reader["ownership_scope"]?.ToString(), true, out Armada.Core.Enums.ScopeEnum __os) ? __os : Armada.Core.Enums.ScopeEnum.TenantWide;
 
-            profile.PersonaOverrides = Deserialize<List<PersonaOverride>>(NullableString(reader["persona_overrides_json"])) ?? new List<PersonaOverride>();
-            profile.Skills = Deserialize<List<string>>(NullableString(reader["skills_json"])) ?? new List<string>();
+            profile.PersonaOverrides = Deserialize<List<PersonaOverride>>(NullableString(reader["persona_overrides_json"]), profile.Id, "persona_overrides_json") ?? new List<PersonaOverride>();
+            profile.Skills = Deserialize<List<string>>(NullableString(reader["skills_json"]), profile.Id, "skills_json") ?? new List<string>();
             return profile;
         }
 
@@ -329,12 +329,16 @@ namespace Armada.Core.Database.Postgresql.Implementations
             return JsonSerializer.Serialize(value ?? Activator.CreateInstance<T>(), _Json);
         }
 
-        private static T? Deserialize<T>(string? json)
+        private static T? Deserialize<T>(string? json, string entityId, string columnName)
         {
             if (String.IsNullOrWhiteSpace(json)) return default;
             try
             {
                 return JsonSerializer.Deserialize<T>(json, _Json);
+            }
+            catch (JsonException exception)
+            {
+                throw new InvalidOperationException("Invalid JSON in " + columnName + " for row " + entityId + ".", exception);
             }
             catch
             {

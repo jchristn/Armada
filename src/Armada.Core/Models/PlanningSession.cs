@@ -145,9 +145,9 @@ namespace Armada.Core.Models
             {
                 SelectedPlaybooks = JsonSerializer.Deserialize<List<SelectedPlaybook>>(json) ?? new List<SelectedPlaybook>();
             }
-            catch
+            catch (JsonException exception)
             {
-                SelectedPlaybooks = new List<SelectedPlaybook>();
+                throw new InvalidOperationException("Invalid JSON in selected_playbooks_json for row " + Id + ".", exception);
             }
         }
 

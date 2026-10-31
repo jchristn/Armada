@@ -853,6 +853,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 if (!String.IsNullOrWhiteSpace(protectedPathJson))
                     vessel.ProtectedPathPatterns = JsonSerializer.Deserialize<List<string>>(protectedPathJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in protected_path_patterns_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try
             {
@@ -860,6 +861,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 if (!String.IsNullOrWhiteSpace(denylistJson))
                     vessel.PrivateIdentifierDenylist = JsonSerializer.Deserialize<List<string>>(denylistJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in private_identifier_denylist_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.AutoLandEnabled = Convert.ToInt64(reader["auto_land_enabled"]) == 1; } catch { }
             try { vessel.AutoLandMaxFiles = Convert.ToInt32(reader["auto_land_max_files"]); } catch { }
@@ -870,6 +872,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 if (!String.IsNullOrWhiteSpace(allowGlobsJson))
                     vessel.AutoLandPathAllowGlobs = JsonSerializer.Deserialize<List<string>>(allowGlobsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in auto_land_path_allow_globs_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try
             {
@@ -877,6 +880,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 if (!String.IsNullOrWhiteSpace(denyGlobsJson))
                     vessel.AutoLandPathDenyGlobs = JsonSerializer.Deserialize<List<string>>(denyGlobsJson) ?? new List<string>();
             }
+            catch (JsonException exception) { throw new InvalidOperationException("Invalid JSON in auto_land_path_deny_globs_json for vessel " + vessel.Id + ".", exception); }
             catch { }
             try { vessel.DefinitionOfDoneEnabled = Convert.ToInt64(reader["definition_of_done_enabled"]) == 1; } catch { }
             try { vessel.DefinitionOfDoneBuildCommand = NullableString(reader["definition_of_done_build_command"]); } catch { }
