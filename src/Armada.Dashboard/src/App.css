@@ -8847,6 +8847,17 @@ tr.row-muted td { opacity: 0.72; }
 }
 .ask-milestone-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0.3rem; }
 .ask-milestone-link { margin-left: auto; }
+/* Progress update cards pin the copy control to the card's top-right corner (the card is the positioning context);
+   the header reserves its width and height (the copy-btn is 20px square, top-aligned with the header row) so neither
+   a wrapped label, time or "Show live card" link nor the message body runs under it. */
+.ask-msg-milestone { position: relative; }
+.ask-milestone-head { min-height: 20px; padding-right: calc(20px + 0.5rem); }
+.ask-msg-milestone .ask-msg-copy {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    margin: 0;
+}
 .ask-msg-summary {
     align-self: stretch;
     max-width: none;
