@@ -375,7 +375,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM docks WHERE tenant_id = @tenantId ORDER BY name;";
+                    cmd.CommandText = "SELECT * FROM docks WHERE tenant_id = @tenantId ORDER BY created_utc DESC;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -580,7 +580,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM docks WHERE tenant_id = @tenantId AND user_id = @userId ORDER BY name;";
+                    cmd.CommandText = "SELECT * FROM docks WHERE tenant_id = @tenantId AND user_id = @userId ORDER BY created_utc DESC;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@userId", userId);
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
