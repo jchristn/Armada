@@ -587,15 +587,41 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
 
 1. Quick probes (served context, output contract, ASCII and format rules, tool calling, speed, determinism) as a
    first, probe-only **Evaluate**. They need nothing else to exist and catch context mismatches at once.
+   Status: implemented (migration 94, `model_probe_runs` and `model_probe_results`). `ModelProbeService` runs the six
+   probes of `ModelProbeCatalog` (probe set `quick-1`) through the captain's own runtime, on its Harbor as a `ModelProbe`
+   job when it routes there, and `ModelProbeScorer` scores them; a probe that cannot apply or launch is CouldNotRun with
+   the reason, never Failed. Runs (`ModelProbeRun`, `ModelProbeResult`) carry provenance, are tagged as evaluations,
+   write no stage outcome and change no routing; the `Evaluation` settings group sets token budgets and concurrency
+   (`EvaluationConcurrencyGate`). Exposed through `evaluate_captain`, `get_model_probe_run` and `list_model_probe_runs`
+   and the matching REST routes. Tests: `Services.ModelProbe`, `Database.ModelProbePersistence`, `E2E.ModelProbes`,
+   `Client.Contract.ModelProbes`.
 2. The pack format and the C# pack with the tasks in [The fixture battery](#the-fixture-battery), running through
    real dispatch, Harbor execution, stage checks and completion parsing, with positive and negative review controls.
    The other language packs follow.
+   Status: implemented (migration 95, `battery_runs` and `battery_task_results`). Packs are data under
+   `battery/<pack>/battery-pack.json` (schema in `battery/README.md`), loaded and validated by `BatteryPackLoader`,
+   `BatteryPackValidator` and `BatteryPackCatalog`. `BatteryRunService` resets the fixture (`BatteryFixtureService`),
+   dispatches each task through real dispatch under the built-in ModelEvaluation pipeline with landing mode None and
+   grades it in the worktree on the host that ran it (`BatteryTaskGrader`, `BatterySeededSetGrader`,
+   `BatteryByteComparison`); a missing toolchain is CouldNotRun and rubric tasks are PendingEvaluation. Packs: C#
+   (commit d70486ad2), JavaScript, Python, Go and Rust (4cae06b53), Java, PHP and Ruby (02637ba42), all with the same ten
+   template tasks. Exposed through `run_battery`, `get_battery_run`, `list_battery_packs` and `list_battery_results`.
+   Tests: `Services.Battery`, `Battery.CSharpPack`, `Services.BatteryPacks`, `Database.BatteryPersistence`,
+   `E2E.Battery`.
 3. Record a baseline for each model in use.
 
 ### Phase 3: handoffs and contract repair
 
 1. Durable, versioned handoff artifacts with budgeted delivery suited to the reader (3.1), replacing the
    3000-character output and 4000-character diff excerpts.
+   Status: done (migration 97, `handoff_artifacts`; commit 8a78b728b). Every stage attempt stores a `HandoffArtifact`
+   (schema version 1: findings, acceptance criteria, stage-check result, commit references, full output and diff or a
+   pointer) built by `HandoffArtifactBuilder` and recorded by `HandoffArtifactService`. At launch `HandoffRenderer`
+   delivers it within the reader's token budget (`HandoffBudgetTokens`; findings first, then checks and diff, then a
+   pointer chosen by `HandoffReaderResolver` and an explicit did-not-fit list) instead of the fixed excerpts. Exposed
+   through `GET /api/v1/missions/{id}/handoff-artifacts`, `GET /api/v1/handoff-artifacts/{id}`, `get_handoff_artifact`
+   and `list_handoff_artifacts`. Tests: `Services.HandoffArtifacts`, `Database.HandoffArtifacts`,
+   `E2E.HandoffArtifacts`, `Client.Contract.HandoffArtifacts`.
 2. Rework prompts built from the artifact, one demand per line. Addresses C2 and C5.
    Status: done. `ReworkPromptBuilder` replaces the one-paragraph rework instruction. When the rework is scheduled, the
    description gets a rework section: a findings placeholder, the demands as a numbered list with one demand per line
@@ -708,9 +734,14 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
    escalated, waiting, no eligible captain, with every excluded captain and reason) is an event `mission.worker_envelope`
    recorded when it changes, so it shows in the mission timeline and black box. The rework escalation selector applies
    the envelope too. The Architect and Judge get the generated description through the `{WorkerEnvelope}` prompt
-   placeholder in the built-in templates (Current, Lean, Compact). Gaps: the envelope cannot be changed through mission
-   update, MCP `create_mission` has no envelope argument, and installations whose Architect or Judge template was
-   customized must add `{WorkerEnvelope}` themselves.
+   placeholder in the built-in templates (Current, Lean, Compact). Follow-up (gaps closed): mission update (REST
+   `PUT /api/v1/missions/{id}`, MCP and WebSocket `update_mission`) sets or clears the envelope with the dispatch
+   validation (400 / InvalidArgument when invalid or looser than the vessel default) and only while the mission is
+   Pending or Assigned and not started (409 / Conflict otherwise; an unchanged value is accepted on any status); MCP
+   `create_mission` and `armada mission create` (`--max-files`, `--max-steps`, `--min-context-tokens`, `--require-tool`)
+   accept an envelope; and a customized Architect or Judge template without `{WorkerEnvelope}` gets the rendered section
+   appended (one warning per template; the stored template is not rewritten). MCP `dispatch` missions[] items have their
+   own schema and take no envelope. Tests: `Services.WorkerEnvelope`.
 2. Routing changes based on profiles only after held-out production tasks support them.
 3. Optional persona-scoped quarantine, off by default.
 

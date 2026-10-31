@@ -13,6 +13,8 @@ namespace Test.Shared.Suites.Services
     using Armada.Core.Services;
     using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Server.Mcp;
+    using Armada.Server.Mcp.Tools;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -375,6 +377,168 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(Case("update_tighten_loosen_invalid_started", "Mission update: tighten accepted, loosen and invalid rejected, a change refused once the mission started, {} clears", TestTags.Negative, () =>
+            {
+                WorkerEnvelope vesselDefault = new WorkerEnvelope { MaxFiles = 5, RequiredTools = new List<string> { "tools" } };
+                Mission pending = new Mission("upd", "x") { Status = MissionStatusEnum.Pending };
+                WorkerEnvelope? tightened = WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(pending, vesselDefault, new WorkerEnvelope { MaxFiles = 3, RequiredTools = new List<string> { "TOOLS", "mcp" } });
+                AssertEqual(3, tightened!.MaxFiles, "a tighter envelope is accepted on a Pending mission");
+                AssertEqual("mcp,tools", String.Join(",", tightened.RequiredTools), "the accepted envelope is normalized");
+
+                ArgumentException loosened = Catch(() => WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(pending, vesselDefault, new WorkerEnvelope { MaxFiles = 9, RequiredTools = new List<string> { "tools" } }), "loosening is rejected");
+                AssertContains("never loosen", loosened.Message, "same reason as dispatch");
+                AssertContains("maxFiles 9", loosened.Message, "the loosened field is named");
+                ArgumentException invalid = Catch(() => WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(pending, null, new WorkerEnvelope { MaxSteps = 0 }), "an invalid value is rejected");
+                AssertContains("maxSteps", invalid.Message, "the invalid field is named");
+                AssertThrows<ArgumentException>(() => WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(pending, null, new WorkerEnvelope { RequiredTools = new List<string> { "browser" } }), "an unknown tool is rejected");
+
+                AssertNull(WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(new Mission { Status = MissionStatusEnum.Pending, WorkerEnvelope = new WorkerEnvelope { MaxFiles = 2 } }, null, JsonSerializer.Deserialize<WorkerEnvelope>("{}")!), "{} clears the envelope");
+
+                Mission assignedNotStarted = new Mission("a", "x") { Status = MissionStatusEnum.Assigned };
+                AssertTrue(WorkerEnvelopeRules.CanChangeMissionEnvelope(assignedNotStarted), "Assigned and not started may change");
+                AssertEqual(2, WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(assignedNotStarted, null, new WorkerEnvelope { MaxFiles = 2 })!.MaxFiles, "accepted on Assigned-not-started");
+
+                Mission running = new Mission("r", "x") { Status = MissionStatusEnum.InProgress, WorkerEnvelope = new WorkerEnvelope { MaxFiles = 4 } };
+                running.StartedUtc = DateTime.UtcNow;
+                string refusal = "";
+                try { WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(running, null, new WorkerEnvelope { MaxFiles = 2 }); }
+                catch (InvalidOperationException ex) { refusal = ex.Message; }
+                AssertTrue(refusal.Length > 0, "a change on an InProgress mission is refused");
+                AssertContains("Pending or Assigned and not started", refusal, "the refusal says when it may change");
+                AssertEqual(4, WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(running, null, new WorkerEnvelope { MaxFiles = 4 })!.MaxFiles, "echoing the stored envelope is a no-op on a started mission");
+
+                Mission assignedStarted = new Mission("s", "x") { Status = MissionStatusEnum.Assigned, ProcessId = 42 };
+                AssertFalse(WorkerEnvelopeRules.CanChangeMissionEnvelope(assignedStarted), "Assigned with a process has started");
+                AssertThrows<InvalidOperationException>(() => WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(assignedStarted, null, new WorkerEnvelope { MaxFiles = 2 }), "refused once a process runs");
+
+                Mission? minimalBody = JsonSerializer.Deserialize<Mission>("{\"title\":\"only a title\"}");
+                AssertNull(minimalBody!.WorkerEnvelope, "a minimal update body carries no envelope, so the stored one is kept");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(Case("mcp_update_mission_envelope", "MCP update_mission sets, keeps, rejects and refuses the envelope like REST", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    McpHarness mcp = await BuildMcpHarnessAsync(testDb.Driver, new WorkerEnvelope { MaxFiles = 5 }).ConfigureAwait(false);
+                    Mission mission = new Mission("mcp update", "x") { TenantId = Armada.Core.Constants.DefaultTenantId, VesselId = mcp.Vessel.Id, Status = MissionStatusEnum.Pending };
+                    mission = await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                    object ok = await mcp.Call("update_mission", new { missionId = mission.Id, workerEnvelope = new { maxFiles = 3 } }).ConfigureAwait(false);
+                    AssertFalse(ok is McpToolError, "tightening is accepted: " + JsonSerializer.Serialize(ok));
+                    AssertEqual(3, (await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!.WorkerEnvelope!.MaxFiles, "the tightened envelope persists");
+
+                    await mcp.Call("update_mission", new { missionId = mission.Id, title = "renamed" }).ConfigureAwait(false);
+                    AssertEqual(3, (await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!.WorkerEnvelope!.MaxFiles, "omitting workerEnvelope keeps it");
+
+                    McpToolError? loose = await mcp.Call("update_mission", new { missionId = mission.Id, workerEnvelope = new { maxFiles = 8 } }).ConfigureAwait(false) as McpToolError;
+                    AssertNotNull(loose, "loosening is an error");
+                    AssertEqual(McpToolErrorCodeEnum.InvalidArgument, loose!.ErrorCode, "loosening is InvalidArgument");
+                    McpToolError? bad = await mcp.Call("update_mission", new { missionId = mission.Id, workerEnvelope = new { minServedContextTokens = 0 } }).ConfigureAwait(false) as McpToolError;
+                    AssertEqual(McpToolErrorCodeEnum.InvalidArgument, bad!.ErrorCode, "an invalid value is InvalidArgument");
+                    AssertEqual(3, (await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!.WorkerEnvelope!.MaxFiles, "a rejected update changes nothing");
+
+                    Mission stored = (await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
+                    stored.Status = MissionStatusEnum.InProgress;
+                    stored.StartedUtc = DateTime.UtcNow;
+                    await testDb.Driver.Missions.UpdateAsync(stored).ConfigureAwait(false);
+                    McpToolError? started = await mcp.Call("update_mission", new { missionId = mission.Id, workerEnvelope = new { maxFiles = 2 } }).ConfigureAwait(false) as McpToolError;
+                    AssertNotNull(started, "a change on a started mission is an error");
+                    AssertEqual(McpToolErrorCodeEnum.Conflict, started!.ErrorCode, "refused as Conflict");
+                    AssertEqual(3, (await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!.WorkerEnvelope!.MaxFiles, "the started mission keeps its envelope");
+                }
+            }));
+
+            cases.Add(Case("mcp_create_mission_envelope", "MCP create_mission without an envelope uses the default; a tighter one is stored; a looser or invalid one is rejected and nothing is created", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    McpHarness mcp = await BuildMcpHarnessAsync(testDb.Driver, new WorkerEnvelope { MaxFiles = 5, RequiredTools = new List<string> { "tools" } }).ConfigureAwait(false);
+
+                    object plainResult = await mcp.Call("create_mission", new { title = "plain", description = "x", vesselId = mcp.Vessel.Id }).ConfigureAwait(false);
+                    AssertFalse(plainResult is McpToolError, "create without an envelope succeeds: " + JsonSerializer.Serialize(plainResult));
+                    Mission plain = DispatchedMission(plainResult);
+                    AssertNull((await testDb.Driver.Missions.ReadAsync(plain.Id).ConfigureAwait(false))!.WorkerEnvelope, "no own envelope; dispatch applies the vessel default");
+
+                    object tightResult = await mcp.Call("create_mission", new { title = "tight", description = "x", vesselId = mcp.Vessel.Id, workerEnvelope = new { maxFiles = 2, requiredTools = new[] { "MCP", "tools" } } }).ConfigureAwait(false);
+                    AssertFalse(tightResult is McpToolError, "create with a tighter envelope succeeds: " + JsonSerializer.Serialize(tightResult));
+                    WorkerEnvelope? stored = (await testDb.Driver.Missions.ReadAsync(DispatchedMission(tightResult).Id).ConfigureAwait(false))!.WorkerEnvelope;
+                    AssertEqual(2, stored!.MaxFiles, "the tighter envelope persists");
+                    AssertEqual("mcp,tools", String.Join(",", stored.RequiredTools), "normalized like REST");
+
+                    int before = (await testDb.Driver.Missions.EnumerateAsync().ConfigureAwait(false)).Count;
+                    McpToolError? loose = await mcp.Call("create_mission", new { title = "loose", description = "x", vesselId = mcp.Vessel.Id, workerEnvelope = new { maxFiles = 9 } }).ConfigureAwait(false) as McpToolError;
+                    AssertNotNull(loose, "a looser envelope is rejected");
+                    AssertEqual(McpToolErrorCodeEnum.InvalidArgument, loose!.ErrorCode, "InvalidArgument");
+                    AssertContains("never loosen", loose.Error ?? "", "the REST reason");
+                    McpToolError? bad = await mcp.Call("create_mission", new { title = "bad", description = "x", vesselId = mcp.Vessel.Id, workerEnvelope = new { requiredTools = new[] { "tools", "browser" } } }).ConfigureAwait(false) as McpToolError;
+                    AssertEqual(McpToolErrorCodeEnum.InvalidArgument, bad!.ErrorCode, "an unknown tool is InvalidArgument");
+                    AssertEqual(before, (await testDb.Driver.Missions.EnumerateAsync().ConfigureAwait(false)).Count, "a rejected create stores no mission");
+                }
+            }));
+
+            cases.Add(Case("customized_template_missing_placeholder", "A customized Architect/Judge template without {WorkerEnvelope} gets the section appended and one warning; no change with the placeholder or without an envelope", TestTags.Positive, async () =>
+            {
+                string section = WorkerEnvelopeRules.PromptSection(new WorkerEnvelope { MaxFiles = 3 }, "Architect");
+                string appendedPrompt = WorkerEnvelopeRules.EnsurePromptSection("custom architect prompt\n", "Architect", section, out bool appended);
+                AssertTrue(appended, "missing section is appended");
+                AssertEqual("custom architect prompt" + section, appendedPrompt, "appended after the template");
+                AssertFalse(WorkerEnvelopeRules.EnsurePromptSection("x" + section + " more", "Architect", section, out bool _).EndsWith(section + section), "an existing section is not duplicated");
+                WorkerEnvelopeRules.EnsurePromptSection("worker prompt", "Worker", section, out bool workerAppended);
+                AssertFalse(workerAppended, "Worker prompts are untouched");
+                AssertEqual("judge prompt", WorkerEnvelopeRules.EnsurePromptSection("judge prompt", "Judge", "", out bool _), "no envelope changes nothing");
+
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    List<string> warnings = new List<string>();
+                    LoggingModule logging = new LoggingModule();
+                    logging.Settings.EnableConsole = false;
+                    logging.MessageLogged += (entry) =>
+                    {
+                        if (entry.Severity == Severity.Warn && entry.Message.Contains("{WorkerEnvelope}", StringComparison.Ordinal))
+                            lock (warnings) warnings.Add(entry.Message);
+                    };
+                    PromptTemplateService templates = new PromptTemplateService(testDb.Driver, logging);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    PromptTemplate architectTemplate = (await testDb.Driver.PromptTemplates.ReadByNameAsync("persona.architect").ConfigureAwait(false))!;
+                    architectTemplate.Content = "An operator's own Architect prompt for {MissionTitle}.";
+                    await testDb.Driver.PromptTemplates.UpdateAsync(architectTemplate).ConfigureAwait(false);
+
+                    ArmadaSettings settings = new ArmadaSettings();
+                    settings.DocksDirectory = Path.Combine(Path.GetTempPath(), "armada_envelope_tpl_docks_" + Guid.NewGuid().ToString("N"));
+                    settings.ReposDirectory = Path.Combine(Path.GetTempPath(), "armada_envelope_tpl_repos_" + Guid.NewGuid().ToString("N"));
+                    StubGitService git = new StubGitService();
+                    IDockService docks = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captains = new CaptainService(logging, testDb.Driver, settings, git, docks);
+                    MissionService missions = new MissionService(logging, testDb.Driver, settings, docks, captains, templates);
+
+                    Vessel vessel = new Vessel("tpl-vessel", "https://github.com/test/repo.git");
+                    vessel.WorkerEnvelope = new WorkerEnvelope { MaxFiles = 3, MaxSteps = 6 };
+                    Captain captain = new Captain("tpl-captain") { Runtime = AgentRuntimeEnum.ClaudeCode };
+                    Mission architect = new Mission("Plan the widgets", "plan it") { Persona = "Architect" };
+
+                    string customized = await GenerateInstructionsAsync(missions, architect, vessel, captain).ConfigureAwait(false);
+                    AssertContains("An operator's own Architect prompt for Plan the widgets.", customized, "the customized template is used as is");
+                    AssertContains("## Worker Eligibility Envelope", customized, "the envelope section is appended");
+                    AssertContains("at most 3 files changed", customized, "with the generated description");
+                    AssertTrue(customized.IndexOf("## Worker Eligibility Envelope", StringComparison.Ordinal) > customized.IndexOf("An operator's own Architect prompt", StringComparison.Ordinal), "after the template");
+                    await GenerateInstructionsAsync(missions, architect, vessel, captain).ConfigureAwait(false);
+                    AssertEqual(1, warnings.Count, "warned once for the template: " + String.Join(" | ", warnings));
+                    AssertContains("persona.architect", warnings[0], "the warning names the template");
+                    AssertEqual("An operator's own Architect prompt for {MissionTitle}.", (await testDb.Driver.PromptTemplates.ReadByNameAsync("persona.architect").ConfigureAwait(false))!.Content, "the stored template is not rewritten");
+
+                    Mission judge = new Mission("Review the widgets", "review it") { Persona = "Judge" };
+                    string builtIn = await GenerateInstructionsAsync(missions, judge, vessel, captain).ConfigureAwait(false);
+                    AssertEqual(1, CountOf(builtIn, "## Worker Eligibility Envelope"), "a template with the placeholder renders the section once");
+                    AssertEqual(1, warnings.Count, "no warning when the placeholder exists");
+
+                    vessel.WorkerEnvelope = null;
+                    string noEnvelope = await GenerateInstructionsAsync(missions, architect, vessel, captain).ConfigureAwait(false);
+                    AssertFalse(noEnvelope.Contains("Worker Eligibility Envelope", StringComparison.Ordinal), "nothing is appended without an envelope");
+                    AssertEqual(1, warnings.Count, "no warning without an envelope");
+                }
+            }));
+
             return new TestSuiteDescriptor(SuiteId, "Worker eligibility envelope", cases);
         }
 
@@ -482,9 +646,78 @@ namespace Test.Shared.Suites.Services
                 .ToList();
         }
 
+        private static async Task<McpHarness> BuildMcpHarnessAsync(DatabaseDriver db, WorkerEnvelope? vesselEnvelope)
+        {
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            ArmadaSettings settings = new ArmadaSettings();
+            settings.DocksDirectory = Path.Combine(Path.GetTempPath(), "armada_envelope_mcp_docks_" + Guid.NewGuid().ToString("N"));
+            settings.ReposDirectory = Path.Combine(Path.GetTempPath(), "armada_envelope_mcp_repos_" + Guid.NewGuid().ToString("N"));
+            StubGitService git = new StubGitService();
+            DockService docks = new DockService(logging, db, settings, git);
+            CaptainService captains = new CaptainService(logging, db, settings, git, docks);
+            MissionService missions = new MissionService(logging, db, settings, docks, captains);
+            AdmiralService admiral = new AdmiralService(logging, db, settings, captains, missions, new VoyageService(logging, db), docks);
+
+            Vessel vessel = new Vessel("envelope-mcp-vessel", "https://github.com/test/repo.git");
+            vessel.TenantId = Armada.Core.Constants.DefaultTenantId;
+            vessel.WorkerEnvelope = vesselEnvelope;
+            vessel = await db.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+            McpHarness harness = new McpHarness { Vessel = vessel };
+            McpMissionTools.Register((name, description, schema, handler) => harness.Handlers[name] = handler, db, admiral, settings, null);
+            return harness;
+        }
+
+        private static Mission DispatchedMission(object result)
+        {
+            if (result is Mission mission) return mission;
+            Armada.Client.Models.MissionDispatchResult? parsed = Armada.Client.Models.MissionDispatchResult.Parse(JsonSerializer.Serialize(result));
+            AssertNotNull(parsed?.Mission, "the reply carries the mission");
+            return parsed!.Mission!;
+        }
+
+        private static async Task<string> GenerateInstructionsAsync(MissionService missions, Mission mission, Vessel vessel, Captain captain)
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "armada_envelope_tpl_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                await missions.GenerateClaudeMdAsync(tempDir, mission, vessel, captain).ConfigureAwait(false);
+                return await File.ReadAllTextAsync(Path.Combine(tempDir, "CLAUDE.md")).ConfigureAwait(false);
+            }
+            finally
+            {
+                try { Directory.Delete(tempDir, true); } catch { }
+            }
+        }
+
+        private static int CountOf(string text, string value)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += value.Length;
+            }
+            return count;
+        }
+
         #endregion
 
         #region Private-Types
+
+        private sealed class McpHarness
+        {
+            public Dictionary<string, Func<JsonElement?, Task<object>>> Handlers { get; } = new Dictionary<string, Func<JsonElement?, Task<object>>>();
+            public Vessel Vessel { get; set; } = null!;
+
+            public Task<object> Call(string tool, object args)
+            {
+                return Handlers[tool](JsonSerializer.SerializeToElement(args));
+            }
+        }
 
         private sealed class Harness
         {

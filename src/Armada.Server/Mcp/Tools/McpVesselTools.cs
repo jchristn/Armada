@@ -372,7 +372,7 @@ namespace Armada.Server.Mcp.Tools
         /// Cancels active missions, removes docks/worktrees, and deletes the bare repository.
         /// This method throws on failure -- vessel deletion should NOT proceed if cleanup fails.
         /// </summary>
-        private static object WorkerEnvelopeSchema(string description)
+        internal static object WorkerEnvelopeSchema(string description)
         {
             return new
             {

@@ -4339,6 +4339,7 @@ Create and dispatch a standalone mission to a vessel. The Admiral assigns a capt
     "mode": { "type": "string", "description": "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success, not a no-op failure." },
     "tier": { "type": "string", "description": "Optional minimum captain tier for this mission (Economy, Standard, or Premium); only captains at or above it are assigned" },
     "isEvaluation": { "type": "boolean", "description": "True for evaluation work: the mission's stage outcomes never count as production data. A mission added to an evaluation voyage is flagged regardless. Default false." },
+    "workerEnvelope": { "type": "object", "description": "Optional Worker eligibility envelope for this mission (maxFiles, maxSteps, minServedContextTokens, requiredTools); it may only tighten the vessel default." },
     "selectedPlaybooks": {
       "type": "array",
       "description": "Optional ordered playbook selections for this mission",
@@ -4358,6 +4359,7 @@ Create and dispatch a standalone mission to a vessel. The Admiral assigns a capt
 
 **Response:** [Mission](#mission) object. Without `tier` the mission routes to any idle captain (treated as `Standard`).
 The returned mission carries `isEvaluation`: true when the argument was set or `voyageId` names an evaluation voyage.
+`workerEnvelope` has the same fields as on `add_vessel`; omit it or pass `{}` to use the vessel default. A looser or invalid envelope returns an `InvalidArgument` tool error (the same reason as REST dispatch) and no mission is created.
 
 ---
 
@@ -4381,7 +4383,8 @@ Update an existing mission's metadata fields. Operational fields (status, timest
     "prUrl": { "type": "string", "description": "Pull request URL" },
     "parentMissionId": { "type": "string", "description": "Parent mission ID for sub-tasks (msn_ prefix)" },
     "persona": { "type": "string", "description": "Persona for this mission (e.g. Worker, Architect, Judge, Test Engineer)" },
-    "mode": { "type": "string", "description": "Execution mode: Implementation, Audit, or Research (read-only report modes)" }
+    "mode": { "type": "string", "description": "Execution mode: Implementation, Audit, or Research (read-only report modes)" },
+    "workerEnvelope": { "type": "object", "description": "Worker eligibility envelope for this mission. The object replaces the mission's envelope; pass {} to clear it; omit it to keep the stored value." }
   },
   "required": ["missionId"]
 }
@@ -4400,6 +4403,7 @@ Update an existing mission's metadata fields. Operational fields (status, timest
 | `parentMissionId` | No | Parent mission ID for sub-tasks |
 | `persona` | No | Persona for this mission |
 | `mode` | No | Execution mode: Implementation, Audit, or Research |
+| `workerEnvelope` | No | Worker eligibility envelope (same fields as `add_vessel`). Replaces the mission's envelope, `{}` clears it, omitted keeps it. It may only tighten the vessel default (`InvalidArgument` otherwise) and may only change while the mission is Pending, or Assigned and not started (`Conflict` otherwise) |
 
 **Response:** Updated [Mission](#mission) object, or `{ "Error": "Mission not found", "ErrorCode": "NotFound" }`.
 

@@ -464,6 +464,14 @@ stage's agent output, capped at 8000 characters). The prior stage is the mission
 without one they hold a short "not available" note. The built-in `persona.judge`,
 `persona.test_engineer`, and `persona.linter` templates use them.
 
+**Worker envelope:**
+`{WorkerEnvelope}` (the vessel's Worker eligibility envelope, tightened by the mission's own, with
+what the persona should do with it; empty when no envelope is set). The built-in `persona.architect`
+and `persona.judge` templates (Current, Lean, Compact) carry it. A customized Architect or Judge
+template saved before the placeholder existed is not rewritten: when it lacks `{WorkerEnvelope}` and
+an envelope applies, Armada logs a warning once per template and appends the rendered section after
+the template's text. Add `{WorkerEnvelope}` to the template to choose where it goes.
+
 **System:**
 `{Timestamp}`, `{ExistingClaudeMd}`
 

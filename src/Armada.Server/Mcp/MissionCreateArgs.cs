@@ -55,5 +55,10 @@ namespace Armada.Server.Mcp
         /// evaluation voyage is flagged regardless. Default false.
         /// </summary>
         public bool IsEvaluation { get; set; } = false;
+
+        /// <summary>
+        /// Optional Worker eligibility envelope; it may only tighten the vessel default.
+        /// </summary>
+        public Armada.Core.Models.WorkerEnvelope? WorkerEnvelope { get; set; }
     }
 }

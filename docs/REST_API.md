@@ -3552,8 +3552,10 @@ Update mission fields (title, description, priority, etc.). Does not change stat
 
 **Request Body:** [Mission](#mission) (fields to update)
 
+`workerEnvelope`: omitted or `null` keeps the stored envelope and `{}` clears it. A changed envelope is validated like dispatch (it may only tighten the vessel default; invalid or looser is `400` with the reason) and may only change while the mission is `Pending`, or `Assigned` and not started (otherwise `409`). Sending the stored value back is accepted on any status.
+
 **Response:** `200 OK` - [Mission](#mission)
-**Error:** `404` - Mission not found
+**Error:** `400` - Invalid or loosened `workerEnvelope`; `404` - Mission not found; `409` - `workerEnvelope` changed on a started mission
 
 ---
 

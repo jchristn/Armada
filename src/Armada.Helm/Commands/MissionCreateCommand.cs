@@ -37,6 +37,17 @@ namespace Armada.Helm.Commands
 
             if (!string.IsNullOrEmpty(settings.Voyage)) mission.VoyageId = settings.Voyage;
             if (settings.Priority.HasValue) mission.Priority = settings.Priority.Value;
+            if (settings.MaxFiles.HasValue || settings.MaxSteps.HasValue || settings.MinServedContextTokens.HasValue || (settings.RequiredTools != null && settings.RequiredTools.Length > 0))
+            {
+                // The server validates the envelope (it may only tighten the vessel default) and answers 400 with the reason.
+                mission.WorkerEnvelope = new WorkerEnvelope
+                {
+                    MaxFiles = settings.MaxFiles,
+                    MaxSteps = settings.MaxSteps,
+                    MinServedContextTokens = settings.MinServedContextTokens,
+                    RequiredTools = settings.RequiredTools != null ? new List<string>(settings.RequiredTools) : new List<string>()
+                };
+            }
 
             MissionDispatchResult? result = await CreateMissionAsync(mission).ConfigureAwait(false);
             Mission? created = result?.Mission;

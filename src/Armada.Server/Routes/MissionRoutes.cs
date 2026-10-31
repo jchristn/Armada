@@ -711,17 +711,31 @@ namespace Armada.Server.Routes
                 // Merge only metadata fields onto the existing record; operational, ownership, and timestamp fields
                 // are preserved (shared with the WebSocket update_mission command).
                 existing = EntityUpdateMerger.MergeMission(existing, incoming);
+                if (incoming.WorkerEnvelope != null)
+                {
+                    // Omitted or null keeps the stored envelope; {} clears it. A change is validated like dispatch (400)
+                    // and refused once the mission has started (409).
+                    Vessel? envelopeVessel = String.IsNullOrEmpty(existing.VesselId) ? null
+                        : ctx.IsAdmin || String.IsNullOrEmpty(ctx.TenantId)
+                            ? await _database.Vessels.ReadAsync(existing.VesselId).ConfigureAwait(false)
+                            : await _database.Vessels.ReadAsync(ctx.TenantId!, existing.VesselId).ConfigureAwait(false);
+                    try { existing.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(existing, envelopeVessel?.WorkerEnvelope, incoming.WorkerEnvelope); }
+                    catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
+                    catch (InvalidOperationException ex) { return RouteErrorMapper.ToResponse(req, ex, 409); }
+                }
                 existing = await _database.Missions.UpdateAsync(existing).ConfigureAwait(false);
                 return (object)existing;
             },
             api => api
                 .WithTag("Missions")
                 .WithSummary("Update a mission")
-                .WithDescription("Updates an existing mission by ID.")
+                .WithDescription("Updates an existing mission by ID. workerEnvelope: omitted or null keeps the stored envelope, {} clears it; a changed envelope may only tighten the vessel default (400 otherwise) and only while the mission is Pending or Assigned and not started (409 otherwise).")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<Mission>("Updated mission data", true))
                 .WithResponse(200, OpenApiJson.For<Mission>("Updated mission"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("workerEnvelope changed on a mission that has started"))
                 .WithSecurity("ApiKey"));
 
             app.Put<StatusTransitionRequest>("/api/v1/missions/{id}/status", async (ApiRequest req) =>

@@ -3893,7 +3893,9 @@
       "requestRequired": true,
       "responses": {
         "200": "Mission",
-        "404": ""
+        "400": "",
+        "404": "",
+        "409": "ApiErrorResponse"
       },
       "tags": [
         "Missions"
@@ -9902,6 +9904,11 @@
         {
           "name": "voyageId",
           "type": "string",
+          "required": false
+        },
+        {
+          "name": "workerEnvelope",
+          "type": "object",
           "required": false
         }
       ],
@@ -16046,9 +16053,14 @@
           "name": "voyageId",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "workerEnvelope",
+          "type": "object",
+          "required": false
         }
       ],
-      "description": "Update an existing mission's title, description, priority, vessel, voyage, branch, or PR URL. Operational fields (status, timestamps, captain) are managed by the system.",
+      "description": "Update an existing mission's title, description, priority, vessel, voyage, branch, PR URL, or Worker envelope. Operational fields (status, timestamps, captain) are managed by the system.",
       "experimental": false
     },
     {
@@ -23513,6 +23525,30 @@
         },
         {
           "kind": "option",
+          "name": "max-files",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "max-steps",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "min-context-tokens",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
           "name": "page",
           "short": null,
           "valueKind": "scalar",
@@ -23541,6 +23577,14 @@
           "short": null,
           "valueKind": "scalar",
           "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "require-tool",
+          "short": null,
+          "valueKind": "vector",
+          "type": "String[]",
           "required": false
         },
         {

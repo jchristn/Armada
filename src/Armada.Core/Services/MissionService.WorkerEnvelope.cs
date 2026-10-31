@@ -18,6 +18,9 @@ namespace Armada.Core.Services
         private readonly ConcurrentDictionary<string, string> _EnvelopeDecisionSignatures =
             new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
 
+        private readonly ConcurrentDictionary<string, byte> _EnvelopePlaceholderWarnings =
+            new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+
         #endregion
 
         #region Public-Methods
@@ -34,6 +37,31 @@ namespace Armada.Core.Services
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             return WorkerEnvelopeRules.Effective(vessel?.WorkerEnvelope, mission.WorkerEnvelope);
+        }
+
+        /// <summary>
+        /// Append the Worker envelope section to an Architect or Judge persona prompt whose template has no
+        /// <c>{WorkerEnvelope}</c> placeholder (an operator-customized template from before Phase 6.1) while an envelope
+        /// applies, and warn once per template. The stored template is not changed.
+        /// </summary>
+        /// <param name="personaPrompt">Rendered persona prompt.</param>
+        /// <param name="mission">Mission.</param>
+        /// <param name="templateName">Name of the persona template that was rendered, for the warning.</param>
+        /// <param name="templateParams">Template parameters (the rendered <c>WorkerEnvelope</c> value).</param>
+        /// <returns>The persona prompt, with the envelope section when it was missing.</returns>
+        /// <exception cref="ArgumentNullException">The mission or parameters are null.</exception>
+        public string EnsureWorkerEnvelopeSection(string personaPrompt, Mission mission, string templateName, Dictionary<string, string> templateParams)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (templateParams == null) throw new ArgumentNullException(nameof(templateParams));
+            templateParams.TryGetValue("WorkerEnvelope", out string? section);
+            string result = WorkerEnvelopeRules.EnsurePromptSection(personaPrompt, mission.Persona, section, out bool appended);
+            if (appended && _EnvelopePlaceholderWarnings.TryAdd(templateName ?? "", 0))
+            {
+                _Logging.Warn(_Header + "prompt template '" + templateName + "' has no {WorkerEnvelope} placeholder (customized before Phase 6.1); "
+                    + "appending the Worker envelope section after it. Add {WorkerEnvelope} to the template to place it yourself.");
+            }
+            return result;
         }
 
         #endregion

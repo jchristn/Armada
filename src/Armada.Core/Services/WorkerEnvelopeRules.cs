@@ -6,6 +6,7 @@ namespace Armada.Core.Services
     using System.Linq;
     using System.Text;
     using System.Text.Json;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
@@ -203,6 +204,47 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Whether a mission's own envelope may still change: it is Pending, or Assigned to a captain that has not
+        /// started it (no start time, no process). Dispatch reads the envelope when it assigns the Worker, so changing
+        /// it after the captain started would not affect the running work.
+        /// </summary>
+        /// <param name="mission">Mission.</param>
+        /// <returns>True when the envelope may change.</returns>
+        /// <exception cref="ArgumentNullException">The mission is null.</exception>
+        public static bool CanChangeMissionEnvelope(Mission mission)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (mission.Status == MissionStatusEnum.Pending) return true;
+            return mission.Status == MissionStatusEnum.Assigned && !mission.StartedUtc.HasValue && !mission.ProcessId.HasValue;
+        }
+
+        /// <summary>
+        /// Apply a mission update's envelope (REST PUT, MCP and WebSocket <c>update_mission</c>). The same value as the
+        /// stored one is a no-op on any status. A different value is validated like dispatch
+        /// (<see cref="ValidateMissionEnvelope"/>: invalid or looser than the vessel default is rejected) and is only
+        /// accepted while <see cref="CanChangeMissionEnvelope"/>; an envelope with no field set clears it.
+        /// </summary>
+        /// <param name="mission">Stored mission (its status and current envelope).</param>
+        /// <param name="vesselDefault">Default envelope of the mission's vessel after the update, or null.</param>
+        /// <param name="requested">Requested envelope; an empty one clears the mission's envelope.</param>
+        /// <returns>The envelope to store, or null for none.</returns>
+        /// <exception cref="ArgumentNullException">The mission or request is null.</exception>
+        /// <exception cref="ArgumentException">The request is invalid or looser than the vessel default.</exception>
+        /// <exception cref="InvalidOperationException">The envelope would change on a mission that has started.</exception>
+        public static WorkerEnvelope? ValidateMissionEnvelopeUpdate(Mission mission, WorkerEnvelope? vesselDefault, WorkerEnvelope requested)
+        {
+            if (mission == null) throw new ArgumentNullException(nameof(mission));
+            if (requested == null) throw new ArgumentNullException(nameof(requested));
+            WorkerEnvelope? normalized = Normalize(requested);
+            if (String.Equals(ToJson(normalized), ToJson(SafeNormalize(mission.WorkerEnvelope)), StringComparison.Ordinal))
+                return mission.WorkerEnvelope;
+            if (!CanChangeMissionEnvelope(mission))
+                throw new InvalidOperationException("workerEnvelope can only change while the mission is Pending or Assigned and not started; mission "
+                    + mission.Id + " is " + mission.Status + ".");
+            return ValidateMissionEnvelope(vesselDefault, normalized);
+        }
+
+        /// <summary>
         /// Short generated description of an envelope for the Architect and Judge prompts, or an empty string when the
         /// envelope sets nothing.
         /// </summary>
@@ -267,6 +309,28 @@ namespace Armada.Core.Services
             else
                 guidance = " Keep the change within these limits; report BLOCKED if the work cannot fit them.";
             return "\n\n## Worker Eligibility Envelope\n" + description + guidance;
+        }
+
+        /// <summary>
+        /// Make sure an Architect or Judge prompt carries the envelope section. A customized template written before
+        /// the <c>{WorkerEnvelope}</c> placeholder existed renders without it; the rendered section is then appended
+        /// after the prompt (the stored template is never rewritten). Other personas, an empty section, and a prompt
+        /// that already contains the section are returned unchanged.
+        /// </summary>
+        /// <param name="prompt">Rendered persona prompt.</param>
+        /// <param name="persona">Mission persona.</param>
+        /// <param name="section">Rendered <c>{WorkerEnvelope}</c> value (<see cref="PromptSection"/>), or null.</param>
+        /// <param name="appended">True when the section was appended.</param>
+        /// <returns>The prompt, with the section appended when it was missing.</returns>
+        public static string EnsurePromptSection(string prompt, string? persona, string? section, out bool appended)
+        {
+            appended = false;
+            string text = prompt ?? "";
+            if (String.IsNullOrWhiteSpace(section)) return text;
+            if (!PersonaCatalog.Matches(persona, PersonaCatalog.Architect) && !PersonaCatalog.Matches(persona, PersonaCatalog.Judge)) return text;
+            if (text.Contains(section.Trim(), StringComparison.Ordinal)) return text;
+            appended = true;
+            return text.TrimEnd() + section;
         }
 
         /// <summary>
