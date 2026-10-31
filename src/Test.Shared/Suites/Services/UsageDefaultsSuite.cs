@@ -126,6 +126,28 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(Case("captain_custom_blank_command_normalizes_in_both_json_orders", "Custom mode does not mask blank-command normalization", TestTags.Negative, () =>
+            {
+                foreach (string command in new string[] { "", " ", "\t\r\n" })
+                {
+                    string encoded = JsonSerializer.Serialize(command);
+                    foreach (string payload in new string[]
+                    {
+                        "{\"UsageCaptureMode\":\"Custom\",\"UsageCaptureCommand\":" + encoded + "}",
+                        "{\"UsageCaptureCommand\":" + encoded + ",\"UsageCaptureMode\":\"Custom\"}"
+                    })
+                    {
+                        Captain captain = JsonSerializer.Deserialize<Captain>(payload)!;
+                        AssertEqual(UsageCaptureModeEnum.Custom, captain.UsageCaptureMode, "Custom getter exposes the stored command");
+                        AssertNull(captain.UsageCaptureCommand, "blank command is normalized rather than hidden by Auto mode");
+                        AssertFalse(captain.UsageCaptureActive, "Custom does not enable omitted capture flag");
+                        Captain restored = JsonSerializer.Deserialize<Captain>(JsonSerializer.Serialize(captain))!;
+                        AssertNull(restored.UsageCaptureCommand, "normalized command survives round trip");
+                        AssertEqual(300, restored.UsageCaptureIntervalSeconds, "omitted interval retains default");
+                    }
+                }
+            }));
+
             cases.Add(Case("captain_full_settings_round_trip", "Fully populated usage settings survive serialization", TestTags.Positive, () =>
             {
                 string json = "{\"UsageCaptureEnabled\":true,\"UsageCaptureIntervalSeconds\":900,"

@@ -190,3 +190,73 @@ provider quota requests, enabled adapters, full solution/adapter/dashboard
 runs, API publication, deployment or release checks were performed. This
 rework changes only the scoped upgrade regression and this findings record;
 post-stage checks and integration delivery remain Armada's responsibility.
+
+## Rework 2 independent test engineer verification
+
+Reviewed worker commit 316192f49a177ff6bd3dfa855541d15ced43a1a3 and its
+complete handoff artifact hoa_mvwxspjx_2xghec0gxgW. The artifact contains no
+numbered findings. Fetched origin/main f1e4cff2a8927061712f11ad3287740af66fc62f
+is already an ancestor of this branch; no additional rebase was necessary.
+
+Prior findings rechecked:
+
+- Resolved: explicit null captain settings. The named
+  captain_explicit_null_settings_keep_defaults case passes on every provider.
+- Resolved: command property-order dependence. The named
+  captain_command_clearing_is_order_independent and
+  captain_non_custom_json_command_is_not_persisted cases pass on every provider.
+- Resolved: absent phase 0 prerequisite. PROBE_INTERFACES.md and the fixtures
+  are on the integration base; Usage.InterfaceEvidence passes all 13 cases.
+  This establishes delivered evidence, not live provider quota access.
+- Resolved: server-provider upgrade coverage. Inspected and independently ran
+  usage_existing_database_upgrades_to_v111 on PostgreSQL, MySQL and SQL Server,
+  as well as SQLite. The test builds v110 data, checks a pending migration,
+  invokes production initialization and verifies retained captain/token rows
+  with disabled defaults and nullable attribution/cost.
+- Unverified, unchanged scope boundary: tenant-service deletion end to end.
+  Storage deletion coverage is not evidence of the later service cascade.
+
+### Coverage added
+
+AC1 / Services.UsageDefaults adds
+captain_custom_blank_command_normalizes_in_both_json_orders. Empty, space and
+control-whitespace commands normalize to null in Custom mode, in both property
+orders, and remain null after serialization. Capture remains disabled and the
+interval remains 300 when omitted. Existing blank-command JSON assertions used
+Auto mode, whose getter hides commands; this case exposes the stored command.
+
+Sensitivity check: temporarily replaced the blank fixtures in this new case
+with the nonblank string quota. Services.UsageDefaults exited 1: 16 passed,
+1 failed, zero skipped, specifically because the command was quota rather than
+null. Restored the blank fixtures immediately. No production code was changed
+and no deliberately failing fixture was committed.
+
+### Executed checks
+
+- dotnet build src/Test.Automated -c Release -f net10.0 --nologo:
+  exit 0, zero warnings and errors.
+- ARMADA_TEST_SUITES=Usage.InterfaceEvidence,Services.UsageDefaults,Database.UsagePersistence
+  dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build:
+  SQLite exit 0, 42 passed, zero failed/skipped.
+- ARMADA_TEST_SUITES=Services.UsageDefaults,Database.UsagePersistence with
+  ARMADA_TEST_DB_TYPE=postgresql, mysql and sqlserver, using the same runner:
+  each exit 0, 29 passed, zero failed/skipped. Used actual local PostgreSQL 17,
+  MySQL 8.4 and SQL Server 2022 containers on loopback. Connection settings were
+  supplied through the existing harness environment and are not stored here.
+- After the sensitivity check, rebuilt and reran Services.UsageDefaults with
+  its original blank fixtures: exit 0, 17 passed, zero failed/skipped.
+- git diff --check: exit 0.
+
+AC1 / Database.UsagePersistence covers fresh and existing migrations, nullable
+snapshot/token fields, tenant isolation, effective-dated memberships, member
+links, idempotent rollups and separate latest-error/last-good state. Negative
+paths include malformed settings, unknown enums, foreign-tenant reads/deletion
+and absent/empty windows. No baseline failures occurred in these scoped runs.
+
+### Residual risks
+
+Full solution, smoke, dashboard, other runner adapters, deployment and release
+checks were not rerun; Armada performs post-stage checks. Provider quota access,
+phase 2 scheduler/process cleanup and phase 7 tenant-service retention remain
+outside this stage. No unsupported adapters were enabled. No known production
+defect blocks this scoped verification.
