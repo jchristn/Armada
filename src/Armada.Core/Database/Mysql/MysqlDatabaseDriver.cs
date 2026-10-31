@@ -105,6 +105,9 @@ namespace Armada.Core.Database.Mysql
             VesselHealthFindings = new VesselHealthFindingMethods(_ConnectionString);
             VesselDependencies = new VesselDependencyMethods(_ConnectionString);
             VesselHealthOverrides = new VesselHealthOverrideMethods(_ConnectionString);
+            UsageSnapshots = new UsageSnapshotMethods(_ConnectionString);
+            UsageMemberships = new UsageAccountMembershipMethods(_ConnectionString);
+            UsageRollups = new UsageHourlyRollupMethods(_ConnectionString);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(_ConnectionString);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(_ConnectionString);
             Docks = new DockMethods(_ConnectionString);
@@ -1346,7 +1349,115 @@ namespace Armada.Core.Database.Mysql
                     @"ALTER TABLE model_profile_revisions ADD COLUMN evaluation_report_json LONGTEXT NULL;"),
                 new SchemaMigration(110, "Add the Worker eligibility envelope: vessels.worker_envelope_json (the vessel default) and missions.worker_envelope_json (a tightened envelope for one mission)",
                     @"ALTER TABLE vessels ADD COLUMN worker_envelope_json LONGTEXT NULL;",
-                    @"ALTER TABLE missions ADD COLUMN worker_envelope_json LONGTEXT NULL;")
+                    @"ALTER TABLE missions ADD COLUMN worker_envelope_json LONGTEXT NULL;"),
+
+                new SchemaMigration(111, "Add account usage capture: usage_snapshots (one sanitized capture attempt per account group), usage_snapshot_captains (member links at capture time), usage_account_memberships (effective-dated attribution), usage_hourly_rollups, usage_latest_state, captain usage-capture settings (disabled by default) and token_usage provider/account/cost attribution",
+                    @"CREATE TABLE IF NOT EXISTS usage_snapshots (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        captain_id VARCHAR(64),
+                        harbor_id VARCHAR(64),
+                        host_id VARCHAR(64) NOT NULL,
+                        runtime VARCHAR(64) NOT NULL,
+                        provider VARCHAR(64),
+                        account_key VARCHAR(128),
+                        captured_utc DATETIME(6) NOT NULL,
+                        received_utc DATETIME(6) NOT NULL,
+                        status VARCHAR(32) NOT NULL,
+                        source VARCHAR(32) NOT NULL,
+                        windows_json LONGTEXT,
+                        raw_excerpt LONGTEXT,
+                        error_code VARCHAR(128)
+                    );",
+                    @"CREATE INDEX idx_usage_snapshots_tenant_captured ON usage_snapshots(tenant_id, captured_utc, id);",
+                    @"CREATE INDEX idx_usage_snapshots_account_captured ON usage_snapshots(tenant_id, host_id, runtime, account_key, captured_utc);",
+                    @"CREATE INDEX idx_usage_snapshots_captain_captured ON usage_snapshots(captain_id, captured_utc);",
+                    @"CREATE TABLE IF NOT EXISTS usage_snapshot_captains (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        snapshot_id VARCHAR(64) NOT NULL,
+                        captain_id VARCHAR(64) NOT NULL,
+                        captured_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE INDEX idx_usage_snapshot_captains_snapshot ON usage_snapshot_captains(snapshot_id);",
+                    @"CREATE INDEX idx_usage_snapshot_captains_captain_time ON usage_snapshot_captains(tenant_id, captain_id, captured_utc);",
+                    @"CREATE TABLE IF NOT EXISTS usage_account_memberships (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        captain_id VARCHAR(64) NOT NULL,
+                        host_id VARCHAR(64) NOT NULL,
+                        runtime VARCHAR(64) NOT NULL,
+                        provider VARCHAR(64),
+                        account_key VARCHAR(128) NOT NULL,
+                        configuration_revision VARCHAR(128),
+                        effective_from_utc DATETIME(6) NOT NULL,
+                        effective_to_utc DATETIME(6),
+                        created_utc DATETIME(6) NOT NULL,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE INDEX idx_usage_memberships_captain_time ON usage_account_memberships(tenant_id, captain_id, effective_from_utc);",
+                    @"CREATE INDEX idx_usage_memberships_account ON usage_account_memberships(tenant_id, host_id, runtime, account_key);",
+                    @"CREATE TABLE IF NOT EXISTS usage_hourly_rollups (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        host_id VARCHAR(64) NOT NULL,
+                        runtime VARCHAR(64) NOT NULL,
+                        provider VARCHAR(64),
+                        account_key VARCHAR(128) NOT NULL,
+                        window_name VARCHAR(128) NOT NULL DEFAULT '',
+                        model VARCHAR(255) NOT NULL DEFAULT '',
+                        hour_utc DATETIME(6) NOT NULL,
+                        sample_count INT NOT NULL DEFAULT 0,
+                        last_percent DOUBLE NULL,
+                        min_percent DOUBLE NULL,
+                        max_percent DOUBLE NULL,
+                        mean_percent DOUBLE NULL,
+                        last_used BIGINT NULL,
+                        last_limit BIGINT NULL,
+                        last_reset_utc DATETIME(6) NULL,
+                        first_observed_utc DATETIME(6) NULL,
+                        last_observed_utc DATETIME(6) NULL,
+                        ok_count INT NOT NULL DEFAULT 0,
+                        unsupported_count INT NOT NULL DEFAULT 0,
+                        auth_missing_count INT NOT NULL DEFAULT 0,
+                        failed_count INT NOT NULL DEFAULT 0,
+                        estimated_count INT NOT NULL DEFAULT 0,
+                        coverage_seconds DOUBLE NULL,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE UNIQUE INDEX idx_usage_rollups_natural ON usage_hourly_rollups(tenant_id, host_id, runtime, account_key, window_name, model, hour_utc);",
+                    @"CREATE INDEX idx_usage_rollups_tenant_hour ON usage_hourly_rollups(tenant_id, hour_utc);",
+                    @"CREATE TABLE IF NOT EXISTS usage_latest_state (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        host_id VARCHAR(64) NOT NULL,
+                        runtime VARCHAR(64) NOT NULL,
+                        provider VARCHAR(64),
+                        account_key VARCHAR(128) NOT NULL,
+                        last_good_snapshot_id VARCHAR(64),
+                        last_good_captured_utc DATETIME(6) NULL,
+                        last_good_received_utc DATETIME(6) NULL,
+                        last_good_status VARCHAR(32),
+                        last_good_windows_json LONGTEXT,
+                        last_error_snapshot_id VARCHAR(64),
+                        last_error_captured_utc DATETIME(6) NULL,
+                        last_error_status VARCHAR(32),
+                        last_error_code VARCHAR(128),
+                        expired_utc DATETIME(6) NULL,
+                        last_update_utc DATETIME(6) NOT NULL
+                    );",
+                    @"CREATE UNIQUE INDEX idx_usage_latest_state_account ON usage_latest_state(tenant_id, host_id, runtime, account_key);",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_enabled TINYINT(1) NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_interval_seconds INT NOT NULL DEFAULT 300;",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_mode VARCHAR(32) NOT NULL DEFAULT 'Auto';",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_command LONGTEXT NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN provider VARCHAR(64) NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN account_key VARCHAR(128) NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN host_id VARCHAR(64) NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN membership_id VARCHAR(64) NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN reported_cost DOUBLE NULL;",
+                    @"ALTER TABLE token_usage ADD COLUMN cost_currency VARCHAR(16) NULL;",
+                    @"CREATE INDEX idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);")
 
 
             };

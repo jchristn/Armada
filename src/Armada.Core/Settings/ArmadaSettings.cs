@@ -970,6 +970,16 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// Account usage capture settings (server switch, interval floor, probe concurrency and timeouts,
+        /// excerpt cap, raw/rollup retention days). Never null; setting null restores the defaults.
+        /// </summary>
+        public UsageCaptureSettings UsageCapture
+        {
+            get => _UsageCapture;
+            set => _UsageCapture = value ?? new UsageCaptureSettings();
+        }
+
+        /// <summary>
         /// The settings file these settings were loaded from or last saved to, used by <see cref="SaveAsync"/> when no
         /// path is given (and by backup and restore). Null means <see cref="DefaultSettingsPath"/>. Not persisted.
         /// </summary>
@@ -1057,6 +1067,7 @@ namespace Armada.Core.Settings
         private RepositoryHealthSettings _RepositoryHealth = new RepositoryHealthSettings();
         private RetentionSettings _Retention = new RetentionSettings();
         private PushSettings _Push = new PushSettings();
+        private UsageCaptureSettings _UsageCapture = new UsageCaptureSettings();
         private DatabaseSettings _Database = new DatabaseSettings();
         private bool _DatabasePathConfigured = false;
 

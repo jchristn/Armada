@@ -111,6 +111,9 @@ namespace Armada.Core.Database.SqlServer
             VesselHealthFindings = new VesselHealthFindingMethods(this, _Settings, _Logging);
             VesselDependencies = new VesselDependencyMethods(this, _Settings, _Logging);
             VesselHealthOverrides = new VesselHealthOverrideMethods(this, _Settings, _Logging);
+            UsageSnapshots = new UsageSnapshotMethods(this, _Settings, _Logging);
+            UsageMemberships = new UsageAccountMembershipMethods(this, _Settings, _Logging);
+            UsageRollups = new UsageHourlyRollupMethods(this, _Settings, _Logging);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(this, _Settings, _Logging);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(this, _Settings, _Logging);
             Docks = new DockMethods(this, _Settings, _Logging);
@@ -619,6 +622,21 @@ namespace Armada.Core.Database.SqlServer
                     captain.Tier = tier;
             }
             catch { }
+            try
+            {
+                object enabled = reader["usage_capture_enabled"];
+                if (enabled != DBNull.Value) captain.UsageCaptureEnabled = Convert.ToBoolean(enabled);
+            }
+            catch { }
+            try { captain.UsageCaptureIntervalSeconds = Convert.ToInt32(reader["usage_capture_interval_seconds"]); } catch { }
+            try
+            {
+                string? captureMode = NullableString(reader["usage_capture_mode"]);
+                if (!String.IsNullOrEmpty(captureMode) && Enum.TryParse<UsageCaptureModeEnum>(captureMode, out UsageCaptureModeEnum parsedMode))
+                    captain.UsageCaptureMode = parsedMode;
+            }
+            catch { }
+            try { captain.UsageCaptureCommand = NullableString(reader["usage_capture_command"]); } catch { }
             return captain;
         }
 

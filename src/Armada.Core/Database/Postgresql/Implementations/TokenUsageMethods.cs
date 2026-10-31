@@ -45,10 +45,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Connection = conn;
                     cmd.CommandText = @"INSERT INTO token_usage (
                             id, tenant_id, user_id, model, runtime, source, source_id, vessel_id, captain_id, harbor_id,
-                            input_tokens, output_tokens, cached_tokens, total_tokens, estimated, created_utc
+                            input_tokens, output_tokens, cached_tokens, total_tokens, estimated, created_utc,
+                            provider, account_key, host_id, membership_id, reported_cost, cost_currency
                         ) VALUES (
                             @id, @tenant_id, @user_id, @model, @runtime, @source, @source_id, @vessel_id, @captain_id, @harbor_id,
-                            @input_tokens, @output_tokens, @cached_tokens, @total_tokens, @estimated, @created_utc
+                            @input_tokens, @output_tokens, @cached_tokens, @total_tokens, @estimated, @created_utc,
+                            @provider, @account_key, @host_id, @membership_id, @reported_cost, @cost_currency
                         );";
                     BindRecord(cmd, record);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -202,11 +204,17 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@total_tokens", record.TotalTokens);
             cmd.Parameters.AddWithValue("@estimated", record.Estimated);
             cmd.Parameters.AddWithValue("@created_utc", record.CreatedUtc);
+            cmd.Parameters.AddWithValue("@provider", (object?)record.Provider ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@account_key", (object?)record.AccountKey ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@host_id", (object?)record.HostId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@membership_id", (object?)record.MembershipId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@reported_cost", record.ReportedCost.HasValue ? (object)record.ReportedCost.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@cost_currency", (object?)record.CostCurrency ?? DBNull.Value);
         }
 
         private static TokenUsageRecord RecordFromReader(NpgsqlDataReader reader)
         {
-            return new TokenUsageRecord
+            TokenUsageRecord record = new TokenUsageRecord
             {
                 Id = reader["id"].ToString()!,
                 TenantId = NullableString(reader["tenant_id"]),
@@ -225,6 +233,21 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 Estimated = Convert.ToBoolean(reader["estimated"]),
                 CreatedUtc = DateTime.SpecifyKind(Convert.ToDateTime(reader["created_utc"]), DateTimeKind.Utc)
             };
+
+            try { record.Provider = NullableString(reader["provider"]); } catch { }
+            try { record.AccountKey = NullableString(reader["account_key"]); } catch { }
+            try { record.HostId = NullableString(reader["host_id"]); } catch { }
+            try { record.MembershipId = NullableString(reader["membership_id"]); } catch { }
+            try { record.ReportedCost = NullableDouble(reader["reported_cost"]); } catch { }
+            try { record.CostCurrency = NullableString(reader["cost_currency"]); } catch { }
+
+            return record;
+        }
+
+        private static double? NullableDouble(object value)
+        {
+            if (value == null || value == DBNull.Value) return null;
+            return Convert.ToDouble(value);
         }
 
         private static string? NullableString(object value)

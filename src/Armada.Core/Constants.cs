@@ -336,6 +336,31 @@ namespace Armada.Core
         public static readonly string AskTrackedWorkIdPrefix = "atw_";
 
         /// <summary>
+        /// ID prefix for usage snapshots (one row per capture attempt against an account on a host).
+        /// </summary>
+        public static readonly string UsageSnapshotIdPrefix = "usg_";
+
+        /// <summary>
+        /// ID prefix for usage snapshot-captain links (the members an account group covered at capture time).
+        /// </summary>
+        public static readonly string UsageSnapshotCaptainIdPrefix = "usl_";
+
+        /// <summary>
+        /// ID prefix for usage account memberships (effective-dated captain/account/host attribution periods).
+        /// </summary>
+        public static readonly string UsageMembershipIdPrefix = "usm_";
+
+        /// <summary>
+        /// ID prefix for usage hourly rollups (bounded per-account utilization aggregates per UTC hour).
+        /// </summary>
+        public static readonly string UsageRollupIdPrefix = "ush_";
+
+        /// <summary>
+        /// ID prefix for usage latest-state rows (per-account last-good and last-error summary).
+        /// </summary>
+        public static readonly string UsageLatestStateIdPrefix = "ust_";
+
+        /// <summary>
         /// Default per-phase timeout, in seconds, for the in-dock Definition-of-Done gate (30 minutes).
         /// </summary>
         public const int DefaultDefinitionOfDoneTimeoutSeconds = 1800;

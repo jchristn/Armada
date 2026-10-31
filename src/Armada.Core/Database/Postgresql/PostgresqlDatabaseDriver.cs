@@ -361,6 +361,9 @@ namespace Armada.Core.Database.Postgresql
             VesselHealthFindings = new VesselHealthFindingMethods(this, _Settings, _Logging);
             VesselDependencies = new VesselDependencyMethods(this, _Settings, _Logging);
             VesselHealthOverrides = new VesselHealthOverrideMethods(this, _Settings, _Logging);
+            UsageSnapshots = new UsageSnapshotMethods(this, _Settings, _Logging);
+            UsageMemberships = new UsageAccountMembershipMethods(this, _Settings, _Logging);
+            UsageRollups = new UsageHourlyRollupMethods(this, _Settings, _Logging);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(this, _Settings, _Logging);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(this, _Settings, _Logging);
             Docks = new DockMethods(this, _Settings, _Logging);

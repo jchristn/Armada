@@ -147,6 +147,57 @@ namespace Armada.Core.Models
         public CliPermissionPolicyEnum? CliPermissionPolicy { get; set; } = null;
 
         /// <summary>
+        /// Whether this captain participates in account usage capture. Default false: capture stays disabled
+        /// until explicitly enabled, and old or minimally deserialized captains stay disabled. Auto and
+        /// Custom mode both additionally require this to be true; Disabled mode opts the captain out of
+        /// limit capture and account membership regardless of this flag.
+        /// </summary>
+        public bool UsageCaptureEnabled { get; set; } = false;
+
+        /// <summary>
+        /// Requested seconds between usage captures for this captain. Default 300, clamped to 60..86400 in
+        /// the setter so model, storage and API agree on the effective value. Groups run at the shortest
+        /// requested interval among enabled members, bounded by the global minimum interval.
+        /// </summary>
+        public int UsageCaptureIntervalSeconds
+        {
+            get => _UsageCaptureIntervalSeconds;
+            set => _UsageCaptureIntervalSeconds = value < 60 ? 60 : (value > 86400 ? 86400 : value);
+        }
+
+        /// <summary>
+        /// How this captain captures usage: Auto (verified read-only sources only), Disabled (opt out
+        /// entirely) or Custom (the configured local executable). Default Auto. Setting a mode other than
+        /// Custom clears <see cref="UsageCaptureCommand"/>, so leaving Custom never keeps a stale command.
+        /// </summary>
+        public UsageCaptureModeEnum UsageCaptureMode
+        {
+            get => _UsageCaptureMode;
+            set
+            {
+                _UsageCaptureMode = value;
+                if (value != UsageCaptureModeEnum.Custom) _UsageCaptureCommand = null;
+            }
+        }
+
+        /// <summary>
+        /// The Custom usage-capture executable contract (JSON with executable and argument array), or null.
+        /// Only meaningful in Custom mode; null or empty is normalized to null. Rejecting shell syntax and
+        /// requiring a command in Custom mode is the service layer's contract, enforced before storage.
+        /// </summary>
+        public string? UsageCaptureCommand
+        {
+            get => _UsageCaptureCommand;
+            set => _UsageCaptureCommand = String.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        /// <summary>
+        /// Whether usage capture is effectively active for this captain: enabled AND not opted out with
+        /// Disabled mode. Derived; not stored.
+        /// </summary>
+        public bool UsageCaptureActive => UsageCaptureEnabled && UsageCaptureMode != UsageCaptureModeEnum.Disabled;
+
+        /// <summary>
         /// Current state of the captain.
         /// </summary>
         public CaptainStateEnum State { get; set; } = CaptainStateEnum.Idle;
@@ -216,6 +267,9 @@ namespace Armada.Core.Models
         private string? _Model = null;
         private string? _ModelEndpointId = null;
         private string? _ModelProfileId = null;
+        private int _UsageCaptureIntervalSeconds = 300;
+        private UsageCaptureModeEnum _UsageCaptureMode = UsageCaptureModeEnum.Auto;
+        private string? _UsageCaptureCommand = null;
 
         #endregion
 

@@ -700,6 +700,33 @@ namespace Armada.Core.Database
             protected set => _VesselHealthOverrides = DuplicateEntityTranslationProxy.Wrap(value);
         }
 
+        /// <summary>
+        /// Usage snapshot operations (snapshots, member links, per-account latest state).
+        /// </summary>
+        public IUsageSnapshotMethods UsageSnapshots
+        {
+            get => _UsageSnapshots;
+            protected set => _UsageSnapshots = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Usage account membership operations (effective-dated attribution periods).
+        /// </summary>
+        public IUsageAccountMembershipMethods UsageMemberships
+        {
+            get => _UsageMemberships;
+            protected set => _UsageMemberships = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
+        /// <summary>
+        /// Usage hourly rollup operations.
+        /// </summary>
+        public IUsageHourlyRollupMethods UsageRollups
+        {
+            get => _UsageRollups;
+            protected set => _UsageRollups = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+
         #endregion
 
         #region Private-Members
@@ -780,6 +807,9 @@ namespace Armada.Core.Database
         private IVesselHealthFindingMethods _VesselHealthFindings = null!;
         private IVesselDependencyMethods _VesselDependencies = null!;
         private IVesselHealthOverrideMethods _VesselHealthOverrides = null!;
+        private IUsageSnapshotMethods _UsageSnapshots = null!;
+        private IUsageAccountMembershipMethods _UsageMemberships = null!;
+        private IUsageHourlyRollupMethods _UsageRollups = null!;
 
         #endregion
 

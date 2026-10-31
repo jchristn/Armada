@@ -72,6 +72,50 @@ namespace Armada.Core.Models
         public string? HarborId { get; set; } = null;
 
         /// <summary>
+        /// Provider the tokens were spent against (for example anthropic, openai), when known. Null for
+        /// legacy records; missing attribution is never guessed or backfilled.
+        /// </summary>
+        public string? Provider { get; set; } = null;
+
+        /// <summary>
+        /// Opaque host-HMAC account key the work is attributed to, when captured at start. Null for legacy
+        /// records, which surface as an Unattributed account series (correlation only).
+        /// </summary>
+        public string? AccountKey { get; set; } = null;
+
+        /// <summary>
+        /// Stable credential host id the account was used on, when known. Descriptive attribution that also
+        /// covers the Admiral host, unlike <see cref="HarborId"/> which is null on the Admiral.
+        /// </summary>
+        public string? HostId { get; set; } = null;
+
+        /// <summary>
+        /// Usage account membership (usm_ identifier) that covers this record's completion time, when
+        /// attribution was captured at start and carried to completion. Null for legacy records.
+        /// </summary>
+        public string? MembershipId { get; set; } = null;
+
+        /// <summary>
+        /// Cost reported by the provider for this unit of work, in <see cref="CostCurrency"/> units.
+        /// Null means unknown, never zero: missing cost stays unknown. Negative values normalize to null.
+        /// </summary>
+        public double? ReportedCost
+        {
+            get => _ReportedCost;
+            set => _ReportedCost = value.HasValue && value.Value < 0 ? null : value;
+        }
+
+        /// <summary>
+        /// Currency code of <see cref="ReportedCost"/> (for example USD), uppercased when supplied.
+        /// Null when no cost was reported. Currencies are never summed across codes.
+        /// </summary>
+        public string? CostCurrency
+        {
+            get => _CostCurrency;
+            set => _CostCurrency = String.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
+        }
+
+        /// <summary>
         /// Input (prompt) tokens consumed. Clamped to be non-negative.
         /// </summary>
         public long InputTokens
@@ -126,6 +170,8 @@ namespace Armada.Core.Models
         private long _OutputTokens = 0;
         private long _CachedTokens = 0;
         private long _TotalTokens = 0;
+        private double? _ReportedCost = null;
+        private string? _CostCurrency = null;
 
         #endregion
 
