@@ -13,6 +13,22 @@ All notable changes to Armada are documented in this file.
 - **Dashboard Evaluate dialog.** The captain page's Full Evaluate control opens a dialog with depth (Full by default), the evaluator captain (idle captains, with a note when one shares the evaluated captain's model family), battery packs, personas and run count, and submits to `POST /api/v1/captains/{id}/evaluate`. The report view is unchanged. New client helper `listBatteryPacks`.
 - **TUI Evaluate view.** The TUI captain page has an Evaluate action (`v`) with the same options, then a viewer that polls the run, shows its probe results and report, and cancels it with `c`.
 
+---
+
+## v1.2.0 (2026-10-29)
+
+v1.2.0 adds the mission and voyage black box: every failure writes an entry that says where, how and why it
+failed, which missions and files it collided with, and how to recover, with a FIX THIS brief for any coding agent (see
+the first section below). It also adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
+its section below). The rest of the release is about model evaluation: knowing how well each model does the work
+it is given, and handing work to it in a form it can use. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
+digest, escalation record) and a suspected cause; Quick probes give a captain or model endpoint a probe-only
+**Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
+are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
+mobile interfaces for the new surfaces. Since v1.1.0 was cut it also includes the `ExcludeReviewAuthorsFromJudge`
+setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 to 106 apply automatically at
+startup; see [UPGRADING.md](docs/UPGRADING.md#v110-to-v120).
+
 ### Worker eligibility envelope (model heterogeneity Phase 6, item 1)
 
 - **Vessel default.** A vessel may carry a default `WorkerEnvelope` (`maxFiles`, `maxSteps`, `minServedContextTokens`, `requiredTools` of `tools`/`mcp`), set through REST vessel create/update, WebSocket `create_vessel`/`update_vessel`, MCP `add_vessel`/`update_vessel` (`workerEnvelope`; `{}` clears it, omitted keeps it) and the dashboard and TUI vessel forms; `get_vessel` returns it. Out-of-range values or unknown tools are rejected (`400`, MCP `InvalidArgument`). No envelope is the default, so routing is unchanged until a vessel sets one. Stored in a new column (migration 110 on SQLite, PostgreSQL, SQL Server and MySQL).
@@ -84,22 +100,6 @@ All notable changes to Armada are documented in this file.
 - Needs You failure cards (Failed and Landing failed) gain **Copy JSON** next to **Copy Markdown**: it copies the
   mission's black box entry and its versioned record, like the black box panel. The Copy Markdown tooltip and toast no
   longer say "FIX THIS".
-
----
-
-## v1.2.0 (2026-10-29)
-
-v1.2.0 adds the mission and voyage black box: every failure writes an entry that says where, how and why it
-failed, which missions and files it collided with, and how to recover, with a FIX THIS brief for any coding agent (see
-the first section below). It also adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
-its section below). The rest of the release is about model evaluation: knowing how well each model does the work
-it is given, and handing work to it in a form it can use. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
-digest, escalation record) and a suspected cause; Quick probes give a captain or model endpoint a probe-only
-**Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
-are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
-mobile interfaces for the new surfaces. Since v1.1.0 was cut it also includes the `ExcludeReviewAuthorsFromJudge`
-setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 to 106 apply automatically at
-startup; see [UPGRADING.md](docs/UPGRADING.md#v110-to-v120).
 
 ### Mission and voyage black box
 
