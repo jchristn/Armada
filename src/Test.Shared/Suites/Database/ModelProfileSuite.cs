@@ -232,6 +232,36 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(0, mutators.Length, "no revision update or delete: " + String.Join(", ", mutators));
             }));
 
+            cases.Add(CaseAsync("revision_evaluation_report_roundtrip", "An advisory revision's evaluation run id and report (migration 109) round-trip; an observed revision keeps them null", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                ModelProfile profile = new ModelProfile { Identity = new ModelProfileIdentity { Runtime = "Mux" } };
+                await db.ModelProfiles.CreateAsync(profile, "key-eval").ConfigureAwait(false);
+                ModelProfileRevision observed = await db.ModelProfiles.CreateRevisionAsync(new ModelProfileRevision { ProfileId = profile.Id, RuntimeVersion = "1.0.0", FirstSeenUtc = _Fixed }).ConfigureAwait(false);
+                ModelEvaluationReport report = new ModelEvaluationReport { RunId = "mpr_eval", Complete = true, ProfileId = profile.Id };
+                report.Narrative = new ModelEvaluationNarrative { Status = ModelEvaluationNarrativeStatusEnum.Accepted, HowToWork = "One task at a time." };
+                report.Narrative.Strengths.Add(new ModelEvaluationFinding { Key = "persona:Judge", Text = "Strong: reviews (3 of 3).", Passed = 3, Total = 3 });
+                ModelProfileRevision advisory = await db.ModelProfiles.CreateRevisionAsync(new ModelProfileRevision
+                {
+                    ProfileId = profile.Id,
+                    RuntimeVersion = "1.0.0",
+                    FirstSeenUtc = _Fixed.AddMinutes(1),
+                    EvaluationRunId = "mpr_eval",
+                    EvaluationReport = report
+                }).ConfigureAwait(false);
+
+                List<ModelProfileRevision> list = await db.ModelProfiles.ReadRevisionsAsync(profile.Id).ConfigureAwait(false);
+                AssertNull(list[0].EvaluationRunId, "observed revision has no run");
+                AssertNull(list[0].EvaluationReport, "observed revision has no report");
+                ModelProfileRevision read = (await db.ModelProfiles.ReadRevisionAsync(advisory.Id).ConfigureAwait(false))!;
+                AssertEqual("mpr_eval", read.EvaluationRunId, "run id");
+                AssertNotNull(read.EvaluationReport, "report");
+                AssertEqual("One task at a time.", read.EvaluationReport!.Narrative.HowToWork, "note");
+                AssertEqual("Strong: reviews (3 of 3).", read.EvaluationReport.Narrative.Strengths.Single().Text, "strength");
+                AssertEqual(observed.ProfileId, read.ProfileId, "same profile");
+            }));
+
             cases.Add(CaseAsync("compatibility_symmetric", "Compatibility marks are symmetric, replace the set, clear with an empty list, and never edit a revision", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

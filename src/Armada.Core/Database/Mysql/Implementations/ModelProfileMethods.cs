@@ -31,9 +31,9 @@ namespace Armada.Core.Database.Mysql.Implementations
             WHERE id = @id;";
 
         private static readonly string _InsertRevision = @"INSERT INTO model_profile_revisions
-            (id, profile_id, tenant_id, runtime_version, model_digest, sampling_temperature, sampling_top_p, tool_tools, tool_mcp, first_seen_utc)
+            (id, profile_id, tenant_id, runtime_version, model_digest, sampling_temperature, sampling_top_p, tool_tools, tool_mcp, first_seen_utc, evaluation_run_id, evaluation_report_json)
             VALUES
-            (@id, @profile_id, @tenant_id, @runtime_version, @model_digest, @sampling_temperature, @sampling_top_p, @tool_tools, @tool_mcp, @first_seen_utc);";
+            (@id, @profile_id, @tenant_id, @runtime_version, @model_digest, @sampling_temperature, @sampling_top_p, @tool_tools, @tool_mcp, @first_seen_utc, @evaluation_run_id, @evaluation_report_json);";
 
         private readonly string _ConnectionString;
         private readonly SemaphoreSlim? _WriteLock;
@@ -173,6 +173,8 @@ namespace Armada.Core.Database.Mysql.Implementations
                     MysqlCommandHelper.Add(cmd, "@tool_tools", revision.ToolConfiguration.Tools);
                     MysqlCommandHelper.Add(cmd, "@tool_mcp", revision.ToolConfiguration.Mcp);
                     MysqlCommandHelper.AddDate(cmd, "@first_seen_utc", revision.FirstSeenUtc);
+                    MysqlCommandHelper.Add(cmd, "@evaluation_run_id", revision.EvaluationRunId);
+                    MysqlCommandHelper.Add(cmd, "@evaluation_report_json", ModelEvaluationReport.ToJson(revision.EvaluationReport));
                 }, token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
             revision.CompatibleWith = new List<string>();
@@ -321,6 +323,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             revision.ToolConfiguration.Tools = MysqlCommandHelper.ReadNullableBool(reader["tool_tools"]);
             revision.ToolConfiguration.Mcp = MysqlCommandHelper.ReadNullableBool(reader["tool_mcp"]);
             revision.FirstSeenUtc = MysqlCommandHelper.ReadDate(reader["first_seen_utc"]);
+            revision.EvaluationRunId = MysqlCommandHelper.ReadString(reader["evaluation_run_id"]);
+            revision.EvaluationReport = ModelEvaluationReport.FromJson(MysqlCommandHelper.ReadString(reader["evaluation_report_json"]));
             return revision;
         }
 

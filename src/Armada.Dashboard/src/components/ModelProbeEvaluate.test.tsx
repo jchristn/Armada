@@ -5,12 +5,13 @@ import componentSource from './ModelProbeEvaluate.tsx?raw';
 import captainDetailSource from '../pages/CaptainDetail.tsx?raw';
 import endpointsSource from '../pages/Endpoints.tsx?raw';
 import ModelProbeEvaluate from './ModelProbeEvaluate';
-import { evaluateCaptain, evaluateModelEndpoint, getModelProbeRun } from '../api/client';
+import { cancelModelProbeRun, evaluateCaptain, evaluateModelEndpoint, getModelProbeRun } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import type { I18nCatalog } from '../i18n/runtime';
 import type { ModelProbeRun } from '../types/models';
 
 vi.mock('../api/client', () => ({
+  cancelModelProbeRun: vi.fn(),
   evaluateCaptain: vi.fn(),
   evaluateModelEndpoint: vi.fn(),
   getModelProbeRun: vi.fn(),
@@ -44,11 +45,33 @@ const COMPLETED = run({
   ],
 });
 
+const FULL = run({
+  depth: 'Full', status: 'Completed', passedCount: 5, failedCount: 1,
+  report: {
+    runId: 'mpr_1', complete: true, batteryTokensUsed: 1000, packs: ['csharp'], personas: ['Worker'],
+    evaluatorCaptainId: 'cpt_eval', evaluatorCaptainName: 'claude-premium', evaluatorExplicit: false,
+    warnings: ['The evaluator is of the same model family (qwen) as the candidate.'], notes: [], probes: [],
+    personaOutcomes: [{
+      persona: 'Worker',
+      totals: { key: 'persona:Worker', label: 'Worker', passed: 3, failed: 3, couldNotRun: 1, pendingEvaluation: 0, graded: 6 },
+      tasks: [],
+    }],
+    narrative: {
+      status: 'Accepted',
+      strengths: [{ key: 'task:csharp/add-member', text: 'Strong: single-file Worker edits (3 of 3).', passed: 3, total: 3 }],
+      weaknesses: [{ key: 'task:csharp/two-place', text: 'Weak: coordinated two-place edits (0 of 3).', passed: 0, total: 3 }],
+      observedProblems: ['Forgets to register the test.'], howToWork: 'One objective per mission.', subjectiveGrades: [],
+    },
+    createdUtc: '2026-10-30T00:00:00Z',
+  },
+});
+
 describe('ModelProbeEvaluate', () => {
   beforeEach(() => {
     vi.mocked(evaluateCaptain).mockReset();
     vi.mocked(evaluateModelEndpoint).mockReset();
     vi.mocked(getModelProbeRun).mockReset();
+    vi.mocked(cancelModelProbeRun).mockReset();
   });
 
   it('starts a Quick run, disables the button while polling, and shows the finished counts and probes', async () => {
@@ -85,13 +108,65 @@ describe('ModelProbeEvaluate', () => {
   });
 
   it('hands a start error to the page error display', async () => {
-    vi.mocked(evaluateCaptain).mockRejectedValue(new Error('Depth Full is not implemented until Phase 5.'));
+    vi.mocked(evaluateCaptain).mockRejectedValue(new Error('Only an admin can evaluate a captain.'));
     const onError = vi.fn();
     render(<ModelProbeEvaluate target="captain" targetId="cpt_1" onError={onError} pollMs={5} />);
     await userEvent.click(screen.getByRole('button', { name: 'Evaluate' }));
-    await waitFor(() => expect(onError).toHaveBeenCalledWith('Depth Full is not implemented until Phase 5.'));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith('Only an admin can evaluate a captain.'));
     expect(screen.getByRole('button', { name: 'Evaluate' })).toBeEnabled();
     expect(screen.queryByTestId('model-probe-counts')).toBeNull();
+  });
+
+  it('starts a Full Evaluate and shows the report: counts per persona, evaluator, warnings and the accepted narrative', async () => {
+    vi.mocked(evaluateCaptain).mockResolvedValue(run({ depth: 'Full' }));
+    vi.mocked(getModelProbeRun).mockResolvedValue(FULL);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Full Evaluate' }));
+    expect(evaluateCaptain).toHaveBeenCalledWith('cpt_1', 'Full');
+    const report = await screen.findByTestId('model-evaluation-report');
+    expect(report).toHaveTextContent('Report complete');
+    expect(report).toHaveTextContent('Evaluator: claude-premium');
+    expect(report).toHaveTextContent('Worker: 3 of 6 passed, 0 pending, 1 could not run');
+    expect(report).toHaveTextContent('The evaluator is of the same model family');
+    expect(report).toHaveTextContent('Strong: single-file Worker edits (3 of 3).');
+    expect(report).toHaveTextContent('Weak: coordinated two-place edits (0 of 3).');
+    expect(report).toHaveTextContent('Forgets to register the test.');
+    expect(report).toHaveTextContent('One objective per mission.');
+  });
+
+  it('shows an incomplete report and the narrative rejection reason', async () => {
+    vi.mocked(evaluateCaptain).mockResolvedValue(run({ depth: 'Full' }));
+    vi.mocked(getModelProbeRun).mockResolvedValue(run({
+      depth: 'Full', status: 'Completed',
+      report: { ...FULL.report!, complete: false, incompleteReason: 'The fixture battery did not finish: budget spent.', narrative: { ...FULL.report!.narrative, status: 'Rejected', reason: 'A strength cites 2 of 3 but the count is 3 of 3.' } },
+    }));
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Full Evaluate' }));
+    const report = await screen.findByTestId('model-evaluation-report');
+    expect(report).toHaveTextContent('Incomplete: The fixture battery did not finish: budget spent.');
+    expect(report).toHaveTextContent('Narrative rejected: A strength cites 2 of 3 but the count is 3 of 3.');
+    expect(report).not.toHaveTextContent('Strong: single-file');
+  });
+
+  it('cancels a running evaluation and stops polling', async () => {
+    vi.mocked(evaluateCaptain).mockResolvedValue(run({ depth: 'Full', status: 'Running' }));
+    vi.mocked(getModelProbeRun).mockResolvedValue(run({ depth: 'Full', status: 'Running' }));
+    vi.mocked(cancelModelProbeRun).mockResolvedValue(run({
+      depth: 'Full', status: 'Cancelled', failureReason: 'Cancelled by an administrator.',
+      report: { ...FULL.report!, complete: false, incompleteReason: 'Cancelled by an administrator.', narrative: { ...FULL.report!.narrative, status: 'Skipped', reason: 'The run was stopped.' } },
+    }));
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Full Evaluate' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(cancelModelProbeRun).toHaveBeenCalledWith('mpr_1');
+    const report = await screen.findByTestId('model-evaluation-report');
+    expect(report).toHaveTextContent('Incomplete: Cancelled by an administrator.');
+    expect(report).toHaveTextContent('Subjective grading skipped: The run was stopped.');
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    const calls = vi.mocked(getModelProbeRun).mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(vi.mocked(getModelProbeRun).mock.calls.length).toBe(calls);
   });
 
   it('shows a poll error inline when no page error display is given', async () => {

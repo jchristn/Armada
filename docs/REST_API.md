@@ -284,8 +284,9 @@ without a declaration requires a global admin. The complete per-route list is th
 | `/api/v1/handoff-artifacts/{id}`, `/api/v1/missions/{id}/handoff-artifacts` (also `POST .../enumerate`) | GET | Authenticated | Global admins see every tenant; everyone else their own tenant (`404` otherwise). A captain session (mission-scoped token) sees its own voyage, or its own mission and the stage it depends on; Ask sessions get `403` |
 | `/api/v1/failure-cause-rules` | GET, POST, POST `.../enumerate`; `GET`, `PUT`, `DELETE .../{id}` | Authenticated | The caller's tenant plus rules for every tenant. Anyone in the tenant may write the tenant's rules; rules for every tenant (`TenantId` null) and built-in rules need a global admin (`403`) |
 | `/api/v1/captains/{id}/evaluate` | POST | TenantAdmin | Global admin, or a tenant admin of the captain's tenant (`404` for another tenant's captain). Captain sessions get `403` |
-| `/api/v1/model-endpoints/{id}/evaluate` | POST | Authenticated | Anyone who can read the endpoint (the `GET /api/v1/model-endpoints/{id}` rules); `404` otherwise |
+| `/api/v1/model-endpoints/{id}/evaluate` | POST | Authenticated | Quick: anyone who can read the endpoint (the `GET /api/v1/model-endpoints/{id}` rules); `404` otherwise. Full: a global admin or a tenant admin (`403` otherwise) |
 | `/api/v1/model-probe-runs` | GET, POST `.../enumerate`; `GET .../{id}` | Authenticated | Global admins see every tenant; everyone else their own tenant (`404` for another tenant's run). Captain sessions get `403` |
+| `/api/v1/model-probe-runs/{id}/cancel` | POST | TenantAdmin | Global admin, or a tenant admin of the run's tenant (`404` for another tenant's run) |
 | `/api/v1/model-profiles` | GET, POST `.../enumerate`; `GET .../{id}`, `GET .../{id}/scorecard` | Authenticated | Global admins see every tenant; everyone else their own tenant (`404` for another tenant's profile) |
 | `/api/v1/model-alerts` | GET, POST `.../enumerate`; `GET .../{id}`, `GET .../thresholds` | Authenticated | Global admins see every tenant; everyone else their own tenant (`404` for another tenant's alert) |
 | `/api/v1/model-alerts/evaluate`, `.../{id}/apply`, `.../{id}/ignore` | POST | Authenticated | Global admin, or a tenant admin of the alert's tenant (`403` otherwise, `404` for another tenant's alert, checked before the body). Captain sessions get `403` |
@@ -5990,8 +5991,8 @@ site's volatile facts (git state, exception, command output) are gone by then, a
 
 **Evaluate** runs probe-only mechanical probes against a captain (through its own runtime, as Harbor jobs of kind
 `ModelProbe`, with the same tool loop it uses in production) or a model endpoint (through the API endpoint runtime, as a
-transient captain that is never saved). Depth `Quick` is the only depth for now; `Full` is `400` ("not implemented until
-Phase 5"). Each run records six results, one per probe: `OutputContract` (Armada's real `[ARMADA:RESULT]`,
+transient captain that is never saved). Depth `Quick` (the default) runs only the probes; depth `Full` is described
+below. Each run records six results, one per probe: `OutputContract` (Armada's real `[ARMADA:RESULT]`,
 `[ARMADA:VERDICT]` and `armada-plan` output, and whether the repair path would be needed), `ServedContext` (served versus
 configured context; a mismatch is a configuration error), `AsciiFormat` (em dashes, smart quotes, ANSI codes),
 `ToolCalling` (single, sequential and parallel calls, an error result, a large result), `Speed` (time to first token and
@@ -6003,16 +6004,39 @@ probe-set version, are tagged `IsEvaluation`, never count in stage outcomes, and
 The `Evaluation` server settings set the token budgets (per run, per day, per day per inference host) and the
 concurrency limits (overall, and per inference host, so models sharing one host run one at a time).
 
+**Full Evaluate** (`Depth` `Full`, only when asked) runs the Quick probes, then a fixture battery run for the candidate
+(for a model endpoint, through a captain of the tenant that drives it; with none, the battery is reported as could not
+run). `Packs` defaults to the packs matching the languages of the tenant's repositories (with a note and the first
+installed pack when none match); `Personas` defaults to every persona the captain is allowed and must stay within them;
+`RunCount` is 1 to 10 (default 3). An evaluator captain (`EvaluatorCaptainId`, same tenant; default the highest-tier idle
+captain of a different model family, a same-family one only when no other is idle with a warning in the report, none at
+all skips the subjective grading with the reason) grades the battery attempts that need a subjective grade and writes
+strengths and weaknesses that must cite the mechanical counts exactly, plus observed problems and a short "how to work
+with this model" note. A reply that does not parse or cites a wrong count is kept out (`Narrative.Status` `Rejected`
+with the reason); the mechanical counts always stand. The run's `Report` carries per-persona counts (total and per task),
+probe counts, packs, personas, evaluator, warnings, notes, the narrative and `Complete`; a complete report is also
+recorded as a new advisory model profile revision (`EvaluationRunId`, `EvaluationReport`, marked compatible with the
+revision it was recorded on). Nothing changes routing, persona captain lists or prompts. A Full run holds the evaluation
+slot of its inference host for the probes, the battery and the grading, spends at most `Evaluation.FullRunTokenBudget`
+estimated battery tokens (default 3,000,000, within the daily budgets), and stops after
+`Evaluation.FullRunTimeoutMinutes` (default 720). Battery missions are flagged `IsEvaluation`, so their stage outcomes
+never count in scorecards or alerts.
+
+**Cancel** stops a Quick or Full run: no further probe, battery task or grading starts, the open battery mission is
+cancelled (releasing its dock and captain), and the run ends `Cancelled` with what finished kept; a Full run keeps a
+partial report with `Complete` false and the reason. A timeout ends the same way.
+
 | Method | Path | Body | Response |
 |---|---|---|---|
-| POST | `/api/v1/captains/{id}/evaluate` | `EvaluateCaptainRequest` (optional; `Depth`, default `Quick`) | `201` `ModelProbeRun` (queued; the probes run in the background). `400` for `Full` or an unknown depth; `403` not an admin; `404` missing or in another tenant |
-| POST | `/api/v1/model-endpoints/{id}/evaluate` | `EvaluateCaptainRequest` (optional) | `201` `ModelProbeRun`; `400`; `404` when the caller cannot read the endpoint |
-| GET | `/api/v1/model-probe-runs` | | `200` `EnumerationResult<ModelProbeRun>` (without results), newest first. Query: `tenantId` (global admins), `captainId`, `modelEndpointId`, `status` (`Queued`, `Running`, `Completed`, `Failed`), `pageNumber`, `pageSize` (1-1000, default 100); `400` for a value that does not parse |
+| POST | `/api/v1/captains/{id}/evaluate` | `EvaluateCaptainRequest` (optional; `Depth`, default `Quick`; for `Full` also `EvaluatorCaptainId`, `Packs`, `Personas`, `RunCount`) | `201` `ModelProbeRun` (queued; the work runs in the background). `400` for an unknown depth, an unknown or malformed pack, a persona the captain is not allowed or a run count outside 1 to 10; `403` not an admin; `404` the captain or the evaluator is missing or in another tenant |
+| POST | `/api/v1/model-endpoints/{id}/evaluate` | `EvaluateCaptainRequest` (optional) | `201` `ModelProbeRun`; `400`; `403` for `Full` by a caller who is not an admin; `404` when the caller cannot read the endpoint |
+| GET | `/api/v1/model-probe-runs` | | `200` `EnumerationResult<ModelProbeRun>` (without results), newest first. Query: `tenantId` (global admins), `captainId`, `modelEndpointId`, `status` (`Queued`, `Running`, `Completed`, `Failed`, `Cancelled`), `pageNumber`, `pageSize` (1-1000, default 100); `400` for a value that does not parse |
 | POST | `/api/v1/model-probe-runs/enumerate` | `ModelProbeRunQuery` (optional): `TenantId` (global admins), `CaptainId`, `ModelEndpointId`, `Status`, `FromUtc`, `PageNumber`, `PageSize` (1-1000, default 100) | `200` the same page as the GET; querystring paging overrides the body; `400` for a body that does not parse |
-| GET | `/api/v1/model-probe-runs/{id}` | | `200` `ModelProbeRun` with `Results` (`Probe`, `Outcome` `Passed`/`Failed`/`CouldNotRun`, `Summary`, `Reason`, `Metrics`); `404` when missing or in another tenant |
+| GET | `/api/v1/model-probe-runs/{id}` | | `200` `ModelProbeRun` with `Results` (`Probe`, `Outcome` `Passed`/`Failed`/`CouldNotRun`, `Summary`, `Reason`, `Metrics`), and for Full `BatteryRunId` and `Report`; `404` when missing or in another tenant |
+| POST | `/api/v1/model-probe-runs/{id}/cancel` | | `200` `ModelProbeRun` after the cancellation (it may still be stopping; a finished run is returned unchanged); `403` not an admin; `404` when missing or in another tenant |
 
 A run is `Failed` only when the run itself could not finish (for example the Admiral restarted while it ran); poll
-`GET /api/v1/model-probe-runs/{id}` until `Status` is `Completed` or `Failed`.
+`GET /api/v1/model-probe-runs/{id}` until `Status` is `Completed`, `Failed` or `Cancelled`.
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/captains/cpt_abc123/evaluate \

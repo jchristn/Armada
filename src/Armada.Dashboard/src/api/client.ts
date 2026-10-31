@@ -206,6 +206,7 @@ import type {
   StageOutcome,
   StageOutcomeQuery,
   StageOutcomeReclassifyResult,
+  ModelEvaluationOptions,
   ModelProbeDepth,
   ModelProbeRun,
   ModelProbeRunQuery,
@@ -2162,18 +2163,32 @@ export const deleteFailureCauseRule = (id: string) =>
   del<void>(`${FAILURE_CAUSE_RULES}/${encodeURIComponent(id)}`);
 
 // ==================== Model Probes ====================
-// Evaluate a captain or model endpoint with the mechanical probes (Quick depth; Full is rejected until Phase 5). Runs
-// are queued and finish in the background; poll getModelProbeRun. Nothing changes routing or captain settings.
+// Evaluate a captain or model endpoint: Quick runs the mechanical probes; Full adds the fixture battery and the
+// evaluator's grading, and records an advisory model profile revision. Runs are queued and finish in the background;
+// poll getModelProbeRun, stop with cancelModelProbeRun. Nothing changes routing or captain settings.
 
 const MODEL_PROBE_RUNS = '/api/v1/model-probe-runs';
 
-/** Queue a probe run for a captain through its own runtime. 201 with the queued run; 400 for depth Full. */
-export const evaluateCaptain = (captainId: string, depth: ModelProbeDepth = 'Quick') =>
-  post<ModelProbeRun>(`/api/v1/captains/${encodeURIComponent(captainId)}/evaluate`, { Depth: depth });
+function evaluateBody(depth: ModelProbeDepth, options?: ModelEvaluationOptions): Record<string, unknown> {
+  const body: Record<string, unknown> = { Depth: depth };
+  if (options?.evaluatorCaptainId) body.EvaluatorCaptainId = options.evaluatorCaptainId;
+  if (options?.packs && options.packs.length > 0) body.Packs = options.packs;
+  if (options?.personas && options.personas.length > 0) body.Personas = options.personas;
+  if (options?.runCount != null) body.RunCount = options.runCount;
+  return body;
+}
 
-/** Queue a probe run for a model endpoint. 201 with the queued run; 400 for depth Full. */
-export const evaluateModelEndpoint = (endpointId: string, depth: ModelProbeDepth = 'Quick') =>
-  post<ModelProbeRun>(`/api/v1/model-endpoints/${encodeURIComponent(endpointId)}/evaluate`, { Depth: depth });
+/** Queue an Evaluate of a captain through its own runtime (Full options apply only to depth Full). 201 with the queued run. */
+export const evaluateCaptain = (captainId: string, depth: ModelProbeDepth = 'Quick', options?: ModelEvaluationOptions) =>
+  post<ModelProbeRun>(`/api/v1/captains/${encodeURIComponent(captainId)}/evaluate`, evaluateBody(depth, options));
+
+/** Queue an Evaluate of a model endpoint (Full needs an admin). 201 with the queued run. */
+export const evaluateModelEndpoint = (endpointId: string, depth: ModelProbeDepth = 'Quick', options?: ModelEvaluationOptions) =>
+  post<ModelProbeRun>(`/api/v1/model-endpoints/${encodeURIComponent(endpointId)}/evaluate`, evaluateBody(depth, options));
+
+/** Cancel a running Evaluate; a Full run keeps a partial report marked incomplete. A finished run comes back unchanged. */
+export const cancelModelProbeRun = (id: string) =>
+  post<ModelProbeRun>(`${MODEL_PROBE_RUNS}/${encodeURIComponent(id)}/cancel`, {});
 
 /** One run with its per-probe results. */
 export const getModelProbeRun = (id: string) =>

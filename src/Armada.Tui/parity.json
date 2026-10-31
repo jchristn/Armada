@@ -1241,6 +1241,14 @@
     },
     {
       "kind": "api",
+      "key": "cancelModelProbeRun",
+      "status": "implemented",
+      "tui": "ArmadaClient.CancelModelProbeRunAsync",
+      "workstream": "W0.2",
+      "notes": "Model Probes"
+    },
+    {
+      "kind": "api",
       "key": "cancelVoyage",
       "status": "implemented",
       "tui": "ArmadaClient.CancelVoyageAsync",

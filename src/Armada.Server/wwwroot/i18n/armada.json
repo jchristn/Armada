@@ -7016,7 +7016,19 @@
         "Suggested actions": "Acciones sugeridas",
         "Recommended": "Recomendada",
         "Last action: {{result}}": "Última acción: {{result}}",
-        "The action could not be applied: {{message}}": "No se pudo aplicar la acción: {{message}}"
+        "The action could not be applied: {{message}}": "No se pudo aplicar la acción: {{message}}",
+        "Report complete": "Informe completo",
+        "Incomplete: {{reason}}": "Incompleto: {{reason}}",
+        "Evaluator: {{name}}": "Evaluador: {{name}}",
+        "{{persona}}: {{passed}} of {{graded}} passed, {{pending}} pending, {{couldNotRun}} could not run": "{{persona}}: {{passed}} de {{graded}} aprobadas, {{pending}} pendientes, {{couldNotRun}} no se pudieron ejecutar",
+        "Strengths": "Fortalezas",
+        "Weaknesses": "Debilidades",
+        "Observed problems": "Problemas observados",
+        "How to work with this model": "Cómo trabajar con este modelo",
+        "Subjective grading skipped: {{reason}}": "Evaluación subjetiva omitida: {{reason}}",
+        "Narrative rejected: {{reason}}": "Narrativa rechazada: {{reason}}",
+        "Full Evaluate": "Evaluación completa",
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Ejecuta las sondas rápidas y la batería de pruebas; después un capitán evaluador de otra familia de modelos califica las tareas subjetivas. Solo orientativo: no cambia el enrutamiento, las listas de capitanes de las personas ni los prompts."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -12975,7 +12987,19 @@
         "Suggested actions": "建议的操作",
         "Recommended": "推荐",
         "Last action: {{result}}": "上一次操作：{{result}}",
-        "The action could not be applied: {{message}}": "无法应用该操作：{{message}}"
+        "The action could not be applied: {{message}}": "无法应用该操作：{{message}}",
+        "Report complete": "报告完整",
+        "Incomplete: {{reason}}": "不完整：{{reason}}",
+        "Evaluator: {{name}}": "评估者：{{name}}",
+        "{{persona}}: {{passed}} of {{graded}} passed, {{pending}} pending, {{couldNotRun}} could not run": "{{persona}}：{{graded}} 项中通过 {{passed}} 项，{{pending}} 项待评，{{couldNotRun}} 项无法运行",
+        "Strengths": "优势",
+        "Weaknesses": "弱点",
+        "Observed problems": "观察到的问题",
+        "How to work with this model": "如何使用此模型",
+        "Subjective grading skipped: {{reason}}": "已跳过主观评分：{{reason}}",
+        "Narrative rejected: {{reason}}": "叙述被拒绝：{{reason}}",
+        "Full Evaluate": "完整评估",
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "运行快速探测和固定测试集，然后由另一模型系列的评估舰长为主观任务评分。仅供参考：不会更改路由、角色的舰长列表或提示词。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -18897,7 +18921,19 @@
         "Suggested actions": "建議的操作",
         "Recommended": "推薦",
         "Last action: {{result}}": "上一次操作：{{result}}",
-        "The action could not be applied: {{message}}": "無法套用該操作：{{message}}"
+        "The action could not be applied: {{message}}": "無法套用該操作：{{message}}",
+        "Report complete": "報告完整",
+        "Incomplete: {{reason}}": "不完整：{{reason}}",
+        "Evaluator: {{name}}": "評估者：{{name}}",
+        "{{persona}}: {{passed}} of {{graded}} passed, {{pending}} pending, {{couldNotRun}} could not run": "{{persona}}：{{graded}} 項中通過 {{passed}} 項，{{pending}} 項待評，{{couldNotRun}} 項無法執行",
+        "Strengths": "優勢",
+        "Weaknesses": "弱點",
+        "Observed problems": "觀察到的問題",
+        "How to work with this model": "如何使用此模型",
+        "Subjective grading skipped: {{reason}}": "已略過主觀評分：{{reason}}",
+        "Narrative rejected: {{reason}}": "敘述被拒絕：{{reason}}",
+        "Full Evaluate": "完整評估",
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "執行快速探測與固定測試集，然後由另一模型系列的評估艦長為主觀任務評分。僅供參考：不會變更路由、角色的艦長清單或提示詞。"
       },
       "sections": {}
     },
@@ -24779,7 +24815,19 @@
         "Suggested actions": "建議嘅操作",
         "Recommended": "推薦",
         "Last action: {{result}}": "上一次操作：{{result}}",
-        "The action could not be applied: {{message}}": "套用唔到呢個操作：{{message}}"
+        "The action could not be applied: {{message}}": "套用唔到呢個操作：{{message}}",
+        "Report complete": "報告完整",
+        "Incomplete: {{reason}}": "唔完整：{{reason}}",
+        "Evaluator: {{name}}": "評估者：{{name}}",
+        "{{persona}}: {{passed}} of {{graded}} passed, {{pending}} pending, {{couldNotRun}} could not run": "{{persona}}：{{graded}} 項入面通過咗 {{passed}} 項，{{pending}} 項等緊評分，{{couldNotRun}} 項行唔到",
+        "Strengths": "強項",
+        "Weaknesses": "弱項",
+        "Observed problems": "睇到嘅問題",
+        "How to work with this model": "點樣用呢個模型",
+        "Subjective grading skipped: {{reason}}": "跳過咗主觀評分：{{reason}}",
+        "Narrative rejected: {{reason}}": "敘述被拒絕：{{reason}}",
+        "Full Evaluate": "完整評估",
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "行快速探測同固定測試集，之後由另一個模型系列嘅評估艦長幫主觀任務評分。只係參考：唔會改路由、角色嘅艦長清單或者提示詞。"
       },
       "sections": {}
     },
@@ -30677,7 +30725,19 @@
         "Suggested actions": "推奨されるアクション",
         "Recommended": "推奨",
         "Last action: {{result}}": "前回のアクション: {{result}}",
-        "The action could not be applied: {{message}}": "アクションを適用できませんでした: {{message}}"
+        "The action could not be applied: {{message}}": "アクションを適用できませんでした: {{message}}",
+        "Report complete": "レポート完了",
+        "Incomplete: {{reason}}": "未完了: {{reason}}",
+        "Evaluator: {{name}}": "評価者: {{name}}",
+        "{{persona}}: {{passed}} of {{graded}} passed, {{pending}} pending, {{couldNotRun}} could not run": "{{persona}}: {{graded}} 件中 {{passed}} 件合格、保留 {{pending}} 件、実行不可 {{couldNotRun}} 件",
+        "Strengths": "強み",
+        "Weaknesses": "弱み",
+        "Observed problems": "確認された問題",
+        "How to work with this model": "このモデルとの付き合い方",
+        "Subjective grading skipped: {{reason}}": "主観評価をスキップしました: {{reason}}",
+        "Narrative rejected: {{reason}}": "所見を却下しました: {{reason}}",
+        "Full Evaluate": "フル評価",
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "クイックプローブと固定テストバッテリーを実行し、別のモデルファミリーの評価キャプテンが主観的なタスクを採点します。参考情報のみで、ルーティング、ペルソナのキャプテン一覧、プロンプトは変更されません。"
       },
       "sections": {}
     },
@@ -36566,7 +36626,19 @@
         "Suggested actions": "Vorgeschlagene Aktionen",
         "Recommended": "Empfohlen",
         "Last action: {{result}}": "Letzte Aktion: {{result}}",
-        "The action could not be applied: {{message}}": "Die Aktion konnte nicht angewendet werden: {{message}}"
+        "The action could not be applied: {{message}}": "Die Aktion konnte nicht angewendet werden: {{message}}",
+        "Report complete": "Bericht vollständig",
+        "Incomplete: {{reason}}": "Unvollständig: {{reason}}",
+        "Evaluator: {{name}}": "Bewerter: {{name}}",
+        "{{persona}}: {{passed}} of {{graded}} passed, {{pending}} pending, {{couldNotRun}} could not run": "{{persona}}: {{passed}} von {{graded}} bestanden, {{pending}} ausstehend, {{couldNotRun}} nicht ausführbar",
+        "Strengths": "Stärken",
+        "Weaknesses": "Schwächen",
+        "Observed problems": "Beobachtete Probleme",
+        "How to work with this model": "So arbeiten Sie mit diesem Modell",
+        "Subjective grading skipped: {{reason}}": "Subjektive Bewertung übersprungen: {{reason}}",
+        "Narrative rejected: {{reason}}": "Bewertungstext abgelehnt: {{reason}}",
+        "Full Evaluate": "Vollständige Bewertung",
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Führt die Schnelltests und die Testbatterie aus; danach bewertet ein Bewerter-Captain einer anderen Modellfamilie die subjektiven Aufgaben. Nur zur Beratung: Routing, Captain-Listen der Personas und Prompts bleiben unverändert."
       },
       "sections": {}
     },
@@ -42455,7 +42527,19 @@
         "Suggested actions": "Actions suggérées",
         "Recommended": "Recommandée",
         "Last action: {{result}}": "Dernière action : {{result}}",
-        "The action could not be applied: {{message}}": "L'action n'a pas pu être appliquée : {{message}}"
+        "The action could not be applied: {{message}}": "L'action n'a pas pu être appliquée : {{message}}",
+        "Report complete": "Rapport complet",
+        "Incomplete: {{reason}}": "Incomplet : {{reason}}",
+        "Evaluator: {{name}}": "Évaluateur : {{name}}",
+        "{{persona}}: {{passed}} of {{graded}} passed, {{pending}} pending, {{couldNotRun}} could not run": "{{persona}} : {{passed}} sur {{graded}} réussies, {{pending}} en attente, {{couldNotRun}} n'ont pas pu s'exécuter",
+        "Strengths": "Points forts",
+        "Weaknesses": "Points faibles",
+        "Observed problems": "Problèmes observés",
+        "How to work with this model": "Comment travailler avec ce modèle",
+        "Subjective grading skipped: {{reason}}": "Évaluation subjective ignorée : {{reason}}",
+        "Narrative rejected: {{reason}}": "Synthèse rejetée : {{reason}}",
+        "Full Evaluate": "Évaluation complète",
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Exécute les sondes rapides et la batterie de tests, puis un capitaine évaluateur d'une autre famille de modèles note les tâches subjectives. À titre indicatif : le routage, les listes de capitaines des personas et les prompts ne changent pas."
       },
       "sections": {}
     },
@@ -48344,7 +48428,19 @@
         "Suggested actions": "Azioni suggerite",
         "Recommended": "Consigliata",
         "Last action: {{result}}": "Ultima azione: {{result}}",
-        "The action could not be applied: {{message}}": "Impossibile applicare l'azione: {{message}}"
+        "The action could not be applied: {{message}}": "Impossibile applicare l'azione: {{message}}",
+        "Report complete": "Report completo",
+        "Incomplete: {{reason}}": "Incompleto: {{reason}}",
+        "Evaluator: {{name}}": "Valutatore: {{name}}",
+        "{{persona}}: {{passed}} of {{graded}} passed, {{pending}} pending, {{couldNotRun}} could not run": "{{persona}}: {{passed}} su {{graded}} superate, {{pending}} in attesa, {{couldNotRun}} non eseguibili",
+        "Strengths": "Punti di forza",
+        "Weaknesses": "Punti deboli",
+        "Observed problems": "Problemi osservati",
+        "How to work with this model": "Come lavorare con questo modello",
+        "Subjective grading skipped: {{reason}}": "Valutazione soggettiva saltata: {{reason}}",
+        "Narrative rejected: {{reason}}": "Sintesi respinta: {{reason}}",
+        "Full Evaluate": "Valutazione completa",
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Esegue le sonde rapide e la batteria di test, poi un capitano valutatore di un'altra famiglia di modelli valuta le attività soggettive. Solo indicativo: instradamento, elenchi di capitani delle persona e prompt non cambiano."
       },
       "sections": {}
     }

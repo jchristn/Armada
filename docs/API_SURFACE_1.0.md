@@ -24,13 +24,13 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 504 | 15 |
-| MCP tools | 253 | 8 |
+| REST routes | 505 | 15 |
+| MCP tools | 254 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 76 | 0 |
 | CLI commands | 97 | 0 |
-| Settings keys | 310 | 12 |
+| Settings keys | 312 | 12 |
 
 ## REST API
 
@@ -304,11 +304,12 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/model-endpoints/{id}` | Authenticated |  | 200 `ModelEndpoint`, 404 |  |
 | PUT | `/api/v1/model-endpoints/{id}` | Authenticated | `ModelEndpoint` | 200 `ModelEndpoint`, 400, 404 |  |
 | POST | `/api/v1/model-endpoints/{id}/duplicate` | Authenticated | `ModelEndpoint` | 201 `ModelEndpoint`, 400, 403, 404 |  |
-| POST | `/api/v1/model-endpoints/{id}/evaluate` | Authenticated | `EvaluateCaptainRequest` (optional) | 201 `ModelProbeRun`, 400, 404 |  |
+| POST | `/api/v1/model-endpoints/{id}/evaluate` | Authenticated | `EvaluateCaptainRequest` (optional) | 201 `ModelProbeRun`, 400, 403 `ApiErrorResponse`, 404 |  |
 | POST | `/api/v1/model-endpoints/{id}/validate` | Authenticated |  | 200 `ModelEndpointProbeResult`, 404 |  |
 | GET | `/api/v1/model-probe-runs` | Authenticated |  | 200 `EnumerationResult<ModelProbeRun>`, 400 |  |
 | POST | `/api/v1/model-probe-runs/enumerate` | Authenticated | `ModelProbeRunQuery` (optional) | 200 `EnumerationResult<ModelProbeRun>`, 400 |  |
 | GET | `/api/v1/model-probe-runs/{id}` | Authenticated |  | 200 `ModelProbeRun`, 404 |  |
+| POST | `/api/v1/model-probe-runs/{id}/cancel` | TenantAdmin |  | 200 `ModelProbeRun`, 403 `ApiErrorResponse`, 404 |  |
 | GET | `/api/v1/model-profiles` | Authenticated |  | 200 `EnumerationResult<ModelProfile>`, 400 |  |
 | POST | `/api/v1/model-profiles/enumerate` | Authenticated | `ModelProfileQuery` (optional) | 200 `EnumerationResult<ModelProfile>`, 400 |  |
 | GET | `/api/v1/model-profiles/{id}` | Authenticated |  | 200 `ModelProfile`, 404 |  |
@@ -564,6 +565,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `cancel_fleet_action_run` | TenantAdmin | `runId*: string` |  |
 | `cancel_merge` | TenantAdmin | `entryId*: string` |  |
 | `cancel_mission` | TenantAdmin | `missionId*: string` |  |
+| `cancel_model_probe_run` | TenantAdmin | `id*: string` |  |
 | `cancel_voyage` | TenantAdmin | `voyageId*: string` |  |
 | `categorize_vessel_import` | TenantAdmin | `applyFleetsAutomatically: boolean`, `batchId*: string`, `captainId: string`, `prompt: string` |  |
 | `classify_stage_outcome` | Authenticated | `cause: string`, `note: string`, `outcomeId*: string` |  |
@@ -630,7 +632,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `enqueue_merge` | TenantAdmin | `branchName*: string`, `missionId: string`, `priority: integer`, `targetBranch: string`, `testCommand: string`, `vesselId*: string` |  |
 | `enumerate` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `entityType*: string`, `eventType: string`, `fleetId: string`, `includeContext: boolean`, `includeDescription: boolean`, `includeInactive: boolean`, `includeMessage: boolean`, `includeOutput: boolean`, `includePayload: boolean`, `includeTestOutput: boolean`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `runId: string`, `search: string`, `signalType: string`, `status: string`, `threadId: string`, `toCaptainId: string`, `unreadOnly: boolean`, `vesselId: string`, `voyageId: string` |  |
 | `evaluate_autoland` | Authenticated | `missionId*: string` |  |
-| `evaluate_captain` | Authenticated | `captainId: string`, `depth: string`, `modelEndpointId: string` |  |
+| `evaluate_captain` | Authenticated | `captainId: string`, `depth: string`, `evaluatorCaptainId: string`, `modelEndpointId: string`, `packs: array<string>`, `personas: array<string>`, `runCount: integer` |  |
 | `evaluate_model_alerts` | Authenticated |  |  |
 | `evaluate_vessel_health` | TenantAdmin | `fleetId: string`, `force: boolean`, `vesselIds: array<string>` |  |
 | `export_blackbox_fixture` | AdminOnly | `entryId: string`, `missionId: string`, `name: string`, `voyageId: string` |  |
@@ -1152,6 +1154,8 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `evaluation.batteryTaskTimeoutMinutes` | int | `60` |  |
 | `evaluation.dailyTokenBudget` | long | `2000000` |  |
 | `evaluation.dailyTokenBudgetPerHost` | long | `1000000` |  |
+| `evaluation.fullRunTimeoutMinutes` | int | `720` |  |
+| `evaluation.fullRunTokenBudget` | long | `3000000` |  |
 | `evaluation.maxConcurrentRuns` | int | `2` |  |
 | `evaluation.maxConcurrentRunsPerHost` | int | `1` |  |
 | `evaluation.probeTimeoutSeconds` | int | `600` |  |

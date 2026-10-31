@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { evaluateCaptain, evaluateModelEndpoint, getModelProbeRun, listModelProbeRuns, setAuthToken } from './client';
+import { cancelModelProbeRun, evaluateCaptain, evaluateModelEndpoint, getModelProbeRun, listModelProbeRuns, setAuthToken } from './client';
 import { onlyCallArgs } from '../test/mockCalls';
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -46,13 +46,42 @@ describe('model probe client', () => {
     expect(run.targetKind).toBe('ModelEndpoint');
   });
 
-  it('surfaces the 400 for depth Full', async () => {
-    // Attach the fetch recorder before the action and verify the rejected request was actually sent.
-    const fetchMock = stub(400, { Error: 'BadRequest', Message: 'Depth Full is not implemented until Phase 5.' });
-    await expect(evaluateCaptain('cpt_1', 'Full')).rejects.toThrow('Depth Full is not implemented until Phase 5.');
+  it('sends depth Full with only the Full options that were given', async () => {
+    const fetchMock = stub(201, { ...RUN, Depth: 'Full' });
+    const run = await evaluateCaptain('cpt_1', 'Full', { evaluatorCaptainId: 'cpt_eval', packs: ['csharp'], personas: [], runCount: 1 });
     const [url, init] = onlyCallArgs(fetchMock);
     expect(new URL(url, 'http://localhost').pathname).toBe('/api/v1/captains/cpt_1/evaluate');
+    expect(JSON.parse(init.body)).toEqual({ Depth: 'Full', EvaluatorCaptainId: 'cpt_eval', Packs: ['csharp'], RunCount: 1 });
+    expect(run.depth).toBe('Full');
+  });
+
+  it('surfaces the 403 for a Full Evaluate by a non-admin', async () => {
+    // Attach the fetch recorder before the action and verify the rejected request was actually sent.
+    const fetchMock = stub(403, { Error: 'Forbidden', Message: 'Only an admin can run a Full Evaluate.' });
+    await expect(evaluateModelEndpoint('mep_1', 'Full')).rejects.toThrow('Only an admin can run a Full Evaluate.');
+    const [url, init] = onlyCallArgs(fetchMock);
+    expect(new URL(url, 'http://localhost').pathname).toBe('/api/v1/model-endpoints/mep_1/evaluate');
     expect(JSON.parse(init.body)).toEqual({ Depth: 'Full' });
+  });
+
+  it('cancels a run and reads back the partial Full report', async () => {
+    const fetchMock = stub(200, {
+      ...RUN, Depth: 'Full', Status: 'Cancelled',
+      Report: { RunId: 'mpr_1', Complete: false, IncompleteReason: 'Cancelled by an administrator.', Narrative: { Status: 'Skipped' } },
+    });
+    const run = await cancelModelProbeRun('mpr 1');
+    const [url, init] = onlyCallArgs(fetchMock);
+    expect(new URL(url, 'http://localhost').pathname).toBe('/api/v1/model-probe-runs/mpr%201/cancel');
+    expect(init.method).toBe('POST');
+    expect(run.status).toBe('Cancelled');
+    expect(run.report?.complete).toBe(false);
+    expect(run.report?.narrative.status).toBe('Skipped');
+  });
+
+  it('surfaces a 404 when cancelling an unknown run', async () => {
+    const fetchMock = stub(404, { Error: 'NotFound', Message: 'Model probe run not found.' });
+    await expect(cancelModelProbeRun('mpr_missing')).rejects.toThrow('Model probe run not found.');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('gets one run with camelized results and metrics, and surfaces a 404', async () => {

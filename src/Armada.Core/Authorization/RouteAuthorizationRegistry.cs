@@ -90,6 +90,7 @@ namespace Armada.Core.Authorization
             Add("GET", "/api/v1/model-probe-runs", "ModelProbeRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/model-probe-runs/enumerate", "ModelProbeRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/model-probe-runs/{id}", "ModelProbeRun", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/model-probe-runs/{id}/cancel", "ModelProbeRun", ResourceOperationEnum.Execute, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/model-profiles", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/model-profiles/enumerate", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/model-profiles/{id}", "ModelProfile", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

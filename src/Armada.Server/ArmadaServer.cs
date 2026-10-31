@@ -610,6 +610,8 @@ namespace Armada.Server
             };
             _BatteryRunService = new BatteryRunService(_Database, _Logging, batteryCatalog, batteryFixtures, batteryDispatcher, () => _Settings.Evaluation, _ModelProbeService.Gate);
             _BatteryAccess = new BatteryAccessService(_Database, _BatteryRunService, _Logging);
+            // Full Evaluate runs its battery through this service, under the Evaluate run's evaluation slot.
+            _ModelProbeService.Battery = _BatteryRunService;
             try
             {
                 int interruptedBattery = await _BatteryRunService.RecoverInterruptedAsync().ConfigureAwait(false);

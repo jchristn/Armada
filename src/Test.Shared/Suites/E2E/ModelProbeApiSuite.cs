@@ -25,7 +25,8 @@ namespace Test.Shared.Suites.E2E
     /// <summary>
     /// End-to-end Evaluate (probe-only Quick model probes) through the real server with canned probe answers (no model
     /// runs): the REST and MCP contract (201 queued run, a finished run with one result per probe, list filters and
-    /// paging), depth Full refused with the Phase 5 message, missing ids, authorization (a non-admin cannot evaluate a
+    /// paging), Full Evaluate parameter validation (unknown pack, disallowed persona, non-admin Full of an endpoint) and
+    /// cancel, missing ids, authorization (a non-admin cannot evaluate a
     /// captain), tenant isolation (another tenant's run is not found; a global admin sees both), the could-not-run path
     /// (a runtime that cannot start gives CouldNotRun results in a Completed run, never Failed), and that an Evaluate run
     /// creates no stage outcome.
@@ -116,9 +117,14 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual(0, (int)none.TotalRecords, "nothing failed");
                 AssertStatusCode(HttpStatusCode.BadRequest, await c.GetAsync("/api/v1/model-probe-runs?status=Done").ConfigureAwait(false), "bad status");
 
-                HttpResponseMessage full = await c.PostAsync("/api/v1/captains/" + captain.Id + "/evaluate", JsonHelper.ToJsonContent(new { depth = "Full" })).ConfigureAwait(false);
-                AssertStatusCode(HttpStatusCode.BadRequest, full, "Full");
-                AssertContains("not implemented until Phase 5", await full.Content.ReadAsStringAsync().ConfigureAwait(false));
+                HttpResponseMessage full = await c.PostAsync("/api/v1/captains/" + captain.Id + "/evaluate", JsonHelper.ToJsonContent(new { depth = "Full", packs = new[] { "no-such-pack" } })).ConfigureAwait(false);
+                AssertStatusCode(HttpStatusCode.BadRequest, full, "Full with an unknown pack");
+                AssertContains("no-such-pack", await full.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertStatusCode(HttpStatusCode.BadRequest, await c.PostAsync("/api/v1/captains/" + captain.Id + "/evaluate", JsonHelper.ToJsonContent(new { depth = "Full", runCount = 11 })).ConfigureAwait(false), "Full run count out of range");
+                AssertStatusCode(HttpStatusCode.NotFound, await c.PostAsync("/api/v1/captains/" + captain.Id + "/evaluate", JsonHelper.ToJsonContent(new { depth = "Full", evaluatorCaptainId = "cpt_missing" })).ConfigureAwait(false), "Full with an unknown evaluator");
+                ModelProbeRun cancelledDone = await JsonHelper.DeserializeAsync<ModelProbeRun>(await c.PostAsync("/api/v1/model-probe-runs/" + queued.Id + "/cancel", null).ConfigureAwait(false)).ConfigureAwait(false);
+                AssertEqual(ModelProbeRunStatusEnum.Completed, cancelledDone.Status, "cancelling a finished run leaves it unchanged");
+                AssertStatusCode(HttpStatusCode.NotFound, await c.PostAsync("/api/v1/model-probe-runs/mpr_missing/cancel", null).ConfigureAwait(false), "cancel a missing run");
                 AssertStatusCode(HttpStatusCode.BadRequest, await c.PostAsync("/api/v1/captains/" + captain.Id + "/evaluate", JsonHelper.ToJsonContent(new { depth = "Deep" })).ConfigureAwait(false), "unknown depth");
                 AssertStatusCode(HttpStatusCode.BadRequest, await c.PostAsync("/api/v1/captains/" + captain.Id + "/evaluate", JsonHelper.ToJsonContent(new { depth = 7 })).ConfigureAwait(false), "undefined depth number");
                 AssertStatusCode(HttpStatusCode.NotFound, await c.PostAsync("/api/v1/captains/cpt_missing/evaluate", null).ConfigureAwait(false), "missing captain");
@@ -151,9 +157,11 @@ namespace Test.Shared.Suites.E2E
                 AssertTrue(executor.Requests.Count > 0, "probes ran through the executor");
                 AssertTrue(executor.Requests.All(r => r.Captain.Runtime == AgentRuntimeEnum.ApiEndpoint && r.Captain.ModelEndpointId == endpoint.Id), "transient endpoint captain");
 
+                // Full dispatches battery missions and spends the evaluation budget: a non-admin who can read the endpoint is
+                // refused, and cannot cancel runs either.
                 HttpResponseMessage full = await c.PostAsync("/api/v1/model-endpoints/" + endpoint.Id + "/evaluate", JsonHelper.ToJsonContent(new { depth = "Full" })).ConfigureAwait(false);
-                AssertStatusCode(HttpStatusCode.BadRequest, full, "Full");
-                AssertContains("Phase 5", await full.Content.ReadAsStringAsync().ConfigureAwait(false));
+                AssertStatusCode(HttpStatusCode.Forbidden, full, "Full by a non-admin");
+                AssertStatusCode(HttpStatusCode.Forbidden, await c.PostAsync("/api/v1/model-probe-runs/" + queued.Id + "/cancel", null).ConfigureAwait(false), "cancel by a non-admin");
             }));
 
             cases.Add(CaseAsync("authorization_isolation", "A non-admin cannot evaluate a captain; another tenant's captain, endpoint and run are not found; a global admin sees both tenants", async () =>
@@ -199,13 +207,14 @@ namespace Test.Shared.Suites.E2E
                 AssertStatusCode(HttpStatusCode.Unauthorized, await fx.UnauthClient.GetAsync("/api/v1/model-probe-runs").ConfigureAwait(false), "anonymous");
             }));
 
-            cases.Add(CaseAsync("mcp_tools", "MCP: evaluate_captain, get_model_probe_run and list_model_probe_runs apply the REST rules with typed errors", async () =>
+            cases.Add(CaseAsync("mcp_tools", "MCP: evaluate_captain, get_model_probe_run, list_model_probe_runs and cancel_model_probe_run apply the REST rules with typed errors", async () =>
             {
                 E2EServerFixture fx = await AcquireAsync(new CannedModelProbeExecutor()).ConfigureAwait(false);
                 E2ETenantUser adminA = await E2ETenantUser.CreateAsync(fx.AuthClient, "mpm-admin-a", true).ConfigureAwait(false);
                 E2ETenantUser userA = await E2ETenantUser.CreateAsync(fx.AuthClient, "mpm-user-a", false, adminA.TenantId).ConfigureAwait(false);
                 E2ETenantUser adminB = await E2ETenantUser.CreateAsync(fx.AuthClient, "mpm-admin-b", true).ConfigureAwait(false);
                 Captain captainA = await SeedCaptainAsync(fx, adminA.TenantId).ConfigureAwait(false);
+                Captain captainB = await SeedCaptainAsync(fx, adminB.TenantId).ConfigureAwait(false);
                 ModelEndpoint endpointA = await SeedEndpointAsync(fx, adminA.TenantId, userA.UserId).ConfigureAwait(false);
 
                 using (McpToolClient admin = Mcp(fx, adminA))
@@ -227,12 +236,17 @@ namespace Test.Shared.Suites.E2E
                     await ErrorAsync(admin, "evaluate_captain", new { }, McpToolErrorCodeEnum.InvalidArgument).ConfigureAwait(false);
                     await ErrorAsync(admin, "evaluate_captain", new { captainId = captainA.Id, modelEndpointId = endpointA.Id }, McpToolErrorCodeEnum.InvalidArgument).ConfigureAwait(false);
                     await ErrorAsync(admin, "evaluate_captain", new { captainId = captainA.Id, depth = "Deep" }, McpToolErrorCodeEnum.InvalidArgument).ConfigureAwait(false);
-                    McpToolCallResult full = await admin.CallToolResultAsync("evaluate_captain", JsonHelper.Serialize(new { captainId = captainA.Id, depth = "Full" })).ConfigureAwait(false);
-                    AssertEqual(McpToolErrorCodeEnum.InvalidArgument, JsonHelper.Deserialize<McpToolError>(full.Text).ErrorCode, "Full: " + full.Text);
-                    AssertContains("not implemented until Phase 5", full.Text);
+                    McpToolCallResult full = await admin.CallToolResultAsync("evaluate_captain", JsonHelper.Serialize(new { captainId = captainA.Id, depth = "Full", packs = new[] { "no-such-pack" } })).ConfigureAwait(false);
+                    AssertEqual(McpToolErrorCodeEnum.InvalidArgument, JsonHelper.Deserialize<McpToolError>(full.Text).ErrorCode, "Full with an unknown pack: " + full.Text);
+                    AssertContains("no-such-pack", full.Text);
+                    await ErrorAsync(admin, "evaluate_captain", new { captainId = captainA.Id, depth = "Full", evaluatorCaptainId = "cpt_missing" }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
+                    await ErrorAsync(user, "evaluate_captain", new { modelEndpointId = endpointA.Id, depth = "Full" }, McpToolErrorCodeEnum.Forbidden).ConfigureAwait(false);
                     await ErrorAsync(user, "evaluate_captain", new { captainId = captainA.Id }, McpToolErrorCodeEnum.Forbidden).ConfigureAwait(false);
                     await ErrorAsync(b, "evaluate_captain", new { captainId = captainA.Id }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
                     await ErrorAsync(b, "evaluate_captain", new { modelEndpointId = endpointA.Id }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
+                    // Full: another tenant's candidate is not found, and neither is another tenant's evaluator.
+                    await ErrorAsync(b, "evaluate_captain", new { captainId = captainA.Id, depth = "Full" }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
+                    await ErrorAsync(b, "evaluate_captain", new { captainId = captainB.Id, depth = "Full", evaluatorCaptainId = captainA.Id }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
                     await ErrorAsync(admin, "evaluate_captain", new { captainId = "cpt_missing" }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
 
                     await WaitRestAsync(fx.AuthClient, run.Id).ConfigureAwait(false);
@@ -254,6 +268,11 @@ namespace Test.Shared.Suites.E2E
                     EnumerationResult<ModelProbeRun> leaked = await OkAsync<EnumerationResult<ModelProbeRun>>(b, "list_model_probe_runs", new { captainId = captainA.Id }).ConfigureAwait(false);
                     AssertEqual(0, (int)leaked.TotalRecords, "tenant B sees none of tenant A's runs");
                     await ErrorAsync(admin, "list_model_probe_runs", new { status = "Done" }, McpToolErrorCodeEnum.InvalidArgument).ConfigureAwait(false);
+
+                    ModelProbeRun unchanged = await OkAsync<ModelProbeRun>(admin, "cancel_model_probe_run", new { id = run.Id }).ConfigureAwait(false);
+                    AssertEqual(ModelProbeRunStatusEnum.Completed, unchanged.Status, "cancelling a finished run leaves it unchanged");
+                    await ErrorAsync(b, "cancel_model_probe_run", new { id = run.Id }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
+                    await ErrorAsync(admin, "cancel_model_probe_run", new { id = "mpr_missing" }, McpToolErrorCodeEnum.NotFound).ConfigureAwait(false);
                 }
             }));
 

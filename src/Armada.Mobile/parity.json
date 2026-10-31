@@ -1273,6 +1273,14 @@
     },
     {
       "kind": "api",
+      "key": "cancelModelProbeRun",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "the mobile app has no captain or model endpoint evaluation screen: the dashboard runs and cancels Quick and Full Evaluates from the captain page and the endpoint health dialog (MODEL_HETEROGENEITY.md Phase 5 item 4); the app adds one when evaluation needs it on the go"
+    },
+    {
+      "kind": "api",
       "key": "cancelVoyage",
       "status": "implemented",
       "mobile": "VoyagesList",

@@ -531,7 +531,7 @@ namespace Test.Shared.Suites.Services
                 AssertContains("boom", run.Results[0].Reason!);
             }));
 
-            cases.Add(CaseAsync("run_full_rejected", "Depth Full is rejected with the Phase 5 message and creates no run", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("run_full_without_battery_rejected", "Depth Full without a configured fixture battery is rejected and creates no run", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 ModelProbeService service = NewService(testDb.Driver, CannedExecutor.Good(), new EvaluationSettings());
@@ -543,7 +543,7 @@ namespace Test.Shared.Suites.Services
                 catch (ArgumentException ex)
                 {
                     rejected = true;
-                    AssertContains("Phase 5", ex.Message);
+                    AssertContains("fixture battery", ex.Message);
                 }
 
                 AssertTrue(rejected, "Full rejected");

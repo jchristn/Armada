@@ -33,9 +33,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
             WHERE id = @id;";
 
         private static readonly string _InsertRevision = @"INSERT INTO model_profile_revisions
-            (id, profile_id, tenant_id, runtime_version, model_digest, sampling_temperature, sampling_top_p, tool_tools, tool_mcp, first_seen_utc)
+            (id, profile_id, tenant_id, runtime_version, model_digest, sampling_temperature, sampling_top_p, tool_tools, tool_mcp, first_seen_utc, evaluation_run_id, evaluation_report_json)
             VALUES
-            (@id, @profile_id, @tenant_id, @runtime_version, @model_digest, @sampling_temperature, @sampling_top_p, @tool_tools, @tool_mcp, @first_seen_utc);";
+            (@id, @profile_id, @tenant_id, @runtime_version, @model_digest, @sampling_temperature, @sampling_top_p, @tool_tools, @tool_mcp, @first_seen_utc, @evaluation_run_id, @evaluation_report_json);";
 
         private readonly string _ConnectionString;
         private readonly SemaphoreSlim? _WriteLock;
@@ -180,6 +180,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     SqlServerCommandHelper.Add(cmd, "@tool_tools", revision.ToolConfiguration.Tools);
                     SqlServerCommandHelper.Add(cmd, "@tool_mcp", revision.ToolConfiguration.Mcp);
                     SqlServerCommandHelper.AddDate(cmd, "@first_seen_utc", revision.FirstSeenUtc);
+                    SqlServerCommandHelper.Add(cmd, "@evaluation_run_id", revision.EvaluationRunId);
+                    SqlServerCommandHelper.Add(cmd, "@evaluation_report_json", ModelEvaluationReport.ToJson(revision.EvaluationReport));
                 }, token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
             revision.CompatibleWith = new List<string>();
@@ -328,6 +330,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
             revision.ToolConfiguration.Tools = SqlServerCommandHelper.ReadNullableBool(reader["tool_tools"]);
             revision.ToolConfiguration.Mcp = SqlServerCommandHelper.ReadNullableBool(reader["tool_mcp"]);
             revision.FirstSeenUtc = SqlServerCommandHelper.ReadDate(reader["first_seen_utc"]);
+            revision.EvaluationRunId = SqlServerCommandHelper.ReadString(reader["evaluation_run_id"]);
+            revision.EvaluationReport = ModelEvaluationReport.FromJson(SqlServerCommandHelper.ReadString(reader["evaluation_report_json"]));
             return revision;
         }
 

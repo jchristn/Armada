@@ -2629,7 +2629,13 @@ namespace Armada.Core.Database.Sqlite.Queries
                     );",
                     @"CREATE UNIQUE INDEX IF NOT EXISTS idx_model_alerts_alert_key ON model_alerts(alert_key);",
                     @"CREATE INDEX IF NOT EXISTS idx_model_alerts_tenant_status_raised ON model_alerts(tenant_id, status, last_raised_utc);",
-                    @"CREATE INDEX IF NOT EXISTS idx_model_alerts_profile ON model_alerts(profile_id);")
+                    @"CREATE INDEX IF NOT EXISTS idx_model_alerts_profile ON model_alerts(profile_id);"),
+
+                new SchemaMigration(109, "Add Full Evaluate results: model_probe_runs.battery_run_id and report_json (the Full report), model_profile_revisions.evaluation_run_id and evaluation_report_json (the advisory revision a Full Evaluate records)",
+                    @"ALTER TABLE model_probe_runs ADD COLUMN battery_run_id TEXT;",
+                    @"ALTER TABLE model_probe_runs ADD COLUMN report_json TEXT;",
+                    @"ALTER TABLE model_profile_revisions ADD COLUMN evaluation_run_id TEXT;",
+                    @"ALTER TABLE model_profile_revisions ADD COLUMN evaluation_report_json TEXT;")
 
 
 
