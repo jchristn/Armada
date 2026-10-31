@@ -522,6 +522,33 @@ namespace Test.Shared.Suites.Database
                     AssertEqual("usg_err_2", afterError.LastErrorSnapshotId, "new error selected");
                     AssertEqual(UsageSnapshotStatusEnum.AuthMissing, afterError.LastErrorStatus, "new error status");
                     AssertNull(afterError.LastErrorCode, "null code of the new error is not merged with the previous code");
+
+                    foreach (string? absentId in new string?[] { null, String.Empty })
+                    {
+                        UsageLatestState unselected = NewLatestState();
+                        unselected.LastGoodSnapshotId = absentId;
+                        unselected.LastGoodCapturedUtc = t1;
+                        unselected.LastGoodReceivedUtc = t1;
+                        unselected.LastGoodStatus = UsageSnapshotStatusEnum.Ok;
+                        unselected.LastGoodWindowsJson = first.LastGoodWindowsJson;
+                        unselected.LastErrorSnapshotId = absentId;
+                        unselected.LastErrorCapturedUtc = t1;
+                        unselected.LastErrorStatus = UsageSnapshotStatusEnum.Failed;
+                        unselected.LastErrorCode = "UnselectedDiagnostic";
+                        await driver.UsageSnapshots.UpsertLatestStateAsync(unselected, ct).ConfigureAwait(false);
+
+                        UsageLatestState? unchanged = await driver.UsageSnapshots.ReadLatestStateAsync("ten_usage_latest_unit", "host_1", AgentRuntimeEnum.Codex, "usage-hmac-key-unit", ct).ConfigureAwait(false);
+                        AssertNotNull(unchanged, "unselected metadata does not remove latest state");
+                        AssertEqual("usg_good_t2", unchanged!.LastGoodSnapshotId, "absent good id preserves selection");
+                        AssertEqual(t2, unchanged.LastGoodCapturedUtc, "absent good id ignores supplied observation time");
+                        AssertNull(unchanged.LastGoodReceivedUtc, "absent good id ignores supplied received time");
+                        AssertEqual(UsageSnapshotStatusEnum.Estimated, unchanged.LastGoodStatus, "absent good id ignores supplied status");
+                        AssertNull(unchanged.LastGoodWindowsJson, "absent good id ignores supplied windows");
+                        AssertEqual("usg_err_2", unchanged.LastErrorSnapshotId, "absent error id preserves selection");
+                        AssertEqual(t2.AddMinutes(10), unchanged.LastErrorCapturedUtc, "absent error id ignores supplied observation time");
+                        AssertEqual(UsageSnapshotStatusEnum.AuthMissing, unchanged.LastErrorStatus, "absent error id ignores supplied status");
+                        AssertNull(unchanged.LastErrorCode, "absent error id ignores supplied diagnostic");
+                    }
                 }
             }));
 

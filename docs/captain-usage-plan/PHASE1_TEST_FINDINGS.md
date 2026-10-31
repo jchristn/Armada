@@ -289,3 +289,72 @@ Executed: net10.0 Release build, zero warnings/errors. SQLite
 Sensitivity: with the previous Armada.Core sources restored, both new cases
 failed on SQLite and SQL Server (`expected <2> but got <1>`; T1 received time
 merged into the T2 summary), 12 of 14 passed.
+
+
+## Rework 3 independent test engineer verification
+
+Reviewed worker commit 08c754c7925dcd34685dbbc9b6544c5ab7a32de1 and complete
+handoff artifact hoa_mvwycqiu_WEeAkyXi1ps (no numbered findings). Fetched main
+f1e4cff2a is already an ancestor of this branch; rebase was unnecessary.
+Main contains the phase 0 interface evidence and still ends at migration 110.
+
+### Coverage added
+
+AC1 / Database.UsagePersistence extends
+usage_latest_state_replaces_last_good_summary_as_a_unit: after known good and
+error writes, both null and empty snapshot IDs accompany deliberately conflicting
+observation/received times, statuses, windows and diagnostics. Every field in
+both selected summaries must remain unchanged. This exercises the inverse of
+unit replacement rather than merely writing an empty error-only object.
+
+Prior findings independently rechecked:
+
+- Resolved: provider omitted from rollup natural key. Inspected migration 111
+  and upsert statements on all four providers; ran
+  usage_rollup_natural_key_includes_provider on each. Named providers remain
+  separate, null/empty share one unknown-provider row, and retries replace
+  only the selected provider's row.
+- Resolved: latest-state field-by-field merge. The extended unit replacement
+  case passes on all four providers, including null window/received values,
+  error replacement and preservation without a snapshot selection.
+- Resolved: explicit null settings and command property order. Existing
+  captain_explicit_null_settings_keep_defaults,
+  captain_command_clearing_is_order_independent and
+  captain_non_custom_json_command_is_not_persisted pass in the provider matrix.
+- Resolved: phase 0 prerequisite and actual server-provider upgrades.
+  Usage.InterfaceEvidence passes 13 cases; fresh database and
+  usage_existing_database_upgrades_to_v111 pass on all four providers with
+  retained legacy token counts, null attribution/cost and disabled defaults.
+- Unverified, later-phase boundary: end-to-end tenant-service deletion.
+  Storage deletion assertions do not establish that service path.
+
+### Negative paths and executed checks
+
+- dotnet build src/Test.Automated -c Release -f net10.0 --nologo:
+  exit 0, zero warnings/errors, including after restoring the sensitivity fixture.
+- ARMADA_TEST_SUITES=Usage.InterfaceEvidence,Services.UsageDefaults,Database.UsagePersistence
+  ARMADA_TEST_DB_TYPE=sqlite dotnet run --project src/Test.Automated -c Release
+  --framework net10.0 --no-build: exit 0, 44 passed, zero failed/skipped.
+- ARMADA_TEST_SUITES=Services.UsageDefaults,Database.UsagePersistence with
+  ARMADA_TEST_DB_TYPE=postgresql, mysql and sqlserver and the same runner:
+  each exit 0, 31 passed, zero failed/skipped. Actual local PostgreSQL 17,
+  MySQL 8.4 and SQL Server 2022 containers; loopback connection parameters
+  supplied through ARMADA_TEST_DB_HOST/PORT/USER/PASS without recording secrets.
+- Sensitivity: temporarily replaced the absent-ID fixtures with the nonempty
+  usg_deliberately_selected ID, then ran Database.UsagePersistence on SQLite
+  with dotnet run --project src/Test.Automated -c Release --framework net10.0.
+  Exit 1, 13 passed, 1 failed, zero skipped: expected usg_good_t2 but received
+  usg_deliberately_selected. Restored fixtures in finally, rebuilt and reran
+  the SQLite three-suite selection successfully (44 passed). No production
+  code or deliberately failing fixture is committed.
+- git diff --check: exit 0. No baseline failures in the scoped provider matrix.
+
+### Residual risks
+
+Full solution, smoke, dashboard and other runner adapters were not rerun;
+Armada performs post-stage checks. Live quota access, scheduler/process cleanup,
+tenant-service retention, deployment and landing are outside this stage.
+The earlier branch-only migration 111 is edited in place: a development database
+that already applied the earlier 111 needs recreation or a separate migration;
+the required main-v110 upgrade path is covered. No unsupported adapters enabled,
+no production code changed, and no known product defect blocks scoped AC1.
