@@ -6,6 +6,13 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Worker eligibility envelope (model heterogeneity Phase 6, item 1)
+
+- **Vessel default.** A vessel may carry a default `WorkerEnvelope` (`maxFiles`, `maxSteps`, `minServedContextTokens`, `requiredTools` of `tools`/`mcp`), set through REST vessel create/update, WebSocket `create_vessel`/`update_vessel`, MCP `add_vessel`/`update_vessel` (`workerEnvelope`; `{}` clears it, omitted keeps it) and the dashboard and TUI vessel forms; `get_vessel` returns it. Out-of-range values or unknown tools are rejected (`400`, MCP `InvalidArgument`). No envelope is the default, so routing is unchanged until a vessel sets one. Stored in a new column (migration 110 on SQLite, PostgreSQL, SQL Server and MySQL).
+- **Missions may only tighten it.** A mission may carry a tighter envelope (fewer files or steps, a larger context minimum, more required tools). REST dispatch rejects a loosened envelope with `400`; a `workerEnvelope` on a mission in the Architect's plan is clamped to the vessel default and an event `mission.worker_envelope_clamped` is recorded.
+- **Dispatch enforces it for the Worker stage.** Only captains whose model profile records at least the minimum served context and the required tools are eligible; a captain with no profile, or a profile missing a needed field, is excluded. When no idle eligible captain exists, the mission escalates to a stronger compatible captain within the Worker persona's allowed captains; when none exists it stays Pending with a visible reason. Each decision (which captains were excluded and why) is recorded as event `mission.worker_envelope`, shown in the mission timeline and the black box.
+- **Prompts.** New prompt template placeholder `{WorkerEnvelope}`, used in the Architect and Judge templates, renders a short description of the envelope (empty when none). Listed in the dashboard and TUI placeholder panels.
+
 ### Landing verification
 
 - Landing verification for the Armada repository now runs the smoke tests (`dotnet test "src/Test.Smoke/Test.Smoke.csproj" -c Release -f net10.0`) instead of the long `src/Test.Automated` suite list, which was being killed (exit 143) and blocking landings.

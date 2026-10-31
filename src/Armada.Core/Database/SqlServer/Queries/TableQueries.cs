@@ -2306,7 +2306,10 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF COL_LENGTH('model_probe_runs', 'battery_run_id') IS NULL ALTER TABLE model_probe_runs ADD battery_run_id NVARCHAR(64) NULL;",
                     @"IF COL_LENGTH('model_probe_runs', 'report_json') IS NULL ALTER TABLE model_probe_runs ADD report_json NVARCHAR(MAX) NULL;",
                     @"IF COL_LENGTH('model_profile_revisions', 'evaluation_run_id') IS NULL ALTER TABLE model_profile_revisions ADD evaluation_run_id NVARCHAR(64) NULL;",
-                    @"IF COL_LENGTH('model_profile_revisions', 'evaluation_report_json') IS NULL ALTER TABLE model_profile_revisions ADD evaluation_report_json NVARCHAR(MAX) NULL;")
+                    @"IF COL_LENGTH('model_profile_revisions', 'evaluation_report_json') IS NULL ALTER TABLE model_profile_revisions ADD evaluation_report_json NVARCHAR(MAX) NULL;"),
+                new SchemaMigration(110, "Add the Worker eligibility envelope: vessels.worker_envelope_json (the vessel default) and missions.worker_envelope_json (a tightened envelope for one mission)",
+                    @"IF COL_LENGTH('vessels', 'worker_envelope_json') IS NULL ALTER TABLE vessels ADD worker_envelope_json NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('missions', 'worker_envelope_json') IS NULL ALTER TABLE missions ADD worker_envelope_json NVARCHAR(MAX) NULL;")
 
 
             };

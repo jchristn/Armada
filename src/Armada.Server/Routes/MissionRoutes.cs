@@ -379,6 +379,16 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Mission.");
                 mission.TenantId = ctx.TenantId;
                 mission.UserId = ctx.UserId;
+                if (mission.WorkerEnvelope != null)
+                {
+                    // A mission may only tighten its vessel's Worker envelope; a looser or invalid one is a 400 with the reason.
+                    Vessel? envelopeVessel = String.IsNullOrEmpty(mission.VesselId) ? null
+                        : ctx.IsAdmin || String.IsNullOrEmpty(ctx.TenantId)
+                            ? await _database.Vessels.ReadAsync(mission.VesselId).ConfigureAwait(false)
+                            : await _database.Vessels.ReadAsync(ctx.TenantId!, mission.VesselId).ConfigureAwait(false);
+                    try { mission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelope(envelopeVessel?.WorkerEnvelope, mission.WorkerEnvelope); }
+                    catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
+                }
                 mission = await _admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 if (mission.Status == MissionStatusEnum.Pending)

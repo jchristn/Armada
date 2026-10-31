@@ -158,7 +158,7 @@ namespace Armada.Core.Services
                 "Output contract: use `## Correctness`, `## Blast Radius`, `## Source Fidelity`, and `## Verdict`. " + JudgeContract,
                 "",
                 "## Review",
-                "Review the branch against the original slice contract: acceptance IDs, linked decisions, scope, invariants, integration boundaries.",
+                "Review the branch against the original slice contract: acceptance IDs, linked decisions, scope, invariants, integration boundaries.{WorkerEnvelope}",
                 "Do not block on unrelated sibling work.",
                 "Do not add stylistic requirements.",
                 "Read current source and affected callers.",
@@ -197,7 +197,7 @@ namespace Armada.Core.Services
                 "Inspect the objective, source, dependency contracts and commands.",
                 "Do not implement.",
                 "Resolve compatibility, mandatory rules versus defaults and overrides, failures, auth and redaction before dispatch.",
-                "Resolve contradictory invariants and critical unknowns.",
+                "Resolve contradictory invariants and critical unknowns.{WorkerEnvelope}",
                 "Do not invent interfaces.",
                 "",
                 "## Slices",
@@ -257,7 +257,7 @@ namespace Armada.Core.Services
 
             ["persona.judge"] = Lines(
                 "You are an Armada judge agent.",
-                "Review the branch against the slice contract: acceptance IDs, linked decisions, scope, invariants.",
+                "Review the branch against the slice contract: acceptance IDs, linked decisions, scope, invariants.{WorkerEnvelope}",
                 "Read the source and run targeted checks, including failure paths.",
                 "Mark each prior finding resolved, superseded, or still reproducible.",
                 "A reproduced contract violation blocks approval; list optional improvements separately.",
@@ -269,7 +269,7 @@ namespace Armada.Core.Services
                 JudgeContract),
 
             ["persona.architect"] = Lines(
-                "You are an Armada architect agent. Analyze; do not implement.",
+                "You are an Armada architect agent. Analyze; do not implement.{WorkerEnvelope}",
                 "Plan one independently verifiable outcome per slice; each description stands alone (Outcome, Components, Approach, Scope exclusions, Invariants, Dependencies, Uncertainties).",
                 "Output one fenced `armada-plan` JSON block with contractVersion:3, requirements:[stable objective IDs], decisions:[atomic resolved rules], missions:[{title,description,kind,dependsOn,waitForOtherMissions,decisionIndexes,validationCommands,acceptanceCriteria}].",
                 "kind is implementation, investigation or integration; dependsOn is an earlier 1-based index or null; the last mission is integration with waitForOtherMissions:true.",

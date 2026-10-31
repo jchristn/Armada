@@ -3280,6 +3280,7 @@ Register a new vessel (git repository) in a fleet.
 | `autoApprove` | boolean | No | Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting |
 | `enableModelContext` | boolean | No | Enable model context accumulation (default true) |
 | `defaultPipelineId` | string | No | Default pipeline ID for voyages dispatched to this vessel |
+| `workerEnvelope` | object | No | Default Worker eligibility envelope: `maxFiles` (integer 1-1000), `maxSteps` (integer 1-1000), `minServedContextTokens` (integer 1-100000000), `requiredTools` (array of `tools`, `mcp`). Only captains whose model profile meets it run Worker missions on this vessel; the Architect may tighten it per mission but never loosen it. Omit or pass `{}` for no envelope. Out-of-range values or unknown tools return an `InvalidArgument` tool error |
 
 **Example Input:**
 
@@ -4072,11 +4073,14 @@ Update an existing vessel's properties.
     "definitionOfDoneEnabled": { "type": "boolean", "description": "Run the in-dock build + unit tests before acceptance; a failure blocks landing with a classified reason (Compile/TestFail/Timeout/Infra)" },
     "definitionOfDoneBuildCommand": { "type": "string", "description": "Shell command that builds the project inside the mission checkout (e.g. dotnet build)" },
     "definitionOfDoneTestCommand": { "type": "string", "description": "Shell command that runs unit tests inside the mission checkout (e.g. dotnet test)" },
-    "definitionOfDoneTimeoutSeconds": { "type": "integer", "description": "Per-phase timeout in seconds, clamped to [30, 7200] (default 1800)" }
+    "definitionOfDoneTimeoutSeconds": { "type": "integer", "description": "Per-phase timeout in seconds, clamped to [30, 7200] (default 1800)" },
+    "workerEnvelope": { "type": "object", "description": "Default Worker eligibility envelope (maxFiles, maxSteps, minServedContextTokens, requiredTools). The object replaces the stored envelope; pass {} to clear it; omit it to keep the stored value." }
   },
   "required": ["vesselId"]
 }
 ```
+
+`workerEnvelope` fields: `maxFiles` and `maxSteps` (integers 1-1000) guide the Architect's slicing and the Judge; `minServedContextTokens` (integer 1-100000000) and `requiredTools` (array of `tools`, `mcp`) restrict which captains may run Worker missions (the captain's model profile must record at least that served context and those capabilities). Out-of-range values or unknown tools return an `InvalidArgument` tool error and nothing is saved.
 
 **Response:** Updated [Vessel](#vessel) object, or `{ "Error": "Vessel not found", "ErrorCode": "NotFound" }`. A taken name returns `{ "Error": "A vessel named '...' already exists.", "ErrorCode": "Conflict", "Code": "DuplicateEntity" }`.
 
@@ -7187,6 +7191,7 @@ Paginated result wrapper returned by `enumerate`.
 | `HotfixBranchPrefix` | string | Prefix used to classify hotfix branches. |
 | `RequirePullRequestForProtectedBranches` | bool | Whether protected branches must land via PR-oriented flow. |
 | `RequireMergeQueueForReleaseBranches` | bool | Whether release branches must land via merge queue. |
+| `WorkerEnvelope` | object \| null | Default Worker eligibility envelope (`maxFiles`, `maxSteps`, `minServedContextTokens`, `requiredTools`); null means no envelope and routing is unchanged. Returned by `get_vessel`. |
 | `DefaultPipelineId` | string \| null | Default pipeline to use for dispatches to this vessel. Vessel setting overrides fleet setting. Null uses WorkerOnly pipeline. |
 
 #### Voyage

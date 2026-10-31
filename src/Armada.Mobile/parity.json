@@ -2177,6 +2177,14 @@
     },
     {
       "kind": "api",
+      "key": "enumerateBlackBoxResilienceGaps",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W2.2",
+      "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
       "key": "enumerateCliPermissionRules",
       "status": "implemented",
       "mobile": "src/screens/system/CliPermissionsHub.tsx",

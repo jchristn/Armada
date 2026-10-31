@@ -2635,7 +2635,10 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"ALTER TABLE model_probe_runs ADD COLUMN battery_run_id TEXT;",
                     @"ALTER TABLE model_probe_runs ADD COLUMN report_json TEXT;",
                     @"ALTER TABLE model_profile_revisions ADD COLUMN evaluation_run_id TEXT;",
-                    @"ALTER TABLE model_profile_revisions ADD COLUMN evaluation_report_json TEXT;")
+                    @"ALTER TABLE model_profile_revisions ADD COLUMN evaluation_report_json TEXT;"),
+                new SchemaMigration(110, "Add the Worker eligibility envelope: vessels.worker_envelope_json (the vessel default) and missions.worker_envelope_json (a tightened envelope for one mission)",
+                    @"ALTER TABLE vessels ADD COLUMN worker_envelope_json TEXT;",
+                    @"ALTER TABLE missions ADD COLUMN worker_envelope_json TEXT;")
 
 
 

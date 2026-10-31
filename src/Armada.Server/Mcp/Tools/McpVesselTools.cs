@@ -83,7 +83,8 @@ namespace Armada.Server.Mcp.Tools
                         defaultPipelineId = new { type = "string", description = "Default pipeline ID for dispatches to this vessel (ppl_ prefix)" },
                         testCommand = new { type = "string", description = "Per-vessel override for the Test intent (beats a repo script and the ecosystem default)" },
                         lintCommand = new { type = "string", description = "Per-vessel override for the Lint intent (beats a repo script and the ecosystem default)" },
-                        auditCommand = new { type = "string", description = "Per-vessel override for the Audit intent (beats a repo script and the ecosystem default)" }
+                        auditCommand = new { type = "string", description = "Per-vessel override for the Audit intent (beats a repo script and the ecosystem default)" },
+                        workerEnvelope = WorkerEnvelopeSchema("Optional default Worker eligibility envelope for missions on this vessel: only captains whose model profile meets it run Worker missions, and the Architect may tighten it per mission but never loosen it. Omit or pass {} for no envelope (routing unchanged).")
                     },
                     required = new[] { "name", "repoUrl", "fleetId" }
                 },
@@ -112,6 +113,14 @@ namespace Armada.Server.Mcp.Tools
                     vessel.TestCommand = String.IsNullOrWhiteSpace(request.TestCommand) ? null : request.TestCommand;
                     vessel.LintCommand = String.IsNullOrWhiteSpace(request.LintCommand) ? null : request.LintCommand;
                     vessel.AuditCommand = String.IsNullOrWhiteSpace(request.AuditCommand) ? null : request.AuditCommand;
+                    try
+                    {
+                        vessel.WorkerEnvelope = WorkerEnvelopeRules.Normalize(request.WorkerEnvelope);
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        return (object)McpToolError.InvalidArgument(ex.Message);
+                    }
                     // A local-clone repoUrl with no explicit working directory gets that clone as its working
                     // directory; LocalPath is deliberately never set (see VesselService.CreateAsync).
                     try
@@ -160,7 +169,8 @@ namespace Armada.Server.Mcp.Tools
                         testCommand = new { type = "string", description = "Per-vessel override for the Test intent (beats a repo script and the ecosystem default)" },
                         lintCommand = new { type = "string", description = "Per-vessel override for the Lint intent (beats a repo script and the ecosystem default)" },
                         auditCommand = new { type = "string", description = "Per-vessel override for the Audit intent (beats a repo script and the ecosystem default)" },
-                        landingMode = new { type = "string", description = "Landing mode override for this vessel: " + McpToolHelpers.EnumNames<Armada.Core.Enums.LandingModeEnum>() + ", or Default to clear it so the global setting applies" }
+                        landingMode = new { type = "string", description = "Landing mode override for this vessel: " + McpToolHelpers.EnumNames<Armada.Core.Enums.LandingModeEnum>() + ", or Default to clear it so the global setting applies" },
+                        workerEnvelope = WorkerEnvelopeSchema("Default Worker eligibility envelope for missions on this vessel: only captains whose model profile meets it run Worker missions, and the Architect may tighten it per mission but never loosen it. The object replaces the stored envelope; pass {} to clear it; omit it to keep the stored value.")
                     },
                     required = new[] { "vesselId" }
                 },
@@ -234,6 +244,17 @@ namespace Armada.Server.Mcp.Tools
                             vessel.LandingMode = landingMode;
                         else
                             return (object)McpToolError.InvalidArgument("landingMode must be one of " + McpToolHelpers.EnumNames<Armada.Core.Enums.LandingModeEnum>() + ", or Default.");
+                    }
+                    if (request.WorkerEnvelope != null)
+                    {
+                        try
+                        {
+                            vessel.WorkerEnvelope = WorkerEnvelopeRules.Normalize(request.WorkerEnvelope);
+                        }
+                        catch (ArgumentException ex)
+                        {
+                            return (object)McpToolError.InvalidArgument(ex.Message);
+                        }
                     }
                     await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(database, vessel).ConfigureAwait(false);
                     vessel = await database.Vessels.UpdateAsync(vessel).ConfigureAwait(false);
@@ -351,6 +372,22 @@ namespace Armada.Server.Mcp.Tools
         /// Cancels active missions, removes docks/worktrees, and deletes the bare repository.
         /// This method throws on failure -- vessel deletion should NOT proceed if cleanup fails.
         /// </summary>
+        private static object WorkerEnvelopeSchema(string description)
+        {
+            return new
+            {
+                type = "object",
+                description = description,
+                properties = new
+                {
+                    maxFiles = new { type = "integer", description = "Most files one Worker mission should change (1 to 1000); guides slicing and the Judge" },
+                    maxSteps = new { type = "integer", description = "Most steps one Worker mission should take (1 to 1000); guides slicing and the Judge" },
+                    minServedContextTokens = new { type = "integer", description = "Smallest served context in tokens a captain's model profile must record (1 to 100000000)" },
+                    requiredTools = new { type = "array", items = new { type = "string", @enum = new[] { WorkerEnvelopeRules.ToolCalls, WorkerEnvelopeRules.Mcp } }, description = "Capabilities a captain's model profile must record as available: tools (tool calls) and mcp (MCP tools)" }
+                }
+            };
+        }
+
         private static async Task<List<string>> CleanupVesselResourcesAsync(Vessel vessel, DatabaseDriver database, IDockService? dockService, Armada.Core.Settings.ArmadaSettings? settings, IAdmiralService? admiral, Armada.Core.BlackBox.IBlackBoxCapture? blackBox)
         {
             List<string> errors = new List<string>();

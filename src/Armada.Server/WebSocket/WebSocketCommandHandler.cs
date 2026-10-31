@@ -273,6 +273,14 @@ namespace Armada.Server.WebSocket
                     if (String.IsNullOrEmpty(newVessel.RepoUrl))
                         return WebSocketCommandError.Create("create_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, "repoUrl is required when creating a vessel");
                     newVessel.NormalizeGitHubTokenOverride();
+                    try
+                    {
+                        newVessel.WorkerEnvelope = WorkerEnvelopeRules.Normalize(newVessel.WorkerEnvelope);
+                    }
+                    catch (ArgumentException envelopeEx)
+                    {
+                        return WebSocketCommandError.Create("create_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, envelopeEx.Message);
+                    }
                     await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_Database, newVessel).ConfigureAwait(false);
                     newVessel = await _Database.Vessels.CreateAsync(newVessel).ConfigureAwait(false);
                     return new { type = "command.result", action = "create_vessel", data = (object)newVessel };
@@ -288,6 +296,14 @@ namespace Armada.Server.WebSocket
                         if (updVesselBody == null)
                             return WebSocketCommandError.Create("update_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, "data is required");
                         Vessel updVessel = EntityUpdateMerger.MergeVessel(existVessel, updVesselBody);
+                        try
+                        {
+                            updVessel.WorkerEnvelope = WorkerEnvelopeRules.Normalize(updVessel.WorkerEnvelope);
+                        }
+                        catch (ArgumentException envelopeEx)
+                        {
+                            return WebSocketCommandError.Create("update_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, envelopeEx.Message);
+                        }
                         await DuplicateEntityGuard.EnsureVesselNameAvailableAsync(_Database, updVessel).ConfigureAwait(false);
                         updVessel = await _Database.Vessels.UpdateAsync(updVessel).ConfigureAwait(false);
                         return new { type = "command.result", action = "update_vessel", data = (object)updVessel };

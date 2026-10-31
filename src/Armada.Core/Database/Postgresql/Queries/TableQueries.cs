@@ -2343,7 +2343,10 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"ALTER TABLE model_probe_runs ADD COLUMN IF NOT EXISTS battery_run_id TEXT;",
                     @"ALTER TABLE model_probe_runs ADD COLUMN IF NOT EXISTS report_json TEXT;",
                     @"ALTER TABLE model_profile_revisions ADD COLUMN IF NOT EXISTS evaluation_run_id TEXT;",
-                    @"ALTER TABLE model_profile_revisions ADD COLUMN IF NOT EXISTS evaluation_report_json TEXT;")
+                    @"ALTER TABLE model_profile_revisions ADD COLUMN IF NOT EXISTS evaluation_report_json TEXT;"),
+                new SchemaMigration(110, "Add the Worker eligibility envelope: vessels.worker_envelope_json (the vessel default) and missions.worker_envelope_json (a tightened envelope for one mission)",
+                    @"ALTER TABLE vessels ADD COLUMN IF NOT EXISTS worker_envelope_json TEXT;",
+                    @"ALTER TABLE missions ADD COLUMN IF NOT EXISTS worker_envelope_json TEXT;")
 
 
             };

@@ -115,6 +115,17 @@ namespace Armada.Tui.Screens.Build
             InputField dodTimeout = Input(editing != null && editing.DefinitionOfDoneTimeoutSeconds > 0 ? editing.DefinitionOfDoneTimeoutSeconds.ToString(CultureInfo.InvariantCulture) : "", "1800");
             dodTimeout.Validator = v => String.IsNullOrWhiteSpace(v) || (Int32.TryParse(v.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n >= 30 && n <= 7200) ? null : "Enter 30 to 7200 seconds.";
 
+            WorkerEnvelope? storedEnvelope = editing?.WorkerEnvelope;
+            InputField envMaxFiles = Input(OptionalCount(storedEnvelope?.MaxFiles), "no limit");
+            envMaxFiles.Validator = v => RangeOrBlank(v, 1, 1000);
+            InputField envMaxSteps = Input(OptionalCount(storedEnvelope?.MaxSteps), "no limit");
+            envMaxSteps.Validator = v => RangeOrBlank(v, 1, 1000);
+            InputField envMinContext = Input(OptionalCount(storedEnvelope?.MinServedContextTokens), "no minimum");
+            envMinContext.Validator = v => RangeOrBlank(v, 1, 100000000);
+            List<string> storedTools = storedEnvelope?.RequiredTools ?? new List<string>();
+            OpsCheckField envTools = new OpsCheckField("Require tool calls", storedTools.Contains("tools"));
+            OpsCheckField envMcp = new OpsCheckField("Require MCP tools", storedTools.Contains("mcp"));
+
             OpsTextArea projectContext = Area(screen, editing?.ProjectContext ?? "", "");
             OpsTextArea styleGuide = Area(screen, editing?.StyleGuide ?? "", "");
             OpsTextArea modelContext = Area(screen, editing?.ModelContext ?? "", "Agent-accumulated context...");
@@ -161,6 +172,12 @@ namespace Armada.Tui.Screens.Build
             dialog.AddField("Build Command", dodBuild);
             dialog.AddField("Test Command", dodTest);
             dialog.AddField("Per-phase Timeout (seconds)", dodTimeout);
+            dialog.Form.AddSection("Worker Eligibility Envelope");
+            dialog.AddField("Max Files", envMaxFiles, "Optional; leave every envelope field blank for no envelope. When set, only captains whose model profile meets it run Worker missions here. The Architect may tighten it per mission but never loosen it.");
+            dialog.AddField("Max Steps", envMaxSteps);
+            dialog.AddField("Min Served Context (tokens)", envMinContext);
+            dialog.AddField("", envTools);
+            dialog.AddField("", envMcp);
             dialog.Form.AddSection("Context");
             dialog.AddField("Project Context", projectContext, null, 5);
             dialog.AddField("Style Guide", styleGuide, null, 5);
@@ -203,6 +220,7 @@ namespace Armada.Tui.Screens.Build
                 body.DefinitionOfDoneBuildCommand = dodBuild.Value.Trim();
                 body.DefinitionOfDoneTestCommand = dodTest.Value.Trim();
                 body.DefinitionOfDoneTimeoutSeconds = Int32.TryParse(dodTimeout.Value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int timeout) ? Math.Max(30, timeout) : 1800;
+                body.WorkerEnvelope = BuildEnvelope(envMaxFiles.Value, envMaxSteps.Value, envMinContext.Value, envTools.Checked, envMcp.Checked);
                 body.ProjectContext = Blank(projectContext.Text);
                 body.StyleGuide = Blank(styleGuide.Text);
                 body.ModelContext = Blank(modelContext.Text);
@@ -299,6 +317,40 @@ namespace Armada.Tui.Screens.Build
         private static string? Blank(string? value)
         {
             return String.IsNullOrEmpty(value) ? null : value;
+        }
+
+        private static string OptionalCount(int? value)
+        {
+            return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "";
+        }
+
+        private static string? RangeOrBlank(string value, int min, int max)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            return Int32.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n >= min && n <= max
+                ? null
+                : "Enter " + min.ToString(CultureInfo.InvariantCulture) + " to " + max.ToString(CultureInfo.InvariantCulture) + ", or leave blank.";
+        }
+
+        private static int? ParseOptional(string value)
+        {
+            return Int32.TryParse((value ?? "").Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? n : (int?)null;
+        }
+
+        private static WorkerEnvelope? BuildEnvelope(string maxFiles, string maxSteps, string minContext, bool requireTools, bool requireMcp)
+        {
+            List<string> tools = new List<string>();
+            if (requireTools) tools.Add("tools");
+            if (requireMcp) tools.Add("mcp");
+            WorkerEnvelope envelope = new WorkerEnvelope
+            {
+                MaxFiles = ParseOptional(maxFiles),
+                MaxSteps = ParseOptional(maxSteps),
+                MinServedContextTokens = ParseOptional(minContext),
+                RequiredTools = tools
+            };
+            if (!envelope.MaxFiles.HasValue && !envelope.MaxSteps.HasValue && !envelope.MinServedContextTokens.HasValue && tools.Count == 0) return null;
+            return envelope;
         }
 
         #endregion

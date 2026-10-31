@@ -678,6 +678,26 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
 ### Phase 6: sizing and routing
 
 1. Worker eligibility envelope (3.3), enforced by dispatch; escalation selects a stronger compatible captain.
+   Status: implemented (migration 110, `vessels.worker_envelope_json` and `missions.worker_envelope_json`). `WorkerEnvelope`
+   has `maxFiles`, `maxSteps`, `minServedContextTokens` and `requiredTools` (`tools`, `mcp`); every field is optional and an
+   envelope with none set is no envelope. `Vessel.WorkerEnvelope` is the default (null by default, so routing is unchanged
+   until a vessel sets one), exposed through REST vessel create/update, MCP `add_vessel` / `update_vessel` / `get_vessel`
+   and the dashboard vessel settings. A mission may carry a tighter `Mission.WorkerEnvelope`: REST dispatch rejects a
+   looser one with 400 and the reason, the Architect's per-mission `workerEnvelope` in the plan is clamped to the default
+   (event `mission.worker_envelope_clamped`), and dispatch always applies the tightest of both. Enforcement is in
+   `MissionService` assignment for the Worker stage only: a captain with no model profile, a profile without served
+   context when a minimum is set, or a profile that does not record a required capability is not eligible, on every
+   routing path (requested, persona default, priorities, tier). File and step limits guide the Architect and Judge and
+   never exclude a captain (profiles record no such capacity). When no idle captain routing would use meets the envelope,
+   dispatch escalates to the lowest-tier idle captain that meets it, may run the Worker persona, meets the mission's tier
+   floor and is stronger than the busy preferred captains; strict and escalated-rework pins are not escalated. With no
+   compatible captain at all the mission stays Pending and the assignment blocker says why. Each decision (assigned,
+   escalated, waiting, no eligible captain, with every excluded captain and reason) is an event `mission.worker_envelope`
+   recorded when it changes, so it shows in the mission timeline and black box. The rework escalation selector applies
+   the envelope too. The Architect and Judge get the generated description through the `{WorkerEnvelope}` prompt
+   placeholder in the built-in templates (Current, Lean, Compact). Gaps: the envelope cannot be changed through mission
+   update, MCP `create_mission` has no envelope argument, and installations whose Architect or Judge template was
+   customized must add `{WorkerEnvelope}` themselves.
 2. Routing changes based on profiles only after held-out production tasks support them.
 3. Optional persona-scoped quarantine, off by default.
 

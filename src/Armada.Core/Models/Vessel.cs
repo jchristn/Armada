@@ -293,6 +293,12 @@ namespace Armada.Core.Models
         public string? AuditCommand { get; set; } = null;
 
         /// <summary>
+        /// Default Worker eligibility envelope for this vessel's Worker missions (docs/MODEL_HETEROGENEITY.md, 3.3), or
+        /// null for no envelope (routing unchanged). A mission may tighten it, never loosen it.
+        /// </summary>
+        public WorkerEnvelope? WorkerEnvelope { get; set; } = null;
+
+        /// <summary>
         /// Per-vessel black box retention override in days (0 keeps entries forever, maximum 3650), or null to use
         /// <c>BlackBox.Retention.RetentionDays</c>.
         /// </summary>

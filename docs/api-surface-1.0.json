@@ -7561,6 +7561,7 @@
       "requestRequired": true,
       "responses": {
         "200": "Vessel",
+        "400": "",
         "404": "",
         "409": "ApiErrorResponse"
       },
@@ -8717,6 +8718,11 @@
         {
           "name": "testCommand",
           "type": "string",
+          "required": false
+        },
+        {
+          "name": "workerEnvelope",
+          "type": "object",
           "required": false
         },
         {
@@ -16592,6 +16598,11 @@
           "name": "vesselId",
           "type": "string",
           "required": true
+        },
+        {
+          "name": "workerEnvelope",
+          "type": "object",
+          "required": false
         },
         {
           "name": "workingDirectory",
