@@ -43,14 +43,14 @@ function FullReport({ report }: { report: ModelEvaluationReport }) {
   const { t } = useLocale();
   const narrative = report.narrative;
   return (
-    <div className="model-evaluation-report" data-testid="model-evaluation-report" style={{ marginTop: '0.5rem' }}>
+    <div className="model-evaluation-report" data-testid="model-evaluation-report">
       <p className={report.complete ? 'text-dim' : 'text-danger'}>
         {report.complete ? t('Report complete') : t('Incomplete: {{reason}}', { reason: report.incompleteReason ?? '' })}
         {report.evaluatorCaptainName && <span className="text-dim">{' '}{t('Evaluator: {{name}}', { name: report.evaluatorCaptainName })}</span>}
       </p>
       {report.warnings.map((warning) => <p key={warning} className="text-warning">{warning}</p>)}
       {report.personaOutcomes.length > 0 && (
-        <ul className="model-evaluation-personas" style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem' }}>
+        <ul className="model-evaluation-personas">
           {report.personaOutcomes.map((outcome) => (
             <li key={outcome.persona}>
               {t('{{persona}}: {{passed}} of {{graded}} passed, {{pending}} pending, {{couldNotRun}} could not run', {
@@ -257,7 +257,7 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
 
   return (
     <div className="model-probe-evaluate">
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div className="model-probe-evaluate-actions">
         <button
           type="button"
           className="btn btn-sm"
@@ -280,7 +280,7 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
           <button type="button" className="btn btn-sm" onClick={handleCancel}>{t('Cancel')}</button>
         )}
         {run && (
-          <span data-testid="model-probe-counts">
+          <span className="model-probe-evaluate-counts" data-testid="model-probe-counts">
             <StatusBadge status={run.status} />{' '}
             <span className="text-dim">
               {t('{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run', {
@@ -293,9 +293,9 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
       {run?.profileError && <p role="alert" className="text-danger">{run.profileError}</p>}
       {run?.batteryError && <p role="alert" className="text-danger">{run.batteryError}</p>}
       {inlineError && <p role="alert" className="text-danger">{inlineError}</p>}
-      {run && <div aria-live="polite">
-        <p>{run.depth} | {elapsed}s{run.depth === 'Full' && !finished && <> | {t(phase)}</>}</p>
-        <label>{t('Tokens')}: {run.tokensUsed} / {run.tokenBudget}
+      {run && <div className="model-probe-evaluate-status" aria-live="polite">
+        <p className="model-probe-evaluate-timing">{run.depth} | {elapsed}s{run.depth === 'Full' && !finished && <> | {t(phase)}</>}</p>
+        <label className="model-probe-evaluate-tokens">{t('Tokens')}: {run.tokensUsed} / {run.tokenBudget}
           <progress aria-label={t('Tokens')} value={Math.min(run.tokensUsed, run.tokenBudget)} max={Math.max(1, run.tokenBudget)} />
         </label>
         {battery && <p>{t('Tasks')}: {battery.passedCount + battery.failedCount + battery.couldNotRunCount + battery.pendingEvaluationCount} / {battery.totalTasks}</p>}
@@ -303,7 +303,7 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
       </div>}
       {run?.failureReason && <p className="text-danger">{run.failureReason}</p>}
       {run && (run.results ?? []).length > 0 && (
-        <ul className="model-probe-results" style={{ margin: '0.5rem 0 0', paddingLeft: '1.25rem' }}>
+        <ul className="model-probe-results">
           {(run.results ?? []).map((result) => (
             <li key={result.id || result.probe}>
               <strong>{t(PROBE_LABELS[result.probe] ?? result.probe)}</strong>{' '}

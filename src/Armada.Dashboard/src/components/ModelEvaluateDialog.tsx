@@ -132,9 +132,9 @@ export default function ModelEvaluateDialog({ open, captainId, submitting = fals
       footer={footer}
     >
       {loadError && <p role="alert" className="text-danger">{loadError}</p>}
-      <fieldset className="model-evaluate-depth" style={{ border: 0, padding: 0, margin: '0 0 0.75rem' }}>
+      <fieldset className="model-evaluate-depth">
         <legend><strong>{t('Depth')}</strong></legend>
-        <label style={{ marginRight: '1rem' }}>
+        <label>
           <input type="radio" name="model-evaluate-depth" value="Quick" checked={depth === 'Quick'} onChange={() => setDepth('Quick')} />{' '}
           {t('Quick')}
         </label>

@@ -9444,3 +9444,112 @@ details.readiness-issue-collapsible { padding-top: 0.45rem; padding-bottom: 0.45
 
 /* Evaluation badge: marks missions and voyages flagged IsEvaluation */
 .tag.evaluation-badge { margin-left: 0.4rem; vertical-align: middle; background: var(--tag-review-bg); color: var(--tag-review-fg); }
+
+/* Model probe evaluation panel (ModelProbeEvaluate on CaptainDetail / endpoint pages) */
+.model-probe-evaluate {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+}
+.model-probe-evaluate p { margin: 0; }
+.model-probe-evaluate-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+.model-probe-evaluate-counts {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: 0.25rem;
+}
+.model-probe-evaluate-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 1.25rem;
+    font-size: 0.85rem;
+    color: var(--text);
+}
+.model-probe-evaluate-timing { font-variant-numeric: tabular-nums; }
+.model-probe-evaluate-tokens {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-variant-numeric: tabular-nums;
+}
+.model-probe-evaluate-tokens progress { width: 10rem; max-width: 40vw; height: 0.6rem; accent-color: var(--accent); }
+.model-probe-evaluate .data-table caption { text-align: left; font-weight: 600; padding: 0.25rem 0 0.5rem; }
+
+/* Probe results and persona outcome lists */
+.model-probe-results,
+.model-evaluation-personas {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.model-probe-results li,
+.model-evaluation-personas li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+.model-probe-results li:last-child,
+.model-evaluation-personas li:last-child { border-bottom: 0; }
+.model-probe-results .tag { flex: 0 0 auto; }
+.model-probe-results .tag.couldnotrun { background: var(--tag-review-bg); color: var(--tag-review-fg); }
+
+/* Full evaluation report block */
+.model-evaluation-report {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+.model-evaluation-report p { margin: 0; }
+.model-evaluation-report ul { margin: 0.2rem 0 0.4rem; padding-left: 1.25rem; }
+
+.text-warning {
+    color: var(--orange, var(--yellow)) !important;
+}
+
+/* Depth choice in the Evaluate dialog */
+.model-evaluate-depth {
+    border: 0;
+    margin: 0 0 0.85rem;
+    padding: 0;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 1.25rem;
+}
+.model-evaluate-depth legend { padding: 0; margin-bottom: 0.4rem; width: 100%; }
+.modal .model-evaluate-depth label,
+.model-evaluate-depth label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text);
+    cursor: pointer;
+}
+.model-evaluate-depth input[type="radio"] { width: auto; margin: 0; }
