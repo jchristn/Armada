@@ -289,6 +289,28 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<ArgumentException>(() => access.IgnoreAsync(admin, alert.Id, 366), "366 days").ConfigureAwait(false);
             }));
 
+            cases.Add(DbCase("action_history_bounded", "An alert holding 100 action records keeps the newest 100 when another action is applied; the oldest record is dropped", async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                ModelProfile profile = await CreateProfileAsync(db, Tenant).ConfigureAwait(false);
+                ModelAlert alert = await CreateAlertAsync(db, profile, "Worker", ModelAlertRuleEnum.FirstPassSuccess).ConfigureAwait(false);
+                ModelAlert stored = (await db.ModelAlerts.ReadAsync(alert.Id).ConfigureAwait(false))!;
+                DateTime start = DateTime.UtcNow.AddDays(-1);
+                for (int i = 0; i < ModelAlert.MaxActions; i++)
+                    stored.Actions.Add(new ModelAlertActionRecord { Action = ModelAlertActionEnum.Ignore, AppliedUtc = start.AddMinutes(i), UserId = "usr_seed_" + i, Changed = true, Result = "seed " + i });
+                await db.ModelAlerts.UpdateAsync(stored).ConfigureAwait(false);
+
+                AuthContext admin = AuthContext.Authenticated(Tenant, "usr_admin", false, true, "Test");
+                ModelAlertApplyResult applied = await Access(db, new ModelAlertSettings(), null).IgnoreAsync(admin, alert.Id, 2).ConfigureAwait(false);
+                ModelAlert after = (await db.ModelAlerts.ReadAsync(alert.Id).ConfigureAwait(false))!;
+                AssertEqual(ModelAlert.MaxActions, after.Actions.Count, "bounded");
+                AssertEqual("usr_seed_1", after.Actions[0].UserId, "the oldest record is dropped");
+                AssertEqual("usr_admin", after.Actions[after.Actions.Count - 1].UserId, "the new record is kept last");
+                AssertEqual(ModelAlert.MaxActions, applied.Alert.Actions.Count, "the returned alert is bounded too");
+                CollectionBounds.Validate(applied.Alert);
+            }));
+
             cases.Add(DbCase("suggested_actions_apply", "Suggested actions change nothing until applied; MoveDown, RemoveFromPersona and Reevaluate go through the persona and Evaluate services and are recorded; CompactTemplate is unavailable with the reason", async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

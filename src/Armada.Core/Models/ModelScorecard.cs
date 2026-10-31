@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A read-only scorecard of one (model profile, persona), optionally one vessel, over a rolling window, computed from
@@ -89,6 +90,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Attribution rules applied and how many items each removed.
         /// </summary>
+        [CollectionBound(9, Reason = "One per exclusion rule")]
         public List<ModelScorecardExclusion> Exclusions
         {
             get => _Exclusions;
@@ -99,6 +101,7 @@ namespace Armada.Core.Models
         /// One group per revision, or per set of revisions marked compatible, oldest first; outcomes that match no
         /// recorded revision come last.
         /// </summary>
+        [CollectionBound(ModelProfile.MaxRevisions + 1, Reason = "One per revision group of the newest ModelProfile.MaxRevisions revisions, plus one for unmatched attempts")]
         public List<ModelScorecardGroup> Groups
         {
             get => _Groups;

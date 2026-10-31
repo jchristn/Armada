@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One revision of a model profile: the runtime version, model digest, sampling and tool configuration first seen
@@ -13,6 +14,11 @@ namespace Armada.Core.Models
     public class ModelProfileRevision
     {
         #region Public-Members
+
+        /// <summary>
+        /// Most revisions one revision may be marked compatible with (100).
+        /// </summary>
+        public const int MaxCompatibleWith = 100;
 
         /// <summary>
         /// Unique identifier (mdv_ prefix).
@@ -64,6 +70,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Revisions an administrator marked compatible with this one (mdv_ prefix), so their results may be pooled.
         /// </summary>
+        [CollectionBound(MaxCompatibleWith, Reason = "Marking a revision that already has the most marks is rejected; a Full Evaluate report marks one revision with room")]
         public List<string> CompatibleWith
         {
             get => _CompatibleWith;

@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One scorecard threshold crossed for a (model profile, revision group, persona, vessel or all vessels, rule)
@@ -13,6 +14,11 @@ namespace Armada.Core.Models
     public class ModelAlert
     {
         #region Public-Members
+
+        /// <summary>
+        /// Most records kept in <see cref="Actions"/> (100). Applying an action drops the oldest record past it.
+        /// </summary>
+        public const int MaxActions = 100;
 
         /// <summary>
         /// Unique identifier (mal_ prefix).
@@ -126,8 +132,9 @@ namespace Armada.Core.Models
         public DateTime? IgnoredUntilUtc { get; set; } = null;
 
         /// <summary>
-        /// Suggested actions applied to this alert, oldest first (the audit record).
+        /// Suggested actions applied to this alert, oldest first (the audit record; the newest <see cref="MaxActions"/>).
         /// </summary>
+        [CollectionBound(MaxActions, Reason = "Applying an action drops the oldest record past the limit")]
         public List<ModelAlertActionRecord> Actions
         {
             get => _Actions;
@@ -137,6 +144,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Suggested actions and whether each can be applied now (computed on read, not stored).
         /// </summary>
+        [CollectionBound(5, Reason = "One per ModelAlertActionEnum value (MoveDown, RemoveFromPersona, CompactTemplate, Reevaluate, Ignore)")]
         public List<ModelAlertSuggestedAction> SuggestedActions
         {
             get => _SuggestedActions;

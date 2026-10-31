@@ -291,6 +291,86 @@ namespace Test.Shared.Suites.Database
                 AssertTrue(list.All(r => r.CompatibleWith.Count == 0), "empty list clears every mark involving r3");
             }));
 
+            cases.Add(CaseAsync("revisions_bounded_newest_kept", "A profile read returns the newest 500 of 501 revisions with Measured from every revision; the scorecard groups only the newest 500", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                ModelProfile profile = new ModelProfile { Identity = new ModelProfileIdentity { Runtime = "Mux" } };
+                await db.ModelProfiles.CreateAsync(profile, "key-many").ConfigureAwait(false);
+                List<ModelProfileRevision> created = new List<ModelProfileRevision>();
+                for (int i = 0; i <= ModelProfile.MaxRevisions; i++)
+                {
+                    ModelProfileRevision revision = new ModelProfileRevision { ProfileId = profile.Id, RuntimeVersion = i + ".0.0", FirstSeenUtc = _Fixed.AddMinutes(i) };
+                    if (i == 0)
+                    {
+                        revision.EvaluationRunId = "mpr_oldest";
+                        revision.EvaluationReport = new ModelEvaluationReport { RunId = "mpr_oldest", Complete = true, ProfileId = profile.Id };
+                    }
+                    created.Add(await db.ModelProfiles.CreateRevisionAsync(revision).ConfigureAwait(false));
+                }
+
+                ModelProfileAccessService access = new ModelProfileAccessService(db, QuietLogging());
+                AuthContext admin = new AuthContext { IsAuthenticated = true, IsAdmin = true, UserId = "usr_admin" };
+                ModelProfile read = await access.GetAsync(admin, profile.Id).ConfigureAwait(false);
+                AssertEqual(ModelProfile.MaxRevisions, read.Revisions.Count, "bounded to the limit");
+                AssertEqual(created[1].Id, read.Revisions[0].Id, "the oldest revision is the one dropped");
+                AssertEqual(created[created.Count - 1].Id, read.Revisions[read.Revisions.Count - 1].Id, "newest kept, oldest first");
+                AssertNotNull(read.Measured, "measured still read from every revision");
+                AssertEqual(created[0].Id, read.Measured!.RevisionId, "measured names the dropped revision's report");
+                CollectionBounds.Validate(read);
+
+                ModelScorecard card = await new ModelScorecardService(db, QuietLogging()).ComputeAsync(profile, new ModelScorecardRequest { Persona = "Worker" }, _Fixed.AddDays(1)).ConfigureAwait(false);
+                List<string> pooled = card.Groups.SelectMany(g => g.RevisionIds).ToList();
+                AssertEqual(ModelProfile.MaxRevisions, pooled.Count, "scorecard pools the newest revisions");
+                AssertFalse(pooled.Contains(created[0].Id), "the oldest revision is not grouped");
+                CollectionBounds.Validate(card);
+            }));
+
+            cases.Add(CaseAsync("compatibility_marks_bounded", "A revision with 100 marks cannot gain another: an admin mark is rejected, a request over 1000 ids is rejected, and a Full Evaluate report pools through the newest revision with room", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                ModelProfile profile = new ModelProfile { Identity = new ModelProfileIdentity { Runtime = "Mux" } };
+                await db.ModelProfiles.CreateAsync(profile, "key-full").ConfigureAwait(false);
+                ModelProfileRevision basis = await db.ModelProfiles.CreateRevisionAsync(new ModelProfileRevision { ProfileId = profile.Id, RuntimeVersion = "1.0.0", FirstSeenUtc = _Fixed }).ConfigureAwait(false);
+                List<string> others = new List<string>();
+                for (int i = 0; i < ModelProfileRevision.MaxCompatibleWith; i++)
+                    others.Add((await db.ModelProfiles.CreateRevisionAsync(new ModelProfileRevision { ProfileId = profile.Id, RuntimeVersion = "2." + i + ".0", FirstSeenUtc = _Fixed.AddMinutes(i + 1) }).ConfigureAwait(false)).Id);
+                await db.ModelProfiles.SetCompatibleWithAsync(basis.Id, others).ConfigureAwait(false);
+                ModelProfileRevision outsider = await db.ModelProfiles.CreateRevisionAsync(new ModelProfileRevision { ProfileId = profile.Id, RuntimeVersion = "9.0.0", FirstSeenUtc = _Fixed.AddDays(1) }).ConfigureAwait(false);
+
+                ModelProfileAccessService access = new ModelProfileAccessService(db, QuietLogging());
+                AuthContext admin = new AuthContext { IsAuthenticated = true, IsAdmin = true, UserId = "usr_admin" };
+                bool rejected = false;
+                try { await access.SetCompatibleWithAsync(admin, profile.Id, outsider.Id, new ModelProfileCompatibilityRequest { CompatibleWith = new List<string> { basis.Id } }).ConfigureAwait(false); }
+                catch (ArgumentException ex) { rejected = ex.Message.Contains(basis.Id, StringComparison.Ordinal); }
+                AssertTrue(rejected, "marking a full revision is rejected, naming it");
+                AssertEqual(ModelProfileRevision.MaxCompatibleWith, (await db.ModelProfiles.ReadRevisionAsync(basis.Id).ConfigureAwait(false))!.CompatibleWith.Count, "basis unchanged");
+                AssertEqual(0, (await db.ModelProfiles.ReadRevisionAsync(outsider.Id).ConfigureAwait(false))!.CompatibleWith.Count, "nothing stored");
+
+                ModelProfileRevision resaved = await access.SetCompatibleWithAsync(admin, profile.Id, others[0], new ModelProfileCompatibilityRequest { CompatibleWith = new List<string> { basis.Id } }).ConfigureAwait(false);
+                AssertTrue(resaved.CompatibleWith.SequenceEqual(new[] { basis.Id }), "re-saving an existing mark to a full revision is allowed");
+
+                List<string> tooMany = Enumerable.Range(0, CollectionLimits.MaxRequestItems + 1).Select(i => basis.Id).ToList();
+                bool limited = false;
+                try { await access.SetCompatibleWithAsync(admin, profile.Id, outsider.Id, new ModelProfileCompatibilityRequest { CompatibleWith = tooMany }).ConfigureAwait(false); }
+                catch (CollectionLimitExceededException ex) { limited = ex.Field == "CompatibleWith"; }
+                AssertTrue(limited, "a request over the request item limit is rejected");
+
+                ModelProfileService service = new ModelProfileService(db, QuietLogging());
+                ModelProfileRevision basisRead = (await db.ModelProfiles.ReadRevisionAsync(basis.Id).ConfigureAwait(false))!;
+                ModelEvaluationReport report = new ModelEvaluationReport { RunId = "mpr_full", Complete = true };
+                ModelProfileRevision advisory = await service.RecordEvaluationAsync(new ModelProfileResolution { Profile = profile, Revision = basisRead }, report).ConfigureAwait(false);
+                AssertTrue(advisory.CompatibleWith.SequenceEqual(new[] { others[others.Count - 1] }), "pooled through the newest revision of the basis's pool");
+                AssertEqual(ModelProfileRevision.MaxCompatibleWith, (await db.ModelProfiles.ReadRevisionAsync(basis.Id).ConfigureAwait(false))!.CompatibleWith.Count, "basis not pushed over the limit");
+                foreach (ModelProfileRevision revision in await db.ModelProfiles.ReadRevisionsAsync(profile.Id).ConfigureAwait(false))
+                    AssertTrue(revision.CompatibleWith.Count <= ModelProfileRevision.MaxCompatibleWith, revision.Id + " within the limit");
+
+                ModelProfileRevision fresh = await db.ModelProfiles.CreateRevisionAsync(new ModelProfileRevision { ProfileId = profile.Id, RuntimeVersion = "10.0.0", FirstSeenUtc = _Fixed.AddDays(2) }).ConfigureAwait(false);
+                ModelProfileRevision second = await service.RecordEvaluationAsync(new ModelProfileResolution { Profile = profile, Revision = fresh }, new ModelEvaluationReport { RunId = "mpr_room", Complete = true }).ConfigureAwait(false);
+                AssertTrue(second.CompatibleWith.SequenceEqual(new[] { fresh.Id }), "a basis with room is marked directly");
+            }));
+
             cases.Add(CaseAsync("captain_reference_roundtrip", "Captain.ModelProfileId round-trips through LinkCaptainAsync, survives a full captain update, and serializes on the API model", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using System.Text.Json.Serialization;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Worker eligibility envelope (docs/MODEL_HETEROGENEITY.md, 3.3): the size a Worker mission is sliced for and the
@@ -38,6 +39,7 @@ namespace Armada.Core.Models
         /// <c>mcp</c> (MCP tools). Empty for none. A profile that does not record a required capability is not eligible.
         /// </summary>
         [JsonPropertyName("requiredTools")]
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
         public List<string> RequiredTools
         {
             get => _RequiredTools;
