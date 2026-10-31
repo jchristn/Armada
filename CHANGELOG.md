@@ -162,6 +162,10 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
 
+### Runbook operations stay on runbook records
+
+- **Ordinary playbooks are not runbooks.** List, read, update, delete, and start-execution apply only when the playbook content starts with the runbook metadata marker `<!-- armada:runbook`. A plain playbook is absent from the runbook list. Read returns no runbook. Update, delete, and start-execution report `Runbook not found.` and leave the playbook row and its content in place. Leading whitespace before the marker does not qualify. A record that starts with the marker remains a runbook.
+
 ### Landing failure prevention
 
 - Every dashboard and TUI delete, bulk delete and purge now shows a progress modal (for example "Deleting vessel" or "Deleting 12 missions": "This may take some time while related records are cleaned up.") that stays up until the server answers, cannot be dismissed while pending, and offers Retry and Dismiss if the delete fails. Duplicate submissions are ignored. Ask Armada uses the same shared dialog.

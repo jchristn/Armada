@@ -50,6 +50,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         {
             if (query == null) throw new ArgumentNullException(nameof(query));
             List<string> conditions = new List<string>();
+            conditions.Add("content LIKE @metadata_prefix ESCAPE '!'");
             if (!String.IsNullOrWhiteSpace(query.TenantId)) conditions.Add("tenant_id = @tenant_id");
             if (!String.IsNullOrWhiteSpace(query.VisibleToUserId)) conditions.Add("(scope = @tenant_wide OR user_id = @visible_user_id)");
             if (query.Active.HasValue) conditions.Add("active = @active");
@@ -67,8 +68,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     SqliteCommandHelper.Add(cmd, "@visible_user_id", query.VisibleToUserId);
                 }
                 if (query.Active.HasValue) SqliteCommandHelper.Add(cmd, "@active", query.Active.Value);
-                if (!String.IsNullOrWhiteSpace(query.WorkflowProfileId) || !String.IsNullOrWhiteSpace(query.EnvironmentId) || query.DefaultCheckType.HasValue)
-                    SqliteCommandHelper.Add(cmd, "@metadata_prefix", EscapeLike(_MetadataMarker) + "%");
+                SqliteCommandHelper.Add(cmd, "@metadata_prefix", EscapeLike(_MetadataMarker) + "%");
                 if (!String.IsNullOrWhiteSpace(query.WorkflowProfileId)) SqliteCommandHelper.Add(cmd, "@workflow_profile", "%" + EscapeLike("\"WorkflowProfileId\":\"" + query.WorkflowProfileId.Trim() + "\"") + "%");
                 if (!String.IsNullOrWhiteSpace(query.EnvironmentId)) SqliteCommandHelper.Add(cmd, "@environment", "%" + EscapeLike("\"EnvironmentId\":\"" + query.EnvironmentId.Trim() + "\"") + "%");
                 if (query.DefaultCheckType.HasValue) SqliteCommandHelper.Add(cmd, "@check_type", "%" + EscapeLike("\"DefaultCheckType\":\"" + query.DefaultCheckType.Value.ToString() + "\"") + "%");
