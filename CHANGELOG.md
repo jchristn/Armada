@@ -6,6 +6,13 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Full Evaluate follow-up (model heterogeneity Phase 5, item 4)
+
+- **Incomplete reports on the profile.** A cancelled or timed-out Full Evaluate (or one whose battery could not run) is now also recorded as an advisory model profile revision, marked `EvaluationIncomplete`. It never changes an earlier revision, never fills `measured`, is never preferred over a complete report, and observations never pool into it. Nothing reads it for routing. No migration.
+- **`measured` block.** `GET /api/v1/model-profiles/{id}` and MCP `get_model_profile` return `Measured`: the counts from the latest complete Full report (run, revision and battery run ids, report time, packs, one count per probe kind, and per persona one count per pack with passed, failed, could not run, pending evaluation and attempted). Counts only, no derived scores; null until a complete report exists.
+- **Dashboard Evaluate dialog.** The captain page's Full Evaluate control opens a dialog with depth (Full by default), the evaluator captain (idle captains, with a note when one shares the evaluated captain's model family), battery packs, personas and run count, and submits to `POST /api/v1/captains/{id}/evaluate`. The report view is unchanged. New client helper `listBatteryPacks`.
+- **TUI Evaluate view.** The TUI captain page has an Evaluate action (`v`) with the same options, then a viewer that polls the run, shows its probe results and report, and cancels it with `c`.
+
 ### Worker eligibility envelope (model heterogeneity Phase 6, item 1)
 
 - **Vessel default.** A vessel may carry a default `WorkerEnvelope` (`maxFiles`, `maxSteps`, `minServedContextTokens`, `requiredTools` of `tools`/`mcp`), set through REST vessel create/update, WebSocket `create_vessel`/`update_vessel`, MCP `add_vessel`/`update_vessel` (`workerEnvelope`; `{}` clears it, omitted keeps it) and the dashboard and TUI vessel forms; `get_vessel` returns it. Out-of-range values or unknown tools are rejected (`400`, MCP `InvalidArgument`). No envelope is the default, so routing is unchanged until a vessel sets one. Stored in a new column (migration 110 on SQLite, PostgreSQL, SQL Server and MySQL).

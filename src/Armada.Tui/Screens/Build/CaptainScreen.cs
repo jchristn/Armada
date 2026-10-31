@@ -19,7 +19,7 @@ namespace Armada.Tui.Screens.Build
     /// endpoint settings, system instructions, allowed and preferred personas, model, state, quarantine with Lift
     /// Quarantine, current mission and dock links, process id, recovery attempts, heartbeat, created and updated; the
     /// current mission card; the captain log (log viewer with the server's Readable formatting, 500 lines first); and
-    /// recent missions. Actions: Edit, Duplicate, View Tools, View Log, View JSON, Recall and Stop (while working,
+    /// recent missions. Actions: Edit, Duplicate, View Tools, Evaluate (CaptainEvaluate), View Log, View JSON, Recall and Stop (while working,
     /// stalled, or planning), and Remove. Reloads on <c>captain.changed</c>. Not thread-safe.
     /// </summary>
     public class CaptainScreen : OpsDetailScreen
@@ -91,6 +91,7 @@ namespace Armada.Tui.Screens.Build
             Action("edit", "Edit", () => CaptainForm.Open(this, Captain!, true, c => Load()), "e", () => Captain != null, true);
             Action("duplicate", "Duplicate", Duplicate, "u", () => Captain != null);
             Action("tools", "View Tools", () => CaptainTools.Show(this, CaptainId, Captain!.Name), "t", () => Captain != null, true);
+            Action("evaluate", "Evaluate", () => CaptainEvaluate.Open(this, Captain!), "v", () => Captain != null, true);
             Action("log", "View Log", () => ViewLog(), "l", () => Captain != null, true);
             Action("json", "View JSON", () => ShowJson(Tr("Captain: {{name}}", LocalizationArgs.Of("name", Captain!.Name)), Captain), "j", () => Captain != null, true);
             Action("unquarantine", "Lift Quarantine", Unquarantine, "q", () => Captain != null && Captain.State == CaptainStateEnum.Quarantined, true);

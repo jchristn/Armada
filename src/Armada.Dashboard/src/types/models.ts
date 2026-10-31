@@ -4425,6 +4425,26 @@ export interface ModelProbeRun {
 }
 
 /** Optional parameters of a Full Evaluate; every value has a server default. */
+/** One task of a fixture battery pack. */
+export interface BatteryTaskInfo {
+  id: string;
+  title?: string | null;
+  persona?: string | null;
+}
+
+/** An installed fixture battery pack (GET /api/v1/battery/packs). */
+export interface BatteryPackInfo {
+  id: string;
+  name?: string | null;
+  version: number;
+  domain?: string | null;
+  description?: string | null;
+  valid: boolean;
+  errors: string[];
+  tasks: BatteryTaskInfo[];
+  taskCount: number;
+}
+
 export interface ModelEvaluationOptions {
   evaluatorCaptainId?: string | null;
   packs?: string[] | null;

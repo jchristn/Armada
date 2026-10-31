@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { cancelModelProbeRun, evaluateCaptain, evaluateModelEndpoint, getModelProbeRun } from '../api/client';
-import type { ModelEvaluationReport, ModelProbeDepth, ModelProbeKind, ModelProbeOutcome, ModelProbeRun } from '../types/models';
+import type { ModelEvaluationOptions, ModelEvaluationReport, ModelProbeDepth, ModelProbeKind, ModelProbeOutcome, ModelProbeRun } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
+import ModelEvaluateDialog from './ModelEvaluateDialog';
 import StatusBadge from './shared/StatusBadge';
 
 /** How often a queued or running probe run is polled. */
@@ -80,8 +81,10 @@ function FullReport({ report }: { report: ModelEvaluationReport }) {
 }
 
 /**
- * Evaluate buttons: Evaluate starts a Quick probe run, Full Evaluate adds the fixture battery and the evaluator's grading
- * (with the server defaults); either is polled until it finishes and can be cancelled while it runs.
+ * Evaluate buttons: Evaluate starts a Quick probe run; Full Evaluate adds the fixture battery and the evaluator's grading.
+ * For a captain, Full Evaluate opens a dialog for the depth, evaluator, packs, personas and run count; for a model
+ * endpoint it starts Full with the server defaults. Either run is polled until it finishes and can be cancelled while it
+ * runs.
  */
 export default function ModelProbeEvaluate({ target, targetId, onError, pollMs = MODEL_PROBE_POLL_MS }: ModelProbeEvaluateProps) {
   const { t } = useLocale();
@@ -89,6 +92,7 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
   const [starting, setStarting] = useState(false);
   const [polling, setPolling] = useState(false);
   const [inlineError, setInlineError] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
 
@@ -125,15 +129,16 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [polling, runId, pollMs]);
 
-  async function handleEvaluate(depth: ModelProbeDepth) {
+  async function handleEvaluate(depth: ModelProbeDepth, options?: ModelEvaluationOptions) {
     setStarting(true);
     setInlineError('');
     try {
       const started = target === 'captain'
-        ? await evaluateCaptain(targetId, depth)
+        ? await (options ? evaluateCaptain(targetId, depth, options) : evaluateCaptain(targetId, depth))
         : await evaluateModelEndpoint(targetId, depth);
       setRun(started);
       setPolling(!isFinished(started));
+      setDialogOpen(false);
     } catch (err) {
       report(err instanceof Error ? err.message : t('Evaluate failed.'));
     } finally {
@@ -170,11 +175,11 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
         <button
           type="button"
           className="btn btn-sm"
-          onClick={() => handleEvaluate('Full')}
+          onClick={() => (target === 'captain' ? setDialogOpen(true) : handleEvaluate('Full'))}
           disabled={busy}
           title={t('Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.')}
         >
-          {t('Full Evaluate')}
+          {target === 'captain' ? t('Full Evaluate...') : t('Full Evaluate')}
         </button>
         {polling && run && (
           <button type="button" className="btn btn-sm" onClick={handleCancel}>{t('Cancel')}</button>
@@ -205,6 +210,15 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
         </ul>
       )}
       {finished && run?.report && <FullReport report={run.report} />}
+      {target === 'captain' && (
+        <ModelEvaluateDialog
+          open={dialogOpen}
+          captainId={targetId}
+          submitting={starting}
+          onClose={() => setDialogOpen(false)}
+          onSubmit={(depth, options) => handleEvaluate(depth, options)}
+        />
+      )}
     </div>
   );
 }

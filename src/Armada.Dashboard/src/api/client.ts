@@ -206,6 +206,7 @@ import type {
   StageOutcome,
   StageOutcomeQuery,
   StageOutcomeReclassifyResult,
+  BatteryPackInfo,
   ModelEvaluationOptions,
   ModelProbeDepth,
   ModelProbeRun,
@@ -2185,6 +2186,10 @@ export const evaluateCaptain = (captainId: string, depth: ModelProbeDepth = 'Qui
 /** Queue an Evaluate of a model endpoint (Full needs an admin). 201 with the queued run. */
 export const evaluateModelEndpoint = (endpointId: string, depth: ModelProbeDepth = 'Quick', options?: ModelEvaluationOptions) =>
   post<ModelProbeRun>(`/api/v1/model-endpoints/${encodeURIComponent(endpointId)}/evaluate`, evaluateBody(depth, options));
+
+/** One page of the installed fixture battery packs (the Full Evaluate dialog's pack list), with validation errors. */
+export const listBatteryPacks = (pageSize = 1000) =>
+  get<EnumerationResult<BatteryPackInfo>>(`/api/v1/battery/packs${cliQuery({ pageSize })}`);
 
 /** Cancel a running Evaluate; a Full run keeps a partial report marked incomplete. A finished run comes back unchanged. */
 export const cancelModelProbeRun = (id: string) =>

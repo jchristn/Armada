@@ -666,7 +666,7 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
    context; immutable `ModelProfileRevision`s (`mdv_`) with the Decision 6 pooling rules (a served context change is a
    new profile); compatibility marks stored beside the revisions; `Captain.ModelProfileId` set best effort from stage
    outcomes and Quick probe runs; REST `/api/v1/model-profiles` and MCP `get_model_profile` / `list_model_profiles`.
-   The `measured` block, the scorecard and Full Evaluate are not part of it.
+   The scorecard and Full Evaluate are not part of it; the `measured` block is filled from Full Evaluate (item 4).
 2. Scorecard with counts, uncertainty, repair frequency and cost per accepted result, using the attribution rules.
    Status: implemented (no migration; computed on request from stage outcomes, token usage and timing).
    `ModelScorecardService` and REST `GET /api/v1/model-profiles/{id}/scorecard`, MCP `get_model_scorecard`: one
@@ -707,12 +707,20 @@ Measure first, then change handoffs and contracts, then prompts, then add profil
    reads it for routing. Battery missions are `IsEvaluation`; settings `evaluation.fullRunTokenBudget` (3,000,000) and
    `evaluation.fullRunTimeoutMinutes` (720). Cancel (`POST /api/v1/model-probe-runs/{id}/cancel`, MCP
    `cancel_model_probe_run`) and the timeout cancel the open battery mission and leave a partial report marked
-   incomplete. The dashboard Evaluate control starts Full with the defaults and shows the report. Gaps: the `ModelEvaluation`
-   pipeline still runs one mission per battery task (no separate Evaluate pipeline stage); the evaluator runs as a single
-   probe-executor exchange, not a mission; a model endpoint's battery needs a saved captain that drives it; battery token
-   use is estimated from prompt and output length; an incomplete report is not recorded on the profile; the dashboard has
-   no dialog for evaluator, packs or personas (REST and MCP only), and the TUI has no Evaluate view; the `measured`
-   profile block is still not filled from the report.
+   incomplete. Gaps: the `ModelEvaluation` pipeline still runs one mission per battery task (no separate Evaluate
+   pipeline stage); the evaluator runs as a single probe-executor exchange, not a mission; a model endpoint's battery
+   needs a saved captain that drives it; battery token use is estimated from prompt and output length.
+   Follow-up (gaps closed, no migration): an incomplete report (cancel, timeout, or a battery that could not run) is
+   also recorded as an advisory revision, marked `EvaluationIncomplete` (derived from the stored report); it never
+   changes an earlier revision, never fills `measured`, and observations never pool into it (`ResolveAsync` skips it
+   when picking the current revision). The profile's `measured` block (`ModelProfile.Measured`, built on each
+   single-profile read, REST `GET /api/v1/model-profiles/{id}` and MCP `get_model_profile`) holds the counts of the
+   latest complete Full report only: run, revision and battery run ids, report time, packs, one count per probe kind and,
+   per persona, one count per pack (passed, failed, could not run, pending evaluation, attempted); no derived scores.
+   The dashboard captain Full Evaluate control opens a dialog (depth, Full by default; evaluator captain from the idle
+   captains with a same-family note; packs from the installed battery packs; personas; run count) and keeps the report
+   view; a model endpoint still starts Full with the defaults. The TUI captain page has an Evaluate action (`v`) with the
+   same options and a viewer that polls the run, shows its probes and report, and cancels it (`c`).
 
 ### Phase 6: sizing and routing
 

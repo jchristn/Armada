@@ -3321,6 +3321,14 @@
     },
     {
       "kind": "api",
+      "key": "listBatteryPacks",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W4.3",
+      "notes": "feeds the dashboard's captain Evaluate dialog (pack list); the mobile app has no evaluation screen (see evaluateCaptain)"
+    },
+    {
+      "kind": "api",
       "key": "listBlackBox",
       "status": "implemented",
       "mobile": "src/screens/blackbox/BlackBoxListScreen.tsx",
