@@ -95,6 +95,13 @@ namespace Armada.Core.Models
         /// </summary>
         public int TrackedRuns { get; set; } = 0;
 
+        /// <summary>
+        /// Why the path does not apply to the mission as it is now (for example "Not applicable: the mission is
+        /// Complete."), or null when it applies. Computed when the entry is read, from the same preconditions a run checks,
+        /// so a path that targets a mission no longer in a failed state is not recommended.
+        /// </summary>
+        public string? NotApplicableReason { get; set; } = null;
+
         private List<string> _Preconditions = new List<string>();
         private List<BlackBoxRecoveryStep> _Steps = new List<BlackBoxRecoveryStep>();
 

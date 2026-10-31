@@ -284,13 +284,15 @@ namespace Armada.Core.BlackBox
             return r.Configuration.Values.FirstOrDefault(v => String.Equals(v.Setting, setting, StringComparison.OrdinalIgnoreCase));
         }
 
-        /// <summary>Whether the Harbor link was recorded as disconnected.</summary>
+        /// <summary>Whether the Harbor link was recorded as disconnected (Disconnected, Offline, Lost, or the link manager's
+        /// NotLinked).</summary>
         /// <param name="r">Record.</param>
         /// <returns>True when disconnected.</returns>
         public static bool HarborDisconnected(BlackBoxRecord r)
         {
             string? state = r?.Workspace?.HarborLinkState;
-            return !String.IsNullOrEmpty(state) && (state!.Equals("Disconnected", StringComparison.OrdinalIgnoreCase) || state.Equals("Offline", StringComparison.OrdinalIgnoreCase) || state.Equals("Lost", StringComparison.OrdinalIgnoreCase));
+            return !String.IsNullOrEmpty(state) && (state!.Equals("Disconnected", StringComparison.OrdinalIgnoreCase) || state.Equals("Offline", StringComparison.OrdinalIgnoreCase) || state.Equals("Lost", StringComparison.OrdinalIgnoreCase)
+                || state.Equals(HarborLinkStateEnum.NotLinked.ToString(), StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>Whether the record is about a mission (has a mission id).</summary>

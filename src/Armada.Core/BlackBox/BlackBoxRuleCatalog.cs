@@ -25,7 +25,7 @@ namespace Armada.Core.BlackBox
         /// <summary>
         /// Version of the built-in rules. Bump on every rule change.
         /// </summary>
-        public const int CurrentRulesVersion = 2;
+        public const int CurrentRulesVersion = 3;
 
         /// <summary>
         /// The built-in catalog.
@@ -956,6 +956,7 @@ namespace Armada.Core.BlackBox
         {
             rules.Add(new BlackBoxRule("BBX-INFRA-001", "Harbor disconnected", r => BlackBoxRuleFacts.HarborDisconnected(r) || BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.HarborUnavailable)
                 .In(BlackBoxPhaseEnum.Dispatch)
+                .YieldsTo("BBX-RECOV-006")
                 .Because("Harbor {harborName|of this dock} was disconnected.", BlackBoxConfidenceEnum.High, "workspace.harborLinkState", "subject.harborId")
                 .Votes(BlackBoxTriageEnum.External, 3)
                 .Recover(new BlackBoxRulePath
@@ -1179,7 +1180,7 @@ namespace Armada.Core.BlackBox
 
             rules.Add(new BlackBoxRule("BBX-RECOV-001", "Armada recovery failed", r => BlackBoxRuleFacts.Phase(r) == BlackBoxPhaseEnum.Recovery)
                 .In(BlackBoxPhaseEnum.Recovery)
-                .YieldsTo("BBX-RECOV-002", "BBX-RECOV-003", "BBX-RECOV-004", "BBX-RECOV-005")
+                .YieldsTo("BBX-RECOV-002", "BBX-RECOV-003", "BBX-RECOV-004", "BBX-RECOV-005", "BBX-RECOV-006")
                 .Because("Armada's own recovery could not finish at step {step}: {reason|no reason recorded}.", BlackBoxConfidenceEnum.Medium, "classification.rawReason", "attempts")
                 .Votes(BlackBoxTriageEnum.ArmadaDefect, 2)
                 .Improve(new BlackBoxRuleImprovement
@@ -1245,8 +1246,32 @@ namespace Armada.Core.BlackBox
                     new[] { D.StageHandoff, "src/Armada.Core/Services/MissionService.Handoff.cs:TryHandoffToNextStageAsync" },
                     BlackBoxRuleChange.Of("Detect overlap when fanning out parallel stages", "Before starting parallel stages, estimate their file overlap; serialize overlapping stages, and at the barrier rebase a conflicting branch onto the merged result and retry before failing the voyage.", "Services.HandoffResilience: two overlapping parallel stages are serialized and the barrier merges cleanly.", BlackBoxSeverityEnum.Medium, D.StageHandoff))));
 
+            rules.Add(new BlackBoxRule("BBX-RECOV-006", "Harbor link lost; the captain may still be working", r => BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.UnconfirmedStop && BlackBoxRuleFacts.HarborDisconnected(r))
+                .In(BlackBoxPhaseEnum.Recovery)
+                .Because("Harbor link lost; the captain may still be working. Armada asked to stop the captain of {missionId|this mission} while Harbor {harborName|of this dock} was {harborLinkState|not linked}, so the stop could not be confirmed.", BlackBoxConfidenceEnum.High, "workspace.harborLinkState", "subject.harborId")
+                .Votes(BlackBoxTriageEnum.External, 2)
+                .Recover(new BlackBoxRulePath
+                {
+                    Key = "reconnect-reconcile",
+                    Title = "Reconnect the Harbor and let Armada reconcile the captain",
+                    Steps = { BlackBoxRuleStep.Manual("Start Harbor {harborName|on the developer machine}, or restore its network path to the Admiral, and wait until it shows Connected. Armada then resumes a captain that kept working, re-sends the stop to one that is stuck, or applies the exit of one that ended while the link was down.") },
+                    Risk = BlackBoxSeverityEnum.Low,
+                    ExpectedOutcome = "The mission continues in place; nothing is restarted while the captain may still be working."
+                })
+                .Recover(new BlackBoxRulePath { Key = "restart", Title = "Restart the mission if it failed", Steps = { RestartStep() }, Risk = BlackBoxSeverityEnum.Low, ExpectedOutcome = "The mission runs again." })
+                .Heals(Heal(BlackBoxSelfHealableEnum.Yes,
+                    "held the captain as unreachable while Harbor {harborName|of this dock} was disconnected (no stall, no recovery and no attempt counted for up to HarborDisconnectGraceMinutes), kept one pending stop retried with backoff instead of on every health check, and on reconnect reconciled the captain: resumed it if it was working, re-sent the stop if it was stuck, or applied the exit it reported",
+                    BlackBoxDetectionGapEnum.MissingInvariant,
+                    "Missing output was judged a stall while the Harbor link was {harborLinkState|down}, so recovery asked for a stop that could not be delivered and retried it on every health check.",
+                    "A captain whose Harbor is disconnected is unreachable, not stalled; a stop that cannot be confirmed is recorded once, retried with backoff, and delivered when the Harbor reconnects.",
+                    "Services.HarborUnreachable",
+                    "Disconnect the Harbor of {missionId|a mission} for an hour with a health check every 10 s and assert a bounded number of captain events, no recovery, and a normal resume after the reconnect.",
+                    new[] { D.HarborLinkEpisode, D.UnconfirmedStop, "src/Armada.Core/Services/HarborConnectionManager.cs:GetLinkState" },
+                    BlackBoxRuleChange.Of("Hold unreachable captains and reconcile them on reconnect", "In HealthCheckCaptainAsync, treat a captain whose Harbor link is down as unreachable (one captain.unreachable, no recovery, bounded by HarborDisconnectGraceMinutes), record an unconfirmed stop once with backoff, and on reconnect resume, re-send the stop, or apply the exit.", "Services.HarborUnreachable: a 60-minute outage records a handful of captain events and the mission resumes after the reconnect.", BlackBoxSeverityEnum.High, D.HarborLinkEpisode, D.UnconfirmedStop))));
+
             rules.Add(new BlackBoxRule("BBX-RECOV-002", "Stop not confirmed by the owning host", r => BlackBoxRuleFacts.Step(r) == BlackBoxStepEnum.UnconfirmedStop)
                 .In(BlackBoxPhaseEnum.Recovery)
+                .YieldsTo("BBX-RECOV-006")
                 .Because("Armada asked the host to stop the captain of {missionId|this mission}, but the host never confirmed the stop.", BlackBoxConfidenceEnum.Medium, "workspace.harborLinkState", "handoff.steps")
                 .Votes(BlackBoxTriageEnum.ArmadaDefect, 2)
                 .Recover(new BlackBoxRulePath { Key = "restart", Title = "Restart the mission", Steps = { RestartStep() }, Risk = BlackBoxSeverityEnum.Low, ExpectedOutcome = "The mission runs again." })

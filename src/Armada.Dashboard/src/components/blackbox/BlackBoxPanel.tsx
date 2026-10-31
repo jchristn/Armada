@@ -506,13 +506,14 @@ export default function BlackBoxPanel({ missionId, voyageId, entryId, fallbackRe
                     {p.risk && p.risk !== 'Unknown' && <span className="blackbox-chip" style={{ marginLeft: '0.35rem' }}>{t('Risk: {{risk}}', { risk: t(p.risk) })}</span>}
                     {p.dataLossRisk && <span className="blackbox-chip blackbox-chip-danger" style={{ marginLeft: '0.35rem' }}>{t('Data loss risk')}</span>}
                   </div>
+                  {p.notApplicableReason && <div className="blackbox-path-not-applicable" data-testid="blackbox-path-not-applicable">{p.notApplicableReason}</div>}
                   {p.expectedOutcome && <div className="text-dim">{p.expectedOutcome}</div>}
                   {!!p.preconditions?.length && <div style={{ fontSize: '0.82rem' }}>{t('Preconditions')}: {p.preconditions.join('; ')}</div>}
                   {!!p.steps?.length && <div className="text-dim" style={{ fontSize: '0.82rem' }}>{t('{{count}} steps', { count: p.steps.length })}</div>}
                   {p.runbookId && <div style={{ fontSize: '0.82rem' }}>{t('Runs runbook')}: <Link to={`/runbooks/${encodeURIComponent(p.runbookId)}`} title={t('This path starts the linked runbook instead of its own steps. Open the runbook.')}>{p.runbookTitle || p.runbookId}</Link></div>}
                   {p.successRate != null && <div className="text-dim" style={{ fontSize: '0.82rem' }} title={t('Share of settled confirmed runs of this path that recovered the mission.')}>{t('Success rate {{rate}}% over {{runs}} tracked runs', { rate: Math.round(p.successRate * 100), runs: p.trackedRuns ?? 0 })}</div>}
                 </div>
-                <button type="button" className="btn btn-sm btn-primary" onClick={() => setAction({ kind: 'recovery', id: p.id, title: p.title, dataLossRisk: !!p.dataLossRisk })} title={t('Show what this path would do (dry run); nothing runs until you confirm.')}>{t('Dry run...')}</button>
+                <button type="button" className="btn btn-sm btn-primary" disabled={!!p.notApplicableReason} onClick={() => setAction({ kind: 'recovery', id: p.id, title: p.title, dataLossRisk: !!p.dataLossRisk })} title={p.notApplicableReason ? p.notApplicableReason : t('Show what this path would do (dry run); nothing runs until you confirm.')}>{t('Dry run...')}</button>
               </div>
             ))}
           </div>

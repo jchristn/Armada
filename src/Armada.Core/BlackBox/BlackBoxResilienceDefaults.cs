@@ -81,7 +81,10 @@ namespace Armada.Core.BlackBox
         public const string MissingHandoffs = "src/Armada.Core/Services/AdmiralService.cs:FlagMissingMergeHandoffsAsync";
 
         /// <summary>Unconfirmed stop recording.</summary>
-        public const string UnconfirmedStop = "src/Armada.Core/Services/AdmiralService.cs:RecordUnconfirmedStopAsync";
+        public const string UnconfirmedStop = "src/Armada.Core/Services/AdmiralService.HarborLink.cs:RecordUnconfirmedStopAsync";
+
+        /// <summary>Unreachable captain and reconnect reconciliation in the health check.</summary>
+        public const string HarborLinkEpisode = "src/Armada.Core/Services/AdmiralService.HarborLink.cs:CheckLinkEpisodeAsync";
 
         #endregion
 

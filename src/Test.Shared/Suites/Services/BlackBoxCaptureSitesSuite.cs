@@ -33,6 +33,7 @@ namespace Test.Shared.Suites.Services
         private const string SuiteId = "Services.BlackBoxCaptureSites";
         private const string MissionServiceFile = "src/Armada.Core/Services/MissionService.cs";
         private const string AdmiralFile = "src/Armada.Core/Services/AdmiralService.cs";
+        private const string AdmiralHarborLinkFile = "src/Armada.Core/Services/AdmiralService.HarborLink.cs";
 
         #endregion
 
@@ -681,7 +682,7 @@ namespace Test.Shared.Suites.Services
             yield return M(BlackBoxStepEnum.RescueFailed, BlackBoxPhaseEnum.Recovery, recovery, recovery, MissionFailureKindEnum.Crash, "Failed", "Failed");
             yield return M(BlackBoxStepEnum.RedispatchExhausted, BlackBoxPhaseEnum.Recovery, adm, adm, MissionFailureKindEnum.Infra, "InProgress", "Failed");
             yield return M(BlackBoxStepEnum.OrphanedExit, BlackBoxPhaseEnum.Recovery, adm, adm, MissionFailureKindEnum.Infra, "InProgress", "WorkProduced");
-            yield return M(BlackBoxStepEnum.UnconfirmedStop, BlackBoxPhaseEnum.Recovery, adm, adm, MissionFailureKindEnum.Infra, "InProgress", "InProgress");
+            yield return M(BlackBoxStepEnum.UnconfirmedStop, BlackBoxPhaseEnum.Recovery, AdmiralHarborLinkFile, AdmiralHarborLinkFile, MissionFailureKindEnum.Infra, "InProgress", "InProgress");
             yield return M(BlackBoxStepEnum.MissingMergeHandoff, BlackBoxPhaseEnum.Recovery, adm, adm, MissionFailureKindEnum.Infra, "WorkProduced", "LandingFailed");
             yield return V(BlackBoxStepEnum.SettlementFailed, settlement, "InProgress", "Failed");
             yield return V(BlackBoxStepEnum.Halted, adm, "InProgress", "Cancelled");

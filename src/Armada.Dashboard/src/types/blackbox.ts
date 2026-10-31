@@ -286,6 +286,8 @@ export interface BlackBoxRecoveryPath {
   /** Share of settled confirmed runs of this path that recovered the mission; null until three have settled. */
   successRate?: number | null;
   trackedRuns?: number;
+  /** Why the path does not apply to the mission as it is now (for example "Not applicable: the mission is Complete."). */
+  notApplicableReason?: string | null;
 }
 
 export interface BlackBoxTriageVote { ruleId: string; verdict: BlackBoxTriage; weight: number }

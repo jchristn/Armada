@@ -448,6 +448,19 @@ describe('BlackBoxPanel insight sections', () => {
     expect(within(recovery).getAllByText(/Runs runbook/)).toHaveLength(1);
   });
 
+  it('marks a path that no longer applies and disables its dry run', async () => {
+    const entry = blackBoxEntryFixture();
+    const paths = entry.record!.analysis!.recoveryPaths!.map((p) => p.id === 'rp1' ? { ...p, notApplicableReason: 'Not applicable: the mission is Complete.' } : p);
+    vi.mocked(getMissionBlackBox).mockResolvedValue({ ...entry, record: { ...entry.record!, analysis: { ...entry.record!.analysis!, recoveryPaths: paths } } });
+    renderPanel();
+    const recovery = await screen.findByTestId('blackbox-recovery');
+    expect(within(recovery).getByTestId('blackbox-path-not-applicable')).toHaveTextContent('Not applicable: the mission is Complete.');
+    const notApplicable = recovery.querySelector('[data-path-id="rp1"]')!;
+    expect(within(notApplicable as HTMLElement).getByRole('button', { name: 'Dry run...' })).toBeDisabled();
+    const others = Array.from(recovery.querySelectorAll('[data-path-id]')).filter((el) => el.getAttribute('data-path-id') !== 'rp1');
+    for (const other of others) expect(within(other as HTMLElement).getByRole('button', { name: 'Dry run...' })).toBeEnabled();
+  });
+
   it('loads the timeline, attempt diff and nearby successes only when opened', async () => {
     vi.mocked(getBlackBoxTimeline).mockResolvedValue({ ...page([{ timestampUtc: '2026-10-28T10:00:00Z', source: 'Entry', kind: 'captured', message: 'Black box captured' }]), entryId: 'bbx_2', sources: [], truncated: false } as never);
     vi.mocked(diffBlackBoxEntries).mockResolvedValue({ entryId: 'bbx_2', otherEntryId: 'bbx_1', sameMission: true, attempt: 2, otherAttempt: 1, sameFingerprint: false, differences: [{ section: 'Subject', field: 'Model', value: 'b', otherValue: 'a' }], differenceCount: 1, filesOnlyInEntry: [], filesOnlyInEntryCount: 0, filesOnlyInOther: [], filesOnlyInOtherCount: 0, filesInBothCount: 0, changedFilesKnown: true });

@@ -456,11 +456,21 @@ namespace Armada.Core.BlackBox
                 else sentences.Add("Triage is undecided; judge it from the evidence.");
             }
             BlackBoxRecoveryPath? first = analysis.RecoveryPaths.FirstOrDefault();
-            if (first != null) sentences.Add("Suggested next step: " + EndSentence(first.Title.Substring(0, 1).ToLowerInvariant() + first.Title.Substring(1)).TrimEnd('.') + " (" + first.Id + ").");
+            if (first != null) sentences.Add(SuggestedNextStep(first));
             BlackBoxConfigRecommendation? rec = analysis.ConfigRecommendations.FirstOrDefault(r => r.SuggestedValue != null);
             if (rec != null && sentences.Count < 6) sentences.Add("To prevent it, set " + rec.Setting + " to " + rec.SuggestedValue + " on the " + rec.Scope.ToString().ToLowerInvariant() + ".");
             string summary = String.Join(" ", sentences.Take(6));
             return BlackBoxLimits.Clip(summary.Replace('—', '-').Replace('–', '-'), BlackBoxLimits.MaxSummaryChars) ?? String.Empty;
+        }
+
+        /// <summary>
+        /// The summary sentence that suggests a recovery path as the next step.
+        /// </summary>
+        /// <param name="path">Recovery path.</param>
+        /// <returns>The sentence.</returns>
+        internal static string SuggestedNextStep(BlackBoxRecoveryPath path)
+        {
+            return "Suggested next step: " + EndSentence(path.Title.Substring(0, 1).ToLowerInvariant() + path.Title.Substring(1)).TrimEnd('.') + " (" + path.Id + ").";
         }
 
         private static string PhaseNoun(BlackBoxPhaseEnum phase)

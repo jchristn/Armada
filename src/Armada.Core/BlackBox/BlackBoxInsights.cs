@@ -43,6 +43,11 @@ namespace Armada.Core.BlackBox
         /// <summary>The insight worker.</summary>
         public BlackBoxInsightBackgroundService Background { get; }
 
+        /// <summary>
+        /// Resolves the open entries of missions that completed after their failure.
+        /// </summary>
+        public BlackBoxCompletionResolver Completions { get; }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -76,6 +81,8 @@ namespace Armada.Core.BlackBox
             Runbooks = new BlackBoxRunbookLinker(database, logging);
             NearbySuccessEnricher = new BlackBoxNearbySuccessEnricher(database, settings, logging);
             Background = new BlackBoxInsightBackgroundService(database, settings, Successes, Outcomes, logging);
+            Completions = new BlackBoxCompletionResolver(database, service, logging);
+            Background.Completions = Completions;
 
             pipeline.AddEnricher(NearbySuccessEnricher);
             pipeline.AnalysisHook = Runbooks;

@@ -105,6 +105,7 @@
   align-items: flex-start;
 }
 .blackbox-path-body { min-width: 0; flex: 1 1 18rem; }
+.blackbox-path-not-applicable { font-size: 0.82rem; font-weight: 600; }
 
 .blackbox-attempts { display: flex; gap: 0.3rem; flex-wrap: wrap; }
 .blackbox-attempts button[aria-pressed="true"] { background: var(--accent-solid); color: #fff; border-color: var(--accent-solid); }

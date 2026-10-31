@@ -410,6 +410,12 @@ namespace Armada.Core.BlackBox
                 foreach (BlackBoxRecoveryPath p in r.Analysis.RecoveryPaths.OrderBy(x => x.Rank).Take(listLimit))
                 {
                     sb.Append("### ").Append(p.Rank.ToString(CultureInfo.InvariantCulture)).Append(". ").Append(Inline(p.Title)).Append(" (").Append(p.Id).Append(")").Append("\n\n");
+                    if (p.NotApplicableReason != null)
+                    {
+                        // A path whose actions no longer apply is listed for the record, not recommended.
+                        sb.Append(Inline(p.NotApplicableReason)).Append("\n\n");
+                        continue;
+                    }
                     sb.Append("Risk: ").Append(p.Risk).Append(p.DataLossRisk ? ", data-loss risk (confirm first)" : String.Empty).Append(".");
                     if (p.ExpectedOutcome != null) sb.Append(" Expected: ").Append(Inline(p.ExpectedOutcome));
                     sb.Append("\n\n");

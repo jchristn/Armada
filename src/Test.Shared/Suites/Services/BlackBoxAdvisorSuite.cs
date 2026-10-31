@@ -344,7 +344,13 @@ namespace Test.Shared.Suites.Services
             list.Add(new BlackBoxGoldenCase("BBX-HAND-002", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.PlanParse, null, "plan block unreadable")) { DoesNotFire = { "BBX-HAND-001" } });
             list.Add(new BlackBoxGoldenCase("BBX-HAND-003", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.StageBranchHarden, null, "could not harden the stage branch")) { DoesNotFire = { "BBX-HAND-001" } });
             list.Add(new BlackBoxGoldenCase("BBX-HAND-004", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.IntegrationBarrier, null, "barrier merge conflicted")) { DoesNotFire = { "BBX-HAND-001" } });
-            list.Add(new BlackBoxGoldenCase("BBX-RECOV-002", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.UnconfirmedStop, null, "stop not confirmed")) { DoesNotFire = { "BBX-RECOV-001" } });
+            list.Add(new BlackBoxGoldenCase("BBX-RECOV-002", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.UnconfirmedStop, null, "stop not confirmed")) { DoesNotFire = { "BBX-RECOV-001", "BBX-RECOV-006" } });
+            list.Add(new BlackBoxGoldenCase("BBX-RECOV-006", BlackBoxTriageEnum.ArmadaDefect, () => { BlackBoxRecord r = Rec(BlackBoxStepEnum.UnconfirmedStop, MissionFailureKindEnum.Infra, "Recovery deferred: the previous job has not confirmed its exit."); r.Workspace!.HarborLinkState = "NotLinked"; r.Subject!.HarborName = "laptop"; return r; })
+            {
+                Statement = "Harbor link lost; the captain may still be working. Armada asked to stop the captain of msn_t while Harbor laptop was NotLinked, so the stop could not be confirmed.",
+                DoesNotFire = { "BBX-RECOV-001", "BBX-RECOV-002", "BBX-INFRA-001" },
+                FirstPathId = "bbx-recov-006.reconnect-reconcile"
+            });
             list.Add(new BlackBoxGoldenCase("BBX-RECOV-003", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.OrphanedExit, null, "orphaned exit")) { DoesNotFire = { "BBX-RECOV-001" } });
             list.Add(new BlackBoxGoldenCase("BBX-RECOV-004", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.MissingMergeHandoff, null, "no landing handoff recorded")) { DoesNotFire = { "BBX-RECOV-001" } });
             list.Add(new BlackBoxGoldenCase("BBX-RECOV-005", BlackBoxTriageEnum.ArmadaDefect, () => Rec(BlackBoxStepEnum.RedispatchExhausted, null, "redispatch budget exhausted")) { DoesNotFire = { "BBX-RECOV-001" } });

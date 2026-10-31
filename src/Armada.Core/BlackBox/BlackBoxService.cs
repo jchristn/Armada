@@ -128,7 +128,7 @@ namespace Armada.Core.BlackBox
             if (String.IsNullOrWhiteSpace(missionId)) throw new BlackBoxNotFoundException("No black box entry for that mission.");
             BlackBoxEntry? entry = await _Database.BlackBoxEntries.ReadCurrentByMissionAsync(missionId.Trim(), caller.IsAdmin ? null : caller.TenantId, token).ConfigureAwait(false);
             if (entry == null || !Visible(caller, entry)) throw new BlackBoxNotFoundException("No black box entry for mission " + missionId + ".");
-            if (includeRecord) entry.Record = await _Pipeline.LoadRecordAsync(entry, token).ConfigureAwait(false);
+            if (includeRecord) entry.Record = await LoadAnnotatedRecordAsync(entry, token).ConfigureAwait(false);
             return entry;
         }
 
@@ -147,7 +147,7 @@ namespace Armada.Core.BlackBox
         public async Task<BlackBoxEntry> GetEntryAsync(AuthContext caller, string entryId, bool includeRecord = true, CancellationToken token = default)
         {
             BlackBoxEntry entry = await ReadVisibleAsync(caller, entryId, token).ConfigureAwait(false);
-            if (includeRecord) entry.Record = await _Pipeline.LoadRecordAsync(entry, token).ConfigureAwait(false);
+            if (includeRecord) entry.Record = await LoadAnnotatedRecordAsync(entry, token).ConfigureAwait(false);
             return entry;
         }
 
@@ -217,7 +217,7 @@ namespace Armada.Core.BlackBox
         public async Task<BlackBoxRecord> GetRecordAsync(AuthContext caller, string entryId, CancellationToken token = default)
         {
             BlackBoxEntry entry = await ReadVisibleAsync(caller, entryId, token).ConfigureAwait(false);
-            return await _Pipeline.LoadRecordAsync(entry, token).ConfigureAwait(false);
+            return await LoadAnnotatedRecordAsync(entry, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -1318,6 +1318,58 @@ namespace Armada.Core.BlackBox
         private static string? Blank(string? value)
         {
             return String.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        private async Task<BlackBoxRecord> LoadAnnotatedRecordAsync(BlackBoxEntry entry, CancellationToken token)
+        {
+            BlackBoxRecord record = await _Pipeline.LoadRecordAsync(entry, token).ConfigureAwait(false);
+            try
+            {
+                await AnnotateApplicabilityAsync(entry, record, token).ConfigureAwait(false);
+            }
+            catch (Exception e) when (!(e is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Debug(_Header + "could not check the recovery paths of " + entry.Id + " against the mission: " + e.Message);
+            }
+            return record;
+        }
+
+        /// <summary>
+        /// Mark the recovery paths whose actions no longer apply to the mission as it is now (a restart of a mission that
+        /// is Complete or still running), with the same preconditions a run checks, and replace a summary's suggested next
+        /// step that names such a path.
+        /// </summary>
+        private async Task AnnotateApplicabilityAsync(BlackBoxEntry entry, BlackBoxRecord record, CancellationToken token)
+        {
+            BlackBoxAnalysis? analysis = record.Analysis;
+            if (analysis == null || analysis.RecoveryPaths.Count == 0) return;
+            string? missionId = entry.MissionId ?? record.Subject?.MissionId;
+            if (String.IsNullOrEmpty(missionId)) return;
+            Mission? mission = await _Database.Missions.ReadAsync(missionId!, token).ConfigureAwait(false);
+            MissionStatusEnum? status = mission?.Status;
+            foreach (BlackBoxRecoveryPath path in analysis.RecoveryPaths)
+            {
+                path.NotApplicableReason = null;
+                List<BlackBoxAction> actions = path.Steps.Where(st => st.Action != null).OrderBy(st => st.Order).Select(st => st.Action!).ToList();
+                if (actions.Count == 0 && path.Action != null) actions.Add(path.Action);
+                MissionStatusEnum? current = status;
+                foreach (BlackBoxAction action in actions)
+                {
+                    string? unmet = BlackBoxActionPreconditions.Check(action, current, mission?.RequiresReview ?? false, true, true);
+                    if (unmet != null)
+                    {
+                        path.NotApplicableReason = status.HasValue ? "Not applicable: the mission is " + status.Value + "." : "Not applicable: the mission no longer exists.";
+                        break;
+                    }
+                    current = BlackBoxActionPreconditions.StatusAfter(action.Tool, current);
+                }
+            }
+
+            BlackBoxRecoveryPath? first = analysis.RecoveryPaths.OrderBy(p => p.Rank).FirstOrDefault();
+            if (first?.NotApplicableReason == null || String.IsNullOrEmpty(analysis.Summary)) return;
+            string suggested = BlackBoxAdvisor.SuggestedNextStep(first);
+            if (analysis.Summary!.Contains(suggested, StringComparison.Ordinal))
+                analysis.Summary = analysis.Summary.Replace(suggested, "Suggested next step: none; " + Char.ToLowerInvariant(first.NotApplicableReason[0]) + first.NotApplicableReason.Substring(1));
         }
 
         private async Task<DateTime?> ExpiryAsync(BlackBoxEntry entry, CancellationToken token)

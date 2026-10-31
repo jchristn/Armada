@@ -11,10 +11,20 @@ namespace Armada.Core.BlackBox
     /// The insight worker: every blackBox.insightIntervalSeconds (while blackBox.enabled) it records successful landings
     /// (<see cref="BlackBoxSuccessRecorder"/>), deletes expired success records, settles recovery outcomes
     /// (<see cref="BlackBoxRecoveryOutcomeTracker"/>) and refreshes the advisor's path success rates; once a day it
-    /// deletes recovery outcomes older than a year. Thread-safe.
+    /// deletes recovery outcomes older than a year. It also resolves the open entries of missions that completed after
+    /// their failure (<see cref="Completions"/>). Thread-safe.
     /// </summary>
     public class BlackBoxInsightBackgroundService : IDisposable
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Resolver of the open entries of missions that completed after their failure, or null to resolve none.
+        /// </summary>
+        public BlackBoxCompletionResolver? Completions { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private readonly string _Header = "[BlackBoxInsightBackgroundService] ";
@@ -93,6 +103,7 @@ namespace Armada.Core.BlackBox
         {
             await _Successes.RunOnceAsync(token).ConfigureAwait(false);
             await _Successes.CleanupAsync(token).ConfigureAwait(false);
+            if (Completions != null) await Completions.RunOnceAsync(token).ConfigureAwait(false);
             await _Outcomes.SettleAsync(token).ConfigureAwait(false);
             await _Outcomes.Stats.RefreshAsync(token).ConfigureAwait(false);
             if (DateTime.UtcNow - _LastOutcomeCleanupUtc > TimeSpan.FromDays(1))
