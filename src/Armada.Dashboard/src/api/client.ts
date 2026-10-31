@@ -213,6 +213,8 @@ import type {
   ModelProbeDepth,
   ModelProbeRun,
   ModelProbeRunQuery,
+  ModelProbeRunWithBattery,
+  BatteryTaskResultInfo,
   ModelAlertAction,
   ModelAlertApplyResult,
 } from '../types/models';
@@ -2197,9 +2199,20 @@ export const listBatteryPacks = (pageSize = 1000, pageNumber = 1) =>
 export const cancelModelProbeRun = (id: string) =>
   post<ModelProbeRun>(`${MODEL_PROBE_RUNS}/${encodeURIComponent(id)}/cancel`, {});
 
-/** One run with its per-probe results. */
-export const getModelProbeRun = async (id: string, includeDetails = false) => {
-  const run = await get<ModelProbeRun>(`${MODEL_PROBE_RUNS}/${encodeURIComponent(id)}`);
+/**
+ * One run with its per-probe results. includeDetails adds the battery snapshot and profile revision; includeBatteryResults
+ * (the Evaluations detail page) also reads one page of the battery's per-task results with their missions and voyages.
+ */
+export const getModelProbeRun = async (id: string, includeDetails = false, includeBatteryResults = false) => {
+  const run = await get<ModelProbeRunWithBattery>(`${MODEL_PROBE_RUNS}/${encodeURIComponent(id)}`);
+  if (includeBatteryResults && run.batteryRunId) {
+    try {
+      const page = await get<EnumerationResult<BatteryTaskResultInfo>>(`/api/v1/battery/runs/${encodeURIComponent(run.batteryRunId)}/results${cliQuery({ pageSize: 1000, order: 'CreatedAscending' })}`);
+      run.batteryResults = page.objects ?? [];
+    } catch (err) {
+      run.batteryResultsError = err instanceof Error ? err.message : String(err);
+    }
+  }
   if (includeDetails && run.batteryRunId) {
     try {
       run.batteryProgress = await get<NonNullable<ModelProbeRun['batteryProgress']>>(`/api/v1/battery/runs/${encodeURIComponent(run.batteryRunId)}`);

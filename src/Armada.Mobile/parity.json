@@ -249,6 +249,22 @@
     },
     {
       "kind": "route",
+      "key": "/evaluations",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "the mobile app has no captain or model endpoint evaluation screen (see getModelProbeRun); the dashboard Evaluations list and run results page are desktop-only until the app adds evaluation"
+    },
+    {
+      "kind": "route",
+      "key": "/evaluations/:id",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "the mobile app has no captain or model endpoint evaluation screen (see getModelProbeRun); the dashboard Evaluations list and run results page are desktop-only until the app adds evaluation"
+    },
+    {
+      "kind": "route",
       "key": "/events",
       "status": "implemented",
       "mobile": "src/app/(app)/(work)/events/index.tsx",

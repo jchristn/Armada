@@ -65,7 +65,7 @@ export const navModelSections: NavModelSection[] = [
   {
     key: 'fleet',
     label: 'BUILD',
-    matchers: ['/fleets', '/vessels', '/workspace', '/captains', '/docks', '/delivery', '/checks', '/environments', '/deployments', '/releases', '/incidents', '/runbooks'],
+    matchers: ['/fleets', '/vessels', '/workspace', '/captains', '/evaluations', '/docks', '/delivery', '/checks', '/environments', '/deployments', '/releases', '/incidents', '/runbooks'],
     items: [
       { to: '/vessels', label: 'Vessels', tooltip: 'Repositories grouped by fleet, plus the vessel workspace, on one surface', icon: 'vessels' },
       { to: '/captains', label: 'Captains', tooltip: 'AI coding agents that execute missions', icon: 'captains' },
@@ -110,6 +110,7 @@ export const navShortcuts: Array<NavModelItem & { section: string }> = [
   { to: '/missions?tab=blackbox', label: 'Black Box', section: 'OPERATIONS', tooltip: 'Failure records for missions and voyages: where, how and why each failed, and how to recover', icon: 'blackbox' },
   { to: '/server?tab=storage', label: 'Storage', section: 'SYSTEM', tooltip: 'Inspect managed files, database allocation, host capacity and record counts', icon: 'server' },
   { to: '/server?tab=cli-permissions', label: 'CLI Tool Permissions', section: 'SYSTEM', tooltip: 'Approve CLI tool requests from captains and manage allow and deny rules', icon: 'cliPermissions' },
+  { to: '/evaluations', label: 'Evaluations', section: 'BUILD', tooltip: 'Past Quick and Full evaluations of captains and model endpoints, with their results', icon: 'captains' },
 ];
 
 /**

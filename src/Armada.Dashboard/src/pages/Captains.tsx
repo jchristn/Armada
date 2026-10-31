@@ -20,6 +20,7 @@ import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
+import { evaluationResultsPath } from '../lib/evaluationLinks';
 import { useAuth } from '../context/AuthContext';
 import CliPermissionPolicySelect from '../components/cliPermissions/CliPermissionPolicySelect';
 import { canCaptainStartPlanning } from '../lib/captains';
@@ -327,7 +328,8 @@ export default function Captains() {
     try {
       const run = await evaluateCaptain(captain.id, depth, options);
       setEvaluateTarget(null);
-      pushToast('success', t('Evaluation {{runId}} started for captain "{{name}}".', { runId: run.id, name: captain.name }));
+      pushToast('success', t('Evaluation {{runId}} started for captain "{{name}}".', { runId: run.id, name: captain.name }),
+        { label: t('View results'), to: evaluationResultsPath(run.id) });
       navigate(`/captains/${encodeURIComponent(captain.id)}?evaluationRun=${encodeURIComponent(run.id)}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Evaluate failed.'));

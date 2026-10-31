@@ -39,6 +39,7 @@ import { supportsAutoApproveSwitch } from '../lib/captainApproval';
 import { CAPTAIN_AUTO_APPROVE_TOOLTIP, CAPTAIN_CLI_POLICY_TOOLTIP, CAPTAIN_INFERENCE_ENDPOINT_TOOLTIP, CAPTAIN_NAME_TOOLTIP, CAPTAIN_REASONING_EFFORT_TOOLTIP, CAPTAIN_RUNTIME_TOOLTIP, CAPTAIN_SYSTEM_INSTRUCTIONS_TOOLTIP, CAPTAIN_TIER_TOOLTIP, buildCaptainPayload, captainDetailActions, captainFormError, captainFormErrorMessage, captainFormFromCaptain, captainModelPlaceholder, captainModelTooltip, cliPolicyChanged } from '../lib/captainForm';
 import { buildCaptainDuplicatePayload } from '../lib/duplicates';
 import ModelProbeEvaluate from '../components/ModelProbeEvaluate';
+import { evaluationsListPath } from '../lib/evaluationLinks';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
 
 const ALLOWED_PERSONAS_TOOLTIP = 'Personas this captain may take on, as a JSON array of persona names, for example ["Worker", "Judge"]. Blank lets it fill any persona.';
@@ -564,6 +565,11 @@ export default function CaptainDetail() {
       {/* Evaluation (Quick mechanical probes) */}
       <div style={{ marginTop: '1rem' }}>
         <h3 title={t('Probe this captain through its own runtime: served context, output contract, ASCII and format, tool calling, speed and determinism.')}>{t('Evaluation')}</h3>
+        <p>
+          <Link to={evaluationsListPath(captain.id)} title={t('Open the Evaluations page filtered to this captain: every past Quick and Full evaluation with its results.')}>
+            {t('Past evaluations')}
+          </Link>
+        </p>
         <ModelProbeEvaluate target="captain" targetId={captain.id} evaluationRunId={searchParams.get('evaluationRun')} onError={setError} />
       </div>
 

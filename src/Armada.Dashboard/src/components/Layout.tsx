@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import DefaultCredentialsBanner from './DefaultCredentialsBanner';
 import { useLocale } from '../context/LocaleContext';
@@ -426,7 +426,7 @@ export default function Layout() {
         <div className="toast-container">
           {toasts.map((toast) => (
             <div key={toast.id} className={`toast toast-${toast.severity}`}>
-              <span className="toast-body">{toast.message}</span>
+              <span className="toast-body">{toast.message}{toast.link && <>{' '}<Link className="toast-link" to={toast.link.to} onClick={() => dismissToast(toast.id)}>{toast.link.label}</Link></>}</span>
               <button className="toast-close" onClick={() => dismissToast(toast.id)} title={t('Close this notification now. It also closes on its own after a few seconds.')} aria-label={t('Dismiss')}>
                 &times;
               </button>

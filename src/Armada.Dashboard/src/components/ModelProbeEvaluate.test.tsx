@@ -2,6 +2,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import catalogSource from '../../../Armada.Server/wwwroot/i18n/armada.json?raw';
 import componentSource from './ModelProbeEvaluate.tsx?raw';
+import detailsSource from './evaluations/ModelProbeRunDetails.tsx?raw';
+import { MemoryRouter } from 'react-router-dom';
 import dialogSource from './ModelEvaluateDialog.tsx?raw';
 import captainDetailSource from '../pages/CaptainDetail.tsx?raw';
 import endpointsSource from '../pages/Endpoints.tsx?raw';
@@ -31,6 +33,11 @@ const localeValue = {
 
 vi.mock('../context/LocaleContext', () => ({
   useLocale: () => localeValue,
+}));
+
+const pushToast = vi.fn();
+vi.mock('../context/NotificationContext', () => ({
+  useOptionalNotifications: () => ({ pushToast }),
 }));
 
 function run(overrides: Partial<ModelProbeRun> = {}): ModelProbeRun {
@@ -110,6 +117,39 @@ describe('ModelProbeEvaluate', () => {
       captain({ id: 'cpt_busy', name: 'busy-one', model: 'deepseek-v4', state: 'Working' }),
     ]));
     vi.mocked(listBatteryPacks).mockReset().mockResolvedValue(page(PACKS));
+    pushToast.mockReset();
+  });
+
+  it('tells the user where the results are when an evaluation starts and when it finishes', async () => {
+    vi.mocked(evaluateCaptain).mockResolvedValue(run({ id: 'mpr_new' }));
+    vi.mocked(getModelProbeRun).mockResolvedValue({ ...COMPLETED, id: 'mpr_new' });
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Evaluate' })).toBeEnabled());
+    expect(screen.queryByRole('link', { name: 'Open full results' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Evaluate' }));
+    expect(pushToast).toHaveBeenCalledWith('success', 'Evaluation started.', { label: 'View results', to: '/evaluations/mpr_new' });
+    expect(screen.getByRole('link', { name: 'Open full results' })).toHaveAttribute('href', '/evaluations/mpr_new');
+    await waitFor(() => expect(pushToast).toHaveBeenCalledWith('success', 'Evaluation mpr_new finished: Completed.', { label: 'View results', to: '/evaluations/mpr_new' }));
+    expect(pushToast).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('link', { name: 'Open full results' })).toHaveAttribute('href', '/evaluations/mpr_new');
+  });
+
+  it('links a model endpoint evaluation (Endpoint Health dialog) to its results and warns when it fails', async () => {
+    vi.mocked(evaluateModelEndpoint).mockResolvedValue(run({ id: 'mpr_ep', targetKind: 'ModelEndpoint', modelEndpointId: 'mep_1', captainId: null }));
+    vi.mocked(getModelProbeRun).mockResolvedValue(run({ id: 'mpr_ep', status: 'Failed', targetKind: 'ModelEndpoint', modelEndpointId: 'mep_1', captainId: null }));
+    render(<ModelProbeEvaluate target="modelEndpoint" targetId="mep_1" pollMs={5} />, { wrapper: MemoryRouter });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Full Evaluate' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: 'Full Evaluate' }));
+    expect(pushToast).toHaveBeenCalledWith('success', 'Evaluation started.', { label: 'View results', to: '/evaluations/mpr_ep' });
+    await waitFor(() => expect(pushToast).toHaveBeenCalledWith('warning', 'Evaluation mpr_ep finished: Failed.', { label: 'View results', to: '/evaluations/mpr_ep' }));
+  });
+
+  it('shows the Open full results link for a loaded past run and no toast without a start', async () => {
+    vi.mocked(listModelProbeRuns).mockResolvedValue(page([COMPLETED]));
+    vi.mocked(getModelProbeRun).mockResolvedValue(COMPLETED);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />, { wrapper: MemoryRouter });
+    expect(await screen.findByRole('link', { name: 'Open full results' })).toHaveAttribute('href', '/evaluations/mpr_1');
+    expect(pushToast).not.toHaveBeenCalled();
   });
 
   it('resumes Full progress and displays incremental probe results', async () => {
@@ -118,7 +158,7 @@ describe('ModelProbeEvaluate', () => {
       results: COMPLETED.results });
     vi.mocked(listModelProbeRuns).mockResolvedValue(page([running]));
     vi.mocked(getModelProbeRun).mockResolvedValueOnce(running).mockResolvedValue(COMPLETED);
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={100} />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={100} />, { wrapper: MemoryRouter });
     await waitFor(() => expect(screen.getByText(/Fixture battery/)).toBeInTheDocument());
     expect(listModelProbeRuns).toHaveBeenCalledWith({ captainId: 'cpt_1', pageSize: 10 });
     expect(screen.getByRole('progressbar')).toHaveAttribute('value', '250');
@@ -130,7 +170,7 @@ describe('ModelProbeEvaluate', () => {
   it('loads an explicit historical run and shows its failure', async () => {
     vi.mocked(listModelProbeRuns).mockResolvedValue(page([run(), run({ id: 'mpr_old', status: 'Failed' })]));
     vi.mocked(getModelProbeRun).mockResolvedValue(run({ id: 'mpr_old', status: 'Failed', failureReason: 'Provider disconnected' }));
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" evaluationRunId="mpr_old" />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" evaluationRunId="mpr_old" />, { wrapper: MemoryRouter });
     await waitFor(() => expect(screen.getByText('Provider disconnected')).toBeInTheDocument());
     expect(getModelProbeRun).toHaveBeenCalledWith('mpr_old', true);
     expect(screen.getAllByRole('row')).toHaveLength(3);
@@ -140,7 +180,7 @@ describe('ModelProbeEvaluate', () => {
     vi.mocked(listModelProbeRuns).mockResolvedValue(page([run()]));
     vi.mocked(getModelProbeRun).mockResolvedValueOnce(run()).mockRejectedValue(new Error('Poll unavailable'));
     const onError = vi.fn();
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={10} onError={onError} />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={10} onError={onError} />, { wrapper: MemoryRouter });
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Poll unavailable'));
     expect(onError).toHaveBeenCalledWith('Poll unavailable');
   });
@@ -148,7 +188,7 @@ describe('ModelProbeEvaluate', () => {
   it('stops active polling on unmount', async () => {
     vi.mocked(listModelProbeRuns).mockResolvedValue(page([run()]));
     vi.mocked(getModelProbeRun).mockResolvedValue(run());
-    const view = render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={100} />);
+    const view = render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={100} />, { wrapper: MemoryRouter });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument());
     view.unmount();
     await new Promise(resolve => setTimeout(resolve, 150));
@@ -159,7 +199,7 @@ describe('ModelProbeEvaluate', () => {
     vi.mocked(listModelProbeRuns).mockResolvedValue(page([run({ status: 'Completed' }), run({ id: 'mpr_old', createdUtc: '2025-01-01', status: 'Completed' })]));
     vi.mocked(getModelProbeRun).mockResolvedValueOnce(COMPLETED).mockResolvedValueOnce({ ...FULL, id: 'mpr_old',
       report: { ...FULL.report!, profileId: 'mdl_1', profileRevisionId: 'mdv_1' }, profileRevision: { id: 'mdv_1' } });
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />, { wrapper: MemoryRouter });
     await waitFor(() => expect(screen.getByText('2 em dashes')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: '2025-01-01' }));
     expect(await screen.findByTestId('model-evaluation-report')).toHaveTextContent('Strong: single-file');
@@ -172,7 +212,7 @@ describe('ModelProbeEvaluate', () => {
     vi.mocked(listModelProbeRuns).mockResolvedValue(page([run()]));
     vi.mocked(getModelProbeRun).mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }))
       .mockResolvedValueOnce(run({ captainId: 'cpt_2', status: 'Failed', failureReason: 'New target failure' }));
-    const view = render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />);
+    const view = render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />, { wrapper: MemoryRouter });
     await waitFor(() => expect(getModelProbeRun).toHaveBeenCalledTimes(1));
     view.rerender(<ModelProbeEvaluate target="captain" targetId="cpt_2" />);
     await screen.findByText('New target failure');
@@ -190,7 +230,7 @@ describe('ModelProbeEvaluate', () => {
     const running = run({ depth: 'Full', status: 'Running', tokenBudget: 0, ...overrides });
     vi.mocked(listModelProbeRuns).mockResolvedValue(page([running]));
     vi.mocked(getModelProbeRun).mockResolvedValue(running);
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />, { wrapper: MemoryRouter });
     await waitFor(() => expect(screen.getByText(new RegExp(phase))).toBeInTheDocument());
     expect(screen.getByRole('progressbar')).toHaveAttribute('max', '1');
     expect(screen.getByRole('progressbar')).toHaveAttribute('value', '0');
@@ -199,7 +239,7 @@ describe('ModelProbeEvaluate', () => {
   it('shows a list error inline while still honoring an explicit run', async () => {
     vi.mocked(listModelProbeRuns).mockRejectedValue(new Error('History unavailable'));
     vi.mocked(getModelProbeRun).mockResolvedValue(COMPLETED);
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" evaluationRunId="mpr_1" />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" evaluationRunId="mpr_1" />, { wrapper: MemoryRouter });
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('History unavailable'));
     expect(screen.getByText('2 em dashes')).toBeInTheDocument();
   });
@@ -208,7 +248,7 @@ describe('ModelProbeEvaluate', () => {
     vi.mocked(listModelProbeRuns).mockImplementation(async query => page(query?.status === 'Running'
       ? [run({ id: 'mpr_active', status: 'Running' })] : query?.status === 'Queued' ? [] : [COMPLETED]));
     vi.mocked(getModelProbeRun).mockResolvedValue(run({ id: 'mpr_active', status: 'Running' }));
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />, { wrapper: MemoryRouter });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument());
     expect(getModelProbeRun).toHaveBeenCalledWith('mpr_active', true);
     expect(listModelProbeRuns).toHaveBeenCalledWith({ captainId: 'cpt_1', status: 'Running', pageSize: 1 });
@@ -217,7 +257,7 @@ describe('ModelProbeEvaluate', () => {
   it('starts a Quick run, disables the button while polling, and shows the finished counts and probes', async () => {
     vi.mocked(evaluateCaptain).mockResolvedValue(run());
     vi.mocked(getModelProbeRun).mockResolvedValueOnce(run({ status: 'Running', passedCount: 2 })).mockResolvedValue(COMPLETED);
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Evaluate' })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: 'Evaluate' }));
@@ -237,7 +277,7 @@ describe('ModelProbeEvaluate', () => {
   it('evaluates a model endpoint and stops polling when the run fails', async () => {
     vi.mocked(evaluateModelEndpoint).mockResolvedValue(run({ targetKind: 'ModelEndpoint', modelEndpointId: 'mep_1' }));
     vi.mocked(getModelProbeRun).mockResolvedValue(run({ status: 'Failed', failureReason: 'Evaluation budget exhausted.' }));
-    render(<ModelProbeEvaluate target="modelEndpoint" targetId="mep_1" pollMs={5} />);
+    render(<ModelProbeEvaluate target="modelEndpoint" targetId="mep_1" pollMs={5} />, { wrapper: MemoryRouter });
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Evaluate' })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: 'Evaluate' }));
@@ -252,7 +292,7 @@ describe('ModelProbeEvaluate', () => {
   it('hands a start error to the page error display', async () => {
     vi.mocked(evaluateCaptain).mockRejectedValue(new Error('Only an admin can evaluate a captain.'));
     const onError = vi.fn();
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" onError={onError} pollMs={5} />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" onError={onError} pollMs={5} />, { wrapper: MemoryRouter });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Evaluate' })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: 'Evaluate' }));
     await waitFor(() => expect(onError).toHaveBeenCalledWith('Only an admin can evaluate a captain.'));
@@ -263,7 +303,7 @@ describe('ModelProbeEvaluate', () => {
   it('starts a Full Evaluate and shows the report: counts per persona, evaluator, warnings and the accepted narrative', async () => {
     vi.mocked(evaluateCaptain).mockResolvedValue(run({ depth: 'Full' }));
     vi.mocked(getModelProbeRun).mockResolvedValue(FULL);
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
 
     await openDialog();
     await userEvent.click(screen.getByRole('button', { name: 'Start evaluation' }));
@@ -286,7 +326,7 @@ describe('ModelProbeEvaluate', () => {
       depth: 'Full', status: 'Completed',
       report: { ...FULL.report!, complete: false, incompleteReason: 'The fixture battery did not finish: budget spent.', narrative: { ...FULL.report!.narrative, status: 'Rejected', reason: 'A strength cites 2 of 3 but the count is 3 of 3.' } },
     }));
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
     await openDialog();
     await userEvent.click(screen.getByRole('button', { name: 'Start evaluation' }));
     const report = await screen.findByTestId('model-evaluation-report');
@@ -302,7 +342,7 @@ describe('ModelProbeEvaluate', () => {
       depth: 'Full', status: 'Cancelled', failureReason: 'Cancelled by an administrator.',
       report: { ...FULL.report!, complete: false, incompleteReason: 'Cancelled by an administrator.', narrative: { ...FULL.report!.narrative, status: 'Skipped', reason: 'The run was stopped.' } },
     }));
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
     await openDialog();
     await userEvent.click(screen.getByRole('button', { name: 'Start evaluation' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
@@ -319,7 +359,7 @@ describe('ModelProbeEvaluate', () => {
   it('the dialog submits the chosen depth, evaluator, packs, personas and run count, and notes a same-family evaluator', async () => {
     vi.mocked(evaluateCaptain).mockResolvedValue(run({ depth: 'Full', status: 'Running' }));
     vi.mocked(getModelProbeRun).mockResolvedValue(run({ depth: 'Full', status: 'Running' }));
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
     const dialog = await openDialog();
     expect(getCaptain).toHaveBeenCalledWith('cpt_1');
     expect(screen.getByRole('radio', { name: 'Full' })).toBeChecked();
@@ -358,7 +398,7 @@ describe('ModelProbeEvaluate', () => {
     vi.mocked(getCaptain).mockResolvedValue(captain({ allowedPersonas: '["Worker","Judge"]' }));
     vi.mocked(evaluateCaptain).mockRejectedValueOnce(new Error('No battery packs are installed.')).mockResolvedValue(run());
     vi.mocked(getModelProbeRun).mockResolvedValue(COMPLETED);
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
     await openDialog();
     expect(screen.getByRole('checkbox', { name: 'Worker' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Judge' })).toBeInTheDocument();
@@ -377,7 +417,7 @@ describe('ModelProbeEvaluate', () => {
 
   it('shows a load error in the dialog', async () => {
     vi.mocked(listBatteryPacks).mockRejectedValue(new Error('Battery packs unavailable.'));
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
     await userEvent.click(screen.getByRole('button', { name: 'Full Evaluate...' }));
     const dialog = await screen.findByRole('dialog');
     await waitFor(() => expect(dialog).toHaveTextContent('Battery packs unavailable.'));
@@ -385,7 +425,7 @@ describe('ModelProbeEvaluate', () => {
 
   it('a model endpoint still starts Full with the server defaults (no dialog)', async () => {
     vi.mocked(evaluateModelEndpoint).mockResolvedValue(run({ targetKind: 'ModelEndpoint', depth: 'Full', status: 'Completed' }));
-    render(<ModelProbeEvaluate target="modelEndpoint" targetId="mep_1" pollMs={5} />);
+    render(<ModelProbeEvaluate target="modelEndpoint" targetId="mep_1" pollMs={5} />, { wrapper: MemoryRouter });
     await userEvent.click(screen.getByRole('button', { name: 'Full Evaluate' }));
     expect(evaluateModelEndpoint).toHaveBeenCalledWith('mep_1', 'Full');
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -394,7 +434,7 @@ describe('ModelProbeEvaluate', () => {
   it('shows a poll error inline when no page error display is given', async () => {
     vi.mocked(evaluateCaptain).mockResolvedValue(run());
     vi.mocked(getModelProbeRun).mockRejectedValue(new Error('Model probe run not found.'));
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Evaluate' })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: 'Evaluate' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Model probe run not found.');
@@ -409,9 +449,11 @@ describe('ModelProbeEvaluate i18n catalog', () => {
   const keys = new Set<string>();
   for (const m of componentSource.matchAll(call)) keys.add(m[1].replace(/\\'/g, "'"));
   for (const m of componentSource.matchAll(literal)) keys.add(m[1]);
+  for (const m of detailsSource.matchAll(call)) keys.add(m[1].replace(/\\'/g, "'"));
+  for (const m of detailsSource.matchAll(literal)) keys.add(m[1]);
   for (const m of dialogSource.matchAll(call)) keys.add(m[1].replace(/\\'/g, "'"));
   const pageKeys: Array<{ source: string; keys: string[] }> = [
-    { source: captainDetailSource, keys: ['Evaluation', 'Probe this captain through its own runtime: served context, output contract, ASCII and format, tool calling, speed and determinism.'] },
+    { source: captainDetailSource, keys: ['Past evaluations', 'Open the Evaluations page filtered to this captain: every past Quick and Full evaluation with its results.', 'Evaluation', 'Probe this captain through its own runtime: served context, output contract, ASCII and format, tool calling, speed and determinism.'] },
     { source: endpointsSource, keys: ['Evaluate', 'Evaluation', 'Probe this model endpoint: served context, output contract, ASCII and format, tool calling, speed and determinism.', "Open this endpoint\\'s details to run the Quick probes against it as an evaluation."] },
   ];
   for (const page of pageKeys) for (const key of page.keys) keys.add(key.replace(/\\'/g, "'"));

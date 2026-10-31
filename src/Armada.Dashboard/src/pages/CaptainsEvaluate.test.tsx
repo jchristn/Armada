@@ -82,7 +82,7 @@ describe('Captains Evaluate row action', () => {
     expect(await screen.findByText('detail at /captains/cpt_1?evaluationRun=mpr_42')).toBeInTheDocument();
     expect(evaluateCaptain).toHaveBeenCalledTimes(1);
     expect(evaluateCaptain).toHaveBeenCalledWith('cpt_1', 'Quick', {});
-    expect(pushToast).toHaveBeenCalledWith('success', 'Evaluation mpr_42 started for captain "claude-one".');
+    expect(pushToast).toHaveBeenCalledWith('success', 'Evaluation mpr_42 started for captain "claude-one".', { label: 'View results', to: '/evaluations/mpr_42' });
   });
 
   it('submits the Full options the dialog collected', async () => {

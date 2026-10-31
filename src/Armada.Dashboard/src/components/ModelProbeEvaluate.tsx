@@ -1,27 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { cancelModelProbeRun, evaluateCaptain, evaluateModelEndpoint, getModelProbeRun, listModelProbeRuns } from '../api/client';
-import type { ModelEvaluationOptions, ModelEvaluationReport, ModelProbeDepth, ModelProbeKind, ModelProbeOutcome, ModelProbeRun } from '../types/models';
+import type { ModelEvaluationOptions, ModelProbeDepth, ModelProbeRun } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
+import { useOptionalNotifications } from '../context/NotificationContext';
+import { evaluationResultsPath } from '../lib/evaluationLinks';
 import ModelEvaluateDialog from './ModelEvaluateDialog';
 import StatusBadge from './shared/StatusBadge';
+import { FullReport, ModelProbeResultsList } from './evaluations/ModelProbeRunDetails';
 
 /** How often a queued or running probe run is polled. */
 export const MODEL_PROBE_POLL_MS = 3000;
-
-const PROBE_LABELS: Record<ModelProbeKind, string> = {
-  ServedContext: 'Served context',
-  OutputContract: 'Output contract',
-  AsciiFormat: 'ASCII and format',
-  ToolCalling: 'Tool calling',
-  Speed: 'Speed',
-  Determinism: 'Determinism',
-};
-
-const OUTCOME_LABELS: Record<ModelProbeOutcome, string> = {
-  Passed: 'Passed',
-  Failed: 'Failed',
-  CouldNotRun: 'Could not run',
-};
 
 interface ModelProbeEvaluateProps {
   /** What to evaluate: a captain (through its own runtime) or a model endpoint. */
@@ -36,49 +25,6 @@ interface ModelProbeEvaluateProps {
 
 function isFinished(run: ModelProbeRun | null): boolean {
   return !!run && (run.status === 'Completed' || run.status === 'Failed' || run.status === 'Cancelled');
-}
-
-/** The Full Evaluate report: completeness, evaluator, per-persona counts (the source of truth) and the narrative. */
-function FullReport({ report }: { report: ModelEvaluationReport }) {
-  const { t } = useLocale();
-  const narrative = report.narrative;
-  return (
-    <div className="model-evaluation-report" data-testid="model-evaluation-report">
-      <p className={report.complete ? 'text-dim' : 'text-danger'}>
-        {report.complete ? t('Report complete') : t('Incomplete: {{reason}}', { reason: report.incompleteReason ?? '' })}
-        {report.evaluatorCaptainName && <span className="text-dim">{' '}{t('Evaluator: {{name}}', { name: report.evaluatorCaptainName })}</span>}
-      </p>
-      {report.warnings.map((warning) => <p key={warning} className="text-warning">{warning}</p>)}
-      {report.personaOutcomes.length > 0 && (
-        <ul className="model-evaluation-personas">
-          {report.personaOutcomes.map((outcome) => (
-            <li key={outcome.persona}>
-              {t('{{persona}}: {{passed}} of {{graded}} passed, {{pending}} pending, {{couldNotRun}} could not run', {
-                persona: outcome.persona, passed: outcome.totals.passed, graded: outcome.totals.graded,
-                pending: outcome.totals.pendingEvaluation, couldNotRun: outcome.totals.couldNotRun,
-              })}
-            </li>
-          ))}
-        </ul>
-      )}
-      {narrative.status === 'Accepted' && (
-        <>
-          {narrative.strengths.length > 0 && (
-            <><strong>{t('Strengths')}</strong><ul>{narrative.strengths.map((f) => <li key={f.key + f.text}>{f.text}</li>)}</ul></>
-          )}
-          {narrative.weaknesses.length > 0 && (
-            <><strong>{t('Weaknesses')}</strong><ul>{narrative.weaknesses.map((f) => <li key={f.key + f.text}>{f.text}</li>)}</ul></>
-          )}
-          {narrative.observedProblems.length > 0 && (
-            <><strong>{t('Observed problems')}</strong><ul>{narrative.observedProblems.map((p) => <li key={p}>{p}</li>)}</ul></>
-          )}
-          {narrative.howToWork && <p><strong>{t('How to work with this model')}</strong>{' '}{narrative.howToWork}</p>}
-        </>
-      )}
-      {narrative.status === 'Skipped' && <p className="text-dim">{t('Subjective grading skipped: {{reason}}', { reason: narrative.reason ?? '' })}</p>}
-      {narrative.status === 'Rejected' && <p className="text-warning">{t('Narrative rejected: {{reason}}', { reason: narrative.reason ?? '' })}</p>}
-    </div>
-  );
 }
 
 /**
@@ -100,6 +46,9 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
   const [dialogOpen, setDialogOpen] = useState(false);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const notifications = useOptionalNotifications();
+  const pushToastRef = useRef(notifications?.pushToast);
+  pushToastRef.current = notifications?.pushToast;
 
   function report(message: string) {
     setInlineError(message);
@@ -199,7 +148,13 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
         // A poll answered before a cancel must not replace the finished run the cancel returned.
         setRun((previous) => (previous && previous.id === latest.id && isFinished(previous) && !isFinished(latest) ? previous : latest));
         remember(latest);
-        if (isFinished(latest)) { setPolling(false); return; }
+        if (isFinished(latest)) {
+          setPolling(false);
+          pushToastRef.current?.(latest.status === 'Completed' ? 'success' : 'warning',
+            t('Evaluation {{runId}} finished: {{status}}.', { runId: latest.id, status: latest.status }),
+            { label: t('View results'), to: evaluationResultsPath(latest.id) });
+          return;
+        }
         timer = setTimeout(tick, pollMs);
       } catch (err) {
         if (cancelled) return;
@@ -227,6 +182,7 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
       remember(started);
       setPolling(!isFinished(started));
       setDialogOpen(false);
+      pushToastRef.current?.('success', t('Evaluation started.'), { label: t('View results'), to: evaluationResultsPath(started.id) });
     } catch (err) {
       report(err instanceof Error ? err.message : t('Evaluate failed.'));
     } finally {
@@ -290,6 +246,13 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
           </span>
         )}
       </div>
+      {run && (
+        <p className="model-probe-results-link">
+          <Link to={evaluationResultsPath(run.id)} title={t('Open the Evaluations page for this run: per-probe results, the Full report, battery results and links to its missions. It stays available after you leave this page.')}>
+            {t('Open full results')}
+          </Link>
+        </p>
+      )}
       {run?.profileError && <p role="alert" className="text-danger">{run.profileError}</p>}
       {run?.batteryError && <p role="alert" className="text-danger">{run.batteryError}</p>}
       {inlineError && <p role="alert" className="text-danger">{inlineError}</p>}
@@ -302,18 +265,7 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
         {battery?.failureReason && <p className="text-danger">{battery.failureReason}</p>}
       </div>}
       {run?.failureReason && <p className="text-danger">{run.failureReason}</p>}
-      {run && (run.results ?? []).length > 0 && (
-        <ul className="model-probe-results">
-          {(run.results ?? []).map((result) => (
-            <li key={result.id || result.probe}>
-              <strong>{t(PROBE_LABELS[result.probe] ?? result.probe)}</strong>{' '}
-              <span className={`tag ${result.outcome.toLowerCase()}`}>{t(OUTCOME_LABELS[result.outcome] ?? result.outcome)}</span>
-              {result.summary && <span>{' '}{result.summary}</span>}
-              {result.reason && <span className="text-dim">{' '}({result.reason})</span>}
-            </li>
-          ))}
-        </ul>
-      )}
+      {run && <ModelProbeResultsList results={run.results ?? []} />}
       {finished && run?.report && <FullReport report={run.report} />}
       {run?.profileRevision && run.report?.profileRevisionId && <p>
         <a download={`${run.report.profileRevisionId}.json`} href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(run.profileRevision, null, 2))}`}>

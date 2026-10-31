@@ -48,7 +48,7 @@ const localeValue = {
   formatRelativeTime: (v: string | null | undefined) => v ?? '',
 };
 vi.mock('../context/LocaleContext', () => ({ useLocale: () => localeValue }));
-vi.mock('../context/NotificationContext', () => ({ useNotifications: () => ({ pushToast: vi.fn() }) }));
+vi.mock('../context/NotificationContext', () => ({ useNotifications: () => ({ pushToast: vi.fn() }), useOptionalNotifications: () => null }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAdmin: true, isTenantAdmin: true, user: null }) }));
 vi.mock('../context/WebSocketContext', () => ({ useWebSocket: () => ({ connected: true, subscribe: () => () => {}, send: vi.fn() }) }));
 vi.mock('../components/MissionHistoryChart', () => ({ default: () => null }));

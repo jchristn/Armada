@@ -4558,3 +4558,32 @@ export interface BatteryPackDetail {
   files: { path: string; size: number }[];
 }
 export interface BatteryPackTextFile { path: string; content: string; }
+
+/** One per-task battery result of a Full Evaluate (GET /api/v1/battery/runs/{id}/results), with its mission and voyage. */
+export interface BatteryTaskResultInfo {
+  id: string;
+  runId: string;
+  packId: string;
+  packVersion: number;
+  taskId: string;
+  taskTitle?: string | null;
+  persona?: string | null;
+  attempt: number;
+  outcome: 'Passed' | 'Failed' | 'CouldNotRun' | 'PendingEvaluation' | string;
+  score?: number | null;
+  summary?: string | null;
+  reason?: string | null;
+  vesselId?: string | null;
+  voyageId?: string | null;
+  missionId?: string | null;
+  missionStatus?: string | null;
+  durationMs: number;
+  createdUtc: string;
+  completedUtc?: string | null;
+}
+
+/** A model probe run with its battery task results, as the Evaluations detail page reads it. */
+export interface ModelProbeRunWithBattery extends ModelProbeRun {
+  batteryResults?: BatteryTaskResultInfo[];
+  batteryResultsError?: string;
+}

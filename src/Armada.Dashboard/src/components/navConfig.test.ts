@@ -56,12 +56,13 @@ describe('navConfig', () => {
   });
 
   it('keeps the folded pages searchable in the command palette, pointing at their new tabs', () => {
-    expect(commands.slice(-5)).toEqual([
+    expect(commands.slice(-6)).toEqual([
       { to: '/dispatch?tab=planning', label: 'Planning', section: 'OPERATIONS' },
       { to: '/activity?source=jobs', label: 'Jobs', section: 'OPERATIONS' },
       { to: '/missions?tab=blackbox', label: 'Black Box', section: 'OPERATIONS' },
       { to: '/server?tab=storage', label: 'Storage', section: 'SYSTEM' },
       { to: '/server?tab=cli-permissions', label: 'CLI Tool Permissions', section: 'SYSTEM' },
+      { to: '/evaluations', label: 'Evaluations', section: 'BUILD' },
     ]);
     for (const old of ['/planning', '/jobs', '/storage', '/cli-permissions', '/blackbox']) {
       expect(allTargets).not.toContain(old);

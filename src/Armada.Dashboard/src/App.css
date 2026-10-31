@@ -5433,6 +5433,7 @@ table.table-dense td { padding-left: 0.45rem; padding-right: 0.45rem; }
 }
 
 .toast-body { flex: 1; }
+.toast-link { color: inherit; font-weight: 600; text-decoration: underline; white-space: nowrap; }
 .toast-clickable .toast-body { cursor: pointer; }
 .toast-clickable .toast-body:hover { text-decoration: underline; }
 

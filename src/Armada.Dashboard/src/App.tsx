@@ -85,6 +85,8 @@ const DeliveryHub = lazy(() => import('./pages/DeliveryHub'));
 const FleetActions = lazy(() => import('./pages/FleetActions'));
 const FleetActionRunDetail = lazy(() => import('./pages/FleetActionRunDetail'));
 const BlackBoxEntry = lazy(() => import('./pages/BlackBoxEntry'));
+const Evaluations = lazy(() => import('./pages/Evaluations'));
+const EvaluationDetail = lazy(() => import('./pages/EvaluationDetail'));
 
 function RouteFallback() {
   return <LoadingIndicator fullHeight label="Loading page..." />;
@@ -127,6 +129,8 @@ export default function App() {
                       <Route path="battery" element={<BatteryPacks />} />
                       <Route path="captains" element={<CaptainsHub />} />
                       <Route path="captains/:id" element={<CaptainDetail />} />
+                      <Route path="evaluations" element={<Evaluations />} />
+                      <Route path="evaluations/:id" element={<EvaluationDetail />} />
 
                       <Route path="missions" element={<MissionsHub />} />
                       <Route path="missions/:id" element={<MissionDetail />} />

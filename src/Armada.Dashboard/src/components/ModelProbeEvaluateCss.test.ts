@@ -4,6 +4,7 @@ const css = readFileSync('./src/App.css', 'utf8');
 const sources = [
   readFileSync('./src/components/ModelProbeEvaluate.tsx', 'utf8'),
   readFileSync('./src/components/ModelEvaluateDialog.tsx', 'utf8'),
+  readFileSync('./src/components/evaluations/ModelProbeRunDetails.tsx', 'utf8'),
 ].join('\n');
 
 const classes = [

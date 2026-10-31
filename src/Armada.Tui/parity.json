@@ -137,6 +137,22 @@
     },
     {
       "kind": "route",
+      "key": "/evaluations",
+      "status": "implemented",
+      "tui": "Router",
+      "workstream": "W4.7",
+      "notes": "redirect to /captains; the TUI shows a captain's evaluation runs and results in the captain screen's Evaluate view"
+    },
+    {
+      "kind": "route",
+      "key": "/evaluations/:id",
+      "status": "implemented",
+      "tui": "Router",
+      "workstream": "W4.7",
+      "notes": "redirect to /captains; the TUI shows a captain's evaluation runs and results in the captain screen's Evaluate view"
+    },
+    {
+      "kind": "route",
       "key": "/checks",
       "status": "implemented",
       "tui": "Router",

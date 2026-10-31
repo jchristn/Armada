@@ -129,6 +129,9 @@ namespace Armada.Tui.Routing
             r.Add(Screen("/workspace/:vesselId/:panel", "Workspace", "WorkspaceScreen", "W4.6"));
             r.Add(Hub("/captains", "Captains", captains));
             r.Add(Screen("/captains/:id", "Captain", "CaptainScreen", "W4.7"));
+            // The dashboard Evaluations list and run page; the TUI shows evaluation runs per captain in the Evaluate view.
+            r.Add(Redirect("/evaluations", "/captains"));
+            r.Add(Redirect("/evaluations/:id", "/captains"));
             r.Add(Hub("/missions", "Missions", missions));
             r.Add(Screen("/missions/:id", "Mission", "MissionScreen", "W3.8"));
             r.Add(Redirect("/voyages", "/missions?tab=voyages"));
