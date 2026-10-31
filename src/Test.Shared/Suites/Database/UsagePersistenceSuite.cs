@@ -492,6 +492,43 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
+            cases.Add(Case("captain_non_custom_json_command_is_not_persisted", "JSON-supplied commands for Auto/Disabled captains never reach storage in either property order", TestTags.Positive, async ct =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    DatabaseDriver driver = testDb.Driver;
+                    string[] payloads = new string[]
+                    {
+                        "{\"Name\":\"auto-mode-first\",\"UsageCaptureEnabled\":true,\"UsageCaptureMode\":\"Auto\",\"UsageCaptureCommand\":\"quota\"}",
+                        "{\"Name\":\"auto-command-first\",\"UsageCaptureEnabled\":true,\"UsageCaptureCommand\":\"quota\",\"UsageCaptureMode\":\"Auto\"}",
+                        "{\"Name\":\"disabled-mode-first\",\"UsageCaptureMode\":\"Disabled\",\"UsageCaptureCommand\":\"quota\"}",
+                        "{\"Name\":\"disabled-command-first\",\"UsageCaptureCommand\":\"quota\",\"UsageCaptureMode\":\"Disabled\"}",
+                        "{\"Name\":\"all-null\",\"UsageCaptureEnabled\":null,\"UsageCaptureIntervalSeconds\":null,\"UsageCaptureMode\":null,\"UsageCaptureCommand\":null}"
+                    };
+
+                    foreach (string payload in payloads)
+                    {
+                        Captain parsed = System.Text.Json.JsonSerializer.Deserialize<Captain>(payload)!;
+                        Captain created = await driver.Captains.CreateAsync(parsed, ct).ConfigureAwait(false);
+                        Captain? read = await driver.Captains.ReadAsync(created.Id, ct).ConfigureAwait(false);
+                        AssertNotNull(read, created.Name + " readable");
+                        AssertNull(read!.UsageCaptureCommand, created.Name + ": no command stored");
+                        AssertEqual(300, read.UsageCaptureIntervalSeconds, created.Name + ": default interval stored");
+                        if (created.Name == "all-null")
+                        {
+                            AssertFalse(read.UsageCaptureEnabled, "explicit null settings persist as disabled");
+                            AssertEqual(UsageCaptureModeEnum.Auto, read.UsageCaptureMode, "explicit null settings persist as Auto");
+                        }
+
+                        read.UsageCaptureMode = UsageCaptureModeEnum.Custom;
+                        AssertNull(read.UsageCaptureCommand, created.Name + ": switching the stored captain to Custom finds no stale command");
+                        Captain? updated = await driver.Captains.UpdateAsync(read, ct).ConfigureAwait(false);
+                        AssertNull(updated!.UsageCaptureCommand, created.Name + ": Custom update without a command stores none");
+                    }
+
+                }
+            }));
+
             cases.Add(Case("token_usage_attribution_round_trips_and_legacy_records_survive", "Token records keep new nullable attribution and legacy token counts", TestTags.Positive, async ct =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))

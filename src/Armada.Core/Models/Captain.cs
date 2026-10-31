@@ -2,11 +2,12 @@ namespace Armada.Core.Models
 {
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A worker agent instance executing missions.
     /// </summary>
-    public class Captain
+    public class Captain : IJsonOnDeserialized
     {
         #region Public-Members
 
@@ -148,17 +149,20 @@ namespace Armada.Core.Models
 
         /// <summary>
         /// Whether this captain participates in account usage capture. Default false: capture stays disabled
-        /// until explicitly enabled, and old or minimally deserialized captains stay disabled. Auto and
-        /// Custom mode both additionally require this to be true; Disabled mode opts the captain out of
-        /// limit capture and account membership regardless of this flag.
+        /// until explicitly enabled, and old or minimally deserialized captains stay disabled. An explicit
+        /// JSON null reads as false. Auto and Custom mode both additionally require this to be true; Disabled
+        /// mode opts the captain out of limit capture and account membership regardless of this flag.
         /// </summary>
+        [JsonConverter(typeof(UsageCaptureEnabledJsonConverter))]
         public bool UsageCaptureEnabled { get; set; } = false;
 
         /// <summary>
         /// Requested seconds between usage captures for this captain. Default 300, clamped to 60..86400 in
         /// the setter so model, storage and API agree on the effective value. Groups run at the shortest
-        /// requested interval among enabled members, bounded by the global minimum interval.
+        /// requested interval among enabled members, bounded by the global minimum interval. An explicit JSON
+        /// null reads as 300.
         /// </summary>
+        [JsonConverter(typeof(UsageCaptureIntervalJsonConverter))]
         public int UsageCaptureIntervalSeconds
         {
             get => _UsageCaptureIntervalSeconds;
@@ -168,8 +172,10 @@ namespace Armada.Core.Models
         /// <summary>
         /// How this captain captures usage: Auto (verified read-only sources only), Disabled (opt out
         /// entirely) or Custom (the configured local executable). Default Auto. Setting a mode other than
-        /// Custom clears <see cref="UsageCaptureCommand"/>, so leaving Custom never keeps a stale command.
+        /// Custom clears <see cref="UsageCaptureCommand"/>, so leaving Custom never keeps a stale command. An
+        /// explicit JSON null reads as Auto.
         /// </summary>
+        [JsonConverter(typeof(UsageCaptureModeJsonConverter))]
         public UsageCaptureModeEnum UsageCaptureMode
         {
             get => _UsageCaptureMode;
@@ -182,12 +188,14 @@ namespace Armada.Core.Models
 
         /// <summary>
         /// The Custom usage-capture executable contract (JSON with executable and argument array), or null.
-        /// Only meaningful in Custom mode; null or empty is normalized to null. Rejecting shell syntax and
-        /// requiring a command in Custom mode is the service layer's contract, enforced before storage.
+        /// Only meaningful in Custom mode: outside Custom it always reads as null whatever order the mode and
+        /// command were assigned in (JSON property order included), so storage and API never see a command
+        /// for an Auto or Disabled captain. Null or whitespace is normalized to null. Rejecting shell syntax
+        /// and requiring a command in Custom mode is the service layer's contract, enforced before storage.
         /// </summary>
         public string? UsageCaptureCommand
         {
-            get => _UsageCaptureCommand;
+            get => _UsageCaptureMode == UsageCaptureModeEnum.Custom ? _UsageCaptureCommand : null;
             set => _UsageCaptureCommand = String.IsNullOrWhiteSpace(value) ? null : value;
         }
 
@@ -291,6 +299,19 @@ namespace Armada.Core.Models
         {
             Name = name;
             Runtime = runtime;
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Normalize usage capture settings after JSON deserialization: a command supplied for a non-Custom
+        /// mode is dropped regardless of property order, so a later switch to Custom cannot revive it.
+        /// </summary>
+        public void OnDeserialized()
+        {
+            if (_UsageCaptureMode != UsageCaptureModeEnum.Custom) _UsageCaptureCommand = null;
         }
 
         #endregion

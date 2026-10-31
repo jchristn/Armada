@@ -106,6 +106,11 @@ namespace Test.Shared.Suites.Services
                     "{\"UsageCaptureIntervalSeconds\":\"300\"}",
                     "{\"UsageCaptureIntervalSeconds\":1.5}",
                     "{\"UsageCaptureMode\":{}}",
+                    "{\"UsageCaptureEnabled\":0}",
+                    "{\"UsageCaptureEnabled\":{}}",
+                    "{\"UsageCaptureIntervalSeconds\":true}",
+                    "{\"UsageCaptureIntervalSeconds\":99999999999}",
+                    "{\"UsageCaptureMode\":\"\"}",
                     "{\"UsageCaptureCommand\":[]}"
                 })
                 {
@@ -188,6 +193,87 @@ namespace Test.Shared.Suites.Services
 
                 captain.UsageCaptureCommand = "  ";
                 AssertNull(captain.UsageCaptureCommand, "whitespace command normalizes to null");
+            }));
+
+            cases.Add(Case("captain_explicit_null_settings_keep_defaults", "Explicit null captain usage settings keep disabled/300/Auto, per field and combined", TestTags.Positive, () =>
+            {
+                JsonSerializerOptions web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+                foreach (JsonSerializerOptions? options in new JsonSerializerOptions?[] { null, web })
+                {
+                    string label = options == null ? "default options" : "web options";
+
+                    Captain enabledNull = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureEnabled\":null}", options)!;
+                    AssertFalse(enabledNull.UsageCaptureEnabled, label + ": null enabled reads as false");
+                    AssertEqual(300, enabledNull.UsageCaptureIntervalSeconds, label + ": null enabled keeps the interval default");
+
+                    Captain intervalNull = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureIntervalSeconds\":null}", options)!;
+                    AssertEqual(300, intervalNull.UsageCaptureIntervalSeconds, label + ": null interval reads as 300");
+                    AssertFalse(intervalNull.UsageCaptureEnabled, label + ": null interval keeps capture disabled");
+
+                    Captain modeNull = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureMode\":null}", options)!;
+                    AssertEqual(UsageCaptureModeEnum.Auto, modeNull.UsageCaptureMode, label + ": null mode reads as Auto");
+                    AssertFalse(modeNull.UsageCaptureActive, label + ": null mode is not active");
+
+                    Captain commandNull = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureCommand\":null}", options)!;
+                    AssertNull(commandNull.UsageCaptureCommand, label + ": null command reads as null");
+
+                    Captain combined = JsonSerializer.Deserialize<Captain>(
+                        "{\"UsageCaptureEnabled\":null,\"UsageCaptureIntervalSeconds\":null,\"UsageCaptureMode\":null,\"UsageCaptureCommand\":null}", options)!;
+                    AssertFalse(combined.UsageCaptureEnabled, label + ": combined nulls keep capture disabled");
+                    AssertEqual(300, combined.UsageCaptureIntervalSeconds, label + ": combined nulls keep 300");
+                    AssertEqual(UsageCaptureModeEnum.Auto, combined.UsageCaptureMode, label + ": combined nulls keep Auto");
+                    AssertNull(combined.UsageCaptureCommand, label + ": combined nulls keep no command");
+                    AssertFalse(combined.UsageCaptureActive, label + ": combined nulls are not active");
+
+                    Captain explicitValues = JsonSerializer.Deserialize<Captain>(
+                        "{\"UsageCaptureEnabled\":true,\"UsageCaptureIntervalSeconds\":120,\"UsageCaptureMode\":\"Disabled\"}", options)!;
+                    AssertTrue(explicitValues.UsageCaptureEnabled, label + ": explicit true still reads");
+                    AssertEqual(120, explicitValues.UsageCaptureIntervalSeconds, label + ": explicit interval still reads");
+                    AssertEqual(UsageCaptureModeEnum.Disabled, explicitValues.UsageCaptureMode, label + ": explicit mode still reads");
+
+                    string serialized = JsonSerializer.Serialize(combined, options);
+                    AssertContains("\"Auto\"", serialized, label + ": mode still serializes as a named string");
+                    Captain roundTripped = JsonSerializer.Deserialize<Captain>(serialized, options)!;
+                    AssertEqual(UsageCaptureModeEnum.Auto, roundTripped.UsageCaptureMode, label + ": defaults round-trip");
+                    AssertEqual(300, roundTripped.UsageCaptureIntervalSeconds, label + ": interval round-trips");
+                }
+            }));
+
+            cases.Add(Case("captain_command_clearing_is_order_independent", "Auto and Disabled drop the command whatever the JSON or assignment order", TestTags.Positive, () =>
+            {
+                string command = "{\"executable\":\"/opt/usage/read-quota\"}";
+                string commandJson = JsonSerializer.Serialize(command);
+                foreach (string mode in new string[] { "Auto", "Disabled" })
+                {
+                    Captain modeFirst = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureMode\":\"" + mode + "\",\"UsageCaptureCommand\":\"quota\"}")!;
+                    AssertNull(modeFirst.UsageCaptureCommand, mode + " before command drops the command");
+                    Captain commandFirst = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureCommand\":\"quota\",\"UsageCaptureMode\":\"" + mode + "\"}")!;
+                    AssertNull(commandFirst.UsageCaptureCommand, mode + " after command drops the command");
+
+                    modeFirst.UsageCaptureMode = UsageCaptureModeEnum.Custom;
+                    AssertNull(modeFirst.UsageCaptureCommand, mode + ": a dropped JSON command is not revived by switching to Custom");
+                    AssertFalse(JsonSerializer.Serialize(commandFirst).Contains("quota"), mode + ": serialized captain carries no command");
+
+                    Captain fromCustom = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureMode\":\"Custom\",\"UsageCaptureCommand\":" + commandJson + "}")!;
+                    AssertEqual(command, fromCustom.UsageCaptureCommand, "Custom keeps the command");
+                    fromCustom.UsageCaptureMode = mode == "Auto" ? UsageCaptureModeEnum.Auto : UsageCaptureModeEnum.Disabled;
+                    AssertNull(fromCustom.UsageCaptureCommand, "Custom to " + mode + " clears the command");
+
+                    Captain assigned = new Captain("order-captain");
+                    assigned.UsageCaptureMode = mode == "Auto" ? UsageCaptureModeEnum.Auto : UsageCaptureModeEnum.Disabled;
+                    assigned.UsageCaptureCommand = command;
+                    AssertNull(assigned.UsageCaptureCommand, mode + ": a command assigned after the mode reads as null");
+                }
+
+                Captain customModeFirst = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureMode\":\"Custom\",\"UsageCaptureCommand\":" + commandJson + "}")!;
+                AssertEqual(command, customModeFirst.UsageCaptureCommand, "Custom before command keeps the command");
+                Captain customCommandFirst = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureCommand\":" + commandJson + ",\"UsageCaptureMode\":\"Custom\"}")!;
+                AssertEqual(command, customCommandFirst.UsageCaptureCommand, "Custom after command keeps the command");
+
+                Captain assignedCustom = new Captain("custom-order-captain");
+                assignedCustom.UsageCaptureCommand = command;
+                assignedCustom.UsageCaptureMode = UsageCaptureModeEnum.Custom;
+                AssertEqual(command, assignedCustom.UsageCaptureCommand, "command assigned before Custom is kept");
             }));
 
             cases.Add(Case("captain_disabled_mode_wins_over_enabled", "Disabled mode always wins over the enabled flag", TestTags.Positive, () =>

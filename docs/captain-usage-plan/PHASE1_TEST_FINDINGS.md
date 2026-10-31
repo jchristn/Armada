@@ -69,3 +69,29 @@ this stage does not establish end-to-end tenant deletion.
 Full solution, dashboard and full adapter suites were not rerun: this stage
 changes only scoped configuration tests and stops on confirmed product defects.
 No production code was changed.
+
+## Rework 1 resolution
+
+Both blocking findings are resolved in src/Armada.Core/Models/Captain.cs.
+
+- Explicit null settings: property-level converters
+  (Services/UsageCaptureEnabledJsonConverter.cs, UsageCaptureIntervalJsonConverter.cs,
+  UsageCaptureModeJsonConverter.cs) read JSON null as false / 300 / Auto. Non-null
+  malformed tokens (strings, numbers for the flag, fractions, out-of-range or boolean
+  intervals, empty or unknown mode names, objects) still throw JsonException.
+  Regression: Services.UsageDefaults captain_explicit_null_settings_keep_defaults
+  (each field alone, combined, default and Web options, round trip) and extra
+  malformed payloads in captain_usage_json_rejects_malformed_types.
+- Order-independent command clearing: UsageCaptureCommand reads null outside Custom
+  whatever the assignment order, and Captain implements IJsonOnDeserialized so a
+  JSON command supplied for Auto or Disabled is dropped and cannot be revived by a
+  later switch to Custom. Regressions: Services.UsageDefaults
+  captain_command_clearing_is_order_independent (both orders, Auto and Disabled,
+  Custom transitions, assignment order) and Database.UsagePersistence
+  captain_non_custom_json_command_is_not_persisted (both orders, create, read,
+  update to Custom, all-null payload).
+
+The three new cases failed against commit 69aaaf581 (System.Boolean conversion
+error; command "quota" retained) and pass with the fix. Existing-database upgrades
+on the server providers, phase 0 interface evidence and tenant deletion cascade
+remain the unverified gaps listed above.
