@@ -502,6 +502,7 @@ namespace Test.Shared.Suites.Services
                 Admiral.OnIsProcessTracked = Handler.IsProcessTracked;
                 Admiral.OnIsRemoteProcessTracked = Manager.IsProcessTracked;
                 Admiral.OnIsProcessAwaitingReconnect = Manager.IsProcessAwaitingReconnect;
+                Admiral.HarborLinks = Manager;
             }
 
             public async Task<RecoveryRecords> CreateStalledMissionAsync(string harborId)

@@ -205,6 +205,7 @@ namespace Armada.Core.Services
             connection.Name = handshake.Name;
             connection.HeartbeatIntervalMs = handshake.HeartbeatIntervalMs;
             connection.LastSeenUtc = now;
+            connection.LinkedUtc = now;
             connection.CloseLink = closeLink;
 
             // Requests sent over the link this handshake replaces can never be answered (the Harbor does not replay RPC
@@ -1018,6 +1019,44 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(harborId)) return null;
             if (_Connections.TryGetValue(harborId, out HarborConnection? connection) && connection != null) return connection.LastSeenUtc;
             return null;
+        }
+
+        /// <summary>
+        /// When the current link of a Harbor was established by its handshake, or null when it is not linked.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>The time the link was established (UTC), or null.</returns>
+        public DateTime? GetLinkedSinceUtc(string harborId)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) return null;
+            if (_Connections.TryGetValue(harborId, out HarborConnection? connection) && connection != null) return connection.LinkedUtc;
+            return null;
+        }
+
+        /// <summary>
+        /// Whether a linked Harbor has sent a heartbeat on its current link. The Harbor replays its job outbox (which may
+        /// carry a job's exit) before its first heartbeat, so a first heartbeat means the Admiral has heard everything the
+        /// Harbor queued while the link was down and knows which jobs still run.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>True when a heartbeat arrived on the current link.</returns>
+        public bool HasReportedSinceLink(string harborId)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) return false;
+            return _Connections.TryGetValue(harborId, out HarborConnection? connection) && connection != null && connection.LastHeartbeatUtc.HasValue;
+        }
+
+        /// <summary>
+        /// Whether the Harbor running a delegated job reports it running right now, by the job's Admiral process handle.
+        /// </summary>
+        /// <param name="processId">Admiral process handle of the job.</param>
+        /// <returns>True when the owning Harbor is linked and lists the job as running, false when it is linked and does
+        /// not, null when the handle is unknown or the Harbor is not linked.</returns>
+        public bool? IsProcessLive(int processId)
+        {
+            if (!_JobsByProcessId.TryGetValue(processId, out HarborJobHandle? job) || job == null) return null;
+            if (!_Connections.TryGetValue(job.HarborId, out HarborConnection? connection) || connection == null) return null;
+            return connection.HasJob(job.JobId);
         }
 
         /// <summary>

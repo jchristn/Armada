@@ -15,7 +15,7 @@ namespace Armada.Core.Services
     /// Top-level orchestration service for coordinating missions and captains.
     /// Delegates domain logic to CaptainService, MissionService, VoyageService, and DockService.
     /// </summary>
-    public class AdmiralService : IAdmiralService
+    public partial class AdmiralService : IAdmiralService
     {
         #region Public-Members
 
@@ -1066,6 +1066,8 @@ namespace Armada.Core.Services
 
             // While this runs (it can verify the stage for many minutes) the health check leaves the process alone.
             _ExitsInProgress.AddOrUpdate(processId, 1, (_, count) => count + 1);
+            // An unreachable or stop-pending captain is settled by its exit.
+            await CloseEpisodeOnExitAsync(captainId, missionId, processId, token).ConfigureAwait(false);
             StageAttemptCapture capture = new StageAttemptCapture { MissionId = missionId, ExitCode = exitInfo.ExitCode, RuntimeFailureKind = exitInfo.FailureKind };
             try
             {
@@ -1748,6 +1750,11 @@ namespace Armada.Core.Services
                 // health check would mask stalled agents that are technically running but
                 // producing no output.
 
+                // A captain on a Harbor that lost its link is unreachable, not stalled; a captain whose stop was not
+                // confirmed waits (with backoff) instead of re-entering recovery on every health check.
+                if (processId.HasValue && !awaitingRecoveryRelaunch
+                    && await CheckLinkEpisodeAsync(captain, mission, processId.Value, token).ConfigureAwait(false)) return;
+
                 // Hard runaway backstop: force-fail a mission that has run past the configured
                 // max-runtime ceiling, independent of stall detection (a mission emitting steady
                 // output would never trip the stall path). 0 disables the cap.
@@ -1762,38 +1769,15 @@ namespace Armada.Core.Services
                     if (_Captains.OnStopAgent != null)
                     {
                         try { await _Captains.OnStopAgent.Invoke(captain).ConfigureAwait(false); }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
-                            await RecordUnconfirmedStopAsync(captain, mission, token).ConfigureAwait(false);
+                            await RecordUnconfirmedStopAsync(captain, mission, CaptainStopPurposeEnum.MaxRuntime, ex, token).ConfigureAwait(false);
                             return;
                         }
                     }
 
-                    if (!MissionStateMachine.IsTerminalOrPostWork(mission.Status))
-                    {
-                        MissionStatusEnum runtimeStatusBefore = mission.Status;
-                        mission.Status = MissionStatusEnum.Failed;
-                        mission.FailureReason = "Mission exceeded max runtime of " + _Settings.MaxMissionRuntimeMinutes + " minutes";
-                        mission.FailureKind = MissionFailureKindEnum.MaxRuntimeExceeded;
-                        mission.ProcessId = null;
-                        mission.CompletedUtc = DateTime.UtcNow;
-                        mission.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                        ArmadaMetrics.MissionRuntimeExceeded.Add(1);
-                        ArmadaMetrics.MissionsFailed.Add(1);
-                        await BlackBox.RecordMissionFailureAsync(mission, runtimeStatusBefore, BlackBoxStepEnum.MaxRuntime, context =>
-                        {
-                            context.Captain = captain;
-                            context.Note = "Ran " + (int)(DateTime.UtcNow - mission.StartedUtc!.Value).TotalMinutes + " minutes; the ceiling is " + _Settings.MaxMissionRuntimeMinutes + ".";
-                        }, token).ConfigureAwait(false);
-
-                        await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (exceeded max runtime)",
-                            entityType: "mission", entityId: mission.Id,
-                            captainId: captain.Id, missionId: mission.Id, token: token).ConfigureAwait(false);
-                    }
-
-                    await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
-                    await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+                    await SettleConfirmedStopAsync(captain, mission, token).ConfigureAwait(false);
+                    await FailMaxRuntimeAsync(captain, mission, token).ConfigureAwait(false);
                     return;
                 }
 
@@ -1801,7 +1785,7 @@ namespace Armada.Core.Services
                 DateTime? outputHeartbeat = captain.LastHeartbeatUtc ?? mission?.StartedUtc;
                 if (outputHeartbeat.HasValue)
                 {
-                    DateTime nowUtc = DateTime.UtcNow;
+                    DateTime nowUtc = UtcNow();
                     TimeSpan elapsed = nowUtc - outputHeartbeat.Value;
                     DateTime? toolStarted = processId.HasValue ? OnGetToolWaitStartedUtc?.Invoke(processId.Value) : null;
                     if (RuntimeToolWaitTracker.IsStalled(nowUtc, outputHeartbeat, toolStarted,
@@ -1809,26 +1793,49 @@ namespace Armada.Core.Services
                     {
                         _Logging.Warn(_Header + "captain " + captain.Id + " appears stalled (" + elapsed.TotalMinutes.ToString("F1") + " min since last heartbeat)");
                         ArmadaMetrics.CaptainStalls.Add(1);
-                        string stallReason = "No activity for " + elapsed.TotalMinutes.ToString("F1")
-                            + " min (configured stall threshold: " + _Settings.StallThresholdMinutes + " min).";
-                        string stallRemediation = "Remediation: inspect provider/tool progress and pending background work; correct blocked configuration or job lifetime before restarting.";
-                        await EmitEventAsync("captain.stalled", stallReason + " "
-                            + (captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts
+                        string stallReason = StallReason(elapsed.TotalMinutes);
+                        CaptainLinkEpisode? pending = _LinkEpisodes.TryGetValue(captain.Id, out CaptainLinkEpisode? known) && known.StopPending ? known : null;
+                        int retryDelay = pending != null ? NextRetryDelayMinutes(pending) : 1;
+                        bool underLimit = captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts;
+                        string recovery;
+                        if (pending != null)
+                            recovery = (underLimit
+                                ? "Automatic recovery " + (captain.RecoveryAttempts + 1) + " of " + _Settings.MaxRecoveryAttempts + " is attempted"
+                                : "Automatic stall recovery is exhausted; stopping the process is attempted again")
+                                + " after waiting for the stop of the previous job, requested " + pending.StopRequestedUtc!.Value.ToString("u") + ", which is still not confirmed. No replacement is launched until it is. ";
+                        else
+                            recovery = underLimit
                                 ? "Automatic recovery " + (captain.RecoveryAttempts + 1) + " of " + _Settings.MaxRecoveryAttempts + " will be attempted. "
-                                : "Automatic stall recovery is exhausted. ") + stallRemediation,
+                                : "Automatic stall recovery is exhausted. ";
+                        CaptainStalledPayload stalledPayload = new CaptainStalledPayload
+                        {
+                            CaptainId = captain.Id,
+                            MissionId = mission?.Id,
+                            HarborId = ProcessHarbor(processId),
+                            ProcessId = processId,
+                            IdleMinutes = Math.Round(elapsed.TotalMinutes, 1),
+                            StallThresholdMinutes = _Settings.StallThresholdMinutes,
+                            Attempt = underLimit ? captain.RecoveryAttempts + 1 : 0,
+                            MaxAttempts = _Settings.MaxRecoveryAttempts,
+                            WaitingOnStop = pending != null,
+                            RetryDelayMinutes = retryDelay,
+                            NextRetryUtc = nowUtc.AddMinutes(retryDelay)
+                        };
+                        await EmitEventAsync("captain.stalled", stallReason + " " + recovery + _StallRemediation,
                             entityType: "captain", entityId: captain.Id, captainId: captain.Id,
                             missionId: mission?.Id, vesselId: mission?.VesselId, voyageId: mission?.VoyageId,
                             token: token, tenantId: mission?.TenantId ?? captain.TenantId,
-                            userId: mission?.UserId ?? captain.UserId).ConfigureAwait(false);
+                            userId: mission?.UserId ?? captain.UserId,
+                            payload: System.Text.Json.JsonSerializer.Serialize(stalledPayload)).ConfigureAwait(false);
 
                         // Attempt auto-recovery if under the limit
-                        if (captain.RecoveryAttempts < _Settings.MaxRecoveryAttempts)
+                        if (underLimit)
                         {
                             ArmadaMetrics.CaptainRecoveries.Add(1);
                             // Kill the stalled process first
                             if (captain.ProcessId.HasValue && _Captains.OnStopAgent == null)
                             {
-                                await RecordUnconfirmedStopAsync(captain, mission, token).ConfigureAwait(false);
+                                await RecordUnconfirmedStopAsync(captain, mission, CaptainStopPurposeEnum.Recovery, null, token).ConfigureAwait(false);
                                 return;
                             }
                             try
@@ -1836,12 +1843,13 @@ namespace Armada.Core.Services
                                 if (captain.ProcessId.HasValue && _Captains.OnStopAgent != null)
                                     await _Captains.OnStopAgent.Invoke(captain).ConfigureAwait(false);
                             }
-                            catch (Exception)
+                            catch (Exception ex)
                             {
-                                await RecordUnconfirmedStopAsync(captain, mission, token).ConfigureAwait(false);
+                                await RecordUnconfirmedStopAsync(captain, mission, CaptainStopPurposeEnum.Recovery, ex, token).ConfigureAwait(false);
                                 return;
                             }
 
+                            await SettleConfirmedStopAsync(captain, mission, token).ConfigureAwait(false);
                             await _Captains.TryRecoverAsync(captain, token).ConfigureAwait(false);
                         }
                         else
@@ -1849,46 +1857,15 @@ namespace Armada.Core.Services
                             if (_Captains.OnStopAgent != null)
                             {
                                 try { await _Captains.OnStopAgent.Invoke(captain).ConfigureAwait(false); }
-                                catch (Exception)
+                                catch (Exception ex)
                                 {
-                                    await RecordUnconfirmedStopAsync(captain, mission, token).ConfigureAwait(false);
+                                    await RecordUnconfirmedStopAsync(captain, mission, CaptainStopPurposeEnum.RecoveryExhausted, ex, token).ConfigureAwait(false);
                                     return;
                                 }
                             }
 
-                            // Mark the active mission as Failed
-                            if (mission != null &&
-                                !MissionStateMachine.IsTerminalOrPostWork(mission.Status))
-                            {
-                                MissionStatusEnum stallStatusBefore = mission.Status;
-                                mission.Status = MissionStatusEnum.Failed;
-                                mission.FailureReason = "Captain stalled, recovery exhausted. " + stallReason + " " + stallRemediation;
-                                mission.FailureKind = MissionFailureKindEnum.StallRecoveryExhausted;
-                                mission.ProcessId = null;
-                                mission.CompletedUtc = DateTime.UtcNow;
-                                mission.LastUpdateUtc = DateTime.UtcNow;
-                                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                                ArmadaMetrics.MissionsFailed.Add(1);
-                                _Logging.Warn(_Header + "mission " + mission.Id + " marked failed (captain stalled, recovery exhausted)");
-                                await BlackBox.RecordMissionFailureAsync(mission, stallStatusBefore, BlackBoxStepEnum.Stall, context =>
-                                {
-                                    context.Captain = captain;
-                                    context.Note = "Recovery attempts: " + captain.RecoveryAttempts + " of " + _Settings.MaxRecoveryAttempts + "; last output heartbeat " + outputHeartbeat.Value.ToString("o") + ".";
-                                }, token).ConfigureAwait(false);
-
-                                // Emit mission.failed event
-                                await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (captain stalled, recovery exhausted)",
-                                    entityType: "mission", entityId: mission.Id,
-                                    captainId: captain.Id, missionId: mission.Id, token: token).ConfigureAwait(false);
-                            }
-
-                            // Reclaim the dock worktree so it doesn't leak
-                            await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
-
-                            // Release the captain to Idle instead of Stalled so it can pick up new work.
-                            // The mission is already marked Failed -- no need to also block the captain.
-                            await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
-                            _Logging.Info(_Header + "captain " + captain.Id + " released to Idle after stall recovery exhaustion");
+                            await SettleConfirmedStopAsync(captain, mission, token).ConfigureAwait(false);
+                            await FailStallRecoveryExhaustedAsync(captain, mission, stallReason, outputHeartbeat, token).ConfigureAwait(false);
                         }
                     }
                 }
@@ -1896,27 +1873,87 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Retain active ownership and surface remediation when stop acknowledgement is unavailable.
+        /// A stop that was pending is now confirmed: close the episode so the next stop starts a new one.
         /// </summary>
-        private async Task RecordUnconfirmedStopAsync(Captain captain, Mission? mission, CancellationToken token)
+        private async Task SettleConfirmedStopAsync(Captain captain, Mission? mission, CancellationToken token)
         {
-            const string reason = "Recovery deferred: the previous job has not confirmed its exit. No replacement was launched. Remediation: reconnect the owning Harbor and confirm the job has stopped before retrying.";
-            _Logging.Warn(_Header + reason + " Captain: " + captain.Id);
-            if (mission != null)
+            if (!_LinkEpisodes.TryGetValue(captain.Id, out CaptainLinkEpisode? episode) || !episode.StopPending) return;
+            string? harborId = episode.HarborId;
+            DateTime? reconnected = harborId != null ? HarborLinks?.GetLinkedSinceUtc(harborId) : null;
+            await CloseEpisodeAsync(captain, mission, episode, CaptainReconcileOutcomeEnum.Stopped, reconnected, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Fail a mission that ran past MaxMissionRuntimeMinutes once its process is stopped, and release its captain.
+        /// </summary>
+        private async Task FailMaxRuntimeAsync(Captain captain, Mission mission, CancellationToken token)
+        {
+            if (!MissionStateMachine.IsTerminalOrPostWork(mission.Status))
             {
-                // The owning host has not confirmed the job stopped: an environment problem, not the work.
-                bool alreadyRecorded = String.Equals(mission.FailureReason, reason, StringComparison.Ordinal);
-                mission.FailureKind = MissionFailureKindEnum.Infra;
-                mission.FailureReason = reason;
+                MissionStatusEnum runtimeStatusBefore = mission.Status;
+                mission.Status = MissionStatusEnum.Failed;
+                mission.FailureReason = "Mission exceeded max runtime of " + _Settings.MaxMissionRuntimeMinutes + " minutes";
+                mission.FailureKind = MissionFailureKindEnum.MaxRuntimeExceeded;
+                mission.ProcessId = null;
+                mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
-                // Non-terminal (the mission keeps its status); recorded once per episode, not on every health check.
-                if (!alreadyRecorded)
-                    await BlackBox.RecordMissionFailureAsync(mission, mission.Status, BlackBoxStepEnum.UnconfirmedStop, context => context.Captain = captain, token).ConfigureAwait(false);
+                ArmadaMetrics.MissionRuntimeExceeded.Add(1);
+                ArmadaMetrics.MissionsFailed.Add(1);
+                await BlackBox.RecordMissionFailureAsync(mission, runtimeStatusBefore, BlackBoxStepEnum.MaxRuntime, context =>
+                {
+                    context.Captain = captain;
+                    context.Note = "Ran " + (int)(DateTime.UtcNow - (mission.StartedUtc ?? DateTime.UtcNow)).TotalMinutes + " minutes; the ceiling is " + _Settings.MaxMissionRuntimeMinutes + ".";
+                }, token).ConfigureAwait(false);
+
+                await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (exceeded max runtime)",
+                    entityType: "mission", entityId: mission.Id,
+                    captainId: captain.Id, missionId: mission.Id, token: token).ConfigureAwait(false);
             }
-            await EmitEventAsync("captain.stop_unconfirmed", reason, entityType: "captain", entityId: captain.Id,
-                captainId: captain.Id, missionId: mission?.Id, voyageId: mission?.VoyageId,
-                token: token, tenantId: mission?.TenantId ?? captain.TenantId, userId: mission?.UserId ?? captain.UserId).ConfigureAwait(false);
+
+            await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
+            await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Fail the mission of a stalled captain whose automatic recovery is exhausted, once its process is stopped, and
+        /// release the captain for new work.
+        /// </summary>
+        private async Task FailStallRecoveryExhaustedAsync(Captain captain, Mission? mission, string stallReason, DateTime? outputHeartbeat, CancellationToken token)
+        {
+            // Mark the active mission as Failed
+            if (mission != null &&
+                !MissionStateMachine.IsTerminalOrPostWork(mission.Status))
+            {
+                MissionStatusEnum stallStatusBefore = mission.Status;
+                mission.Status = MissionStatusEnum.Failed;
+                mission.FailureReason = "Captain stalled, recovery exhausted. " + stallReason + " " + _StallRemediation;
+                mission.FailureKind = MissionFailureKindEnum.StallRecoveryExhausted;
+                mission.ProcessId = null;
+                mission.CompletedUtc = DateTime.UtcNow;
+                mission.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                ArmadaMetrics.MissionsFailed.Add(1);
+                _Logging.Warn(_Header + "mission " + mission.Id + " marked failed (captain stalled, recovery exhausted)");
+                await BlackBox.RecordMissionFailureAsync(mission, stallStatusBefore, BlackBoxStepEnum.Stall, context =>
+                {
+                    context.Captain = captain;
+                    context.Note = "Recovery attempts: " + captain.RecoveryAttempts + " of " + _Settings.MaxRecoveryAttempts + "; last output heartbeat " + (outputHeartbeat.HasValue ? outputHeartbeat.Value.ToString("o") : "none") + ".";
+                }, token).ConfigureAwait(false);
+
+                // Emit mission.failed event
+                await EmitEventAsync("mission.failed", "Mission failed: " + mission.Title + " (captain stalled, recovery exhausted)",
+                    entityType: "mission", entityId: mission.Id,
+                    captainId: captain.Id, missionId: mission.Id, token: token).ConfigureAwait(false);
+            }
+
+            // Reclaim the dock worktree so it doesn't leak
+            await ReclaimDockAsync(captain, mission, token).ConfigureAwait(false);
+
+            // Release the captain to Idle instead of Stalled so it can pick up new work.
+            // The mission is already marked Failed -- no need to also block the captain.
+            await _Captains.ReleaseAsync(captain, token).ConfigureAwait(false);
+            _Logging.Info(_Header + "captain " + captain.Id + " released to Idle after stall recovery exhaustion");
         }
 
         /// <summary>Emit an event to the event log database.</summary>
@@ -1936,11 +1973,12 @@ namespace Armada.Core.Services
             string? entityType = null, string? entityId = null,
             string? captainId = null, string? missionId = null,
             string? vesselId = null, string? voyageId = null,
-            CancellationToken token = default, string? tenantId = null, string? userId = null)
+            CancellationToken token = default, string? tenantId = null, string? userId = null, string? payload = null)
         {
             try
             {
                 ArmadaEvent evt = new ArmadaEvent(eventType, message);
+                evt.Payload = payload;
                 evt.TenantId = tenantId;
                 evt.UserId = userId;
                 evt.EntityType = entityType;

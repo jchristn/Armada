@@ -420,6 +420,25 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
+        /// How long, in minutes, a captain whose process runs on a Harbor that lost its link to the Admiral is held as
+        /// unreachable instead of stalled. While held, missing output is not judged a stall: no recovery starts, no recovery
+        /// attempt is counted, and the mission stays InProgress, because the captain may still be working on the Harbor.
+        /// When the Harbor reconnects the stall clock restarts at the reconnect. After this grace the unreachable captain is
+        /// handed to normal stall recovery. 0 turns the grace off (an unreachable captain is judged by the stall threshold
+        /// at once). Must be in range [0, 1440].
+        /// </summary>
+        public int HarborDisconnectGraceMinutes
+        {
+            get => _HarborDisconnectGraceMinutes;
+            set
+            {
+                if (value < 0) value = 0;
+                if (value > 1440) value = 1440;
+                _HarborDisconnectGraceMinutes = value;
+            }
+        }
+
+        /// <summary>
         /// How long, in hours, a LocalMerge landing refused because the target checkout had tracked changes is retried
         /// automatically once that checkout is clean again. After it the mission stays LandingFailed for a person to retry.
         /// 0 disables the automatic retry. Must be in range [0, 720].
@@ -1018,6 +1037,7 @@ namespace Armada.Core.Settings
         private int _MaxMissionRecoveryAttempts = 2;
         private int _TransientResumeDelaySeconds = 5;
         private int _TransientOutageGraceMinutes = 10;
+        private int _HarborDisconnectGraceMinutes = 60;
         private int _LandingDeferralDeadlineHours = 24;
         private int _MinIdleCaptains = 0;
         private int _MaxCaptains = 0;

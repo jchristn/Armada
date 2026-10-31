@@ -34,6 +34,12 @@ namespace Armada.Core.Services
         public DateTime LastSeenUtc { get; set; } = DateTime.UtcNow;
 
         /// <summary>
+        /// When this link was established by its handshake (UTC). A captain on this Harbor that was unreachable while the
+        /// link was down has its stall clock reset to this time when the link returns.
+        /// </summary>
+        public DateTime LinkedUtc { get; set; } = DateTime.UtcNow;
+
+        /// <summary>
         /// The heartbeat interval the Harbor advertised in its handshake, in milliseconds: null when it did not say (an
         /// older Harbor), zero when it sends no heartbeats.
         /// </summary>

@@ -519,6 +519,8 @@ namespace Armada.Server
             admiralService.OnGetToolWaitStartedUtc = _AgentLifecycle.GetToolWaitStartedUtc;
             admiralService.OnIsRemoteProcessTracked = _HarborConnectionManager.IsProcessTracked;
             admiralService.OnIsProcessAwaitingReconnect = _HarborConnectionManager.IsProcessAwaitingReconnect;
+            // A captain on a Harbor that lost its link is held as unreachable, not judged stalled, and reconciled on reconnect.
+            admiralService.HarborLinks = _HarborConnectionManager;
             missionService.OnGetMissionOutput = _AgentLifecycle.GetAndClearMissionOutput;
             missionService.OnPeekMissionOutput = _AgentLifecycle.PeekMissionOutput;
             missionService.OnTakeMissionTelemetry = _AgentLifecycle.TakeMissionTelemetry;
