@@ -52,7 +52,7 @@ function renderCaptains() {
   );
 }
 
-describe('Captains Evaluate... row action', () => {
+describe('Captains Evaluate row action', () => {
   beforeEach(() => {
     localStorage.clear();
     pushToast.mockReset();
@@ -68,7 +68,7 @@ describe('Captains Evaluate... row action', () => {
     renderCaptains();
     await screen.findByText('claude-one');
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Evaluate...' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Evaluate' }));
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(await screen.findByText('Evaluate claude-one')).toBeInTheDocument();
@@ -89,7 +89,7 @@ describe('Captains Evaluate... row action', () => {
     renderCaptains();
     await screen.findByText('claude-one');
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Evaluate...' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Evaluate' }));
     await screen.findByText('Evaluate claude-one');
 
     fireEvent.change(screen.getByLabelText('Run count'), { target: { value: '2' } });
@@ -106,7 +106,7 @@ describe('Captains Evaluate... row action', () => {
     renderCaptains();
     await screen.findByText('claude-one');
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Evaluate...' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Evaluate' }));
     await screen.findByText('Evaluate claude-one');
 
     const start = screen.getByRole('button', { name: 'Start evaluation' });
@@ -119,21 +119,21 @@ describe('Captains Evaluate... row action', () => {
     expect(pushToast).not.toHaveBeenCalledWith('success', expect.anything());
   });
 
-  it('shows Evaluate... to a global admin', async () => {
+  it('shows Evaluate to a global admin', async () => {
     auth.isAdmin = true;
     auth.isTenantAdmin = false;
     renderCaptains();
     await screen.findByText('claude-one');
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
-    expect(await screen.findByRole('menuitem', { name: 'Evaluate...' })).toBeInTheDocument();
+    expect(await screen.findByRole('menuitem', { name: 'Evaluate' })).toBeInTheDocument();
   });
 
-  it('hides Evaluate... from users who are not an admin', async () => {
+  it('hides Evaluate from users who are not an admin', async () => {
     auth.isTenantAdmin = false;
     renderCaptains();
     await screen.findByText('claude-one');
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
     expect(await screen.findByRole('menuitem', { name: 'View Tools' })).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Evaluate...' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Evaluate' })).toBeNull();
   });
 });
