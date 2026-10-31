@@ -90,6 +90,87 @@ import { sortByName } from '../lib/sortByName';
 import { PLANNING_PATH, planningHref } from '../lib/navTargets';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
 
+/** Fields the backlog editor hydrates. A live event uses this to tell an unsaved edit from the last loaded copy. */
+interface ObjectiveEditorSnapshot {
+  title: string;
+  description: string;
+  status: ObjectiveStatus;
+  kind: ObjectiveKind;
+  category: string;
+  priority: ObjectivePriority;
+  rank: string;
+  backlogState: ObjectiveBacklogState;
+  effort: ObjectiveEffort;
+  owner: string;
+  targetVersion: string;
+  dueUtc: string;
+  parentObjectiveId: string;
+  blockedByObjectiveIds: string[];
+  refinementSummary: string;
+  suggestedPipelineId: string;
+  suggestedPlaybooks: string;
+  tagEntries: TagEntry[];
+  acceptanceCriteria: string;
+  nonGoals: string;
+  rolloutConstraints: string;
+  evidenceLinks: string;
+  fleetIds: string;
+  vesselIds: string;
+  planningSessionIds: string;
+  refinementSessionIds: string;
+  voyageIds: string;
+  missionIds: string;
+  checkRunIds: string;
+  releaseIds: string;
+  deploymentIds: string;
+  incidentIds: string;
+  refinementFleetId: string;
+  refinementVesselId: string;
+}
+
+function objectiveEditorSnapshot(next: Objective): ObjectiveEditorSnapshot {
+  return {
+    title: next.title,
+    description: next.description || '',
+    status: next.status,
+    kind: next.kind,
+    category: next.category || '',
+    priority: next.priority,
+    rank: String(next.rank),
+    backlogState: next.backlogState,
+    effort: next.effort,
+    owner: next.owner || '',
+    targetVersion: next.targetVersion || '',
+    dueUtc: toDateTimeLocalValue(next.dueUtc),
+    parentObjectiveId: next.parentObjectiveId || '',
+    blockedByObjectiveIds: [...(next.blockedByObjectiveIds || [])],
+    refinementSummary: next.refinementSummary || '',
+    suggestedPipelineId: next.suggestedPipelineId || '',
+    suggestedPlaybooks: joinSuggestedPlaybooks(next.suggestedPlaybooks),
+    tagEntries: parseTagEntries(next.tags).map((entry) => ({ key: entry.key, value: entry.value })),
+    acceptanceCriteria: joinList(next.acceptanceCriteria),
+    nonGoals: joinList(next.nonGoals),
+    rolloutConstraints: joinList(next.rolloutConstraints),
+    evidenceLinks: joinList(next.evidenceLinks),
+    fleetIds: joinList(next.fleetIds),
+    vesselIds: joinList(next.vesselIds),
+    planningSessionIds: joinList(next.planningSessionIds),
+    refinementSessionIds: joinList(next.refinementSessionIds),
+    voyageIds: joinList(next.voyageIds),
+    missionIds: joinList(next.missionIds),
+    checkRunIds: joinList(next.checkRunIds),
+    releaseIds: joinList(next.releaseIds),
+    deploymentIds: joinList(next.deploymentIds),
+    incidentIds: joinList(next.incidentIds),
+    refinementFleetId: next.fleetIds[0] || '',
+    refinementVesselId: next.vesselIds[0] || '',
+  };
+}
+
+function editorSnapshotsMatch(left: ObjectiveEditorSnapshot, right: ObjectiveEditorSnapshot): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function renderRouteLinks(ids: string[], prefix: string | ((id: string) => string), labelMap?: Map<string, string>) {
   if (ids.length < 1) return <span className="text-dim">None</span>;
   return (
@@ -120,6 +201,7 @@ export default function ObjectiveDetail() {
   const isBacklogPath = location.pathname.startsWith('/backlog');
 
   const [objective, setObjective] = useState<Objective | null>(null);
+  const [pendingServerObjective, setPendingServerObjective] = useState<Objective | null>(null);
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [captains, setCaptains] = useState<Captain[]>([]);
@@ -190,6 +272,9 @@ export default function ObjectiveDetail() {
   const [deletingRefinement, setDeletingRefinement] = useState(false);
 
   const refinementTranscriptRef = useRef<HTMLDivElement | null>(null);
+  const loadedEditorSnapshotRef = useRef<ObjectiveEditorSnapshot | null>(null);
+  const editorSnapshotRef = useRef<ObjectiveEditorSnapshot | null>(null);
+  const acceptLiveObjectiveRef = useRef<(next: Objective) => void>(() => {});
 
   const fleetMap = useMemo(() => new Map(fleets.map((fleet) => [fleet.id, fleet.name])), [fleets]);
   const vesselMap = useMemo(() => new Map(vessels.map((vessel) => [vessel.id, vessel.name])), [vessels]);
@@ -329,6 +414,10 @@ export default function ObjectiveDetail() {
     setIncidentIds(joinList(next.incidentIds));
     setRefinementFleetId(next.fleetIds[0] || '');
     setRefinementVesselId(next.vesselIds[0] || '');
+    const snapshot = objectiveEditorSnapshot(next);
+    loadedEditorSnapshotRef.current = snapshot;
+    editorSnapshotRef.current = snapshot;
+    setPendingServerObjective(null);
   }
 
   function buildPayload(): ObjectiveUpsertRequest {
@@ -535,7 +624,7 @@ export default function ObjectiveDetail() {
       if (msg.type === 'objective.changed') {
         const payload = msg.data as Objective | undefined;
         if (!payload || payload.id !== objective?.id) return;
-        hydrateObjectiveForm(payload);
+        acceptLiveObjectiveRef.current(payload);
         return;
       }
 
@@ -593,7 +682,7 @@ export default function ObjectiveDetail() {
       if (msg.type === 'objective-refinement-session.applied') {
         const payload = msg.data as { objective?: Objective; summary?: ObjectiveRefinementSummaryResponse } | undefined;
         if (!payload?.objective || payload.objective.id !== objective?.id) return;
-        hydrateObjectiveForm(payload.objective);
+        acceptLiveObjectiveRef.current(payload.objective);
         if (payload.summary) setRefinementSummaryDraft(payload.summary);
         return;
       }
@@ -820,6 +909,61 @@ export default function ObjectiveDetail() {
     }
   }
 
+  function currentEditorSnapshot(): ObjectiveEditorSnapshot {
+    return {
+      title,
+      description,
+      status,
+      kind,
+      category,
+      priority,
+      rank,
+      backlogState,
+      effort,
+      owner,
+      targetVersion,
+      dueUtc,
+      parentObjectiveId,
+      blockedByObjectiveIds: [...blockedByObjectiveIds],
+      refinementSummary,
+      suggestedPipelineId,
+      suggestedPlaybooks,
+      tagEntries: tagEntries.map((entry) => ({ key: entry.key, value: entry.value })),
+      acceptanceCriteria,
+      nonGoals,
+      rolloutConstraints,
+      evidenceLinks,
+      fleetIds,
+      vesselIds,
+      planningSessionIds,
+      refinementSessionIds,
+      voyageIds,
+      missionIds,
+      checkRunIds,
+      releaseIds,
+      deploymentIds,
+      incidentIds,
+      refinementFleetId,
+      refinementVesselId,
+    };
+  }
+
+  editorSnapshotRef.current = currentEditorSnapshot();
+  acceptLiveObjectiveRef.current = (next: Objective) => {
+    const loaded = loadedEditorSnapshotRef.current;
+    const current = editorSnapshotRef.current;
+    if (loaded && current && !editorSnapshotsMatch(current, loaded)) {
+      setPendingServerObjective(next);
+      return;
+    }
+    hydrateObjectiveForm(next);
+  };
+
+  function reloadPendingServerCopy() {
+    if (!pendingServerObjective) return;
+    hydrateObjectiveForm(pendingServerObjective);
+  }
+
   if (loading) {
     return (
       <div className="playbook-empty-state">
@@ -961,6 +1105,16 @@ export default function ObjectiveDetail() {
       {!canManage && (
         <div className="alert alert-warning" style={{ marginBottom: '1rem' }}>
           {t('You can view backlog items, but only tenant administrators can create or change them.')}
+        </div>
+      )}
+
+      {pendingServerObjective && (
+        <div className="alert alert-warning" role="status" style={{ marginBottom: '1rem' }}>
+          <span>{t('A newer copy of this backlog item is on the server. Your unsaved edits are still here.')}</span>
+          {' '}
+          <button type="button" className="btn btn-sm" onClick={reloadPendingServerCopy}>
+            {t('Reload server copy')}
+          </button>
         </div>
       )}
 
