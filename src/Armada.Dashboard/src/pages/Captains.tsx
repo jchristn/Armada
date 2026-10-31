@@ -41,7 +41,7 @@ export default function Captains() {
   const deletion = useDeleteProgress();
   const { isAdmin, isTenantAdmin } = useAuth();
   const canManageCliPolicy = !!isAdmin || !!isTenantAdmin;
-  // POST /captains/{id}/evaluate needs a tenant admin (or global admin), so only they see Evaluate...
+  // POST /captains/{id}/evaluate needs a tenant admin (or global admin), so only they see Evaluate
   const canEvaluate = !!isAdmin || !!isTenantAdmin;
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [loading, setLoading] = useState(true);
@@ -442,7 +442,7 @@ export default function Captains() {
           { label: 'Edit', title: 'Change this captain\'s name, runtime, model, tier, permissions and instructions.', onClick: () => openEdit(c) },
           { label: 'Duplicate', title: 'Create a new idle captain with a copy of this one\'s name, runtime, model, instructions, personas and runtime options, then open it.', onClick: () => void handleDuplicate(c) },
           { label: 'View Tools', title: 'Show the MCP servers and tools this captain\'s runtime can reach, checked live where Armada can.', onClick: () => void handleViewTools(c) },
-          ...(canEvaluate ? [{ label: 'Evaluate...', title: 'Evaluate this captain through its own runtime: Quick probes, or Full with the fixture battery and an evaluator captain\'s grading. Opens the captain\'s page to follow the run. Advisory only.', onClick: () => setEvaluateTarget(c) }] : []),
+          ...(canEvaluate ? [{ label: 'Evaluate', title: 'Evaluate this captain through its own runtime: Quick probes, or Full with the fixture battery and an evaluator captain\'s grading. Opens the captain\'s page to follow the run. Advisory only.', onClick: () => setEvaluateTarget(c) }] : []),
           { label: 'View JSON', title: 'Show this captain\'s full record as JSON, as the API returns it.', onClick: () => setJsonData({ open: true, title: `${t('Captain')}: ${c.name}`, data: c }) },
           { label: 'View Notifications', title: 'Open the inbox of items waiting on a person, such as reviews, failures and stalled captains.', onClick: () => navigate('/inbox') },
           { label: 'Stop', title: 'Kill the captain\'s process and return it to Idle. A mission it is running is marked Failed and its dock is reclaimed. You confirm first.', onClick: () => handleStop(c.id, c.name) },
