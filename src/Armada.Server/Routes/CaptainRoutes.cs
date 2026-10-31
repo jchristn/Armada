@@ -304,7 +304,10 @@ namespace Armada.Server.Routes
                 // that does not edit personas) keeps its stored value. An explicit null still clears it.
                 CaptainUpdateFieldPresence presence = CaptainUpdateFieldPresence.FromJson(req.Http.Request.DataAsString, _jsonOptions);
                 updated = EntityUpdateMerger.MergeCaptain(existing, updated, presence);
-                CaptainModelValidationFailure? updateValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(updated).ConfigureAwait(false);
+                // Live model validation runs only when the merged update changes Model, Runtime, or ModelEndpointId.
+                CaptainModelValidationFailure? updateValidationError = null;
+                if (AgentLifecycleHandler.ModelBindingChanged(existing, updated))
+                    updateValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(updated).ConfigureAwait(false);
                 if (updateValidationError != null)
                 {
                     req.Http.Response.StatusCode = 400;

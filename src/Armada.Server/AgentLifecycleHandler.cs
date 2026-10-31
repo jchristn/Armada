@@ -568,6 +568,25 @@ namespace Armada.Server
         }
 
         /// <summary>
+        /// Whether a merged captain update changes the model binding.
+        /// The binding is <see cref="Captain.Model"/>, <see cref="Captain.Runtime"/>, and
+        /// <see cref="Captain.ModelEndpointId"/>.
+        /// </summary>
+        /// <param name="stored">Captain currently stored.</param>
+        /// <param name="updated">Captain after the update is merged.</param>
+        /// <returns>True when any of the three fields differ.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="stored"/> or <paramref name="updated"/> is null.</exception>
+        public static bool ModelBindingChanged(Captain stored, Captain updated)
+        {
+            if (stored == null) throw new ArgumentNullException(nameof(stored));
+            if (updated == null) throw new ArgumentNullException(nameof(updated));
+            if (stored.Runtime != updated.Runtime) return true;
+            if (!String.Equals(stored.Model, updated.Model, StringComparison.Ordinal)) return true;
+            if (!String.Equals(stored.ModelEndpointId, updated.ModelEndpointId, StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        /// <summary>
         /// Validate that the captain's configured model can be launched by its runtime.
         /// Returns null if validation succeeds, otherwise an error message.
         /// </summary>
