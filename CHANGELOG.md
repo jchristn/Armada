@@ -161,6 +161,7 @@ commands arrive with their own changes. Schema migrations 103 and 104 apply at s
 - macOS Harbor bundles store the pi permission-gate extension in `Contents/Resources/Pi`, and pi resolves it there as well as beside portable binaries. This prevents ARM64 code signing from treating TypeScript resources as unsigned nested code. The DMG verifier checks the resource layout.
 - After building and verifying both Harbor DMGs, `build-harbor-app.sh` installs the native app into `~/Applications`, staging and signature-checking a fresh bundle before replacement. `--no-install` opts out, and `--no-build` remains verification-only.
 - Helm's NuGet tool package preserves battery fixture `.gitignore` and `.gitattributes` files instead of excluding them with NU5119 warnings. Installer verification checks every packaged framework for those files.
+- Preserve existing incident links when an objective update, voyage link, or reorder cannot resolve the linked incident. New incident links remain validated.
 
 ### Landing failure prevention
 
