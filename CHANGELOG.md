@@ -6,6 +6,10 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Captains list Evaluate action
+
+- **Evaluate... in the captain row menu.** The Captains list Actions menu has an Evaluate... item (after View Tools, shown to global and tenant admins) that opens the same Evaluate dialog as the captain page. Submitting starts the run through `POST /api/v1/captains/{id}/evaluate` and opens `/captains/{id}?evaluationRun=<run id>` with a toast naming the run. No server change.
+
 ### Full Evaluate follow-up (model heterogeneity Phase 5, item 4)
 
 - **Incomplete reports on the profile.** A cancelled or timed-out Full Evaluate (or one whose battery could not run) is now also recorded as an advisory model profile revision, marked `EvaluationIncomplete`. It never changes an earlier revision, never fills `measured`, is never preferred over a complete report, and observations never pool into it. Nothing reads it for routing. No migration.
