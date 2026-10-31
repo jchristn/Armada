@@ -155,6 +155,21 @@ export interface FleetDetailResponse {
   vesselCount: number;
 }
 
+/**
+ * Worker eligibility envelope (docs/MODEL_HETEROGENEITY.md 3.3): the size a Worker mission is sliced for and the model
+ * profile a captain needs to run it. Every field is optional.
+ */
+export interface WorkerEnvelope {
+  /** Most files one Worker mission should change (1 to 1000), or null for no limit. */
+  maxFiles?: number | null;
+  /** Most steps one Worker mission should take (1 to 1000), or null for no limit. */
+  maxSteps?: number | null;
+  /** Smallest served context in tokens a captain's model profile must record, or null for no minimum. */
+  minServedContextTokens?: number | null;
+  /** Capabilities the profile must record as available: 'tools' (tool calls) and 'mcp' (MCP tools). */
+  requiredTools?: string[];
+}
+
 export interface Vessel {
   id: string;
   tenantId: string | null;
@@ -196,6 +211,8 @@ export interface Vessel {
   lintCommand?: string | null;
   /** Per-vessel override for the Audit intent. */
   auditCommand?: string | null;
+  /** Default Worker eligibility envelope for missions on this vessel; null or absent means none (routing unchanged). */
+  workerEnvelope?: WorkerEnvelope | null;
   allowConcurrentMissions: boolean;
   /** Chain a mission that overlaps an active one after it (DependsOnMissionId) at dispatch. */
   serializeOverlappingMissions?: boolean;

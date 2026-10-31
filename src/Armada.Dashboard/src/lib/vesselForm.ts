@@ -1,4 +1,4 @@
-import type { Vessel } from '../types/models';
+import type { Vessel, WorkerEnvelope } from '../types/models';
 
 /**
  * Editable vessel fields as held by the shared vessel form (Vessels list Create/Edit and the vessel page Edit).
@@ -44,6 +44,12 @@ export interface VesselFormState {
   testCommand: string;
   lintCommand: string;
   auditCommand: string;
+  /** Worker eligibility envelope: blank numbers and no required tools mean no envelope. */
+  envelopeMaxFiles: string;
+  envelopeMaxSteps: string;
+  envelopeMinServedContextTokens: string;
+  envelopeRequireTools: boolean;
+  envelopeRequireMcp: boolean;
 }
 
 /** Landing-mode option with a short label and a full explanation. */
@@ -65,6 +71,7 @@ export const emptyVesselForm: VesselFormState = {
   autoLandEnabled: false, autoLandMaxFiles: '', autoLandMaxLines: '', autoLandPathAllowGlobs: '', autoLandPathDenyGlobs: '',
   definitionOfDoneEnabled: false, definitionOfDoneBuildCommand: '', definitionOfDoneTestCommand: '', definitionOfDoneTimeoutSeconds: '',
   testCommand: '', lintCommand: '', auditCommand: '',
+  envelopeMaxFiles: '', envelopeMaxSteps: '', envelopeMinServedContextTokens: '', envelopeRequireTools: false, envelopeRequireMcp: false,
 };
 
 /** Landing-mode metadata shared by the vessel form, the Vessels filter, and the Vessels table. */
@@ -143,7 +150,37 @@ export function vesselToForm(v: Vessel): VesselFormState {
     testCommand: v.testCommand || '',
     lintCommand: v.lintCommand || '',
     auditCommand: v.auditCommand || '',
+    envelopeMaxFiles: v.workerEnvelope?.maxFiles ? String(v.workerEnvelope.maxFiles) : '',
+    envelopeMaxSteps: v.workerEnvelope?.maxSteps ? String(v.workerEnvelope.maxSteps) : '',
+    envelopeMinServedContextTokens: v.workerEnvelope?.minServedContextTokens ? String(v.workerEnvelope.minServedContextTokens) : '',
+    envelopeRequireTools: (v.workerEnvelope?.requiredTools ?? []).includes('tools'),
+    envelopeRequireMcp: (v.workerEnvelope?.requiredTools ?? []).includes('mcp'),
   };
+}
+
+function parseEnvelopeCount(text: string): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const value = parseInt(trimmed, 10);
+  return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Builds the vessel's Worker eligibility envelope from the form, or null when the form sets nothing (no envelope,
+ * routing unchanged). Out-of-range numbers are sent as typed so the server's validation message reaches the operator.
+ */
+export function buildWorkerEnvelope(form: VesselFormState): WorkerEnvelope | null {
+  const requiredTools: string[] = [];
+  if (form.envelopeRequireTools) requiredTools.push('tools');
+  if (form.envelopeRequireMcp) requiredTools.push('mcp');
+  const envelope: WorkerEnvelope = {
+    maxFiles: parseEnvelopeCount(form.envelopeMaxFiles),
+    maxSteps: parseEnvelopeCount(form.envelopeMaxSteps),
+    minServedContextTokens: parseEnvelopeCount(form.envelopeMinServedContextTokens),
+    requiredTools,
+  };
+  if (envelope.maxFiles === null && envelope.maxSteps === null && envelope.minServedContextTokens === null && requiredTools.length === 0) return null;
+  return envelope;
 }
 
 function splitLines(text: string): string[] {
@@ -200,6 +237,7 @@ export function buildVesselPayload(form: VesselFormState, existing: Vessel | nul
   payload.testCommand = form.testCommand.trim() || null;
   payload.lintCommand = form.lintCommand.trim() || null;
   payload.auditCommand = form.auditCommand.trim() || null;
+  payload.workerEnvelope = buildWorkerEnvelope(form);
 
   // GitHub token override: omit to keep the stored value; an empty string clears it.
   if (existing && form.clearGitHubTokenOverride) payload.gitHubTokenOverride = '';

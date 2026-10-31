@@ -72,6 +72,7 @@ export default function VesselFormModal({ vessel, fleets, pipelines, onClose, on
     testOverride: t('Command fleet actions run for the Test intent on this vessel. Overrides the repo script and the detected ecosystem default. Blank uses detection.'),
     lintOverride: t('Command fleet actions run for the Lint intent on this vessel. Overrides the repo script and the detected ecosystem default. Blank uses detection.'),
     auditOverride: t('Command fleet actions run for the Audit intent on this vessel. Overrides the repo script and the detected ecosystem default. Blank uses detection.'),
+    workerEnvelope: t('Optional Worker eligibility envelope. Leave every field blank for no envelope. When set, only captains whose model profile meets it run Worker missions on this vessel. The Architect may tighten it per mission but never loosen it.'),
     timeout: t('Time limit in seconds for each of the build and test commands, from 30 to 7200. Blank uses 1800 (30 minutes). Going over counts as a timeout failure.'),
     projectContext: t('What this project is: purpose, architecture, key files and dependencies. Added to every captain prompt for this vessel, so keep it accurate and concise.'),
     styleGuide: t('Coding rules captains must follow here: naming, patterns, language restrictions, preferred libraries. Added to every captain prompt for this vessel.'),
@@ -303,6 +304,36 @@ export default function VesselFormModal({ vessel, fleets, pipelines, onClose, on
             <input title={tip.auditOverride} value={form.auditCommand} onChange={e => setForm({ ...form, auditCommand: e.target.value })} placeholder={t('e.g. osv-scanner scan source -r .')} />
           </label>
         </div>
+
+        {/* Worker eligibility envelope (vessel default; missions may only tighten it) */}
+        <fieldset title={tip.workerEnvelope} style={{ border: 'none', padding: 0, margin: '0 0 0.5rem 0' }}>
+          <legend title={tip.workerEnvelope} style={{ fontWeight: 600, padding: 0, marginBottom: '0.25rem' }}>{t('Worker eligibility envelope')}</legend>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0 1.5rem' }}>
+            <label style={columnLabelStyle} title={tip.workerEnvelope}>
+              {t('Max files')}
+              <input title={tip.workerEnvelope} type="number" min={1} max={1000} value={form.envelopeMaxFiles} onChange={e => setForm({ ...form, envelopeMaxFiles: e.target.value })} />
+            </label>
+            <label style={columnLabelStyle} title={tip.workerEnvelope}>
+              {t('Max steps')}
+              <input title={tip.workerEnvelope} type="number" min={1} max={1000} value={form.envelopeMaxSteps} onChange={e => setForm({ ...form, envelopeMaxSteps: e.target.value })} />
+            </label>
+            <label style={columnLabelStyle} title={tip.workerEnvelope}>
+              {t('Min served context (tokens)')}
+              <input title={tip.workerEnvelope} type="number" min={1} max={100000000} value={form.envelopeMinServedContextTokens} onChange={e => setForm({ ...form, envelopeMinServedContextTokens: e.target.value })} />
+            </label>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem 2rem' }}>
+            <span style={{ verticalAlign: 'middle' }}>{t('Required tools')}</span>
+            <label style={checkboxLabelStyle} title={tip.workerEnvelope}>
+              <input title={tip.workerEnvelope} type="checkbox" checked={form.envelopeRequireTools} onChange={e => setForm({ ...form, envelopeRequireTools: e.target.checked })} style={checkboxStyle} />
+              <span style={{ verticalAlign: 'middle' }}>{t('Tool calls')}</span>
+            </label>
+            <label style={checkboxLabelStyle} title={tip.workerEnvelope}>
+              <input title={tip.workerEnvelope} type="checkbox" checked={form.envelopeRequireMcp} onChange={e => setForm({ ...form, envelopeRequireMcp: e.target.checked })} style={checkboxStyle} />
+              <span style={{ verticalAlign: 'middle' }}>{t('MCP tools')}</span>
+            </label>
+          </div>
+        </fieldset>
 
         {/* Context */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0 1.5rem' }}>

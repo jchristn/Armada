@@ -1343,7 +1343,10 @@ namespace Armada.Core.Database.Mysql
                     @"ALTER TABLE model_probe_runs ADD COLUMN battery_run_id VARCHAR(64) NULL;",
                     @"ALTER TABLE model_probe_runs ADD COLUMN report_json LONGTEXT NULL;",
                     @"ALTER TABLE model_profile_revisions ADD COLUMN evaluation_run_id VARCHAR(64) NULL;",
-                    @"ALTER TABLE model_profile_revisions ADD COLUMN evaluation_report_json LONGTEXT NULL;")
+                    @"ALTER TABLE model_profile_revisions ADD COLUMN evaluation_report_json LONGTEXT NULL;"),
+                new SchemaMigration(110, "Add the Worker eligibility envelope: vessels.worker_envelope_json (the vessel default) and missions.worker_envelope_json (a tightened envelope for one mission)",
+                    @"ALTER TABLE vessels ADD COLUMN worker_envelope_json LONGTEXT NULL;",
+                    @"ALTER TABLE missions ADD COLUMN worker_envelope_json LONGTEXT NULL;")
 
 
             };

@@ -7028,7 +7028,15 @@
         "Subjective grading skipped: {{reason}}": "Evaluación subjetiva omitida: {{reason}}",
         "Narrative rejected: {{reason}}": "Narrativa rechazada: {{reason}}",
         "Full Evaluate": "Evaluación completa",
-        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Ejecuta las sondas rápidas y la batería de pruebas; después un capitán evaluador de otra familia de modelos califica las tareas subjetivas. Solo orientativo: no cambia el enrutamiento, las listas de capitanes de las personas ni los prompts."
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Ejecuta las sondas rápidas y la batería de pruebas; después un capitán evaluador de otra familia de modelos califica las tareas subjetivas. Solo orientativo: no cambia el enrutamiento, las listas de capitanes de las personas ni los prompts.",
+        "Worker eligibility envelope": "Envolvente de elegibilidad del Worker",
+        "Max files": "Archivos máximos",
+        "Max steps": "Pasos máximos",
+        "Min served context (tokens)": "Contexto servido mínimo (tokens)",
+        "Required tools": "Herramientas requeridas",
+        "Tool calls": "Llamadas a herramientas",
+        "MCP tools": "Herramientas MCP",
+        "Optional Worker eligibility envelope. Leave every field blank for no envelope. When set, only captains whose model profile meets it run Worker missions on this vessel. The Architect may tighten it per mission but never loosen it.": "Envolvente de elegibilidad del Worker opcional. Deja todos los campos en blanco para no usar envolvente. Si se define, solo los capitanes cuyo perfil de modelo la cumple ejecutan misiones Worker en este repositorio. El Architect puede ajustarla por misión, pero nunca relajarla."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -12999,7 +13007,15 @@
         "Subjective grading skipped: {{reason}}": "已跳过主观评分：{{reason}}",
         "Narrative rejected: {{reason}}": "叙述被拒绝：{{reason}}",
         "Full Evaluate": "完整评估",
-        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "运行快速探测和固定测试集，然后由另一模型系列的评估舰长为主观任务评分。仅供参考：不会更改路由、角色的舰长列表或提示词。"
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "运行快速探测和固定测试集，然后由另一模型系列的评估舰长为主观任务评分。仅供参考：不会更改路由、角色的舰长列表或提示词。",
+        "Worker eligibility envelope": "Worker 资格范围",
+        "Max files": "最多文件数",
+        "Max steps": "最多步骤数",
+        "Min served context (tokens)": "最小服务上下文（token）",
+        "Required tools": "必需工具",
+        "Tool calls": "工具调用",
+        "MCP tools": "MCP 工具",
+        "Optional Worker eligibility envelope. Leave every field blank for no envelope. When set, only captains whose model profile meets it run Worker missions on this vessel. The Architect may tighten it per mission but never loosen it.": "可选的 Worker 资格范围。所有字段留空表示不设范围。设置后，只有模型配置满足该范围的船长才会在此仓库运行 Worker 任务。Architect 可以按任务收紧它，但不能放宽。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -18933,7 +18949,15 @@
         "Subjective grading skipped: {{reason}}": "已略過主觀評分：{{reason}}",
         "Narrative rejected: {{reason}}": "敘述被拒絕：{{reason}}",
         "Full Evaluate": "完整評估",
-        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "執行快速探測與固定測試集，然後由另一模型系列的評估艦長為主觀任務評分。僅供參考：不會變更路由、角色的艦長清單或提示詞。"
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "執行快速探測與固定測試集，然後由另一模型系列的評估艦長為主觀任務評分。僅供參考：不會變更路由、角色的艦長清單或提示詞。",
+        "Worker eligibility envelope": "Worker 資格範圍",
+        "Max files": "最多檔案數",
+        "Max steps": "最多步驟數",
+        "Min served context (tokens)": "最小服務上下文（token）",
+        "Required tools": "必需工具",
+        "Tool calls": "工具呼叫",
+        "MCP tools": "MCP 工具",
+        "Optional Worker eligibility envelope. Leave every field blank for no envelope. When set, only captains whose model profile meets it run Worker missions on this vessel. The Architect may tighten it per mission but never loosen it.": "可選的 Worker 資格範圍。所有欄位留空表示不設範圍。設定後，只有模型設定檔符合該範圍的船長才會在此儲存庫執行 Worker 任務。Architect 可以依任務收緊它，但不能放寬。"
       },
       "sections": {}
     },
@@ -24827,7 +24851,15 @@
         "Subjective grading skipped: {{reason}}": "跳過咗主觀評分：{{reason}}",
         "Narrative rejected: {{reason}}": "敘述被拒絕：{{reason}}",
         "Full Evaluate": "完整評估",
-        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "行快速探測同固定測試集，之後由另一個模型系列嘅評估艦長幫主觀任務評分。只係參考：唔會改路由、角色嘅艦長清單或者提示詞。"
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "行快速探測同固定測試集，之後由另一個模型系列嘅評估艦長幫主觀任務評分。只係參考：唔會改路由、角色嘅艦長清單或者提示詞。",
+        "Worker eligibility envelope": "Worker 資格範圍",
+        "Max files": "最多檔案數",
+        "Max steps": "最多步驟數",
+        "Min served context (tokens)": "最細服務上下文（token）",
+        "Required tools": "必需工具",
+        "Tool calls": "工具呼叫",
+        "MCP tools": "MCP 工具",
+        "Optional Worker eligibility envelope. Leave every field blank for no envelope. When set, only captains whose model profile meets it run Worker missions on this vessel. The Architect may tighten it per mission but never loosen it.": "可選嘅 Worker 資格範圍。所有欄位留空即係唔設範圍。設定之後，只有模型設定檔符合範圍嘅船長先會喺呢個儲存庫執行 Worker 任務。Architect 可以按任務收緊，但唔可以放寬。"
       },
       "sections": {}
     },
@@ -30737,7 +30769,15 @@
         "Subjective grading skipped: {{reason}}": "主観評価をスキップしました: {{reason}}",
         "Narrative rejected: {{reason}}": "所見を却下しました: {{reason}}",
         "Full Evaluate": "フル評価",
-        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "クイックプローブと固定テストバッテリーを実行し、別のモデルファミリーの評価キャプテンが主観的なタスクを採点します。参考情報のみで、ルーティング、ペルソナのキャプテン一覧、プロンプトは変更されません。"
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "クイックプローブと固定テストバッテリーを実行し、別のモデルファミリーの評価キャプテンが主観的なタスクを採点します。参考情報のみで、ルーティング、ペルソナのキャプテン一覧、プロンプトは変更されません。",
+        "Worker eligibility envelope": "Worker の適格範囲",
+        "Max files": "最大ファイル数",
+        "Max steps": "最大ステップ数",
+        "Min served context (tokens)": "最小提供コンテキスト（トークン）",
+        "Required tools": "必須ツール",
+        "Tool calls": "ツール呼び出し",
+        "MCP tools": "MCP ツール",
+        "Optional Worker eligibility envelope. Leave every field blank for no envelope. When set, only captains whose model profile meets it run Worker missions on this vessel. The Architect may tighten it per mission but never loosen it.": "任意の Worker 適格範囲です。すべての項目を空欄にすると範囲なしになります。設定すると、モデルプロファイルがこれを満たすキャプテンだけがこのリポジトリで Worker ミッションを実行します。Architect はミッションごとに厳しくできますが、緩めることはできません。"
       },
       "sections": {}
     },
@@ -36638,7 +36678,15 @@
         "Subjective grading skipped: {{reason}}": "Subjektive Bewertung übersprungen: {{reason}}",
         "Narrative rejected: {{reason}}": "Bewertungstext abgelehnt: {{reason}}",
         "Full Evaluate": "Vollständige Bewertung",
-        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Führt die Schnelltests und die Testbatterie aus; danach bewertet ein Bewerter-Captain einer anderen Modellfamilie die subjektiven Aufgaben. Nur zur Beratung: Routing, Captain-Listen der Personas und Prompts bleiben unverändert."
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Führt die Schnelltests und die Testbatterie aus; danach bewertet ein Bewerter-Captain einer anderen Modellfamilie die subjektiven Aufgaben. Nur zur Beratung: Routing, Captain-Listen der Personas und Prompts bleiben unverändert.",
+        "Worker eligibility envelope": "Worker-Eignungsrahmen",
+        "Max files": "Max. Dateien",
+        "Max steps": "Max. Schritte",
+        "Min served context (tokens)": "Min. bereitgestellter Kontext (Tokens)",
+        "Required tools": "Erforderliche Tools",
+        "Tool calls": "Tool-Aufrufe",
+        "MCP tools": "MCP-Tools",
+        "Optional Worker eligibility envelope. Leave every field blank for no envelope. When set, only captains whose model profile meets it run Worker missions on this vessel. The Architect may tighten it per mission but never loosen it.": "Optionaler Worker-Eignungsrahmen. Alle Felder leer lassen für keinen Rahmen. Wenn gesetzt, führen nur Captains, deren Modellprofil ihn erfüllt, Worker-Missionen in diesem Repository aus. Der Architect darf ihn pro Mission verschärfen, aber nie lockern."
       },
       "sections": {}
     },
@@ -42539,7 +42587,15 @@
         "Subjective grading skipped: {{reason}}": "Évaluation subjective ignorée : {{reason}}",
         "Narrative rejected: {{reason}}": "Synthèse rejetée : {{reason}}",
         "Full Evaluate": "Évaluation complète",
-        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Exécute les sondes rapides et la batterie de tests, puis un capitaine évaluateur d'une autre famille de modèles note les tâches subjectives. À titre indicatif : le routage, les listes de capitaines des personas et les prompts ne changent pas."
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Exécute les sondes rapides et la batterie de tests, puis un capitaine évaluateur d'une autre famille de modèles note les tâches subjectives. À titre indicatif : le routage, les listes de capitaines des personas et les prompts ne changent pas.",
+        "Worker eligibility envelope": "Enveloppe d'éligibilité du Worker",
+        "Max files": "Fichiers max.",
+        "Max steps": "Étapes max.",
+        "Min served context (tokens)": "Contexte servi min. (jetons)",
+        "Required tools": "Outils requis",
+        "Tool calls": "Appels d'outils",
+        "MCP tools": "Outils MCP",
+        "Optional Worker eligibility envelope. Leave every field blank for no envelope. When set, only captains whose model profile meets it run Worker missions on this vessel. The Architect may tighten it per mission but never loosen it.": "Enveloppe d'éligibilité du Worker facultative. Laissez tous les champs vides pour aucune enveloppe. Une fois définie, seuls les capitaines dont le profil de modèle la respecte exécutent les missions Worker sur ce dépôt. L'Architect peut la resserrer par mission mais jamais l'assouplir."
       },
       "sections": {}
     },
@@ -48440,7 +48496,15 @@
         "Subjective grading skipped: {{reason}}": "Valutazione soggettiva saltata: {{reason}}",
         "Narrative rejected: {{reason}}": "Sintesi respinta: {{reason}}",
         "Full Evaluate": "Valutazione completa",
-        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Esegue le sonde rapide e la batteria di test, poi un capitano valutatore di un'altra famiglia di modelli valuta le attività soggettive. Solo indicativo: instradamento, elenchi di capitani delle persona e prompt non cambiano."
+        "Run the Quick probes plus the fixture battery, then have an evaluator captain of another model family grade the subjective tasks. Advisory only: nothing changes routing, persona captain lists or prompts.": "Esegue le sonde rapide e la batteria di test, poi un capitano valutatore di un'altra famiglia di modelli valuta le attività soggettive. Solo indicativo: instradamento, elenchi di capitani delle persona e prompt non cambiano.",
+        "Worker eligibility envelope": "Perimetro di idoneità del Worker",
+        "Max files": "File massimi",
+        "Max steps": "Passi massimi",
+        "Min served context (tokens)": "Contesto servito minimo (token)",
+        "Required tools": "Strumenti richiesti",
+        "Tool calls": "Chiamate agli strumenti",
+        "MCP tools": "Strumenti MCP",
+        "Optional Worker eligibility envelope. Leave every field blank for no envelope. When set, only captains whose model profile meets it run Worker missions on this vessel. The Architect may tighten it per mission but never loosen it.": "Perimetro di idoneità del Worker facoltativo. Lascia vuoti tutti i campi per nessun perimetro. Se impostato, solo i capitani il cui profilo di modello lo rispetta eseguono missioni Worker su questo repository. L'Architect può restringerlo per missione ma mai allargarlo."
       },
       "sections": {}
     }

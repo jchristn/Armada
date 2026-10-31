@@ -132,6 +132,11 @@ namespace Armada.Core.Services
         private class ParsedArchitectMission
         {
             /// <summary>
+            /// Worker eligibility envelope the Architect set for this mission (structured armada-plan format), or null.
+            /// </summary>
+            public WorkerEnvelope? WorkerEnvelope { get; set; } = null;
+
+            /// <summary>
             /// Mission title.
             /// </summary>
             public string Title { get; set; } = "";
@@ -348,6 +353,17 @@ namespace Armada.Core.Services
             {
                 blocker.Reason = MissionAssignmentBlockerReasonEnum.NoCaptains;
                 blocker.Summary = "Waiting for a captain: there are no captains. Create one to run missions.";
+                return blocker;
+            }
+
+            WorkerEnvelopeGate? envelopeGate = await BuildWorkerEnvelopeGateAsync(mission, token).ConfigureAwait(false);
+            if (envelopeGate != null && !envelopeGate.AnyCompatibleCaptain())
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain;
+                blocker.Summary = "Waiting for a captain: no captain meets the Worker eligibility envelope or may run the Worker persona. "
+                    + WorkerEnvelopeRules.Describe(envelopeGate.Envelope)
+                    + " Give a captain a model profile that meets it, or change the vessel's envelope.";
+                await DescribeCaptainsAsync(blocker, allCaptains, mission, token).ConfigureAwait(false);
                 return blocker;
             }
 

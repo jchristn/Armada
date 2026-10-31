@@ -500,6 +500,7 @@ namespace Armada.Core.Services
             mission.OverlapWarnings = null;
             mission.BriefLintWarnings = null;
             Vessel? dispatchVessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+            mission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelope(dispatchVessel?.WorkerEnvelope, mission.WorkerEnvelope);
             MissionDispatchAdvice? advice = dispatchVessel != null ? await AdviseDispatchAsync(mission, dispatchVessel, token).ConfigureAwait(false) : null;
             mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
             await PersistMissionPlaybooksAsync(mission, mission.SelectedPlaybooks, token).ConfigureAwait(false);

@@ -1,5 +1,7 @@
 namespace Armada.Server.Mcp
 {
+    using Armada.Core.Models;
+
     /// <summary>
     /// MCP tool arguments for adding a vessel.
     /// </summary>
@@ -85,5 +87,10 @@ namespace Armada.Server.Mcp
         /// Per-vessel override for the Audit intent (beats a repo script and the ecosystem default).
         /// </summary>
         public string? AuditCommand { get; set; }
+
+        /// <summary>
+        /// Default Worker eligibility envelope for the vessel, or null for none (an empty object also means none).
+        /// </summary>
+        public WorkerEnvelope? WorkerEnvelope { get; set; }
     }
 }

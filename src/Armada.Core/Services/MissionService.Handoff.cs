@@ -169,6 +169,7 @@ namespace Armada.Core.Services
                     nextMission.LastUpdateUtc = DateTime.UtcNow;
                     await _Database.Missions.UpdateAsync(nextMission, token).ConfigureAwait(false);
                     await RetitleDependentChainAsync(voyageMissions, nextMission, first.Title, first.Description, token).ConfigureAwait(false);
+                    await ApplyArchitectWorkerEnvelopeAsync(completedMission, nextMission, first, voyageMissions, token).ConfigureAwait(false);
 
                     // Find what depends on this worker mission (Judge, Test Engineer stages)
                     // Create additional worker missions for remaining parsed items

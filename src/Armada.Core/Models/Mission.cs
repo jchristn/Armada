@@ -138,6 +138,12 @@ namespace Armada.Core.Models
         public bool IsEvaluation { get; set; } = false;
 
         /// <summary>
+        /// Worker eligibility envelope tightened for this mission (for example by the Architect), or null to use the
+        /// vessel default. It can only tighten the vessel's default; dispatch combines both and uses the tightest.
+        /// </summary>
+        public WorkerEnvelope? WorkerEnvelope { get; set; } = null;
+
+        /// <summary>
         /// For a Worker the Judge sent back for rework, its rework round (1 for the first); 0 for any other mission. Stored
         /// so rework state never depends on the title, which an operator can change.
         /// </summary>

@@ -80,6 +80,7 @@ namespace Armada.Core.Services
                 context.DefaultCaptainId = await PersonaDefaultCaptainIdAsync(mission, context.RoutingPersona, token).ConfigureAwait(false);
                 context.Persona = await ReadPersonaByNameAsync(mission.TenantId, context.RoutingPersona, token, mission.UserId).ConfigureAwait(false);
             }
+            context.EnvelopeGate = await BuildWorkerEnvelopeGateAsync(mission, token).ConfigureAwait(false);
             return context;
         }
 
@@ -90,6 +91,7 @@ namespace Armada.Core.Services
             if (context.ExcludedAuthors.Contains(captain.Id)) return "authored an earlier stage";
             if (!CaptainVisibleToMission(captain, mission)) return "belongs to another tenant or user";
             if (captain.QuarantineUntilUtc.HasValue && captain.QuarantineUntilUtc > DateTime.UtcNow) return "quarantined";
+            if (context.EnvelopeGate != null && context.EnvelopeGate.Exclusions.TryGetValue(captain.Id, out string? envelopeReason)) return envelopeReason;
             if (!String.IsNullOrEmpty(mission.RequestedCaptainId) && captain.Id == mission.RequestedCaptainId) return null;
             if (context.EscalatedToRequestedCaptain) return "escalated to another captain";
             if (context.StrictCaptainOverride) return "the voyage requires another captain";
@@ -98,7 +100,8 @@ namespace Armada.Core.Services
             if (mission.Tier.HasValue && !CaptainTierSelector.CanHandle(captain, mission.Tier.Value)) return "tier below " + mission.Tier.Value;
             if (context.Persona != null && context.Persona.CaptainPriorities.Count > 0
                 && !PersonaCaptainPrioritySelector.AllowsGeneralFallback(context.Persona)
-                && PersonaCaptainPrioritySelector.Select(context.Persona, new List<Captain> { captain }) == null)
+                && PersonaCaptainPrioritySelector.Select(context.Persona, new List<Captain> { captain }) == null
+                && !(context.EnvelopeGate != null && context.EnvelopeGate.CanEscalateTo(captain, mission)))
                 return "not in persona " + context.Persona.Name + "'s captain priorities";
             return null;
         }
@@ -199,7 +202,7 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task<Captain?> FindAvailableCaptainAsync(Mission mission, CancellationToken token)
+        private async Task<Captain?> FindRoutedCaptainAsync(Mission mission, WorkerEnvelopeGate? envelopeGate, CancellationToken token)
         {
             string? persona = RoutingPersona(mission);
             CaptainTierEnum? requiredTier = mission.Tier;
@@ -212,6 +215,12 @@ namespace Armada.Core.Services
             if (_Settings.ExcludeReviewAuthorsFromJudge)
                 idleCaptains.RemoveAll(c => reviewAuthors.Contains(c.Id));
             idleCaptains = await ApplyCapacityLimitsAsync(idleCaptains, mission, token).ConfigureAwait(false);
+            // The Worker eligibility envelope applies to every path below, a requested or default captain included.
+            if (envelopeGate != null)
+            {
+                idleCaptains = idleCaptains.Where(c => !envelopeGate.Exclusions.ContainsKey(c.Id)).ToList();
+                envelopeGate.IdlePool = idleCaptains;
+            }
             if (idleCaptains.Count == 0)
                 return null;
 
@@ -226,6 +235,7 @@ namespace Armada.Core.Services
                 {
                     _Logging.Info(_Header + "mission " + mission.Id + " skips " + (idleCaptains.Count - untried.Count) + " captain(s) that already failed to start it");
                     idleCaptains = untried;
+                    if (envelopeGate != null) envelopeGate.IdlePool = idleCaptains;
                 }
             }
 
@@ -582,6 +592,7 @@ namespace Armada.Core.Services
             public bool StrictCaptainOverride { get; set; } = false;
             public string? DefaultCaptainId { get; set; } = null;
             public Persona? Persona { get; set; } = null;
+            public WorkerEnvelopeGate? EnvelopeGate { get; set; } = null;
         }
 
         #endregion
