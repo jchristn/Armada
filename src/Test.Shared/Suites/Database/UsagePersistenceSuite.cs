@@ -2,6 +2,8 @@ namespace Test.Shared.Suites.Database
 {
     using System;
     using System.Collections.Generic;
+    using System.Data.Common;
+    using System.Reflection;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -12,6 +14,9 @@ namespace Test.Shared.Suites.Database
     using Armada.Core.Models;
     using Armada.Core.Settings;
     using Microsoft.Data.Sqlite;
+    using Microsoft.Data.SqlClient;
+    using MySqlConnector;
+    using Npgsql;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -24,8 +29,8 @@ namespace Test.Shared.Suites.Database
     /// upserts, separate latest-state good/error preservation, captain usage-capture settings round-trips
     /// and legacy token records surviving the upgrade with attribution left null. Cases run unchanged
     /// against SQLite, PostgreSQL, MySQL and SQL Server through the shared test database harness; the
-    /// upgrade-from-v110 case replays the SQLite migration list because server providers are provisioned
-    /// fresh per run.
+    /// upgrade-from-v110 case replays migrations through v110 into an isolated database before invoking
+    /// the production initializer, including on server providers.
     /// </summary>
     public sealed class UsagePersistenceSuite : IArmadaTestSuite
     {
@@ -587,41 +592,51 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
-            cases.Add(CaseAsync("usage_existing_sqlite_database_upgrades_to_v111", "An existing v110 database upgrades to v111 and keeps its rows", TestTags.Positive, async ct =>
+            cases.Add(Case("usage_existing_database_upgrades_to_v111", "An existing v110 database upgrades to v111 and keeps its rows", TestTags.Positive, async ct =>
             {
                 string path = TestTemp.NewFile("usage_upgrade", ".db");
+                string databaseName = "usage_upgrade_" + Guid.NewGuid().ToString("N");
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
                 try
                 {
-                    LoggingModule logging = new LoggingModule();
-                    logging.Settings.EnableConsole = false;
-
-                    await ApplyMigrationsUpToV110(path, ct).ConfigureAwait(false);
-
-                    using (SqliteConnection conn = new SqliteConnection("Data Source=" + path + ";Pooling=False"))
+                    DatabaseSettings settings;
+                    if (TestDatabaseConfig.IsSqlite)
                     {
-                        await conn.OpenAsync(ct).ConfigureAwait(false);
-                        using (SqliteCommand tenantCmd = conn.CreateCommand())
-                        {
-                            tenantCmd.CommandText = @"INSERT INTO tenants (id, name, active, created_utc, last_update_utc)
-                                VALUES ('ten_legacy', 'Legacy Tenant', 1, '2026-10-01T00:00:00.000000Z', '2026-10-01T00:00:00.000000Z');";
-                            await tenantCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-                        }
-                        using (SqliteCommand cmd = conn.CreateCommand())
-                        {
-                            cmd.CommandText = @"INSERT INTO captains (id, tenant_id, name, runtime, state, recovery_attempts, created_utc, last_update_utc)
-                                VALUES ('cpt_legacy_upgrade', 'ten_legacy', 'Legacy Captain', 'ClaudeCode', 'Idle', 0, '2026-10-01T00:00:00.000000Z', '2026-10-01T00:00:00.000000Z');";
-                            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-                        }
-                        using (SqliteCommand cmd = conn.CreateCommand())
-                        {
-                            cmd.CommandText = @"INSERT INTO token_usage (id, tenant_id, model, runtime, source, input_tokens, output_tokens, cached_tokens, total_tokens, estimated, created_utc)
-                                VALUES ('tku_legacy_upgrade', 'ten_legacy', 'claude-sonnet-4', 'claudecode', 'mission', 1234, 567, 89, 1901, 0, '2026-10-01T01:00:00.000000Z');";
-                            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-                        }
+                        settings = new DatabaseSettings();
+                        settings.Type = DatabaseTypeEnum.Sqlite;
+                        settings.Filename = path;
+                        await ApplyMigrationsUpToV110(path, ct).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await TestDatabaseProvisioner.CreateDatabaseAsync(databaseName, ct).ConfigureAwait(false);
+                        settings = TestDatabaseConfig.BuildSettings(databaseName);
+                        await ApplyServerMigrationsUpToV110(settings, logging, ct).ConfigureAwait(false);
                     }
 
-                    using (SqliteDatabaseDriver driver = new SqliteDatabaseDriver("Data Source=" + path + ";Pooling=False", logging))
+                    using (DbConnection conn = CreateUpgradeConnection(settings))
                     {
+                        await conn.OpenAsync(ct).ConfigureAwait(false);
+                        string active = TestDatabaseConfig.Type == DatabaseTypeEnum.Postgresql ? "TRUE" : "1";
+                        string estimated = TestDatabaseConfig.Type == DatabaseTypeEnum.Postgresql ? "FALSE" : "0";
+                        // A real initialized v110 database has the built-in tenant. Retain it alongside
+                        // the legacy tenant so InitializeAsync can repair the default user/credential.
+                        await ExecuteUpgradeSql(conn, "INSERT INTO tenants (id, name, active, created_utc, last_update_utc) "
+                            + "SELECT '" + Armada.Core.Constants.DefaultTenantId + "', 'Default Tenant', " + active + ", '2026-10-01T00:00:00', '2026-10-01T00:00:00' "
+                            + "WHERE NOT EXISTS (SELECT 1 FROM tenants WHERE id = '" + Armada.Core.Constants.DefaultTenantId + "');", ct).ConfigureAwait(false);
+                        await ExecuteUpgradeSql(conn, "INSERT INTO tenants (id, name, active, created_utc, last_update_utc) "
+                            + "VALUES ('ten_legacy', 'Legacy Tenant', " + active + ", '2026-10-01T00:00:00', '2026-10-01T00:00:00');", ct).ConfigureAwait(false);
+                        await ExecuteUpgradeSql(conn, @"INSERT INTO captains (id, tenant_id, name, runtime, state, recovery_attempts, created_utc, last_update_utc)
+                            VALUES ('cpt_legacy_upgrade', 'ten_legacy', 'Legacy Captain', 'ClaudeCode', 'Idle', 0, '2026-10-01T00:00:00', '2026-10-01T00:00:00');", ct).ConfigureAwait(false);
+                        await ExecuteUpgradeSql(conn, "INSERT INTO token_usage (id, tenant_id, model, runtime, source, input_tokens, output_tokens, cached_tokens, total_tokens, estimated, created_utc) "
+                            + "VALUES ('tku_legacy_upgrade', 'ten_legacy', 'claude-sonnet-4', 'claudecode', 'mission', 1234, 567, 89, 1901, " + estimated + ", '2026-10-01T01:00:00');", ct).ConfigureAwait(false);
+                    }
+
+                    using (DatabaseDriver driver = DatabaseDriverFactory.Create(settings, logging))
+                    {
+                        AssertEqual(110, await driver.GetSchemaVersionAsync(ct).ConfigureAwait(false), "fixture starts at v110");
+                        AssertTrue(await driver.GetPendingMigrationCountAsync(ct).ConfigureAwait(false) > 0, "usage migration is pending");
                         await driver.InitializeAsync(ct).ConfigureAwait(false);
 
                         int version = await driver.GetSchemaVersionAsync(ct).ConfigureAwait(false);
@@ -641,7 +656,13 @@ namespace Test.Shared.Suites.Database
                         AssertEqual(1234, legacyTokens!.InputTokens, "legacy token input count is not lost");
                         AssertEqual(1901, legacyTokens.TotalTokens, "legacy token total is not lost");
                         AssertNull(legacyTokens.Provider, "upgraded legacy record has null provider");
+                        AssertEqual(567, legacyTokens.OutputTokens, "legacy output tokens survive");
+                        AssertEqual(89, legacyTokens.CachedTokens, "legacy cached tokens survive");
+                        AssertNull(legacyTokens.AccountKey, "legacy account remains unattributed");
+                        AssertNull(legacyTokens.HostId, "legacy host remains unattributed");
+                        AssertNull(legacyTokens.MembershipId, "legacy membership remains unattributed");
                         AssertNull(legacyTokens.ReportedCost, "upgraded legacy record has unknown cost");
+                        AssertNull(legacyTokens.CostCurrency, "legacy currency remains unknown");
 
                         UsageSnapshot upgraded = new UsageSnapshot();
                         upgraded.TenantId = "ten_legacy";
@@ -658,14 +679,22 @@ namespace Test.Shared.Suites.Database
                         AssertEqual("usage-hmac-key-upgrade", readUpgraded!.AccountKey, "upgraded database round-trips account keys");
 
                         int migrated = await driver.UsageSnapshots.DeleteByTenantAsync("ten_legacy", ct).ConfigureAwait(false);
-                        AssertEqual(1, migrated, "tenant cascade deletes usage rows on the upgraded database");
+                        AssertEqual(1, migrated, "tenant-scoped storage deletion removes usage rows");
                     }
                 }
                 finally
                 {
-                    SqliteConnection.ClearAllPools();
+                    if (TestDatabaseConfig.IsSqlite)
+                    {
+                        SqliteConnection.ClearAllPools();
+                        TestTemp.TryDelete(path);
+                    }
+                    else
+                    {
+                        await TestDatabaseProvisioner.DropDatabaseAsync(databaseName).ConfigureAwait(false);
+                    }
                 }
-            }, sqliteOnly: true));
+            }));
 
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
@@ -695,6 +724,76 @@ namespace Test.Shared.Suites.Database
             rollup.MeanPercent = lastPercent - 2.0;
             rollup.OkCount = sampleCount;
             return rollup;
+        }
+
+        private static DbConnection CreateUpgradeConnection(DatabaseSettings settings)
+        {
+            switch (settings.Type)
+            {
+                case DatabaseTypeEnum.Postgresql: return new NpgsqlConnection(settings.GetConnectionString());
+                case DatabaseTypeEnum.Mysql: return new MySqlConnection(settings.GetConnectionString());
+                case DatabaseTypeEnum.SqlServer: return new SqlConnection(settings.GetConnectionString());
+                default: return new SqliteConnection(settings.GetConnectionString());
+            }
+        }
+
+        private static async Task ExecuteUpgradeSql(DbConnection connection, string sql, CancellationToken token)
+        {
+            using (DbCommand command = connection.CreateCommand())
+            {
+                command.CommandText = sql;
+                await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            }
+        }
+
+        private static async Task ApplyServerMigrationsUpToV110(DatabaseSettings settings, LoggingModule logging, CancellationToken token)
+        {
+            using (DatabaseDriver driver = DatabaseDriverFactory.Create(settings, logging))
+            using (DbConnection connection = CreateUpgradeConnection(settings))
+            {
+                await connection.OpenAsync(token).ConfigureAwait(false);
+                string schemaSql = settings.Type == DatabaseTypeEnum.Mysql
+                    ? Armada.Core.Database.Mysql.Queries.TableQueries.SchemaMigrations
+                    : settings.Type == DatabaseTypeEnum.SqlServer
+                        ? Armada.Core.Database.SqlServer.Queries.TableQueries.SchemaMigrations
+                        : "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, description TEXT NOT NULL, applied_utc TIMESTAMP NOT NULL);";
+                await ExecuteUpgradeSql(connection, schemaSql, token).ConfigureAwait(false);
+
+                // Reuse the provider's executor (including duplicate-column guards and MySQL statement
+                // splitting). Reflection is confined to fixture construction so production initialization
+                // remains unchanged and the upgrade itself always uses InitializeAsync.
+                MethodInfo executor = driver.GetType().GetMethod("ExecuteMigrationAsync", BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)
+                    ?? throw new InvalidOperationException("Provider migration executor missing");
+                foreach (SchemaMigration migration in driver.GetMigrationsForVerification())
+                {
+                    if (migration.Version > 110) continue;
+                    using (DbTransaction transaction = await connection.BeginTransactionAsync(token).ConfigureAwait(false))
+                    {
+                        Task execution = (Task)(executor.Invoke(executor.IsStatic ? null : driver, new object[] { connection, transaction, migration, token })
+                            ?? throw new InvalidOperationException("Provider migration executor returned no task"));
+                        await execution.ConfigureAwait(false);
+                        using (DbCommand record = connection.CreateCommand())
+                        {
+                            record.Transaction = transaction;
+                            record.CommandText = "INSERT INTO schema_migrations (version, description, applied_utc) VALUES (@v, @d, @t);";
+                            DbParameter version = record.CreateParameter();
+                            version.ParameterName = "@v";
+                            version.Value = migration.Version;
+                            record.Parameters.Add(version);
+                            DbParameter description = record.CreateParameter();
+                            description.ParameterName = "@d";
+                            description.Value = migration.Description;
+                            record.Parameters.Add(description);
+                            DbParameter applied = record.CreateParameter();
+                            applied.ParameterName = "@t";
+                            applied.Value = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+                            record.Parameters.Add(applied);
+                            await record.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                        }
+                        await transaction.CommitAsync(token).ConfigureAwait(false);
+                    }
+                }
+            }
         }
 
         private static async Task ApplyMigrationsUpToV110(string path, CancellationToken token)
@@ -763,21 +862,6 @@ namespace Test.Shared.Suites.Database
                 displayName: displayName,
                 executeAsync: body,
                 tags: new List<string> { tag, TestTags.Database });
-        }
-
-        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<CancellationToken, Task> body, bool sqliteOnly = false)
-        {
-            bool skip = sqliteOnly && !TestDatabaseConfig.IsSqlite;
-            string? skipReason = skip ? "Case replays the SQLite migration list to simulate an existing database; server providers are provisioned fresh per run." : null;
-
-            return new TestCaseDescriptor(
-                suiteId: SuiteId,
-                caseId: caseId,
-                displayName: displayName,
-                executeAsync: body,
-                tags: new List<string> { tag, TestTags.Database },
-                skip: skip,
-                skipReason: skipReason);
         }
 
         #endregion

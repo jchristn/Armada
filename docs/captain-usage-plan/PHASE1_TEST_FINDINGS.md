@@ -130,3 +130,63 @@ Prior server-provider fresh-database results remain inherited evidence only.
 No full solution, adapter or dashboard runs were performed in this stage;
 Armada runs post-stage checks. No baseline failures occurred in the scoped run.
 Stage outcome: BLOCKED on the prerequisite and unmet AC1 provider upgrade gate.
+
+## Rework 2 resolution and executed checks
+
+Rebased this branch onto fetched main f1e4cff2a before continuing phase 1.
+
+Finding 1 (server-provider existing-database upgrades): resolved.
+`Database.UsagePersistence.usage_existing_database_upgrades_to_v111` now runs
+without provider skips. It creates an isolated database, replays the selected
+provider's migrations through v110 using its migration executor, records each
+version, inserts legacy captain/token rows, verifies version 110 and pending
+migrations, then calls the production InitializeAsync. The provider-specific
+executor is accessed reflectively only during fixture setup to preserve its
+statement splitting and duplicate-column handling without changing production
+migration interfaces. The fixture keeps the built-in tenant where present and
+adds it where absent, matching an initialized legacy database.
+
+The shared assertions check the upgraded schema, zero pending migrations,
+legacy captain identity and disabled/300/Auto/null settings, retained input,
+output, cached and total tokens, null provider/account/host/membership/cost/
+currency attribution, and new snapshot/member writes and reads. The isolated
+server database is dropped in finally. SQLite still replays its own migrations
+and now removes its temporary file. The test's tenant deletion assertion is
+labeled as storage deletion, not proof of the tenant service cascade.
+
+Finding 2 (missing phase 0 prerequisite): resolved by integration-base changes,
+not by recreating phase 0 in this mission. Fetched main contains
+`docs/captain-usage-plan/PROBE_INTERFACES.md`, its fixtures and
+`Usage.InterfaceEvidence`. After rebase, all 13 evidence checks passed. The
+phase 0 document explicitly leaves unverified provider adapters disabled;
+these checks validate the delivered evidence and fixtures, not live provider
+quota access.
+
+Executed on the final fixture revision:
+
+- `dotnet build src/Test.Automated -c Release -f net10.0 --nologo`:
+  exit 0, zero warnings, zero errors.
+- `ARMADA_TEST_SUITES=Usage.InterfaceEvidence,Services.UsageDefaults,Database.UsagePersistence dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build`:
+  SQLite, exit 0, 41 passed, zero failed, zero skipped.
+- `ARMADA_TEST_SUITES=Services.UsageDefaults,Database.UsagePersistence` with
+  the same runner and `ARMADA_TEST_DB_TYPE=postgresql`, `mysql`, and
+  `sqlserver`, respectively: each exit 0, 28 passed, zero failed, zero skipped.
+  Actual local containers: PostgreSQL 17, MySQL 8.4, SQL Server 2022.
+  Host/port/user/password were supplied through the shared harness environment;
+  no credentials or connection strings are included in this evidence.
+- `git diff --check`: exit 0.
+
+Earlier development runs exposed fixture setup issues: PostgreSQL's container
+uses a nondefault username, and providers differ in whether old migrations seed
+the built-in tenant. Corrected the invocation and made fixture tenant insertion
+conditional; all four providers were rerun after the final correction. These
+were setup failures, not inherited baseline product failures. Prior explicit
+null and property-order regressions remain in the passing defaults/persistence
+suites on every provider.
+
+Remaining limits: end-to-end tenant-service deletion is not established by
+storage deletion and remains for the later service/retention phases. No live
+provider quota requests, enabled adapters, full solution/adapter/dashboard
+runs, API publication, deployment or release checks were performed. This
+rework changes only the scoped upgrade regression and this findings record;
+post-stage checks and integration delivery remain Armada's responsibility.
