@@ -283,10 +283,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@status", session.Status.ToString());
             cmd.Parameters.AddWithValue("@process_id", (object?)session.ProcessId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@failure_reason", (object?)session.FailureReason ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@created_utc", session.CreatedUtc);
-            cmd.Parameters.AddWithValue("@started_utc", (object?)session.StartedUtc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@completed_utc", (object?)session.CompletedUtc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@last_update_utc", session.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", session.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@started_utc", session.StartedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@completed_utc", session.CompletedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", session.LastUpdateUtc);
         }
 
         private static ObjectiveRefinementSession FromReader(NpgsqlDataReader reader)

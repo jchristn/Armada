@@ -284,8 +284,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@requires_approval", environment.RequiresApproval);
             cmd.Parameters.AddWithValue("@is_default", environment.IsDefault);
             cmd.Parameters.AddWithValue("@active", environment.Active);
-            cmd.Parameters.AddWithValue("@created_utc", environment.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", environment.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", environment.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", environment.LastUpdateUtc);
         }
 
         private static DeploymentEnvironment FromReader(NpgsqlDataReader reader)

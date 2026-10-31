@@ -274,12 +274,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
             if (query.FromUtc.HasValue)
             {
                 conditions.Add("created_utc >= @from_utc");
-                parameters.Add(new NpgsqlParameter("@from_utc", query.FromUtc.Value));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@from_utc", query.FromUtc.Value));
             }
             if (query.ToUtc.HasValue)
             {
                 conditions.Add("created_utc <= @to_utc");
-                parameters.Add(new NpgsqlParameter("@to_utc", query.ToUtc.Value));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@to_utc", query.ToUtc.Value));
             }
         }
 
@@ -312,10 +312,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@coverage_summary_json", checkRun.CoverageSummary != null ? JsonSerializer.Serialize(checkRun.CoverageSummary, _Json) : DBNull.Value);
             cmd.Parameters.AddWithValue("@artifacts_json", JsonSerializer.Serialize(checkRun.Artifacts ?? new List<CheckRunArtifact>(), _Json));
             cmd.Parameters.AddWithValue("@duration_ms", (object?)checkRun.DurationMs ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@started_utc", (object?)checkRun.StartedUtc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@completed_utc", (object?)checkRun.CompletedUtc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@created_utc", checkRun.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", checkRun.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@started_utc", checkRun.StartedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@completed_utc", checkRun.CompletedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", checkRun.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", checkRun.LastUpdateUtc);
         }
 
         private static CheckRun FromReader(NpgsqlDataReader reader)

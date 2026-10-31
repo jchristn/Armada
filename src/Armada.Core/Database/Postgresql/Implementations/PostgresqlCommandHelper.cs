@@ -136,9 +136,18 @@ namespace Armada.Core.Database.Postgresql.Implementations
         /// </summary>
         internal static void AddDate(NpgsqlCommand cmd, string name, DateTime value)
         {
+            cmd.Parameters.Add(DateParameter(name, value));
+        }
+
+        /// <summary>
+        /// Create a UTC timestamp parameter for timestamp without time zone.
+        /// Unspecified kinds are treated as UTC. The value keeps its clock digits.
+        /// </summary>
+        internal static NpgsqlParameter DateParameter(string name, DateTime value)
+        {
             NpgsqlParameter parameter = new NpgsqlParameter(name, NpgsqlTypes.NpgsqlDbType.Timestamp);
             parameter.Value = DateTime.SpecifyKind(NormalizeUtc(value), DateTimeKind.Unspecified);
-            cmd.Parameters.Add(parameter);
+            return parameter;
         }
 
         /// <summary>
