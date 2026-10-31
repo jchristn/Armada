@@ -4,12 +4,15 @@ namespace Test.Shared.Suites.Runtimes
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Net.Http;
     using System.Text.Json;
     using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
+    using Armada.Core.Models;
     using Armada.Core.Protocol;
+    using Armada.Core.Services;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -280,6 +283,185 @@ namespace Test.Shared.Suites.Runtimes
                 return Task.CompletedTask;
             }));
 
+            cases.Add(new TestCaseDescriptor(SuiteId, "codex_fixtures_match_installed_schema_contract", "AC0/D4: the Codex read fixture keeps accountId null, every window carries the schema-required usedPercent with epoch-second resets, and initialize needs only clientInfo without experimentalApi", (CancellationToken ct) =>
+            {
+                string directory = FixtureDirectory();
+                JsonSerializerOptions options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+                CodexRateLimitsReadFixture? read = JsonSerializer.Deserialize<CodexRateLimitsReadFixture>(
+                    File.ReadAllText(Path.Combine(directory, "codex-account-ratelimits-read.sanitized.json")), options);
+                AssertNotNull(read, "the Codex read fixture did not deserialize");
+                AssertNull(read!.AccountId, "the sanitized Codex fixture must not carry an account id; phase 1 HMACs it on the host");
+                AssertNotNull(read.RateLimits, "rateLimits is required by GetAccountRateLimitsResponse");
+
+                List<string> problems = new List<string>();
+                List<CodexRateLimitSnapshotFixture> snapshots = new List<CodexRateLimitSnapshotFixture> { read.RateLimits! };
+                if (read.RateLimitsByLimitId != null) snapshots.AddRange(read.RateLimitsByLimitId.Values);
+                int windows = 0;
+                foreach (CodexRateLimitSnapshotFixture snapshot in snapshots)
+                {
+                    foreach (CodexRateLimitWindowFixture? window in new[] { snapshot.Primary, snapshot.Secondary })
+                    {
+                        if (window == null) continue;
+                        windows++;
+                        string label = (snapshot.LimitId ?? "(no limitId)") + " window";
+                        if (window.UsedPercent == null) problems.Add(label + " has no usedPercent, which the installed schema requires");
+                        else if (window.UsedPercent < 0 || window.UsedPercent > 100) problems.Add(label + " usedPercent " + window.UsedPercent + " is outside 0..100");
+                        if (window.WindowDurationMins != null && window.WindowDurationMins <= 0) problems.Add(label + " has a non-positive windowDurationMins");
+                        if (window.ResetsAt != null && !IsEpochSeconds(window.ResetsAt.Value)) problems.Add(label + " resetsAt " + window.ResetsAt + " is not Unix epoch seconds");
+                    }
+                }
+
+                foreach (KeyValuePair<string, CodexRateLimitSnapshotFixture> pair in read.RateLimitsByLimitId ?? new Dictionary<string, CodexRateLimitSnapshotFixture>())
+                {
+                    if (pair.Value.LimitId != null && !String.Equals(pair.Key, pair.Value.LimitId, StringComparison.Ordinal)) problems.Add("rateLimitsByLimitId key " + pair.Key + " does not match its limitId " + pair.Value.LimitId);
+                }
+
+                AssertTrue(windows >= 2, "the Codex read fixture should exercise at least two windows, found " + windows);
+
+                CodexInitializeFixture? init = JsonSerializer.Deserialize<CodexInitializeFixture>(
+                    File.ReadAllText(Path.Combine(directory, "codex-app-server-initialize.sanitized.json")), options);
+                AssertNotNull(init, "the Codex initialize fixture did not deserialize");
+                AssertNotNull(init!.ClientInfo, "initialize requires clientInfo");
+                if (String.IsNullOrWhiteSpace(init.ClientInfo!.Name)) problems.Add("initialize clientInfo.name is required");
+                if (String.IsNullOrWhiteSpace(init.ClientInfo.Version)) problems.Add("initialize clientInfo.version is required");
+                if (init.Capabilities?.ExperimentalApi == true) problems.Add("the usage probe must not opt into experimentalApi");
+
+                AssertTrue(problems.Count == 0, "Codex fixtures drift from the installed schema contract:\n" + String.Join("\n", problems));
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(new TestCaseDescriptor(SuiteId, "claude_fixture_timestamps_are_epoch_seconds", "Claude rate_limit_event resetsAt values are absolute epoch seconds (not milliseconds) and utilization is a 0..1 fraction", (CancellationToken ct) =>
+            {
+                string[] lines = File.ReadAllLines(Path.Combine(FixtureDirectory(), "claude-rate-limit-event.sanitized.jsonl"))
+                    .Where(line => !String.IsNullOrWhiteSpace(line))
+                    .ToArray();
+                foreach (string line in lines)
+                {
+                    AssertTrue(ClaudeRateLimitEvent.TryParse(line, out ClaudeRateLimitEvent? evt) && evt!.Info != null, "unparseable Claude fixture line");
+                    AssertNotNull(evt!.Info!.ResetsAt, "Claude fixture line has no resetsAt");
+                    AssertTrue(IsEpochSeconds(evt.Info.ResetsAt!.Value), "Claude resetsAt " + evt.Info.ResetsAt + " is not Unix epoch seconds");
+                    AssertNotNull(evt.Info.Utilization, "Claude fixture line has no utilization");
+                    AssertTrue(evt.Info.Utilization >= 0d && evt.Info.Utilization <= 1d, "Claude utilization " + evt.Info.Utilization + " is not a 0..1 fraction");
+                }
+
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(new TestCaseDescriptor(SuiteId, "apiendpoint_header_fixtures_are_allowlisted", "ApiEndpoint header fixtures hold only allowlisted rate-limit headers (no credential or request-id header), Anthropic resets are RFC 3339 UTC, OpenAI resets are durations and retry-after is delay seconds", (CancellationToken ct) =>
+            {
+                Regex anthropicName = new Regex("^anthropic-ratelimit-(requests|input-tokens|output-tokens|tokens)-(limit|remaining|reset)$");
+                Regex openAiName = new Regex("^x-ratelimit-(limit|remaining|reset)-(requests|tokens)$");
+                Regex duration = new Regex("^(?=.)([0-9]+h)?([0-9]+m(?!s))?([0-9]+(\\.[0-9]+)?(ms|s))?$");
+                List<string> problems = new List<string>();
+
+                foreach (string file in new[] { "anthropic-ratelimit-headers.sanitized.json", "openai-compatible-ratelimit-headers.sanitized.json" })
+                {
+                    Dictionary<string, string>? headers = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(Path.Combine(FixtureDirectory(), file)));
+                    AssertNotNull(headers, file + " did not deserialize as a header map");
+                    AssertTrue(headers!.Count > 0, file + " holds no headers");
+                    foreach (KeyValuePair<string, string> header in headers)
+                    {
+                        string name = header.Key;
+                        bool anthropic = anthropicName.IsMatch(name);
+                        bool openAi = openAiName.IsMatch(name);
+                        bool retryAfter = String.Equals(name, "retry-after", StringComparison.Ordinal);
+                        if (!anthropic && !openAi && !retryAfter) { problems.Add(file + ": header '" + name + "' is outside the rate-limit allowlist"); continue; }
+
+                        if (name.EndsWith("-reset", StringComparison.Ordinal))
+                        {
+                            if (!DateTimeOffset.TryParseExact(header.Value, "yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out DateTimeOffset _))
+                                problems.Add(file + ": " + name + " '" + header.Value + "' is not an RFC 3339 UTC timestamp");
+                        }
+                        else if (openAi && name.StartsWith("x-ratelimit-reset-", StringComparison.Ordinal))
+                        {
+                            if (!duration.IsMatch(header.Value)) problems.Add(file + ": " + name + " '" + header.Value + "' is not a duration string");
+                        }
+                        else if (!Int64.TryParse(header.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long count) || count < 0)
+                        {
+                            problems.Add(file + ": " + name + " '" + header.Value + "' is not a non-negative integer");
+                        }
+                    }
+                }
+
+                AssertTrue(problems.Count == 0, "ApiEndpoint header fixtures are not allowlisted evidence:\n" + String.Join("\n", problems));
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(new TestCaseDescriptor(SuiteId, "apiendpoint_provider_default_seam_gap_matches_source", "The documented ProviderDefault seam gap matches ModelEndpointAuth: no Armada HttpClient for ProviderDefault without headers, an Armada handler chain otherwise", (CancellationToken ct) =>
+            {
+                ModelEndpoint endpoint = new ModelEndpoint
+                {
+                    Name = "usage-seam",
+                    Provider = ModelProviderEnum.Ollama,
+                    Kind = ModelEndpointKindEnum.Inference,
+                    BaseUrl = "http://127.0.0.1:11434",
+                    AuthType = ModelEndpointAuthTypeEnum.ProviderDefault,
+                    Headers = new List<ModelEndpointHeader>()
+                };
+
+                string apiSection = ReadDocSections()["ApiEndpoint"];
+                bool gapDocumented = apiSection.Contains("`ModelEndpointAuth.CreateHttpClient` returns null when `AuthType` is", StringComparison.Ordinal);
+                bool gapInCode = ModelEndpointAuth.CreateHttpClient(endpoint) == null;
+                AssertEqual(gapInCode, gapDocumented, "PROBE_INTERFACES.md must describe the ProviderDefault seam gap exactly when ModelEndpointAuth still has it");
+
+                endpoint.Headers = new List<ModelEndpointHeader> { new ModelEndpointHeader("X-Usage-Seam", "placeholder") };
+                using (HttpClient? withHeaders = ModelEndpointAuth.CreateHttpClient(endpoint))
+                    AssertNotNull(withHeaders, "a ProviderDefault endpoint with extra headers goes through the Armada handler chain");
+
+                endpoint.Headers = new List<ModelEndpointHeader>();
+                endpoint.AuthType = ModelEndpointAuthTypeEnum.Bearer;
+                using (HttpClient? bearer = ModelEndpointAuth.CreateHttpClient(endpoint))
+                    AssertNotNull(bearer, "a configured-auth endpoint goes through the Armada handler chain");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(new TestCaseDescriptor(SuiteId, "gemini_fixture_yields_no_reset", "The Gemini RESOURCE_EXHAUSTED fixture is recognized as a rate limit by RuntimeProviderErrorParser and yields no reset or retry value", (CancellationToken ct) =>
+            {
+                string text = File.ReadAllText(Path.Combine(FixtureDirectory(), "gemini-resource-exhausted.sanitized.json"));
+                AssertFalse(text.Contains("reset", StringComparison.OrdinalIgnoreCase), "the Gemini fixture must not carry a reset value");
+                AssertFalse(text.Contains("retry", StringComparison.OrdinalIgnoreCase), "the Gemini fixture must not carry a retry delay");
+
+                string line = String.Join(" ", text.Split('\n').Select(l => l.Trim()));
+                RuntimeProviderError? error = RuntimeProviderErrorParser.TryParseCliStderrLine(line, "Gemini");
+                AssertNotNull(error, "RuntimeProviderErrorParser does not recognize the Gemini fixture");
+                AssertTrue(String.Equals(error!.ErrorType, "rate_limit_exceeded", StringComparison.Ordinal) || error.HttpStatusCode == 429,
+                    "the Gemini fixture should classify as a rate limit, got type '" + error.ErrorType + "' status " + error.HttpStatusCode);
+                AssertNull(error.ResetUtc, "no reset may be inferred from the Gemini exhaustion error");
+                AssertNull(error.RetryAfterSeconds, "no retry delay may be inferred from the Gemini exhaustion error");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(new TestCaseDescriptor(SuiteId, "custom_contract_fixture_within_plan_bounds", "The Custom contract fixture is schemaVersion 1, at most 64 KiB, 1..32 windows with sane percentages, positive window lengths and resets after capture, and a placeholder account key", (CancellationToken ct) =>
+            {
+                string path = Path.Combine(FixtureDirectory(), "custom-usage-contract.sanitized.json");
+                AssertTrue(new FileInfo(path).Length <= 64 * 1024, "the Custom contract fixture exceeds the 64 KiB stdout cap");
+                CustomUsageContractFixture? contract = JsonSerializer.Deserialize<CustomUsageContractFixture>(File.ReadAllText(path));
+                AssertNotNull(contract, "the Custom contract fixture did not deserialize");
+                AssertEqual(1, contract!.SchemaVersion ?? 0, "Custom contract schemaVersion");
+                AssertNotNull(contract.CapturedUtc, "Custom contract capturedUtc is required");
+                AssertTrue(!String.IsNullOrWhiteSpace(contract.AccountKey) && contract.AccountKey!.Contains("placeholder", StringComparison.Ordinal),
+                    "the Custom contract accountKey must stay a placeholder; the host owns the final HMAC");
+                AssertNotNull(contract.Windows, "Custom contract windows are required");
+                AssertTrue(contract.Windows!.Count >= 1 && contract.Windows.Count <= 32, "Custom contract must carry 1..32 windows, found " + contract.Windows.Count);
+
+                List<string> problems = new List<string>();
+                foreach (CustomUsageWindowFixture window in contract.Windows)
+                {
+                    string label = window.Name ?? "(unnamed)";
+                    if (String.IsNullOrWhiteSpace(window.Name)) problems.Add("a window has no name");
+                    if (window.UsedPercent != null && (Double.IsNaN(window.UsedPercent.Value) || window.UsedPercent < 0 || window.UsedPercent > 100)) problems.Add(label + ": impossible usedPercent");
+                    if (window.Used != null && window.Used < 0) problems.Add(label + ": negative used");
+                    if (window.Limit != null && window.Limit <= 0) problems.Add(label + ": non-positive limit");
+                    if (window.WindowMinutes == null || window.WindowMinutes <= 0) problems.Add(label + ": windowMinutes must be positive");
+                    if (window.ResetsUtc != null && window.ResetsUtc <= contract.CapturedUtc) problems.Add(label + ": resetsUtc is not after capturedUtc");
+                    if (window.ResetsUtc != null && window.ResetsUtc.Value.Offset != TimeSpan.Zero) problems.Add(label + ": resetsUtc is not UTC");
+                }
+
+                AssertTrue(problems.Count == 0, "the Custom contract fixture violates the plan bounds:\n" + String.Join("\n", problems));
+                return Task.CompletedTask;
+            }));
+
             cases.Add(new TestCaseDescriptor(SuiteId, "unavailable_interfaces_are_explicit", "Gemini, Cursor and OpenCode are recorded as unavailable with evidence and retry conditions, and no fixture pretends to be their interface", (CancellationToken ct) =>
             {
                 UsageFixtureManifest manifest = ReadManifest();
@@ -342,6 +524,12 @@ namespace Test.Shared.Suites.Runtimes
         #endregion
 
         #region Private-Methods
+
+        private static bool IsEpochSeconds(long value)
+        {
+            // 2001-09-09 .. 2286-11-20 in seconds; millisecond values are three orders of magnitude larger.
+            return value >= 1000000000L && value < 10000000000L;
+        }
 
         private static string DocPath()
         {
