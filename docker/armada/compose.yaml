@@ -16,6 +16,9 @@ services:
       - ./armada.json:/app/data/settings.json
       - ./db:/app/data/db
       - ./logs:/app/data/logs
+      # Managed battery packs (ARMADA_BATTERY_DIR in the image). A named volume starts with the image's ownership
+      # (UID 1654) and keeps edited and custom packs across upgrades; bundled packs are seeded on every start.
+      - battery-packs:/app/data/battery-packs
       # To use a host checkout as a vessel, mount it and trust its container path in a gitconfig named by
       # GIT_CONFIG_GLOBAL (it is owned by your host user, not the container's UID 1654, and git refuses it
       # otherwise). See docs/DOCKER.md, "Vessels from repositories mounted into the container".
@@ -116,6 +119,7 @@ services:
         condition: service_healthy
 
 volumes:
+  battery-packs:
   prometheus-data:
   loki-data:
   grafana-data:

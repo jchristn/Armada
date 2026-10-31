@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import catalogSource from '../../../Armada.Server/wwwroot/i18n/armada.json?raw';
 import componentSource from './ModelProbeEvaluate.tsx?raw';
 import detailsSource from './evaluations/ModelProbeRunDetails.tsx?raw';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import dialogSource from './ModelEvaluateDialog.tsx?raw';
 import captainDetailSource from '../pages/CaptainDetail.tsx?raw';
 import endpointsSource from '../pages/Endpoints.tsx?raw';
@@ -421,6 +421,24 @@ describe('ModelProbeEvaluate', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Full Evaluate...' }));
     const dialog = await screen.findByRole('dialog');
     await waitFor(() => expect(dialog).toHaveTextContent('Battery packs unavailable.'));
+  });
+
+  it('Manage packs navigates inside the /dashboard basename instead of requesting /battery from the server', async () => {
+    render(
+      <MemoryRouter basename="/dashboard" initialEntries={['/dashboard/captains']}>
+        <Routes>
+          <Route path="captains" element={<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />} />
+          <Route path="battery" element={<p>battery packs page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await openDialog();
+    const link = screen.getByRole('link', { name: 'Manage packs' });
+    // A raw href="/battery" escaped the basename and hit the Admiral's JSON 404.
+    expect(link).toHaveAttribute('href', '/dashboard/battery');
+    await userEvent.click(link);
+    expect(await screen.findByText('battery packs page')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('a model endpoint still starts Full with the server defaults (no dialog)', async () => {

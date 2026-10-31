@@ -25,6 +25,9 @@ RUN dotnet restore src/Armada.Server/Armada.Server.csproj
 COPY src/Armada.Core/ src/Armada.Core/
 COPY src/Armada.Runtimes/ src/Armada.Runtimes/
 COPY src/Armada.Server/ src/Armada.Server/
+# Fixture battery packs (data only). Armada.Server.csproj publishes battery/ next to the binary only when the folder is
+# in the build context; without this copy the image shipped no packs and Evaluate had nothing to run.
+COPY battery/ battery/
 # The React dashboard built above; Armada.Server.csproj publishes it to /app/dashboard so the Admiral
 # serves it at /dashboard (without it the Admiral falls back to the legacy embedded pages).
 COPY --from=dashboard-build /dashboard/dist/ src/Armada.Dashboard/dist/
@@ -47,7 +50,10 @@ COPY --from=build /app .
 # (settings.json, database, logs, docks, repos); bind-mounted host directories must be writable by
 # that UID (for example: sudo chown -R 1654:1654 docker/armada/db docker/armada/logs).
 ENV ARMADA_DATA_DIR=/app/data
-RUN mkdir -p /app/data/db /app/data/logs /app/data/docks /app/data/repos \
+# Managed battery packs: writable by the Admiral (pack management) and seeded on every start from the read-only
+# /app/battery bundle without overwriting edited or custom packs. Mount a volume here to keep them across upgrades.
+ENV ARMADA_BATTERY_DIR=/app/data/battery-packs
+RUN mkdir -p /app/data/db /app/data/logs /app/data/docks /app/data/repos /app/data/battery-packs \
     && chown -R $APP_UID:$APP_UID /app/data
 USER $APP_UID
 

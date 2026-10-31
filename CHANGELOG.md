@@ -6,6 +6,11 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Battery packs in the server image and the Evaluate dialog link
+
+- **The server image ships the fixture battery packs.** `src/Armada.Server/Dockerfile` copied only source projects into the build, so `Armada.Server.csproj` published no `battery/` and Evaluate had no packs. The image now carries them at `/app/battery` and sets `ARMADA_BATTERY_DIR=/app/data/battery-packs`, a writable directory the Admiral seeds with missing bundled packs on every start without overwriting edited or custom packs or recreating deleted ones (`BatteryPackSeeder`, marker `.armada-seeded-packs`). The compose files mount the named volume `battery-packs` there. `Evaluation.BatteryDirectory` is seeded the same way and still takes precedence.
+- **Manage packs link.** The Evaluate dialog's Manage packs link was a raw `href="/battery"` that skipped the router's `/dashboard` basename, so the standalone dashboard proxied it to the Admiral and showed a JSON 404. It is now a router link to `/dashboard/battery`.
+
 - Captain evaluation panels resume existing runs, show live probe and battery progress, expose failures inline, and provide the last ten runs with reports and profile revision links.
 ### Captains list Evaluate action
 

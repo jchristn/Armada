@@ -128,6 +128,14 @@ The image sets `ARMADA_DATA_DIR=/app/data`, so settings, database, logs, docks, 
 under `/app/data`. Only the settings file, `db/`, and `logs/` are bind-mounted; docks and repository clones live in
 the container and are recreated from each vessel's repository URL when the container is replaced.
 
+Fixture battery packs ship in the image at `/app/battery` (read-only). The image also sets
+`ARMADA_BATTERY_DIR=/app/data/battery-packs`, the managed directory that Evaluate and battery pack management use. On
+every start the Admiral copies each bundled pack the directory does not have yet; it never overwrites a pack that is
+already there (edited and custom packs survive upgrades) and records seeded ids in `.armada-seeded-packs`, so a bundled
+pack you delete stays deleted. Compose mounts the named volume `battery-packs` there; without a volume, custom packs
+are lost when the container is replaced (the bundled ones are seeded again). `Evaluation.BatteryDirectory` in
+settings.json takes precedence over the variable.
+
 The proxy stack file is `docker/proxy/compose.yaml`:
 
 ```yaml

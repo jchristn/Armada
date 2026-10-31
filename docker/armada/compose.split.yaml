@@ -26,6 +26,9 @@ services:
       - ./armada.split.json:/app/data/settings.json
       - ./db:/app/data/db
       - ./logs:/app/data/logs
+      # Managed battery packs (ARMADA_BATTERY_DIR in the image). A named volume starts with the image's ownership
+      # (UID 1654) and keeps edited and custom packs across upgrades; bundled packs are seeded on every start.
+      - battery-packs:/app/data/battery-packs
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7890/api/v1/status/health"]
       interval: 5s
@@ -101,6 +104,7 @@ services:
         condition: service_healthy
 
 volumes:
+  battery-packs:
   prometheus-data:
   loki-data:
   grafana-data:

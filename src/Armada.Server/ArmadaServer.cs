@@ -604,6 +604,7 @@ namespace Armada.Server
             // Fixture battery: packs are data under battery/; each task is reset, dispatched as a real mission on the pack's
             // fixture vessel under the ModelEvaluation pipeline, and graded. It shares Evaluate's concurrency gate.
             BatteryPackCatalog batteryCatalog = new BatteryPackCatalog(() => _Settings.Evaluation.BatteryDirectory);
+            SeedBundledBatteryPacks(batteryCatalog);
             BatteryFixtureService batteryFixtures = new BatteryFixtureService(_Database, _Logging, Path.Combine(_Settings.DataDirectory, "battery"));
             AdmiralBatteryTaskDispatcher batteryDispatcher = new AdmiralBatteryTaskDispatcher(_Admiral, _Database, _Logging)
             {
@@ -1100,6 +1101,28 @@ namespace Armada.Server
         #endregion
 
         #region Private-Methods
+
+        private void SeedBundledBatteryPacks(BatteryPackCatalog catalog)
+        {
+            // A managed battery directory (Evaluation.BatteryDirectory or ARMADA_BATTERY_DIR, which the server image sets
+            // under the data directory) is writable and survives upgrades; fill it with the bundled packs it lacks.
+            string? target = catalog.ResolveExplicitDirectory();
+            if (target == null) return;
+            BatteryPackSeedResult seed = BatteryPackSeeder.Seed(BatteryPackCatalog.BundledDirectory(), target);
+            if (seed.SkippedReason != null)
+            {
+                string message = _Header + "battery packs not seeded into " + target + ": " + seed.SkippedReason;
+                if (seed.SkippedReason.StartsWith("Cannot", StringComparison.Ordinal)) _Logging.Warn(message);
+                else _Logging.Info(message);
+                return;
+            }
+
+            _Logging.Info(_Header + "battery directory " + target + ": seeded " + seed.Added.Count + " bundled pack(s)"
+                + (seed.Added.Count > 0 ? " (" + String.Join(", ", seed.Added) + ")" : "")
+                + ", kept " + seed.Preserved.Count + " existing, " + seed.Retired.Count + " deleted by an operator");
+            foreach (string failure in seed.Failed)
+                _Logging.Warn(_Header + "could not seed battery pack " + failure + " (the directory must be writable by the Admiral's user)");
+        }
 
         private void StartMcpListener()
         {
