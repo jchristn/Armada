@@ -7122,7 +7122,9 @@
         "Pack ID: the directory name of the pack in the battery catalog.": "ID del paquete: el nombre del directorio del paquete en el catalogo de baterias.",
         "Reload the battery pack list now.": "Volver a cargar la lista de paquetes de bateria ahora.",
         "Result of the last validation. Hover an invalid pack for its errors.": "Resultado de la ultima validacion. Pase el cursor sobre un paquete no valido para ver sus errores.",
-        "What the pack exercises, for example code or documentation.": "Lo que ejercita el paquete, por ejemplo codigo o documentacion."
+        "What the pack exercises, for example code or documentation.": "Lo que ejercita el paquete, por ejemplo codigo o documentacion.",
+        "Battery Packs": "Paquetes de bateria",
+        "Fixture battery packs a Full captain evaluation runs: validity, language, tasks, and (for admins) manifest and file editing.": "Paquetes de bateria de pruebas que ejecuta una evaluacion completa de capitanes: validez, lenguaje, tareas y (para administradores) edicion del manifiesto y de archivos."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -13191,7 +13193,9 @@
         "Pack ID: the directory name of the pack in the battery catalog.": "包 ID：测试集目录中该包的目录名。",
         "Reload the battery pack list now.": "立即重新加载测试集包列表。",
         "Result of the last validation. Hover an invalid pack for its errors.": "上次验证的结果。将鼠标悬停在无效的包上可查看其错误。",
-        "What the pack exercises, for example code or documentation.": "包所测试的内容，例如代码或文档。"
+        "What the pack exercises, for example code or documentation.": "包所测试的内容，例如代码或文档。",
+        "Battery Packs": "测试集包",
+        "Fixture battery packs a Full captain evaluation runs: validity, language, tasks, and (for admins) manifest and file editing.": "完整船长评估运行的测试集包：有效性、语言、任务，以及（管理员可用的）清单和文件编辑。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -19223,7 +19227,9 @@
         "Pack ID: the directory name of the pack in the battery catalog.": "套件 ID：測試集目錄中該套件的目錄名稱。",
         "Reload the battery pack list now.": "立即重新載入測試集套件清單。",
         "Result of the last validation. Hover an invalid pack for its errors.": "上次驗證的結果。將游標停在無效的套件上可查看其錯誤。",
-        "What the pack exercises, for example code or documentation.": "套件所測試的內容，例如程式碼或文件。"
+        "What the pack exercises, for example code or documentation.": "套件所測試的內容，例如程式碼或文件。",
+        "Battery Packs": "測試集套件",
+        "Fixture battery packs a Full captain evaluation runs: validity, language, tasks, and (for admins) manifest and file editing.": "完整船長評估執行的測試集套件：有效性、語言、任務，以及（管理員可用的）清單與檔案編輯。"
       },
       "sections": {}
     },
@@ -25215,7 +25221,9 @@
         "Pack ID: the directory name of the pack in the battery catalog.": "套件 ID：測試集目錄入面嗰個套件嘅目錄名。",
         "Reload the battery pack list now.": "即刻重新載入測試集套件清單。",
         "Result of the last validation. Hover an invalid pack for its errors.": "上次驗證嘅結果。將游標放喺無效嘅套件上面就睇到佢嘅錯誤。",
-        "What the pack exercises, for example code or documentation.": "套件測試嘅內容，例如程式碼或者文件。"
+        "What the pack exercises, for example code or documentation.": "套件測試嘅內容，例如程式碼或者文件。",
+        "Battery Packs": "測試集套件",
+        "Fixture battery packs a Full captain evaluation runs: validity, language, tasks, and (for admins) manifest and file editing.": "完整船長評估會行嘅測試集套件：有效性、語言、任務，同埋（管理員可用嘅）清單同檔案編輯。"
       },
       "sections": {}
     },
@@ -31223,7 +31231,9 @@
         "Pack ID: the directory name of the pack in the battery catalog.": "パック ID: バッテリーカタログ内のパックのディレクトリ名。",
         "Reload the battery pack list now.": "バッテリーパックの一覧を今すぐ再読み込みします。",
         "Result of the last validation. Hover an invalid pack for its errors.": "前回の検証の結果。無効なパックにカーソルを合わせるとエラーが表示されます。",
-        "What the pack exercises, for example code or documentation.": "パックが検証する対象。たとえばコードやドキュメント。"
+        "What the pack exercises, for example code or documentation.": "パックが検証する対象。たとえばコードやドキュメント。",
+        "Battery Packs": "バッテリーパック",
+        "Fixture battery packs a Full captain evaluation runs: validity, language, tasks, and (for admins) manifest and file editing.": "完全なキャプテン評価で実行するフィクスチャのバッテリーパック: 有効性、言語、タスク、および（管理者向けの）マニフェストとファイルの編集。"
       },
       "sections": {}
     },
@@ -37222,7 +37232,9 @@
         "Pack ID: the directory name of the pack in the battery catalog.": "Paket-ID: der Verzeichnisname des Pakets im Battery-Katalog.",
         "Reload the battery pack list now.": "Die Liste der Battery-Pakete jetzt neu laden.",
         "Result of the last validation. Hover an invalid pack for its errors.": "Ergebnis der letzten Validierung. Bewegen Sie den Mauszeiger ueber ein ungueltiges Paket, um seine Fehler zu sehen.",
-        "What the pack exercises, for example code or documentation.": "Was das Paket prueft, zum Beispiel Code oder Dokumentation."
+        "What the pack exercises, for example code or documentation.": "Was das Paket prueft, zum Beispiel Code oder Dokumentation.",
+        "Battery Packs": "Batteriepakete",
+        "Fixture battery packs a Full captain evaluation runs: validity, language, tasks, and (for admins) manifest and file editing.": "Fixture-Batteriepakete, die eine vollstaendige Captain-Bewertung ausfuehrt: Gueltigkeit, Sprache, Aufgaben und (fuer Admins) Bearbeitung von Manifest und Dateien."
       },
       "sections": {}
     },
@@ -43221,7 +43233,9 @@
         "Pack ID: the directory name of the pack in the battery catalog.": "ID du pack : le nom du repertoire du pack dans le catalogue de batteries.",
         "Reload the battery pack list now.": "Recharger maintenant la liste des packs de batterie.",
         "Result of the last validation. Hover an invalid pack for its errors.": "Resultat de la derniere validation. Survolez un pack non valide pour voir ses erreurs.",
-        "What the pack exercises, for example code or documentation.": "Ce que le pack met a l'epreuve, par exemple du code ou de la documentation."
+        "What the pack exercises, for example code or documentation.": "Ce que le pack met a l'epreuve, par exemple du code ou de la documentation.",
+        "Battery Packs": "Packs de batterie",
+        "Fixture battery packs a Full captain evaluation runs: validity, language, tasks, and (for admins) manifest and file editing.": "Packs de batterie de fixtures executes par une evaluation complete de capitaine : validite, langage, taches et (pour les administrateurs) edition du manifeste et des fichiers."
       },
       "sections": {}
     },
@@ -49220,7 +49234,9 @@
         "Pack ID: the directory name of the pack in the battery catalog.": "ID del pacchetto: il nome della directory del pacchetto nel catalogo delle batterie.",
         "Reload the battery pack list now.": "Ricarica ora l'elenco dei pacchetti di batteria.",
         "Result of the last validation. Hover an invalid pack for its errors.": "Risultato dell'ultima convalida. Passa il mouse su un pacchetto non valido per vederne gli errori.",
-        "What the pack exercises, for example code or documentation.": "Cosa mette alla prova il pacchetto, ad esempio codice o documentazione."
+        "What the pack exercises, for example code or documentation.": "Cosa mette alla prova il pacchetto, ad esempio codice o documentazione.",
+        "Battery Packs": "Pacchetti della batteria",
+        "Fixture battery packs a Full captain evaluation runs: validity, language, tasks, and (for admins) manifest and file editing.": "Pacchetti della batteria di fixture eseguiti da una valutazione completa del capitano: validita, linguaggio, attivita e (per gli amministratori) modifica del manifest e dei file."
       },
       "sections": {}
     }

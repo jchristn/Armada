@@ -34,11 +34,8 @@ export const dashboardItem: NavItem = withIcon(dashboardModelItem);
 
 export const askArmadaItem: NavItem = withIcon(askArmadaModelItem);
 
+// Battery packs are a Captains hub tab (/captains?tab=battery), not a sidebar item; /battery redirects there.
 export const navSections: NavSection[] = navModelSections.map((section) => ({
   ...section,
-  matchers: section.key === 'fleet' ? [...section.matchers, '/battery'] : section.matchers,
-  // The filesystem pack editor is a dashboard administration surface. Keep it out of the mobile nav.
-  items: section.items.flatMap(item => item.to === '/captains'
-    ? [withIcon(item), withIcon({ to: '/battery', label: 'Battery packs', tooltip: 'Manage fixture battery packs', icon: 'captains' })]
-    : [withIcon(item)]),
+  items: section.items.map(withIcon),
 }));
