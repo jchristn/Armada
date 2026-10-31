@@ -192,13 +192,18 @@ namespace Armada.Core.Database.Postgresql.Implementations
 
         #region Private-Methods
 
+        private static string? NullIfEmpty(string? value)
+        {
+            return String.IsNullOrEmpty(value) ? null : value;
+        }
+
         private static void BindRollup(NpgsqlCommand cmd, UsageHourlyRollup rollup)
         {
             PostgresqlCommandHelper.Add(cmd, "@id", rollup.Id);
             PostgresqlCommandHelper.Add(cmd, "@tenant_id", rollup.TenantId);
             PostgresqlCommandHelper.Add(cmd, "@host_id", rollup.HostId);
             PostgresqlCommandHelper.Add(cmd, "@runtime", rollup.Runtime.ToString());
-            PostgresqlCommandHelper.Add(cmd, "@provider", String.IsNullOrEmpty(rollup.Provider) ? null : rollup.Provider);
+            PostgresqlCommandHelper.Add(cmd, "@provider", rollup.Provider ?? String.Empty);
             PostgresqlCommandHelper.Add(cmd, "@account_key", rollup.AccountKey);
             PostgresqlCommandHelper.Add(cmd, "@window_name", rollup.WindowName ?? String.Empty);
             PostgresqlCommandHelper.Add(cmd, "@model", rollup.Model ?? String.Empty);
@@ -229,7 +234,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             rollup.TenantId = reader["tenant_id"].ToString()!;
             rollup.HostId = reader["host_id"].ToString()!;
             rollup.Runtime = PostgresqlCommandHelper.ReadEnum(reader["runtime"], AgentRuntimeEnum.ClaudeCode);
-            rollup.Provider = PostgresqlCommandHelper.ReadString(reader["provider"]);
+            rollup.Provider = NullIfEmpty(PostgresqlCommandHelper.ReadString(reader["provider"]));
             rollup.AccountKey = reader["account_key"].ToString()!;
             rollup.WindowName = PostgresqlCommandHelper.ReadString(reader["window_name"]) ?? String.Empty;
             rollup.Model = PostgresqlCommandHelper.ReadString(reader["model"]) ?? String.Empty;

@@ -2399,7 +2399,7 @@ namespace Armada.Core.Database.Postgresql.Queries
                         tenant_id TEXT NOT NULL,
                         host_id TEXT NOT NULL,
                         runtime TEXT NOT NULL,
-                        provider TEXT,
+                        provider TEXT NOT NULL DEFAULT '',
                         account_key TEXT NOT NULL,
                         window_name TEXT NOT NULL DEFAULT '',
                         model TEXT NOT NULL DEFAULT '',
@@ -2422,7 +2422,7 @@ namespace Armada.Core.Database.Postgresql.Queries
                         coverage_seconds DOUBLE PRECISION,
                         last_update_utc TIMESTAMP NOT NULL
                     );",
-                    @"CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_rollups_natural ON usage_hourly_rollups(tenant_id, host_id, runtime, account_key, window_name, model, hour_utc);",
+                    @"CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_rollups_natural ON usage_hourly_rollups(tenant_id, host_id, runtime, provider, account_key, window_name, model, hour_utc);",
                     @"CREATE INDEX IF NOT EXISTS idx_usage_rollups_tenant_hour ON usage_hourly_rollups(tenant_id, hour_utc);",
                     @"CREATE TABLE IF NOT EXISTS usage_latest_state (
                         id TEXT NOT NULL PRIMARY KEY,

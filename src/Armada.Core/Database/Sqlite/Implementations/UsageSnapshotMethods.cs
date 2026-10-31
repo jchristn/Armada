@@ -362,12 +362,12 @@ namespace Armada.Core.Database.Sqlite.Implementations
             SqliteCommandHelper.Add(cmd, "@runtime", state.Runtime.ToString());
             SqliteCommandHelper.Add(cmd, "@provider", String.IsNullOrEmpty(state.Provider) ? null : state.Provider);
             SqliteCommandHelper.Add(cmd, "@account_key", state.AccountKey);
-            SqliteCommandHelper.Add(cmd, "@last_good_snapshot_id", state.LastGoodSnapshotId);
+            SqliteCommandHelper.Add(cmd, "@last_good_snapshot_id", String.IsNullOrEmpty(state.LastGoodSnapshotId) ? null : state.LastGoodSnapshotId);
             SqliteCommandHelper.AddDate(cmd, "@last_good_captured_utc", state.LastGoodCapturedUtc);
             SqliteCommandHelper.AddDate(cmd, "@last_good_received_utc", state.LastGoodReceivedUtc);
             SqliteCommandHelper.Add(cmd, "@last_good_status", state.LastGoodStatus?.ToString());
             SqliteCommandHelper.Add(cmd, "@last_good_windows_json", state.LastGoodWindowsJson);
-            SqliteCommandHelper.Add(cmd, "@last_error_snapshot_id", state.LastErrorSnapshotId);
+            SqliteCommandHelper.Add(cmd, "@last_error_snapshot_id", String.IsNullOrEmpty(state.LastErrorSnapshotId) ? null : state.LastErrorSnapshotId);
             SqliteCommandHelper.AddDate(cmd, "@last_error_captured_utc", state.LastErrorCapturedUtc);
             SqliteCommandHelper.Add(cmd, "@last_error_status", state.LastErrorStatus?.ToString());
             SqliteCommandHelper.Add(cmd, "@last_error_code", state.LastErrorCode);

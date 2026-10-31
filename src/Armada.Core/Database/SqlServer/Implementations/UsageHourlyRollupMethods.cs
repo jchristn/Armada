@@ -192,13 +192,18 @@ namespace Armada.Core.Database.SqlServer.Implementations
 
         #region Private-Methods
 
+        private static string? NullIfEmpty(string? value)
+        {
+            return String.IsNullOrEmpty(value) ? null : value;
+        }
+
         private static void BindRollup(SqlCommand cmd, UsageHourlyRollup rollup)
         {
             SqlServerCommandHelper.Add(cmd, "@id", rollup.Id);
             SqlServerCommandHelper.Add(cmd, "@tenant_id", rollup.TenantId);
             SqlServerCommandHelper.Add(cmd, "@host_id", rollup.HostId);
             SqlServerCommandHelper.Add(cmd, "@runtime", rollup.Runtime.ToString());
-            SqlServerCommandHelper.Add(cmd, "@provider", String.IsNullOrEmpty(rollup.Provider) ? null : rollup.Provider);
+            SqlServerCommandHelper.Add(cmd, "@provider", rollup.Provider ?? String.Empty);
             SqlServerCommandHelper.Add(cmd, "@account_key", rollup.AccountKey);
             SqlServerCommandHelper.Add(cmd, "@window_name", rollup.WindowName ?? String.Empty);
             SqlServerCommandHelper.Add(cmd, "@model", rollup.Model ?? String.Empty);
@@ -229,7 +234,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             rollup.TenantId = reader["tenant_id"].ToString()!;
             rollup.HostId = reader["host_id"].ToString()!;
             rollup.Runtime = SqlServerCommandHelper.ReadEnum(reader["runtime"], AgentRuntimeEnum.ClaudeCode);
-            rollup.Provider = SqlServerCommandHelper.ReadString(reader["provider"]);
+            rollup.Provider = NullIfEmpty(SqlServerCommandHelper.ReadString(reader["provider"]));
             rollup.AccountKey = reader["account_key"].ToString()!;
             rollup.WindowName = SqlServerCommandHelper.ReadString(reader["window_name"]) ?? String.Empty;
             rollup.Model = SqlServerCommandHelper.ReadString(reader["model"]) ?? String.Empty;

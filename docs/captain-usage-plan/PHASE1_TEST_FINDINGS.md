@@ -260,3 +260,32 @@ checks were not rerun; Armada performs post-stage checks. Provider quota access,
 phase 2 scheduler/process cleanup and phase 7 tenant-service retention remain
 outside this stage. No unsupported adapters were enabled. No known production
 defect blocks this scoped verification.
+
+## Rework 3 worker resolution (judge findings on 7f304c155)
+
+1. Rollup natural key omitted provider (blocking): resolved. Migration 111 (not
+   yet on main, still the next unused number) now declares
+   `usage_hourly_rollups.provider` NOT NULL DEFAULT '' on all four providers and
+   `idx_usage_rollups_natural` is (tenant, host, runtime, provider, account,
+   window, model, hour). The SQLite/PostgreSQL ON CONFLICT targets, the MySQL
+   unique key and the SQL Server MERGE match all include provider, and the
+   upserts no longer rewrite provider on conflict. Null semantics: a null or
+   empty provider is stored as '' (one unknown-provider key, distinct from
+   every named provider; SQL Server would otherwise treat NULLs as equal and
+   SQLite/PostgreSQL/MySQL as distinct) and reads back as null. MySQL rollup
+   runtime narrowed to VARCHAR(32) so the eight-column utf8mb4 key stays under
+   the 3072-byte index limit. Regression: `usage_rollup_natural_key_includes_provider`.
+2. Latest-state COALESCE merge (blocking): resolved. A write with a non-empty
+   LastGoodSnapshotId replaces every last-good field as a unit (null windows
+   and timestamps included); a write without one preserves all of them. The
+   latest-error fields follow the same rule keyed on LastErrorSnapshotId.
+   Empty snapshot ids bind as null. Regression:
+   `usage_latest_state_replaces_last_good_summary_as_a_unit`.
+
+Executed: net10.0 Release build, zero warnings/errors. SQLite
+(Usage.InterfaceEvidence, Services.UsageDefaults, Database.UsagePersistence):
+44 passed, 0 failed. PostgreSQL 17, MySQL 8.4, SQL Server 2022 local containers
+(Services.UsageDefaults, Database.UsagePersistence): 31 passed, 0 failed each.
+Sensitivity: with the previous Armada.Core sources restored, both new cases
+failed on SQLite and SQL Server (`expected <2> but got <1>`; T1 received time
+merged into the T2 summary), 12 of 14 passed.

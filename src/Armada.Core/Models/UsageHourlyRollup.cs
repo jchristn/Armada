@@ -62,7 +62,8 @@ namespace Armada.Core.Models
         public AgentRuntimeEnum Runtime { get; set; } = AgentRuntimeEnum.ClaudeCode;
 
         /// <summary>
-        /// Provider the account belongs to, when known. Descriptive only.
+        /// Provider the account belongs to, when known. Part of the rollup's natural key: rollups that
+        /// differ only by provider are separate rows. Null means unknown and is stored as the empty string.
         /// </summary>
         public string? Provider { get; set; } = null;
 

@@ -399,6 +399,132 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
+            cases.Add(Case("usage_rollup_natural_key_includes_provider", "Rollups that differ only by provider are separate rows; null provider is its own key", TestTags.Positive, async ct =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    DatabaseDriver driver = testDb.Driver;
+
+                    DateTime hour = new DateTime(2026, 10, 27, 14, 0, 0, DateTimeKind.Utc);
+                    UsageHourlyRollup anthropic = NewRollup("ten_usage_provider", hour, 4, 20.0);
+                    anthropic.Provider = "anthropic";
+                    await driver.UsageRollups.UpsertAsync(anthropic, ct).ConfigureAwait(false);
+
+                    UsageHourlyRollup openai = NewRollup("ten_usage_provider", hour, 6, 80.0);
+                    openai.Provider = "openai";
+                    await driver.UsageRollups.UpsertAsync(openai, ct).ConfigureAwait(false);
+
+                    UsageRollupQuery all = new UsageRollupQuery
+                    {
+                        TenantId = "ten_usage_provider",
+                        AccountKey = "usage-hmac-key-rollup",
+                        FromHourUtc = hour,
+                        ToHourUtc = hour.AddHours(1)
+                    };
+                    EnumerationResult<UsageHourlyRollup> page = await driver.UsageRollups.EnumerateAsync(all, ct).ConfigureAwait(false);
+                    AssertEqual(2L, page.TotalRecords, "a different provider is a distinct natural key row");
+
+                    UsageHourlyRollup? anthropicRead = await driver.UsageRollups.ReadAsync(anthropic.Id, "ten_usage_provider", ct).ConfigureAwait(false);
+                    AssertNotNull(anthropicRead, "first provider row kept");
+                    AssertEqual("anthropic", anthropicRead!.Provider, "first provider row not relabeled");
+                    AssertEqual(20.0, anthropicRead.LastPercent, "first provider utilization not overwritten");
+                    AssertEqual(4, anthropicRead.SampleCount, "first provider sample count not overwritten");
+
+                    UsageHourlyRollup? openaiRead = await driver.UsageRollups.ReadAsync(openai.Id, "ten_usage_provider", ct).ConfigureAwait(false);
+                    AssertNotNull(openaiRead, "second provider row stored separately");
+                    AssertEqual("openai", openaiRead!.Provider, "second provider stored");
+                    AssertEqual(80.0, openaiRead.LastPercent, "second provider utilization stored");
+
+                    UsageHourlyRollup unknown = NewRollup("ten_usage_provider", hour, 2, 10.0);
+                    unknown.Provider = null;
+                    await driver.UsageRollups.UpsertAsync(unknown, ct).ConfigureAwait(false);
+                    UsageHourlyRollup unknownAgain = NewRollup("ten_usage_provider", hour, 3, 15.0);
+                    unknownAgain.Provider = String.Empty;
+                    await driver.UsageRollups.UpsertAsync(unknownAgain, ct).ConfigureAwait(false);
+
+                    EnumerationResult<UsageHourlyRollup> withUnknown = await driver.UsageRollups.EnumerateAsync(all, ct).ConfigureAwait(false);
+                    AssertEqual(3L, withUnknown.TotalRecords, "null and empty provider share one unknown-provider row, distinct from named providers");
+                    UsageHourlyRollup? unknownRead = await driver.UsageRollups.ReadAsync(unknown.Id, "ten_usage_provider", ct).ConfigureAwait(false);
+                    AssertNotNull(unknownRead, "unknown-provider row keeps its first id");
+                    AssertNull(unknownRead!.Provider, "unknown provider reads back as null");
+                    AssertEqual(3, unknownRead.SampleCount, "unknown-provider retry replaced the row instead of adding one");
+                    AssertEqual(15.0, unknownRead.LastPercent, "unknown-provider retry replaced utilization");
+
+                    UsageHourlyRollup anthropicRetry = NewRollup("ten_usage_provider", hour, 5, 25.0);
+                    anthropicRetry.Provider = "anthropic";
+                    await driver.UsageRollups.UpsertAsync(anthropicRetry, ct).ConfigureAwait(false);
+                    EnumerationResult<UsageHourlyRollup> afterRetry = await driver.UsageRollups.EnumerateAsync(all, ct).ConfigureAwait(false);
+                    AssertEqual(3L, afterRetry.TotalRecords, "same-provider retry stays idempotent");
+                    UsageHourlyRollup? anthropicRetried = await driver.UsageRollups.ReadAsync(anthropic.Id, "ten_usage_provider", ct).ConfigureAwait(false);
+                    AssertEqual(25.0, anthropicRetried!.LastPercent, "same-provider retry replaced its own row");
+                    UsageHourlyRollup? openaiAfter = await driver.UsageRollups.ReadAsync(openai.Id, "ten_usage_provider", ct).ConfigureAwait(false);
+                    AssertEqual(80.0, openaiAfter!.LastPercent, "other provider untouched by the retry");
+                }
+            }));
+
+            cases.Add(Case("usage_latest_state_replaces_last_good_summary_as_a_unit", "Selecting a new good snapshot replaces every last-good field, including nulls; error-only writes preserve it", TestTags.Positive, async ct =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    DatabaseDriver driver = testDb.Driver;
+
+                    DateTime t1 = new DateTime(2026, 10, 27, 9, 0, 0, DateTimeKind.Utc);
+                    DateTime t2 = new DateTime(2026, 10, 27, 10, 0, 0, DateTimeKind.Utc);
+
+                    UsageLatestState first = NewLatestState();
+                    first.LastGoodSnapshotId = "usg_good_t1";
+                    first.LastGoodCapturedUtc = t1;
+                    first.LastGoodReceivedUtc = t1.AddSeconds(2);
+                    first.LastGoodStatus = UsageSnapshotStatusEnum.Ok;
+                    first.LastGoodWindowsJson = "[{\"name\":\"five_hour\",\"usedPercent\":42}]";
+                    await driver.UsageSnapshots.UpsertLatestStateAsync(first, ct).ConfigureAwait(false);
+
+                    UsageLatestState firstError = NewLatestState();
+                    firstError.LastErrorSnapshotId = "usg_err_1";
+                    firstError.LastErrorCapturedUtc = t1.AddMinutes(10);
+                    firstError.LastErrorStatus = UsageSnapshotStatusEnum.Failed;
+                    firstError.LastErrorCode = "ProbeTimeout";
+                    await driver.UsageSnapshots.UpsertLatestStateAsync(firstError, ct).ConfigureAwait(false);
+
+                    UsageLatestState second = NewLatestState();
+                    second.LastGoodSnapshotId = "usg_good_t2";
+                    second.LastGoodCapturedUtc = t2;
+                    second.LastGoodReceivedUtc = null;
+                    second.LastGoodStatus = UsageSnapshotStatusEnum.Estimated;
+                    second.LastGoodWindowsJson = null;
+                    await driver.UsageSnapshots.UpsertLatestStateAsync(second, ct).ConfigureAwait(false);
+
+                    UsageLatestState? replaced = await driver.UsageSnapshots.ReadLatestStateAsync("ten_usage_latest_unit", "host_1", AgentRuntimeEnum.Codex, "usage-hmac-key-unit", ct).ConfigureAwait(false);
+                    AssertNotNull(replaced, "latest state exists");
+                    AssertEqual("usg_good_t2", replaced!.LastGoodSnapshotId, "new good snapshot selected");
+                    AssertEqual(t2, replaced.LastGoodCapturedUtc, "observation time of the selected snapshot");
+                    AssertNull(replaced.LastGoodReceivedUtc, "null received time of the selected snapshot is not merged with T1's");
+                    AssertEqual(UsageSnapshotStatusEnum.Estimated, replaced.LastGoodStatus, "status of the selected snapshot");
+                    AssertNull(replaced.LastGoodWindowsJson, "unknown windows of the selected snapshot are not merged with T1's windows");
+                    AssertEqual("usg_err_1", replaced.LastErrorSnapshotId, "a good-only write preserves the latest error");
+                    AssertEqual("ProbeTimeout", replaced.LastErrorCode, "a good-only write preserves the latest error code");
+
+                    UsageLatestState secondError = NewLatestState();
+                    secondError.LastGoodSnapshotId = String.Empty;
+                    secondError.LastErrorSnapshotId = "usg_err_2";
+                    secondError.LastErrorCapturedUtc = t2.AddMinutes(10);
+                    secondError.LastErrorStatus = UsageSnapshotStatusEnum.AuthMissing;
+                    secondError.LastErrorCode = null;
+                    await driver.UsageSnapshots.UpsertLatestStateAsync(secondError, ct).ConfigureAwait(false);
+
+                    UsageLatestState? afterError = await driver.UsageSnapshots.ReadLatestStateAsync("ten_usage_latest_unit", "host_1", AgentRuntimeEnum.Codex, "usage-hmac-key-unit", ct).ConfigureAwait(false);
+                    AssertNotNull(afterError, "latest state still exists");
+                    AssertEqual("usg_good_t2", afterError!.LastGoodSnapshotId, "error-only write keeps the last good snapshot");
+                    AssertEqual(t2, afterError.LastGoodCapturedUtc, "error-only write keeps the last good observation time");
+                    AssertNull(afterError.LastGoodReceivedUtc, "error-only write keeps the null received time");
+                    AssertEqual(UsageSnapshotStatusEnum.Estimated, afterError.LastGoodStatus, "error-only write keeps the last good status");
+                    AssertNull(afterError.LastGoodWindowsJson, "error-only write keeps the unknown windows");
+                    AssertEqual("usg_err_2", afterError.LastErrorSnapshotId, "new error selected");
+                    AssertEqual(UsageSnapshotStatusEnum.AuthMissing, afterError.LastErrorStatus, "new error status");
+                    AssertNull(afterError.LastErrorCode, "null code of the new error is not merged with the previous code");
+                }
+            }));
+
             cases.Add(Case("usage_retention_deletes_snapshots_links_and_rollups_by_cutoff", "Retention cutoffs remove old snapshots, links and rollups only", TestTags.Positive, async ct =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
@@ -724,6 +850,17 @@ namespace Test.Shared.Suites.Database
             rollup.MeanPercent = lastPercent - 2.0;
             rollup.OkCount = sampleCount;
             return rollup;
+        }
+
+        private static UsageLatestState NewLatestState()
+        {
+            UsageLatestState state = new UsageLatestState();
+            state.TenantId = "ten_usage_latest_unit";
+            state.HostId = "host_1";
+            state.Runtime = AgentRuntimeEnum.Codex;
+            state.Provider = "openai";
+            state.AccountKey = "usage-hmac-key-unit";
+            return state;
         }
 
         private static DbConnection CreateUpgradeConnection(DatabaseSettings settings)

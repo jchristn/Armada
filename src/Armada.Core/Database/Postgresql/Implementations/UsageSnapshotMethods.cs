@@ -362,12 +362,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
             PostgresqlCommandHelper.Add(cmd, "@runtime", state.Runtime.ToString());
             PostgresqlCommandHelper.Add(cmd, "@provider", String.IsNullOrEmpty(state.Provider) ? null : state.Provider);
             PostgresqlCommandHelper.Add(cmd, "@account_key", state.AccountKey);
-            PostgresqlCommandHelper.Add(cmd, "@last_good_snapshot_id", state.LastGoodSnapshotId);
+            PostgresqlCommandHelper.Add(cmd, "@last_good_snapshot_id", String.IsNullOrEmpty(state.LastGoodSnapshotId) ? null : state.LastGoodSnapshotId);
             PostgresqlCommandHelper.AddDate(cmd, "@last_good_captured_utc", state.LastGoodCapturedUtc);
             PostgresqlCommandHelper.AddDate(cmd, "@last_good_received_utc", state.LastGoodReceivedUtc);
             PostgresqlCommandHelper.Add(cmd, "@last_good_status", state.LastGoodStatus?.ToString());
             PostgresqlCommandHelper.Add(cmd, "@last_good_windows_json", state.LastGoodWindowsJson);
-            PostgresqlCommandHelper.Add(cmd, "@last_error_snapshot_id", state.LastErrorSnapshotId);
+            PostgresqlCommandHelper.Add(cmd, "@last_error_snapshot_id", String.IsNullOrEmpty(state.LastErrorSnapshotId) ? null : state.LastErrorSnapshotId);
             PostgresqlCommandHelper.AddDate(cmd, "@last_error_captured_utc", state.LastErrorCapturedUtc);
             PostgresqlCommandHelper.Add(cmd, "@last_error_status", state.LastErrorStatus?.ToString());
             PostgresqlCommandHelper.Add(cmd, "@last_error_code", state.LastErrorCode);

@@ -2362,7 +2362,7 @@ namespace Armada.Core.Database.SqlServer.Queries
                         tenant_id NVARCHAR(64) NOT NULL,
                         host_id NVARCHAR(64) NOT NULL,
                         runtime NVARCHAR(64) NOT NULL,
-                        provider NVARCHAR(64) NULL,
+                        provider NVARCHAR(64) NOT NULL DEFAULT '',
                         account_key NVARCHAR(128) NOT NULL,
                         window_name NVARCHAR(128) NOT NULL DEFAULT '',
                         model NVARCHAR(255) NOT NULL DEFAULT '',
@@ -2385,7 +2385,7 @@ namespace Armada.Core.Database.SqlServer.Queries
                         coverage_seconds FLOAT NULL,
                         last_update_utc DATETIME2 NOT NULL
                     );",
-                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_usage_rollups_natural') CREATE UNIQUE INDEX idx_usage_rollups_natural ON usage_hourly_rollups(tenant_id, host_id, runtime, account_key, window_name, model, hour_utc);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_usage_rollups_natural') CREATE UNIQUE INDEX idx_usage_rollups_natural ON usage_hourly_rollups(tenant_id, host_id, runtime, provider, account_key, window_name, model, hour_utc);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_usage_rollups_tenant_hour') CREATE INDEX idx_usage_rollups_tenant_hour ON usage_hourly_rollups(tenant_id, hour_utc);",
                     @"IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'usage_latest_state') CREATE TABLE usage_latest_state (
                         id NVARCHAR(64) NOT NULL PRIMARY KEY,

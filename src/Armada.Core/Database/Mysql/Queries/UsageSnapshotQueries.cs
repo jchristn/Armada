@@ -44,15 +44,15 @@ namespace Armada.Core.Database.Mysql.Queries
              @expired_utc, @last_update_utc)
             ON DUPLICATE KEY UPDATE
                 provider = VALUES(provider),
-                last_good_snapshot_id = COALESCE(VALUES(last_good_snapshot_id), last_good_snapshot_id),
-                last_good_captured_utc = COALESCE(VALUES(last_good_captured_utc), last_good_captured_utc),
-                last_good_received_utc = COALESCE(VALUES(last_good_received_utc), last_good_received_utc),
-                last_good_status = COALESCE(VALUES(last_good_status), last_good_status),
-                last_good_windows_json = COALESCE(VALUES(last_good_windows_json), last_good_windows_json),
-                last_error_snapshot_id = COALESCE(VALUES(last_error_snapshot_id), last_error_snapshot_id),
-                last_error_captured_utc = COALESCE(VALUES(last_error_captured_utc), last_error_captured_utc),
-                last_error_status = COALESCE(VALUES(last_error_status), last_error_status),
-                last_error_code = COALESCE(VALUES(last_error_code), last_error_code),
+                last_good_snapshot_id = IF(VALUES(last_good_snapshot_id) IS NULL, last_good_snapshot_id, VALUES(last_good_snapshot_id)),
+                last_good_captured_utc = IF(VALUES(last_good_snapshot_id) IS NULL, last_good_captured_utc, VALUES(last_good_captured_utc)),
+                last_good_received_utc = IF(VALUES(last_good_snapshot_id) IS NULL, last_good_received_utc, VALUES(last_good_received_utc)),
+                last_good_status = IF(VALUES(last_good_snapshot_id) IS NULL, last_good_status, VALUES(last_good_status)),
+                last_good_windows_json = IF(VALUES(last_good_snapshot_id) IS NULL, last_good_windows_json, VALUES(last_good_windows_json)),
+                last_error_snapshot_id = IF(VALUES(last_error_snapshot_id) IS NULL, last_error_snapshot_id, VALUES(last_error_snapshot_id)),
+                last_error_captured_utc = IF(VALUES(last_error_snapshot_id) IS NULL, last_error_captured_utc, VALUES(last_error_captured_utc)),
+                last_error_status = IF(VALUES(last_error_snapshot_id) IS NULL, last_error_status, VALUES(last_error_status)),
+                last_error_code = IF(VALUES(last_error_snapshot_id) IS NULL, last_error_code, VALUES(last_error_code)),
                 expired_utc = VALUES(expired_utc),
                 last_update_utc = VALUES(last_update_utc);";
 
@@ -84,7 +84,6 @@ namespace Armada.Core.Database.Mysql.Queries
              @first_observed_utc, @last_observed_utc, @ok_count, @unsupported_count, @auth_missing_count, @failed_count,
              @estimated_count, @coverage_seconds, @last_update_utc)
             ON DUPLICATE KEY UPDATE
-                provider = VALUES(provider),
                 sample_count = VALUES(sample_count),
                 last_percent = VALUES(last_percent),
                 min_percent = VALUES(min_percent),

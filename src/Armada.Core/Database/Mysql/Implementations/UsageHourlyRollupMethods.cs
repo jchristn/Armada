@@ -186,13 +186,18 @@ namespace Armada.Core.Database.Mysql.Implementations
 
         #region Private-Methods
 
+        private static string? NullIfEmpty(string? value)
+        {
+            return String.IsNullOrEmpty(value) ? null : value;
+        }
+
         private static void BindRollup(MySqlCommand cmd, UsageHourlyRollup rollup)
         {
             MysqlCommandHelper.Add(cmd, "@id", rollup.Id);
             MysqlCommandHelper.Add(cmd, "@tenant_id", rollup.TenantId);
             MysqlCommandHelper.Add(cmd, "@host_id", rollup.HostId);
             MysqlCommandHelper.Add(cmd, "@runtime", rollup.Runtime.ToString());
-            MysqlCommandHelper.Add(cmd, "@provider", String.IsNullOrEmpty(rollup.Provider) ? null : rollup.Provider);
+            MysqlCommandHelper.Add(cmd, "@provider", rollup.Provider ?? String.Empty);
             MysqlCommandHelper.Add(cmd, "@account_key", rollup.AccountKey);
             MysqlCommandHelper.Add(cmd, "@window_name", rollup.WindowName ?? String.Empty);
             MysqlCommandHelper.Add(cmd, "@model", rollup.Model ?? String.Empty);
@@ -223,7 +228,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             rollup.TenantId = reader["tenant_id"].ToString()!;
             rollup.HostId = reader["host_id"].ToString()!;
             rollup.Runtime = MysqlCommandHelper.ReadEnum(reader["runtime"], AgentRuntimeEnum.ClaudeCode);
-            rollup.Provider = MysqlCommandHelper.ReadString(reader["provider"]);
+            rollup.Provider = NullIfEmpty(MysqlCommandHelper.ReadString(reader["provider"]));
             rollup.AccountKey = reader["account_key"].ToString()!;
             rollup.WindowName = MysqlCommandHelper.ReadString(reader["window_name"]) ?? String.Empty;
             rollup.Model = MysqlCommandHelper.ReadString(reader["model"]) ?? String.Empty;

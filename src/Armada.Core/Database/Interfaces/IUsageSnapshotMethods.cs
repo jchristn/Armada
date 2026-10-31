@@ -67,7 +67,11 @@ namespace Armada.Core.Database.Interfaces
         /// Upsert the per-account latest state. The row is keyed by tenant, host, runtime and account key.
         /// The caller decides whether the write updates the last-good summary or the separate latest-error
         /// fields; storage never overwrites the last good state with an error and never refreshes an
-        /// expired row.
+        /// expired row. Each summary is replaced as one unit: when LastGoodSnapshotId is set, every
+        /// last-good field (including null windows and timestamps) is taken from the state, so the summary
+        /// always describes exactly the selected snapshot; when it is null or empty, every stored last-good
+        /// field is preserved unchanged. The latest-error fields follow the same rule keyed on
+        /// LastErrorSnapshotId.
         /// </summary>
         /// <param name="state">State to store.</param>
         /// <param name="token">Cancellation token.</param>

@@ -356,12 +356,12 @@ namespace Armada.Core.Database.Mysql.Implementations
             MysqlCommandHelper.Add(cmd, "@runtime", state.Runtime.ToString());
             MysqlCommandHelper.Add(cmd, "@provider", String.IsNullOrEmpty(state.Provider) ? null : state.Provider);
             MysqlCommandHelper.Add(cmd, "@account_key", state.AccountKey);
-            MysqlCommandHelper.Add(cmd, "@last_good_snapshot_id", state.LastGoodSnapshotId);
+            MysqlCommandHelper.Add(cmd, "@last_good_snapshot_id", String.IsNullOrEmpty(state.LastGoodSnapshotId) ? null : state.LastGoodSnapshotId);
             MysqlCommandHelper.AddDate(cmd, "@last_good_captured_utc", state.LastGoodCapturedUtc);
             MysqlCommandHelper.AddDate(cmd, "@last_good_received_utc", state.LastGoodReceivedUtc);
             MysqlCommandHelper.Add(cmd, "@last_good_status", state.LastGoodStatus?.ToString());
             MysqlCommandHelper.Add(cmd, "@last_good_windows_json", state.LastGoodWindowsJson);
-            MysqlCommandHelper.Add(cmd, "@last_error_snapshot_id", state.LastErrorSnapshotId);
+            MysqlCommandHelper.Add(cmd, "@last_error_snapshot_id", String.IsNullOrEmpty(state.LastErrorSnapshotId) ? null : state.LastErrorSnapshotId);
             MysqlCommandHelper.AddDate(cmd, "@last_error_captured_utc", state.LastErrorCapturedUtc);
             MysqlCommandHelper.Add(cmd, "@last_error_status", state.LastErrorStatus?.ToString());
             MysqlCommandHelper.Add(cmd, "@last_error_code", state.LastErrorCode);

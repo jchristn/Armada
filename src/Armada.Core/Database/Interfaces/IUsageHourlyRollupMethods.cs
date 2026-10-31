@@ -14,8 +14,11 @@ namespace Armada.Core.Database.Interfaces
     public interface IUsageHourlyRollupMethods
     {
         /// <summary>
-        /// Insert or update the rollup for its natural key. Re-running the same rollup replaces the row
-        /// with the recomputed values; nothing is accumulated twice.
+        /// Insert or update the rollup for its natural key: tenant, host, runtime, provider, account key,
+        /// window name, model and UTC hour. Re-running the same rollup replaces the row with the
+        /// recomputed values; nothing is accumulated twice. A null or empty provider is stored as the
+        /// empty string and is its own key value (an unknown provider), distinct from every named
+        /// provider on all four database providers; it reads back as null.
         /// </summary>
         /// <param name="rollup">Rollup to store.</param>
         /// <param name="token">Cancellation token.</param>

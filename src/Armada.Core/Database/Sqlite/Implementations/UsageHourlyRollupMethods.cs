@@ -192,13 +192,18 @@ namespace Armada.Core.Database.Sqlite.Implementations
 
         #region Private-Methods
 
+        private static string? NullIfEmpty(string? value)
+        {
+            return String.IsNullOrEmpty(value) ? null : value;
+        }
+
         private static void BindRollup(SqliteCommand cmd, UsageHourlyRollup rollup)
         {
             SqliteCommandHelper.Add(cmd, "@id", rollup.Id);
             SqliteCommandHelper.Add(cmd, "@tenant_id", rollup.TenantId);
             SqliteCommandHelper.Add(cmd, "@host_id", rollup.HostId);
             SqliteCommandHelper.Add(cmd, "@runtime", rollup.Runtime.ToString());
-            SqliteCommandHelper.Add(cmd, "@provider", String.IsNullOrEmpty(rollup.Provider) ? null : rollup.Provider);
+            SqliteCommandHelper.Add(cmd, "@provider", rollup.Provider ?? String.Empty);
             SqliteCommandHelper.Add(cmd, "@account_key", rollup.AccountKey);
             SqliteCommandHelper.Add(cmd, "@window_name", rollup.WindowName ?? String.Empty);
             SqliteCommandHelper.Add(cmd, "@model", rollup.Model ?? String.Empty);
@@ -229,7 +234,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             rollup.TenantId = reader["tenant_id"].ToString()!;
             rollup.HostId = reader["host_id"].ToString()!;
             rollup.Runtime = SqliteCommandHelper.ReadEnum(reader["runtime"], AgentRuntimeEnum.ClaudeCode);
-            rollup.Provider = SqliteCommandHelper.ReadString(reader["provider"]);
+            rollup.Provider = NullIfEmpty(SqliteCommandHelper.ReadString(reader["provider"]));
             rollup.AccountKey = reader["account_key"].ToString()!;
             rollup.WindowName = SqliteCommandHelper.ReadString(reader["window_name"]) ?? String.Empty;
             rollup.Model = SqliteCommandHelper.ReadString(reader["model"]) ?? String.Empty;

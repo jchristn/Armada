@@ -37,15 +37,15 @@ namespace Armada.Core.Database.SqlServer.Queries
             ON target.tenant_id = source.tenant_id AND target.host_id = source.host_id AND target.runtime = source.runtime AND target.account_key = source.account_key
             WHEN MATCHED THEN UPDATE SET
                 provider = @provider,
-                last_good_snapshot_id = ISNULL(@last_good_snapshot_id, target.last_good_snapshot_id),
-                last_good_captured_utc = ISNULL(@last_good_captured_utc, target.last_good_captured_utc),
-                last_good_received_utc = ISNULL(@last_good_received_utc, target.last_good_received_utc),
-                last_good_status = ISNULL(@last_good_status, target.last_good_status),
-                last_good_windows_json = ISNULL(@last_good_windows_json, target.last_good_windows_json),
-                last_error_snapshot_id = ISNULL(@last_error_snapshot_id, target.last_error_snapshot_id),
-                last_error_captured_utc = ISNULL(@last_error_captured_utc, target.last_error_captured_utc),
-                last_error_status = ISNULL(@last_error_status, target.last_error_status),
-                last_error_code = ISNULL(@last_error_code, target.last_error_code),
+                last_good_snapshot_id = CASE WHEN @last_good_snapshot_id IS NULL THEN target.last_good_snapshot_id ELSE @last_good_snapshot_id END,
+                last_good_captured_utc = CASE WHEN @last_good_snapshot_id IS NULL THEN target.last_good_captured_utc ELSE @last_good_captured_utc END,
+                last_good_received_utc = CASE WHEN @last_good_snapshot_id IS NULL THEN target.last_good_received_utc ELSE @last_good_received_utc END,
+                last_good_status = CASE WHEN @last_good_snapshot_id IS NULL THEN target.last_good_status ELSE @last_good_status END,
+                last_good_windows_json = CASE WHEN @last_good_snapshot_id IS NULL THEN target.last_good_windows_json ELSE @last_good_windows_json END,
+                last_error_snapshot_id = CASE WHEN @last_error_snapshot_id IS NULL THEN target.last_error_snapshot_id ELSE @last_error_snapshot_id END,
+                last_error_captured_utc = CASE WHEN @last_error_snapshot_id IS NULL THEN target.last_error_captured_utc ELSE @last_error_captured_utc END,
+                last_error_status = CASE WHEN @last_error_snapshot_id IS NULL THEN target.last_error_status ELSE @last_error_status END,
+                last_error_code = CASE WHEN @last_error_snapshot_id IS NULL THEN target.last_error_code ELSE @last_error_code END,
                 expired_utc = @expired_utc,
                 last_update_utc = @last_update_utc
             WHEN NOT MATCHED THEN INSERT
@@ -77,13 +77,12 @@ namespace Armada.Core.Database.SqlServer.Queries
         internal const string MembershipDeleteByTenant = "DELETE FROM usage_account_memberships WHERE tenant_id = @tenant_id;";
 
         internal const string RollupUpsert = @"MERGE usage_hourly_rollups WITH (HOLDLOCK) AS target
-            USING (SELECT @tenant_id AS tenant_id, @host_id AS host_id, @runtime AS runtime, @account_key AS account_key,
+            USING (SELECT @tenant_id AS tenant_id, @host_id AS host_id, @runtime AS runtime, @provider AS provider, @account_key AS account_key,
                           @window_name AS window_name, @model AS model, @hour_utc AS hour_utc) AS source
             ON target.tenant_id = source.tenant_id AND target.host_id = source.host_id AND target.runtime = source.runtime
-               AND target.account_key = source.account_key AND target.window_name = source.window_name
+               AND target.provider = source.provider AND target.account_key = source.account_key AND target.window_name = source.window_name
                AND target.model = source.model AND target.hour_utc = source.hour_utc
             WHEN MATCHED THEN UPDATE SET
-                provider = @provider,
                 sample_count = @sample_count,
                 last_percent = @last_percent,
                 min_percent = @min_percent,

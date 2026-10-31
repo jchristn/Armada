@@ -43,15 +43,15 @@ namespace Armada.Core.Database.Postgresql.Queries
              @expired_utc, @last_update_utc)
             ON CONFLICT(tenant_id, host_id, runtime, account_key) DO UPDATE SET
                 provider = excluded.provider,
-                last_good_snapshot_id = COALESCE(excluded.last_good_snapshot_id, usage_latest_state.last_good_snapshot_id),
-                last_good_captured_utc = COALESCE(excluded.last_good_captured_utc, usage_latest_state.last_good_captured_utc),
-                last_good_received_utc = COALESCE(excluded.last_good_received_utc, usage_latest_state.last_good_received_utc),
-                last_good_status = COALESCE(excluded.last_good_status, usage_latest_state.last_good_status),
-                last_good_windows_json = COALESCE(excluded.last_good_windows_json, usage_latest_state.last_good_windows_json),
-                last_error_snapshot_id = COALESCE(excluded.last_error_snapshot_id, usage_latest_state.last_error_snapshot_id),
-                last_error_captured_utc = COALESCE(excluded.last_error_captured_utc, usage_latest_state.last_error_captured_utc),
-                last_error_status = COALESCE(excluded.last_error_status, usage_latest_state.last_error_status),
-                last_error_code = COALESCE(excluded.last_error_code, usage_latest_state.last_error_code),
+                last_good_snapshot_id = CASE WHEN excluded.last_good_snapshot_id IS NULL THEN usage_latest_state.last_good_snapshot_id ELSE excluded.last_good_snapshot_id END,
+                last_good_captured_utc = CASE WHEN excluded.last_good_snapshot_id IS NULL THEN usage_latest_state.last_good_captured_utc ELSE excluded.last_good_captured_utc END,
+                last_good_received_utc = CASE WHEN excluded.last_good_snapshot_id IS NULL THEN usage_latest_state.last_good_received_utc ELSE excluded.last_good_received_utc END,
+                last_good_status = CASE WHEN excluded.last_good_snapshot_id IS NULL THEN usage_latest_state.last_good_status ELSE excluded.last_good_status END,
+                last_good_windows_json = CASE WHEN excluded.last_good_snapshot_id IS NULL THEN usage_latest_state.last_good_windows_json ELSE excluded.last_good_windows_json END,
+                last_error_snapshot_id = CASE WHEN excluded.last_error_snapshot_id IS NULL THEN usage_latest_state.last_error_snapshot_id ELSE excluded.last_error_snapshot_id END,
+                last_error_captured_utc = CASE WHEN excluded.last_error_snapshot_id IS NULL THEN usage_latest_state.last_error_captured_utc ELSE excluded.last_error_captured_utc END,
+                last_error_status = CASE WHEN excluded.last_error_snapshot_id IS NULL THEN usage_latest_state.last_error_status ELSE excluded.last_error_status END,
+                last_error_code = CASE WHEN excluded.last_error_snapshot_id IS NULL THEN usage_latest_state.last_error_code ELSE excluded.last_error_code END,
                 expired_utc = excluded.expired_utc,
                 last_update_utc = excluded.last_update_utc;";
 
@@ -82,8 +82,7 @@ namespace Armada.Core.Database.Postgresql.Queries
              @sample_count, @last_percent, @min_percent, @max_percent, @mean_percent, @last_used, @last_limit, @last_reset_utc,
              @first_observed_utc, @last_observed_utc, @ok_count, @unsupported_count, @auth_missing_count, @failed_count,
              @estimated_count, @coverage_seconds, @last_update_utc)
-            ON CONFLICT(tenant_id, host_id, runtime, account_key, window_name, model, hour_utc) DO UPDATE SET
-                provider = excluded.provider,
+            ON CONFLICT(tenant_id, host_id, runtime, provider, account_key, window_name, model, hour_utc) DO UPDATE SET
                 sample_count = excluded.sample_count,
                 last_percent = excluded.last_percent,
                 min_percent = excluded.min_percent,

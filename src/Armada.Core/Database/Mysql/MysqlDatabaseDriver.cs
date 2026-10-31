@@ -1401,8 +1401,8 @@ namespace Armada.Core.Database.Mysql
                         id VARCHAR(64) NOT NULL PRIMARY KEY,
                         tenant_id VARCHAR(64) NOT NULL,
                         host_id VARCHAR(64) NOT NULL,
-                        runtime VARCHAR(64) NOT NULL,
-                        provider VARCHAR(64),
+                        runtime VARCHAR(32) NOT NULL,
+                        provider VARCHAR(64) NOT NULL DEFAULT '',
                         account_key VARCHAR(128) NOT NULL,
                         window_name VARCHAR(128) NOT NULL DEFAULT '',
                         model VARCHAR(255) NOT NULL DEFAULT '',
@@ -1425,7 +1425,7 @@ namespace Armada.Core.Database.Mysql
                         coverage_seconds DOUBLE NULL,
                         last_update_utc DATETIME(6) NOT NULL
                     );",
-                    @"CREATE UNIQUE INDEX idx_usage_rollups_natural ON usage_hourly_rollups(tenant_id, host_id, runtime, account_key, window_name, model, hour_utc);",
+                    @"CREATE UNIQUE INDEX idx_usage_rollups_natural ON usage_hourly_rollups(tenant_id, host_id, runtime, provider, account_key, window_name, model, hour_utc);",
                     @"CREATE INDEX idx_usage_rollups_tenant_hour ON usage_hourly_rollups(tenant_id, hour_utc);",
                     @"CREATE TABLE IF NOT EXISTS usage_latest_state (
                         id VARCHAR(64) NOT NULL PRIMARY KEY,

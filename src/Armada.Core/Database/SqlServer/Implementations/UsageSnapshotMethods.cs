@@ -362,12 +362,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
             SqlServerCommandHelper.Add(cmd, "@runtime", state.Runtime.ToString());
             SqlServerCommandHelper.Add(cmd, "@provider", String.IsNullOrEmpty(state.Provider) ? null : state.Provider);
             SqlServerCommandHelper.Add(cmd, "@account_key", state.AccountKey);
-            SqlServerCommandHelper.Add(cmd, "@last_good_snapshot_id", state.LastGoodSnapshotId);
+            SqlServerCommandHelper.Add(cmd, "@last_good_snapshot_id", String.IsNullOrEmpty(state.LastGoodSnapshotId) ? null : state.LastGoodSnapshotId);
             SqlServerCommandHelper.AddDate(cmd, "@last_good_captured_utc", state.LastGoodCapturedUtc);
             SqlServerCommandHelper.AddDate(cmd, "@last_good_received_utc", state.LastGoodReceivedUtc);
             SqlServerCommandHelper.Add(cmd, "@last_good_status", state.LastGoodStatus?.ToString());
             SqlServerCommandHelper.Add(cmd, "@last_good_windows_json", state.LastGoodWindowsJson);
-            SqlServerCommandHelper.Add(cmd, "@last_error_snapshot_id", state.LastErrorSnapshotId);
+            SqlServerCommandHelper.Add(cmd, "@last_error_snapshot_id", String.IsNullOrEmpty(state.LastErrorSnapshotId) ? null : state.LastErrorSnapshotId);
             SqlServerCommandHelper.AddDate(cmd, "@last_error_captured_utc", state.LastErrorCapturedUtc);
             SqlServerCommandHelper.Add(cmd, "@last_error_status", state.LastErrorStatus?.ToString());
             SqlServerCommandHelper.Add(cmd, "@last_error_code", state.LastErrorCode);
