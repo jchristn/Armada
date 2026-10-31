@@ -111,8 +111,10 @@ Provenance labels used below:
   - A window has required `usedPercent` (int32) plus nullable `windowDurationMins` (int64) and
     nullable `resetsAt` (int64). Because the duration is data, neither window may be assumed to be
     5 hours or 7 days.
-  - `Account/rateLimits/updatedNotification` pushes the same snapshot during an app-server session,
-    which is a free passive source whenever Armada already holds such a session.
+  - `account/rateLimits/updated` is the wire method for passive snapshot pushes during an
+    app-server session. `Account/rateLimits/updatedNotification` is the schema title, not a
+    JSON-RPC method. The generated `ServerNotification` method enum confirms the exact wire name.
+    This is a free passive source whenever Armada already holds such a session.
 - Fields: utilization percent per window, window duration, per-model or per-limit identifiers,
   plan type, credit balance, spend-control state.
 - Timestamps: `resetsAt` is absolute Unix epoch seconds; `windowDurationMins` is a duration, not a
@@ -273,7 +275,7 @@ runtime with no usage capture adapter, and the disabled framework must not depen
 |---|---|---|
 | Is the installed Claude OAuth client permitted to read its usage endpoint? | Unproven. The endpoint path and window names exist in the 2.1.316 binary, but permission, request shape and response shape need an opt-in authenticated read. | The endpoint may refuse or change without notice. |
 | Which credential profile selectors identify shared accounts? | Not answered. Claude exposes only `auth status` locally, Codex exposes `account/read` and a nullable `accountId`, and neither was called. | Account identity stays host-local and HMAC-derived in phase 1. |
-| Does current Codex exec emit limit events? | Unproven for exec. The app-server `account/rateLimits/read` request and the `account/rateLimits/updatedNotification` push are verified from the installed schema. | The session-log fallback stays undocumented and disabled. |
+| Does current Codex exec emit limit events? | Unproven for exec. The app-server `account/rateLimits/read` request and the `account/rateLimits/updated` push are verified from the installed schema. | The session-log fallback stays undocumented and disabled. |
 | Where can ApiEndpoint and Mux HTTP headers be observed before stream disposal? | ApiEndpoint: in a DelegatingHandler around the PolyPrompt transport, with the ProviderDefault gap noted above. Mux: not observable by Armada at all. | Phase 3 needs an attached capture proving headers are seen before disposal. |
 | Gemini budget counters and model bucket mappings | Not available. Only an operator-configured budget estimate and an exhaustion error. | Estimation stays labeled and cannot quarantine. |
 | Cost currencies | Only mux `costUsd` is defined; everything else is null or estimated. | No conversion, no subscription charge claims. |

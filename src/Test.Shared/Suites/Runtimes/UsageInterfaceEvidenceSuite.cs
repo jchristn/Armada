@@ -154,6 +154,19 @@ namespace Test.Shared.Suites.Runtimes
                 return Task.CompletedTask;
             }));
 
+            cases.Add(new TestCaseDescriptor(SuiteId, "codex_notification_uses_exact_wire_method", "Codex passive updates use the installed schema's method enum rather than its descriptive title", (CancellationToken ct) =>
+            {
+                string body = ReadDocSections()["Codex"];
+                AssertContains("`account/rateLimits/updated` is the wire method", body);
+                AssertContains("`Account/rateLimits/updatedNotification` is the schema title", body);
+                AssertContains("`account/rateLimits/read`", body);
+                AssertFalse(body.Contains("`Account/rateLimits/updatedNotification` pushes", StringComparison.Ordinal), "the schema title must not be documented as a wire method");
+                string document = File.ReadAllText(DocPath());
+                AssertFalse(document.Contains("`account/rateLimits/updatedNotification`", StringComparison.Ordinal), "the adjacent summary must not invent a Notification-suffixed wire method");
+                AssertContains("`account/rateLimits/updated` push", document);
+                return Task.CompletedTask;
+            }));
+
             cases.Add(new TestCaseDescriptor(SuiteId, "fixtures_are_inventoried_and_sanitized", "Every usage fixture is listed in manifest.json with a known provenance, a sanitized name and no credential-shaped content", (CancellationToken ct) =>
             {
                 string directory = FixtureDirectory();
