@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { getTokenUsage, listCaptains } from '../api/client';
+import { ErrorState } from '../components/shared/StateBlocks';
 import type { Captain, TokenUsageSummaryResult } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
 import { copyOrDownloadSvgImage } from '../lib/chartImage';
@@ -63,6 +64,8 @@ export default function TokenUsage() {
   const [shape, setShape] = useState<Shape>('bars');
   const [data, setData] = useState<TokenUsageSummaryResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [copiedTime, setCopiedTime] = useState<CopyState>('idle');
   const [copiedModel, setCopiedModel] = useState<CopyState>('idle');
@@ -97,22 +100,31 @@ export default function TokenUsage() {
   }, [tooltip]);
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
     const end = new Date();
     const start = new Date(end.getTime() - range.hours * 3600000);
     setLoading(true);
-    getTokenUsage({ fromUtc: start.toISOString(), toUtc: end.toISOString(), bucketMinutes: range.stepMinutes, modelLimit: MODEL_LIMIT, harborId: harborId || undefined, captainId: captainId || undefined, model: modelFilter || undefined })
+    getTokenUsage({ fromUtc: start.toISOString(), toUtc: end.toISOString(), bucketMinutes: range.stepMinutes, modelLimit: MODEL_LIMIT, harborId: harborId || undefined, captainId: captainId || undefined, model: modelFilter || undefined }, { signal: controller.signal })
       .then((result) => {
         if (cancelled) return;
         setData(result);
+        setLoadError(null);
         // Remember every model seen, so the picker still lists the others while one model is selected.
         const seen = (result?.byModel ?? []).map(m => m.model).filter(m => Boolean(m) && m !== OTHER_MODELS_KEY);
         setKnownModels(prev => (seen.every(m => prev.includes(m)) ? prev : [...new Set([...prev, ...seen])].sort()));
       })
-      .catch(() => { if (!cancelled) setData(null); })
+      .catch(() => {
+        if (cancelled) return;
+        setData(null);
+        setLoadError(t('Could not load token usage.'));
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [range.hours, range.stepMinutes, timeRange, harborId, captainId, modelFilter]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [range.hours, range.stepMinutes, timeRange, harborId, captainId, modelFilter, reloadKey]);
 
   const bucketTimestamps = useMemo<number[]>(
     () => (data?.buckets || []).map(b => new Date(b.bucketStartUtc).getTime()),
@@ -265,6 +277,10 @@ export default function TokenUsage() {
 
       <TokenActivityHeatmap harborId={harborId} captainId={captainId} model={modelFilter} spec={heatmapSpec} />
 
+      {loadError && (
+        <ErrorState message={loadError} onRetry={() => setReloadKey((key) => key + 1)} />
+      )}
+
       {/* Chart 1 -- Usage over time. Title + axis labels live inside the SVG so the copied image includes them. */}
       <div className="token-usage-chart-card">
         <div className="token-usage-chart-header">
@@ -272,7 +288,7 @@ export default function TokenUsage() {
         </div>
         {loading ? (
           <div className="mission-history-empty">{t('Loading token usage...')}</div>
-        ) : !hasTimeData ? (
+        ) : loadError ? null : !hasTimeData ? (
           <div className="mission-history-empty">{t('No token usage for this time range')}</div>
         ) : (
           <>
@@ -343,7 +359,7 @@ export default function TokenUsage() {
         </div>
         {loading ? (
           <div className="mission-history-empty">{t('Loading token usage...')}</div>
-        ) : !hasModelData ? (
+        ) : loadError ? null : !hasModelData ? (
           <div className="mission-history-empty">{t('No token usage for this time range')}</div>
         ) : (
           <>

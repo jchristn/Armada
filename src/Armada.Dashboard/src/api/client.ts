@@ -1352,14 +1352,14 @@ export const getMissionHistory = (params?: { fromUtc?: string; toUtc?: string; b
     ),
   } : undefined)}`);
 /** Token-usage summary: at most 1000 buckets (a larger window is a 400); byModel lists the modelLimit top models and otherModels sums the rest. */
-export const getTokenUsage = (params?: { fromUtc?: string; toUtc?: string; bucketMinutes?: number; modelLimit?: number; model?: string; runtime?: string; source?: string; sourceId?: string; vesselId?: string; captainId?: string; harborId?: string }) =>
+export const getTokenUsage = (params?: { fromUtc?: string; toUtc?: string; bucketMinutes?: number; modelLimit?: number; model?: string; runtime?: string; source?: string; sourceId?: string; vesselId?: string; captainId?: string; harborId?: string }, opts?: RequestOptions) =>
   get<TokenUsageSummaryResult>(`/api/v1/token-usage/summary${buildQuery(params ? {
     filters: Object.fromEntries(
       Object.entries(params)
         .filter(([, value]) => value !== undefined && value !== null && value !== '')
         .map(([key, value]) => [key, String(value)]),
     ),
-  } : undefined)}`);
+  } : undefined)}`, opts);
 export const getMissionLandingPreview = (id: string) => get<LandingPreviewResult>(`/api/v1/missions/${encodeURIComponent(id)}/landing-preview`);
 export const getMissionGitHubPullRequest = (id: string) => get<GitHubPullRequestDetail>(`/api/v1/missions/${encodeURIComponent(id)}/github/pull-request`);
 /** One page (1 to 100, GitHub's largest page) of the mission pull request's reviews; newest first unless order is CreatedAscending. */
