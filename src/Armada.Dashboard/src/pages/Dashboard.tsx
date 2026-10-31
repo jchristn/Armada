@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getStatus,
@@ -138,6 +138,37 @@ export default function Dashboard() {
     }
   }, [t, statusFilter, vesselFilter, captainFilter]);
 
+  const loadAllRef = useRef(loadAll);
+  loadAllRef.current = loadAll;
+  const homeLoadRef = useRef<Promise<void> | null>(null);
+  const homeLoadPendingRef = useRef(false);
+  const homeLoadStartedRef = useRef(false);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+
+  // One home load at a time. A request that arrives while a load is running schedules one follow-up.
+  // The first load does not bump the history signal; the chart fetches on its own mount.
+  const refreshHome = useCallback((): Promise<void> => {
+    if (homeLoadRef.current) {
+      homeLoadPendingRef.current = true;
+      return homeLoadRef.current;
+    }
+
+    const run = async () => {
+      do {
+        homeLoadPendingRef.current = false;
+        if (homeLoadStartedRef.current) setHistoryRefresh((value) => value + 1);
+        else homeLoadStartedRef.current = true;
+        await loadAllRef.current();
+      } while (homeLoadPendingRef.current);
+    };
+
+    const promise = run().finally(() => {
+      if (homeLoadRef.current === promise) homeLoadRef.current = null;
+    });
+    homeLoadRef.current = promise;
+    return promise;
+  }, []);
+
   // Name maps and filter pickers: every vessel, captain, and fleet (all pages). Loaded on mount and with the
   // 30 second poll rather than on every WebSocket message, since a large tenant needs several pages.
   const loadReference = useCallback(async () => {
@@ -152,8 +183,8 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+    void refreshHome();
+  }, [loadAll, refreshHome]);
 
   useEffect(() => {
     void loadReference();
@@ -163,19 +194,12 @@ export default function Dashboard() {
 
   // Auto-refresh on WebSocket messages
   useEffect(() => {
-    const unsubscribe = subscribe((_msg: WebSocketMessage) => {
-      loadAll();
+    return subscribe((_msg: WebSocketMessage) => {
+      void refreshHome();
     });
-    return unsubscribe;
-  }, [subscribe, loadAll]);
+  }, [subscribe, refreshHome]);
 
-  // Polling fallback: refresh every 30 seconds
-  useEffect(() => {
-    const timer = setInterval(loadAll, 30000);
-    return () => clearInterval(timer);
-  }, [loadAll]);
-
-  const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('dashboard', loadAll);
+  const { seconds: refreshSeconds, setSeconds: setRefreshSeconds } = useAutoRefresh('dashboard', refreshHome);
 
   // Compute alerts from status data
   const alerts = useMemo(() => dashboardAlerts(status), [status]);
@@ -190,7 +214,7 @@ export default function Dashboard() {
   const handleDeleteMission = async (id: string) => {
     try {
       await deleteMission(id);
-      loadAll();
+      void refreshHome();
     } catch {
       setError(t('Failed to delete mission.'));
     }
@@ -241,7 +265,7 @@ export default function Dashboard() {
               + {t('Voyage')}
             </button>
             <AutoRefreshSelect seconds={refreshSeconds} onChange={setRefreshSeconds} />
-            <RefreshButton onRefresh={loadAll} title="Reload every panel on this page from the server now." />
+            <RefreshButton onRefresh={refreshHome} title="Reload every panel on this page from the server now." />
           </>
         )}
       />
@@ -392,7 +416,7 @@ export default function Dashboard() {
       <HealthKpiCards />
 
       {/* Mission History Chart */}
-      <MissionHistoryChart vessels={vessels} fleets={fleets} onRefresh={loadAll} />
+      <MissionHistoryChart vessels={vessels} fleets={fleets} onRefresh={refreshHome} refreshSignal={historyRefresh} />
 
       {/* Voyage Progress */}
       {activeVoyages.rows.length > 0 && (
@@ -570,7 +594,7 @@ export default function Dashboard() {
                       }] : canRestartFromHome(m.status) ? [{
                         label: 'Restart',
                         title: 'Reset a Failed or Cancelled mission to Pending so it is dispatched again. Clears its captain, branch, pull request and timing.',
-                        onClick: async () => { try { await restartMission(m.id); loadAll(); } catch { /* ignore */ } },
+                        onClick: async () => { try { await restartMission(m.id); void refreshHome(); } catch { /* ignore */ } },
                       }] : []),
                       {
                         label: 'Delete',
