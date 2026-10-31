@@ -139,7 +139,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" };
                 }
 
-                string? explicitProfileId = NormalizeEmpty(req.Query.GetValueOrDefault("projectProfileId"));
+                string? explicitProfileId = NormalizeEmpty(QueryValueReader.Read(req.Query, "projectProfileId"));
                 ProjectProfileResolutionResult resolved = await _projectProfiles.ResolveWithModeForVesselAsync(ctx, vessel, explicitProfileId).ConfigureAwait(false);
                 if (resolved.Profile == null)
                 {
@@ -364,22 +364,22 @@ namespace Armada.Server.Routes
 
         private static void ApplyQuerystringOverrides(ApiRequest req, ProjectProfileQuery query)
         {
-            if (int.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
+            if (int.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int pageNumber))
                 query.PageNumber = Math.Max(1, pageNumber);
-            if (int.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
+            if (int.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int pageSize))
                 query.PageSize = pageSize;
-            if (Enum.TryParse(req.Query.GetValueOrDefault("scope"), true, out ProjectProfileScopeEnum scope))
+            if (Enum.TryParse(QueryValueReader.Read(req.Query, "scope"), true, out ProjectProfileScopeEnum scope))
                 query.Scope = scope;
-            if (DateTime.TryParse(req.Query.GetValueOrDefault("fromUtc"), out DateTime fromUtc))
+            if (DateTime.TryParse(QueryValueReader.Read(req.Query, "fromUtc"), out DateTime fromUtc))
                 query.FromUtc = fromUtc.ToUniversalTime();
-            if (DateTime.TryParse(req.Query.GetValueOrDefault("toUtc"), out DateTime toUtc))
+            if (DateTime.TryParse(QueryValueReader.Read(req.Query, "toUtc"), out DateTime toUtc))
                 query.ToUtc = toUtc.ToUniversalTime();
 
-            query.FleetId = NormalizeEmpty(req.Query.GetValueOrDefault("fleetId")) ?? query.FleetId;
-            query.VesselId = NormalizeEmpty(req.Query.GetValueOrDefault("vesselId")) ?? query.VesselId;
-            query.Search = NormalizeEmpty(req.Query.GetValueOrDefault("search")) ?? query.Search;
+            query.FleetId = NormalizeEmpty(QueryValueReader.Read(req.Query, "fleetId")) ?? query.FleetId;
+            query.VesselId = NormalizeEmpty(QueryValueReader.Read(req.Query, "vesselId")) ?? query.VesselId;
+            query.Search = NormalizeEmpty(QueryValueReader.Read(req.Query, "search")) ?? query.Search;
 
-            if (TryParseNullableBool(req.Query.GetValueOrDefault("active"), out bool? active))
+            if (TryParseNullableBool(QueryValueReader.Read(req.Query, "active"), out bool? active))
                 query.Active = active;
         }
 

@@ -117,7 +117,7 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    return await _Service.ListRunsAsync(ctx, ParseQuery(key => req.Query.GetValueOrDefault(key))).ConfigureAwait(false);
+                    return await _Service.ListRunsAsync(ctx, ParseQuery(key => QueryValueReader.Read(req.Query, key))).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
                 {

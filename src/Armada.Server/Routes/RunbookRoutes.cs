@@ -345,33 +345,33 @@ namespace Armada.Server.Routes
 
         private static void ApplyRunbookQuerystringOverrides(ApiRequest req, RunbookQuery query)
         {
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int pageNumber))
                 query.PageNumber = Math.Max(1, pageNumber);
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int pageSize))
                 query.PageSize = Math.Clamp(pageSize, 1, 500);
-            if (Boolean.TryParse(req.Query.GetValueOrDefault("active"), out bool active))
+            if (Boolean.TryParse(QueryValueReader.Read(req.Query, "active"), out bool active))
                 query.Active = active;
-            if (Enum.TryParse(req.Query.GetValueOrDefault("defaultCheckType"), true, out CheckRunTypeEnum defaultCheckType))
+            if (Enum.TryParse(QueryValueReader.Read(req.Query, "defaultCheckType"), true, out CheckRunTypeEnum defaultCheckType))
                 query.DefaultCheckType = defaultCheckType;
 
-            query.WorkflowProfileId = NormalizeEmpty(req.Query.GetValueOrDefault("workflowProfileId")) ?? query.WorkflowProfileId;
-            query.EnvironmentId = NormalizeEmpty(req.Query.GetValueOrDefault("environmentId")) ?? query.EnvironmentId;
-            query.Search = NormalizeEmpty(req.Query.GetValueOrDefault("search")) ?? query.Search;
+            query.WorkflowProfileId = NormalizeEmpty(QueryValueReader.Read(req.Query, "workflowProfileId")) ?? query.WorkflowProfileId;
+            query.EnvironmentId = NormalizeEmpty(QueryValueReader.Read(req.Query, "environmentId")) ?? query.EnvironmentId;
+            query.Search = NormalizeEmpty(QueryValueReader.Read(req.Query, "search")) ?? query.Search;
         }
 
         private static void ApplyExecutionQuerystringOverrides(ApiRequest req, RunbookExecutionQuery query)
         {
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int pageNumber))
                 query.PageNumber = Math.Max(1, pageNumber);
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int pageSize))
                 query.PageSize = Math.Clamp(pageSize, 1, 500);
-            if (Enum.TryParse(req.Query.GetValueOrDefault("status"), true, out RunbookExecutionStatusEnum status))
+            if (Enum.TryParse(QueryValueReader.Read(req.Query, "status"), true, out RunbookExecutionStatusEnum status))
                 query.Status = status;
 
-            query.RunbookId = NormalizeEmpty(req.Query.GetValueOrDefault("runbookId")) ?? query.RunbookId;
-            query.DeploymentId = NormalizeEmpty(req.Query.GetValueOrDefault("deploymentId")) ?? query.DeploymentId;
-            query.IncidentId = NormalizeEmpty(req.Query.GetValueOrDefault("incidentId")) ?? query.IncidentId;
-            query.Search = NormalizeEmpty(req.Query.GetValueOrDefault("search")) ?? query.Search;
+            query.RunbookId = NormalizeEmpty(QueryValueReader.Read(req.Query, "runbookId")) ?? query.RunbookId;
+            query.DeploymentId = NormalizeEmpty(QueryValueReader.Read(req.Query, "deploymentId")) ?? query.DeploymentId;
+            query.IncidentId = NormalizeEmpty(QueryValueReader.Read(req.Query, "incidentId")) ?? query.IncidentId;
+            query.Search = NormalizeEmpty(QueryValueReader.Read(req.Query, "search")) ?? query.Search;
         }
 
         private static ApiErrorResponse BuildAuthError(ApiRequest req)

@@ -224,7 +224,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Mission> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Missions.EnumerateAsync(q), (t, q) => _database.Missions.EnumerateAsync(t, q), (t, u, q) => _database.Missions.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
@@ -251,7 +251,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Mission> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Missions.EnumerateAsync(q), (t, q) => _database.Missions.EnumerateAsync(t, q), (t, u, q) => _database.Missions.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
@@ -274,7 +274,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<MissionSummary> result = ctx.IsAdmin
                     ? await _database.Missions.EnumerateSummariesAsync(query).ConfigureAwait(false)
@@ -304,7 +304,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<MissionSummary> result = ctx.IsAdmin
                     ? await _database.Missions.EnumerateSummariesAsync(query).ConfigureAwait(false)
@@ -332,12 +332,12 @@ namespace Armada.Server.Routes
                 }
 
                 MissionHistoryQuery query = new MissionHistoryQuery();
-                if (DateTime.TryParse(Uri.UnescapeDataString(req.Query.GetValueOrDefault("fromUtc") ?? ""), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime fromUtc)) query.FromUtc = fromUtc.ToUniversalTime();
-                if (DateTime.TryParse(Uri.UnescapeDataString(req.Query.GetValueOrDefault("toUtc") ?? ""), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime toUtc)) query.ToUtc = toUtc.ToUniversalTime();
-                if (int.TryParse(req.Query.GetValueOrDefault("bucketMinutes"), out int bucketMinutes) && bucketMinutes > 0) query.BucketMinutes = bucketMinutes;
-                string? fleetId = req.Query.GetValueOrDefault("fleetId");
+                if (DateTime.TryParse(QueryValueReader.Read(req.Query, "fromUtc") ?? "", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime fromUtc)) query.FromUtc = fromUtc.ToUniversalTime();
+                if (DateTime.TryParse(QueryValueReader.Read(req.Query, "toUtc") ?? "", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime toUtc)) query.ToUtc = toUtc.ToUniversalTime();
+                if (int.TryParse(QueryValueReader.Read(req.Query, "bucketMinutes"), out int bucketMinutes) && bucketMinutes > 0) query.BucketMinutes = bucketMinutes;
+                string? fleetId = QueryValueReader.Read(req.Query, "fleetId");
                 if (!String.IsNullOrEmpty(fleetId)) query.FleetId = fleetId;
-                string? vesselId = req.Query.GetValueOrDefault("vesselId");
+                string? vesselId = QueryValueReader.Read(req.Query, "vesselId");
                 if (!String.IsNullOrEmpty(vesselId)) query.VesselId = vesselId;
 
                 // A window that would produce more than MaxSummaryBuckets buckets is a typed 400.
@@ -1352,11 +1352,11 @@ namespace Armada.Server.Routes
                     int offset = 0;
                     int lineCount = 200;
 
-                    string? offsetParam = req.Query.GetValueOrDefault("offset");
+                    string? offsetParam = QueryValueReader.Read(req.Query, "offset");
                     if (!String.IsNullOrEmpty(offsetParam) && Int32.TryParse(offsetParam, out int parsedOffset))
                         offset = Math.Max(0, parsedOffset);
 
-                    string? linesParam = req.Query.GetValueOrDefault("lines");
+                    string? linesParam = QueryValueReader.Read(req.Query, "lines");
                     if (!String.IsNullOrEmpty(linesParam) && Int32.TryParse(linesParam, out int parsedLines))
                         lineCount = Math.Clamp(parsedLines, 1, Constants.MaxLogLinesPerRequest);
 

@@ -158,7 +158,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Vessel> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Vessels.EnumerateAsync(q), (t, q) => _database.Vessels.EnumerateAsync(t, q), (t, u, q) => _database.Vessels.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
@@ -181,7 +181,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
                 EnumerationQuery query = JsonSerializer.Deserialize<EnumerationQuery>(req.Http.Request.DataAsString, _jsonOptions) ?? new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 Stopwatch sw = Stopwatch.StartNew();
                 EnumerationResult<Vessel> result = await Armada.Core.Models.EnumerationScope.EnumerateScopedAsync(ctx, query, q => _database.Vessels.EnumerateAsync(q), (t, q) => _database.Vessels.EnumerateAsync(t, q), (t, u, q) => _database.Vessels.EnumerateAsync(t, u, q)).ConfigureAwait(false);
                 result.TotalMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
@@ -448,18 +448,18 @@ namespace Armada.Server.Routes
                 if (vessel == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
                 if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Git service is not available"); }
 
-                string branch = NormalizeEmpty(UnescapeQueryValue(req.Query.GetValueOrDefault("branch"))) ?? DefaultBranchOf(vessel);
+                string branch = NormalizeEmpty(QueryValueReader.Read(req.Query, "branch")) ?? DefaultBranchOf(vessel);
                 if (!GitRevisionNames.IsSafeBranchName(branch)) { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "branch is not a valid branch name" }; }
 
                 int offset = 0;
-                string? offsetRaw = NormalizeEmpty(req.Query.GetValueOrDefault("utcOffsetMinutes"));
+                string? offsetRaw = NormalizeEmpty(QueryValueReader.Read(req.Query, "utcOffsetMinutes"));
                 if (offsetRaw != null && !Int32.TryParse(offsetRaw, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out offset))
                 { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "utcOffsetMinutes must be an integer" }; }
                 if (Math.Abs(offset) > Constants.VesselHistoryMaxUtcOffsetMinutes)
                 { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "utcOffsetMinutes must be between -" + Constants.VesselHistoryMaxUtcOffsetMinutes + " and " + Constants.VesselHistoryMaxUtcOffsetMinutes }; }
 
-                string? fromRaw = NormalizeEmpty(req.Query.GetValueOrDefault("from"));
-                string? toRaw = NormalizeEmpty(req.Query.GetValueOrDefault("to"));
+                string? fromRaw = NormalizeEmpty(QueryValueReader.Read(req.Query, "from"));
+                string? toRaw = NormalizeEmpty(QueryValueReader.Read(req.Query, "to"));
                 DateTime to = DateTime.UtcNow.AddMinutes(offset).Date;
                 if (toRaw != null && !TryParseDay(toRaw, out to))
                 { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "to must be a date in yyyy-MM-dd form" }; }
@@ -519,14 +519,14 @@ namespace Armada.Server.Routes
                 if (_git == null) { req.Http.Response.StatusCode = 503; return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Git service is not available"); }
 
                 int limit = Constants.VesselHistoryDefaultPageSize;
-                string? limitRaw = NormalizeEmpty(req.Query.GetValueOrDefault("limit"));
+                string? limitRaw = NormalizeEmpty(QueryValueReader.Read(req.Query, "limit"));
                 if (limitRaw != null && !Int32.TryParse(limitRaw, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out limit))
                 { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "limit must be an integer" }; }
                 if (limit < 1 || limit > Constants.VesselHistoryMaxPageSize)
                 { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "limit must be between 1 and " + Constants.VesselHistoryMaxPageSize }; }
 
                 VesselCommitCursor? cursor = null;
-                string? cursorRaw = NormalizeEmpty(UnescapeQueryValue(req.Query.GetValueOrDefault("cursor")));
+                string? cursorRaw = NormalizeEmpty(QueryValueReader.Read(req.Query, "cursor"));
                 string branch;
                 long? until = null;
                 if (cursorRaw != null)
@@ -538,9 +538,9 @@ namespace Armada.Server.Routes
                 }
                 else
                 {
-                    branch = NormalizeEmpty(UnescapeQueryValue(req.Query.GetValueOrDefault("branch"))) ?? DefaultBranchOf(vessel);
+                    branch = NormalizeEmpty(QueryValueReader.Read(req.Query, "branch")) ?? DefaultBranchOf(vessel);
                     if (!GitRevisionNames.IsSafeBranchName(branch)) { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "branch is not a valid branch name" }; }
-                    string? beforeRaw = NormalizeEmpty(UnescapeQueryValue(req.Query.GetValueOrDefault("before")));
+                    string? beforeRaw = NormalizeEmpty(QueryValueReader.Read(req.Query, "before"));
                     if (beforeRaw != null)
                     {
                         if (!TryParseBefore(beforeRaw, out long beforeUntil))
@@ -721,12 +721,12 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" };
                 }
 
-                string? explicitProfileId = NormalizeEmpty(req.Query.GetValueOrDefault("workflowProfileId"));
-                string? environmentName = NormalizeEmpty(req.Query.GetValueOrDefault("environmentName"));
-                bool includeWorkflowRequirements = ParseBoolean(req.Query.GetValueOrDefault("includeWorkflowRequirements"), true);
+                string? explicitProfileId = NormalizeEmpty(QueryValueReader.Read(req.Query, "workflowProfileId"));
+                string? environmentName = NormalizeEmpty(QueryValueReader.Read(req.Query, "environmentName"));
+                bool includeWorkflowRequirements = ParseBoolean(QueryValueReader.Read(req.Query, "includeWorkflowRequirements"), true);
 
                 CheckRunTypeEnum? checkType = null;
-                string? checkTypeRaw = NormalizeEmpty(req.Query.GetValueOrDefault("checkType"));
+                string? checkTypeRaw = NormalizeEmpty(QueryValueReader.Read(req.Query, "checkType"));
                 if (!String.IsNullOrWhiteSpace(checkTypeRaw))
                 {
                     if (!Enum.TryParse(checkTypeRaw, true, out CheckRunTypeEnum parsedCheckType))
@@ -781,7 +781,7 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" };
                 }
 
-                string? sourceBranch = NormalizeEmpty(UnescapeQueryValue(req.Query.GetValueOrDefault("sourceBranch")));
+                string? sourceBranch = NormalizeEmpty(QueryValueReader.Read(req.Query, "sourceBranch"));
                 return await _landingPreview.PreviewForVesselAsync(ctx, vessel, sourceBranch).ConfigureAwait(false);
             },
             api => api
@@ -1110,20 +1110,6 @@ namespace Armada.Server.Routes
             if (result.TimedOut) throw new InvalidOperationException("git timed out");
             if (result.ExitCode != 0) throw new InvalidOperationException("git exited with code " + result.ExitCode + ": " + result.StandardError.Trim());
             return result.StandardOutput;
-        }
-
-        private static string? UnescapeQueryValue(string? value)
-        {
-            // Query values arrive percent-encoded (a branch such as feature/x is sent as feature%2Fx).
-            if (String.IsNullOrEmpty(value)) return value;
-            try
-            {
-                return Uri.UnescapeDataString(value);
-            }
-            catch (UriFormatException)
-            {
-                return value;
-            }
         }
 
         private static string DefaultBranchOf(Vessel vessel)

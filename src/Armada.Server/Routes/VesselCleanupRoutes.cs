@@ -87,7 +87,7 @@ namespace Armada.Server.Routes
                 Vessel? vessel = await ReadVesselAsync(ctx, req.Parameters["id"]).ConfigureAwait(false);
                 if (vessel == null) return NotFound(req);
                 EnumerationQuery query = new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 try
                 {
                     return (object)await _Cleanup.EnumerateResourcesAsync(vessel, query).ConfigureAwait(false);

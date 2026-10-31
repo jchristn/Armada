@@ -82,8 +82,8 @@ namespace Armada.Core.Models
         /// Read a query from querystring parameters: pageNumber, pageSize, status (comma-separated JobStatusEnum names,
         /// case-insensitive), and kind (a JobKindEnum name).
         /// </summary>
-        /// <param name="getter">Returns a querystring value by name, or null. Values may be percent-encoded as they arrive
-        /// on the wire (browsers send <c>status=Queued%2CRunning</c>); they are decoded before parsing.</param>
+        /// <param name="getter">Returns a querystring value by name, or null. Percent-decoding is done once by the REST
+        /// query reader before this method runs. A literal plus sign is treated as a space.</param>
         /// <param name="query">The query, or null when a value is invalid. With no paging or filter parameter the query is
         /// the first page of the default size (there is no unpaged form).</param>
         /// <param name="error">Why a value was rejected, or null.</param>
@@ -199,14 +199,7 @@ namespace Armada.Core.Models
         private static string? Unescape(string? value)
         {
             if (String.IsNullOrEmpty(value)) return value;
-            try
-            {
-                return Uri.UnescapeDataString(value.Replace('+', ' '));
-            }
-            catch (UriFormatException)
-            {
-                return value;
-            }
+            return value.Replace('+', ' ');
         }
 
         #endregion

@@ -201,22 +201,22 @@ namespace Armada.Server.Routes
 
         private static void ApplyQuerystringOverrides(ApiRequest req, IncidentQuery query)
         {
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int pageNumber))
                 query.PageNumber = Math.Max(1, pageNumber);
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int pageSize))
                 query.PageSize = Math.Clamp(pageSize, 1, 500);
-            if (Enum.TryParse(req.Query.GetValueOrDefault("status"), true, out IncidentStatusEnum status))
+            if (Enum.TryParse(QueryValueReader.Read(req.Query, "status"), true, out IncidentStatusEnum status))
                 query.Status = status;
-            if (Enum.TryParse(req.Query.GetValueOrDefault("severity"), true, out IncidentSeverityEnum severity))
+            if (Enum.TryParse(QueryValueReader.Read(req.Query, "severity"), true, out IncidentSeverityEnum severity))
                 query.Severity = severity;
 
-            query.VesselId = NormalizeEmpty(req.Query.GetValueOrDefault("vesselId")) ?? query.VesselId;
-            query.EnvironmentId = NormalizeEmpty(req.Query.GetValueOrDefault("environmentId")) ?? query.EnvironmentId;
-            query.DeploymentId = NormalizeEmpty(req.Query.GetValueOrDefault("deploymentId")) ?? query.DeploymentId;
-            query.ReleaseId = NormalizeEmpty(req.Query.GetValueOrDefault("releaseId")) ?? query.ReleaseId;
-            query.MissionId = NormalizeEmpty(req.Query.GetValueOrDefault("missionId")) ?? query.MissionId;
-            query.VoyageId = NormalizeEmpty(req.Query.GetValueOrDefault("voyageId")) ?? query.VoyageId;
-            query.Search = NormalizeEmpty(req.Query.GetValueOrDefault("search")) ?? query.Search;
+            query.VesselId = NormalizeEmpty(QueryValueReader.Read(req.Query, "vesselId")) ?? query.VesselId;
+            query.EnvironmentId = NormalizeEmpty(QueryValueReader.Read(req.Query, "environmentId")) ?? query.EnvironmentId;
+            query.DeploymentId = NormalizeEmpty(QueryValueReader.Read(req.Query, "deploymentId")) ?? query.DeploymentId;
+            query.ReleaseId = NormalizeEmpty(QueryValueReader.Read(req.Query, "releaseId")) ?? query.ReleaseId;
+            query.MissionId = NormalizeEmpty(QueryValueReader.Read(req.Query, "missionId")) ?? query.MissionId;
+            query.VoyageId = NormalizeEmpty(QueryValueReader.Read(req.Query, "voyageId")) ?? query.VoyageId;
+            query.Search = NormalizeEmpty(QueryValueReader.Read(req.Query, "search")) ?? query.Search;
         }
 
         private async Task ValidateObjectivesAsync(AuthContext auth, IEnumerable<string>? objectiveIds)

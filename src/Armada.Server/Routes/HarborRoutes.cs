@@ -132,7 +132,7 @@ namespace Armada.Server.Routes
                 AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
                 if (ctx == null) return BuildAuthError(req);
 
-                string? rangeText = req.Query.GetValueOrDefault("range");
+                string? rangeText = QueryValueReader.Read(req.Query, "range");
                 if (!Armada.Core.Metrics.HarborMetricsRanges.TryParse(rangeText, out HarborMetricsRangeEnum range))
                 {
                     req.Http.Response.StatusCode = 400;
@@ -235,8 +235,8 @@ namespace Armada.Server.Routes
                 if (ctx == null) return BuildAuthError(req);
 
                 EnumerationQuery query = new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
-                bool openOnly = String.Equals(req.Query.GetValueOrDefault("open"), "true", StringComparison.OrdinalIgnoreCase);
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
+                bool openOnly = String.Equals(QueryValueReader.Read(req.Query, "open"), "true", StringComparison.OrdinalIgnoreCase);
                 EnumerationResult<HarborJobRecord>? page = _Jobs == null ? null
                     : await _Jobs.EnumerateJobsAsync(ctx, req.Parameters["id"], openOnly, query).ConfigureAwait(false);
                 if (page == null)
@@ -265,7 +265,7 @@ namespace Armada.Server.Routes
                 if (ctx == null) return BuildAuthError(req);
 
                 EnumerationQuery query = EnumerationRequestReader.Read(req, _BodyJsonOptions);
-                bool openOnly = String.Equals(req.Query.GetValueOrDefault("open"), "true", StringComparison.OrdinalIgnoreCase);
+                bool openOnly = String.Equals(QueryValueReader.Read(req.Query, "open"), "true", StringComparison.OrdinalIgnoreCase);
                 EnumerationResult<HarborJobRecord>? page = _Jobs == null ? null
                     : await _Jobs.EnumerateJobsAsync(ctx, req.Parameters["id"], openOnly, query).ConfigureAwait(false);
                 if (page == null)
