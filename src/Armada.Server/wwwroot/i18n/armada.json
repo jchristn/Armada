@@ -7111,7 +7111,18 @@
         "The battery has not started yet.": "La bateria aun no ha comenzado.",
         "The report is written when the battery and grading finish.": "El informe se escribe cuando terminan la bateria y la calificacion.",
         "View results": "Ver resultados",
-        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{passed}} superadas, {{failed}} fallidas, {{couldNotRun}} no se pudieron ejecutar, {{pending}} pendientes de {{total}} tareas"
+        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{passed}} superadas, {{failed}} fallidas, {{couldNotRun}} no se pudieron ejecutar, {{pending}} pendientes de {{total}} tareas",
+        "Display name from the pack manifest.": "Nombre visible del manifiesto del paquete.",
+        "Failed to load battery packs.": "No se pudieron cargar los paquetes de bateria.",
+        "Fixture packs that Full Evaluate runs against captains. Each pack has a manifest and the fixture files its tasks start from.": "Paquetes de pruebas que las ejecuciones de Evaluacion completa usan con los capitanes. Cada paquete tiene un manifiesto y los archivos de fixture desde los que parten sus tareas.",
+        "Manifest version of the pack.": "Version del manifiesto del paquete.",
+        "No files.": "Sin archivos.",
+        "Number of tasks the pack defines.": "Numero de tareas que define el paquete.",
+        "Open the menu in a row to view, validate or delete that pack.": "Abra el menu de una fila para ver, validar o eliminar ese paquete.",
+        "Pack ID: the directory name of the pack in the battery catalog.": "ID del paquete: el nombre del directorio del paquete en el catalogo de baterias.",
+        "Reload the battery pack list now.": "Volver a cargar la lista de paquetes de bateria ahora.",
+        "Result of the last validation. Hover an invalid pack for its errors.": "Resultado de la ultima validacion. Pase el cursor sobre un paquete no valido para ver sus errores.",
+        "What the pack exercises, for example code or documentation.": "Lo que ejercita el paquete, por ejemplo codigo o documentacion."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -13168,7 +13179,19 @@
         "The battery has not started yet.": "测试组尚未开始。",
         "The report is written when the battery and grading finish.": "测试组和评分完成后会写入报告。",
         "View results": "查看结果",
-        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{total}} 个任务中 {{passed}} 个通过，{{failed}} 个失败，{{couldNotRun}} 个无法运行，{{pending}} 个待定"
+        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{total}} 个任务中 {{passed}} 个通过，{{failed}} 个失败，{{couldNotRun}} 个无法运行，{{pending}} 个待定",
+        "Create": "创建",
+        "Display name from the pack manifest.": "包清单中的显示名称。",
+        "Failed to load battery packs.": "无法加载测试集包。",
+        "Fixture packs that Full Evaluate runs against captains. Each pack has a manifest and the fixture files its tasks start from.": "完整评估运行时用于测试队长的测试集包。每个包包含一个清单以及其任务起始所用的测试文件。",
+        "Manifest version of the pack.": "包的清单版本。",
+        "No files.": "没有文件。",
+        "Number of tasks the pack defines.": "包定义的任务数量。",
+        "Open the menu in a row to view, validate or delete that pack.": "打开某行的菜单以查看、验证或删除该包。",
+        "Pack ID: the directory name of the pack in the battery catalog.": "包 ID：测试集目录中该包的目录名。",
+        "Reload the battery pack list now.": "立即重新加载测试集包列表。",
+        "Result of the last validation. Hover an invalid pack for its errors.": "上次验证的结果。将鼠标悬停在无效的包上可查看其错误。",
+        "What the pack exercises, for example code or documentation.": "包所测试的内容，例如代码或文档。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -19188,7 +19211,19 @@
         "The battery has not started yet.": "測試組尚未開始。",
         "The report is written when the battery and grading finish.": "測試組和評分完成後會寫入報告。",
         "View results": "查看結果",
-        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{total}} 個任務中 {{passed}} 個通過，{{failed}} 個失敗，{{couldNotRun}} 個無法執行，{{pending}} 個待定"
+        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{total}} 個任務中 {{passed}} 個通過，{{failed}} 個失敗，{{couldNotRun}} 個無法執行，{{pending}} 個待定",
+        "Create": "建立",
+        "Display name from the pack manifest.": "套件清單中的顯示名稱。",
+        "Failed to load battery packs.": "無法載入測試集套件。",
+        "Fixture packs that Full Evaluate runs against captains. Each pack has a manifest and the fixture files its tasks start from.": "完整評估執行時用於測試隊長的測試集套件。每個套件包含一個清單以及其任務起始所用的測試檔案。",
+        "Manifest version of the pack.": "套件的清單版本。",
+        "No files.": "沒有檔案。",
+        "Number of tasks the pack defines.": "套件定義的任務數量。",
+        "Open the menu in a row to view, validate or delete that pack.": "開啟某列的選單以檢視、驗證或刪除該套件。",
+        "Pack ID: the directory name of the pack in the battery catalog.": "套件 ID：測試集目錄中該套件的目錄名稱。",
+        "Reload the battery pack list now.": "立即重新載入測試集套件清單。",
+        "Result of the last validation. Hover an invalid pack for its errors.": "上次驗證的結果。將游標停在無效的套件上可查看其錯誤。",
+        "What the pack exercises, for example code or documentation.": "套件所測試的內容，例如程式碼或文件。"
       },
       "sections": {}
     },
@@ -25168,7 +25203,19 @@
         "The battery has not started yet.": "測試組仲未開始。",
         "The report is written when the battery and grading finish.": "測試組同評分完成之後會寫報告。",
         "View results": "睇結果",
-        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{total}} 個任務入面 {{passed}} 個通過，{{failed}} 個失敗，{{couldNotRun}} 個運行唔到，{{pending}} 個待定"
+        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{total}} 個任務入面 {{passed}} 個通過，{{failed}} 個失敗，{{couldNotRun}} 個運行唔到，{{pending}} 個待定",
+        "Create": "建立",
+        "Display name from the pack manifest.": "套件清單入面嘅顯示名稱。",
+        "Failed to load battery packs.": "載入唔到測試集套件。",
+        "Fixture packs that Full Evaluate runs against captains. Each pack has a manifest and the fixture files its tasks start from.": "完整評估執行時用嚟測試隊長嘅測試集套件。每個套件有一個清單同埋佢啲任務起步用嘅測試檔案。",
+        "Manifest version of the pack.": "套件嘅清單版本。",
+        "No files.": "冇檔案。",
+        "Number of tasks the pack defines.": "套件定義咗嘅任務數目。",
+        "Open the menu in a row to view, validate or delete that pack.": "打開某一行嘅選單嚟睇、驗證或者刪除嗰個套件。",
+        "Pack ID: the directory name of the pack in the battery catalog.": "套件 ID：測試集目錄入面嗰個套件嘅目錄名。",
+        "Reload the battery pack list now.": "即刻重新載入測試集套件清單。",
+        "Result of the last validation. Hover an invalid pack for its errors.": "上次驗證嘅結果。將游標放喺無效嘅套件上面就睇到佢嘅錯誤。",
+        "What the pack exercises, for example code or documentation.": "套件測試嘅內容，例如程式碼或者文件。"
       },
       "sections": {}
     },
@@ -31164,7 +31211,19 @@
         "The battery has not started yet.": "バッテリーはまだ開始していません。",
         "The report is written when the battery and grading finish.": "レポートはバッテリーと採点の完了後に作成されます。",
         "View results": "結果を表示",
-        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{total}} タスク中 {{passed}} 件成功、{{failed}} 件失敗、{{couldNotRun}} 件実行不可、{{pending}} 件保留中"
+        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{total}} タスク中 {{passed}} 件成功、{{failed}} 件失敗、{{couldNotRun}} 件実行不可、{{pending}} 件保留中",
+        "Create": "作成",
+        "Display name from the pack manifest.": "パックのマニフェストにある表示名。",
+        "Failed to load battery packs.": "バッテリーパックを読み込めませんでした。",
+        "Fixture packs that Full Evaluate runs against captains. Each pack has a manifest and the fixture files its tasks start from.": "フル評価の実行でキャプテンに対して使うフィクスチャパックです。各パックにはマニフェストと、タスクの開始点となるフィクスチャファイルがあります。",
+        "Manifest version of the pack.": "パックのマニフェストのバージョン。",
+        "No files.": "ファイルはありません。",
+        "Number of tasks the pack defines.": "パックが定義するタスクの数。",
+        "Open the menu in a row to view, validate or delete that pack.": "行のメニューを開いて、そのパックを表示、検証、または削除します。",
+        "Pack ID: the directory name of the pack in the battery catalog.": "パック ID: バッテリーカタログ内のパックのディレクトリ名。",
+        "Reload the battery pack list now.": "バッテリーパックの一覧を今すぐ再読み込みします。",
+        "Result of the last validation. Hover an invalid pack for its errors.": "前回の検証の結果。無効なパックにカーソルを合わせるとエラーが表示されます。",
+        "What the pack exercises, for example code or documentation.": "パックが検証する対象。たとえばコードやドキュメント。"
       },
       "sections": {}
     },
@@ -37151,7 +37210,19 @@
         "The battery has not started yet.": "Die Battery wurde noch nicht gestartet.",
         "The report is written when the battery and grading finish.": "Der Bericht wird geschrieben, wenn Battery und Bewertung abgeschlossen sind.",
         "View results": "Ergebnisse anzeigen",
-        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{passed}} bestanden, {{failed}} fehlgeschlagen, {{couldNotRun}} nicht ausfuhrbar, {{pending}} ausstehend von {{total}} Aufgaben"
+        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{passed}} bestanden, {{failed}} fehlgeschlagen, {{couldNotRun}} nicht ausfuhrbar, {{pending}} ausstehend von {{total}} Aufgaben",
+        "Create": "Erstellen",
+        "Display name from the pack manifest.": "Anzeigename aus dem Paketmanifest.",
+        "Failed to load battery packs.": "Battery-Pakete konnten nicht geladen werden.",
+        "Fixture packs that Full Evaluate runs against captains. Each pack has a manifest and the fixture files its tasks start from.": "Fixture-Pakete, mit denen Full-Evaluate-Laeufe Captains pruefen. Jedes Paket hat ein Manifest und die Fixture-Dateien, von denen seine Aufgaben ausgehen.",
+        "Manifest version of the pack.": "Manifestversion des Pakets.",
+        "No files.": "Keine Dateien.",
+        "Number of tasks the pack defines.": "Anzahl der Aufgaben, die das Paket definiert.",
+        "Open the menu in a row to view, validate or delete that pack.": "Oeffnen Sie das Menue einer Zeile, um dieses Paket anzuzeigen, zu validieren oder zu loeschen.",
+        "Pack ID: the directory name of the pack in the battery catalog.": "Paket-ID: der Verzeichnisname des Pakets im Battery-Katalog.",
+        "Reload the battery pack list now.": "Die Liste der Battery-Pakete jetzt neu laden.",
+        "Result of the last validation. Hover an invalid pack for its errors.": "Ergebnis der letzten Validierung. Bewegen Sie den Mauszeiger ueber ein ungueltiges Paket, um seine Fehler zu sehen.",
+        "What the pack exercises, for example code or documentation.": "Was das Paket prueft, zum Beispiel Code oder Dokumentation."
       },
       "sections": {}
     },
@@ -43138,7 +43209,19 @@
         "The battery has not started yet.": "La batterie n'a pas encore demarre.",
         "The report is written when the battery and grading finish.": "Le rapport est redige lorsque la batterie et la notation sont terminees.",
         "View results": "Voir les resultats",
-        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{passed}} reussies, {{failed}} echouees, {{couldNotRun}} non executables, {{pending}} en attente sur {{total}} taches"
+        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{passed}} reussies, {{failed}} echouees, {{couldNotRun}} non executables, {{pending}} en attente sur {{total}} taches",
+        "Create": "Creer",
+        "Display name from the pack manifest.": "Nom affiche issu du manifeste du pack.",
+        "Failed to load battery packs.": "Impossible de charger les packs de batterie.",
+        "Fixture packs that Full Evaluate runs against captains. Each pack has a manifest and the fixture files its tasks start from.": "Packs de fixtures que les executions d'evaluation complete utilisent pour tester les capitaines. Chaque pack contient un manifeste et les fichiers de fixture dont partent ses taches.",
+        "Manifest version of the pack.": "Version du manifeste du pack.",
+        "No files.": "Aucun fichier.",
+        "Number of tasks the pack defines.": "Nombre de taches definies par le pack.",
+        "Open the menu in a row to view, validate or delete that pack.": "Ouvrez le menu d'une ligne pour afficher, valider ou supprimer ce pack.",
+        "Pack ID: the directory name of the pack in the battery catalog.": "ID du pack : le nom du repertoire du pack dans le catalogue de batteries.",
+        "Reload the battery pack list now.": "Recharger maintenant la liste des packs de batterie.",
+        "Result of the last validation. Hover an invalid pack for its errors.": "Resultat de la derniere validation. Survolez un pack non valide pour voir ses erreurs.",
+        "What the pack exercises, for example code or documentation.": "Ce que le pack met a l'epreuve, par exemple du code ou de la documentation."
       },
       "sections": {}
     },
@@ -49125,7 +49208,19 @@
         "The battery has not started yet.": "La batteria non e ancora iniziata.",
         "The report is written when the battery and grading finish.": "Il report viene scritto al termine della batteria e della valutazione.",
         "View results": "Visualizza risultati",
-        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{passed}} superate, {{failed}} fallite, {{couldNotRun}} non eseguibili, {{pending}} in attesa su {{total}} attivita"
+        "{{passed}} passed, {{failed}} failed, {{couldNotRun}} could not run, {{pending}} pending of {{total}} tasks": "{{passed}} superate, {{failed}} fallite, {{couldNotRun}} non eseguibili, {{pending}} in attesa su {{total}} attivita",
+        "Create": "Crea",
+        "Display name from the pack manifest.": "Nome visualizzato dal manifesto del pacchetto.",
+        "Failed to load battery packs.": "Impossibile caricare i pacchetti di batteria.",
+        "Fixture packs that Full Evaluate runs against captains. Each pack has a manifest and the fixture files its tasks start from.": "Pacchetti di fixture che le esecuzioni di valutazione completa usano per mettere alla prova i capitani. Ogni pacchetto ha un manifesto e i file di fixture da cui partono le sue attivita.",
+        "Manifest version of the pack.": "Versione del manifesto del pacchetto.",
+        "No files.": "Nessun file.",
+        "Number of tasks the pack defines.": "Numero di attivita definite dal pacchetto.",
+        "Open the menu in a row to view, validate or delete that pack.": "Apri il menu di una riga per visualizzare, convalidare o eliminare quel pacchetto.",
+        "Pack ID: the directory name of the pack in the battery catalog.": "ID del pacchetto: il nome della directory del pacchetto nel catalogo delle batterie.",
+        "Reload the battery pack list now.": "Ricarica ora l'elenco dei pacchetti di batteria.",
+        "Result of the last validation. Hover an invalid pack for its errors.": "Risultato dell'ultima convalida. Passa il mouse su un pacchetto non valido per vederne gli errori.",
+        "What the pack exercises, for example code or documentation.": "Cosa mette alla prova il pacchetto, ad esempio codice o documentazione."
       },
       "sections": {}
     }

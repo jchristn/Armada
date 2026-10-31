@@ -45,3 +45,43 @@ it('shows API errors without discarding the manifest draft', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Manifest must be valid JSON.');
   expect(screen.getByRole('textbox', { name: 'Manifest JSON' })).toHaveValue('{');
 });
+it('renders through the shared PageHeader and DataTable with server paging', async () => {
+  vi.mocked(api.listBatteryPacks).mockResolvedValue({ objects: [detail.info], totalPages: 3, totalRecords: 60, pageNumber: 1, pageSize: 25 } as Awaited<ReturnType<typeof api.listBatteryPacks>>);
+  const { container } = render(<BatteryPacks />);
+  expect(await screen.findByText('Demo')).toBeInTheDocument();
+  expect(container.querySelector('.page-header h2')).toHaveTextContent('Battery packs');
+  expect(container.querySelector('.table-wrap table')).not.toBeNull();
+  expect(container.querySelector('.pagination-bar')).not.toBeNull();
+  expect(screen.getByText('Invalid')).toHaveClass('tag', 'invalid');
+  expect(api.listBatteryPacks).toHaveBeenCalledWith(25, 1);
+  expect(container.querySelector('[style]')).toBeNull();
+});
+it('shows the shared empty placeholder when no packs are installed', async () => {
+  vi.mocked(api.listBatteryPacks).mockResolvedValue({ objects: [], totalPages: 0, totalRecords: 0 } as unknown as Awaited<ReturnType<typeof api.listBatteryPacks>>);
+  render(<BatteryPacks />);
+  expect(await screen.findByText('No battery packs are installed.')).toBeInTheDocument();
+});
+it('shows a load failure with a retry that re-runs the same query', async () => {
+  vi.mocked(api.listBatteryPacks).mockRejectedValueOnce(new Error('Server unavailable'));
+  render(<BatteryPacks />);
+  expect(await screen.findByRole('alert')).toHaveTextContent('Server unavailable');
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  expect(await screen.findByText('Demo')).toBeInTheDocument();
+  expect(api.listBatteryPacks).toHaveBeenLastCalledWith(25, 1);
+});
+it('opens the editor in a dialog from a row click and reads a file from the files table', async () => {
+  vi.mocked(api.readBatteryPackFile).mockResolvedValue({ path: 'fixture/a.txt', content: 'abc' });
+  render(<BatteryPacks />);
+  fireEvent.click(await screen.findByText('Demo'));
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByRole('textbox', { name: 'Manifest JSON' })).toHaveClass('mono');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Open' }));
+  await waitFor(() => expect(api.readBatteryPackFile).toHaveBeenCalledWith('demo', 'fixture/a.txt'));
+  expect(await within(dialog).findByRole('textbox', { name: 'File content' })).toHaveValue('abc');
+});
+it('marks valid and invalid tags with the shared complete and failed colors', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('./src/App.css', 'utf8');
+  expect(css).toMatch(/\.tag\.passed[^{]*\.tag\.valid\s*\{\s*background: var\(--tag-complete-bg\)/);
+  expect(css).toMatch(/\.tag\.landingfailed, \.tag\.invalid\s*\{\s*background: var\(--tag-failed-bg\)/);
+});
