@@ -95,3 +95,38 @@ The three new cases failed against commit 69aaaf581 (System.Boolean conversion
 error; command "quota" retained) and pass with the fix. Existing-database upgrades
 on the server providers, phase 0 interface evidence and tenant deletion cascade
 remain the unverified gaps listed above.
+
+## Rework 1 test engineer verification
+
+Reviewed worker commit 3f480eaf133ea05d096b2868a241bf1fc7a45e5a.
+Executed:
+
+```
+ARMADA_TEST_SUITES=Services.UsageDefaults,Database.UsagePersistence dotnet run --project src/Test.Automated -c Release --framework net10.0
+```
+
+Result: exit 0; 28 passed, 0 failed, 0 skipped, SQLite. This independently
+confirms both prior product findings are resolved: explicit null captain
+settings preserve defaults, and non-Custom JSON commands are cleared in both
+property orders and do not reach storage. Malformed types and unknown enums
+remain rejected. No additional test descriptors or product changes were needed.
+
+Unresolved acceptance gates:
+
+- Phase 0 prerequisite: docs/captain-usage-plan/PROBE_INTERFACES.md is absent
+  from this branch and local main (c52ca7be8). The ordered-phase mission rule
+  requires preceding deliverables on the integration base. Supply and verify
+  AC0 interface evidence before declaring dependent phase completion.
+- AC1 existing-database migrations: UsagePersistenceSuite's upgrade case
+  explicitly skips non-SQLite providers because they are provisioned fresh.
+  Expected: actual PostgreSQL, MySQL and SQL Server v110-to-v111 upgrades with
+  existing captain/token rows retained. Actual: this stage establishes only
+  SQLite upgrade behavior; no server-provider upgrades were run. Add and run
+  provider-specific existing-database fixtures before AC1 can pass.
+- Tenant deletion cascade remains unverified end to end. The SQLite upgrade
+  case's usage-row deletion check does not establish the tenant service path.
+
+Prior server-provider fresh-database results remain inherited evidence only.
+No full solution, adapter or dashboard runs were performed in this stage;
+Armada runs post-stage checks. No baseline failures occurred in the scoped run.
+Stage outcome: BLOCKED on the prerequisite and unmet AC1 provider upgrade gate.
