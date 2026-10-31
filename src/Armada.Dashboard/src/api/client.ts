@@ -2203,12 +2203,13 @@ export const cancelModelProbeRun = (id: string) =>
  * One run with its per-probe results. includeDetails adds the battery snapshot and profile revision; includeBatteryResults
  * (the Evaluations detail page) also reads one page of the battery's per-task results with their missions and voyages.
  */
-export const getModelProbeRun = async (id: string, includeDetails = false, includeBatteryResults = false) => {
+export const getModelProbeRun = async (id: string, includeDetails = false, includeBatteryResults = false, batteryResultsPage = 1) => {
   const run = await get<ModelProbeRunWithBattery>(`${MODEL_PROBE_RUNS}/${encodeURIComponent(id)}`);
   if (includeBatteryResults && run.batteryRunId) {
     try {
-      const page = await get<EnumerationResult<BatteryTaskResultInfo>>(`/api/v1/battery/runs/${encodeURIComponent(run.batteryRunId)}/results${cliQuery({ pageSize: 1000, order: 'CreatedAscending' })}`);
+      const page = await get<EnumerationResult<BatteryTaskResultInfo>>(`/api/v1/battery/runs/${encodeURIComponent(run.batteryRunId)}/results${cliQuery({ pageNumber: batteryResultsPage, pageSize: 25, order: 'CreatedAscending' })}`);
       run.batteryResults = page.objects ?? [];
+      run.batteryResultsPage = page;
     } catch (err) {
       run.batteryResultsError = err instanceof Error ? err.message : String(err);
     }

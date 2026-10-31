@@ -53,6 +53,36 @@ describe('model probe client', () => {
     expect(result.batteryProgress).toBeUndefined();
   });
 
+  it('loads one requested page of battery results with authentication', async () => {
+    setAuthToken('tok_1');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, { ...RUN, BatteryRunId: 'bat 1' }))
+      .mockResolvedValueOnce(jsonResponse(200, { Objects: [{ Id: 'btr_1', MissionId: 'msn_1', Output: '<b>raw</b>', Details: { ExitCode: 0 } }], TotalPages: 3 }))
+      .mockResolvedValueOnce(jsonResponse(200, { Status: 'Completed' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await getModelProbeRun('mpr_1', true, true, 2);
+    const url = new URL(fetchMock.mock.calls[1][0], 'http://localhost');
+    expect(url.pathname).toBe('/api/v1/battery/runs/bat%201/results');
+    expect(url.searchParams.get('pageNumber')).toBe('2');
+    expect(url.searchParams.get('pageSize')).toBe('25');
+    expect(fetchMock.mock.calls[1][1].headers['X-Token']).toBe('tok_1');
+    expect(result.batteryResultsPage?.totalPages).toBe(3);
+    expect(result.batteryResults).toEqual([{ id: 'btr_1', missionId: 'msn_1', output: '<b>raw</b>', details: { exitCode: 0 } }]);
+  });
+
+  it('preserves probes and battery progress when paged task results fail', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, { ...RUN, BatteryRunId: 'bat_1' }))
+      .mockResolvedValueOnce(jsonResponse(503, { Message: 'Results unavailable' }))
+      .mockResolvedValueOnce(jsonResponse(200, { Status: 'Completed' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await getModelProbeRun('mpr_1', true, true, 1);
+    expect(result.id).toBe('mpr_1');
+    expect(result.batteryProgress?.status).toBe('Completed');
+    expect(result.batteryResultsError).toContain('Results unavailable');
+    expect(result.batteryResults).toBeUndefined();
+  });
+
   it('evaluates a captain with a PascalCase Quick depth and the session token', async () => {
     setAuthToken('tok_1');
     const fetchMock = stub(201, RUN);
