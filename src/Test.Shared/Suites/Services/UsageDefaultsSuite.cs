@@ -57,6 +57,70 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(nullCommand.UsageCaptureActive, "explicit null command does not enable capture");
             }));
 
+            cases.Add(Case("usage_global_json_omitted_null_and_empty_keep_defaults", "Omitted, null and empty global blocks keep capture disabled", TestTags.Positive, () =>
+            {
+                foreach (string json in new string[] { "{}", "{\"UsageCapture\":null}", "{\"UsageCapture\":{}}" })
+                {
+                    ArmadaSettings settings = JsonSerializer.Deserialize<ArmadaSettings>(json)!;
+                    AssertNotNull(settings.UsageCapture, "global block is restored");
+                    AssertFalse(settings.UsageCapture.Enabled, "capture stays disabled");
+                    AssertFalse(settings.UsageCapture.AllowPtyFallback, "PTY stays opt-in");
+                    AssertEqual(60, settings.UsageCapture.MinimumIntervalSeconds, "default minimum");
+                    AssertEqual(20, settings.UsageCapture.ProbeTimeoutSeconds, "default timeout");
+                    AssertEqual(4, settings.UsageCapture.MaximumConcurrentProbes, "default concurrency");
+                    AssertEqual(1, settings.UsageCapture.MaximumConcurrentProbesPerHost, "default host concurrency");
+                    AssertEqual(7, settings.UsageCapture.RawSnapshotRetentionDays, "default raw retention");
+                    AssertEqual(90, settings.UsageCapture.RollupRetentionDays, "default rollup retention");
+                }
+            }));
+
+            cases.Add(Case("usage_global_json_overrides_clamp_and_round_trip", "Explicit global settings clamp through deserialization and persist", TestTags.Positive, () =>
+            {
+                string json = "{\"UsageCapture\":{\"Enabled\":true,\"AllowPtyFallback\":true,"
+                    + "\"MinimumIntervalSeconds\":1,\"ProbeTimeoutSeconds\":999,"
+                    + "\"MaximumConcurrentProbes\":0,\"MaximumConcurrentProbesPerHost\":999,"
+                    + "\"MaximumBackoffSeconds\":0,\"MaximumExcerptBytes\":999999,"
+                    + "\"RawSnapshotRetentionDays\":0,\"RollupRetentionDays\":999999}}";
+                ArmadaSettings settings = JsonSerializer.Deserialize<ArmadaSettings>(json)!;
+                ArmadaSettings restored = JsonSerializer.Deserialize<ArmadaSettings>(JsonSerializer.Serialize(settings))!;
+                foreach (UsageCaptureSettings usage in new UsageCaptureSettings[] { settings.UsageCapture, restored.UsageCapture })
+                {
+                    AssertTrue(usage.Enabled, "explicit enable survives");
+                    AssertTrue(usage.AllowPtyFallback, "explicit PTY override survives");
+                    AssertEqual(60, usage.MinimumIntervalSeconds, "minimum clamps");
+                    AssertEqual(300, usage.ProbeTimeoutSeconds, "timeout clamps");
+                    AssertEqual(1, usage.MaximumConcurrentProbes, "concurrency clamps");
+                    AssertEqual(64, usage.MaximumConcurrentProbesPerHost, "host concurrency clamps");
+                    AssertEqual(60, usage.MaximumBackoffSeconds, "backoff clamps");
+                    AssertEqual(65536, usage.MaximumExcerptBytes, "excerpt clamps");
+                    AssertEqual(1, usage.RawSnapshotRetentionDays, "raw retention clamps");
+                    AssertEqual(1825, usage.RollupRetentionDays, "rollup retention clamps");
+                }
+            }));
+
+            cases.Add(Case("captain_usage_json_rejects_malformed_types", "Malformed captain settings cannot silently enable capture", TestTags.Negative, () =>
+            {
+                foreach (string json in new string[]
+                {
+                    "{\"UsageCaptureEnabled\":\"true\"}",
+                    "{\"UsageCaptureIntervalSeconds\":\"300\"}",
+                    "{\"UsageCaptureIntervalSeconds\":1.5}",
+                    "{\"UsageCaptureMode\":{}}",
+                    "{\"UsageCaptureCommand\":[]}"
+                })
+                {
+                    AssertThrows<JsonException>(() => JsonSerializer.Deserialize<Captain>(json));
+                }
+
+                foreach (string command in new string[] { "", " ", "\t\r\n" })
+                {
+                    string json = "{\"UsageCaptureCommand\":" + JsonSerializer.Serialize(command) + "}";
+                    Captain captain = JsonSerializer.Deserialize<Captain>(json)!;
+                    AssertNull(captain.UsageCaptureCommand, "blank command normalizes through JSON");
+                    AssertFalse(captain.UsageCaptureActive, "blank command cannot enable default captain");
+                }
+            }));
+
             cases.Add(Case("captain_full_settings_round_trip", "Fully populated usage settings survive serialization", TestTags.Positive, () =>
             {
                 string json = "{\"UsageCaptureEnabled\":true,\"UsageCaptureIntervalSeconds\":900,"
