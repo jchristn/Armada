@@ -7,6 +7,9 @@ All notable changes to Armada are documented in this file.
 ## Unreleased
 
 - Captain evaluation panels resume existing runs, show live probe and battery progress, expose failures inline, and provide the last ten runs with reports and profile revision links.
+### Captains list Evaluate action
+
+- **Evaluate... in the captain row menu.** The Captains list Actions menu has an Evaluate... item (after View Tools, shown to global and tenant admins) that opens the same Evaluate dialog as the captain page. Submitting starts the run through `POST /api/v1/captains/{id}/evaluate` and opens `/captains/{id}?evaluationRun=<run id>` with a toast naming the run. No server change.
 
 ### Full Evaluate follow-up (model heterogeneity Phase 5, item 4)
 

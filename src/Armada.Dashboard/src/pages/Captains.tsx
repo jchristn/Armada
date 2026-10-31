@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiErrorMessage, listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, enumerateModelEndpoints, setCaptainCliPermissionPolicy } from '../api/client';
+import { apiErrorMessage, listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, enumerateModelEndpoints, evaluateCaptain, setCaptainCliPermissionPolicy } from '../api/client';
 import { listAll } from '../api/paging';
-import type { ModelEndpoint } from '../types/models';
+import type { ModelEndpoint, ModelEvaluationOptions, ModelProbeDepth } from '../types/models';
 import type { Captain, CaptainToolAccessResult } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -11,6 +11,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import MuxRuntimeFields from '../components/captains/MuxRuntimeFields';
 import CaptainTierBadge from '../components/shared/CaptainTierBadge';
 import CaptainToolViewer from '../components/captains/CaptainToolViewer';
+import ModelEvaluateDialog from '../components/ModelEvaluateDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
@@ -40,6 +41,8 @@ export default function Captains() {
   const deletion = useDeleteProgress();
   const { isAdmin, isTenantAdmin } = useAuth();
   const canManageCliPolicy = !!isAdmin || !!isTenantAdmin;
+  // POST /captains/{id}/evaluate needs a tenant admin (or global admin), so only they see Evaluate...
+  const canEvaluate = !!isAdmin || !!isTenantAdmin;
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -52,6 +55,8 @@ export default function Captains() {
   const [inferenceEndpoints, setInferenceEndpoints] = useState<ModelEndpoint[]>([]);
 
   // JSON viewer
+  const [evaluateTarget, setEvaluateTarget] = useState<Captain | null>(null);
+  const [evaluating, setEvaluating] = useState(false);
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [toolViewer, setToolViewer] = useState<{ open: boolean; captainName: string; loading: boolean; error: string; data: CaptainToolAccessResult | null }>({
     open: false,
@@ -317,6 +322,20 @@ export default function Captains() {
     }
   }
 
+  async function handleEvaluate(captain: Captain, depth: ModelProbeDepth, options: ModelEvaluationOptions) {
+    setEvaluating(true);
+    try {
+      const run = await evaluateCaptain(captain.id, depth, options);
+      setEvaluateTarget(null);
+      pushToast('success', t('Evaluation {{runId}} started for captain "{{name}}".', { runId: run.id, name: captain.name }));
+      navigate(`/captains/${encodeURIComponent(captain.id)}?evaluationRun=${encodeURIComponent(run.id)}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('Evaluate failed.'));
+    } finally {
+      setEvaluating(false);
+    }
+  }
+
   async function handleViewTools(captain: Captain) {
     setToolViewer({
       open: true,
@@ -423,6 +442,7 @@ export default function Captains() {
           { label: 'Edit', title: 'Change this captain\'s name, runtime, model, tier, permissions and instructions.', onClick: () => openEdit(c) },
           { label: 'Duplicate', title: 'Create a new idle captain with a copy of this one\'s name, runtime, model, instructions, personas and runtime options, then open it.', onClick: () => void handleDuplicate(c) },
           { label: 'View Tools', title: 'Show the MCP servers and tools this captain\'s runtime can reach, checked live where Armada can.', onClick: () => void handleViewTools(c) },
+          ...(canEvaluate ? [{ label: 'Evaluate...', title: 'Evaluate this captain through its own runtime: Quick probes, or Full with the fixture battery and an evaluator captain\'s grading. Opens the captain\'s page to follow the run. Advisory only.', onClick: () => setEvaluateTarget(c) }] : []),
           { label: 'View JSON', title: 'Show this captain\'s full record as JSON, as the API returns it.', onClick: () => setJsonData({ open: true, title: `${t('Captain')}: ${c.name}`, data: c }) },
           { label: 'View Notifications', title: 'Open the inbox of items waiting on a person, such as reviews, failures and stalled captains.', onClick: () => navigate('/inbox') },
           { label: 'Stop', title: 'Kill the captain\'s process and return it to Idle. A mission it is running is marked Failed and its dock is reclaimed. You confirm first.', onClick: () => handleStop(c.id, c.name) },
@@ -573,6 +593,15 @@ export default function Captains() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
       {deletion.dialog}
+      {evaluateTarget && (
+        <ModelEvaluateDialog
+          open
+          captainId={evaluateTarget.id}
+          submitting={evaluating}
+          onClose={() => setEvaluateTarget(null)}
+          onSubmit={(depth, options) => void handleEvaluate(evaluateTarget, depth, options)}
+        />
+      )}
 
       <DataTable
         tableKey="captains"
