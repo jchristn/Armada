@@ -69,7 +69,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@test_output", (object?)entry.TestOutput ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@test_exit_code", entry.TestExitCode.HasValue ? (object)entry.TestExitCode.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@retry_count", entry.RetryCount);
-                    cmd.Parameters.AddWithValue("@lease_expires_utc", entry.LeaseExpiresUtc.HasValue ? (object)entry.LeaseExpiresUtc.Value : DBNull.Value);
+                    PostgresqlCommandHelper.AddDate(cmd, "@lease_expires_utc", entry.LeaseExpiresUtc);
                     cmd.Parameters.AddWithValue("@created_utc", ToIso8601(entry.CreatedUtc));
                     cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(entry.LastUpdateUtc));
                     cmd.Parameters.AddWithValue("@test_started_utc", entry.TestStartedUtc.HasValue ? (object)ToIso8601(entry.TestStartedUtc.Value) : DBNull.Value);
@@ -158,7 +158,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@test_output", (object?)entry.TestOutput ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@test_exit_code", entry.TestExitCode.HasValue ? (object)entry.TestExitCode.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@retry_count", entry.RetryCount);
-                    cmd.Parameters.AddWithValue("@lease_expires_utc", entry.LeaseExpiresUtc.HasValue ? (object)entry.LeaseExpiresUtc.Value : DBNull.Value);
+                    PostgresqlCommandHelper.AddDate(cmd, "@lease_expires_utc", entry.LeaseExpiresUtc);
                     cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(entry.LastUpdateUtc));
                     cmd.Parameters.AddWithValue("@test_started_utc", entry.TestStartedUtc.HasValue ? (object)ToIso8601(entry.TestStartedUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@completed_utc", entry.CompletedUtc.HasValue ? (object)ToIso8601(entry.CompletedUtc.Value) : DBNull.Value);

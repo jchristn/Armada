@@ -394,8 +394,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                             insertCmd.Parameters.AddWithValue("@delivery_mode", snapshot.DeliveryMode.ToString());
                             insertCmd.Parameters.AddWithValue("@resolved_path", (object?)snapshot.ResolvedPath ?? DBNull.Value);
                             insertCmd.Parameters.AddWithValue("@worktree_relative_path", (object?)snapshot.WorktreeRelativePath ?? DBNull.Value);
-                            insertCmd.Parameters.AddWithValue("@source_last_update_utc",
-                                snapshot.SourceLastUpdateUtc.HasValue ? snapshot.SourceLastUpdateUtc.Value : DBNull.Value);
+                            PostgresqlCommandHelper.AddDate(insertCmd, "@source_last_update_utc", snapshot.SourceLastUpdateUtc);
                             await insertCmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                         }
                     }
@@ -458,12 +457,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (query.CreatedAfter.HasValue)
                 {
                     conditions.Add("created_utc > @created_after");
-                    parameters.Add(new NpgsqlParameter("@created_after", query.CreatedAfter.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_after", query.CreatedAfter.Value));
                 }
                 if (query.CreatedBefore.HasValue)
                 {
                     conditions.Add("created_utc < @created_before");
-                    parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_before", query.CreatedBefore.Value));
                 }
 
                 string whereClause = conditions.Count > 0 ? " WHERE " + String.Join(" AND ", conditions) : "";
@@ -505,8 +504,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@description", (object?)playbook.Description ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@content", playbook.Content);
             cmd.Parameters.AddWithValue("@active", playbook.Active);
-            cmd.Parameters.AddWithValue("@created_utc", playbook.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", playbook.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", playbook.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", playbook.LastUpdateUtc);
         }
 
         private static Playbook PlaybookFromReader(NpgsqlDataReader reader)

@@ -329,12 +329,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@timeout_ms", endpoint.TimeoutMs);
             cmd.Parameters.AddWithValue("@enabled", endpoint.Enabled);
             cmd.Parameters.AddWithValue("@health_status", endpoint.HealthStatus.ToString());
-            cmd.Parameters.AddWithValue("@last_health_check_utc", (object?)endpoint.LastHealthCheckUtc ?? DBNull.Value);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_health_check_utc", endpoint.LastHealthCheckUtc);
             cmd.Parameters.AddWithValue("@last_health_error", (object?)endpoint.LastHealthError ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@last_latency_ms", (object?)endpoint.LastLatencyMs ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@health_history_json", JsonSerializer.Serialize(endpoint.HealthHistory ?? new List<ModelEndpointHealthRecord>(), _Json));
-            cmd.Parameters.AddWithValue("@created_utc", endpoint.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", endpoint.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", endpoint.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", endpoint.LastUpdateUtc);
         }
 
         private static ModelEndpoint EndpointFromReader(NpgsqlDataReader reader)
@@ -361,8 +361,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 LastHealthCheckUtc = NullableDateTime(reader["last_health_check_utc"]),
                 LastHealthError = NullableString(reader["last_health_error"]),
                 LastLatencyMs = NullableLong(reader["last_latency_ms"]),
-                CreatedUtc = (DateTime)reader["created_utc"],
-                LastUpdateUtc = (DateTime)reader["last_update_utc"]
+                CreatedUtc = DateTime.SpecifyKind((DateTime)reader["created_utc"], DateTimeKind.Utc),
+                LastUpdateUtc = DateTime.SpecifyKind((DateTime)reader["last_update_utc"], DateTimeKind.Utc)
             };
 
             endpoint.ApiKey = NullableString(reader["api_key"]);

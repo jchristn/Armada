@@ -350,7 +350,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@effort", objective.Effort.ToString());
             cmd.Parameters.AddWithValue("@owner", (object?)objective.Owner ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@target_version", (object?)objective.TargetVersion ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@due_utc", (object?)objective.DueUtc ?? DBNull.Value);
+            PostgresqlCommandHelper.AddDate(cmd, "@due_utc", objective.DueUtc);
             cmd.Parameters.AddWithValue("@parent_objective_id", (object?)objective.ParentObjectiveId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@blocked_by_objective_ids_json", ObjectivePersistenceHelper.Serialize(objective.BlockedByObjectiveIds));
             cmd.Parameters.AddWithValue("@refinement_summary", (object?)objective.RefinementSummary ?? DBNull.Value);
@@ -375,10 +375,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@source_type", (object?)objective.SourceType ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@source_id", (object?)objective.SourceId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@source_url", (object?)objective.SourceUrl ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@source_updated_utc", (object?)objective.SourceUpdatedUtc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@created_utc", objective.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", objective.LastUpdateUtc);
-            cmd.Parameters.AddWithValue("@completed_utc", (object?)objective.CompletedUtc ?? DBNull.Value);
+            PostgresqlCommandHelper.AddDate(cmd, "@source_updated_utc", objective.SourceUpdatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", objective.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", objective.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@completed_utc", objective.CompletedUtc);
         }
 
         private static Objective ObjectiveFromReader(NpgsqlDataReader reader)
@@ -408,8 +408,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 SourceId = NullableString(reader["source_id"]),
                 SourceUrl = NullableString(reader["source_url"]),
                 SourceUpdatedUtc = NullableDateTime(reader["source_updated_utc"]),
-                CreatedUtc = (DateTime)reader["created_utc"],
-                LastUpdateUtc = (DateTime)reader["last_update_utc"],
+                CreatedUtc = DateTime.SpecifyKind((DateTime)reader["created_utc"], DateTimeKind.Utc),
+                LastUpdateUtc = DateTime.SpecifyKind((DateTime)reader["last_update_utc"], DateTimeKind.Utc),
                 CompletedUtc = NullableDateTime(reader["completed_utc"])
             };
 

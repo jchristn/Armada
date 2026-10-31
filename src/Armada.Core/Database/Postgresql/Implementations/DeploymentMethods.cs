@@ -318,12 +318,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
             if (query.FromUtc.HasValue)
             {
                 conditions.Add("created_utc >= @from_utc");
-                parameters.Add(new NpgsqlParameter("@from_utc", query.FromUtc.Value.ToUniversalTime()));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@from_utc", query.FromUtc.Value));
             }
             if (query.ToUtc.HasValue)
             {
                 conditions.Add("created_utc <= @to_utc");
-                parameters.Add(new NpgsqlParameter("@to_utc", query.ToUtc.Value.ToUniversalTime()));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@to_utc", query.ToUtc.Value));
             }
         }
 
@@ -347,7 +347,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@verification_status", deployment.VerificationStatus.ToString());
             cmd.Parameters.AddWithValue("@approval_required", deployment.ApprovalRequired);
             cmd.Parameters.AddWithValue("@approved_by_user_id", (object?)deployment.ApprovedByUserId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@approved_utc", (object?)deployment.ApprovedUtc?.ToUniversalTime() ?? DBNull.Value);
+            PostgresqlCommandHelper.AddDate(cmd, "@approved_utc", deployment.ApprovedUtc);
             cmd.Parameters.AddWithValue("@approval_comment", (object?)deployment.ApprovalComment ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@deploy_check_run_id", (object?)deployment.DeployCheckRunId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@smoke_test_check_run_id", (object?)deployment.SmokeTestCheckRunId ?? DBNull.Value);
@@ -359,17 +359,17 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@request_history_summary_json", deployment.RequestHistorySummary != null
                 ? JsonSerializer.Serialize(deployment.RequestHistorySummary, _Json)
                 : DBNull.Value);
-            cmd.Parameters.AddWithValue("@created_utc", deployment.CreatedUtc.ToUniversalTime());
-            cmd.Parameters.AddWithValue("@started_utc", (object?)deployment.StartedUtc?.ToUniversalTime() ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@completed_utc", (object?)deployment.CompletedUtc?.ToUniversalTime() ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@verified_utc", (object?)deployment.VerifiedUtc?.ToUniversalTime() ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@rolled_back_utc", (object?)deployment.RolledBackUtc?.ToUniversalTime() ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@monitoring_window_ends_utc", (object?)deployment.MonitoringWindowEndsUtc?.ToUniversalTime() ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@last_monitored_utc", (object?)deployment.LastMonitoredUtc?.ToUniversalTime() ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@last_regression_alert_utc", (object?)deployment.LastRegressionAlertUtc?.ToUniversalTime() ?? DBNull.Value);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", deployment.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@started_utc", deployment.StartedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@completed_utc", deployment.CompletedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@verified_utc", deployment.VerifiedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@rolled_back_utc", deployment.RolledBackUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@monitoring_window_ends_utc", deployment.MonitoringWindowEndsUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_monitored_utc", deployment.LastMonitoredUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_regression_alert_utc", deployment.LastRegressionAlertUtc);
             cmd.Parameters.AddWithValue("@latest_monitoring_summary", (object?)deployment.LatestMonitoringSummary ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@monitoring_failure_count", deployment.MonitoringFailureCount);
-            cmd.Parameters.AddWithValue("@last_update_utc", deployment.LastUpdateUtc.ToUniversalTime());
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", deployment.LastUpdateUtc);
         }
 
         private static Deployment FromReader(NpgsqlDataReader reader)

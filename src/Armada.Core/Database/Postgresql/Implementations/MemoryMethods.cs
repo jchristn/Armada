@@ -409,8 +409,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@source_vessel_id", (object?)memory.SourceVesselId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@source_detail", (object?)memory.SourceDetail ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@vessel_id", (object?)memory.VesselId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@created_utc", memory.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", memory.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", memory.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", memory.LastUpdateUtc);
         }
 
 

@@ -266,12 +266,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
             if (query.FromUtc.HasValue)
             {
                 conditions.Add("created_utc >= @from_utc");
-                parameters.Add(new NpgsqlParameter("@from_utc", query.FromUtc.Value));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@from_utc", query.FromUtc.Value));
             }
             if (query.ToUtc.HasValue)
             {
                 conditions.Add("created_utc <= @to_utc");
-                parameters.Add(new NpgsqlParameter("@to_utc", query.ToUtc.Value));
+                parameters.Add(PostgresqlCommandHelper.DateParameter("@to_utc", query.ToUtc.Value));
             }
         }
 
@@ -292,8 +292,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@workflow_profile_id", (object?)profile.WorkflowProfileId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@persona_overrides_json", Serialize(profile.PersonaOverrides));
             cmd.Parameters.AddWithValue("@skills_json", Serialize(profile.Skills));
-            cmd.Parameters.AddWithValue("@created_utc", profile.CreatedUtc);
-            cmd.Parameters.AddWithValue("@last_update_utc", profile.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", profile.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", profile.LastUpdateUtc);
         }
 
         private static ProjectProfile FromReader(NpgsqlDataReader reader)

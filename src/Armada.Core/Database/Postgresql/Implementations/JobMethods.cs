@@ -113,9 +113,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@progress", job.Progress);
                     cmd.Parameters.AddWithValue("@result_json", (object?)job.ResultJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@error_reason", (object?)job.ErrorReason ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@started_utc", job.StartedUtc.HasValue ? (object)job.StartedUtc.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@completed_utc", job.CompletedUtc.HasValue ? (object)job.CompletedUtc.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@last_update_utc", job.LastUpdateUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@started_utc", job.StartedUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@completed_utc", job.CompletedUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", job.LastUpdateUtc);
                     int rows = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                     return rows > 0;
                 }
@@ -137,7 +137,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         WHERE id = @id AND status = @running;";
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@progress", Math.Clamp(minimumProgress, 0, 100));
-                    cmd.Parameters.AddWithValue("@last_update_utc", lastUpdateUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", lastUpdateUtc);
                     cmd.Parameters.AddWithValue("@running", JobStatusEnum.Running.ToString());
                     int rows = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                     return rows > 0;
@@ -371,10 +371,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@progress", job.Progress);
             cmd.Parameters.AddWithValue("@result_json", (object?)job.ResultJson ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@error_reason", (object?)job.ErrorReason ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@created_utc", job.CreatedUtc);
-            cmd.Parameters.AddWithValue("@started_utc", (object?)job.StartedUtc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@completed_utc", (object?)job.CompletedUtc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@last_update_utc", job.LastUpdateUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@created_utc", job.CreatedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@started_utc", job.StartedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@completed_utc", job.CompletedUtc);
+            PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", job.LastUpdateUtc);
         }
 
         private static Job JobFromReader(NpgsqlDataReader reader)

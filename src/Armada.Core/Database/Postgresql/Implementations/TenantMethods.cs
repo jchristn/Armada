@@ -64,8 +64,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@name", tenant.Name);
                     cmd.Parameters.AddWithValue("@active", tenant.Active);
                     cmd.Parameters.AddWithValue("@is_protected", tenant.IsProtected);
-                    cmd.Parameters.AddWithValue("@created_utc", tenant.CreatedUtc);
-                    cmd.Parameters.AddWithValue("@last_update_utc", tenant.LastUpdateUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@created_utc", tenant.CreatedUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", tenant.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -143,7 +143,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@name", tenant.Name);
                     cmd.Parameters.AddWithValue("@active", tenant.Active);
                     cmd.Parameters.AddWithValue("@is_protected", tenant.IsProtected);
-                    cmd.Parameters.AddWithValue("@last_update_utc", tenant.LastUpdateUtc);
+                    PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", tenant.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -211,12 +211,12 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 if (query.CreatedAfter.HasValue)
                 {
                     conditions.Add("created_utc > @created_after");
-                    parameters.Add(new NpgsqlParameter("@created_after", query.CreatedAfter.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_after", query.CreatedAfter.Value));
                 }
                 if (query.CreatedBefore.HasValue)
                 {
                     conditions.Add("created_utc < @created_before");
-                    parameters.Add(new NpgsqlParameter("@created_before", query.CreatedBefore.Value));
+                    parameters.Add(PostgresqlCommandHelper.DateParameter("@created_before", query.CreatedBefore.Value));
                 }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
