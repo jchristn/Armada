@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import catalogSource from '../../../Armada.Server/wwwroot/i18n/armada.json?raw';
 import componentSource from './ModelProbeEvaluate.tsx?raw';
 import detailsSource from './evaluations/ModelProbeRunDetails.tsx?raw';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import dialogSource from './ModelEvaluateDialog.tsx?raw';
 import captainDetailSource from '../pages/CaptainDetail.tsx?raw';
 import endpointsSource from '../pages/Endpoints.tsx?raw';
@@ -423,19 +423,24 @@ describe('ModelProbeEvaluate', () => {
     await waitFor(() => expect(dialog).toHaveTextContent('Battery packs unavailable.'));
   });
 
-  it('Manage packs navigates inside the /dashboard basename instead of requesting /battery from the server', async () => {
+  it('Manage packs opens the Captains Battery Packs tab inside the /dashboard basename', async () => {
+    function TabProbe() {
+      const location = useLocation();
+      return new URLSearchParams(location.search).get('tab') === 'battery'
+        ? <p>battery packs page</p>
+        : <ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />;
+    }
     render(
       <MemoryRouter basename="/dashboard" initialEntries={['/dashboard/captains']}>
         <Routes>
-          <Route path="captains" element={<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />} />
-          <Route path="battery" element={<p>battery packs page</p>} />
+          <Route path="captains" element={<TabProbe />} />
         </Routes>
       </MemoryRouter>,
     );
     await openDialog();
     const link = screen.getByRole('link', { name: 'Manage packs' });
-    // A raw href="/battery" escaped the basename and hit the Admiral's JSON 404.
-    expect(link).toHaveAttribute('href', '/dashboard/battery');
+    // A raw href="/battery" escaped the basename and hit the Admiral's JSON 404; packs are now a Captains tab.
+    expect(link).toHaveAttribute('href', '/dashboard/captains?tab=battery');
     await userEvent.click(link);
     expect(await screen.findByText('battery packs page')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).toBeNull();

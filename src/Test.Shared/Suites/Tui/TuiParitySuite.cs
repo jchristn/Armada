@@ -57,6 +57,12 @@ namespace Test.Shared.Suites.Tui
                 Missing(manifest, "tab", tabs);
                 foreach (string tab in tabs)
                 {
+                    ParityEntry? entry = manifest.Entries.FirstOrDefault(e => e.Kind == "tab" && e.Key == tab);
+                    if (entry?.Status == "not-applicable")
+                    {
+                        AssertFalse(String.IsNullOrWhiteSpace(entry.Notes), "not-applicable tab explains why: " + tab);
+                        continue;
+                    }
                     string page = tab.Split(':')[0];
                     string key = tab.Split(':')[1];
                     RouteMatch m = Router.Resolve(DashboardSource.HubPages[page] + key);

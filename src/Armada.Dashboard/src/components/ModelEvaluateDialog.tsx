@@ -168,7 +168,7 @@ export default function ModelEvaluateDialog({ open, captainId, submitting = fals
           <strong>{t('Battery packs')}</strong>{' '}
           {/* A router Link, not a raw href: the SPA lives under the /dashboard basename, and a bare /battery
               request goes to the Admiral (or the standalone nginx proxy) and answers a JSON 404. */}
-          <Link to="/battery" onClick={onClose}>{t('Manage packs')}</Link>{' '}
+          <Link to="/captains?tab=battery" onClick={onClose}>{t('Manage packs')}</Link>{' '}
           <span className="text-dim">{t('None selected: the packs matching your repositories\' languages.')}</span>
           {!loading && installedPacks.length === 0 && <p className="text-dim">{t('No battery packs are installed.')}</p>}
           <ul style={{ listStyle: 'none', margin: '0.25rem 0 0', padding: 0 }}>

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import catalogSource from '../../../Armada.Server/wwwroot/i18n/armada.json?raw';
 import pageSource from '../pages/BatteryPacks.tsx?raw';
+import hubSource from '../pages/CaptainsHub.tsx?raw';
 import type { I18nCatalog } from '../i18n/runtime';
 
 const S = "'((?:[^'\\\\]|\\\\.)*)'";
 const CALL = new RegExp(`\\bt\\(\\s*${S}`, 'g');
+/** CaptainsHub tab labels and tooltips, translated by the shared Tabs component. */
+const TAB_TEXT = new RegExp(`\\b(?:label|tooltip):\\s*${S}`, 'g');
 
 /** Strings the Battery packs page translates outside a t('...') literal: row action menu labels (ActionMenu) and the
  * status badge values (StatusBadge) and confirm dialog title (ConfirmDialog). */
@@ -16,6 +19,7 @@ function batteryKeys(): string[] {
     const key = m[1].replace(/\\'/g, "'");
     if (key.trim()) keys.add(key);
   }
+  for (const m of hubSource.matchAll(TAB_TEXT)) keys.add(m[1].replace(/\\'/g, "'"));
   return [...keys].sort();
 }
 
@@ -31,6 +35,9 @@ describe('Battery packs i18n catalog', () => {
     expect(keys.length).toBeGreaterThan(30);
     expect(keys).toContain('Battery packs');
     expect(keys).toContain('Result of the last validation. Hover an invalid pack for its errors.');
+    // The Captains hub tab that hosts the page.
+    expect(keys).toContain('Battery Packs');
+    expect(keys).toContain('Docks');
   });
 
   it('has a translation for every string in every non-English locale', () => {

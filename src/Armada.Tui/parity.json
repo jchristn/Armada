@@ -809,6 +809,14 @@
     },
     {
       "kind": "tab",
+      "key": "CaptainsHub:battery",
+      "status": "not-applicable",
+      "tui": "",
+      "workstream": "",
+      "notes": "Battery Packs tab (moved from /battery): server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "tab",
       "key": "CliPermissions:requests",
       "status": "implemented",
       "tui": "CliPermissionRequestsScreen",

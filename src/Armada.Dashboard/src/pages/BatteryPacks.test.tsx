@@ -3,11 +3,13 @@ import BatteryPacks from './BatteryPacks';
 import * as api from '../api/client';
 import type { BatteryPackDetail } from '../types/models';
 vi.mock('../api/client', () => ({ listBatteryPacks: vi.fn(), getBatteryPack: vi.fn(), updateBatteryPackManifest: vi.fn(), deleteBatteryPack: vi.fn(), validateBatteryPack: vi.fn(), createBatteryPack: vi.fn(), readBatteryPackFile: vi.fn(), writeBatteryPackFile: vi.fn(), deleteBatteryPackFile: vi.fn() }));
-vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAdmin: true }) }));
+const auth = vi.hoisted(() => ({ isAdmin: true }));
+vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
 vi.mock('../context/LocaleContext', () => ({ useLocale: () => ({ t: (text: string, params?: Record<string, string>) => text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => params?.[key] ?? key) }) }));
 const detail: BatteryPackDetail = { id: 'demo', manifestJson: '{}', info: { id: 'demo', name: 'Demo', version: 1, domain: 'C#', valid: false, errors: ['Missing tasks'], tasks: [], taskCount: 0 }, files: [{ path: 'fixture/a.txt', size: 3 }] };
 beforeEach(() => {
   vi.clearAllMocks();
+  auth.isAdmin = true;
   vi.mocked(api.listBatteryPacks).mockResolvedValue({ objects: [detail.info], totalPages: 1 } as Awaited<ReturnType<typeof api.listBatteryPacks>>);
   vi.mocked(api.getBatteryPack).mockResolvedValue(detail);
   vi.mocked(api.updateBatteryPackManifest).mockResolvedValue({ ...detail, manifestJson: '{"id":"demo"}' });
@@ -84,4 +86,18 @@ it('marks valid and invalid tags with the shared complete and failed colors', as
   const css = readFileSync('./src/App.css', 'utf8');
   expect(css).toMatch(/\.tag\.passed[^{]*\.tag\.valid\s*\{\s*background: var\(--tag-complete-bg\)/);
   expect(css).toMatch(/\.tag\.landingfailed, \.tag\.invalid\s*\{\s*background: var\(--tag-failed-bg\)/);
+});
+it('keeps packs read-only for non-admins: View only, no create, delete, save or new file', async () => {
+  auth.isAdmin = false;
+  render(<BatteryPacks />);
+  expect(await screen.findByText('Demo')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '+ New pack' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
+  expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull();
+  expect(screen.queryByRole('menuitem', { name: 'View/Edit' })).toBeNull();
+  fireEvent.click(screen.getByRole('menuitem', { name: 'View' }));
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByRole('textbox', { name: 'Manifest JSON' })).toHaveAttribute('readonly');
+  expect(within(dialog).queryByRole('button', { name: 'Save manifest' })).toBeNull();
+  expect(within(dialog).queryByRole('button', { name: '+ New file' })).toBeNull();
 });
