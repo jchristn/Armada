@@ -1201,6 +1201,8 @@ namespace Armada.Server.WebSocket
                         return WebSocketCommandError.Create("delete_pipeline", WebSocketCommandErrorCodeEnum.NotFound, "Pipeline not found");
                     if (delPipeline.IsBuiltIn)
                         return WebSocketCommandError.Create("delete_pipeline", WebSocketCommandErrorCodeEnum.Conflict, "Cannot delete built-in pipeline");
+                    ObjectiveService objectives = new ObjectiveService(_Database);
+                    await objectives.ClearSuggestedPipelineAsync(delPipeline.Id).ConfigureAwait(false);
                     await _Database.Pipelines.DeleteAsync(delPipeline.Id).ConfigureAwait(false);
                     return new { type = "command.result", action = "delete_pipeline", data = (object)new { Status = "deleted", Name = delPipelineName } };
 

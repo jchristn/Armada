@@ -6,6 +6,7 @@ namespace Armada.Core.Services
     using System.Threading;
     using System.Text.Json;
     using System.Text.Json.Serialization;
+    using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -582,6 +583,57 @@ namespace Armada.Core.Services
             return await PersistLinkedObjectiveAsync(auth, objective, token).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Remove a pipeline from every objective that suggests it, and store a newer snapshot.
+        /// </summary>
+        /// <param name="pipelineId">Pipeline identifier to remove from objective suggestions.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="pipelineId"/> is blank.</exception>
+        public async Task ClearSuggestedPipelineAsync(string pipelineId, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(pipelineId)) throw new ArgumentNullException(nameof(pipelineId));
+
+            await EnsureBackfilledAsync(token).ConfigureAwait(false);
+            // Read every page before any write. A write changes update time, and the page order is by update time.
+            List<Objective> matches = new List<Objective>();
+            int pageNumber = 1;
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+                EnumerationResult<Objective> page = await _Database.Objectives.EnumeratePageAsync(
+                    null,
+                    null,
+                    new ObjectiveQuery
+                    {
+                        PageNumber = pageNumber,
+                        PageSize = CollectionLimits.MaxPageSize
+                    },
+                    token).ConfigureAwait(false);
+
+                foreach (Objective objective in page.Objects)
+                {
+                    if (String.Equals(objective.SuggestedPipelineId, pipelineId, StringComparison.Ordinal))
+                        matches.Add(objective);
+                }
+
+                if (page.Objects.Count == 0 || pageNumber >= page.TotalPages)
+                    break;
+
+                pageNumber++;
+            }
+
+            foreach (Objective objective in matches)
+            {
+                string tenantId = objective.TenantId ?? Constants.DefaultTenantId;
+                string userId = objective.UserId ?? Constants.DefaultUserId;
+                bool isAdmin = objective.TenantId == null;
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, isAdmin, true, "PipelineDelete");
+                objective.SuggestedPipelineId = null;
+                objective.LastUpdateUtc = DateTime.UtcNow;
+                await PersistObjectiveAsync(auth, objective, token).ConfigureAwait(false);
+            }
+        }
+
         private async Task<Objective?> ReadObjectiveRowAsync(AuthContext auth, string id, CancellationToken token)
         {
             if (auth.IsAdmin)
@@ -663,6 +715,13 @@ namespace Armada.Core.Services
                     continue;
 
                 SanitizeObjective(objective);
+                if (!String.IsNullOrWhiteSpace(objective.SuggestedPipelineId))
+                {
+                    Pipeline? pipeline = await _Database.Pipelines.ReadAsync(objective.SuggestedPipelineId, token).ConfigureAwait(false);
+                    if (pipeline == null)
+                        objective.SuggestedPipelineId = null;
+                }
+
                 await UpsertObjectiveRowAsync(objective, token, skipIfExistingNewer: true).ConfigureAwait(false);
             }
         }
