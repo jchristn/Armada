@@ -201,6 +201,7 @@ namespace Armada.Core.Services
             connection.HostsDocks = HasAvailableCapability(handshake.Capabilities, HarborProtocol.DockCapability);
             connection.HostsCheckouts = connection.HostsDocks && HasAvailableCapability(handshake.Capabilities, HarborProtocol.CheckoutCapability);
             connection.OpensTerminals = connection.HostsCheckouts && HasAvailableCapability(handshake.Capabilities, HarborProtocol.OpenTerminalCapability);
+            connection.HostsUsageProbes = HasAvailableCapability(handshake.Capabilities, HarborProtocol.UsageProbeCapability);
             connection.PromptRuntimes = ReadPromptRuntimes(handshake.Capabilities);
             connection.Name = handshake.Name;
             connection.HeartbeatIntervalMs = handshake.HeartbeatIntervalMs;
@@ -515,6 +516,28 @@ namespace Armada.Core.Services
         public bool OpensTerminals(string harborId)
         {
             return !String.IsNullOrWhiteSpace(harborId) && _Connections.TryGetValue(harborId, out HarborConnection? connection) && connection!.OpensTerminals;
+        }
+
+        /// <summary>
+        /// Whether any Harbor is currently connected.
+        /// </summary>
+        /// <returns>True when at least one Harbor link is up.</returns>
+        public bool HasConnectedHarbors()
+        {
+            return !_Connections.IsEmpty;
+        }
+
+        /// <summary>
+        /// Whether a connected Harbor can run account usage capture probes on its host (it advertised
+        /// <see cref="HarborProtocol.UsageProbeCapability"/> in its handshake). An Admiral sends a usage
+        /// probe request only to such a Harbor; for an older Harbor the capture answers Unsupported with
+        /// HostUpgradeRequired instead of probing.
+        /// </summary>
+        /// <param name="harborId">Harbor identifier.</param>
+        /// <returns>True when connected and able to probe.</returns>
+        public bool HostsUsageProbes(string harborId)
+        {
+            return !String.IsNullOrWhiteSpace(harborId) && _Connections.TryGetValue(harborId, out HarborConnection? connection) && connection!.HostsUsageProbes;
         }
 
         /// <summary>

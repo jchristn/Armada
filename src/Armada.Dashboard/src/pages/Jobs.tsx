@@ -59,7 +59,7 @@ export default function Jobs() {
       cellTitle: (job) => [job.name, job.errorReason].filter(Boolean).join('\n'),
       render: (job) => <span className="cell-one-line">{job.name}</span>,
     },
-    { key: 'kind', label: t('Kind'), headerTitle: t('Type of background work: Generic, Cleanup, Sync, Report, VesselDiscovery, VesselImport, or FleetCategorization.'), render: (job) => job.kind },
+    { key: 'kind', label: t('Kind'), headerTitle: t('Type of background work: Generic, Cleanup, Sync, Report, VesselDiscovery, VesselImport, FleetCategorization, or UsageProbe (an account usage capture).'), render: (job) => job.kind },
     { key: 'status', label: t('Status'), headerTitle: t('Queued, Running, Succeeded, Failed, or Cancelled.'), cellClassName: 'cell-nowrap', render: (job) => <StatusBadge status={job.status} /> },
     { key: 'progress', label: t('Progress'), headerTitle: t('Percent of the job\'s work completed, from 0 to 100.'), cellClassName: 'mono cell-nowrap', render: (job) => `${job.progress}%` },
     {

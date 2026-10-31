@@ -47,8 +47,21 @@ namespace Armada.Core.Harbor
 
         /// <summary>
         /// What the command is for, so the Harbor can present it: null or absent means routine git work.
+        /// <see cref="Armada.Core.Services.HostCommandKindEnum.UsageProbe"/> selects the host-side usage
+        /// helper instead of an executable; an Admiral sends it only to a Harbor that advertises
+        /// <see cref="HarborProtocol.UsageProbeCapability"/>.
         /// </summary>
-        public HostCommandKindEnum? Kind { get; set; } = null;
+        public Armada.Core.Services.HostCommandKindEnum? Kind { get; set; } = null;
+
+        /// <summary>
+        /// Serialized <see cref="Armada.Core.Services.UsageProbeHost"/> (safe profile reference and probe
+        /// configuration, never credential contents), present only when
+        /// <see cref="Kind"/> is <see cref="Armada.Core.Services.HostCommandKindEnum.UsageProbe"/>. The
+        /// Harbor deserializes it, runs the host-side usage helper on its own credentials, and replies with
+        /// the sanitized <see cref="Armada.Core.Services.UsageProbeResult"/> JSON in the git result's
+        /// standard output. A sender that predates the field never sets it.
+        /// </summary>
+        public string? UsageProbeJson { get; set; } = null;
 
         /// <summary>
         /// Optional short name for the command in the Harbor's activity log (for example the check's name), or null.

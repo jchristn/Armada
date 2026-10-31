@@ -22,12 +22,27 @@ namespace Armada.Core.Services
 
         #endregion
 
+        #region Public-Members
+
+        /// <summary>
+        /// Host-side usage helper invoked for a request whose kind is
+        /// <see cref="HostCommandKindEnum.UsageProbe"/>: it performs credential access, the probe read and
+        /// sanitization locally and answers with the sanitized result. Null (an Admiral whose composition
+        /// predates the helper) answers Unsupported rather than running anything.
+        /// </summary>
+        public IUsageProbe? UsageProbe { get; set; } = null;
+
+        #endregion
+
         #region Public-Methods
 
         /// <inheritdoc />
         public async Task<HostCommandResult> RunAsync(HostCommandRequest request, CancellationToken token = default)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
+
+            if (request.Kind == HostCommandKindEnum.UsageProbe)
+                return await RunUsageProbeAsync(request, token).ConfigureAwait(false);
 
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
@@ -112,6 +127,43 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private async Task<HostCommandResult> RunUsageProbeAsync(HostCommandRequest request, CancellationToken token)
+        {
+            IUsageProbe? probe = UsageProbe;
+            if (probe == null)
+                return ProbeReply(UsageProbeResult.Unsupported("ProbeHelperUnavailable", "this host has no usage probe helper; update it"));
+
+            UsageProbeHost host = UsageProbeHost.Deserialize(request.UsageProbeJson);
+            if (request.TimeoutMs > 0) host.TimeoutSeconds = (request.TimeoutMs + 999) / 1000;
+
+            try
+            {
+                UsageProbeResult result = await probe.CaptureAsync(host, token).ConfigureAwait(false);
+                return ProbeReply(result);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                // A probe that cannot run is a failed attempt with a redacted diagnostic, never an unbounded
+                // stderr channel and never the end of the caller.
+                return ProbeReply(UsageProbeResult.Failed("ProbeFailed", SecretRedactor.Redact(e.Message)));
+            }
+        }
+
+        private static HostCommandResult ProbeReply(UsageProbeResult result)
+        {
+            return new HostCommandResult
+            {
+                ExitCode = 0,
+                StandardOutput = result.Serialize(),
+                StandardError = String.IsNullOrWhiteSpace(result.ErrorCode) ? String.Empty : result.ErrorCode,
+                TimedOut = String.Equals(result.ErrorCode, "ProbeTimeout", StringComparison.Ordinal)
+            };
+        }
 
         private static async Task PumpAsync(StreamReader reader, StringBuilder sink)
         {

@@ -207,6 +207,8 @@ namespace Armada.Server
         private HarborMetricsService _HarborMetricsService = null!;
         private HarborJobControlService _HarborJobControl = null!;
         private HarborConnectionManager _HarborConnectionManager = null!;
+        private Armada.Core.Services.UsageCaptureService _UsageCapture = null!;
+        private Armada.Core.Services.UsageCaptureScheduler _UsageCaptureScheduler = null!;
         private CaptainLaunchRouter _LaunchRouter = null!;
         private HarborLinkEndpoint _HarborLinkEndpoint = null!;
         private IVesselService _VesselService = null!;
@@ -448,6 +450,29 @@ namespace Armada.Server
             // Fleet actions: runner (owned here, started below) and service; seed built-ins into every tenant.
             FleetActionSeedService fleetActionSeeder = new FleetActionSeedService(_Database, _Logging);
             _FleetActionRunner = new FleetActionRunner(_Database, _Settings, _Logging, new AdmiralFleetActionMissionDispatcher(_Database, _Admiral), new LocalHostCommandExecutor(), _HarborConnectionManager);
+
+            // Account usage capture (disabled by default): the Admiral host runs the probe helper in-process
+            // for local captures, Harbor captures go over the link, and every attempt owns its own dedicated
+            // UsageProbe job. No runtime probe adapters are registered yet (phase 3), so an Auto-mode captain
+            // answers Unsupported; a Custom command runs through the host helper as specified.
+            Armada.Core.Services.UsageAccountResolver usageAccounts = new Armada.Core.Services.UsageAccountResolver(_Settings.DataDirectory, _Logging);
+            Armada.Runtimes.UsageProbeHostRunner usageProbeHostRunner = new Armada.Runtimes.UsageProbeHostRunner(_Logging, usageAccounts);
+            Armada.Core.Services.LocalHostCommandExecutor usageLocalCommands = new Armada.Core.Services.LocalHostCommandExecutor { UsageProbe = usageProbeHostRunner };
+            _UsageCapture = new Armada.Core.Services.UsageCaptureService(
+                _Database,
+                _Settings,
+                usageAccounts,
+                usageLocalCommands,
+                _HarborConnectionManager,
+                _Logging,
+                lifetime: _TokenSource.Token);
+            _UsageCaptureScheduler = new Armada.Core.Services.UsageCaptureScheduler(
+                _UsageCapture,
+                _Database,
+                usageAccounts,
+                _Settings,
+                _HarborConnectionManager,
+                _Logging);
             _FleetActionService = new FleetActionService(_Database, _Settings, _FleetActionRunner, fleetActionSeeder, _Logging);
             try
             {
@@ -988,6 +1013,19 @@ namespace Armada.Server
             _BlackBox?.Background.Start();
             _BlackBox?.Insights.Background.Start();
             _ModelAlertService.Start();
+
+            // Usage capture is disabled by default; when it is on, rebuild the capture groups now so the
+            // scheduler starts from a complete picture (with randomized initial due times).
+            try
+            {
+                await _UsageCaptureScheduler.RebuildAsync(_TokenSource.Token).ConfigureAwait(false);
+                if (_Settings.UsageCapture.Enabled)
+                    _Logging.Debug(_Header + "usage capture scheduler started with " + _UsageCaptureScheduler.Groups().Count + " group(s)");
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "usage capture scheduler startup error: " + ex.ToString());
+            }
 
             // Start health check loop
             _HealthCheckTask = HealthCheckLoopAsync(_TokenSource.Token);
@@ -2377,6 +2415,15 @@ namespace Armada.Server
                     // Drive the merge queue so auto-enqueued entries land without a manual trigger.
                     try { await _MergeQueue.ProcessQueueAsync(token).ConfigureAwait(false); }
                     catch (Exception mqEx) { _Logging.Warn(_Header + "merge queue processing error: " + mqEx.Message); }
+
+                    // Usage capture scheduler: rebuild the groups and start the due captures. Every attempt
+                    // is its own dedicated UsageProbe job, never a captain launch slot or state change.
+                    try
+                    {
+                        if (_Settings.UsageCapture.Enabled)
+                            await _UsageCaptureScheduler.TickAsync(token).ConfigureAwait(false);
+                    }
+                    catch (Exception usageEx) when (!(usageEx is OperationCanceledException)) { _Logging.Warn(_Header + "usage capture scheduling error: " + usageEx.Message); }
 
                     // Harbor metrics: links closed past the reconnect grace become disconnects; idle minute samples are written.
                     try { await _HarborMetricsRecorder.SweepAsync(token).ConfigureAwait(false); }

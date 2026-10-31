@@ -115,6 +115,7 @@ namespace Armada.Core.Services
         private readonly int _MaxConcurrentJobs;
         private readonly IHostCommandExecutor _CommandExecutor;
         private readonly IHarborJobRunner? _JobRunner;
+        private readonly IUsageProbe? _UsageProbe;
         private readonly HarborDockManager? _Docks;
         private readonly LoggingModule _Logging;
         private readonly int _HeartbeatIntervalMs;
@@ -165,6 +166,10 @@ namespace Armada.Core.Services
         /// on this host, and serves file operations in vessel checkouts. When null, dock and file requests are refused. When
         /// its <see cref="HarborDockManager.TerminalLauncher"/> is set, the Harbor also advertises
         /// <see cref="HarborProtocol.OpenTerminalCapability"/>.</param>
+        /// <param name="usageProbe">Optional host-side usage helper; when set, the Harbor advertises
+        /// <see cref="HarborProtocol.UsageProbeCapability"/> and runs account usage capture probes on this
+        /// host, performing credential access and sanitization locally. When null, a usage probe request is
+        /// answered Unsupported rather than run.</param>
         public HarborLinkClient(
             string harborId,
             string name,
@@ -175,7 +180,8 @@ namespace Armada.Core.Services
             int heartbeatIntervalMs,
             Action<HarborLogEntry>? onLog = null,
             IHarborJobRunner? jobRunner = null,
-            HarborDockManager? dockManager = null)
+            HarborDockManager? dockManager = null,
+            IUsageProbe? usageProbe = null)
         {
             if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
             if (String.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
@@ -203,6 +209,8 @@ namespace Armada.Core.Services
                     : Armada.Core.Enums.AgentRuntimeEnum.ClaudeCode.ToString();
                 _Capabilities.Add(new HarborCapability { Name = HarborProtocol.CliPermissionPromptCapability, Available = true, Detail = runtimes });
             }
+            if (usageProbe != null && !_Capabilities.Exists(c => String.Equals(c.Name, HarborProtocol.UsageProbeCapability, StringComparison.OrdinalIgnoreCase)))
+                _Capabilities.Add(new HarborCapability { Name = HarborProtocol.UsageProbeCapability, Available = true });
 
             _MaxConcurrentJobs = maxConcurrentJobs < 1 ? 1 : maxConcurrentJobs;
             _CommandExecutor = commandExecutor ?? throw new ArgumentNullException(nameof(commandExecutor));
@@ -210,6 +218,7 @@ namespace Armada.Core.Services
             _HeartbeatIntervalMs = heartbeatIntervalMs < 0 ? 0 : heartbeatIntervalMs;
             _OnLog = onLog;
             _JobRunner = jobRunner;
+            _UsageProbe = usageProbe;
         }
 
         #endregion
@@ -399,9 +408,12 @@ namespace Armada.Core.Services
             {
                 // A command can run for a long time (a check run, a build): run it off the receive loop so launches,
                 // dock and file requests, and heartbeat acknowledgements keep flowing, one at a time per working
-                // directory so commands in the same folder keep their order.
+                // directory so commands in the same folder keep their order. A usage probe is its own path: it never
+                // shares the per-directory command gate and never runs an executable.
                 CancellationToken commandToken = _SessionCommands?.Token ?? token;
-                Task work = Task.Run(() => HandleGitAsync(git, commandToken));
+                Task work = git.Kind == HostCommandKindEnum.UsageProbe
+                    ? Task.Run(() => HandleUsageProbeAsync(git, commandToken))
+                    : Task.Run(() => HandleGitAsync(git, commandToken));
                 _CommandsInFlight.TryAdd(work, 0);
                 _ = work.ContinueWith(done => _CommandsInFlight.TryRemove(done, out byte _), TaskScheduler.Default);
                 return;
@@ -510,6 +522,74 @@ namespace Armada.Core.Services
             finally
             {
                 gate.Release();
+            }
+        }
+
+        /// <summary>
+        /// Run one account usage capture probe on this host: deserialize the safe probe context, let the
+        /// host-side usage helper read the account limits with this host's own credentials, and reply with
+        /// the sanitized result only. Never runs an executable, never shares the per-directory command
+        /// gate, and never puts probe output into an unrestricted jobs log: the reply is the typed
+        /// result, and failures become redacted error codes.
+        /// </summary>
+        /// <param name="probe">Usage probe request from the Admiral.</param>
+        /// <param name="token">Cancellation token (the session command token).</param>
+        private async Task HandleUsageProbeAsync(HarborGitRequest probe, CancellationToken token)
+        {
+            LogEntry(_LogClassifier.GitRequest(probe));
+
+            UsageProbeResult result;
+            IUsageProbe? helper = _UsageProbe;
+            if (helper == null)
+            {
+                result = UsageProbeResult.Unsupported("HostUpgradeRequired", "this Harbor build cannot run usage probes; update it");
+            }
+            else
+            {
+                UsageProbeHost host = UsageProbeHost.Deserialize(probe.UsageProbeJson);
+                if (String.IsNullOrWhiteSpace(host.TenantId) || String.IsNullOrWhiteSpace(host.HostId))
+                {
+                    result = UsageProbeResult.Failed("InvalidProbeContext", "the usage probe request has no tenant or host identity");
+                }
+                else
+                {
+                    if (probe.TimeoutMs > 0) host.TimeoutSeconds = (probe.TimeoutMs + 999) / 1000;
+                    result = await RunUsageProbeAsync(helper, host, token).ConfigureAwait(false);
+                }
+            }
+
+            Enqueue(new HarborGitResult
+            {
+                CorrelationId = probe.CorrelationId,
+                RequestId = probe.RequestId,
+                ExitCode = 0,
+                StandardOutput = result.Serialize(),
+                StandardError = String.IsNullOrWhiteSpace(result.ErrorCode) ? String.Empty : result.ErrorCode,
+                TimedOut = String.Equals(result.ErrorCode, "ProbeTimeout", StringComparison.Ordinal)
+            });
+
+            LogEntry(_LogClassifier.GitResult(probe, new HostCommandResult
+            {
+                ExitCode = 0,
+                StandardError = result.Status.ToString() + (String.IsNullOrWhiteSpace(result.ErrorCode) ? String.Empty : " " + result.ErrorCode)
+            }));
+        }
+
+        private async Task<UsageProbeResult> RunUsageProbeAsync(IUsageProbe helper, UsageProbeHost host, CancellationToken token)
+        {
+            try
+            {
+                return await helper.CaptureAsync(host, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                return UsageProbeResult.Failed("ProbeCancelled", "the usage probe was cancelled");
+            }
+            catch (Exception e)
+            {
+                // A probe that cannot run is a failed attempt with a redacted diagnostic, never an
+                // unrestricted stderr channel and never the end of the link.
+                return UsageProbeResult.Failed("ProbeFailed", SecretRedactor.Redact(e.Message));
             }
         }
 

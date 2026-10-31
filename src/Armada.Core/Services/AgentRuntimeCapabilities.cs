@@ -29,6 +29,25 @@ namespace Armada.Core.Services
             AgentRuntimeEnum.Pi
         };
 
+        /// <summary>
+        /// Per-runtime account usage capture capabilities, in runtime order, beside the boolean
+        /// <see cref="SupportsUsageCapture"/>. Describes the source (active, passive or estimated) and the
+        /// reason a runtime has none; it never promises credentials or quota numbers, and conditional
+        /// capability (a Custom command) still answers Unsupported without one.
+        /// </summary>
+        public static IReadOnlyList<UsageCaptureCapability> UsageCaptureCapabilities { get; } = new List<UsageCaptureCapability>
+        {
+            new UsageCaptureCapability(AgentRuntimeEnum.ClaudeCode, UsageCaptureKindEnum.Active),
+            new UsageCaptureCapability(AgentRuntimeEnum.Codex, UsageCaptureKindEnum.Active),
+            new UsageCaptureCapability(AgentRuntimeEnum.Gemini, UsageCaptureKindEnum.Estimated),
+            new UsageCaptureCapability(AgentRuntimeEnum.Cursor, "Cursor has no verified account limit interface; its provider rejects without structured quota data."),
+            new UsageCaptureCapability(AgentRuntimeEnum.Mux, "Mux runs locally and its provider rate-limit headers are not observable by Armada; per-run stats are accounting, not remaining capacity."),
+            new UsageCaptureCapability(AgentRuntimeEnum.OpenCode, "OpenCode local stats are session accounting; no remaining quota source exists for its configured provider."),
+            new UsageCaptureCapability(AgentRuntimeEnum.ApiEndpoint, UsageCaptureKindEnum.Passive),
+            new UsageCaptureCapability(AgentRuntimeEnum.Custom, UsageCaptureKindEnum.Active),
+            new UsageCaptureCapability(AgentRuntimeEnum.Pi, "Pi has no usage capture adapter; no verified account limit source exists for it.")
+        };
+
         #endregion
 
         #region Public-Methods
@@ -46,6 +65,35 @@ namespace Armada.Core.Services
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// True when the runtime has a usable account usage capture source at all: an active read of a
+        /// verified source, a passive header harvest, an operator-configured estimate, or (Custom) the
+        /// administrator-chosen executable contract. Conditional capability does not promise credentials
+        /// or quota numbers: an observation the runtime cannot make still answers Unsupported.
+        /// </summary>
+        /// <param name="runtime">Runtime.</param>
+        /// <returns>True when a capture source exists.</returns>
+        public static bool SupportsUsageCapture(AgentRuntimeEnum runtime)
+        {
+            return UsageCapture(runtime).Supported;
+        }
+
+        /// <summary>
+        /// The runtime's account usage capture capability: what kind of source it has, and the reason it
+        /// has none when it does not.
+        /// </summary>
+        /// <param name="runtime">Runtime.</param>
+        /// <returns>The capability descriptor.</returns>
+        public static UsageCaptureCapability UsageCapture(AgentRuntimeEnum runtime)
+        {
+            foreach (UsageCaptureCapability capability in UsageCaptureCapabilities)
+            {
+                if (capability.Runtime == runtime) return capability;
+            }
+
+            return new UsageCaptureCapability(runtime, "The runtime has no verified account usage capture source.");
         }
 
         /// <summary>

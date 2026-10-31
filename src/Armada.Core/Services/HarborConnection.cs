@@ -80,6 +80,14 @@ namespace Armada.Core.Services
         public bool OpensTerminals { get; set; } = false;
 
         /// <summary>
+        /// Whether the Harbor can run account usage capture probes on its host (it advertised
+        /// <see cref="Armada.Core.Harbor.HarborProtocol.UsageProbeCapability"/> in its handshake on this
+        /// link). An Admiral sends a usage probe request only to such a Harbor; an older Harbor answers
+        /// Unsupported with HostUpgradeRequired instead.
+        /// </summary>
+        public bool HostsUsageProbes { get; set; } = false;
+
+        /// <summary>
         /// Runtimes whose permission prompts the Harbor can send to Armada (the detail of
         /// <see cref="Armada.Core.Harbor.HarborProtocol.CliPermissionPromptCapability"/> in its handshake); empty for a
         /// Harbor that predates it.

@@ -43,6 +43,9 @@ namespace Armada.Core.Services
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
 
+            if (request.Kind == HostCommandKindEnum.UsageProbe)
+                return await RunUsageProbeAsync(request, token).ConfigureAwait(false);
+
             HarborGitRequest gitRequest = new HarborGitRequest
             {
                 RequestId = Guid.NewGuid().ToString("N"),
@@ -75,6 +78,70 @@ namespace Armada.Core.Services
                 StandardOutput = result.StandardOutput,
                 StandardError = result.StandardError,
                 TimedOut = result.TimedOut
+            };
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<HostCommandResult> RunUsageProbeAsync(HostCommandRequest request, CancellationToken token)
+        {
+            // Allowlist: a usage probe is sent only to a Harbor that advertised the usage-probe capability.
+            // An older Harbor answers Unsupported (update it), a disconnected one Failed with its last good
+            // data retained; neither falls back to this host's credentials.
+            if (!_Manager.IsConnected(_HarborId))
+            {
+                return ProbeReply(UsageProbeResult.Failed("HostUnavailable", "Harbor " + _HarborId + " is not connected; the last good observation is kept"));
+            }
+
+            if (!_Manager.HostsUsageProbes(_HarborId))
+            {
+                return ProbeReply(UsageProbeResult.Unsupported("HostUpgradeRequired", "Harbor " + _HarborId + " cannot run usage probes; update it"));
+            }
+
+            HarborGitRequest probeRequest = new HarborGitRequest
+            {
+                RequestId = Guid.NewGuid().ToString("N"),
+                TimeoutMs = request.TimeoutMs,
+                Kind = HostCommandKindEnum.UsageProbe,
+                Label = String.IsNullOrWhiteSpace(request.Label) ? null : request.Label,
+                UsageProbeJson = request.UsageProbeJson
+            };
+
+            // The Harbor stops the probe at TimeoutMs (the execution deadline); the Admiral waits for the bounded
+            // round-trip deadline only, which stays execution duration plus the reply grace, never transit time.
+            int waitMs = request.TimeoutMs > 0 ? request.TimeoutMs + Math.Min(request.TimeoutMs, _ReplyGraceMs) : 0;
+            HarborGitResult? result = await _Manager.SendGitAsync(_HarborId, probeRequest, waitMs, token).ConfigureAwait(false);
+            if (result == null)
+            {
+                return ProbeReply(UsageProbeResult.Failed("ProbeTimeout", "Harbor " + _HarborId + " did not answer the usage probe within the round-trip deadline"));
+            }
+
+            if (String.IsNullOrWhiteSpace(result.StandardOutput))
+            {
+                return ProbeReply(UsageProbeResult.Failed("ProbeTimeout", result.TimedOut
+                    ? "Harbor " + _HarborId + " stopped the usage probe at its execution deadline"
+                    : "Harbor " + _HarborId + " answered the usage probe without a result payload"));
+            }
+
+            return new HostCommandResult
+            {
+                ExitCode = result.ExitCode,
+                StandardOutput = result.StandardOutput,
+                StandardError = result.StandardError,
+                TimedOut = result.TimedOut
+            };
+        }
+
+        private static HostCommandResult ProbeReply(UsageProbeResult result)
+        {
+            return new HostCommandResult
+            {
+                ExitCode = 0,
+                StandardOutput = result.Serialize(),
+                StandardError = String.IsNullOrWhiteSpace(result.ErrorCode) ? String.Empty : result.ErrorCode,
+                TimedOut = String.Equals(result.ErrorCode, "ProbeTimeout", StringComparison.Ordinal)
             };
         }
 
