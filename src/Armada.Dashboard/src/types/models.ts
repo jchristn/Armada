@@ -4418,6 +4418,19 @@ export interface ModelProbeRun {
   lastUpdateUtc: string;
   /** Battery run a Full Evaluate started (bat_ prefix), or null. */
   batteryRunId?: string | null;
+  profileRevision?: Record<string, unknown>;
+  profileError?: string;
+  batteryError?: string;
+  /** Client-enriched battery snapshot, requested by the evaluation progress panel. */
+  batteryProgress?: {
+    status: string;
+    totalTasks: number;
+    passedCount: number;
+    failedCount: number;
+    couldNotRunCount: number;
+    pendingEvaluationCount: number;
+    failureReason?: string | null;
+  };
   /** Full Evaluate report, or null for Quick; a cancelled or timed-out Full run keeps a partial report (complete false). */
   report?: ModelEvaluationReport | null;
   /** Filled by getModelProbeRun; empty in list rows. */

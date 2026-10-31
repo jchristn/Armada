@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   apiErrorMessage,
   createCaptain,
@@ -67,6 +67,7 @@ export default function CaptainDetail() {
   const { isAdmin, isTenantAdmin } = useAuth();
   const canManageCliPolicy = !!isAdmin || !!isTenantAdmin;
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [captain, setCaptain] = useState<Captain | null>(null);
   const [currentMission, setCurrentMission] = useState<Mission | null>(null);
@@ -563,7 +564,7 @@ export default function CaptainDetail() {
       {/* Evaluation (Quick mechanical probes) */}
       <div style={{ marginTop: '1rem' }}>
         <h3 title={t('Probe this captain through its own runtime: served context, output contract, ASCII and format, tool calling, speed and determinism.')}>{t('Evaluation')}</h3>
-        <ModelProbeEvaluate target="captain" targetId={captain.id} onError={setError} />
+        <ModelProbeEvaluate target="captain" targetId={captain.id} evaluationRunId={searchParams.get('evaluationRun')} onError={setError} />
       </div>
 
       {/* Current Mission Details */}

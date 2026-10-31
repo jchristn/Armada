@@ -7057,7 +7057,13 @@
         "None selected: every persona the captain is allowed.": "Ninguna seleccionada: todas las personas permitidas al capitan.",
         "Run count": "Numero de ejecuciones",
         "Runs of each battery task, 1 to 10 (empty: 3).": "Ejecuciones de cada tarea de la bateria, de 1 a 10 (vacio: 3).",
-        "The run count must be a whole number from 1 to 10.": "El numero de ejecuciones debe ser un numero entero de 1 a 10."
+        "The run count must be a whole number from 1 to 10.": "El numero de ejecuciones debe ser un numero entero de 1 a 10.",
+        "Tokens": "Tokens",
+        "Incomplete": "Incompleto",
+        "Writing report": "Escribiendo informe",
+        "Evaluator grading": "Calificacion del evaluador",
+        "Fixture battery": "Bateria de pruebas",
+        "Quick probes": "Pruebas rapidas"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -13058,7 +13064,14 @@
         "None selected: every persona the captain is allowed.": "未选择：船长允许的所有角色。",
         "Run count": "运行次数",
         "Runs of each battery task, 1 to 10 (empty: 3).": "每个测试集任务的运行次数，1 到 10（留空：3）。",
-        "The run count must be a whole number from 1 to 10.": "运行次数必须是 1 到 10 的整数。"
+        "The run count must be a whole number from 1 to 10.": "\u8fd0\u884c\u6b21\u6570\u5fc5\u987b\u662f 1 \u5230 10 \u7684\u6574\u6570\u3002",
+        "Tokens": "\u4ee4\u724c",
+        "Tasks": "\u4efb\u52a1",
+        "Incomplete": "\u672a\u5b8c\u6210",
+        "Writing report": "\u6b63\u5728\u5199\u5165\u62a5\u544a",
+        "Evaluator grading": "\u8bc4\u4f30\u5458\u8bc4\u5206",
+        "Fixture battery": "\u5939\u5177\u6d4b\u8bd5",
+        "Quick probes": "\u5feb\u901f\u63a2\u6d4b"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -19022,7 +19035,14 @@
         "None selected: every persona the captain is allowed.": "未選取：船長允許的所有角色。",
         "Run count": "執行次數",
         "Runs of each battery task, 1 to 10 (empty: 3).": "每個測試集工作的執行次數，1 到 10（留空：3）。",
-        "The run count must be a whole number from 1 to 10.": "執行次數必須是 1 到 10 的整數。"
+        "The run count must be a whole number from 1 to 10.": "\u57f7\u884c\u6b21\u6578\u5fc5\u9808\u662f 1 \u5230 10 \u7684\u6574\u6578\u3002",
+        "Tokens": "\u6b0a\u6756",
+        "Tasks": "\u4efb\u52d9",
+        "Incomplete": "\u672a\u5b8c\u6210",
+        "Writing report": "\u6b63\u5728\u5beb\u5165\u5831\u544a",
+        "Evaluator grading": "\u8a55\u4f30\u54e1\u8a55\u5206",
+        "Fixture battery": "\u593e\u5177\u6e2c\u8a66",
+        "Quick probes": "\u5feb\u901f\u63a2\u6e2c"
       },
       "sections": {}
     },
@@ -24946,7 +24966,14 @@
         "None selected: every persona the captain is allowed.": "未揀：船長獲准嘅所有角色。",
         "Run count": "執行次數",
         "Runs of each battery task, 1 to 10 (empty: 3).": "每個測試集工作嘅執行次數，1 至 10（留空：3）。",
-        "The run count must be a whole number from 1 to 10.": "執行次數一定要係 1 至 10 嘅整數。"
+        "The run count must be a whole number from 1 to 10.": "\u57f7\u884c\u6b21\u6578\u4e00\u5b9a\u8981\u4fc2 1 \u81f3 10 \u5605\u6574\u6578\u3002",
+        "Tokens": "\u6b0a\u6756",
+        "Tasks": "\u4efb\u52d9",
+        "Incomplete": "\u672a\u5b8c\u6210",
+        "Writing report": "\u5beb\u7dca\u5831\u544a",
+        "Evaluator grading": "\u8a55\u4f30\u54e1\u8a55\u5206",
+        "Fixture battery": "\u593e\u5177\u6e2c\u8a66",
+        "Quick probes": "\u5feb\u901f\u63a2\u6e2c"
       },
       "sections": {}
     },
@@ -30886,7 +30913,14 @@
         "None selected: every persona the captain is allowed.": "未選択: キャプテンに許可されたすべてのペルソナ。",
         "Run count": "実行回数",
         "Runs of each battery task, 1 to 10 (empty: 3).": "各バッテリータスクの実行回数、1 から 10 (空欄: 3)。",
-        "The run count must be a whole number from 1 to 10.": "実行回数は 1 から 10 の整数でなければなりません。"
+        "The run count must be a whole number from 1 to 10.": "\u5b9f\u884c\u56de\u6570\u306f 1 \u304b\u3089 10 \u306e\u6574\u6570\u3067\u306a\u3051\u308c\u3070\u306a\u308a\u307e\u305b\u3093\u3002",
+        "Tokens": "\u30c8\u30fc\u30af\u30f3",
+        "Tasks": "\u30bf\u30b9\u30af",
+        "Incomplete": "\u672a\u5b8c\u4e86",
+        "Writing report": "\u30ec\u30dd\u30fc\u30c8\u3092\u4f5c\u6210\u4e2d",
+        "Evaluator grading": "\u8a55\u4fa1\u8005\u304c\u63a1\u70b9\u4e2d",
+        "Fixture battery": "\u30d5\u30a3\u30af\u30b9\u30c1\u30e3\u30c6\u30b9\u30c8",
+        "Quick probes": "\u30af\u30a4\u30c3\u30af\u30d7\u30ed\u30fc\u30d6"
       },
       "sections": {}
     },
@@ -36817,7 +36851,14 @@
         "None selected: every persona the captain is allowed.": "Keine Auswahl: jede Persona, die dem Kapitaen erlaubt ist.",
         "Run count": "Anzahl der Laeufe",
         "Runs of each battery task, 1 to 10 (empty: 3).": "Laeufe jeder Batterieaufgabe, 1 bis 10 (leer: 3).",
-        "The run count must be a whole number from 1 to 10.": "Die Anzahl der Laeufe muss eine ganze Zahl von 1 bis 10 sein."
+        "The run count must be a whole number from 1 to 10.": "Die Anzahl der Laeufe muss eine ganze Zahl von 1 bis 10 sein.",
+        "Tokens": "Token",
+        "Tasks": "Aufgaben",
+        "Incomplete": "Unvollstandig",
+        "Writing report": "Bericht wird geschrieben",
+        "Evaluator grading": "Bewertung durch Evaluator",
+        "Fixture battery": "Fixture-Tests",
+        "Quick probes": "Schnelle Tests"
       },
       "sections": {}
     },
@@ -42748,7 +42789,14 @@
         "None selected: every persona the captain is allowed.": "Aucune selection : toutes les personas autorisees pour le capitaine.",
         "Run count": "Nombre d'executions",
         "Runs of each battery task, 1 to 10 (empty: 3).": "Executions de chaque tache de la batterie, de 1 a 10 (vide : 3).",
-        "The run count must be a whole number from 1 to 10.": "Le nombre d'executions doit etre un nombre entier de 1 a 10."
+        "The run count must be a whole number from 1 to 10.": "Le nombre d'executions doit etre un nombre entier de 1 a 10.",
+        "Tokens": "Jetons",
+        "Tasks": "Taches",
+        "Incomplete": "Incomplet",
+        "Writing report": "Redaction du rapport",
+        "Evaluator grading": "Notation par l'evaluateur",
+        "Fixture battery": "Batterie de tests",
+        "Quick probes": "Sondes rapides"
       },
       "sections": {}
     },
@@ -48679,7 +48727,14 @@
         "None selected: every persona the captain is allowed.": "Nessuna selezione: tutte le persona consentite al capitano.",
         "Run count": "Numero di esecuzioni",
         "Runs of each battery task, 1 to 10 (empty: 3).": "Esecuzioni di ogni attivita della batteria, da 1 a 10 (vuoto: 3).",
-        "The run count must be a whole number from 1 to 10.": "Il numero di esecuzioni deve essere un numero intero da 1 a 10."
+        "The run count must be a whole number from 1 to 10.": "Il numero di esecuzioni deve essere un numero intero da 1 a 10.",
+        "Tokens": "Token",
+        "Tasks": "Attivita",
+        "Incomplete": "Incompleto",
+        "Writing report": "Scrittura del rapporto",
+        "Evaluator grading": "Valutazione dell'esaminatore",
+        "Fixture battery": "Batteria di test",
+        "Quick probes": "Sonde rapide"
       },
       "sections": {}
     }

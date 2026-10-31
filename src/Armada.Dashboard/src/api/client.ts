@@ -2196,8 +2196,27 @@ export const cancelModelProbeRun = (id: string) =>
   post<ModelProbeRun>(`${MODEL_PROBE_RUNS}/${encodeURIComponent(id)}/cancel`, {});
 
 /** One run with its per-probe results. */
-export const getModelProbeRun = (id: string) =>
-  get<ModelProbeRun>(`${MODEL_PROBE_RUNS}/${encodeURIComponent(id)}`);
+export const getModelProbeRun = async (id: string, includeDetails = false) => {
+  const run = await get<ModelProbeRun>(`${MODEL_PROBE_RUNS}/${encodeURIComponent(id)}`);
+  if (includeDetails && run.batteryRunId) {
+    try {
+      run.batteryProgress = await get<NonNullable<ModelProbeRun['batteryProgress']>>(`/api/v1/battery/runs/${encodeURIComponent(run.batteryRunId)}`);
+    } catch (err) {
+      // Keep probe results and polling available when the auxiliary battery read fails.
+      run.batteryError = err instanceof Error ? err.message : String(err);
+    }
+  }
+  if (includeDetails && run.report?.profileId && run.report.profileRevisionId) {
+    try {
+      const profile = await get<{ revisions: Array<Record<string, unknown> & { id: string }> }>(`/api/v1/model-profiles/${encodeURIComponent(run.report.profileId)}`);
+      run.profileRevision = profile.revisions.find(revision => revision.id === run.report?.profileRevisionId);
+      if (!run.profileRevision) run.profileError = 'Profile revision is not available.';
+    } catch (err) {
+      run.profileError = err instanceof Error ? err.message : String(err);
+    }
+  }
+  return run;
+};
 
 /** One page of the runs visible to the caller, newest first; list rows carry no results. */
 export const listModelProbeRuns = (query?: ModelProbeRunQuery) =>

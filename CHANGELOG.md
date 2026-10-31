@@ -6,6 +6,8 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+- Captain evaluation panels resume existing runs, show live probe and battery progress, expose failures inline, and provide the last ten runs with reports and profile revision links.
+
 ### Full Evaluate follow-up (model heterogeneity Phase 5, item 4)
 
 - **Incomplete reports on the profile.** A cancelled or timed-out Full Evaluate (or one whose battery could not run) is now also recorded as an advisory model profile revision, marked `EvaluationIncomplete`. It never changes an earlier revision, never fills `measured`, is never preferred over a complete report, and observations never pool into it. Nothing reads it for routing. No migration.
