@@ -25,7 +25,11 @@ namespace Test.Shared.Suites.Services
     /// expires, manual captures join a flight and respect the cooldown rather than bypassing the
     /// interval, failures back off at 2x per consecutive failure up to the configured bound, AuthMissing
     /// retries slowly, Unsupported waits for a configuration change, and a result whose generation is
-    /// stale is discarded instead of applied.
+    /// stale is discarded instead of applied. The credential host receives exactly one UsageProbe request
+    /// carrying the group's identity, mode, deadline and configuration revision; a host fault that escapes
+    /// the executor is recorded as one redacted failure with the same backoff (never a crash or a leak);
+    /// and a server that starts with capture disabled neither invalidates a generation nor dispatches
+    /// anything until the switch is enabled.
     /// </summary>
     public sealed class UsageSchedulerSuite : IArmadaTestSuite
     {
@@ -1031,6 +1035,170 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(900, scheduler.Groups()[0].EffectiveIntervalSeconds, "the rebuilt group runs at the member's new interval");
             }));
 
+            cases.Add(CaseAsync("scheduler_probe_request_carries_the_host_context", "The credential host receives one UsageProbe request carrying the group's identity, mode and deadline", TestTags.Positive, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync(null, new UsageCaptureSettings
+                {
+                    Enabled = true,
+                    MinimumIntervalSeconds = 60,
+                    ProbeTimeoutSeconds = 25
+                }).ConfigureAwait(false);
+
+                await fixture.CreateCaptainAsync("context-auto", 300).ConfigureAwait(false);
+                string customCommand = "{\"executable\":\"/opt/two\",\"arguments\":[]}";
+                await fixture.CreateCustomCaptainAsync("context-custom", customCommand).ConfigureAwait(false);
+
+                UsageCaptureScheduler scheduler = fixture.CreateScheduler();
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+
+                UsageCaptureGroup? autoFound = scheduler.Groups().Find(candidate => candidate.Mode == UsageCaptureModeEnum.Auto);
+                AssertNotNull(autoFound, "the Auto group exists");
+                UsageCaptureGroup autoGroup = autoFound!;
+                UsageCaptureGroup? customFound = scheduler.Groups().Find(candidate => candidate.Mode == UsageCaptureModeEnum.Custom);
+                AssertNotNull(customFound, "the Custom group exists");
+                UsageCaptureGroup customGroup = customFound!;
+                AssertEqual(0, fixture.Executor.Calls, "building the schedule dispatches nothing; the probe is attached before the action, not at rebuild");
+
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(autoGroup.GroupKey) ?? fixture.Clock.Now());
+                UsageCaptureAttempt attempt = await fixture.Service.TryStartAsync(autoGroup, null).ConfigureAwait(false);
+                UsageCaptureAttemptResult result = await AwaitAsync(attempt.Completion).ConfigureAwait(false);
+                AssertTrue(result.Persisted, "the Auto capture commits");
+
+                AssertEqual(1, fixture.Executor.Calls, "exactly one probe reached the credential host");
+                HostCommandRequest request = fixture.Executor.Requests[0];
+                AssertEqual(HostCommandKindEnum.UsageProbe, request.Kind, "the capture is a usage-probe host command, never a git command");
+                AssertEqual(25000, request.TimeoutMs, "the request carries the configured probe deadline in milliseconds");
+                AssertContains("usage-capture", request.Label ?? String.Empty, "the request is labelled by the capture it serves");
+
+                UsageProbeHost host = UsageProbeHost.Deserialize(request.UsageProbeJson);
+                AssertEqual(TenantId, host.TenantId, "the host context names the owning tenant");
+                AssertEqual(autoGroup.HostId, host.HostId, "the host context names the credential host");
+                AssertNull(host.HarborId, "a local host carries no Harbor id");
+                AssertEqual(AgentRuntimeEnum.ClaudeCode, host.Runtime, "the host context names the group's runtime");
+                AssertEqual(UsageCaptureModeEnum.Auto, host.Mode, "the host context names the group's capture mode");
+                AssertNull(host.CommandJson, "Auto mode sends no custom command");
+                AssertFalse(host.AllowPty, "PTY stays opt-in and is never requested by default");
+                AssertEqual(25, host.TimeoutSeconds, "the host context bounds the probe deadline");
+                AssertEqual(autoGroup.ConfigurationRevision, host.ConfigurationRevision, "the host context carries the configuration revision the answer is applied against");
+                AssertEqual(fixture.Clock.Now(), host.DispatchedUtc, "the host context records the dispatch time on the shared clock");
+
+                UsageSnapshotQuery query = new UsageSnapshotQuery { TenantId = TenantId, PageSize = 10 };
+                EnumerationResult<UsageSnapshot> snapshots = await fixture.Database.UsageSnapshots.EnumerateAsync(query).ConfigureAwait(false);
+                AssertEqual(1, snapshots.Objects.Count, "the answer the host returned is the snapshot that was stored");
+                AssertEqual(autoGroup.HostId, snapshots.Objects[0].HostId, "the stored snapshot belongs to the host the probe ran on");
+                AssertEqual(AgentRuntimeEnum.ClaudeCode, snapshots.Objects[0].Runtime, "the stored snapshot belongs to the probed runtime");
+
+                // A Custom group dispatches the administrator's executable contract verbatim, and its
+                // configuration revision keeps it distinct from the Auto group on the same host.
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(customGroup.GroupKey) ?? fixture.Clock.Now());
+                UsageCaptureAttempt customAttempt = await fixture.Service.TryStartAsync(customGroup, null).ConfigureAwait(false);
+                UsageCaptureAttemptResult customResult = await AwaitAsync(customAttempt.Completion).ConfigureAwait(false);
+                AssertTrue(customResult.Persisted, "the Custom capture commits");
+
+                AssertEqual(2, fixture.Executor.Calls, "the Custom group made its own dispatch");
+                AssertEqual(HostCommandKindEnum.UsageProbe, fixture.Executor.Requests[1].Kind, "the Custom capture is a usage-probe host command too");
+                UsageProbeHost customHost = UsageProbeHost.Deserialize(fixture.Executor.Requests[1].UsageProbeJson);
+                AssertEqual(UsageCaptureModeEnum.Custom, customHost.Mode, "the Custom group's request names Custom mode");
+                AssertEqual(customCommand, customHost.CommandJson, "the custom command travels verbatim, never as shell syntax");
+                AssertEqual(AgentRuntimeEnum.Codex, customHost.Runtime, "the Custom group's request names its runtime");
+                AssertFalse(String.Equals(customHost.ConfigurationRevision, host.ConfigurationRevision, StringComparison.Ordinal), "the Custom configuration revision differs from the Auto revision");
+            }));
+
+            cases.Add(CaseAsync("scheduler_host_exception_is_redacted_and_backs_off", "An executor exception becomes one redacted failure result, never a leak or a crash", TestTags.Negative, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
+                Captain captain = await fixture.CreateCaptainAsync("throwing", 300).ConfigureAwait(false);
+
+                UsageCaptureScheduler scheduler = fixture.CreateScheduler();
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+                UsageCaptureGroup group = scheduler.Groups()[0];
+
+                string secret = "sk-live-abcdefghijklmnop0123456789";
+                fixture.Executor.ThrowMessage = "remote usage probe failed: Authorization: Bearer " + secret;
+
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(group.GroupKey) ?? fixture.Clock.Now());
+                UsageCaptureAttempt attempt = await fixture.Service.TryStartAsync(group, captain.Id).ConfigureAwait(false);
+                AssertTrue(attempt.Started, "the attempt starts");
+
+                UsageCaptureAttemptResult result = await AwaitAsync(attempt.Completion).ConfigureAwait(false);
+                AssertEqual(1, fixture.Executor.Calls, "the probe reached the credential host exactly once before it threw");
+                AssertTrue(result.Persisted, "the failure is recorded instead of escaping the attempt");
+                AssertEqual(UsageSnapshotStatusEnum.Failed, result.Status, "an exception is a failed capture");
+                AssertEqual("CaptureAttemptFailed", result.ErrorCode, "the failure carries a stable error code");
+
+                AssertNotNull(result.Snapshot, "the failure snapshot exists");
+                UsageSnapshot snapshot = result.Snapshot!;
+                AssertEqual("CaptureAttemptFailed", snapshot.ErrorCode, "the snapshot names the failure");
+                AssertEqual(TenantId, snapshot.TenantId, "the failure snapshot stays tenant-scoped");
+                AssertEqual(group.HostId, snapshot.HostId, "the failure snapshot stays on the credential host");
+                AssertNotNull(snapshot.RawExcerpt, "the failure keeps a diagnostic excerpt");
+                AssertContains("Bearer [REDACTED]", snapshot.RawExcerpt ?? String.Empty, "the diagnostic is redacted before it is stored");
+                AssertFalse((snapshot.RawExcerpt ?? String.Empty).Contains(secret, StringComparison.Ordinal), "the credential never reaches the stored excerpt");
+
+                Job? job = await fixture.Database.Jobs.ReadAsync(attempt.JobId!).ConfigureAwait(false);
+                AssertNotNull(job, "the attempt's dedicated job row survives");
+                AssertEqual(JobStatusEnum.Failed, job!.Status, "an exception fails the job");
+                AssertEqual("CaptureAttemptFailed", job.ErrorReason, "the job carries the stable code, not the exception text");
+                AssertFalse((job.ErrorReason ?? String.Empty).Contains(secret, StringComparison.Ordinal), "the credential never reaches the job row");
+
+                AssertEqual(1, fixture.Service.FailureCount(group.GroupKey), "the failure counts once for this attempt");
+                int delay = (int)(fixture.Service.NextEligibleUtc(group.GroupKey)!.Value - fixture.Clock.Now()).TotalSeconds;
+                AssertEqual(600, delay, "an exception backs off at 2x like any other failure");
+                AssertFalse(fixture.Service.IsInFlight(group.GroupKey), "the flight is cleaned up after the exception");
+
+                List<UsageAccountMembership> memberships = await fixture.Database.UsageMemberships.ReadActiveAsync(TenantId, captain.Id).ConfigureAwait(false);
+                AssertEqual(0, memberships.Count, "a failure with no identity never opens a membership");
+
+                // The service is still usable afterwards: the next due attempt succeeds and resets backoff.
+                fixture.Executor.ThrowMessage = null;
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(group.GroupKey) ?? fixture.Clock.Now());
+                UsageCaptureAttempt recovery = await fixture.Service.TryStartAsync(group, captain.Id).ConfigureAwait(false);
+                UsageCaptureAttemptResult recoveryResult = await AwaitAsync(recovery.Completion).ConfigureAwait(false);
+                AssertEqual(UsageSnapshotStatusEnum.Ok, recoveryResult.Status, "the group recovers after a host exception");
+                AssertEqual(0, fixture.Service.FailureCount(group.GroupKey), "the recovery resets the backoff");
+            }));
+
+            cases.Add(CaseAsync("scheduler_starting_disabled_never_invalidates_or_dispatches", "A server that starts with capture disabled never invalidates or dispatches until it is enabled", TestTags.Negative, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync(null, new UsageCaptureSettings
+                {
+                    Enabled = false,
+                    MinimumIntervalSeconds = 60
+                }).ConfigureAwait(false);
+
+                await fixture.CreateCaptainAsync("disabled-start", 300).ConfigureAwait(false);
+
+                UsageCaptureScheduler scheduler = fixture.CreateScheduler();
+                long generation = fixture.Service.Generation;
+
+                List<UsageCaptureAttempt> first = await scheduler.TickAsync().ConfigureAwait(false);
+                AssertEqual(0, first.Count, "a disabled switch starts nothing");
+                AssertEqual(generation, fixture.Service.Generation, "the first disabled tick does not invalidate work that never existed");
+
+                List<UsageCaptureAttempt> second = await scheduler.TickAsync().ConfigureAwait(false);
+                AssertEqual(0, second.Count, "the disabled switch keeps starting nothing");
+                AssertEqual(generation, fixture.Service.Generation, "a server that stays disabled never invalidates a generation");
+                AssertEqual(0, fixture.Executor.Calls, "capture disabled means no probe reaches any host");
+                AssertEqual(0, scheduler.Groups().Count, "a disabled tick builds no capture groups");
+
+                // Enabling the switch is not a configuration change either: nothing is invalidated, the
+                // group is scheduled from now, and it runs when due.
+                fixture.Settings.UsageCapture.Enabled = true;
+                List<UsageCaptureAttempt> enabled = await scheduler.TickAsync().ConfigureAwait(false);
+                AssertEqual(0, enabled.Count, "an enabled tick does not start a group it just scheduled");
+                AssertEqual(generation, fixture.Service.Generation, "enabling the switch does not invalidate the generation");
+                AssertEqual(1, scheduler.Groups().Count, "the enabled tick builds the captain's group");
+                AssertEqual(0, fixture.Executor.Calls, "the freshly scheduled group is not due yet");
+
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(scheduler.Groups()[0].GroupKey) ?? fixture.Clock.Now());
+                List<UsageCaptureAttempt> due = await scheduler.TickAsync().ConfigureAwait(false);
+                AssertEqual(1, due.Count, "the due group starts once capture is enabled");
+                UsageCaptureAttemptResult result = await AwaitAsync(due[0].Completion).ConfigureAwait(false);
+                AssertTrue(result.Persisted, "the enabled capture commits");
+                AssertEqual(1, fixture.Executor.Calls, "exactly one probe ran after enabling");
+                AssertEqual(generation, fixture.Service.Generation, "no invalidation happened across the disabled-to-enabled sequence");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Usage Capture Scheduler",
@@ -1260,14 +1428,25 @@ namespace Test.Shared.Suites.Services
 
             public bool Hold { get; set; } = false;
 
+            /// <summary>
+            /// When set, the executor throws this message instead of answering, so a case can prove the
+            /// capture service turns an escaping host fault into a recorded, redacted failure.
+            /// </summary>
+            public string? ThrowMessage { get; set; } = null;
+
             /// <summary>How many probes reached the credential host through this stub.</summary>
             public int Calls { get; private set; } = 0;
+
+            /// <summary>The host commands the capture service dispatched, in order.</summary>
+            public List<HostCommandRequest> Requests { get; } = new List<HostCommandRequest>();
 
             private readonly SemaphoreSlim _Gate = new SemaphoreSlim(0);
 
             public Task<HostCommandResult> RunAsync(HostCommandRequest request, CancellationToken token = default)
             {
                 Calls++;
+                Requests.Add(request);
+                if (!String.IsNullOrWhiteSpace(ThrowMessage)) throw new InvalidOperationException(ThrowMessage);
                 if (!Hold) return Task.FromResult(Reply(Result));
                 return HeldAsync(token);
             }
