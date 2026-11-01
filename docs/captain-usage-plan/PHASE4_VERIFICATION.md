@@ -4,6 +4,55 @@ Branch: armada/codex-1/msn_mvxf3n23_V1oCE5oqulg
 Mission: msn_mvxf3n23_V1oCE5oqulg
 State: BLOCKED; do not land as a completed AC4 implementation.
 
+## Test Engineer rework 2: independent verification
+
+Mission msn_mvxfz2no_hqirk5ZkZqj checked worker commit
+109d354f3e79af99407fc80076dd788f146a4440 and the complete handoff
+hoa_mvxg6dn1_9mbkJPTee1g. The prior AC4 finding remains unresolved.
+Current McpUsageTools.cs:25 declares required captainId; ArmadaServer.cs:2104
+passes the schema to the pinned Voltaic 2.4.0 server. No production code,
+contract or test assertions were changed. Existing coverage already reproduces
+the defect; no duplicate known-failing test was added.
+
+Independent commands, using newest installed SDK 10.0.401 and net10.0:
+
+- `dotnet restore src/Armada.sln --verbosity quiet`: exit 0.
+- `dotnet build src/Armada.sln -c Release --no-restore --verbosity quiet`:
+  exit 0, zero warnings and errors.
+- `dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build -- --suites E2E.Usage,E2E.UsageTenantIsolation,Client.Contract.Usage,E2E.ApiContract,E2E.Authorization,Client.Coverage,Client.RouteSurface`:
+  exit 1; 40 total, 39 passed, one failed, none skipped.
+- `dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build -- --suites Services.Usage,Services.UsageDefaults`:
+  exit 0; 93 passed, none failed or skipped.
+- `git fetch origin main`: exit 0; origin/main is
+  30358ef7824534abd6e7448cb2fc9d3c116355e1.
+- `git merge-base --is-ancestor 1eeb9e5853710e49dfe0c9ef9a88f16aaa23c176 origin/main`
+  and `git merge-base --is-ancestor f4e88920fde7a664bbb95ea001d5b92c4148b720 origin/main`:
+  each exit 0.
+
+Affected case: src/Test.Shared/Suites/E2E/UsageTenantIsolationSuite.cs:61,
+E2E.UsageTenantIsolation.mcp_missing_argument_is_protocol_error. Authenticated
+tools/call capture_captain_usage with arguments {} must return error.code
+-32602. Actual response contains result.isError=true and missing captainId
+text, with no error.code. Required correction: preserve schema requiredness
+and correct the pre-handler validation protocol response in the dependency or
+shared dispatcher. This production correction is outside the Test Engineer
+role; AC4 and landing remain blocked.
+
+D1 account_owned_samples_half_open, rest_roles_and_explicit_tenant and
+mcp_tenant_scope passed. D5 missions_use_persisted_attribution,
+mission_metadata_and_stable_pages and partial_legacy_attribution_stays_unknown
+passed. Empty/default/error, aggregation boundaries, SDK live methods and
+commit_fanout_reconnect passed. The 93 service checks preserved Phase 2/3
+timeouts, cancellation, cleanup, stale-work rejection, scheduling limits,
+deserialization defaults, local HTTP capture-before-request and secret redaction.
+Reflection discovery in ArmadaTestSuites.cs includes these shared suites.
+
+No coverage was added. Prior unverified live capture 202/429/503 responses,
+full role matrix, external databases, Postman assertion execution and production
+attribution remain unverified. Postman api-engineer and api-testing guidance
+were read; existing runnable shared contracts were reused without workspace
+setup or publication. No full suite, phases 5-7 changes or landing was attempted.
+
 ## Worker rework 2: dependency prerequisite independently confirmed
 
 Mission msn_mvxfz2no_gNyvd2ig9qQ inspected the complete preceding handoff
