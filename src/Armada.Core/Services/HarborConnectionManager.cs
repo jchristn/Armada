@@ -433,6 +433,90 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
+        /// Send a usage probe request to a connected Harbor and await its reply, with request-specific
+        /// cancellation: when <paramref name="token"/> is cancelled while the probe is outstanding, the Harbor
+        /// is sent a cancel message naming this request only (<see cref="HarborGitRequest.CancelsRequestId"/>),
+        /// so it stops that probe's process tree while unrelated concurrent requests keep running, and this
+        /// method keeps waiting up to <paramref name="cancelConfirmMs"/> for the cancelled probe's own reply,
+        /// which confirms the remote execution ended. Returns the reply (after a cancellation, the Harbor's
+        /// confirmation, normally ProbeCancelled), or null when the round-trip deadline passed or the
+        /// cancellation was not confirmed in time; the caller tells them apart by its token.
+        /// </summary>
+        /// <param name="harborId">Target Harbor identifier.</param>
+        /// <param name="request">Usage probe request (its RequestId correlates the reply).</param>
+        /// <param name="timeoutMs">Round-trip deadline in milliseconds; values below 1 mean wait indefinitely.</param>
+        /// <param name="cancelConfirmMs">How long to wait for the Harbor to confirm a cancellation, in milliseconds.</param>
+        /// <param name="token">Cancellation token; cancelling it cancels the probe on the Harbor.</param>
+        /// <returns>The probe reply, or null on timeout or an unconfirmed cancellation.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when the Harbor id or request is missing.</exception>
+        /// <exception cref="ArgumentException">Thrown when the request has no request id.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the Harbor is not connected, or its link closes before it
+        /// replies.</exception>
+        public async Task<HarborGitResult?> SendUsageProbeAsync(string harborId, HarborGitRequest request, int timeoutMs, int cancelConfirmMs, CancellationToken token = default)
+        {
+            if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentNullException(nameof(harborId));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (String.IsNullOrWhiteSpace(request.RequestId)) throw new ArgumentException("Usage probe request is missing a request id.");
+            if (!_Connections.TryGetValue(harborId, out HarborConnection? connection))
+                throw new InvalidOperationException("Harbor " + harborId + " is not connected.");
+
+            TaskCompletionSource<HarborGitResult> completion = new TaskCompletionSource<HarborGitResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _PendingGit[request.RequestId] = completion;
+            _PendingOwners[request.RequestId] = harborId;
+
+            try
+            {
+                try
+                {
+                    // The probe request is written in full (never abandoned half-written): a cancellation that
+                    // arrives during the send is handled below as a cancellation of a delivered probe.
+                    await connection!.SendAsync(request, CancellationToken.None).ConfigureAwait(false);
+
+                    Task delay = Task.Delay(timeoutMs < 1 ? Timeout.Infinite : timeoutMs, token);
+                    Task finished = await Task.WhenAny(completion.Task, delay).ConfigureAwait(false);
+                    if (finished == completion.Task)
+                        return await completion.Task.ConfigureAwait(false);
+                    if (!token.IsCancellationRequested)
+                        return null;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                }
+
+                // Cancelled while the Harbor still runs the probe: cancel exactly this request there, then wait
+                // (bounded) for the probe's own reply so the caller learns the remote process tree is stopped
+                // before it releases any slot the probe held.
+                if (completion.Task.IsCompleted) return await completion.Task.ConfigureAwait(false);
+                if (!_Connections.TryGetValue(harborId, out HarborConnection? current)) return null;
+                HarborGitRequest cancel = new HarborGitRequest
+                {
+                    RequestId = Guid.NewGuid().ToString("N"),
+                    Kind = request.Kind,
+                    Label = request.Label,
+                    CancelsRequestId = request.RequestId
+                };
+                using (CancellationTokenSource confirm = new CancellationTokenSource(Math.Max(1, cancelConfirmMs)))
+                {
+                    try
+                    {
+                        await current!.SendAsync(cancel, confirm.Token).ConfigureAwait(false);
+                        return await completion.Task.WaitAsync(confirm.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _Logging.Warn(_Header + "Harbor " + harborId + " did not confirm cancellation of usage probe " + request.RequestId + " within " + cancelConfirmMs + "ms");
+                        return null;
+                    }
+                }
+            }
+            finally
+            {
+                _PendingGit.TryRemove(request.RequestId, out TaskCompletionSource<HarborGitResult>? _);
+                _PendingOwners.TryRemove(request.RequestId, out string? _);
+            }
+        }
+
+        /// <summary>
         /// Send a dock request (resolve a vessel's repository, create or remove a dock) to a connected Harbor and await
         /// its result. Returns null when the Harbor does not reply within the timeout.
         /// </summary>

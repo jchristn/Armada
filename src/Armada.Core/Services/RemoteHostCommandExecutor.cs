@@ -12,8 +12,23 @@ namespace Armada.Core.Services
     /// </summary>
     public class RemoteHostCommandExecutor : IHostCommandExecutor
     {
+        #region Public-Members
+
+        /// <summary>
+        /// How long a cancelled usage probe waits for the Harbor to confirm that the probe (and its process
+        /// tree) stopped, in milliseconds. Clamped to 1..60000; default 15000.
+        /// </summary>
+        public int CancelConfirmMs
+        {
+            get { return _CancelConfirmMs; }
+            set { _CancelConfirmMs = Math.Clamp(value, 1, 60000); }
+        }
+
+        #endregion
+
         #region Private-Members
 
+        private int _CancelConfirmMs = 15000;
         private readonly HarborConnectionManager _Manager;
         private readonly string _HarborId;
         private const int _ReplyGraceMs = 15000;
@@ -112,9 +127,13 @@ namespace Armada.Core.Services
             // The Harbor stops the probe at TimeoutMs (the execution deadline); the Admiral waits for the bounded
             // round-trip deadline only, which stays execution duration plus the reply grace, never transit time.
             int waitMs = request.TimeoutMs > 0 ? request.TimeoutMs + Math.Min(request.TimeoutMs, _ReplyGraceMs) : 0;
-            HarborGitResult? result = await _Manager.SendGitAsync(_HarborId, probeRequest, waitMs, token).ConfigureAwait(false);
+            // A cancelled caller cancels THIS probe on the Harbor (its process tree is stopped there, unrelated
+            // probes keep running) and waits for the Harbor to confirm before reporting ProbeCancelled.
+            HarborGitResult? result = await _Manager.SendUsageProbeAsync(_HarborId, probeRequest, waitMs, CancelConfirmMs, token).ConfigureAwait(false);
             if (result == null)
             {
+                if (token.IsCancellationRequested)
+                    return ProbeReply(UsageProbeResult.Failed("ProbeCancelled", "the usage probe was cancelled; Harbor " + _HarborId + " did not confirm its process stopped within " + CancelConfirmMs + "ms"));
                 return ProbeReply(UsageProbeResult.Failed("ProbeTimeout", "Harbor " + _HarborId + " did not answer the usage probe within the round-trip deadline"));
             }
 

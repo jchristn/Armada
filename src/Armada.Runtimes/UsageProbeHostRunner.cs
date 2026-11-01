@@ -383,6 +383,16 @@ namespace Armada.Runtimes
             catch
             {
             }
+
+            try
+            {
+                // Kill(true) only signals the tree: wait (bounded) for the probe's root process to be reaped
+                // so a cancelled or timed-out probe has actually stopped before its reply is sent.
+                process.WaitForExit(5000);
+            }
+            catch
+            {
+            }
         }
 
         #endregion

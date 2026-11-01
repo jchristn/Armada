@@ -122,6 +122,7 @@ namespace Armada.Core.Services
         private readonly Action<HarborLogEntry>? _OnLog;
         private HarborJobState _JobState = new HarborJobState();
         private static readonly TimeSpan _ActivityInterval = TimeSpan.FromSeconds(1);
+        private readonly ConcurrentDictionary<string, CancellationTokenSource> _ProbeCancellations = new ConcurrentDictionary<string, CancellationTokenSource>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _CommandLocks = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<Task, byte> _CommandsInFlight = new ConcurrentDictionary<Task, byte>();
         private CancellationTokenSource? _SessionCommands = null;
@@ -411,9 +412,43 @@ namespace Armada.Core.Services
                 // directory so commands in the same folder keep their order. A usage probe is its own path: it never
                 // shares the per-directory command gate and never runs an executable.
                 CancellationToken commandToken = _SessionCommands?.Token ?? token;
-                Task work = git.Kind == HostCommandKindEnum.UsageProbe
-                    ? Task.Run(() => HandleUsageProbeAsync(git, commandToken))
-                    : Task.Run(() => HandleGitAsync(git, commandToken));
+                if (git.Kind == HostCommandKindEnum.UsageProbe && !String.IsNullOrWhiteSpace(git.CancelsRequestId))
+                {
+                    // Request-specific cancellation: only the named probe is cancelled; its helper stops the
+                    // probe's process tree and the probe's own reply reports ProbeCancelled.
+                    if (_ProbeCancellations.TryGetValue(git.CancelsRequestId, out CancellationTokenSource? target))
+                    {
+                        try { target.Cancel(); }
+                        catch (ObjectDisposedException) { }
+                    }
+                    return;
+                }
+
+                Task work;
+                if (git.Kind == HostCommandKindEnum.UsageProbe)
+                {
+                    // Registered here, on the receive loop, before the probe starts: a cancel message is read
+                    // after its probe request, so it always finds the probe's source while the probe runs.
+                    CancellationTokenSource probeCts = CancellationTokenSource.CreateLinkedTokenSource(commandToken);
+                    string probeRequestId = git.RequestId ?? String.Empty;
+                    _ProbeCancellations[probeRequestId] = probeCts;
+                    work = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await HandleUsageProbeAsync(git, probeCts.Token).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            _ProbeCancellations.TryRemove(new KeyValuePair<string, CancellationTokenSource>(probeRequestId, probeCts));
+                            probeCts.Dispose();
+                        }
+                    });
+                }
+                else
+                {
+                    work = Task.Run(() => HandleGitAsync(git, commandToken));
+                }
                 _CommandsInFlight.TryAdd(work, 0);
                 _ = work.ContinueWith(done => _CommandsInFlight.TryRemove(done, out byte _), TaskScheduler.Default);
                 return;

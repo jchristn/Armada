@@ -64,6 +64,17 @@ namespace Armada.Core.Harbor
         public string? UsageProbeJson { get; set; } = null;
 
         /// <summary>
+        /// When set on a <see cref="Armada.Core.Services.HostCommandKindEnum.UsageProbe"/> request, this message
+        /// runs nothing: it cancels the usage probe the same Admiral sent earlier with this
+        /// <see cref="RequestId"/>. The Harbor cancels only that probe (unrelated concurrent probes and commands
+        /// keep running), its host-side helper stops the probe's process tree, and the cancelled probe's own
+        /// reply reports ProbeCancelled. The cancel message itself gets no reply; a cancel for a probe that
+        /// already finished or is unknown is ignored. Null or absent (a sender that predates the field) means
+        /// an ordinary request.
+        /// </summary>
+        public string? CancelsRequestId { get; set; } = null;
+
+        /// <summary>
         /// Optional short name for the command in the Harbor's activity log (for example the check's name), or null.
         /// </summary>
         public string? Label { get; set; } = null;

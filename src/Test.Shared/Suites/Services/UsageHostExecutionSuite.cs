@@ -189,6 +189,66 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(IsProcessAlive(pid), "the cancelled probe's process tree was terminated");
             }));
 
+            cases.Add(CaseAsync("remote_probe_cancellation_terminates_only_that_harbor_process_tree", "Cancelling a remote usage probe stops its process tree on the Harbor, reports ProbeCancelled, and leaves a concurrent probe running", TestTags.Reliability, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                LoggingModule logging = CreateLogging();
+                HarborConnectionManager manager = new HarborConnectionManager(new HarborService(testDb.Driver, logging), logging, null);
+                InProcessHarbor harbor = await InProcessHarbor.ConnectAsync(
+                    manager, "hbr_cancel", TenantId, null, new AgentRuntimeFactory(logging), new string[] { "git" }, logging,
+                    usageProbe: new UsageProbeHostRunner(logging, new UsageAccountResolver("hbr_cancel", new string('c', 64)))).ConfigureAwait(false);
+                try
+                {
+                    string dir = TestTemp.NewDirectory("usage_remote_cancel");
+                    string pidA = Path.Combine(dir, "a.pid");
+                    string childA = Path.Combine(dir, "a.child");
+                    string pidB = Path.Combine(dir, "b.pid");
+
+                    // Probe A: a shell with a background child, both far outliving the 20 s execution deadline.
+                    string commandA = "sleep 600 & echo $! > " + Quote(childA) + "; echo $$ > " + Quote(pidA) + "; wait";
+                    // Probe B: an unrelated concurrent probe on the same Harbor that answers Ok after 4 s.
+                    string payloadB = "{\"schemaVersion\":1,\"status\":\"Ok\",\"accountKey\":\"acct-b\",\"provider\":\"anthropic\","
+                        + "\"windows\":[{\"name\":\"primary\",\"usedPercent\":12,\"windowMinutes\":300}]}";
+                    string commandB = "echo $$ > " + Quote(pidB) + "; sleep 4; echo " + Quote(payloadB);
+
+                    RemoteHostCommandExecutor executor = new RemoteHostCommandExecutor(manager, "hbr_cancel");
+                    using CancellationTokenSource cancelA = new CancellationTokenSource();
+                    Task<HostCommandResult> replyA = executor.RunAsync(RemoteCustomRequest("hbr_cancel", "/bin/sh", new string[] { "-c", commandA }, 20), cancelA.Token);
+                    Task<HostCommandResult> replyB = executor.RunAsync(RemoteCustomRequest("hbr_cancel", "/bin/sh", new string[] { "-c", commandB }, 20), CancellationToken.None);
+
+                    int a = await WaitForPidAsync(pidA).ConfigureAwait(false);
+                    int child = await WaitForPidAsync(childA).ConfigureAwait(false);
+                    int b = await WaitForPidAsync(pidB).ConfigureAwait(false);
+                    AssertTrue(IsProcessAlive(a) && IsProcessAlive(child), "probe A and its child run on the Harbor before cancellation");
+                    AssertFalse(replyA.IsCompleted, "probe A has not answered before it is cancelled");
+
+                    Stopwatch elapsed = Stopwatch.StartNew();
+                    cancelA.Cancel();
+                    HostCommandResult cancelled = await replyA.WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                    elapsed.Stop();
+
+                    UsageProbeResult resultA = UsageProbeResult.Deserialize(cancelled.StandardOutput);
+                    AssertEqual(UsageSnapshotStatusEnum.Failed, resultA.Status, "a cancelled remote probe is a failed attempt");
+                    AssertEqual("ProbeCancelled", resultA.ErrorCode, "the Admiral reports the cancellation, not a timeout");
+                    AssertFalse(cancelled.TimedOut, "a cancelled remote probe is not reported as timed out");
+                    AssertTrue(elapsed.Elapsed < TimeSpan.FromSeconds(10), "cancellation is not deferred to the execution deadline (took " + elapsed.Elapsed + ")");
+                    AssertFalse(IsProcessAlive(a), "the cancelled probe's shell on the Harbor was terminated before the reply");
+                    AssertFalse(await StaysAliveAsync(child).ConfigureAwait(false), "the cancelled probe's child process on the Harbor was terminated");
+
+                    // Isolation: the unrelated probe kept running through the cancellation and still answers.
+                    AssertTrue(IsProcessAlive(b), "an unrelated concurrent probe is not cancelled with probe A");
+                    AssertFalse(replyB.IsCompleted, "the unrelated probe is still executing after probe A was cancelled");
+                    HostCommandResult okReply = await replyB.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                    UsageProbeResult resultB = UsageProbeResult.Deserialize(okReply.StandardOutput);
+                    AssertEqual(UsageSnapshotStatusEnum.Ok, resultB.Status, "the unrelated probe answers Ok after probe A's cancellation (" + resultB.ErrorCode + ")");
+                    AssertEqual(0, harbor.Runner.Launches.Count, "probes never launch captain jobs on the Harbor");
+                }
+                finally
+                {
+                    harbor.Dispose();
+                }
+            }));
+
             cases.Add(CaseAsync("older_harbor_answers_unsupported_until_it_advertises_the_capability", "A Harbor without the usage-probe capability answers Unsupported with HostUpgradeRequired", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -304,6 +364,60 @@ namespace Test.Shared.Suites.Services
                     List<string> members = await testDb.Driver.UsageSnapshots.ReadCaptainsAsync(result.Snapshot.Id, TenantId).ConfigureAwait(false);
                     AssertEqual(2, members.Count, "the snapshot links every member captain");
                     AssertEqual(0, harbor.Runner.Launches.Count, "a usage probe never launches a captain job on the Harbor");
+                }
+                finally
+                {
+                    harbor.Dispose();
+                }
+            }));
+
+            cases.Add(CaseAsync("invalidated_remote_attempt_stops_the_harbor_process_before_its_permit_is_reused", "Invalidating a capture whose probe runs on a Harbor terminates that remote process tree before the attempt finishes, and the freed slot runs the next capture", TestTags.Reliability, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                await SeedTenantAsync(testDb.Driver).ConfigureAwait(false);
+                LoggingModule logging = CreateLogging();
+                HarborConnectionManager manager = new HarborConnectionManager(new HarborService(testDb.Driver, logging), logging, null);
+                InProcessHarbor harbor = await InProcessHarbor.ConnectAsync(
+                    manager, "hbr_inval", TenantId, null, new AgentRuntimeFactory(logging), new string[] { "git" }, logging,
+                    usageProbe: new UsageProbeHostRunner(logging, new UsageAccountResolver("hbr_inval", new string('3', 64), "hbr_inval"))).ConfigureAwait(false);
+                try
+                {
+                    ArmadaSettings settings = new ArmadaSettings();
+                    settings.UsageCapture = new UsageCaptureSettings { Enabled = true, ProbeTimeoutSeconds = 30, MaximumConcurrentProbes = 1, MaximumConcurrentProbesPerHost = 1 };
+                    UsageCaptureService service = new UsageCaptureService(
+                        testDb.Driver, settings, new UsageAccountResolver("host-inval", new string('4', 64)), new StubExecutor(), manager, logging);
+
+                    string dir = TestTemp.NewDirectory("usage_remote_invalidate");
+                    string pidFile = Path.Combine(dir, "probe.pid");
+                    string childFile = Path.Combine(dir, "probe.child");
+                    string command = "sleep 600 & echo $! > " + Quote(childFile) + "; echo $$ > " + Quote(pidFile) + "; wait";
+                    UsageCaptureGroup held = RemoteGroup("hbr_inval", AgentRuntimeEnum.ClaudeCode, "fp-held", CommandJson("/bin/sh", new string[] { "-c", command }), "cpt_inval_a");
+
+                    UsageCaptureAttempt attempt = await service.TryStartAsync(held, "cpt_inval_a").ConfigureAwait(false);
+                    AssertTrue(attempt.Started, "the remote capture starts");
+                    int pid = await WaitForPidAsync(pidFile).ConfigureAwait(false);
+                    int child = await WaitForPidAsync(childFile).ConfigureAwait(false);
+                    AssertTrue(IsProcessAlive(pid), "the probe runs on the Harbor before the invalidation");
+
+                    Stopwatch elapsed = Stopwatch.StartNew();
+                    service.Invalidate();
+                    UsageCaptureAttemptResult result = await AwaitAsync(attempt.Completion).ConfigureAwait(false);
+                    elapsed.Stop();
+
+                    // The attempt finishes only after the Harbor stopped the process tree.
+                    AssertFalse(IsProcessAlive(pid), "the invalidated probe's shell on the Harbor is gone when the attempt finishes");
+                    AssertFalse(await StaysAliveAsync(child).ConfigureAwait(false), "the invalidated probe's child process on the Harbor was terminated");
+                    AssertEqual("SettingsGenerationChanged", result.DiscardedReason, "the stale attempt is discarded, not committed");
+                    AssertFalse(result.Persisted, "nothing from the invalidated attempt is written");
+                    AssertTrue(elapsed.Elapsed < TimeSpan.FromSeconds(10), "the remote process was not left to its 30 s deadline (took " + elapsed.Elapsed + ")");
+
+                    // The only server-wide and per-host slot came back, so the next capture on the Harbor runs.
+                    UsageCaptureGroup next = RemoteGroup("hbr_inval", AgentRuntimeEnum.Codex, "fp-next", SplitCommandJson(), "cpt_inval_b");
+                    UsageCaptureAttempt nextAttempt = await service.TryStartAsync(next, "cpt_inval_b").ConfigureAwait(false);
+                    AssertTrue(nextAttempt.Started, "a capture after the invalidation starts");
+                    UsageCaptureAttemptResult nextResult = await AwaitAsync(nextAttempt.Completion).ConfigureAwait(false);
+                    AssertEqual(UsageSnapshotStatusEnum.Ok, nextResult.Status, "the next remote capture answers Ok (" + nextResult.ErrorCode + ")");
+                    AssertTrue(nextResult.Persisted, "the next remote capture commits");
                 }
                 finally
                 {
@@ -578,6 +692,65 @@ namespace Test.Shared.Suites.Services
                 TimeoutSeconds = 10,
                 DispatchedUtc = DateTime.UtcNow
             };
+        }
+
+        private static HostCommandRequest RemoteCustomRequest(string harborId, string executable, string[] arguments, int timeoutSeconds)
+        {
+            UsageProbeHost host = NewCustomHost(harborId, CommandJson(executable, arguments));
+            host.HarborId = harborId;
+            host.TimeoutSeconds = timeoutSeconds;
+            return new HostCommandRequest
+            {
+                Kind = HostCommandKindEnum.UsageProbe,
+                UsageProbeJson = host.Serialize(),
+                TimeoutMs = timeoutSeconds * 1000,
+                Label = "usage-capture remote-cancel"
+            };
+        }
+
+        private static UsageCaptureGroup RemoteGroup(string harborId, AgentRuntimeEnum runtime, string fingerprint, string commandJson, string memberId)
+        {
+            return new UsageCaptureGroup
+            {
+                GroupKey = UsageAccountResolver.GroupKey(TenantId, harborId, runtime, fingerprint),
+                TenantId = TenantId,
+                HostId = harborId,
+                HarborId = harborId,
+                Runtime = runtime,
+                Mode = UsageCaptureModeEnum.Custom,
+                CommandJson = commandJson,
+                CommandFingerprint = fingerprint,
+                ConfigurationRevision = harborId + "|" + runtime + "|" + fingerprint,
+                EffectiveIntervalSeconds = 300,
+                MemberCaptainIds = new List<string> { memberId }
+            };
+        }
+
+        private static async Task<int> WaitForPidAsync(string pidFile)
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (File.Exists(pidFile))
+                {
+                    string text = (await File.ReadAllTextAsync(pidFile).ConfigureAwait(false)).Trim();
+                    if (Int32.TryParse(text, out int pid)) return pid;
+                }
+                await Task.Delay(50).ConfigureAwait(false);
+            }
+            throw new TimeoutException("the probe never wrote " + Path.GetFileName(pidFile));
+        }
+
+        private static async Task<bool> StaysAliveAsync(int pid)
+        {
+            // An orphaned child is reaped by the system shortly after its signal; poll briefly before
+            // concluding it survived.
+            for (int i = 0; i < 30; i++)
+            {
+                if (!IsProcessAlive(pid)) return false;
+                await Task.Delay(100).ConfigureAwait(false);
+            }
+            return IsProcessAlive(pid);
         }
 
         private static string Quote(string path)
