@@ -192,6 +192,124 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(result.Snapshot.Id, joinedResult.Snapshot?.Id, "the join observes the same committed snapshot");
             }));
 
+            cases.Add(CaseAsync("scheduler_tenants_with_shared_credentials_capture_separately", "Two tenants sharing one credential host and account key capture separately; tenant is the ownership boundary", TestTags.Negative, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
+                const string SecondTenantId = "ten_usage_sched_b";
+
+                await fixture.Database.Tenants.CreateAsync(new Armada.Core.Models.TenantMetadata { Id = SecondTenantId, Name = "Usage Scheduler Tenant B" }).ConfigureAwait(false);
+
+                Captain first = await fixture.CreateCaptainAsync("tenant-a", 300).ConfigureAwait(false);
+                Captain second = new Captain("tenant-b", AgentRuntimeEnum.ClaudeCode)
+                {
+                    TenantId = SecondTenantId,
+                    UsageCaptureEnabled = true,
+                    UsageCaptureIntervalSeconds = 300,
+                    UsageCaptureMode = UsageCaptureModeEnum.Auto
+                };
+                second = await fixture.Database.Captains.CreateAsync(second).ConfigureAwait(false);
+
+                UsageCaptureScheduler scheduler = fixture.CreateScheduler();
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+
+                // The two captains share a runtime, a credential host and (below) the account key their
+                // probe reports. They must still be two accounts: the tenant is part of the group
+                // discriminator (D1).
+                List<UsageCaptureGroup> groups = scheduler.Groups();
+                AssertEqual(2, groups.Count, "the same host and runtime in two tenants is two groups, not one");
+                UsageCaptureGroup? groupA = groups.Find(candidate => String.Equals(candidate.TenantId, TenantId, StringComparison.Ordinal));
+                UsageCaptureGroup? groupB = groups.Find(candidate => String.Equals(candidate.TenantId, SecondTenantId, StringComparison.Ordinal));
+                AssertNotNull(groupA, "tenant A owns a capture group");
+                AssertNotNull(groupB, "tenant B owns its own capture group");
+                AssertFalse(String.Equals(groupA!.GroupKey, groupB!.GroupKey, StringComparison.Ordinal), "the group keys differ between tenants");
+                string[]? partsA = UsageAccountResolver.SplitGroupKey(groupA.GroupKey);
+                string[]? partsB = UsageAccountResolver.SplitGroupKey(groupB.GroupKey);
+                AssertNotNull(partsA, "tenant A's group key splits into its segments");
+                AssertNotNull(partsB, "tenant B's group key splits into its segments");
+                AssertEqual(TenantId, partsA![0], "tenant A's group key names tenant A");
+                AssertEqual(SecondTenantId, partsB![0], "tenant B's group key names tenant B");
+                AssertEqual(1, groupA.MemberCaptainIds.Count, "tenant A's group holds only its own captain");
+                AssertEqual(first.Id, groupA.MemberCaptainIds[0], "tenant A's member is its own captain");
+                AssertEqual(1, groupB.MemberCaptainIds.Count, "tenant B's group holds only its own captain");
+                AssertEqual(second.Id, groupB.MemberCaptainIds[0], "tenant B's member is its own captain");
+
+                // Both probes report the same account key, as they would when two tenants share one set
+                // of operator credentials. Each tenant still starts its own attempt and job.
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(groupA.GroupKey) ?? fixture.Clock.Now());
+                UsageCaptureAttempt attemptA = await fixture.Service.TryStartAsync(groupA, first.Id).ConfigureAwait(false);
+                AssertTrue(attemptA.Started, "tenant A starts its own attempt");
+                UsageCaptureAttempt attemptB = await fixture.Service.TryStartAsync(groupB, second.Id).ConfigureAwait(false);
+                AssertTrue(attemptB.Started, "tenant B starts its own attempt instead of joining tenant A's");
+                AssertFalse(String.Equals(attemptA.JobId, attemptB.JobId, StringComparison.Ordinal), "each tenant owns a distinct dedicated job");
+
+                UsageCaptureAttemptResult resultA = await AwaitAsync(attemptA.Completion).ConfigureAwait(false);
+                UsageCaptureAttemptResult resultB = await AwaitAsync(attemptB.Completion).ConfigureAwait(false);
+                AssertTrue(resultA.Persisted, "tenant A's snapshot is persisted");
+                AssertTrue(resultB.Persisted, "tenant B's snapshot is persisted");
+                AssertNotNull(resultA.Snapshot, "tenant A receives its snapshot");
+                AssertNotNull(resultB.Snapshot, "tenant B receives its snapshot");
+                AssertFalse(String.Equals(resultA.Snapshot!.Id, resultB.Snapshot!.Id, StringComparison.Ordinal), "the shared credentials never collapse into one snapshot");
+                AssertEqual(TenantId, resultA.Snapshot.TenantId, "tenant A's snapshot belongs to tenant A");
+                AssertEqual(SecondTenantId, resultB.Snapshot.TenantId, "tenant B's snapshot belongs to tenant B");
+                AssertEqual(fixture.Executor.Result.AccountKey, resultA.Snapshot.AccountKey, "tenant A records the observed account key");
+                AssertEqual(fixture.Executor.Result.AccountKey, resultB.Snapshot.AccountKey, "tenant B records the same observed account key");
+
+                // Enumeration and member links are tenant-scoped: neither tenant sees the other's rows.
+                EnumerationResult<UsageSnapshot> snapshotsA = await fixture.Database.UsageSnapshots.EnumerateAsync(new UsageSnapshotQuery { TenantId = TenantId, PageSize = 10 }).ConfigureAwait(false);
+                EnumerationResult<UsageSnapshot> snapshotsB = await fixture.Database.UsageSnapshots.EnumerateAsync(new UsageSnapshotQuery { TenantId = SecondTenantId, PageSize = 10 }).ConfigureAwait(false);
+                AssertEqual(1, snapshotsA.Objects.Count, "tenant A enumerates exactly its own snapshot");
+                AssertEqual(1, snapshotsB.Objects.Count, "tenant B enumerates exactly its own snapshot");
+                AssertEqual(resultA.Snapshot.Id, snapshotsA.Objects[0].Id, "tenant A's enumeration is its snapshot");
+                AssertEqual(resultB.Snapshot.Id, snapshotsB.Objects[0].Id, "tenant B's enumeration is its snapshot");
+                AssertEqual(0, (await fixture.Database.UsageSnapshots.ReadCaptainsAsync(resultB.Snapshot.Id, TenantId).ConfigureAwait(false)).Count, "tenant A cannot read tenant B's member link");
+                AssertEqual(1, (await fixture.Database.UsageSnapshots.ReadCaptainsAsync(resultB.Snapshot.Id, SecondTenantId).ConfigureAwait(false)).Count, "tenant B reads its own member link");
+
+                List<UsageAccountMembership> crossTenant = await fixture.Database.UsageMemberships.ReadActiveAsync(SecondTenantId, first.Id).ConfigureAwait(false);
+                AssertEqual(0, crossTenant.Count, "no membership crosses the tenant boundary");
+                List<UsageAccountMembership> membershipB = await fixture.Database.UsageMemberships.ReadActiveAsync(SecondTenantId, second.Id).ConfigureAwait(false);
+                AssertEqual(1, membershipB.Count, "tenant B's captain holds its own membership");
+                AssertEqual(fixture.Executor.Result.AccountKey, membershipB[0].AccountKey, "the membership names the shared account key");
+
+                List<Job> captureJobs = (await fixture.Database.Jobs.EnumerateAsync().ConfigureAwait(false)).Where(job => job.Kind == JobKindEnum.UsageProbe).ToList();
+                AssertEqual(2, captureJobs.Count, "the two tenants own two dedicated capture jobs");
+                AssertEqual(1, captureJobs.FindAll(job => String.Equals(job.TenantId, TenantId, StringComparison.Ordinal)).Count, "one job belongs to tenant A");
+                AssertEqual(1, captureJobs.FindAll(job => String.Equals(job.TenantId, SecondTenantId, StringComparison.Ordinal)).Count, "one job belongs to tenant B");
+            }));
+
+            cases.Add(CaseAsync("scheduler_disabled_mode_wins_over_enabled_flag", "A captain with capture enabled but mode Disabled is never scheduled until the mode changes", TestTags.Negative, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
+                Captain captain = await fixture.CreateCaptainAsync("mode-disabled", 300).ConfigureAwait(false);
+                captain.UsageCaptureEnabled = true;
+                captain.UsageCaptureMode = UsageCaptureModeEnum.Disabled;
+                await fixture.Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+
+                UsageCaptureScheduler scheduler = fixture.CreateScheduler();
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+
+                // D3: the Disabled mode wins over the enabled flag. The captain is not a member of any
+                // group, is not reported as an unresolved host, and no tick starts a probe for it.
+                AssertEqual(0, scheduler.Groups().Count, "disabled mode forms no capture group");
+                AssertEqual(0, scheduler.UnresolvedCaptains().Count, "the inactive captain is not reported as an unresolved host");
+                fixture.Clock.Advance(TimeSpan.FromSeconds(3600));
+                List<UsageCaptureAttempt> ticks = await scheduler.TickAsync().ConfigureAwait(false);
+                AssertEqual(0, ticks.Count, "no tick starts a probe for a mode-disabled captain");
+                AssertEqual(0, fixture.Executor.Calls, "the credential host is never asked to probe");
+                AssertEqual(0, (await fixture.Database.Jobs.EnumerateAsync().ConfigureAwait(false)).Count(job => job.Kind == JobKindEnum.UsageProbe), "no capture job is created for a mode-disabled captain");
+
+                // Switching the mode to Auto makes the same captain schedulable again.
+                captain.UsageCaptureMode = UsageCaptureModeEnum.Auto;
+                await fixture.Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+                UsageCaptureGroup group = scheduler.Groups()[0];
+                AssertEqual(1, group.MemberCaptainIds.Count, "the re-enabled captain forms one group");
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(group.GroupKey) ?? fixture.Clock.Now());
+                List<UsageCaptureAttempt> due = await scheduler.TickAsync().ConfigureAwait(false);
+                AssertEqual(1, due.Count, "the re-enabled captain is scheduled when due");
+                UsageCaptureAttemptResult result = await AwaitAsync(due[0].Completion).ConfigureAwait(false);
+                AssertTrue(result.Persisted, "the re-enabled captain's capture commits");
+            }));
+
             cases.Add(CaseAsync("scheduler_manual_capture_respects_cooldown_and_server_switch", "Manual capture respects the cooldown and the server switch; it is not an interval bypass", TestTags.Negative, async () =>
             {
                 using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
