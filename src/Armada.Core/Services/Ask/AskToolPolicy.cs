@@ -41,6 +41,7 @@ namespace Armada.Core.Services.Ask
             "list_vessel_dependencies",
             "papercut_summary",
             "token_usage_summary",
+            "usage_status",
             "search_memory",
             "evaluate_autoland",
             "get_cli_permission_request",

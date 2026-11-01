@@ -6,6 +6,21 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Account usage query and public surfaces (Phase 4)
+
+- **Pending acceptance:** missing required MCP arguments still return the pinned
+  transport tool error instead of AC4's required JSON-RPC protocol error. See
+  `docs/captain-usage-plan/PHASE4_VERIFICATION.md`; this implementation is blocked
+  from landing as complete.
+
+- Add tenant-scoped account snapshot/latest queries, bounded limit/token series,
+  completion-time mission drill-down, and capture receipts across REST, MCP and
+  Armada.Client. Preserve shared-account ownership and nullable attribution.
+- Declare authorization for the new routes/tools, allow read-only usage status in
+  Ask, and publish committed usage notifications only within the owning tenant.
+- Extend the local REST/MCP/WebSocket documentation and reusable Usage Postman
+  requests without changing collection authentication or publishing a workspace.
+
 ### Captain Active setting
 
 - Add persisted captain `Active` eligibility (default true, including migration of existing rows) across REST, MCP, Dashboard, mobile, TUI, Helm and the legacy web UI. Disabled captains cannot accept new work; runtime State and in-flight work are preserved. Operational snapshots cannot overwrite an Active configuration edit.

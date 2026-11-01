@@ -190,6 +190,7 @@ namespace Armada.Server
         private ModelAlertAccessService _ModelAlertAccess = null!;
         private BatteryRunService _BatteryRunService = null!;
         private BatteryAccessService _BatteryAccess = null!;
+        private UsageAccessService _UsageAccess = null!;
         private CheckRunService _CheckRunService = null!;
         private ObjectiveService _ObjectiveService = null!;
         private ReleaseService _ReleaseService = null!;
@@ -475,6 +476,8 @@ namespace Armada.Server
                 _Settings,
                 _HarborConnectionManager,
                 _Logging);
+            _UsageAccess = new UsageAccessService(_Database, _UsageCapture, _UsageCaptureScheduler, _Settings.UsageCapture, _HarborConnectionManager);
+            _UsageCapture.SnapshotCommitted += (snapshot, captainIds) => _WebSocketHub?.BroadcastToTenant(snapshot.TenantId, "usage.snapshot", new { tenantId = snapshot.TenantId, snapshotId = snapshot.Id, hostId = snapshot.HostId, runtime = snapshot.Runtime, provider = snapshot.Provider, captainIds, capturedUtc = snapshot.CapturedUtc, status = snapshot.Status });
             _FleetActionService = new FleetActionService(_Database, _Settings, _FleetActionRunner, fleetActionSeeder, _Logging);
             try
             {
@@ -1672,6 +1675,7 @@ namespace Armada.Server
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Token usage
+            new UsageRoutes(_UsageAccess, _JsonOptions).Register(_App, authenticate, _AuthorizationService);
             new TokenUsageRoutes(_Database, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
@@ -2203,7 +2207,8 @@ namespace Armada.Server
                 _BlackBox?.Hooks,
                 _BlackBox?.Insights.Service,
                 _ModelProfileAccess,
-                _ModelAlertAccess);
+                _ModelAlertAccess,
+                _UsageAccess);
         }
 
         /// <summary>

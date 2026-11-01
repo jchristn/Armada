@@ -3922,3 +3922,13 @@ async def main():
 
 asyncio.run(main())
 ```
+
+### usage.snapshot
+
+A committed account observation emits `usage.snapshot` with `tenantId`,
+`snapshotId`, `hostId`, `runtime`, `provider`, `captainIds`, `capturedUtc` and
+`status`. The hub routes it only to authorized subscribers in the owning tenant.
+Account credentials, raw excerpts and full provider responses are excluded.
+Clients should invalidate and refetch usage queries, coalesce bursts, and refetch
+after reconnect; events are notifications rather than an append-only data feed.
+Historical observations remain available from the paged REST queries.

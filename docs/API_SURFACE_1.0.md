@@ -24,13 +24,13 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 513 | 15 |
-| MCP tools | 262 | 8 |
+| REST routes | 518 | 15 |
+| MCP tools | 264 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
-| WebSocket event types | 76 | 0 |
+| WebSocket event types | 77 | 0 |
 | CLI commands | 97 | 0 |
-| Settings keys | 313 | 12 |
+| Settings keys | 324 | 12 |
 
 ## REST API
 
@@ -147,6 +147,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/captains/{id}/tools` | Authenticated |  | 200 `CaptainToolAccessResult`, 400, 404 |  |
 | POST | `/api/v1/captains/{id}/tools/enumerate` | Authenticated | `CaptainToolsQuery` (optional) | 200 `CaptainToolAccessResult`, 400, 404 |  |
 | POST | `/api/v1/captains/{id}/unquarantine` | TenantAdmin |  | 200, 404 |  |
+| POST | `/api/v1/captains/{id}/usage/capture` | TenantAdmin | `UsageCaptureArgs` (optional) | 200 `EnumerationResult<UsageSnapshotView>`, 202 `UsageCaptureReceipt`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/check-runs` | Authenticated |  | 200 `EnumerationResult<CheckRun>` |  |
 | POST | `/api/v1/check-runs` | TenantAdmin | `CheckRunRequest` | 201 `CheckRun` |  |
 | POST | `/api/v1/check-runs/enumerate` | Authenticated | `CheckRunQuery` (optional) | 200 `EnumerationResult<CheckRun>` |  |
@@ -466,6 +467,10 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/token-usage/enumerate` | Authenticated | `TokenUsageQuery` (optional) | 200 `EnumerationResult<TokenUsageRecord>` |  |
 | GET | `/api/v1/token-usage/summary` | Authenticated |  | 200 `TokenUsageSummaryResult`, 400 |  |
 | POST | `/api/v1/token-usage/synthetic` | AdminOnly | `TokenUsageSyntheticRequest` | 200 `TokenUsageSyntheticResult`, 400, 409 `ApiErrorResponse` |  |
+| GET | `/api/v1/usage/latest` | Authenticated |  | 200 `EnumerationResult<UsageSnapshotView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| GET | `/api/v1/usage/missions` | Authenticated |  | 200 `UsageMissionResult`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| GET | `/api/v1/usage/series` | Authenticated |  | 200 `UsageSeriesResult`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| GET | `/api/v1/usage/snapshots` | Authenticated |  | 200 `EnumerationResult<UsageSnapshotView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/users` | Authenticated |  | 200 `EnumerationResult<UserMaster>` |  |
 | POST | `/api/v1/users` | TenantAdmin |  | 201 `UserMaster`, 400, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/users/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<UserMaster>` |  |
@@ -575,6 +580,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `cancel_mission` | TenantAdmin | `missionId*: string` |  |
 | `cancel_model_probe_run` | TenantAdmin | `id*: string` |  |
 | `cancel_voyage` | TenantAdmin | `voyageId*: string` |  |
+| `capture_captain_usage` | TenantAdmin | `captainId*: string`, `harborId: string` |  |
 | `categorize_vessel_import` | TenantAdmin | `applyFleetsAutomatically: boolean`, `batchId*: string`, `captainId: string`, `prompt: string` |  |
 | `classify_stage_outcome` | Authenticated | `cause: string`, `note: string`, `outcomeId*: string` |  |
 | `cli_permission_prompt` | Authenticated | `input*: object`, `tool_name*: string`, `tool_use_id: string` |  |
@@ -814,6 +820,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `update_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `auditCommand: string`, `autoApprove: boolean`, `autoLandEnabled: boolean`, `autoLandMaxFiles: integer`, `autoLandMaxLines: integer`, `autoLandPathAllowGlobs: array<string>`, `autoLandPathDenyGlobs: array<string>`, `clearAutoApprove: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `definitionOfDoneBuildCommand: string`, `definitionOfDoneEnabled: boolean`, `definitionOfDoneTestCommand: string`, `definitionOfDoneTimeoutSeconds: integer`, `enableModelContext: boolean`, `gitHubTokenOverride: string`, `landingMode: string`, `lintCommand: string`, `modelContext: string`, `name: string`, `projectContext: string`, `repoUrl: string`, `serializeOverlappingMissions: boolean`, `styleGuide: string`, `testCommand: string`, `vesselId*: string`, `workerEnvelope: object`, `workingDirectory: string` |  |
 | `update_vessel_context` | TenantAdmin | `modelContext: string`, `projectContext: string`, `styleGuide: string`, `vesselId*: string` |  |
 | `update_workflow_profile` | TenantAdmin | `abbreviatedUnitTestCommand: string`, `active: boolean`, `buildCommand: string`, `changelogGenerationCommand: string`, `deploymentVerificationCommand: string`, `description: string`, `e2eTestCommand: string`, `environments: array<object>`, `expectedArtifacts: array<string>`, `fleetId: string`, `id*: string`, `integrationTestCommand: string`, `isDefault: boolean`, `languageHints: array<string>`, `lintCommand: string`, `migrationCommand: string`, `name: string`, `ownershipScope: string`, `packageCommand: string`, `performanceCommand: string`, `publishArtifactCommand: string`, `releaseVersioningCommand: string`, `requiredInputs: array<object>`, `rollbackVerificationCommand: string`, `scope: string`, `securityScanCommand: string`, `unitTestCommand: string`, `vesselId: string` |  |
+| `usage_status` | Authenticated | `captainId: string`, `from: string`, `harborId: string`, `pageNumber: integer`, `pageSize: integer`, `provider: string`, `runtime: string`, `tenantId: string`, `to: string` |  |
 | `validate_battery_pack` | Authenticated | `packId*: string` |  |
 | `validate_model_endpoint` | Authenticated | `endpointId*: string` |  |
 | `validate_workflow_profile` | TenantAdmin | `abbreviatedUnitTestCommand: string`, `active: boolean`, `buildCommand: string`, `changelogGenerationCommand: string`, `deploymentVerificationCommand: string`, `description: string`, `e2eTestCommand: string`, `environments: array<object>`, `expectedArtifacts: array<string>`, `fleetId: string`, `integrationTestCommand: string`, `isDefault: boolean`, `languageHints: array<string>`, `lintCommand: string`, `migrationCommand: string`, `name*: string`, `ownershipScope: string`, `packageCommand: string`, `performanceCommand: string`, `publishArtifactCommand: string`, `releaseVersioningCommand: string`, `requiredInputs: array<object>`, `rollbackVerificationCommand: string`, `scope: string`, `securityScanCommand: string`, `unitTestCommand: string`, `vesselId: string` |  |
@@ -923,6 +930,7 @@ Generic events carry a `message` and the payload `{ entityType, entityId, captai
 | `runbook-execution.changed` | tenant | `RunbookExecution` |
 | `signal.batch_deleted` | tenant | generic |
 | `status.snapshot` | connection | `ArmadaStatus` + `allTenants` |
+| `usage.snapshot` | tenant | `tenantId`, `snapshotId`, `hostId`, `runtime`, `provider`, `captainIds`, `capturedUtc`, `status` |
 | `vessel.batch_deleted` | tenant | generic |
 | `voyage.batch_deleted` | tenant | generic |
 | `voyage.changed` | tenant | `id`, `title`, `status` |
@@ -1351,5 +1359,16 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `toolWaitHardLimitMinutes` | int | `60` |  |
 | `transientOutageGraceMinutes` | int | `10` |  |
 | `transientResumeDelaySeconds` | int | `5` |  |
+| `usageCapture` | object |  |  |
+| `usageCapture.allowPtyFallback` | bool | `false` |  |
+| `usageCapture.enabled` | bool | `false` |  |
+| `usageCapture.maximumBackoffSeconds` | int | `3600` |  |
+| `usageCapture.maximumConcurrentProbes` | int | `4` |  |
+| `usageCapture.maximumConcurrentProbesPerHost` | int | `1` |  |
+| `usageCapture.maximumExcerptBytes` | int | `2048` |  |
+| `usageCapture.minimumIntervalSeconds` | int | `60` |  |
+| `usageCapture.probeTimeoutSeconds` | int | `20` |  |
+| `usageCapture.rawSnapshotRetentionDays` | int | `7` |  |
+| `usageCapture.rollupRetentionDays` | int | `90` |  |
 | `verifyAllStageRuntimes` | bool | `true` |  |
 | `webSocketEnabled` | bool | `true` |  |

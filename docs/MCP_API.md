@@ -7851,3 +7851,25 @@ Synthetic activity generation is an operator CLI/global-admin REST workflow (`PO
 ### Strict captain assignments
 
 Set `captainAssignments[].strictCaptain` to `true` alongside `captainId` to wait for that selected captain instead of falling back when busy/unavailable. The default is `false`; tier fallback remains unchanged. Exact persona overrides take precedence over `*`. Strict selection also prevents automatic rework escalation to a different captain: an exhausted or stagnant chain reports remediation and preserves its work. Without a selected captain this flag has no effect. C# clients share `CaptainAssignmentOverride.StrictCaptain`. See [PIPELINES.md](PIPELINES.md#validated-slice-contracts) for plan validation and full-pipeline rework.
+
+## Account usage
+
+`usage_status` is an authenticated, read-only Ask tool. Optional `captainId`,
+`harborId`, `hostId`, `runtime`, `provider`, `accountKey`, `from`, `to`, `tenantId`,
+`pageNumber` and `pageSize` select the same tenant-scoped public views as REST.
+Without dates it returns latest account groups; dates select bounded snapshots.
+The default page is 1 with 25 objects, bounded to 100. A global administrator
+can explicitly select one tenant; omission does not combine tenants.
+
+`capture_captain_usage` requires `captainId`; optional `harborId` must match the
+resolved host. It requires tenant administration and remains an Ask mutation.
+The intended AC4 contract requires missing arguments to be JSON-RPC protocol
+errors (-32602). This branch does not yet meet that requirement: pinned Voltaic
+2.4.0 validates the required schema before Armada handlers and returns
+`result.isError` instead. The regression remains failing; this is a landing blocker. The tool returns the
+same queued receipt or original passive observation as REST. Shared attempts
+return the existing JobId with JoinedExisting. Disabled capture, cooldown and
+unavailable hosts are explicit errors; AuthMissing observations remain readable
+with empty windows and their original observation time. Neither tool exposes
+credentials or ordinary-user raw excerpts. Foreign identifiers are NotFound;
+invalid filters are InvalidArgument; insufficient role is Forbidden.

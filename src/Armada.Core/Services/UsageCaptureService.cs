@@ -30,6 +30,9 @@ namespace Armada.Core.Services
     /// </summary>
     public class UsageCaptureService
     {
+        /// <summary>Raised only after the snapshot and member links commit.</summary>
+        public event Action<UsageSnapshot, List<string>>? SnapshotCommitted;
+
         #region Public-Members
 
         /// <summary>
@@ -628,6 +631,8 @@ namespace Armada.Core.Services
 
             await ReconcileMembershipsAsync(group, memberCaptainIds, probe, receivedUtc, token).ConfigureAwait(false);
             await UpsertLatestStateAsync(group, snapshot, token).ConfigureAwait(false);
+            try { SnapshotCommitted?.Invoke(snapshot, memberCaptainIds); }
+            catch (Exception ex) { _Logging.Warn(_Header + "usage event delivery failed: " + ex.Message); }
             return snapshot;
         }
 

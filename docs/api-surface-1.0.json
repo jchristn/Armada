@@ -1894,6 +1894,30 @@
       "experimental": false
     },
     {
+      "method": "POST",
+      "route": "/api/v1/captains/{id}/usage/capture",
+      "auth": "TenantAdmin",
+      "resource": "Usage:Create",
+      "requestType": "UsageCaptureArgs",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<UsageSnapshotView>",
+        "202": "UsageCaptureReceipt",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "429": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Usage"
+      ],
+      "summary": "Capture captain account usage",
+      "experimental": false
+    },
+    {
       "method": "GET",
       "route": "/api/v1/check-runs",
       "auth": "Authenticated",
@@ -7312,6 +7336,98 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/usage/latest",
+      "auth": "Authenticated",
+      "resource": "Usage:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<UsageSnapshotView>",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "429": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Usage"
+      ],
+      "summary": "Read latest account usage",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/usage/missions",
+      "auth": "Authenticated",
+      "resource": "Usage:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "UsageMissionResult",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "429": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Usage"
+      ],
+      "summary": "Read usage attributed to completed missions",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/usage/series",
+      "auth": "Authenticated",
+      "resource": "Usage:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "UsageSeriesResult",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "429": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Usage"
+      ],
+      "summary": "Read bounded usage series",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/usage/snapshots",
+      "auth": "Authenticated",
+      "resource": "Usage:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<UsageSnapshotView>",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "429": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Usage"
+      ],
+      "summary": "Read sanitized usage snapshots",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/users",
       "auth": "Authenticated",
       "resource": "User:Read",
@@ -9199,6 +9315,25 @@
         }
       ],
       "description": "Cancel an entire voyage and its Pending, Assigned, and Blocked missions. Returns the voyage with CancelledMissions and NotCancelledMissions counts; read which missions remain with enumerate (entityType missions, voyageId).",
+      "experimental": false
+    },
+    {
+      "name": "capture_captain_usage",
+      "auth": "TenantAdmin",
+      "resource": "Usage:Create",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "harborId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Capture usage for a tenant-owned captain. Requires tenant administrator. Returns an idempotent queued job receipt; disabled capture is Conflict, cooldown is rate limited and offline host is Unavailable.",
       "experimental": false
     },
     {
@@ -17078,6 +17213,60 @@
       "experimental": false
     },
     {
+      "name": "usage_status",
+      "auth": "Authenticated",
+      "resource": "Usage:Read",
+      "arguments": [
+        {
+          "name": "captainId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "from",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "harborId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "provider",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "runtime",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "tenantId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "to",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Read sanitized account usage. Without dates returns latest; dated reads use [from,to). Default page 1, size 25, maximum 100.",
+      "experimental": false
+    },
+    {
       "name": "validate_battery_pack",
       "auth": "Authenticated",
       "resource": "BatteryPack:Read",
@@ -18412,6 +18601,23 @@
         "payloadType": "ArmadaStatus",
         "fields": [
           "allTenants"
+        ],
+        "generic": false
+      },
+      {
+        "type": "usage.snapshot",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": null,
+        "fields": [
+          "tenantId",
+          "snapshotId",
+          "hostId",
+          "runtime",
+          "provider",
+          "captainIds",
+          "capturedUtc",
+          "status"
         ],
         "generic": false
       },
@@ -28682,6 +28888,72 @@
       "key": "transientResumeDelaySeconds",
       "type": "int",
       "default": "5",
+      "experimental": false
+    },
+    {
+      "key": "usageCapture",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "usageCapture.allowPtyFallback",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
+      "key": "usageCapture.enabled",
+      "type": "bool",
+      "default": "false",
+      "experimental": false
+    },
+    {
+      "key": "usageCapture.maximumBackoffSeconds",
+      "type": "int",
+      "default": "3600",
+      "experimental": false
+    },
+    {
+      "key": "usageCapture.maximumConcurrentProbes",
+      "type": "int",
+      "default": "4",
+      "experimental": false
+    },
+    {
+      "key": "usageCapture.maximumConcurrentProbesPerHost",
+      "type": "int",
+      "default": "1",
+      "experimental": false
+    },
+    {
+      "key": "usageCapture.maximumExcerptBytes",
+      "type": "int",
+      "default": "2048",
+      "experimental": false
+    },
+    {
+      "key": "usageCapture.minimumIntervalSeconds",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "usageCapture.probeTimeoutSeconds",
+      "type": "int",
+      "default": "20",
+      "experimental": false
+    },
+    {
+      "key": "usageCapture.rawSnapshotRetentionDays",
+      "type": "int",
+      "default": "7",
+      "experimental": false
+    },
+    {
+      "key": "usageCapture.rollupRetentionDays",
+      "type": "int",
+      "default": "90",
       "experimental": false
     },
     {
