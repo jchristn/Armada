@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// The model as served: a runtime, provider, model and served context shared by every captain and Harbor that runs it
@@ -12,6 +13,11 @@ namespace Armada.Core.Models
     public class ModelProfile
     {
         #region Public-Members
+
+        /// <summary>
+        /// Most revisions a profile read returns in <see cref="Revisions"/> (500, the newest). Older revisions stay stored.
+        /// </summary>
+        public const int MaxRevisions = 500;
 
         /// <summary>
         /// Unique identifier (mdl_ prefix).
@@ -60,8 +66,9 @@ namespace Armada.Core.Models
         public string? Notes { get; set; } = null;
 
         /// <summary>
-        /// Revisions, oldest first. Filled only by single-profile reads; list pages leave it empty.
+        /// The newest <see cref="MaxRevisions"/> revisions, oldest first. Filled only by single-profile reads; list pages leave it empty.
         /// </summary>
+        [CollectionBound(MaxRevisions, Reason = "A profile read returns the newest revisions; Measured and the scorecard read every revision")]
         public List<ModelProfileRevision> Revisions
         {
             get => _Revisions;

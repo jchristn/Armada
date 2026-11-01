@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// The scorecard of one revision of a model profile, or of revisions an administrator marked compatible (pooled).
@@ -14,6 +15,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Revisions in the group (mdv_ IDs), oldest first. Empty for outcomes that match no recorded revision.
         /// </summary>
+        [CollectionBound(ModelProfile.MaxRevisions, Reason = "The scorecard pools the newest ModelProfile.MaxRevisions revisions")]
         public List<string> RevisionIds
         {
             get => _RevisionIds;
@@ -43,6 +45,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// The metrics.
         /// </summary>
+        [CollectionBound(64, Reason = "The named metrics plus one per stage check skip reason and per suspected cause")]
         public List<ModelScorecardMetric> Metrics
         {
             get => _Metrics;

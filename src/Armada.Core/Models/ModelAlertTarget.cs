@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One evaluated (profile, revision group, persona, vessel scope) and the result of every rule.
@@ -55,6 +56,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Result of every rule, in rule order.
         /// </summary>
+        [CollectionBound(4, Reason = "One per ModelAlertRuleEnum value")]
         public List<ModelAlertRuleResult> Rules { get; set; } = new List<ModelAlertRuleResult>();
     }
 }

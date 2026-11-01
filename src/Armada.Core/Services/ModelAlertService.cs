@@ -264,7 +264,9 @@ namespace Armada.Core.Services
                         Attempts = group.Attempts,
                         Rules = ModelAlertRules.Evaluate(group, thresholds, otherCosts)
                     };
-                    evaluation.Targets.Add(target);
+                    // The result lists are bounded; every target is still evaluated and its alerts stored.
+                    if (evaluation.Targets.Count < ModelAlertEvaluation.MaxTargets) evaluation.Targets.Add(target);
+                    else evaluation.Truncated = true;
 
                     foreach (ModelAlertRuleResult rule in target.Rules.Where(r => r.State == ModelAlertRuleStateEnum.Crossed))
                     {
@@ -307,7 +309,8 @@ namespace Armada.Core.Services
                         keptOpen.Add(alert.Id);
                         if (raised)
                         {
-                            evaluation.Raised.Add(alert);
+                            if (evaluation.Raised.Count < ModelAlertEvaluation.MaxRaised) evaluation.Raised.Add(alert);
+                            else evaluation.Truncated = true;
                             if (!alert.IsIgnored(now)) Notify(alert);
                         }
                     }

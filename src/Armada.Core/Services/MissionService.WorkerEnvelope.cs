@@ -156,6 +156,9 @@ namespace Armada.Core.Services
 
             // Dispatch runs every few seconds; record a decision only when it differs from the last one for the mission.
             string signature = outcome + "|" + decision.CaptainId + "|" + String.Join(";", decision.Excluded.Select(e => e.CaptainId + "=" + e.Reason));
+            // The stored list is bounded; the summary and the signature above count every excluded captain.
+            if (decision.Excluded.Count > WorkerEnvelopeDecision.MaxExcluded)
+                decision.Excluded.RemoveRange(WorkerEnvelopeDecision.MaxExcluded, decision.Excluded.Count - WorkerEnvelopeDecision.MaxExcluded);
             if (_EnvelopeDecisionSignatures.TryGetValue(mission.Id, out string? previous) && String.Equals(previous, signature, StringComparison.Ordinal)) return;
             if (_EnvelopeDecisionSignatures.Count >= _MaxEnvelopeDecisionsTracked) _EnvelopeDecisionSignatures.Clear();
             _EnvelopeDecisionSignatures[mission.Id] = signature;

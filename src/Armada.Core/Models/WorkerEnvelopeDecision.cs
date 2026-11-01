@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// One Worker eligibility envelope decision for a mission, recorded as the payload of a
@@ -10,6 +11,11 @@ namespace Armada.Core.Models
     public class WorkerEnvelopeDecision
     {
         #region Public-Members
+
+        /// <summary>
+        /// Most captains listed in <see cref="Excluded"/> (1000, the page size limit).
+        /// </summary>
+        public const int MaxExcluded = CollectionLimits.MaxPageSize;
 
         /// <summary>
         /// Mission identifier.
@@ -53,8 +59,9 @@ namespace Armada.Core.Models
         public string Description { get; set; } = "";
 
         /// <summary>
-        /// Captains of the mission's tenant the envelope excluded, and why.
+        /// Captains of the mission's tenant the envelope excluded, and why, by name (at most <see cref="MaxExcluded"/>).
         /// </summary>
+        [CollectionBound(MaxExcluded, Reason = "Captains past the limit are dropped from the list; Summary counts every excluded captain")]
         public List<WorkerEnvelopeExclusion> Excluded { get; set; } = new List<WorkerEnvelopeExclusion>();
 
         /// <summary>

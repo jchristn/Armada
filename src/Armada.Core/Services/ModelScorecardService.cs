@@ -149,8 +149,11 @@ namespace Armada.Core.Services
             };
             Dictionary<string, ModelScorecardExclusion> exclusions = AddExclusions(card);
 
+            // The newest revisions only, so the groups and their revision lists stay bounded; an attempt that matches only
+            // an older revision counts as unmatched.
             List<ModelProfileRevision> revisions = (await _Database.ModelProfiles.ReadRevisionsAsync(profile.Id, token).ConfigureAwait(false))
                 .OrderBy(r => r.FirstSeenUtc).ThenBy(r => r.Id, StringComparer.Ordinal).ToList();
+            if (revisions.Count > ModelProfile.MaxRevisions) revisions.RemoveRange(0, revisions.Count - ModelProfile.MaxRevisions);
             string profileKey = ModelProfileRules.IdentityKey(profile.TenantId, profile.Identity);
 
             // This profile's attempts in the day window, then the attribution rules.

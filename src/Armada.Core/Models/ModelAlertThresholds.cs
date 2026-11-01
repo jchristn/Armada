@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Alert thresholds: defaults plus per-persona overrides (body of GET and PUT /api/v1/model-alerts/thresholds).
@@ -10,6 +11,11 @@ namespace Armada.Core.Models
     public class ModelAlertThresholds
     {
         #region Public-Members
+
+        /// <summary>
+        /// Most per-persona overrides (100).
+        /// </summary>
+        public const int MaxOverrides = 100;
 
         /// <summary>
         /// Defaults for every persona. A null value uses the built-in default.
@@ -23,6 +29,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Per-persona overrides; a null value in an override keeps the default.
         /// </summary>
+        [CollectionBound(MaxOverrides)]
         public List<ModelAlertThreshold> Overrides
         {
             get => _Overrides;
@@ -95,7 +102,7 @@ namespace Armada.Core.Models
                 error = ValidateOne(item, label);
                 if (error != null) return error;
             }
-            if (Overrides.Count > 100) return "At most 100 overrides.";
+            if (Overrides.Count > MaxOverrides) return "At most " + MaxOverrides + " overrides.";
             return null;
         }
 

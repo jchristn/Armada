@@ -224,6 +224,7 @@ namespace Armada.Server
             }
 
             alert.Actions.Add(record);
+            if (alert.Actions.Count > ModelAlert.MaxActions) alert.Actions.RemoveRange(0, alert.Actions.Count - ModelAlert.MaxActions);
             alert = await _Database.ModelAlerts.UpdateAsync(alert, token).ConfigureAwait(false);
             _Logging.Info(_Header + "alert " + alert.Id + ": " + action + " applied by " + caller.UserId + ": " + record.Result);
             await AttachActionsAsync(caller, alert, token).ConfigureAwait(false);

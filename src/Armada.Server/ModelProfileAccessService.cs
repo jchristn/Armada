@@ -71,8 +71,8 @@ namespace Armada.Server
         }
 
         /// <summary>
-        /// One profile visible to the caller, with its revisions oldest first and the measured block from the latest
-        /// complete Full Evaluate report.
+        /// One profile visible to the caller, with its newest <see cref="ModelProfile.MaxRevisions"/> revisions oldest
+        /// first and the measured block from the latest complete Full Evaluate report among every revision.
         /// </summary>
         /// <param name="caller">Caller.</param>
         /// <param name="profileId">Profile identifier.</param>
@@ -83,8 +83,10 @@ namespace Armada.Server
         {
             RequirePerson(caller);
             ModelProfile profile = await ReadVisibleAsync(caller, profileId, token).ConfigureAwait(false);
-            profile.Revisions = await _Database.ModelProfiles.ReadRevisionsAsync(profile.Id, token).ConfigureAwait(false);
-            profile.Measured = ModelProfileMeasured.From(profile.Revisions);
+            List<ModelProfileRevision> revisions = await _Database.ModelProfiles.ReadRevisionsAsync(profile.Id, token).ConfigureAwait(false);
+            profile.Measured = ModelProfileMeasured.From(revisions);
+            if (revisions.Count > ModelProfile.MaxRevisions) revisions.RemoveRange(0, revisions.Count - ModelProfile.MaxRevisions);
+            profile.Revisions = revisions;
             return profile;
         }
 
@@ -162,7 +164,11 @@ namespace Armada.Server
         /// <returns>The revision with its compatibility marks.</returns>
         /// <exception cref="KeyNotFoundException">Thrown when the profile or revision does not exist or is not visible.</exception>
         /// <exception cref="UnauthorizedAccessException">Thrown when the caller is not an admin.</exception>
-        /// <exception cref="ArgumentException">Thrown when the list is missing or names an unknown revision.</exception>
+        /// <exception cref="ArgumentException">Thrown when the list is missing, lists more than
+        /// <see cref="ModelProfileRevision.MaxCompatibleWith"/> revisions, or names an unknown revision or one that already
+        /// has the most marks.</exception>
+        /// <exception cref="CollectionLimitExceededException">Thrown when the list holds more than
+        /// <see cref="CollectionLimits.MaxRequestItems"/> entries.</exception>
         public async Task<ModelProfileRevision> SetCompatibleWithAsync(AuthContext caller, string? profileId, string? revisionId, ModelProfileCompatibilityRequest? request, CancellationToken token = default)
         {
             RequirePerson(caller);
@@ -172,15 +178,19 @@ namespace Armada.Server
             if (revision == null || !String.Equals(revision.ProfileId, profile.Id, StringComparison.Ordinal)) throw new KeyNotFoundException("Model profile revision not found.");
             RequireAdmin(caller);
             if (request == null || request.CompatibleWith == null) throw new ArgumentException("CompatibleWith is required (an empty list removes every mark).");
+            CollectionLimits.RequireRequestItems(request.CompatibleWith, "CompatibleWith");
 
             List<string> ids = request.CompatibleWith.Select(Blank).Where(id => id != null).Select(id => id!)
                 .Where(id => !String.Equals(id, revision.Id, StringComparison.Ordinal)).Distinct(StringComparer.Ordinal).ToList();
-            if (ids.Count > 100) throw new ArgumentException("CompatibleWith may list at most 100 revisions.");
+            if (ids.Count > ModelProfileRevision.MaxCompatibleWith) throw new ArgumentException("CompatibleWith may list at most " + ModelProfileRevision.MaxCompatibleWith + " revisions.");
             foreach (string id in ids)
             {
                 ModelProfileRevision? other = await _Database.ModelProfiles.ReadRevisionAsync(id, token).ConfigureAwait(false);
                 if (other == null || !String.Equals(other.TenantId ?? String.Empty, revision.TenantId ?? String.Empty, StringComparison.Ordinal))
                     throw new ArgumentException("Unknown model profile revision: " + id);
+                // Marks are symmetric: the other revision gains a mark to this one, so it must have room.
+                if (other.CompatibleWith.Count(c => !String.Equals(c, revision.Id, StringComparison.Ordinal)) >= ModelProfileRevision.MaxCompatibleWith)
+                    throw new ArgumentException("Model profile revision " + id + " is already marked compatible with " + ModelProfileRevision.MaxCompatibleWith + " revisions, the most allowed.");
             }
 
             await _Database.ModelProfiles.SetCompatibleWithAsync(revision.Id, ids, token).ConfigureAwait(false);

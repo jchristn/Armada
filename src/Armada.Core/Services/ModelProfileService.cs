@@ -2,6 +2,7 @@ namespace Armada.Core.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
@@ -116,7 +117,8 @@ namespace Armada.Core.Services
         /// <summary>
         /// Record a Full Evaluate report as an advisory profile update: a new immutable revision that repeats the
         /// provenance of the revision the run was recorded on, carries the report, and is marked compatible with that
-        /// revision so the scorecard pools the two. Nothing reads it for routing, persona captain lists or prompts. An
+        /// revision (or, when it already has <see cref="ModelProfileRevision.MaxCompatibleWith"/> marks, the newest
+        /// revision pooled with it that has room) so the scorecard pools the two. Nothing reads it for routing, persona captain lists or prompts. An
         /// incomplete report (cancelled or timed out) is recorded the same way and marked
         /// <see cref="ModelProfileRevision.EvaluationIncomplete"/>: it never changes an earlier revision, never fills
         /// the measured block and is never preferred over a complete report.
@@ -152,10 +154,19 @@ namespace Armada.Core.Services
                 advisory = await _Database.ModelProfiles.CreateRevisionAsync(advisory, token).ConfigureAwait(false);
                 if (!String.IsNullOrEmpty(basis.Id))
                 {
-                    List<string> compatible = new List<string>(basis.CompatibleWith);
-                    if (!compatible.Contains(basis.Id)) compatible.Add(basis.Id);
-                    await _Database.ModelProfiles.SetCompatibleWithAsync(advisory.Id, compatible, token).ConfigureAwait(false);
-                    advisory.CompatibleWith = compatible;
+                    List<ModelProfileRevision> revisions = await _Database.ModelProfiles.ReadRevisionsAsync(resolution.Profile.Id, token).ConfigureAwait(false);
+                    string? anchor = PoolAnchor(revisions, basis.Id, advisory.Id);
+                    if (anchor != null)
+                    {
+                        List<string> compatible = new List<string> { anchor };
+                        await _Database.ModelProfiles.SetCompatibleWithAsync(advisory.Id, compatible, token).ConfigureAwait(false);
+                        advisory.CompatibleWith = compatible;
+                    }
+                    else
+                    {
+                        _Logging.Warn(_Header + "advisory revision " + advisory.Id + " is not pooled: every revision compatible with " + basis.Id
+                            + " already has " + ModelProfileRevision.MaxCompatibleWith + " marks");
+                    }
                 }
             }
             finally
@@ -256,6 +267,35 @@ namespace Armada.Core.Services
         {
             return identity.Runtime + "/" + (identity.Provider ?? "-") + "/" + (identity.Model ?? "-") + "/"
                 + (identity.ServedContextTokens.HasValue ? identity.ServedContextTokens.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "-");
+        }
+
+        private static string? PoolAnchor(List<ModelProfileRevision> revisions, string basisId, string advisoryId)
+        {
+            // The scorecard pools connected components of the compatibility marks, so one mark to any revision of the
+            // basis's component pools the advisory revision with the basis. Prefer the basis, then the newest revision of
+            // its component, and skip any that already has the most marks.
+            Dictionary<string, ModelProfileRevision> byId = new Dictionary<string, ModelProfileRevision>(StringComparer.Ordinal);
+            foreach (ModelProfileRevision revision in revisions) byId[revision.Id] = revision;
+            if (!byId.TryGetValue(basisId, out ModelProfileRevision? basis)) return basisId;
+
+            HashSet<string> component = new HashSet<string>(StringComparer.Ordinal) { basisId };
+            Queue<string> pending = new Queue<string>();
+            pending.Enqueue(basisId);
+            while (pending.Count > 0)
+            {
+                foreach (string other in byId[pending.Dequeue()].CompatibleWith)
+                    if (byId.ContainsKey(other) && component.Add(other)) pending.Enqueue(other);
+            }
+
+            IEnumerable<ModelProfileRevision> candidates = new[] { basis }.Concat(revisions
+                .Where(r => component.Contains(r.Id) && !String.Equals(r.Id, basisId, StringComparison.Ordinal))
+                .OrderByDescending(r => r.FirstSeenUtc).ThenByDescending(r => r.Id, StringComparer.Ordinal));
+            foreach (ModelProfileRevision candidate in candidates)
+            {
+                if (String.Equals(candidate.Id, advisoryId, StringComparison.Ordinal)) continue;
+                if (candidate.CompatibleWith.Count < ModelProfileRevision.MaxCompatibleWith) return candidate.Id;
+            }
+            return null;
         }
 
         #endregion
