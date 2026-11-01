@@ -81,10 +81,10 @@ namespace Test.Shared.Suites.Services
 
                 List<UsageCaptureGroup> customGroups = customScheduler.Groups();
                 AssertEqual(3, customGroups.Count, "Auto and each distinct Custom command identity form their own groups");
-                UsageCaptureGroup shared = customGroups.Find(candidate => candidate.Mode == UsageCaptureModeEnum.Custom && candidate.MemberCaptainIds.Count == 2);
+                UsageCaptureGroup? shared = customGroups.Find(candidate => candidate.Mode == UsageCaptureModeEnum.Custom && candidate.MemberCaptainIds.Count == 2);
                 AssertNotNull(shared, "captains with the same command share one group");
                 AssertEqual(2, shared!.MemberCaptainIds.Count, "the same executable identity is one group");
-                UsageCaptureGroup other = customGroups.Find(candidate => candidate.Mode == UsageCaptureModeEnum.Custom && candidate.MemberCaptainIds.Count == 1);
+                UsageCaptureGroup? other = customGroups.Find(candidate => candidate.Mode == UsageCaptureModeEnum.Custom && candidate.MemberCaptainIds.Count == 1);
                 AssertNotNull(other, "a different executable identity stays its own group");
                 AssertFalse(String.Equals(other!.CommandFingerprint, shared.CommandFingerprint, StringComparison.Ordinal), "command fingerprints differ between the groups");
             }));

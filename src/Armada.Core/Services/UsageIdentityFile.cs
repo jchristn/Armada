@@ -56,8 +56,8 @@ namespace Armada.Core.Services
         /// </summary>
         public UsageIdentityFile()
         {
-            HostId = null;
-            Key = null;
+            HostId = String.Empty;
+            Key = String.Empty;
         }
 
         /// <summary>

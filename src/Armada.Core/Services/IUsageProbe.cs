@@ -5,7 +5,7 @@ namespace Armada.Core.Services
 
     /// <summary>
     /// Captures one account usage observation on the host that holds the credentials. Implemented by the
-    /// host-side usage helper (the <see cref="Armada.Runtimes.UsageProbeHostRunner"/> and, later, the
+    /// host-side usage helper (the <c>Armada.Runtimes.UsageProbeHostRunner</c> and, later, the
     /// per-runtime probes) and invoked through the host-command seam: in Local mode the Admiral host runs
     /// it in-process, in Split mode the credential Harbor runs it on its own machine. The host context
     /// carries only a safe profile reference and probe configuration, never credential contents, and the

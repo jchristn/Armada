@@ -48,6 +48,16 @@ namespace Armada.Core.Models
         public List<ModelAlert> Raised { get; set; } = new List<ModelAlert>();
 
         /// <summary>
+        /// Total alerts raised or reopened, including entries omitted from the bounded Raised list.
+        /// </summary>
+        public int RaisedCount { get; set; } = 0;
+
+        /// <summary>
+        /// Total evaluated targets, including entries omitted from the bounded Targets list.
+        /// </summary>
+        public int TargetCount { get; set; } = 0;
+
+        /// <summary>
         /// Alerts that were open and are still open.
         /// </summary>
         public int StillOpen { get; set; } = 0;

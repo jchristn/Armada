@@ -137,7 +137,7 @@ namespace Armada.Core.Services
                 try
                 {
                     ModelAlertEvaluation result = await EvaluateAsync(null, null, token).ConfigureAwait(false);
-                    _Logging.Info(_Header + "pass: " + result.Pairs + " pairs, " + result.Raised.Count + " raised, " + result.StillOpen + " still open, " + result.Resolved + " resolved");
+                    _Logging.Info(_Header + "pass: " + result.Pairs + " pairs, " + result.RaisedCount + " raised, " + result.StillOpen + " still open, " + result.Resolved + " resolved");
                 }
                 catch (OperationCanceledException)
                 {
@@ -265,6 +265,7 @@ namespace Armada.Core.Services
                         Rules = ModelAlertRules.Evaluate(group, thresholds, otherCosts)
                     };
                     // The result lists are bounded; every target is still evaluated and its alerts stored.
+                    evaluation.TargetCount++;
                     if (evaluation.Targets.Count < ModelAlertEvaluation.MaxTargets) evaluation.Targets.Add(target);
                     else evaluation.Truncated = true;
 
@@ -309,6 +310,7 @@ namespace Armada.Core.Services
                         keptOpen.Add(alert.Id);
                         if (raised)
                         {
+                            evaluation.RaisedCount++;
                             if (evaluation.Raised.Count < ModelAlertEvaluation.MaxRaised) evaluation.Raised.Add(alert);
                             else evaluation.Truncated = true;
                             if (!alert.IsIgnored(now)) Notify(alert);

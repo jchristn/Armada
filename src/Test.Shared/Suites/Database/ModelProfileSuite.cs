@@ -324,6 +324,12 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(ModelProfile.MaxRevisions, pooled.Count, "scorecard pools the newest revisions");
                 AssertFalse(pooled.Contains(created[0].Id), "the oldest revision is not grouped");
                 CollectionBounds.Validate(card);
+
+                await db.ModelProfiles.SetCompatibleWithAsync(created[0].Id, new List<string> { created[1].Id, created[2].Id }).ConfigureAwait(false);
+                ModelScorecard bridged = await new ModelScorecardService(db, QuietLogging()).ComputeAsync(profile, new ModelScorecardRequest { Persona = "Worker" }, _Fixed.AddDays(1)).ConfigureAwait(false);
+                AssertTrue(bridged.Groups.Any(g => g.RevisionIds.Contains(created[1].Id) && g.RevisionIds.Contains(created[2].Id)), "an omitted compatibility bridge still pools retained revisions");
+                AssertTrue(card.Truncated, "omitted revisions are reported");
+                CollectionBounds.Validate(bridged);
             }));
 
             cases.Add(CaseAsync("compatibility_marks_bounded", "A revision with 100 marks cannot gain another: an admin mark is rejected, a request over 1000 ids is rejected, and a Full Evaluate report pools through the newest revision with room", TestTags.Negative, async () =>

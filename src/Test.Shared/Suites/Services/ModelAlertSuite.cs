@@ -140,6 +140,37 @@ namespace Test.Shared.Suites.Services
                 return Task.CompletedTask;
             }));
 
+            cases.Add(DbCase("evaluation_lists_bounded_counts_complete", "More than 1000 targets and alerts keep complete counts, inbox persistence and notifications while bounding response lists", async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                await CreateProfileAsync(db, Tenant).ConfigureAwait(false);
+                for (int i = 0; i < ModelAlertEvaluation.MaxTargets; i++)
+                {
+                    await db.StageOutcomes.CreateAsync(Outcome("msn_bound_" + i, false, 1, o => o.VesselId = "vsl_bound_" + i)).ConfigureAwait(false);
+                }
+                ModelAlertSettings settings = new ModelAlertSettings { IncludeVessels = true };
+                settings.Thresholds.Defaults.FirstPassMinMissions = 1;
+                int pushed = 0;
+                ModelAlertService service = new ModelAlertService(db, Quiet(), () => settings) { AlertRaised = _ => pushed++ };
+                ModelAlertEvaluation result = await service.EvaluateAsync(Tenant, _Now).ConfigureAwait(false);
+                AssertEqual(1001, result.TargetCount, "all-vessels plus 1000 individual vessels");
+                AssertEqual(1001, result.RaisedCount, "complete raised count for background logging");
+                AssertEqual(ModelAlertEvaluation.MaxTargets, result.Targets.Count, "bounded targets");
+                AssertEqual(ModelAlertEvaluation.MaxRaised, result.Raised.Count, "bounded alerts");
+                AssertTrue(result.Truncated, "omitted response entries reported");
+                AssertEqual(1001, pushed, "every new alert notified");
+                AssertEqual(1001L, (await db.ModelAlerts.EnumerateAsync(new ModelAlertQuery()).ConfigureAwait(false)).TotalRecords, "every alert persisted");
+                CollectionBounds.Validate(result);
+                ModelAlertEvaluation again = await service.EvaluateAsync(Tenant, _Now).ConfigureAwait(false);
+                AssertEqual(1001, again.StillOpen, "dedupe includes alerts beyond the response limit");
+                AssertEqual(0, again.RaisedCount, "no newly raised alerts on repeated pass");
+                AssertEqual(1001, pushed, "no duplicate notifications");
+                ModelAlertEvaluation empty = JsonSerializer.Deserialize<ModelAlertEvaluation>("{}")!;
+                AssertEqual(0, empty.RaisedCount, "minimal input count default");
+                AssertEqual(0, empty.TargetCount, "minimal input target default");
+            }));
+
             cases.Add(DbCase("raise_dedupe_resolve_reopen", "A crossed condition raises one alert; later passes keep the same row, resolve it when the condition clears and reopen the same row when it returns; nothing else changes", async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

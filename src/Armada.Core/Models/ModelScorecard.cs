@@ -83,7 +83,7 @@ namespace Armada.Core.Models
         public int Attempts { get; set; } = 0;
 
         /// <summary>
-        /// True when more stage outcomes matched the day window than the scorecard reads, so the oldest were not read.
+        /// True when the stage outcome read hit its limit or older revisions were omitted from the bounded groups.
         /// </summary>
         public bool Truncated { get; set; } = false;
 

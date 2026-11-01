@@ -39,7 +39,6 @@ namespace Armada.Runtimes
         private static readonly TimeSpan _MaximumCapturedSkew = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan _MaximumCapturedAge = TimeSpan.FromHours(24);
 
-        private string _Header = "[UsageProbeHostRunner] ";
         private readonly LoggingModule _Logging;
         private readonly UsageAccountResolver? _Accounts;
         private readonly Func<AgentRuntimeEnum, IUsageProbe?>? _RuntimeProbes;
@@ -159,7 +158,7 @@ namespace Armada.Runtimes
                         RedirectStandardError = true,
                         CreateNoWindow = true
                     };
-                    foreach (string argument in command.Arguments)
+                    foreach (string argument in command.Arguments!)
                         startInfo.ArgumentList.Add(argument);
 
                     process.StartInfo = startInfo;

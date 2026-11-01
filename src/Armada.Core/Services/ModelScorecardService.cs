@@ -153,7 +153,12 @@ namespace Armada.Core.Services
             // an older revision counts as unmatched.
             List<ModelProfileRevision> revisions = (await _Database.ModelProfiles.ReadRevisionsAsync(profile.Id, token).ConfigureAwait(false))
                 .OrderBy(r => r.FirstSeenUtc).ThenBy(r => r.Id, StringComparer.Ordinal).ToList();
-            if (revisions.Count > ModelProfile.MaxRevisions) revisions.RemoveRange(0, revisions.Count - ModelProfile.MaxRevisions);
+            Dictionary<string, string> groupOfRevision = PoolRevisions(revisions);
+            if (revisions.Count > ModelProfile.MaxRevisions)
+            {
+                revisions.RemoveRange(0, revisions.Count - ModelProfile.MaxRevisions);
+                card.Truncated = true;
+            }
             string profileKey = ModelProfileRules.IdentityKey(profile.TenantId, profile.Identity);
 
             // This profile's attempts in the day window, then the attribution rules.
@@ -210,7 +215,7 @@ namespace Armada.Core.Services
                 await MissionOutcomesAsync(missionId, allByMission, token).ConfigureAwait(false);
 
             // Revision groups.
-            Dictionary<string, string> groupOfRevision = PoolRevisions(revisions);
+            // Pool before trimming so an omitted bridge cannot split compatible retained revisions.
             List<string> groupKeys = new List<string>();
             foreach (ModelProfileRevision revision in revisions)
             {

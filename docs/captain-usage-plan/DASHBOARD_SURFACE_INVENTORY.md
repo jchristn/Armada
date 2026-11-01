@@ -52,3 +52,13 @@ theme tokens applied on every surface, and every keyboard focus stop carrying th
 
 Not verified: pixel-identical screenshots (geometry and computed styles were measured instead), other
 browsers (Chrome 156 only), and the Windows/Linux Harbor app.
+
+## Integrated recovery verification
+
+The recovery Worker reran all 1497 dashboard tests and rebuilt the integrated branch.
+`recovery-visual-check.mjs` checks representative existing surface markup against that production CSS
+bundle at 1280/768/390 in both themes. All 30 checks passed, including geometry, keyboard focus
+visibility/color and Jobs Running/Succeeded theme colors. Detailed measurements are recorded in
+`recovery-visual-results.json`. The dark 390px settings screenshot was viewed. This remains a CSS
+fixture check, not an authenticated page-flow or chart-interaction audit. See `RECOVERY_HANDOFF.md`
+for the complete executed checks and pending independent review/landing gates.

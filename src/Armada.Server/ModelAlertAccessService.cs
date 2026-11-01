@@ -121,7 +121,7 @@ namespace Armada.Server
             RequirePerson(caller);
             RequireAdmin(caller);
             ModelAlertEvaluation evaluation = await _Alerts.EvaluateAsync(caller.IsAdmin ? null : caller.TenantId, null, token).ConfigureAwait(false);
-            _Logging.Info(_Header + "evaluation by " + caller.UserId + ": " + evaluation.Pairs + " pairs, " + evaluation.Raised.Count + " raised, " + evaluation.Resolved + " resolved");
+            _Logging.Info(_Header + "evaluation by " + caller.UserId + ": " + evaluation.Pairs + " pairs, " + evaluation.RaisedCount + " raised, " + evaluation.Resolved + " resolved");
             return evaluation;
         }
 

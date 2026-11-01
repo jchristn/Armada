@@ -63,7 +63,6 @@ namespace Armada.Core.Services
         private Dictionary<string, UsageCaptureGroup> _Groups = new Dictionary<string, UsageCaptureGroup>(StringComparer.Ordinal);
         private List<string> _Unresolved = new List<string>();
         private List<KeyValuePair<string, string>> _ActiveCaptains = new List<KeyValuePair<string, string>>();
-        private bool _Rebuilt = false;
         private bool _CaptureEnabledLastTick = true;
 
         /// <summary>
@@ -270,7 +269,6 @@ namespace Armada.Core.Services
                 _Groups = groups;
                 _Unresolved = unresolved;
                 _ActiveCaptains = active;
-                _Rebuilt = true;
             }
 
             // Groups first seen now get their randomized initial due time; groups the invalidation

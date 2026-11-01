@@ -6,6 +6,13 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Recovery validation
+
+- Recover preserved AC2 and model collection bounds together. Harbor launches clear inherited MCP
+  credentials unless the request supplies a scoped binding. Alert evaluation reports complete counts
+  beyond its response caps; scorecards report revision truncation and retain compatibility pooling
+  through omitted historical bridges. Add boundary regressions and document the limits.
+
 ### Captain usage capture phase 2: host execution and scheduler (AC2)
 
 - **Host probe framework.** New Core services define the account usage capture contract: `IUsageProbe` (the host-side usage helper invoked through the host-command seam), `UsageProbeHost` (the safe probe context that travels the link: tenant, stable credential host identity, runtime, mode and Custom command, never credential contents), and `UsageProbeResult` (the sanitized answer: allowlisted status and source, host-derived account key, windows, redacted diagnostics, a stable error code and an optional provider Retry-After). `AgentRuntimeCapabilities` reports per-runtime usage capture support beside planning sessions (`SupportsUsageCapture` plus a richer capability descriptor naming the source kind and the reason a runtime has none).

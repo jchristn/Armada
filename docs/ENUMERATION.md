@@ -239,3 +239,26 @@ internal services); reads return only what writes allowed.
   to 5000 items) are not rewritten. Writes reject them; reads still return them until they are edited or expire.
 - Mux endpoints, workspace changes, vessel cleanup inventory and branch lists are cut from a source (a CLI, git, the
   file system) that cannot page; the page and its exact total are computed from the source's full answer on the host.
+
+## Model profile and alert result bounds
+
+Model profile detail retains the newest 500 revisions (returned oldest first). Measured capabilities
+are computed from the complete stored history before response trimming. Scorecards expose at most
+500 revision ids plus an unmatched group and set `Truncated` when revisions are omitted. Compatibility
+components are computed from the complete history, so an omitted bridge does not split retained
+compatible revisions. Attempts matching only omitted revisions remain unmatched.
+
+Compatibility writes allow 100 distinct marks per revision and reject a raw request over 1000 ids.
+Symmetric marks cannot push a peer above 100. Full Evaluate links its advisory revision to a member
+of the existing component with room; it does not duplicate every edge.
+
+Alert evaluation returns at most 1000 `Targets` and 1000 `Raised` entries and sets `Truncated` if
+entries are omitted. `TargetCount` and `RaisedCount` describe the complete pass, including omitted
+entries. All evaluated alerts still persist, deduplicate and notify normally. The background log
+uses `RaisedCount`. Action history keeps the newest 100 records. Threshold overrides allow 100,
+fixed rule/action/exclusion sets retain their declared bounds, and stored worker-envelope exclusions
+list at most 1000 captains while the decision summary counts all candidates.
+
+Regressions: `Database.ModelProfiles/revisions_bounded_newest_kept`,
+`Database.ModelProfiles/compatibility_marks_bounded`, `Services.ModelAlerts/action_history_bounded`,
+and `Services.ModelAlerts/evaluation_lists_bounded_counts_complete`.
