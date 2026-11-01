@@ -724,7 +724,7 @@ namespace Armada.Core.Services
                     mission.LastUpdateUtc = DateTime.UtcNow;
                     mission.FailureReason = mission.Persona + " reported a blocking defect (see its Affected Case)."
                         + (reworkUnavailableReason == null ? String.Empty : "\n" + reworkUnavailableReason)
-                        + "\nRemediation: read the stage's affected case, correct the product code on the preserved branch, then restart the pipeline from the Worker. Unverified work has not been approved for landing.";
+                        + "\nRemediation: read the stage's affected case, then restart this mission (restart_mission " + mission.Id + "): the restart sends the work back to its Worker for one more rework round on the preserved branch, followed by a fresh " + mission.Persona + " check; it does not re-run this stage on the unchanged product code. Unverified work has not been approved for landing.";
                     mission.FailureKind = MissionFailureKindEnum.JudgeRejected;
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                     _Logging.Warn(_Header + mission.Persona + " mission " + mission.Id + " reported a blocking defect and no rework could be scheduled");

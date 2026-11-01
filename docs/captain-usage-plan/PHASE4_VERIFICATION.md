@@ -2,8 +2,11 @@
 
 Branch: armada/codex-1/msn_mvxf3n23_V1oCE5oqulg
 Mission: msn_mvxf3n23_V1oCE5oqulg
-State: HTTP missing-argument finding resolved; AC4 remains BLOCKED on the
-stdio public surface, independently reproduced in Test Engineer rework 3.
+State: HTTP and stdio missing-argument findings resolved by the salvage mission
+msn_mvxxnhfb_MVZJzose6td (branch armada/claude-code-1/msn_mvxxnhfb_MVZJzose6td),
+which recovered this branch by fast-forward and installed the guard on
+`armada mcp stdio`; see PHASE4_SALVAGE_RCA.md. The sections below are the
+historical record of the earlier rounds.
 
 ## Test Engineer rework 3: HTTP verified, stdio protocol defect remains
 

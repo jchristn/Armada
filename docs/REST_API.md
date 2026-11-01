@@ -3740,6 +3740,8 @@ Restart a `Failed`, `LandingFailed`, or `Cancelled` mission by resetting it to `
 
 The mission is then dispatched at once under the normal dispatch rules (voyage status, pipeline dependencies, vessel concurrency, requested captain). When a captain is free the response shows it `Assigned` or `InProgress`; when none is, it stays `Pending`, the response is still `200`, and the regular dispatcher picks it up later.
 
+A verifier stage (Test Engineer, Linter, Usability Engineer) that failed because it reported a blocking product defect (`FailureKind` `JudgeRejected` with a standalone `[ARMADA:STAGE-OUTCOME] BLOCKED` line, for example after the automatic rework budget ran out) is not re-run on the unchanged product code: the restart sends the work back to its Worker as one more operator-approved rework round on the preserved branch (normal captain routing, outside the automatic budget), followed by a fresh verifier and the stages that followed the blocked one. The blocked stage keeps its affected case and becomes produced work, the voyage is reopened, and the result is the new rework Worker mission (a different id). A given description is added to that Worker as operator guidance; the title is ignored. `409 Conflict` when the Worker cannot be found in the dependency chain.
+
 **Permission:** TenantAdmin
 
 **Path Parameters:**

@@ -16,6 +16,11 @@ All notable changes to Armada are documented in this file.
   `McpUsageTools.ProtocolRequiredArguments`; every other call, wrong-type
   arguments and every other tool keep the previous behavior. The schema still
   declares `captainId` required.
+- `armada mcp stdio` installs the same guard, so an initialized stdio session
+  also answers `capture_captain_usage` without `captainId` with JSON-RPC
+  -32602 (it previously returned `result.isError`) and keeps serving later
+  calls. Live regressions: `E2E.UsageMcpTransportParity` drives the real Helm
+  stdio process and an HTTP session through the error and a recovery call.
 - Tests: `E2E.McpTool` `ToolsList_ContainsAllExpectedToolNames` follows the
   paginated `tools/list` cursor; the new `capture_captain_usage` tool had moved
   `get_release` onto the second page.
@@ -35,6 +40,14 @@ All notable changes to Armada are documented in this file.
 
 
 ### Recovery validation
+
+- Restarting a verifier stage that failed on a blocking product defect (for
+  example a Test Engineer whose block exhausted the automatic rework budget)
+  now sends the work back to its Worker as an operator-approved rework round,
+  followed by a fresh verifier, instead of re-running verification against the
+  unchanged product code. The failure's remediation text names that restart.
+  Previously the black box recovery `bbx-rev-002.restart` restarted only the
+  verifier, which could never correct the product and blocked again.
 
 - Recover preserved AC2 and model collection bounds together. Harbor launches clear inherited MCP
   credentials unless the request supplies a scoped binding. Alert evaluation reports complete counts

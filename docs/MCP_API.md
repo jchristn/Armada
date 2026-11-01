@@ -3770,6 +3770,8 @@ Returns the cancelled mission. Cancelling stops the mission's agent first: the c
 
 Restart a Failed, LandingFailed, or Cancelled mission, resetting it to `Pending` for re-dispatch, or start a `Pending` mission as it is. Optionally update the title and description (instructions) before restarting. A failed or cancelled mission has the captain assignment, dock, PR URL, commit, failure, review, and timing fields cleared; a Pending one keeps every other field. A later pipeline stage keeps the previous stage's branch (a first stage starts on a fresh branch), a finished voyage is reopened, and the stages cancelled because this one failed are restored to Pending. The mission is then dispatched at once when a captain is free under the normal dispatch rules, and the result shows it `Assigned` or `InProgress`; otherwise it stays `Pending` (not an error) for the regular dispatcher. `Conflict` for any other status.
 
+A verifier stage (Test Engineer, Linter, Usability Engineer) that failed because it reported a blocking product defect (`FailureKind` `JudgeRejected` with a standalone `[ARMADA:STAGE-OUTCOME] BLOCKED` line, for example after the automatic rework budget ran out) is not re-run on the unchanged product code: the restart sends the work back to its Worker as one more operator-approved rework round on the preserved branch (normal captain routing, outside the automatic budget), followed by a fresh verifier and the stages that followed the blocked one. The blocked stage keeps its affected case and becomes produced work, the voyage is reopened, and the result is the new rework Worker mission (a different id). A given description is added to that Worker as operator guidance; the title is ignored. `Conflict` when the Worker cannot be found in the dependency chain.
+
 **Input Schema:**
 
 ```json
@@ -7866,6 +7868,8 @@ resolved host. It requires tenant administration and remains an Ask mutation.
 A call that omits `captainId` (an empty or absent `arguments` object) is a
 JSON-RPC protocol error, not a tool result:
 `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Tool 'capture_captain_usage' arguments is missing required property 'captainId'.","data":{"tool":"capture_captain_usage","argument":"captainId"}},"id":2}`.
+The same protocol error is returned over both transports: the Admiral's HTTP
+MCP endpoint (stateful and stateless) and `armada mcp stdio`.
 Required names are case-sensitive, as in JSON Schema. A `captainId` of the
 wrong type is still a schema-validation tool result with `isError: true`, and
 other tools keep that form for missing arguments too. The tool returns the

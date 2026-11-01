@@ -87,6 +87,12 @@ namespace Armada.Helm.Commands
             using McpStdioToolSet toolSet = new McpStdioToolSet(armadaSettings, logging, database);
             toolSet.Register(RegisterAdapted);
 
+            // AC4 parity with the HTTP MCP server: a usage tool call that omits a declared required argument is a
+            // JSON-RPC invalid-params protocol error (-32602), not an isError tool result. Fail loudly on stderr
+            // (stdout is the transport) when the library's dispatcher cannot be captured.
+            if (!McpRequiredArgumentGuard.Install(mcpServer, Armada.Server.Mcp.Tools.McpUsageTools.ProtocolRequiredArguments))
+                Console.Error.WriteLine("[McpStdioCommand] MCP required-argument guard not installed; the MCP library's tools/call dispatcher could not be captured");
+
             // Run until stdin closes or process is killed
             using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             Console.CancelKeyPress += (s, e) =>
