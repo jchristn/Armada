@@ -35,24 +35,28 @@ InProgress mission existed on this vessel besides this Worker. Fresh origin/main
 
 ## Per-mission accounting
 
-No newly recovered work is claimed landed at this stage. Each preserved hash is an ancestor of this
-integrated branch, not of origin/main. Historical review outcomes remain as recorded.
+Final fetch observed origin/main advance to d035ee438e2fa345661462fa45f7777ae9af53c7.
+Armada now records msn_mvx7xshf_uLAmFBPoY2q Complete (completed at 02:55:22 UTC).
+Every AC2 hash below is now reachable from remote main; collection bounds and the new recovery fixes
+remain unlanded. This external landing produced no new merge queue record (the same four historical
+entries remain). It is reachability evidence, not proof of independent approval of this integrated
+candidate. Historical review outcomes remain as recorded.
 
 | Mission | Recorded commit | Accounting |
 | --- | --- | --- |
-| msn_mvx7xshf_uLAmFBPoY2q | d035ee438e | Preserved in integrated branch; review and landing pending |
-| msn_mvx5uw3r_7iGyWvXpQt4 | 15e3eab350 | Historical rejection retained; corrected candidate awaits independent review |
-| msn_mvx5uw3r_WGXgKmDptiK | 15e3eab350 | Preserved in integrated branch; review and landing pending |
-| msn_mvx5uw3r_XywwKYwd0d5 | ace82a6d23 | Preserved in integrated branch; review and landing pending |
-| msn_mvx4p47h_J8BAltgrL5D | fd04a13f03 | Preserved in integrated branch; review and landing pending |
-| msn_mvx4p47h_iVqAKbcfJXn | fd04a13f03 | Preserved in integrated branch; review and landing pending |
-| msn_mvx4p47h_2M2m9r3eHVn | dc4601fc6b | Preserved in integrated branch; review and landing pending |
-| msn_mvx25urd_GEhkqtrmDE7 | fb819d1201 | Preserved in integrated branch; review and landing pending |
-| msn_mvx25urd_3NJtgW4d8ZS | fb819d1201 | Preserved in integrated branch; review and landing pending |
-| msn_mvx25urd_ddkWcJ8nbbL | dd0275c671 | Preserved in integrated branch; review and landing pending |
-| msn_mvwzyeo8_Y6TqZCymBdr | f1b976b88a | Preserved in integrated branch; review and landing pending |
-| msn_mvwzyemx_dNypNJyctPV | f1b976b88a | Preserved in integrated branch; review and landing pending |
-| msn_mvwzybwf_FXHI7L6qj3V | 6a87580a15 | Preserved in integrated branch; review and landing pending |
+| msn_mvx7xshf_uLAmFBPoY2q | d035ee438e | Already landed externally at d035ee438; Armada Complete; remote reachability verified |
+| msn_mvx5uw3r_7iGyWvXpQt4 | 15e3eab350 | Rejected outcome retained; reviewed hash now reachable via later corrected AC2 landing; superseded |
+| msn_mvx5uw3r_WGXgKmDptiK | 15e3eab350 | Hash already reachable via d035ee438; historical outcome retained; reconciliation awaits integrated review |
+| msn_mvx5uw3r_XywwKYwd0d5 | ace82a6d23 | Hash already reachable via d035ee438; historical outcome retained; reconciliation awaits integrated review |
+| msn_mvx4p47h_J8BAltgrL5D | fd04a13f03 | Hash already reachable via d035ee438; historical outcome retained; reconciliation awaits integrated review |
+| msn_mvx4p47h_iVqAKbcfJXn | fd04a13f03 | Hash already reachable via d035ee438; historical outcome retained; reconciliation awaits integrated review |
+| msn_mvx4p47h_2M2m9r3eHVn | dc4601fc6b | Hash already reachable via d035ee438; historical outcome retained; reconciliation awaits integrated review |
+| msn_mvx25urd_GEhkqtrmDE7 | fb819d1201 | Hash already reachable via d035ee438; historical outcome retained; reconciliation awaits integrated review |
+| msn_mvx25urd_3NJtgW4d8ZS | fb819d1201 | Hash already reachable via d035ee438; historical outcome retained; reconciliation awaits integrated review |
+| msn_mvx25urd_ddkWcJ8nbbL | dd0275c671 | Hash already reachable via d035ee438; historical outcome retained; reconciliation awaits integrated review |
+| msn_mvwzyeo8_Y6TqZCymBdr | f1b976b88a | Hash already reachable via d035ee438; historical outcome retained; reconciliation awaits integrated review |
+| msn_mvwzyemx_dNypNJyctPV | f1b976b88a | Hash already reachable via d035ee438; historical outcome retained; reconciliation awaits integrated review |
+| msn_mvwzybwf_FXHI7L6qj3V | 6a87580a15 | Hash already reachable via d035ee438; historical outcome retained; reconciliation awaits integrated review |
 | msn_mvw0z9ai_OmURrhHig8E | 78371d8d10 | Preserved in integrated branch; review and landing pending |
 | msn_mvsmzs1f_ssuGLWjrsfT | 8b961ec27a | Already landed by equivalent recovery; do not restart |
 
@@ -140,3 +144,13 @@ Framework net10.0, SDK 10.0.401, newest installed targeted SDK (8.0.425 also ins
 - Final landing cannot occur before the dependent review stages. No old mission/voyage was falsely
   marked Complete, no failed review was rewritten, no queue was bypassed and no vessel setting changed.
 
+
+## Final remote update
+
+After pushing candidate b6ba4d307, git fetch origin observed main at d035ee438.
+`git merge-base --is-ancestor origin/main HEAD` succeeds: the candidate already includes that exact
+landing, so no duplicate merge or source adjustment is required. Every AC2 historical commit is an
+ancestor of remote main; fafb47a4a / 78371d8d and b6ba4d307 are not. The correction in this report
+changes accounting only and does not invalidate any executed product checks. Independent approval
+and landing of the final integrated recovery branch are still required before remaining records can
+be reconciled. The failed Judge was annotated through annotate_blackbox, not changed to a pass.
