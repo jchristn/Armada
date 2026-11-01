@@ -1000,6 +1000,114 @@ namespace Test.Shared.Suites.Services
                 await ConcurrencyLimitChangeAsync(overall: true, lower: false).ConfigureAwait(false);
             }));
 
+            cases.Add(CaseAsync("scheduler_overall_limit_bounds_a_burst_across_hosts", "The server-wide probe limit holds when six groups on distinct hosts start at once", TestTags.Reliability, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync(capture: new UsageCaptureSettings
+                {
+                    Enabled = true,
+                    MinimumIntervalSeconds = 60,
+                    MaximumConcurrentProbes = 2,
+                    MaximumConcurrentProbesPerHost = 4
+                }).ConfigureAwait(false);
+
+                UsageCaptureGroup[] groups = new UsageCaptureGroup[6];
+                for (int i = 0; i < groups.Length; i++)
+                    groups[i] = HostGroup("host-burst-" + i, AgentRuntimeEnum.ClaudeCode, null, "cpt_burst_" + i);
+
+                fixture.Executor.Hold = true;
+                List<UsageCaptureAttempt> attempts = new List<UsageCaptureAttempt>();
+                foreach (UsageCaptureGroup group in groups)
+                {
+                    UsageCaptureAttempt attempt = await fixture.Service.TryStartAsync(group, null).ConfigureAwait(false);
+                    AssertTrue(attempt.Started, "every group on its own host starts its own attempt");
+                    attempts.Add(attempt);
+                }
+
+                // The per-host limit is 4 and every group is on a DIFFERENT host, so only the server-wide
+                // limit can bound this burst. A settle window lets an over-admitted probe arrive.
+                for (int i = 0; i < 100 && fixture.Executor.Calls < 2; i++) await Task.Delay(50).ConfigureAwait(false);
+                await Task.Delay(500).ConfigureAwait(false);
+                AssertEqual(2, fixture.Executor.Calls, "no more than the server-wide limit reaches a credential host");
+
+                // Each released server-wide permit admits exactly one queued group, never two.
+                for (int expected = 3; expected <= groups.Length; expected++)
+                {
+                    fixture.Executor.Release();
+                    for (int i = 0; i < 100 && fixture.Executor.Calls < expected; i++) await Task.Delay(50).ConfigureAwait(false);
+                    AssertEqual(expected, fixture.Executor.Calls, "one released permit admits exactly one probe");
+                }
+
+                // Six probes are dispatched and four were released: two are still held.
+                fixture.Executor.Release();
+                fixture.Executor.Release();
+                foreach (UsageCaptureAttempt attempt in attempts)
+                {
+                    UsageCaptureAttemptResult result = await AwaitAsync(attempt.Completion).ConfigureAwait(false);
+                    AssertTrue(result.Persisted, "every burst attempt commits once its permit is free");
+                }
+            }));
+
+            cases.Add(CaseAsync("scheduler_cancelled_overall_waiter_keeps_the_server_permit_count", "An attempt cancelled while queued for the server-wide slot never reaches a host and strands no permit", TestTags.Negative, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync(capture: new UsageCaptureSettings
+                {
+                    Enabled = true,
+                    MinimumIntervalSeconds = 60,
+                    MaximumConcurrentProbes = 1,
+                    MaximumConcurrentProbesPerHost = 4
+                }).ConfigureAwait(false);
+
+                UsageCaptureGroup running = HostGroup("host-overall-a", AgentRuntimeEnum.ClaudeCode, null, "cpt_overall_running");
+                UsageCaptureGroup queued = HostGroup("host-overall-b", AgentRuntimeEnum.Codex, "fp-overall-wait", "cpt_overall_queued");
+
+                fixture.Executor.Hold = true;
+                UsageCaptureAttempt held = await fixture.Service.TryStartAsync(running, null).ConfigureAwait(false);
+                AssertTrue(held.Started, "the first attempt takes the only server-wide slot");
+                for (int i = 0; i < 100 && fixture.Executor.Calls < 1; i++) await Task.Delay(50).ConfigureAwait(false);
+                AssertEqual(1, fixture.Executor.Calls, "the first attempt reached its credential host");
+
+                // A DIFFERENT host, so only the server-wide slot can park this attempt.
+                UsageCaptureAttempt waiter = await fixture.Service.TryStartAsync(queued, null).ConfigureAwait(false);
+                AssertTrue(waiter.Started, "the second attempt is accepted and waits for the server-wide slot");
+
+                Job? waiterJob = null;
+                for (int i = 0; i < 100; i++)
+                {
+                    waiterJob = await fixture.Database.Jobs.ReadAsync(waiter.JobId!).ConfigureAwait(false);
+                    if (waiterJob != null && waiterJob.Status == JobStatusEnum.Running) break;
+                    await Task.Delay(50).ConfigureAwait(false);
+                }
+                AssertNotNull(waiterJob, "the queued attempt's job row is readable");
+                AssertEqual(JobStatusEnum.Running, waiterJob!.Status, "the queued attempt's job runs while it waits");
+                await Task.Delay(500).ConfigureAwait(false);
+                AssertEqual(1, fixture.Executor.Calls, "the queued attempt never touched a credential host");
+
+                long generation = fixture.Service.Generation;
+                fixture.Service.Invalidate();
+                AssertTrue(fixture.Service.Generation > generation, "the invalidation bumps the generation");
+
+                UsageCaptureAttemptResult heldResult = await AwaitAsync(held.Completion).ConfigureAwait(false);
+                AssertFalse(heldResult.Persisted, "the cancelled probe's answer is never applied");
+                AssertEqual("SettingsGenerationChanged", heldResult.DiscardedReason, "the running attempt's discard names the generation change");
+
+                UsageCaptureAttemptResult waiterResult = await AwaitAsync(waiter.Completion).ConfigureAwait(false);
+                AssertFalse(waiterResult.Persisted, "the cancelled queued attempt commits nothing");
+                AssertEqual("ProbeCancelled", waiterResult.ErrorCode, "the queued attempt was cancelled before it ran");
+                AssertEqual("SettingsGenerationChanged", waiterResult.DiscardedReason, "the queued attempt's discard names the generation change");
+                AssertFalse(fixture.Service.IsInFlight(running.GroupKey), "the running flight is cleaned up");
+                AssertFalse(fixture.Service.IsInFlight(queued.GroupKey), "the queued flight is cleaned up");
+
+                // The single server-wide slot is still honoured: a fresh attempt on a third host runs and
+                // commits. A permit stranded by the cancelled waiter would leave it parked forever.
+                fixture.Executor.Hold = false;
+                UsageCaptureGroup fresh = HostGroup("host-overall-c", AgentRuntimeEnum.ClaudeCode, null, "cpt_overall_fresh");
+                UsageCaptureAttempt after = await fixture.Service.TryStartAsync(fresh, null).ConfigureAwait(false);
+                AssertTrue(after.Started, "a fresh attempt starts after the cancelled waiter");
+                UsageCaptureAttemptResult afterResult = await AwaitAsync(after.Completion).ConfigureAwait(false);
+                AssertTrue(afterResult.Persisted, "the fresh attempt commits; the cancelled waiter stranded no server-wide permit");
+                AssertEqual(2, fixture.Executor.Calls, "only the held and the fresh attempts reached a credential host");
+            }));
+
             cases.Add(CaseAsync("scheduler_settings_change_cancels_and_reschedules", "A scheduling settings change cancels the work queued under the old bounds and reschedules from scratch", TestTags.Negative, async () =>
             {
                 using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
