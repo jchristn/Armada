@@ -896,6 +896,141 @@ namespace Test.Shared.Suites.Services
                 AssertNull(resolved.HarborId, "no Harbor is named for a standalone deployment");
             }));
 
+            cases.Add(CaseAsync("scheduler_cancelled_host_waiter_returns_every_permit", "A cancelled attempt waiting for a host slot gives back the global permit it already holds", TestTags.Negative, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync(capture: new UsageCaptureSettings
+                {
+                    Enabled = true,
+                    MinimumIntervalSeconds = 60,
+                    MaximumConcurrentProbes = 4,
+                    MaximumConcurrentProbesPerHost = 1
+                }).ConfigureAwait(false);
+
+                string hostId = fixture.Accounts.HostId;
+
+                // Two distinct groups on ONE host with a single per-host slot: the first takes the host
+                // slot, the second parks on the host gate while holding one of the four global permits.
+                UsageCaptureGroup running = HostGroup(hostId, AgentRuntimeEnum.ClaudeCode, null, "cpt_permit_running");
+                UsageCaptureGroup waiting = HostGroup(hostId, AgentRuntimeEnum.Codex, "fp-permit", "cpt_permit_waiting");
+
+                fixture.Executor.Hold = true;
+                UsageCaptureAttempt held = await fixture.Service.TryStartAsync(running, null).ConfigureAwait(false);
+                AssertTrue(held.Started, "the first attempt takes the host's only slot");
+                for (int i = 0; i < 100 && fixture.Executor.Calls < 1; i++) await Task.Delay(50).ConfigureAwait(false);
+                AssertEqual(1, fixture.Executor.Calls, "the first attempt reached the credential host");
+
+                UsageCaptureAttempt waiter = await fixture.Service.TryStartAsync(waiting, null).ConfigureAwait(false);
+                AssertTrue(waiter.Started, "the second attempt is accepted and waits for the host slot");
+                AssertTrue(fixture.Service.IsInFlight(waiting.GroupKey), "the host-waiting attempt is in flight");
+
+                // The waiter parks on the host gate, which only the service's own gates can see: it is given
+                // a bounded moment to take its global permit and reach the host slot, so the configuration
+                // change below cancels an attempt that provably holds a global permit.
+                Job? waiterJob = null;
+                for (int i = 0; i < 100; i++)
+                {
+                    waiterJob = await fixture.Database.Jobs.ReadAsync(waiter.JobId!).ConfigureAwait(false);
+                    if (waiterJob != null && waiterJob.Status == JobStatusEnum.Running) break;
+                    await Task.Delay(50).ConfigureAwait(false);
+                }
+                AssertNotNull(waiterJob, "the waiting attempt's job row is readable");
+                AssertEqual(JobStatusEnum.Running, waiterJob!.Status, "the waiting attempt's job runs while it waits for the host slot");
+                await Task.Delay(500).ConfigureAwait(false);
+
+                // A configuration change cancels both: the probe stops and the waiter is released from the
+                // host gate. Every permit the two attempts acquired must come back.
+                long generation = fixture.Service.Generation;
+                fixture.Service.Invalidate();
+                AssertTrue(fixture.Service.Generation > generation, "the invalidation bumps the generation");
+
+                UsageCaptureAttemptResult heldResult = await AwaitAsync(held.Completion).ConfigureAwait(false);
+                AssertFalse(heldResult.Persisted, "the cancelled probe's result is never applied");
+                AssertEqual("SettingsGenerationChanged", heldResult.DiscardedReason, "the running attempt's discard names the generation change");
+
+                UsageCaptureAttemptResult waiterResult = await AwaitAsync(waiter.Completion).ConfigureAwait(false);
+                AssertFalse(waiterResult.Persisted, "the cancelled waiter's result is never applied");
+                AssertEqual("SettingsGenerationChanged", waiterResult.DiscardedReason, "the waiter's discard names the generation change");
+                AssertEqual("ProbeCancelled", waiterResult.ErrorCode, "the waiter was cancelled rather than run to its deadline");
+                AssertFalse(fixture.Service.IsInFlight(running.GroupKey), "the running flight is cleaned up");
+                AssertFalse(fixture.Service.IsInFlight(waiting.GroupKey), "the waiting flight is cleaned up");
+
+                // All four global permits are free again: four attempts on four DISTINCT hosts (so no host
+                // slot is contended) must all reach the credential host. A global permit stranded by the
+                // cancelled host waiter leaves the fourth attempt waiting forever.
+                UsageCaptureGroup[] fresh = new UsageCaptureGroup[4];
+                for (int i = 0; i < fresh.Length; i++)
+                    fresh[i] = HostGroup("host-permit-" + i, AgentRuntimeEnum.ClaudeCode, null, "cpt_permit_fresh_" + i);
+
+                int reached = fixture.Executor.Calls;
+                List<UsageCaptureAttempt> after = new List<UsageCaptureAttempt>();
+                foreach (UsageCaptureGroup group in fresh)
+                {
+                    UsageCaptureAttempt attempt = await fixture.Service.TryStartAsync(group, null).ConfigureAwait(false);
+                    AssertTrue(attempt.Started, "a fresh attempt on a free host starts");
+                    after.Add(attempt);
+                }
+
+                for (int i = 0; i < 100 && fixture.Executor.Calls < reached + fresh.Length; i++) await Task.Delay(50).ConfigureAwait(false);
+                AssertEqual(reached + fresh.Length, fixture.Executor.Calls, "every global permit is usable again after the cancelled host waiter");
+
+                for (int i = 0; i < fresh.Length; i++) fixture.Executor.Release();
+                foreach (UsageCaptureAttempt attempt in after)
+                {
+                    UsageCaptureAttemptResult result = await AwaitAsync(attempt.Completion).ConfigureAwait(false);
+                    AssertTrue(result.Persisted, "a fresh attempt commits its snapshot rather than hanging on a stranded permit");
+                }
+            }));
+
+            cases.Add(CaseAsync("scheduler_settings_change_cancels_and_reschedules", "A scheduling settings change cancels the work queued under the old bounds and reschedules from scratch", TestTags.Negative, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
+                Captain captain = await fixture.CreateCaptainAsync("bounds", 300).ConfigureAwait(false);
+
+                UsageCaptureScheduler scheduler = fixture.CreateScheduler();
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+                UsageCaptureGroup group = scheduler.Groups()[0];
+                AssertEqual(300, group.EffectiveIntervalSeconds, "the group starts at its requested interval above the floor");
+
+                // A probe is in flight under the old bounds when the operator raises the global floor.
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(group.GroupKey) ?? fixture.Clock.Now());
+                fixture.Executor.Hold = true;
+                UsageCaptureAttempt attempt = await fixture.Service.TryStartAsync(group, captain.Id).ConfigureAwait(false);
+                AssertTrue(attempt.Started, "the attempt starts under the old bounds");
+                long generation = fixture.Service.Generation;
+
+                fixture.Settings.UsageCapture.MinimumIntervalSeconds = 600;
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+
+                AssertTrue(fixture.Service.Generation > generation, "raising the global floor invalidates the scheduling generation");
+                UsageCaptureGroup floored = scheduler.Groups()[0];
+                AssertEqual(600, floored.EffectiveIntervalSeconds, "the rebuilt group runs at the new floor");
+                AssertEqual(fixture.Clock.Now().AddSeconds(600), fixture.Service.NextEligibleUtc(group.GroupKey), "the group reschedules from scratch at the new floor");
+
+                // The probe queued under the old bounds is cancelled and its answer is never applied.
+                UsageCaptureAttemptResult cancelled = await AwaitAsync(attempt.Completion).ConfigureAwait(false);
+                AssertFalse(cancelled.Persisted, "a result from the old bounds is never applied");
+                AssertEqual("SettingsGenerationChanged", cancelled.DiscardedReason, "the discard names the settings change");
+                AssertEqual("ProbeCancelled", cancelled.ErrorCode, "the probe was cancelled rather than run to its deadline");
+
+                // The rescheduled group runs when due at the new floor and commits.
+                fixture.Executor.Hold = false;
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(group.GroupKey) ?? fixture.Clock.Now());
+                List<UsageCaptureAttempt> due = await scheduler.TickAsync().ConfigureAwait(false);
+                AssertEqual(1, due.Count, "the rescheduled group starts when due at the new floor");
+                UsageCaptureAttemptResult result = await AwaitAsync(due[0].Completion).ConfigureAwait(false);
+                AssertTrue(result.Persisted, "the rescheduled capture commits");
+
+                // A member's own requested interval is a configuration change too, not only the global
+                // bounds: the work queued for the old interval is cancelled the same way.
+                long nextGeneration = fixture.Service.Generation;
+                fixture.Settings.UsageCapture.MinimumIntervalSeconds = 60;
+                captain.UsageCaptureIntervalSeconds = 900;
+                await fixture.Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+                AssertTrue(fixture.Service.Generation > nextGeneration, "a member's requested interval change invalidates the generation");
+                AssertEqual(900, scheduler.Groups()[0].EffectiveIntervalSeconds, "the rebuilt group runs at the member's new interval");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Usage Capture Scheduler",
@@ -932,6 +1067,27 @@ namespace Test.Shared.Suites.Services
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
             return logging;
+        }
+
+        /// <summary>
+        /// A hand-built group pinned to one host, so a case can place several groups on the same or on
+        /// distinct hosts without depending on dock resolution.
+        /// </summary>
+        private static UsageCaptureGroup HostGroup(string hostId, AgentRuntimeEnum runtime, string? fingerprint, string memberId)
+        {
+            return new UsageCaptureGroup
+            {
+                GroupKey = UsageAccountResolver.GroupKey(TenantId, hostId, runtime, fingerprint),
+                ConfigurationRevision = UsageAccountResolver.ConfigurationRevision(hostId, runtime, fingerprint),
+                TenantId = TenantId,
+                HostId = hostId,
+                Runtime = runtime,
+                Mode = fingerprint == null ? UsageCaptureModeEnum.Auto : UsageCaptureModeEnum.Custom,
+                CommandJson = fingerprint == null ? null : "{\"executable\":\"/opt/permit\",\"arguments\":[]}",
+                CommandFingerprint = fingerprint,
+                EffectiveIntervalSeconds = 300,
+                MemberCaptainIds = new List<string> { memberId }
+            };
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
@@ -976,11 +1132,11 @@ namespace Test.Shared.Suites.Services
                 ServiceJitter = jitter;
             }
 
-            public static async Task<TestDatabaseFixture> CreateAsync(Func<double>? jitter = null)
+            public static async Task<TestDatabaseFixture> CreateAsync(Func<double>? jitter = null, UsageCaptureSettings? capture = null)
             {
                 TestDatabase testDatabase = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 ArmadaSettings settings = new ArmadaSettings();
-                settings.UsageCapture = new UsageCaptureSettings { Enabled = true, MinimumIntervalSeconds = 60 };
+                settings.UsageCapture = capture ?? new UsageCaptureSettings { Enabled = true, MinimumIntervalSeconds = 60 };
                 UsageAccountResolver accounts = new UsageAccountResolver("host-sched-1", new string('a', 64));
                 FakeTimeProvider clock = new FakeTimeProvider(DateTime.UtcNow);
                 StubProbeExecutor executor = new StubProbeExecutor();

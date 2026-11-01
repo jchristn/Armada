@@ -493,6 +493,38 @@ namespace Test.Shared.Suites.Services
                 return Task.CompletedTask;
             }));
 
+            cases.Add(CaseAsync("production_server_ticks_the_scheduler_while_capture_is_disabled", "The production health loop ticks the usage scheduler even while capture is disabled, so the switch cancels in-flight work", TestTags.Positive, () =>
+            {
+                string source = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "src", "Armada.Server", "ArmadaServer.cs"));
+
+                // The tick must not be gated on the switch: a tick that observes capture turned off is the
+                // production path that invalidates the generation and cancels the probes still in flight.
+                // A call skipped while capture is disabled leaves the queued and running work alive until
+                // the process restarts, and a late answer is only discarded at commit time.
+                AssertEqual(1, CountOccurrences(source, "_UsageCaptureScheduler.TickAsync("), "the scheduler is ticked from exactly one production site");
+
+                int loopStart = source.IndexOf("private async Task HealthCheckLoopAsync", StringComparison.Ordinal);
+                AssertTrue(loopStart >= 0, "the health check loop exists");
+                string loop = source.Substring(loopStart);
+                int tick = loop.IndexOf("_UsageCaptureScheduler.TickAsync(", StringComparison.Ordinal);
+                AssertTrue(tick > 0, "the health check loop ticks the usage capture scheduler");
+
+                AssertTrue(source.Contains("await _UsageCaptureScheduler.TickAsync(token).ConfigureAwait(false);", StringComparison.Ordinal), "the tick is awaited on the health loop's token");
+
+                // The statement's own guard scope: nothing between the tick's try block and the call may
+                // consult the capture switch.
+                int windowStart = Math.Max(0, tick - 400);
+                string preceding = loop.Substring(windowStart, tick - windowStart);
+                AssertFalse(preceding.Contains("UsageCapture.Enabled", StringComparison.Ordinal), "the tick is not skipped while UsageCapture.Enabled is false");
+
+                // The scheduler is the component that decides what a disabled switch means: its own
+                // disabled branch invalidates the generation once, on the transition, and starts nothing.
+                string schedulerSource = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "src", "Armada.Core", "Services", "UsageCaptureScheduler.cs"));
+                AssertTrue(schedulerSource.Contains("if (!_Settings.UsageCapture.Enabled)", StringComparison.Ordinal), "the scheduler owns the disabled-switch branch");
+
+                return Task.CompletedTask;
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Usage Capture Host Contract",

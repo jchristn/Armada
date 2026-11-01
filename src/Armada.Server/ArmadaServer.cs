@@ -2417,11 +2417,13 @@ namespace Armada.Server
                     catch (Exception mqEx) { _Logging.Warn(_Header + "merge queue processing error: " + mqEx.Message); }
 
                     // Usage capture scheduler: rebuild the groups and start the due captures. Every attempt
-                    // is its own dedicated UsageProbe job, never a captain launch slot or state change.
+                    // is its own dedicated UsageProbe job, never a captain launch slot or state change. The
+                    // tick is unconditional: a tick that observes the switch turned off invalidates the
+                    // generation and cancels the probes it still has in flight, which a call skipped while
+                    // capture is disabled could never do.
                     try
                     {
-                        if (_Settings.UsageCapture.Enabled)
-                            await _UsageCaptureScheduler.TickAsync(token).ConfigureAwait(false);
+                        await _UsageCaptureScheduler.TickAsync(token).ConfigureAwait(false);
                     }
                     catch (Exception usageEx) when (!(usageEx is OperationCanceledException)) { _Logging.Warn(_Header + "usage capture scheduling error: " + usageEx.Message); }
 

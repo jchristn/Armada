@@ -389,69 +389,80 @@ namespace Armada.Core.Services
                     return new UsageCaptureAttemptResult { DiscardedReason = "JobNotStartable", ErrorCode = "JobNotStartable" };
 
                 await _OverallGate.WaitAsync(attemptToken).ConfigureAwait(false);
-                SemaphoreSlim hostGate = HostGate(group.HostId);
-                await hostGate.WaitAsync(attemptToken).ConfigureAwait(false);
                 try
                 {
-                    // Before the credential host is touched at all: an attempt whose lease expired while it
-                    // waited for a free slot never runs the probe it can no longer answer for.
-                    if (Now() > leaseDeadline)
-                        return await DiscardAsync(job, "LeaseExpired",
-                            UsageProbeResult.Failed("LeaseExpired", "the capture attempt's lease expired before it reached the credential host"),
+                    SemaphoreSlim hostGate = HostGate(group.HostId);
+                    await hostGate.WaitAsync(attemptToken).ConfigureAwait(false);
+                    try
+                    {
+                        // Before the credential host is touched at all: an attempt whose lease expired while it
+                        // waited for a free slot never runs the probe it can no longer answer for.
+                        if (Now() > leaseDeadline)
+                            return await DiscardAsync(job, "LeaseExpired",
+                                UsageProbeResult.Failed("LeaseExpired", "the capture attempt's lease expired before it reached the credential host"),
+                                attemptToken).ConfigureAwait(false);
+
+                        UsageProbeResult probe = await CaptureThroughHostAsync(job, group, attemptToken).ConfigureAwait(false);
+                        DateTime finished = Now();
+
+                        if (generation != Generation)
+                            return await DiscardAsync(job, "SettingsGenerationChanged", probe, attemptToken).ConfigureAwait(false);
+
+                        // A capture that is disabled while its probe was held is a stale write too: the
+                        // operator asked for the account not to be read, and the answer is never applied.
+                        if (!_Settings.UsageCapture.Enabled)
+                            return await DiscardAsync(job, "CaptureDisabled", probe, attemptToken).ConfigureAwait(false);
+
+                        // No result may be applied after its lease expired: a slow attempt whose window passed
+                        // reports the discard instead of overwriting the replacement attempt's state.
+                        if (finished > leaseDeadline)
+                            return await DiscardAsync(job, "LeaseExpired", probe, attemptToken).ConfigureAwait(false);
+
+                        // A member that verifiably stopped capturing (or moved to another group) while the probe
+                        // ran is not attributed: only the members still in this configuration are written.
+                        List<string> members = await EffectiveMembersAsync(group, attemptToken).ConfigureAwait(false);
+                        if (members.Count == 0)
+                            return await DiscardAsync(job, "NoMembers", probe, attemptToken).ConfigureAwait(false);
+
+                        UsageSnapshot snapshot = await CommitAsync(group, members, probe, triggeringCaptainId, finished, attemptToken).ConfigureAwait(false);
+                        DateTime? next = ScheduleNext(group, probe, finished);
+
+                        bool healthy = probe.Status == UsageSnapshotStatusEnum.Ok
+                            || probe.Status == UsageSnapshotStatusEnum.Estimated
+                            || probe.Status == UsageSnapshotStatusEnum.Unsupported
+                            || probe.Status == UsageSnapshotStatusEnum.AuthMissing;
+
+                        _ = await _Jobs.TryFinishAsync(job.Id,
+                            healthy ? JobStatusEnum.Succeeded : JobStatusEnum.Failed,
+                            healthy ? SnapshotResultJson(snapshot) : null,
+                            healthy ? null : (probe.ErrorCode ?? "CaptureFailed"),
                             attemptToken).ConfigureAwait(false);
 
-                    UsageProbeResult probe = await CaptureThroughHostAsync(job, group, attemptToken).ConfigureAwait(false);
-                    DateTime finished = Now();
+                        _Logging.Info(_Header + "capture of group " + group.GroupKey + " answered " + probe.Status
+                            + (probe.ErrorCode == null ? String.Empty : " (" + probe.ErrorCode + ")")
+                            + " in " + (long)(finished - dispatched).TotalMilliseconds + " ms; snapshot " + snapshot.Id);
 
-                    if (generation != Generation)
-                        return await DiscardAsync(job, "SettingsGenerationChanged", probe, attemptToken).ConfigureAwait(false);
-
-                    // A capture that is disabled while its probe was held is a stale write too: the
-                    // operator asked for the account not to be read, and the answer is never applied.
-                    if (!_Settings.UsageCapture.Enabled)
-                        return await DiscardAsync(job, "CaptureDisabled", probe, attemptToken).ConfigureAwait(false);
-
-                    // No result may be applied after its lease expired: a slow attempt whose window passed
-                    // reports the discard instead of overwriting the replacement attempt's state.
-                    if (finished > leaseDeadline)
-                        return await DiscardAsync(job, "LeaseExpired", probe, attemptToken).ConfigureAwait(false);
-
-                    // A member that verifiably stopped capturing (or moved to another group) while the probe
-                    // ran is not attributed: only the members still in this configuration are written.
-                    List<string> members = await EffectiveMembersAsync(group, attemptToken).ConfigureAwait(false);
-                    if (members.Count == 0)
-                        return await DiscardAsync(job, "NoMembers", probe, attemptToken).ConfigureAwait(false);
-
-                    UsageSnapshot snapshot = await CommitAsync(group, members, probe, triggeringCaptainId, finished, attemptToken).ConfigureAwait(false);
-                    DateTime? next = ScheduleNext(group, probe, finished);
-
-                    bool healthy = probe.Status == UsageSnapshotStatusEnum.Ok
-                        || probe.Status == UsageSnapshotStatusEnum.Estimated
-                        || probe.Status == UsageSnapshotStatusEnum.Unsupported
-                        || probe.Status == UsageSnapshotStatusEnum.AuthMissing;
-
-                    _ = await _Jobs.TryFinishAsync(job.Id,
-                        healthy ? JobStatusEnum.Succeeded : JobStatusEnum.Failed,
-                        healthy ? SnapshotResultJson(snapshot) : null,
-                        healthy ? null : (probe.ErrorCode ?? "CaptureFailed"),
-                        attemptToken).ConfigureAwait(false);
-
-                    _Logging.Info(_Header + "capture of group " + group.GroupKey + " answered " + probe.Status
-                        + (probe.ErrorCode == null ? String.Empty : " (" + probe.ErrorCode + ")")
-                        + " in " + (long)(finished - dispatched).TotalMilliseconds + " ms; snapshot " + snapshot.Id);
-
-                    return new UsageCaptureAttemptResult
+                        return new UsageCaptureAttemptResult
+                        {
+                            Snapshot = snapshot,
+                            Persisted = true,
+                            Status = probe.Status,
+                            ErrorCode = probe.ErrorCode,
+                            NextEligibleUtc = next
+                        };
+                    }
+                    finally
                     {
-                        Snapshot = snapshot,
-                        Persisted = true,
-                        Status = probe.Status,
-                        ErrorCode = probe.ErrorCode,
-                        NextEligibleUtc = next
-                    };
+                        // The host permit is released by its own finally: an attempt cancelled while it
+                        // waited for this gate (or cancelled inside the body) never strands a permit.
+                        hostGate.Release();
+                    }
                 }
                 finally
                 {
-                    hostGate.Release();
+                    // The overall permit is protected by its own finally as well: it is acquired before the
+                    // host gate, so a cancellation raised while waiting for the host permit must still give
+                    // the server-wide slot back (a leaked global permit stalls capture on every host).
                     _OverallGate.Release();
                 }
             }

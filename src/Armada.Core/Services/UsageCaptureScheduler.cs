@@ -66,6 +66,28 @@ namespace Armada.Core.Services
         private bool _Rebuilt = false;
         private bool _CaptureEnabledLastTick = true;
 
+        /// <summary>
+        /// The scheduling revision of one group's effective configuration: the server-wide scheduling bounds
+        /// (the minimum interval floor, the opt-in PTY switch, the host execution deadline, the overall and
+        /// per-host concurrency bounds and the failure backoff cap) plus the group's own requested and
+        /// effective intervals. Retention and excerpt bounds are deliberately excluded: they change what a
+        /// committed observation keeps, never which captures run, when, or what a queued attempt waits for.
+        /// </summary>
+        /// <param name="capture">Capture settings.</param>
+        /// <param name="group">Group.</param>
+        /// <returns>The revision.</returns>
+        private static string SchedulingRevision(UsageCaptureSettings capture, UsageCaptureGroup group)
+        {
+            return "min=" + capture.MinimumIntervalSeconds
+                + "|pty=" + capture.AllowPtyFallback
+                + "|timeout=" + capture.ProbeTimeoutSeconds
+                + "|overall=" + capture.MaximumConcurrentProbes
+                + "|perHost=" + capture.MaximumConcurrentProbesPerHost
+                + "|backoff=" + capture.MaximumBackoffSeconds
+                + "|requested=" + group.RequestedIntervalSeconds
+                + "|effective=" + group.EffectiveIntervalSeconds;
+        }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -93,6 +115,10 @@ namespace Armada.Core.Services
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Harbors = harbors;
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
+            // The switch's transition is tracked from the setting the scheduler is built with, so the first
+            // tick of a server that starts (or stays) disabled does not invalidate work that never existed;
+            // only a genuine enabled-to-disabled transition cancels what is still in flight.
+            _CaptureEnabledLastTick = settings.UsageCapture.Enabled;
         }
 
         #endregion
@@ -105,8 +131,8 @@ namespace Armada.Core.Services
         /// an invalidation cleared their state) their randomized initial due time. Existing groups keep
         /// their schedule, including a lease a previous process still holds. A rebuild that observes a
         /// configuration change (a captain stopped capturing, a group disappeared, a group's configuration
-        /// revision changed or it lost a member) invalidates the capture service first, so the probes the
-        /// change orphaned are cancelled and their results are never applied.
+        /// or scheduling revision changed, or it lost a member) invalidates the capture service first, so
+        /// the probes the change orphaned are cancelled and their results are never applied.
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         public async Task RebuildAsync(CancellationToken token = default)
@@ -172,6 +198,11 @@ namespace Armada.Core.Services
                 if (!group.MemberCaptainIds.Contains(captain.Id)) group.MemberCaptainIds.Add(captain.Id);
             }
 
+            // The scheduling revision is recomputed after every member contributed its interval: it captures
+            // the server-wide scheduling bounds and the group's own intervals, so a settings or interval
+            // change is a configuration change for the work that was scheduled under the old bounds.
+            foreach (UsageCaptureGroup group in groups.Values) group.SchedulingRevision = SchedulingRevision(_Settings.UsageCapture, group);
+
             // Close the memberships of captains that stopped capturing (disabled mode, or a moved
             // captain): a closed membership is attribution history, not a live group.
             bool configurationChanged = false;
@@ -205,6 +236,15 @@ namespace Armada.Core.Services
                 }
 
                 if (!String.Equals(rebuilt.ConfigurationRevision, previous.ConfigurationRevision, StringComparison.Ordinal))
+                {
+                    configurationChanged = true;
+                    continue;
+                }
+
+                // Scheduling and global capture settings are configuration too: a group whose effective
+                // interval, floor, deadline, PTY switch, concurrency bound or backoff cap changed cancels
+                // the work queued under the old bounds and is rescheduled from scratch with the new ones.
+                if (!String.Equals(rebuilt.SchedulingRevision, previous.SchedulingRevision, StringComparison.Ordinal))
                 {
                     configurationChanged = true;
                     continue;

@@ -76,6 +76,13 @@ namespace Armada.Core.Services
         public string? ConfigurationRevision { get; set; } = null;
 
         /// <summary>
+        /// Scheduling revision: the server-wide scheduling bounds and the group's own intervals that the
+        /// schedule was computed from. A rebuild that observes a different revision is a configuration
+        /// change: the work queued under the old bounds is cancelled and the group reschedules from scratch.
+        /// </summary>
+        public string? SchedulingRevision { get; set; } = null;
+
+        /// <summary>
         /// Shortest capture interval the members requested, in seconds, before the global floor.
         /// </summary>
         public int RequestedIntervalSeconds { get; set; } = 300;
