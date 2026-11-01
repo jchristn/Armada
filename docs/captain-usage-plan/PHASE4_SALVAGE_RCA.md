@@ -148,3 +148,48 @@ argument or schema, so `docs/api-surface-1.0.json` needs no regeneration.
   work, so escalation happens earlier.
 - A Judge (not a verifier) that fails at the budget still restarts itself with its prior findings.
   That is the existing re-evaluation design and was not changed.
+
+## 6. Independent Judge verification (2026-11-01)
+
+Reviewed tip `1c3357600c03d6d56a0d20c53e4e64bbad7c5757` against a fresh fetch of
+`origin/main` (`30358ef7824534abd6e7448cb2fc9d3c116355e1`). No production source
+was changed by the Judge.
+
+- Independently enumerated all 128 vessel missions, all 78 voyages and all four
+  merge entries (each fit one page at pageSize 200). Only this Judge is active.
+- Checked every recorded mission commit against main and HEAD, and patch
+  equivalence for surviving mission branch refs. All nine preserved Phase 4
+  commits are ancestors of HEAD. Other non-main recorded commits match the
+  ledger's rewritten, superseded or integration-only dispositions. Historical
+  deleted branch refs cannot be re-enumerated from git; their recorded commits
+  remain available for the ancestry audit.
+- Independently confirmed the configuration-bounds work `fafb47a4a`, prior
+  recovery commits `26cce7093`/`b524da942`, and every Phase 2/3 anchor listed above
+  are ancestors of main. Inspected the get-all retirement range-diff pairing
+  and the newer evaluation history/detail, battery pagination and toast-link
+  implementations on main supporting the superseded disposition.
+- Read both original black boxes through Armada MCP. Their recorded failed
+  verifier restart recommendation agrees with the RCA; settlement is a
+  consequence, not a demonstrated defect.
+- Created a fresh detached validation worktree at the reviewed tip. SDK
+  10.0.401; `dotnet restore src/Test.Automated/Test.Automated.csproj` succeeded
+  before validation. `dotnet build src/Test.Automated -c Release -f net10.0
+  --no-restore` succeeded with zero warnings/errors (exit 0).
+- Ran the built Test.Automated host with `--suites
+  E2E.Usage,Services.MultiRuntimeFlow,Services.Usage,Client.Contract.Usage,Client.RouteSurface,Client.Coverage,E2E.ApiContract,E2E.Authorization,E2E.McpTenantIsolation,Services.PipelineDispatch`:
+  **231 passed, zero failed/skipped, exit 0**. Prefix selection includes the
+  live stdio and HTTP transport recovery cases, usage aggregation/events and
+  tenant-isolation cases, and restart refusal/no-voyage/repeated-verifier cases.
+- Prior stdio AC4 and blocked-verifier restart findings are resolved by current
+  source and independently executed checks. No acceptance criteria were changed
+  or exceptions added by this recovery. Phase 2/3 targeted usage regressions pass.
+- `git diff --check` reports CRLF as trailing whitespace in the existing-format
+  Postman collection; with `core.whitespace=cr-at-eol` it passes. This is a
+  formatting observation, not a contract defect.
+
+No blocking defect found. Full suite/smoke host remain the pipeline's post-stage
+checks. Other database providers, dashboard checks and Postman collection
+execution were not run by the Judge. Approval is for pipeline landing, not proof
+of landing: main still lacks this recovery chain. After normal landing, fetch
+main again, prove ancestry or patch equivalence, and reconcile the historical
+records/black boxes using supported Armada operations with that main SHA.
