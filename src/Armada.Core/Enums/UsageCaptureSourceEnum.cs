@@ -47,6 +47,20 @@ namespace Armada.Core.Enums
         /// An administrator-configured local executable contract.
         /// </summary>
         [EnumMember(Value = "Custom")]
-        Custom
+        Custom,
+
+        /// <summary>
+        /// A local Codex <c>app-server</c> JSON-RPC session answering <c>account/rateLimits/read</c>; no
+        /// thread or turn is created, so no model is invoked.
+        /// </summary>
+        [EnumMember(Value = "AppServer")]
+        AppServer,
+
+        /// <summary>
+        /// A rate-limit event a harness emitted on its own structured stream while a real mission ran (Claude
+        /// Code <c>rate_limit_event</c>); passive, never scheduled.
+        /// </summary>
+        [EnumMember(Value = "HarnessEvent")]
+        HarnessEvent
     }
 }

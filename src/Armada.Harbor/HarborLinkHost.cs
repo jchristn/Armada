@@ -112,7 +112,9 @@ namespace Armada.Harbor
                 // the usage-probe capability and runs the probes on this, the credential host.
                 Armada.Core.Services.UsageAccountResolver usageAccounts = new Armada.Core.Services.UsageAccountResolver(
                     HarborAppSettings.SettingsDirectory(), _Logging, _Settings.HarborId);
-                _UsageProbeRunner = new Armada.Runtimes.UsageProbeHostRunner(_Logging, usageAccounts);
+                // The verified read-only runtime probes (phase 3) run here, on the credential host.
+                Armada.Runtimes.Usage.UsageProbeRegistry usageProbes = new Armada.Runtimes.Usage.UsageProbeRegistry(_Logging, usageAccounts);
+                _UsageProbeRunner = new Armada.Runtimes.UsageProbeHostRunner(_Logging, usageAccounts, usageProbes.Resolve);
                 _Executor.UsageProbe = _UsageProbeRunner;
 
                 _JobRunner = new Armada.Runtimes.LocalHarborJobRunner(_Logging);

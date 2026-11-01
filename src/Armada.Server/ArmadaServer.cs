@@ -453,10 +453,12 @@ namespace Armada.Server
 
             // Account usage capture (disabled by default): the Admiral host runs the probe helper in-process
             // for local captures, Harbor captures go over the link, and every attempt owns its own dedicated
-            // UsageProbe job. No runtime probe adapters are registered yet (phase 3), so an Auto-mode captain
-            // answers Unsupported; a Custom command runs through the host helper as specified.
+            // UsageProbe job. Auto mode runs only the verified read-only runtime probes of the registry (phase 3:
+            // Codex app-server; every other runtime answers Unsupported with its reason); a Custom command runs
+            // through the host helper as specified.
             Armada.Core.Services.UsageAccountResolver usageAccounts = new Armada.Core.Services.UsageAccountResolver(_Settings.DataDirectory, _Logging);
-            Armada.Runtimes.UsageProbeHostRunner usageProbeHostRunner = new Armada.Runtimes.UsageProbeHostRunner(_Logging, usageAccounts);
+            Armada.Runtimes.Usage.UsageProbeRegistry usageProbes = new Armada.Runtimes.Usage.UsageProbeRegistry(_Logging, usageAccounts);
+            Armada.Runtimes.UsageProbeHostRunner usageProbeHostRunner = new Armada.Runtimes.UsageProbeHostRunner(_Logging, usageAccounts, usageProbes.Resolve);
             Armada.Core.Services.LocalHostCommandExecutor usageLocalCommands = new Armada.Core.Services.LocalHostCommandExecutor { UsageProbe = usageProbeHostRunner };
             _UsageCapture = new Armada.Core.Services.UsageCaptureService(
                 _Database,

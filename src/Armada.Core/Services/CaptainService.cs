@@ -415,9 +415,89 @@ namespace Armada.Core.Services
             _Logging.Info(_Header + "released captain " + captain.Id);
         }
 
+        /// <summary>
+        /// Apply a usage quota decision (D6) to a captain. A Hold moves an Idle captain into a quota-owned
+        /// quarantine (atomically out of Idle where the tenant-scoped reserve applies) or refreshes an existing
+        /// quota-owned hold from a newer observation; it never interrupts a Working captain. A Release clears
+        /// only a quota-owned hold. A manual, health, crash-loop, configuration or provider-error quarantine is
+        /// never overwritten or cleared, and an observation no newer than the one that set the current
+        /// quota-owned hold is ignored (compare-and-set on the recorded capture time), so a late failure or an
+        /// old low-utilization sample cannot undo a newer exhausted sample.
+        /// </summary>
+        /// <param name="captainId">Captain identifier.</param>
+        /// <param name="decision">Decision from <see cref="UsageQuotaPolicy.Evaluate"/>.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>What was done.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="captainId"/> is null or empty or <paramref name="decision"/> is null.</exception>
+        public async Task<UsageQuotaOutcomeEnum> ApplyUsageQuotaAsync(string captainId, UsageQuotaDecision decision, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
+            if (decision == null) throw new ArgumentNullException(nameof(decision));
+            if (decision.Action == UsageQuotaActionEnum.NoChange) return UsageQuotaOutcomeEnum.Unchanged;
+
+            Captain? captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+            if (captain == null) return UsageQuotaOutcomeEnum.NotFound;
+
+            DateTime observed = TruncateToSecond(decision.ObservedUtc);
+            bool quarantined = captain.State == CaptainStateEnum.Quarantined;
+            bool owned = quarantined && UsageQuotaHold.IsQuotaOwned(captain.QuarantineReason);
+            if (quarantined && !owned) return UsageQuotaOutcomeEnum.SkippedForeignHold;
+            if (owned && UsageQuotaHold.TryReadObservedUtc(captain.QuarantineReason, out DateTime current) && observed <= current)
+                return UsageQuotaOutcomeEnum.SkippedStale;
+
+            if (decision.Action == UsageQuotaActionEnum.Release)
+            {
+                if (!owned) return UsageQuotaOutcomeEnum.Unchanged;
+                captain.State = CaptainStateEnum.Idle;
+                captain.QuarantineUntilUtc = null;
+                captain.QuarantineReason = null;
+                captain.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                _Logging.Info(_Header + "released quota hold on captain " + captain.Id + ": fresh observation below every applicable limit");
+                return UsageQuotaOutcomeEnum.Released;
+            }
+
+            string reason = UsageQuotaHold.FormatReason(decision.ExhaustedWindows, observed);
+            DateTime until = decision.HoldUntilUtc ?? DateTime.UtcNow.AddMinutes(_Settings.CaptainQuarantineMinutes);
+            if (owned)
+            {
+                captain.QuarantineUntilUtc = until;
+                captain.QuarantineReason = reason;
+                captain.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                return UsageQuotaOutcomeEnum.Extended;
+            }
+
+            if (captain.State != CaptainStateEnum.Idle || !String.IsNullOrEmpty(captain.CurrentMissionId))
+                return UsageQuotaOutcomeEnum.SkippedBusy;
+
+            if (!String.IsNullOrEmpty(captain.TenantId))
+            {
+                if (!await _Database.Captains.TryReserveAsync(captain.TenantId!, captain.Id, CaptainStateEnum.Quarantined, token).ConfigureAwait(false))
+                    return UsageQuotaOutcomeEnum.SkippedBusy;
+                Captain? reserved = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
+                if (reserved == null) return UsageQuotaOutcomeEnum.NotFound;
+                captain = reserved;
+            }
+
+            captain.State = CaptainStateEnum.Quarantined;
+            captain.QuarantineUntilUtc = until;
+            captain.QuarantineReason = reason;
+            captain.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+            _Logging.Warn(_Header + "quota hold on captain " + captain.Id + " until " + until.ToString("o") + ": " + reason);
+            return UsageQuotaOutcomeEnum.Held;
+        }
+
         #endregion
 
         #region Private-Methods
+
+        private static DateTime TruncateToSecond(DateTime value)
+        {
+            DateTime utc = value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+            return new DateTime(utc.Ticks - (utc.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc);
+        }
 
         private async Task RecordOperatorStopAsync(Captain captain, Mission mission, OperatorStopContext stop, CancellationToken token)
         {

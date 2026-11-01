@@ -62,6 +62,14 @@ namespace Armada.Runtimes
         public TimeSpan GatewayDeadlineHint { get; set; } = TimeSpan.FromSeconds(10);
 
         /// <summary>
+        /// Passive rate-limit header capture for this runtime's inference calls. The production client factory
+        /// attaches it to every completion client's transport (including the provider-default path), so each
+        /// response's allowlisted rate-limit headers are observed as soon as they arrive, before any body is
+        /// read; nothing is ever requested to obtain them.
+        /// </summary>
+        public Armada.Runtimes.Usage.HeaderUsageCapture UsageHeaders { get; } = new Armada.Runtimes.Usage.HeaderUsageCapture();
+
+        /// <summary>
         /// While one model call is still in flight, a progress line is written this often, so a long generation on a slow
         /// model is not mistaken for a stalled captain (stall detection watches output). The call stays bounded by its own
         /// deadlines: the request timeout, or with streaming the first-response and idle deadlines.
@@ -175,7 +183,7 @@ namespace Armada.Runtimes
             _Endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _MaxIterations = Math.Clamp(maxIterations, 1, 1000);
-            _ClientFactory = clientFactory ?? ((ep, log) => ModelEndpointClientFactory.CreateCompletion(ep, log));
+            _ClientFactory = clientFactory ?? ((ep, log) => ModelEndpointClientFactory.CreateCompletion(ep, log, UsageHeaders.Record));
         }
 
         /// <summary>
@@ -199,7 +207,7 @@ namespace Armada.Runtimes
             _EndpointResolver = endpointResolver ?? throw new ArgumentNullException(nameof(endpointResolver));
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _MaxIterations = Math.Clamp(maxIterations, 1, 1000);
-            _ClientFactory = clientFactory ?? ((ep, log) => ModelEndpointClientFactory.CreateCompletion(ep, log));
+            _ClientFactory = clientFactory ?? ((ep, log) => ModelEndpointClientFactory.CreateCompletion(ep, log, UsageHeaders.Record));
         }
 
         #endregion
