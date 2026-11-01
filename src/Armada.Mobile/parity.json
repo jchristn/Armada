@@ -1321,6 +1321,14 @@
     },
     {
       "kind": "api",
+      "key": "captureCaptainUsage",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Usage | no mobile usage screen yet; dashboard-first Phase 5, reviewed in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+    },
+    {
+      "kind": "api",
       "key": "categorizeVesselImport",
       "status": "implemented",
       "mobile": "src/screens/vessels/import",
@@ -3086,6 +3094,38 @@
       "mobile": "src/screens/activity/TokenUsageTab.tsx",
       "workstream": "W4.3",
       "notes": "Activity hub Token Usage source"
+    },
+    {
+      "kind": "api",
+      "key": "getUsageLatest",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Usage | no mobile usage screen yet; dashboard-first Phase 5, reviewed in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+    },
+    {
+      "kind": "api",
+      "key": "getUsageMissions",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Usage | no mobile usage screen yet; dashboard-first Phase 5, reviewed in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+    },
+    {
+      "kind": "api",
+      "key": "getUsageSeries",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Usage | no mobile usage screen yet; dashboard-first Phase 5, reviewed in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+    },
+    {
+      "kind": "api",
+      "key": "getUsageSnapshots",
+      "status": "planned",
+      "mobile": "",
+      "workstream": "W3.2",
+      "notes": "Usage | no mobile usage screen yet; dashboard-first Phase 5, reviewed in docs/captain-usage-plan/DASHBOARD_PARITY.md"
     },
     {
       "kind": "api",

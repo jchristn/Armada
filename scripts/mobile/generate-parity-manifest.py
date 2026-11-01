@@ -34,7 +34,7 @@ STATUSES = ["implemented", "planned", "not-applicable", "extension"]
 
 # client.ts area (section header) -> workstream that builds the screens calling it.
 AREA_WORKSTREAMS = {
-    "Battery packs": "W3.2",
+    "Battery packs": "W3.2", "Usage": "W3.2",
     "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)": "W1.1", "Ask Armada": "W1.1",
     "CLI tool permissions": "W1.2", "Needs-you inbox": "W1.3",
     "Status / Health": "W2.1", "Missions": "W2.2", "Generic entity lookup": "W2.2", "Voyages": "W2.3",

@@ -1,4 +1,6 @@
 import TokenActivityHeatmap from '../components/activity/TokenActivityHeatmap';
+import Tabs from '../components/shared/Tabs';
+import { UsageLimitsTab, UsageOverviewTab } from '../components/usage/UsageActivityTabs';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
@@ -48,7 +50,24 @@ function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + '…' : text;
 }
 
+/**
+ * Token usage route: the existing token charts (Tokens, the default tab) plus the account usage Overview and Limits
+ * tabs. Every tab keeps its query state in the URL.
+ */
 export default function TokenUsage() {
+  return (
+    <Tabs
+      ariaLabel="Token and account usage views"
+      tabs={[
+        { key: 'tokens', label: 'Tokens', tooltip: 'Armada-recorded tokens by time and model.', render: () => <TokenUsageTokens /> },
+        { key: 'overview', label: 'Overview', tooltip: 'Account limit utilization and tokens recorded at completion on one time scale.', render: () => <UsageOverviewTab /> },
+        { key: 'limits', label: 'Limits', tooltip: 'Current account limits grouped by account and host.', render: () => <UsageLimitsTab /> },
+      ]}
+    />
+  );
+}
+
+function TokenUsageTokens() {
   const { t } = useLocale();
   // ?harborId= (from a Harbor's charts) limits the page to captains run on that Harbor.
   const [searchParams, setSearchParams] = useSearchParams();

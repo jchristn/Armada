@@ -39,6 +39,9 @@ vi.mock('../api/client', () => ({
   createPipeline: vi.fn(), getPipeline: vi.fn(), updatePipeline: vi.fn(), deletePipeline: vi.fn(), listPersonas: vi.fn(), createVoyage: vi.fn(),
   getStatus: vi.fn(), listCaptains: vi.fn(), listSignals: vi.fn(), deleteMission: vi.fn(), restartMission: vi.fn(), enumerateFleetActionRuns: vi.fn(),
   enumerateVoyageProgress: vi.fn(),
+  getUsageLatest: vi.fn(() => Promise.resolve({ objects: [], totalRecords: 0, totalPages: 0, pageNumber: 1, pageSize: 25, success: true, totalMs: 0 })),
+  getUsageSeries: vi.fn(() => Promise.reject(new Error('not used'))),
+  captureCaptainUsage: vi.fn(),
 }));
 
 const localeValue = {
@@ -50,7 +53,7 @@ const localeValue = {
 vi.mock('../context/LocaleContext', () => ({ useLocale: () => localeValue }));
 vi.mock('../context/NotificationContext', () => ({ useNotifications: () => ({ pushToast: vi.fn() }), useOptionalNotifications: () => null }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAdmin: true, isTenantAdmin: true, user: null }) }));
-vi.mock('../context/WebSocketContext', () => ({ useWebSocket: () => ({ connected: true, subscribe: () => () => {}, send: vi.fn() }) }));
+vi.mock('../context/WebSocketContext', () => ({ useWebSocket: () => ({ connected: true, subscribe: () => () => {}, send: vi.fn() }), useUsageRevision: () => 0 }));
 vi.mock('../components/MissionHistoryChart', () => ({ default: () => null }));
 vi.mock('../components/vessels/health/HealthKpiCards', () => ({ default: () => null }));
 vi.mock('../components/captains/CaptainToolViewer', () => ({ default: () => null }));

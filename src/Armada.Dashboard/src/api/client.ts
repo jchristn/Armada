@@ -1,5 +1,12 @@
 import type {
   ScopeEnum,
+  UsageCaptureReceipt,
+  UsageFilter,
+  UsageMissionFilter,
+  UsageMissionResult,
+  UsageSeriesFilter,
+  UsageSeriesResult,
+  UsageSnapshotView,
   AuthenticateRequest,
   AuthenticateResult,
   WhoAmIResult,
@@ -2352,6 +2359,39 @@ export const getPipeline = (name: string) => get<Pipeline>(`/api/v1/pipelines/${
 export const createPipeline = (data: Partial<Pipeline>) => post<Pipeline>('/api/v1/pipelines', data);
 export const updatePipeline = (name: string, data: Partial<Pipeline>) => put<Pipeline>(`/api/v1/pipelines/${encodeURIComponent(name)}`, data);
 export const deletePipeline = (name: string) => del<void>(`/api/v1/pipelines/${encodeURIComponent(name)}`);
+
+// ==================== Usage ====================
+
+type UsageQueryValue = string | number | undefined;
+
+function usageQuery(filter: object, extra: Record<string, UsageQueryValue> = {}): string {
+  const values: Record<string, UsageQueryValue> = { ...(filter as Record<string, UsageQueryValue>), ...extra };
+  const filters: Record<string, string> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (key === 'pageNumber' || key === 'pageSize') continue;
+    if (value !== undefined && value !== null && String(value) !== '') filters[key] = String(value);
+  }
+  return buildQuery({ pageNumber: values.pageNumber as number | undefined, pageSize: values.pageSize as number | undefined, filters });
+}
+
+/**
+ * Latest account observations. `captainId` reads one captain; `captainIds` (comma-separated, 1..100 distinct ids,
+ * latest only) hydrates a visible page in one request. Missing observations return no row, never zero usage.
+ */
+export const getUsageLatest = (filter: UsageFilter & { captainIds?: string } = {}) =>
+  get<EnumerationResult<UsageSnapshotView>>(`/api/v1/usage/latest${usageQuery(filter)}`);
+/** Bounded historical snapshots, newest first. */
+export const getUsageSnapshots = (filter: UsageFilter = {}) =>
+  get<EnumerationResult<UsageSnapshotView>>(`/api/v1/usage/snapshots${usageQuery(filter)}`);
+/** Limit or token series over [from,to) with 5/60/360-minute buckets. */
+export const getUsageSeries = (filter: UsageSeriesFilter) =>
+  get<UsageSeriesResult>(`/api/v1/usage/series${usageQuery(filter)}`);
+/** Completed missions for exactly one provider/account/host/time selection, plus coverage. */
+export const getUsageMissions = (filter: UsageMissionFilter) =>
+  get<UsageMissionResult>(`/api/v1/usage/missions${usageQuery(filter)}`);
+/** Queue an on-demand capture for a captain's account (TenantAdmin). 202 receipt, or 200 latest view for passive-only sources. */
+export const captureCaptainUsage = (captainId: string) =>
+  post<UsageCaptureReceipt | UsageSnapshotView>(`/api/v1/captains/${captainId}/usage/capture`, {});
 
 // ==================== Docks ====================
 export const listDocks = (params?: { pageNumber?: number; pageSize?: number; filters?: Record<string, string> }) =>

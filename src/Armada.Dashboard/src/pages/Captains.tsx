@@ -31,6 +31,10 @@ import { buildCaptainDuplicatePayload } from '../lib/duplicates';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 import { PLANNING_PATH } from '../lib/navTargets';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
+import { useLatestUsageForCaptains } from '../lib/useUsage';
+import { captainUsagePath } from '../lib/usage';
+import CaptainUsageCell from '../components/usage/CaptainUsageCell';
+import UsageState from '../components/usage/UsageState';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'runtime' | 'state' | 'createdUtc';
@@ -136,6 +140,10 @@ export default function Captains() {
     const start = (currentPage - 1) * pageSize;
     return sorted.slice(start, start + pageSize);
   }, [sorted, currentPage, pageSize]);
+
+  // One batch latest request (per 100 ids) hydrates the visible page; never one request per row.
+  const visibleCaptainIds = useMemo(() => paginated.map((c) => c.id), [paginated]);
+  const usage = useLatestUsageForCaptains(visibleCaptainIds);
 
   function handleSort(field: SortField) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -428,6 +436,10 @@ export default function Captains() {
       ) : '-',
     },
     {
+      key: 'usage', label: t('Usage'), headerTitle: t('Highest applicable account limit window for this captain, with its name and freshness. 75% and above is a warning, 90% and above is near the limit. A dash state never means zero usage.'), cellClassName: 'cell-nowrap', interactive: true,
+      render: (c) => <CaptainUsageCell captain={c} views={usage.byCaptain.get(c.id)} status={usage.status} />,
+    },
+    {
       key: 'heartbeat', label: t('Heartbeat'), headerTitle: t('When the captain last produced agent output. If it stops advancing while the captain is Working, the captain may be stalled. Hover a value for the exact time.'), cellClassName: 'text-dim cell-nowrap', cellTitle: (c) => formatDateTime(c.lastHeartbeatUtc),
       render: (c) => formatRelativeTime(c.lastHeartbeatUtc),
     },
@@ -441,6 +453,7 @@ export default function Captains() {
       render: (c) => (
         <ActionMenu id={`captain-${c.id}`} items={[
           { label: 'View Detail', title: 'Open this captain\'s page with its state, settings, missions and log.', onClick: () => navigate(`/captains/${c.id}`) },
+          { label: 'View Usage', title: 'Open this captain\'s usage section: account limits, capture state and capture settings, including why usage is unavailable.', onClick: () => navigate(captainUsagePath(c.id)) },
           ...(canCaptainStartPlanning(c) ? [{ label: 'Start Planning', title: 'Open a planning session with this captain to break work into missions before dispatching. Reserves the captain while the session runs.', onClick: () => handleStartPlanning(c) }] : []),
           { label: 'Edit', title: 'Change this captain\'s name, runtime, model, tier, permissions and instructions.', onClick: () => openEdit(c) },
           { label: 'Duplicate', title: 'Create a new idle captain with a copy of this one\'s name, runtime, model, instructions, personas and runtime options, then open it.', onClick: () => void handleDuplicate(c) },
@@ -610,6 +623,12 @@ export default function Captains() {
         />
       )}
 
+      {usage.status === 'error' && (
+        <div className="usage-table-notice"><UsageState kind="error" onRetry={usage.retry} /></div>
+      )}
+      {usage.truncated && (
+        <p className="text-dim usage-table-notice">{t('Usage shows the first account pages for these captains. Open a captain\'s usage section for every account.')}</p>
+      )}
       <DataTable
         tableKey="captains"
         columns={columns}

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   apiErrorMessage,
@@ -39,6 +39,7 @@ import { supportsAutoApproveSwitch } from '../lib/captainApproval';
 import { CAPTAIN_AUTO_APPROVE_TOOLTIP, CAPTAIN_CLI_POLICY_TOOLTIP, CAPTAIN_INFERENCE_ENDPOINT_TOOLTIP, CAPTAIN_NAME_TOOLTIP, CAPTAIN_REASONING_EFFORT_TOOLTIP, CAPTAIN_RUNTIME_TOOLTIP, CAPTAIN_SYSTEM_INSTRUCTIONS_TOOLTIP, CAPTAIN_TIER_TOOLTIP, buildCaptainPayload, captainDetailActions, captainFormError, captainFormErrorMessage, captainFormFromCaptain, captainModelPlaceholder, captainModelTooltip, cliPolicyChanged } from '../lib/captainForm';
 import { buildCaptainDuplicatePayload } from '../lib/duplicates';
 import ModelProbeEvaluate from '../components/ModelProbeEvaluate';
+import CaptainUsageCard from '../components/usage/CaptainUsageCard';
 import { evaluationsListPath } from '../lib/evaluationLinks';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
 
@@ -132,6 +133,19 @@ export default function CaptainDetail() {
   }, [id, t]);
 
   useEffect(() => { load(); }, [load]);
+
+  // View Usage (Captains row menu) links to ?section=usage: bring the usage section into view and give it focus
+  // once the captain has loaded, so keyboard users land on it.
+  const usageSectionRef = useRef<HTMLElement | null>(null);
+  const usageRequested = searchParams.get('section') === 'usage';
+  const usageCaptainId = captain?.id;
+  useEffect(() => {
+    if (!usageRequested || !usageCaptainId || usageCaptainId !== id) return;
+    const section = usageSectionRef.current;
+    if (!section) return;
+    if (typeof section.scrollIntoView === 'function') section.scrollIntoView({ block: 'start' });
+    section.focus({ preventScroll: true });
+  }, [usageRequested, usageCaptainId, id]);
 
   function openEdit() {
     if (!captain) return;
@@ -566,6 +580,11 @@ export default function CaptainDetail() {
             <span className="text-dim"> ({formatDateTime(captain.lastUpdateUtc)})</span>
           </span>
         </div>
+      </div>
+
+      {/* Account usage (limits, capture now, capture settings) */}
+      <div style={{ marginTop: '1rem' }}>
+        <CaptainUsageCard ref={usageSectionRef} captain={captain} canManage={canManageCliPolicy} onCaptainSaved={setCaptain} />
       </div>
 
       {/* Evaluation (Quick mechanical probes) */}

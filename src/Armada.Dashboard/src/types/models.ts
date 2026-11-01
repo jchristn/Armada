@@ -267,6 +267,16 @@ export interface Captain {
   runtimeOptionsJson?: string | null;
   /** CLI tool permission policy for this captain's CLI sessions; null or absent inherits (see CliPermissionPolicy). */
   cliPermissionPolicy?: CliPermissionPolicy | null;
+  /** Account usage capture switch; absent on older servers means off. */
+  usageCaptureEnabled?: boolean;
+  /** Requested capture interval in seconds (60..86400, default 300). */
+  usageCaptureIntervalSeconds?: number;
+  /** Auto, Disabled or Custom. */
+  usageCaptureMode?: UsageCaptureMode;
+  /** Custom executable/argument-list JSON; null outside Custom mode. */
+  usageCaptureCommand?: string | null;
+  /** True when capture is enabled and the mode is not Disabled. */
+  usageCaptureActive?: boolean;
   state: string;
   currentMissionId: string | null;
   currentDockId: string | null;
@@ -2747,6 +2757,8 @@ export interface SendSignalRequest {
 
 export interface SettingsData {
   storage?: import('./storage').StorageSettings;
+  /** Server-wide account usage capture group (GlobalAdmin edits it; disabled by default). */
+  usageCapture?: UsageCaptureSettings;
   dataRetentionDays?: number;
   requestHistoryRetentionDays?: number;
   [key: string]: unknown;
@@ -4591,4 +4603,178 @@ export interface ModelProbeRunWithBattery extends ModelProbeRun {
   batteryResults?: BatteryTaskResultInfo[];
   batteryResultsPage?: EnumerationResult<BatteryTaskResultInfo>;
   batteryResultsError?: string;
+}
+
+// ==================== Account usage capture ====================
+
+export type UsageCaptureMode = 'Auto' | 'Disabled' | 'Custom';
+export type UsageSnapshotStatus = 'Ok' | 'Unsupported' | 'AuthMissing' | 'Failed' | 'Estimated';
+
+/** One provider limit window. Null numbers mean unknown, never zero. */
+export interface UsageWindow {
+  name: string;
+  usedPercent: number | null;
+  used: number | null;
+  limit: number | null;
+  unit: string | null;
+  windowMinutes: number | null;
+  resetsUtc: string | null;
+  model: string | null;
+  scope: string | null;
+  configurationRevision?: string | null;
+  coverageNote: string | null;
+}
+
+/** Sanitized latest or historical account observation, shared by every member captain. */
+export interface UsageSnapshotView {
+  id: string | null;
+  tenantId: string | null;
+  hostId: string | null;
+  harborId: string | null;
+  runtime: string;
+  provider: string | null;
+  accountKey: string | null;
+  captainIds: string[];
+  capturedUtc: string;
+  status: UsageSnapshotStatus;
+  errorCode: string | null;
+  windows: UsageWindow[];
+  stale: boolean;
+  observedUtc: string | null;
+  requestedIntervalSeconds: number;
+  effectiveIntervalSeconds: number;
+  capabilityReason: string | null;
+}
+
+export interface UsageCaptureReceipt {
+  jobId: string | null;
+  status: string;
+  joinedExisting: boolean;
+  nextEligibleUtc: string | null;
+}
+
+export interface UsageSeriesPoint {
+  bucketStartUtc: string;
+  bucketEndUtc: string;
+  lastPercent: number | null;
+  minPercent: number | null;
+  maxPercent: number | null;
+  meanPercent: number | null;
+  lastResetUtc: string | null;
+  observedUtc: string | null;
+  observationAgeSeconds: number | null;
+  observationCount: number;
+  status: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  totalTokens: number;
+  reportedCost: number | null;
+  costCurrency: string | null;
+  estimated: boolean;
+}
+
+export interface UsageSeries {
+  provider: string | null;
+  accountKey: string | null;
+  hostId: string | null;
+  runtime: string | null;
+  window: string | null;
+  model: string | null;
+  costCurrency: string | null;
+  points: UsageSeriesPoint[];
+}
+
+export interface UsageCoverage {
+  unattributedRecords: number;
+  excludedUnattributedRecords: number;
+  nonMissionRecords: number;
+  missionRecords: number;
+  knownCostRecords: number;
+  seriesTruncated: boolean;
+  warning: string | null;
+}
+
+export interface UsageSeriesResult {
+  fromUtc: string;
+  toUtc: string;
+  bucketMinutes: number;
+  resolution: string;
+  groupBy: string;
+  series: UsageSeries[];
+  coverage: UsageCoverage;
+}
+
+export interface UsageMissionRow {
+  missionId: string;
+  title: string | null;
+  status: string | null;
+  vesselId: string | null;
+  vesselName: string | null;
+  captainId: string | null;
+  captainName: string | null;
+  accountKey: string | null;
+  hostId: string | null;
+  missionUrl: string | null;
+  completedUtc: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  totalTokens: number;
+  reportedCost: number | null;
+  costCurrency: string | null;
+  estimated: boolean;
+  costCoverage: number;
+}
+
+export interface UsageMissionResult extends EnumerationResult<UsageMissionRow> {
+  coverage: UsageCoverage;
+}
+
+/** Identity filters shared by the usage reads; ranges are UTC ISO-8601 [from,to). */
+export interface UsageFilter {
+  captainId?: string;
+  harborId?: string;
+  hostId?: string;
+  runtime?: string;
+  provider?: string;
+  accountKey?: string;
+  from?: string;
+  to?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface UsageSeriesFilter extends UsageFilter {
+  from: string;
+  to: string;
+  metric: 'limits' | 'tokens';
+  groupBy: 'account' | 'provider';
+  bucketMinutes: 5 | 60 | 360;
+  window?: string;
+  model?: string;
+}
+
+export interface UsageMissionFilter extends UsageFilter {
+  from: string;
+  to: string;
+  provider: string;
+  window?: string;
+  model?: string;
+  sortBy?: string;
+  sortDirection?: 'ascending' | 'descending';
+}
+
+/** Server-wide capture settings (GET/PUT /api/v1/settings usageCapture group). */
+export interface UsageCaptureSettings {
+  enabled: boolean;
+  minimumIntervalSeconds: number;
+  allowPtyFallback: boolean;
+  probeTimeoutSeconds: number;
+  maximumConcurrentProbes: number;
+  maximumConcurrentProbesPerHost: number;
+  maximumBackoffSeconds: number;
+  maximumExcerptBytes: number;
+  rawSnapshotRetentionDays: number;
+  rollupRetentionDays: number;
 }

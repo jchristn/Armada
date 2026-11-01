@@ -206,7 +206,8 @@ The card separates each window, shows exact reset time plus countdown, last capt
 
 Every Captains table row must include an ActionMenu item labeled exactly `View Usage`
 in English, translated through the shared catalog. It opens the selected captain's
-detail usage section at a stable route/anchor, preserves captain scope and supports
+detail usage section at a stable route/anchor (`/captains/{id}?section=usage`, which
+scrolls to and focuses the `#captain-usage` section), preserves captain scope and supports
 the existing menu's keyboard navigation. Keep it available for disabled,
 unsupported and no-data captains so their explanations remain reachable. Reads
 use existing authenticated permissions; capture/edit actions retain admin checks.
@@ -248,7 +249,7 @@ One account row owns its bars and polling schedule. Member captains are links be
 
 ### Captain edit
 
-Capture defaults off. Mode, interval, effective schedule and Custom executable contract are in one form section. PTY is separately opt-in and unavailable if globally prohibited. Changing Custom configuration requires the same role as captain mutation; preserve unsaved edits on server validation failure.
+Capture defaults off. Mode, interval, effective schedule and Custom executable contract are in one form section. PTY is separately opt-in and unavailable if globally prohibited. Changing Custom configuration requires the same role as captain mutation; preserve unsaved edits on server validation failure. A captain update that omits the usage fields keeps their stored values (a rename never disables capture); an invalid Custom command is rejected with 400 before anything is stored; a saved configuration change invalidates in-flight capture and rebuilds schedules.
 
 ![Captain capture form](docs/captain-usage-plan/mockups/06-edit.png)
 

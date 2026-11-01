@@ -8,6 +8,8 @@ import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useProxySessionContext } from '../lib/useProxySessionContext';
 import DefaultLandingModeField from '../components/settings/DefaultLandingModeField';
+import UsageCaptureSettingsPanel from '../components/usage/UsageCaptureSettingsPanel';
+import { useAuth } from '../context/AuthContext';
 import { DEFAULT_GLOBAL_LANDING_MODE } from '../lib/vesselForm';
 
 interface ServerSettings {
@@ -33,6 +35,7 @@ interface HealthInfo {
 
 export default function Settings() {
   const { t } = useLocale();
+  const { isAdmin } = useAuth();
   const proxyContext = useProxySessionContext();
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [health, setHealth] = useState<HealthInfo | null>(null);
@@ -255,6 +258,8 @@ export default function Settings() {
             </div>
           </div>
           </fieldset>
+
+          <UsageCaptureSettingsPanel canEdit={isAdmin} />
 
           {/* System Paths (read-only) */}
           <div className="settings-section" style={{ marginTop: '1.5rem' }}>

@@ -137,22 +137,6 @@
     },
     {
       "kind": "route",
-      "key": "/evaluations",
-      "status": "implemented",
-      "tui": "Router",
-      "workstream": "W4.7",
-      "notes": "redirect to /captains; the TUI shows a captain's evaluation runs and results in the captain screen's Evaluate view"
-    },
-    {
-      "kind": "route",
-      "key": "/evaluations/:id",
-      "status": "implemented",
-      "tui": "Router",
-      "workstream": "W4.7",
-      "notes": "redirect to /captains; the TUI shows a captain's evaluation runs and results in the captain screen's Evaluate view"
-    },
-    {
-      "kind": "route",
       "key": "/checks",
       "status": "implemented",
       "tui": "Router",
@@ -262,6 +246,22 @@
       "tui": "EnvironmentScreen",
       "workstream": "W5.2",
       "notes": "detail with verification definitions"
+    },
+    {
+      "kind": "route",
+      "key": "/evaluations",
+      "status": "implemented",
+      "tui": "Router",
+      "workstream": "W4.7",
+      "notes": "redirect to /captains; the TUI shows a captain's evaluation runs and results in the captain screen's Evaluate view"
+    },
+    {
+      "kind": "route",
+      "key": "/evaluations/:id",
+      "status": "implemented",
+      "tui": "Router",
+      "workstream": "W4.7",
+      "notes": "redirect to /captains; the TUI shows a captain's evaluation runs and results in the captain screen's Evaluate view"
     },
     {
       "kind": "route",
@@ -793,6 +793,14 @@
     },
     {
       "kind": "tab",
+      "key": "CaptainsHub:battery",
+      "status": "not-applicable",
+      "tui": "",
+      "workstream": "",
+      "notes": "Battery Packs tab (moved from /battery): server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
+    },
+    {
+      "kind": "tab",
       "key": "CaptainsHub:captains",
       "status": "implemented",
       "tui": "CaptainsScreen",
@@ -806,14 +814,6 @@
       "tui": "DocksScreen",
       "workstream": "W4.8",
       "notes": "Docks"
-    },
-    {
-      "kind": "tab",
-      "key": "CaptainsHub:battery",
-      "status": "not-applicable",
-      "tui": "",
-      "workstream": "",
-      "notes": "Battery Packs tab (moved from /battery): server filesystem pack editor is a dashboard administration surface; REST, MCP and ArmadaClient provide programmatic management."
     },
     {
       "kind": "tab",
@@ -1270,6 +1270,14 @@
       "tui": "ArmadaClient.CancelVoyageAsync",
       "workstream": "W0.2",
       "notes": "Voyages"
+    },
+    {
+      "kind": "api",
+      "key": "captureCaptainUsage",
+      "status": "implemented",
+      "tui": "ArmadaClient.CaptureCaptainUsageAsync",
+      "workstream": "W0.2",
+      "notes": "Usage | ArmadaClient method only; no TUI usage screen yet: reviewed exception in docs/captain-usage-plan/DASHBOARD_PARITY.md"
     },
     {
       "kind": "api",
@@ -3038,6 +3046,38 @@
       "tui": "ArmadaClient.GetTokenUsageAsync",
       "workstream": "W0.2",
       "notes": "Missions | used by TokenUsageScreen (harborId filter from the Harbors screen, x clears it)"
+    },
+    {
+      "kind": "api",
+      "key": "getUsageLatest",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetUsageLatestAsync",
+      "workstream": "W0.2",
+      "notes": "Usage | ArmadaClient method only; no TUI usage screen yet: reviewed exception in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+    },
+    {
+      "kind": "api",
+      "key": "getUsageMissions",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetUsageMissionsAsync",
+      "workstream": "W0.2",
+      "notes": "Usage | ArmadaClient method only; no TUI usage screen yet: reviewed exception in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+    },
+    {
+      "kind": "api",
+      "key": "getUsageSeries",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetUsageSeriesAsync",
+      "workstream": "W0.2",
+      "notes": "Usage | ArmadaClient method only; no TUI usage screen yet: reviewed exception in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+    },
+    {
+      "kind": "api",
+      "key": "getUsageSnapshots",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetUsageSnapshotsAsync",
+      "workstream": "W0.2",
+      "notes": "Usage | ArmadaClient method only; no TUI usage screen yet: reviewed exception in docs/captain-usage-plan/DASHBOARD_PARITY.md"
     },
     {
       "kind": "api",
