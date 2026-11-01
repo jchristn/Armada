@@ -63,6 +63,7 @@ namespace Armada.Harbor
         private LocalHostCommandExecutor? _Executor = null;
         private Armada.Runtimes.LocalHarborJobRunner? _JobRunner = null;
         private HarborDockManager? _DockManager = null;
+        private Armada.Runtimes.UsageProbeHostRunner? _UsageProbeRunner = null;
 
         #endregion
 
@@ -103,6 +104,17 @@ namespace Armada.Harbor
             if (_JobRunner == null || _Executor == null || _DockManager == null)
             {
                 _Executor = new LocalHostCommandExecutor();
+
+                // The host-side usage helper is built once and kept for the host's lifetime, so the account
+                // identity it derives (the persisted host identity and key under the Harbor's settings
+                // directory, named by this Harbor's id) survives reconnects: rebuilding it per session would
+                // give every session a different account. Supplied to the link client, it is what advertises
+                // the usage-probe capability and runs the probes on this, the credential host.
+                Armada.Core.Services.UsageAccountResolver usageAccounts = new Armada.Core.Services.UsageAccountResolver(
+                    HarborAppSettings.SettingsDirectory(), _Logging, _Settings.HarborId);
+                _UsageProbeRunner = new Armada.Runtimes.UsageProbeHostRunner(_Logging, usageAccounts);
+                _Executor.UsageProbe = _UsageProbeRunner;
+
                 _JobRunner = new Armada.Runtimes.LocalHarborJobRunner(_Logging);
                 // Each job's output is also kept on this computer, so its log can be read here (Status > Logs) even when
                 // the Admiral is on another machine.
@@ -123,6 +135,7 @@ namespace Armada.Harbor
             LocalHostCommandExecutor executor = _Executor;
             Armada.Runtimes.LocalHarborJobRunner jobRunner = _JobRunner;
             HarborDockManager dockManager = _DockManager;
+            Armada.Runtimes.UsageProbeHostRunner usageProbeRunner = _UsageProbeRunner!;
 
             while (!token.IsCancellationRequested)
             {
@@ -140,7 +153,8 @@ namespace Armada.Harbor
                         _Settings.HeartbeatIntervalMs,
                         Log,
                         jobRunner,
-                        dockManager);
+                        dockManager,
+                        usageProbe: usageProbeRunner);
                     client.StorageCollector = async storageToken =>
                     {
                         HarborDockSettings storageDocks = _Settings.BuildDockSettings();

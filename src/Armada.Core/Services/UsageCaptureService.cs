@@ -17,8 +17,11 @@ namespace Armada.Core.Services
     /// overall concurrency gates (separate from mission launch slots), the dedicated UsageProbe job each
     /// attempt owns, the dispatch through the host-command seam (Local executor on the Admiral's host,
     /// the remote executor over the link on a Harbor), and the commit of one sanitized snapshot with its
-    /// member links, memberships and latest state. A result is never applied after its lease expired or
-    /// its settings generation changed: the attempt reports the discard instead. Failures back off at
+    /// member links, memberships and latest state. A result is never applied after its lease expired (a
+    /// lease whose clock starts at dispatch, so waiting for a concurrency slot consumes it), after its
+    /// settings generation changed, after capture was disabled, or once its group has no member left to
+    /// attribute: the attempt reports the discard instead, and an invalidation cancels the probes it
+    /// orphaned. Failures back off at
     /// 2x the effective interval per consecutive failure up to the configured bound, with jitter applied,
     /// and honor a longer provider Retry-After; success resets the backoff; AuthMissing retries slowly;
     /// Unsupported retries only on a runtime, version or configuration change; a disconnected host is a
@@ -68,6 +71,8 @@ namespace Armada.Core.Services
         private readonly Func<double> _Jitter;
         private readonly CancellationToken _Lifetime;
         private long _Generation = 1;
+        private readonly object _ConfigurationLock = new object();
+        private CancellationTokenSource _ConfigurationCancellation = null!;
         private readonly ConcurrentDictionary<string, GroupState> _GroupStates = new ConcurrentDictionary<string, GroupState>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, InFlightAttempt> _InFlight = new ConcurrentDictionary<string, InFlightAttempt>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _StartLocks = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.Ordinal);
@@ -114,6 +119,7 @@ namespace Armada.Core.Services
             _Clock = clock ?? TimeProvider.System;
             _Jitter = jitter ?? DefaultJitter;
             _Lifetime = lifetime;
+            _ConfigurationCancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
             _OverallGate = new SemaphoreSlim(Math.Max(1, settings.UsageCapture.MaximumConcurrentProbes));
         }
 
@@ -123,15 +129,37 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Invalidate the scheduling generation and clear per-group backoff and eligibility: a settings or
-        /// configuration change cancels queued work (running attempts finish but their results are
-        /// discarded), and groups are recomputed by the next rebuild, with Unsupported sources eligible
-        /// again because the configuration changed.
+        /// configuration change cancels the work it still has in flight (running probes stop at their host
+        /// seam and their results are discarded rather than applied), and groups are recomputed by the next
+        /// rebuild, with Unsupported sources eligible again because the configuration changed.
         /// </summary>
         public void Invalidate()
         {
-            Interlocked.Increment(ref _Generation);
-            _GroupStates.Clear();
-            _Logging.Info(_Header + "settings generation invalidated to " + Generation + "; groups reschedule");
+            lock (_ConfigurationLock)
+            {
+                Interlocked.Increment(ref _Generation);
+                _GroupStates.Clear();
+                // Cancel the probes a configuration change orphaned, then arm the next generation's
+                // cancellation: a cancelled attempt reports its discard instead of a stale write.
+                _ConfigurationCancellation.Cancel();
+                _ConfigurationCancellation.Dispose();
+                _ConfigurationCancellation = CancellationTokenSource.CreateLinkedTokenSource(_Lifetime);
+            }
+
+            _Logging.Info(_Header + "settings generation invalidated to " + Generation + "; in-flight captures stop and groups reschedule");
+        }
+
+        /// <summary>
+        /// The cancellation token an attempt runs on: the process lifetime plus the current configuration
+        /// generation, so an invalidation stops the probes it orphaned.
+        /// </summary>
+        /// <returns>The attempt's cancellation token source, disposed by the attempt when it ends.</returns>
+        private CancellationTokenSource AttemptCancellation()
+        {
+            lock (_ConfigurationLock)
+            {
+                return CancellationTokenSource.CreateLinkedTokenSource(_Lifetime, _ConfigurationCancellation.Token);
+            }
         }
 
         /// <summary>
@@ -283,7 +311,8 @@ namespace Armada.Core.Services
                 InFlightAttempt attempt = new InFlightAttempt(job.Id, completionSource.Task);
                 _InFlight[group.GroupKey] = attempt;
 
-                _ = RunAttemptAsync(job, group, triggeringCaptainId, generation, attempt, completionSource);
+                CancellationTokenSource attemptCancellation = AttemptCancellation();
+                _ = RunAttemptAsync(job, group, triggeringCaptainId, generation, attempt, completionSource, attemptCancellation);
 
                 return new UsageCaptureAttempt
                 {
@@ -325,12 +354,12 @@ namespace Armada.Core.Services
 
         #region Private-Methods
 
-        private async Task RunAttemptAsync(Job job, UsageCaptureGroup group, string? triggeringCaptainId, long generation, InFlightAttempt flight, TaskCompletionSource<UsageCaptureAttemptResult> completion)
+        private async Task RunAttemptAsync(Job job, UsageCaptureGroup group, string? triggeringCaptainId, long generation, InFlightAttempt flight, TaskCompletionSource<UsageCaptureAttemptResult> completion, CancellationTokenSource attemptCancellation)
         {
             UsageCaptureAttemptResult result;
             try
             {
-                result = await RunAttemptCoreAsync(job, group, triggeringCaptainId, generation).ConfigureAwait(false);
+                result = await RunAttemptCoreAsync(job, group, triggeringCaptainId, generation, attemptCancellation.Token).ConfigureAwait(false);
             }
             catch (Exception e)
             {
@@ -339,37 +368,61 @@ namespace Armada.Core.Services
             }
             finally
             {
+                attemptCancellation.Dispose();
                 RemoveFlight(group.GroupKey, flight);
             }
 
             completion.TrySetResult(result);
         }
 
-        private async Task<UsageCaptureAttemptResult> RunAttemptCoreAsync(Job job, UsageCaptureGroup group, string? triggeringCaptainId, long generation)
+        private async Task<UsageCaptureAttemptResult> RunAttemptCoreAsync(Job job, UsageCaptureGroup group, string? triggeringCaptainId, long generation, CancellationToken attemptToken)
         {
             try
             {
+                // The lease clock starts at dispatch, before the concurrency gates: an attempt that waits
+                // for a free slot consumes its own lease, exactly the persisted lease another process or a
+                // restart would see.
+                DateTime dispatched = Now();
+                DateTime leaseDeadline = dispatched + LeaseWindow;
+
                 if (!await _Jobs.TryStartAsync(job, 10, _Lifetime).ConfigureAwait(false))
                     return new UsageCaptureAttemptResult { DiscardedReason = "JobNotStartable", ErrorCode = "JobNotStartable" };
 
-                await _OverallGate.WaitAsync(_Lifetime).ConfigureAwait(false);
+                await _OverallGate.WaitAsync(attemptToken).ConfigureAwait(false);
                 SemaphoreSlim hostGate = HostGate(group.HostId);
-                await hostGate.WaitAsync(_Lifetime).ConfigureAwait(false);
+                await hostGate.WaitAsync(attemptToken).ConfigureAwait(false);
                 try
                 {
-                    DateTime started = Now();
-                    UsageProbeResult probe = await CaptureThroughHostAsync(job, group, _Lifetime).ConfigureAwait(false);
+                    // Before the credential host is touched at all: an attempt whose lease expired while it
+                    // waited for a free slot never runs the probe it can no longer answer for.
+                    if (Now() > leaseDeadline)
+                        return await DiscardAsync(job, "LeaseExpired",
+                            UsageProbeResult.Failed("LeaseExpired", "the capture attempt's lease expired before it reached the credential host"),
+                            attemptToken).ConfigureAwait(false);
+
+                    UsageProbeResult probe = await CaptureThroughHostAsync(job, group, attemptToken).ConfigureAwait(false);
                     DateTime finished = Now();
 
                     if (generation != Generation)
-                        return await DiscardAsync(job, "SettingsGenerationChanged", probe, _Lifetime).ConfigureAwait(false);
+                        return await DiscardAsync(job, "SettingsGenerationChanged", probe, attemptToken).ConfigureAwait(false);
+
+                    // A capture that is disabled while its probe was held is a stale write too: the
+                    // operator asked for the account not to be read, and the answer is never applied.
+                    if (!_Settings.UsageCapture.Enabled)
+                        return await DiscardAsync(job, "CaptureDisabled", probe, attemptToken).ConfigureAwait(false);
 
                     // No result may be applied after its lease expired: a slow attempt whose window passed
                     // reports the discard instead of overwriting the replacement attempt's state.
-                    if (finished > started + LeaseWindow)
-                        return await DiscardAsync(job, "LeaseExpired", probe, _Lifetime).ConfigureAwait(false);
+                    if (finished > leaseDeadline)
+                        return await DiscardAsync(job, "LeaseExpired", probe, attemptToken).ConfigureAwait(false);
 
-                    UsageSnapshot snapshot = await CommitAsync(group, probe, triggeringCaptainId, finished, _Lifetime).ConfigureAwait(false);
+                    // A member that verifiably stopped capturing (or moved to another group) while the probe
+                    // ran is not attributed: only the members still in this configuration are written.
+                    List<string> members = await EffectiveMembersAsync(group, attemptToken).ConfigureAwait(false);
+                    if (members.Count == 0)
+                        return await DiscardAsync(job, "NoMembers", probe, attemptToken).ConfigureAwait(false);
+
+                    UsageSnapshot snapshot = await CommitAsync(group, members, probe, triggeringCaptainId, finished, attemptToken).ConfigureAwait(false);
                     DateTime? next = ScheduleNext(group, probe, finished);
 
                     bool healthy = probe.Status == UsageSnapshotStatusEnum.Ok
@@ -381,11 +434,11 @@ namespace Armada.Core.Services
                         healthy ? JobStatusEnum.Succeeded : JobStatusEnum.Failed,
                         healthy ? SnapshotResultJson(snapshot) : null,
                         healthy ? null : (probe.ErrorCode ?? "CaptureFailed"),
-                        _Lifetime).ConfigureAwait(false);
+                        attemptToken).ConfigureAwait(false);
 
                     _Logging.Info(_Header + "capture of group " + group.GroupKey + " answered " + probe.Status
                         + (probe.ErrorCode == null ? String.Empty : " (" + probe.ErrorCode + ")")
-                        + " in " + (long)(finished - started).TotalMilliseconds + " ms; snapshot " + snapshot.Id);
+                        + " in " + (long)(finished - dispatched).TotalMilliseconds + " ms; snapshot " + snapshot.Id);
 
                     return new UsageCaptureAttemptResult
                     {
@@ -411,7 +464,20 @@ namespace Armada.Core.Services
                     : UsageProbeResult.Failed("CaptureAttemptFailed", SecretRedactor.Redact(e.Message));
                 try
                 {
-                    UsageSnapshot snapshot = await CommitAsync(group, failure, triggeringCaptainId, Now(), CancellationToken.None).ConfigureAwait(false);
+                    // The stale-write guards apply to a failure result too: a configuration change or a
+                    // disabled switch means this attempt's answer belongs to a configuration that no longer
+                    // exists, and it is never persisted.
+                    if (generation != Generation || !_Settings.UsageCapture.Enabled)
+                    {
+                        _ = await _Jobs.TryFinishAsync(job.Id, JobStatusEnum.Failed, null, "SettingsGenerationChanged", CancellationToken.None).ConfigureAwait(false);
+                        return new UsageCaptureAttemptResult { Status = failure.Status, ErrorCode = failure.ErrorCode, DiscardedReason = "SettingsGenerationChanged" };
+                    }
+
+                    List<string> members = await EffectiveMembersAsync(group, CancellationToken.None).ConfigureAwait(false);
+                    if (members.Count == 0)
+                        return await DiscardAsync(job, "NoMembers", failure, CancellationToken.None).ConfigureAwait(false);
+
+                    UsageSnapshot snapshot = await CommitAsync(group, members, failure, triggeringCaptainId, Now(), CancellationToken.None).ConfigureAwait(false);
                     ScheduleNext(group, failure, Now());
                     _ = await _Jobs.TryFinishAsync(job.Id, JobStatusEnum.Failed, null, failure.ErrorCode, CancellationToken.None).ConfigureAwait(false);
                     return new UsageCaptureAttemptResult { Snapshot = snapshot, Persisted = true, Status = failure.Status, ErrorCode = failure.ErrorCode };
@@ -519,7 +585,7 @@ namespace Armada.Core.Services
             return UsageProbeResult.Deserialize(result.StandardOutput, result.ExitCode == 0 ? "MalformedOutput" : "ProbeFailed");
         }
 
-        private async Task<UsageSnapshot> CommitAsync(UsageCaptureGroup group, UsageProbeResult probe, string? triggeringCaptainId, DateTime receivedUtc, CancellationToken token)
+        private async Task<UsageSnapshot> CommitAsync(UsageCaptureGroup group, List<string> memberCaptainIds, UsageProbeResult probe, string? triggeringCaptainId, DateTime receivedUtc, CancellationToken token)
         {
             UsageSnapshot snapshot = new UsageSnapshot
             {
@@ -539,19 +605,99 @@ namespace Armada.Core.Services
                 ErrorCode = probe.ErrorCode
             };
 
-            snapshot = await _Database.UsageSnapshots.CreateAsync(snapshot, group.MemberCaptainIds, token).ConfigureAwait(false);
+            snapshot = await _Database.UsageSnapshots.CreateAsync(snapshot, memberCaptainIds, token).ConfigureAwait(false);
 
-            await ReconcileMembershipsAsync(group, probe, receivedUtc, token).ConfigureAwait(false);
+            await ReconcileMembershipsAsync(group, memberCaptainIds, probe, receivedUtc, token).ConfigureAwait(false);
             await UpsertLatestStateAsync(group, snapshot, token).ConfigureAwait(false);
             return snapshot;
         }
 
-        private async Task ReconcileMembershipsAsync(UsageCaptureGroup group, UsageProbeResult probe, DateTime observedUtc, CancellationToken token)
+        /// <summary>
+        /// The members a commit may still attribute: those whose captain row is still capturing and still
+        /// resolves into this group's configuration. A member that verifiably stopped capturing (or moved)
+        /// while the probe ran is dropped, so its result is never a stale write against the captain; a
+        /// member whose row cannot be read is kept, because there is nothing to reconcile against.
+        /// </summary>
+        /// <param name="group">Group the attempt ran for.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The members still eligible for attribution.</returns>
+        private async Task<List<string>> EffectiveMembersAsync(UsageCaptureGroup group, CancellationToken token)
+        {
+            List<string> effective = new List<string>();
+            foreach (string captainId in group.MemberCaptainIds)
+            {
+                if (String.IsNullOrWhiteSpace(captainId)) continue;
+
+                Captain? captain;
+                try
+                {
+                    captain = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+                }
+                catch (Exception e)
+                {
+                    _Logging.Warn(_Header + "could not re-read member captain " + captainId + "; it is kept as a member: " + e.Message);
+                    effective.Add(captainId);
+                    continue;
+                }
+
+                if (captain == null)
+                {
+                    effective.Add(captainId);
+                    continue;
+                }
+
+                if (!captain.UsageCaptureActive)
+                {
+                    _Logging.Debug(_Header + "captain " + captainId + " stopped capturing while its group's probe ran; its result is not attributed");
+                    continue;
+                }
+
+                if (!await StillInGroupAsync(captain, group, token).ConfigureAwait(false))
+                {
+                    _Logging.Debug(_Header + "captain " + captainId + " moved out of group " + group.GroupKey + " while its probe ran; its result is not attributed");
+                    continue;
+                }
+
+                effective.Add(captainId);
+            }
+
+            return effective;
+        }
+
+        /// <summary>
+        /// Whether a captain still resolves into the group an attempt ran for. A verification that cannot
+        /// be made answers true, so an unrelated failure never silently drops a member's attribution.
+        /// </summary>
+        /// <param name="captain">Captain to verify.</param>
+        /// <param name="group">Group the attempt ran for.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True while the captain belongs to the group.</returns>
+        private async Task<bool> StillInGroupAsync(Captain captain, UsageCaptureGroup group, CancellationToken token)
+        {
+            try
+            {
+                UsageProbeHost? host = await _Accounts.TryResolveHostAsync(_Database, _Harbors, captain, _Settings, token).ConfigureAwait(false);
+                if (host == null) return false;
+
+                string? fingerprint = captain.UsageCaptureMode == UsageCaptureModeEnum.Custom
+                    ? UsageAccountResolver.CommandFingerprint(captain.UsageCaptureCommand)
+                    : null;
+                string key = UsageAccountResolver.GroupKey(captain.TenantId ?? String.Empty, host.HostId, captain.Runtime, fingerprint);
+                return String.Equals(key, group.GroupKey, StringComparison.Ordinal);
+            }
+            catch (Exception e)
+            {
+                _Logging.Warn(_Header + "could not verify the group of captain " + captain.Id + "; it is kept as a member: " + e.Message);
+                return true;
+            }
+        }
+
+        private async Task ReconcileMembershipsAsync(UsageCaptureGroup group, List<string> memberCaptainIds, UsageProbeResult probe, DateTime observedUtc, CancellationToken token)
         {
             // A missing identity never merges unrelated captains into an unknown group.
             if (String.IsNullOrWhiteSpace(probe.AccountKey)) return;
 
-            foreach (string captainId in group.MemberCaptainIds)
+            foreach (string captainId in memberCaptainIds)
             {
                 if (String.IsNullOrWhiteSpace(captainId)) continue;
                 try
@@ -707,20 +853,31 @@ namespace Armada.Core.Services
 
         private async Task<Job?> FindActiveLeaseAsync(UsageCaptureGroup group, CancellationToken token)
         {
+            // The lease is this group's own active UsageProbe job, wherever the page ordering put it: newer
+            // unrelated jobs must never hide an unexpired lease behind the first page, so every page of the
+            // active probe jobs is traversed before an attempt is allowed to launch.
             string jobName = UsageAccountResolver.JobName(group.GroupKey);
-            JobQuery query = new JobQuery
-            {
-                Kind = JobKindEnum.UsageProbe,
-                Statuses = new List<JobStatusEnum> { JobStatusEnum.Queued, JobStatusEnum.Running },
-                PageSize = 200
-            };
-
-            EnumerationResult<Job> page = await _Database.Jobs.EnumeratePageAsync(query, token).ConfigureAwait(false);
             Job? latest = null;
-            foreach (Job job in page.Objects)
+            int pageNumber = 1;
+            while (true)
             {
-                if (!String.Equals(job.Name, jobName, StringComparison.Ordinal)) continue;
-                if (latest == null || job.LastUpdateUtc > latest.LastUpdateUtc) latest = job;
+                JobQuery query = new JobQuery
+                {
+                    Kind = JobKindEnum.UsageProbe,
+                    Statuses = new List<JobStatusEnum> { JobStatusEnum.Queued, JobStatusEnum.Running },
+                    PageNumber = pageNumber,
+                    PageSize = 200
+                };
+
+                EnumerationResult<Job> page = await _Database.Jobs.EnumeratePageAsync(query, token).ConfigureAwait(false);
+                foreach (Job job in page.Objects)
+                {
+                    if (!String.Equals(job.Name, jobName, StringComparison.Ordinal)) continue;
+                    if (latest == null || job.LastUpdateUtc > latest.LastUpdateUtc) latest = job;
+                }
+
+                if (page.Objects.Count == 0 || pageNumber >= page.TotalPages) break;
+                pageNumber++;
             }
 
             return latest;

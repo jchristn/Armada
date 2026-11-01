@@ -64,6 +64,7 @@ namespace Armada.Core.Services
         private List<string> _Unresolved = new List<string>();
         private List<KeyValuePair<string, string>> _ActiveCaptains = new List<KeyValuePair<string, string>>();
         private bool _Rebuilt = false;
+        private bool _CaptureEnabledLastTick = true;
 
         #endregion
 
@@ -102,7 +103,10 @@ namespace Armada.Core.Services
         /// Rebuild the capture groups from the enabled captains, closing the account memberships of
         /// captains that stopped capturing, and give groups seen for the first time (this run, or after
         /// an invalidation cleared their state) their randomized initial due time. Existing groups keep
-        /// their schedule, including a lease a previous process still holds.
+        /// their schedule, including a lease a previous process still holds. A rebuild that observes a
+        /// configuration change (a captain stopped capturing, a group disappeared, a group's configuration
+        /// revision changed or it lost a member) invalidates the capture service first, so the probes the
+        /// change orphaned are cancelled and their results are never applied.
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         public async Task RebuildAsync(CancellationToken token = default)
@@ -170,6 +174,7 @@ namespace Armada.Core.Services
 
             // Close the memberships of captains that stopped capturing (disabled mode, or a moved
             // captain): a closed membership is attribution history, not a live group.
+            bool configurationChanged = false;
             foreach (KeyValuePair<string, string> previously in _ActiveCaptains)
             {
                 bool stillActive = false;
@@ -182,7 +187,42 @@ namespace Armada.Core.Services
                     }
                 }
 
-                if (!stillActive) await _Capture.CloseMembershipsAsync(previously.Key, previously.Value, token).ConfigureAwait(false);
+                if (!stillActive)
+                {
+                    configurationChanged = true;
+                    await _Capture.CloseMembershipsAsync(previously.Key, previously.Value, token).ConfigureAwait(false);
+                }
+            }
+
+            // A group whose configuration revision changed, that lost a member or that disappeared
+            // entirely is a configuration change too: its in-flight work belongs to the old configuration.
+            foreach (UsageCaptureGroup previous in Groups())
+            {
+                if (!groups.TryGetValue(previous.GroupKey, out UsageCaptureGroup? rebuilt))
+                {
+                    configurationChanged = true;
+                    continue;
+                }
+
+                if (!String.Equals(rebuilt.ConfigurationRevision, previous.ConfigurationRevision, StringComparison.Ordinal))
+                {
+                    configurationChanged = true;
+                    continue;
+                }
+
+                foreach (string member in previous.MemberCaptainIds)
+                {
+                    if (rebuilt.MemberCaptainIds.Contains(member)) continue;
+                    configurationChanged = true;
+                    break;
+                }
+            }
+
+            if (configurationChanged)
+            {
+                // Cancels the orphaned probes, bumps the settings generation and clears the schedule, so a
+                // late result is discarded by the commit path as well as stopped at the host seam.
+                _Capture.Invalidate();
             }
 
             lock (_GroupsLock)
@@ -204,15 +244,31 @@ namespace Armada.Core.Services
         /// <summary>
         /// One scheduling tick: rebuild the groups (so configuration changes apply immediately) and start
         /// an attempt for every group whose next eligible time has passed. Already-running groups are
-        /// joined rather than duplicated, and a group whose lease is held waits for it. The returned
-        /// receipts never wait for the attempts themselves.
+        /// joined rather than duplicated, and a group whose lease is held waits for it. A tick that
+        /// observes capture newly disabled cancels the work it still has in flight, so a late result is
+        /// never applied. The returned receipts never wait for the attempts themselves.
         /// </summary>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The receipts of the attempts this tick started or joined.</returns>
         public async Task<List<UsageCaptureAttempt>> TickAsync(CancellationToken token = default)
         {
             List<UsageCaptureAttempt> receipts = new List<UsageCaptureAttempt>();
-            if (!_Settings.UsageCapture.Enabled) return receipts;
+            if (!_Settings.UsageCapture.Enabled)
+            {
+                // The switch that just turned off invalidates the capture it still has in flight: the
+                // running probes stop and their results are discarded instead of being applied to an
+                // account the operator asked not to read.
+                if (_CaptureEnabledLastTick)
+                {
+                    _CaptureEnabledLastTick = false;
+                    _Capture.Invalidate();
+                    _Logging.Info(_Header + "capture is disabled; in-flight captures stop and their results are discarded");
+                }
+
+                return receipts;
+            }
+
+            _CaptureEnabledLastTick = true;
 
             await RebuildAsync(token).ConfigureAwait(false);
 

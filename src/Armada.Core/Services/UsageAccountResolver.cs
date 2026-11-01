@@ -23,7 +23,8 @@ namespace Armada.Core.Services
     /// executable identities never share results just because they return the same account key. It also
     /// resolves the credential host a captain's capture runs on: the Harbor that hosts the captain's
     /// dock when there is one, otherwise (a deployment with no Harbor links at all) the Admiral's own
-    /// host. No host resolution is Failed/HostUnavailable, never a fallback to the Admiral's credentials.
+    /// the Admiral's host. No host resolution is Failed/HostUnavailable, never a fallback to the
+    /// Admiral's credentials.
     /// </summary>
     public class UsageAccountResolver
     {
@@ -127,8 +128,9 @@ namespace Armada.Core.Services
         /// configuration derived from the captain: the Harbor hosting the captain's current dock, or, in a
         /// deployment with no Harbor links at all, the Admiral's own host. A captain whose dock is on a
         /// Harbor is probed on that Harbor even while it is disconnected (HostUnavailable, never a
-        /// fallback to the Admiral's credentials); a captain with no dock in a Harbor deployment has no
-        /// resolved host either.
+        /// fallback to the Admiral's credentials); a captain with no dock in a deployment that has any
+        /// Harbor link has no resolved host either, whether or not a Harbor is connected right now: the
+        /// number of live connections says nothing about which host holds the credentials.
         /// </summary>
         /// <param name="database">Database, to read the captain's current dock.</param>
         /// <param name="harbors">Harbor connections, or null when Harbor delegation is not available.</param>
@@ -181,9 +183,12 @@ namespace Armada.Core.Services
                 // that shares the Admiral's filesystem), so this host holds the credentials.
                 hostId = _HostId;
             }
-            else if (harbors != null && harbors.HasConnectedHarbors())
+            else if (await HasHarborLinksAsync(database, harbors, token).ConfigureAwait(false))
             {
-                // A split deployment: a captain without a dock has no resolved credential host.
+                // A split deployment: any Harbor has ever linked, so a captain without a dock has no
+                // resolved credential host. This does not depend on which Harbors are connected right now:
+                // a live connection count is not credential ownership, and a disconnected Harbor is still
+                // the host that holds this deployment's credentials.
                 _Logging?.Warn(_Header + "captain " + captain.Id + " has no dock to resolve a credential host");
                 return null;
             }
@@ -206,6 +211,31 @@ namespace Armada.Core.Services
                 ConfigurationRevision = ConfigurationRevision(hostId, captain.Runtime, commandFingerprint),
                 DispatchedUtc = DateTime.UtcNow
             };
+        }
+
+        /// <summary>
+        /// Whether this deployment has Harbor links at all (any Harbor has ever registered), which is what
+        /// makes it a split deployment. Deliberately independent of the live connection state: whether a
+        /// Harbor is connected right now says nothing about which host holds the credentials, and a
+        /// deployment that cannot be proved standalone never borrows the Admiral's credentials.
+        /// </summary>
+        /// <param name="database">Database, to look for registered Harbors.</param>
+        /// <param name="harbors">Harbor connections, or null when Harbor delegation is not available on this Admiral.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when a Harbor has registered.</returns>
+        private static async Task<bool> HasHarborLinksAsync(DatabaseDriver database, HarborConnectionManager? harbors, CancellationToken token)
+        {
+            if (harbors == null) return false;
+            try
+            {
+                return await database.Harbors.ExistsAnyAsync(token).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // A deployment that cannot be proved standalone is treated as split: the safe answer keeps
+                // an unresolvable captain unreported rather than capturing it on the Admiral's credentials.
+                return true;
+            }
         }
 
         /// <summary>

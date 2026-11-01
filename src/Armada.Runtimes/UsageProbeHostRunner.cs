@@ -20,9 +20,11 @@ namespace Armada.Runtimes
     /// only. It never sends a model prompt: Auto mode runs only registered read-only runtime probes
     /// (none ship in this build, so Auto answers Unsupported with a stable reason until the runtime
     /// adapters land), and Custom mode runs the administrator-chosen executable contract: a configured
-    /// executable plus argument list with no shell interpolation, a bounded output reader, a host
-    /// execution deadline with process-tree termination on expiry or cancellation, and the documented
-    /// single JSON object output contract. The host owns the final account HMAC and the allowed
+    /// executable plus argument list with no shell interpolation, a bounded output reader that refuses an
+    /// answer past its cap instead of parsing a truncated prefix, a host execution deadline with
+    /// process-tree termination on expiry or cancellation, and the documented single JSON object output
+    /// contract (an observation time outside the accepted bounds is refused, never replaced with a fresh
+    /// one). The host owns the final account HMAC and the allowed
     /// status/source regardless of what the executable claims, and every diagnostic is redacted and
     /// byte-capped before it is returned.
     /// </summary>
@@ -140,6 +142,7 @@ namespace Armada.Runtimes
             StringBuilder standardOutput = new StringBuilder();
             StringBuilder standardError = new StringBuilder();
             bool timedOut = false;
+            int stdoutBytes = 0;
 
             using (CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
@@ -169,8 +172,8 @@ namespace Armada.Runtimes
                         return UsageProbeResult.Failed("CommandStartFailed", SecretRedactor.Redact("the configured executable could not start: " + e.Message));
                     }
 
-                    Task outputPump = PumpAsync(process.StandardOutput, standardOutput, _MaximumStdoutBytes);
-                    Task errorPump = PumpAsync(process.StandardError, standardError, _MaximumStderrBytes);
+                    Task<int> outputPump = PumpAsync(process.StandardOutput, standardOutput, _MaximumStdoutBytes);
+                    Task<int> errorPump = PumpAsync(process.StandardError, standardError, _MaximumStderrBytes);
 
                     try
                     {
@@ -185,7 +188,7 @@ namespace Armada.Runtimes
                     {
                         // Cleanup always runs: a killed process's pipes reach end of stream, and the bounded
                         // readers stop at their caps regardless.
-                        await DrainAsync(outputPump, errorPump).ConfigureAwait(false);
+                        stdoutBytes = await DrainAsync(outputPump, errorPump).ConfigureAwait(false);
                     }
 
                     if (token.IsCancellationRequested)
@@ -196,6 +199,12 @@ namespace Armada.Runtimes
 
                     if (process.ExitCode != 0)
                         return UsageProbeResult.Failed("CommandFailed", SanitizeExcerpt(standardError.ToString()));
+
+                    // The whole answer is measured, never just its stored prefix: output past the accepted size
+                    // is refused rather than parsed as a truncated document, and an answer whose size cannot be
+                    // established in time is refused for the same reason.
+                    if (stdoutBytes < 0 || stdoutBytes > _MaximumStdoutBytes)
+                        return UsageProbeResult.Failed("MalformedOutput", "the configured command wrote more than the accepted " + _MaximumStdoutBytes + " bytes of output");
 
                     return ParseCustomOutput(host, standardOutput.ToString());
                 }
@@ -243,6 +252,13 @@ namespace Armada.Runtimes
                 return UsageProbeResult.Failed("MalformedOutput", "the configured command reported " + output.Windows.Count + " windows; at most " + _MaximumWindows + " are accepted");
 
             DateTime nowUtc = host.DispatchedUtc == default ? DateTime.UtcNow : host.DispatchedUtc;
+
+            // The observation time is validated, never replaced: a result dated outside the accepted skew
+            // or age would manufacture freshness (a capture that never happened when it claims it did).
+            DateTime capturedUtc = output.CapturedUtc == default ? nowUtc : output.CapturedUtc;
+            if (capturedUtc > nowUtc + _MaximumCapturedSkew || capturedUtc < nowUtc - _MaximumCapturedAge)
+                return UsageProbeResult.Failed("MalformedOutput", "the configured command reported an observation time outside the accepted bounds");
+
             foreach (UsageWindow window in output.Windows)
             {
                 if (window == null) continue;
@@ -256,8 +272,7 @@ namespace Armada.Runtimes
                     return UsageProbeResult.Failed("MalformedOutput", "a reported window limit is not positive");
                 if (window.ResetsUtc.HasValue)
                 {
-                    DateTime origin = output.CapturedUtc == default ? nowUtc : output.CapturedUtc;
-                    if (window.ResetsUtc.Value < origin - _MaximumCapturedAge || window.ResetsUtc.Value > origin + TimeSpan.FromDays(8))
+                    if (window.ResetsUtc.Value < capturedUtc - _MaximumCapturedAge || window.ResetsUtc.Value > capturedUtc + TimeSpan.FromDays(8))
                         return UsageProbeResult.Failed("MalformedOutput", "a reported reset time is beyond the accepted skew");
                 }
             }
@@ -266,10 +281,6 @@ namespace Armada.Runtimes
             // provider-issued account identity, which never leaves this host unhashed.
             UsageAccountResolver accounts = ResolveAccounts();
             string? accountKey = accounts.DeriveAccountKey(host.TenantId, host.Runtime, output.AccountKey, null);
-
-            DateTime capturedUtc = output.CapturedUtc == default ? nowUtc : output.CapturedUtc;
-            if (capturedUtc > nowUtc + _MaximumCapturedSkew || capturedUtc < nowUtc - _MaximumCapturedAge)
-                capturedUtc = nowUtc;
 
             return new UsageProbeResult
             {
@@ -313,9 +324,10 @@ namespace Armada.Runtimes
             return Encoding.UTF8.GetString(bytes, 0, _MaximumStderrBytes);
         }
 
-        private static async Task PumpAsync(StreamReader reader, StringBuilder sink, int maximumBytes)
+        private static async Task<int> PumpAsync(StreamReader reader, StringBuilder sink, int maximumBytes)
         {
             char[] buffer = new char[4096];
+            int total = 0;
             try
             {
                 int written = 0;
@@ -323,9 +335,12 @@ namespace Armada.Runtimes
                 {
                     int read = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
                     if (read <= 0) break;
-                    if (written >= maximumBytes) continue; // keep draining the pipe without storing more
                     string chunk = new string(buffer, 0, read);
                     int chunkBytes = Encoding.UTF8.GetByteCount(chunk);
+                    // The pipe is drained to its end whatever happens, and every byte is counted: an answer
+                    // that exceeds the cap is refused by the caller, never guessed at from a prefix.
+                    total += chunkBytes;
+                    if (written >= maximumBytes) continue;
                     if (written + chunkBytes > maximumBytes) continue; // a chunk that would cross the cap is dropped, never split mid-character
                     lock (sink) sink.Append(chunk);
                     written += chunkBytes;
@@ -337,9 +352,10 @@ namespace Armada.Runtimes
             catch (IOException)
             {
             }
+            return total;
         }
 
-        private static async Task DrainAsync(Task outputPump, Task errorPump)
+        private static async Task<int> DrainAsync(Task<int> outputPump, Task<int> errorPump)
         {
             try
             {
@@ -347,7 +363,15 @@ namespace Armada.Runtimes
             }
             catch (TimeoutException)
             {
+                return -1;
             }
+            catch (Exception)
+            {
+                // The pumps are best effort; the caller refuses an answer whose size is not established.
+                return -1;
+            }
+
+            return outputPump.Status == TaskStatus.RanToCompletion ? outputPump.Result : -1;
         }
 
         private static void KillTree(Process process)

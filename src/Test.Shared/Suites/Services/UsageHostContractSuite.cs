@@ -468,6 +468,31 @@ namespace Test.Shared.Suites.Services
                 return Task.CompletedTask;
             }));
 
+            cases.Add(CaseAsync("production_harbor_supplies_the_usage_probe_helper", "The production Harbor link composes a persistent usage helper and hands it to its link client", TestTags.Positive, () =>
+            {
+                string source = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "src", "Armada.Harbor", "HarborLinkHost.cs"));
+
+                // The helper is composed once for the host's lifetime, from the Harbor's own persisted identity
+                // (the settings directory and this Harbor's id), before the session loop: rebuilding it per
+                // session would give every session a different account, and omitting it would stop an
+                // upgraded Harbor from advertising or executing usage probes at all.
+                int setup = source.IndexOf("if (_JobRunner == null", StringComparison.Ordinal);
+                int sessionLoop = source.IndexOf("while (!token.IsCancellationRequested)", StringComparison.Ordinal);
+                int helper = source.IndexOf("new Armada.Runtimes.UsageProbeHostRunner(", StringComparison.Ordinal);
+                AssertTrue(setup >= 0, "the link host has a once-only setup block");
+                AssertTrue(sessionLoop > setup, "the session loop follows the setup block");
+                AssertTrue(helper > setup && helper < sessionLoop, "the usage helper is composed once, before the session loop");
+
+                AssertEqual(1, CountOccurrences(source, "new Armada.Runtimes.UsageProbeHostRunner("), "the helper is composed once, never per session");
+                AssertTrue(source.Contains("new Armada.Core.Services.UsageAccountResolver(", StringComparison.Ordinal), "the helper is built with an account resolver");
+                AssertTrue(source.Contains("HarborAppSettings.SettingsDirectory()", StringComparison.Ordinal), "the resolver persists the Harbor's host identity in its settings directory");
+                AssertTrue(source.Contains("_Settings.HarborId", StringComparison.Ordinal), "the resolver names this Harbor as its host identity");
+                AssertTrue(source.Contains("_Executor.UsageProbe = _UsageProbeRunner;", StringComparison.Ordinal), "the local host-command seam carries the helper too");
+                AssertTrue(source.Contains("usageProbe: usageProbeRunner", StringComparison.Ordinal), "the link client is constructed with the helper, which advertises the capability and runs the probes");
+
+                return Task.CompletedTask;
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Usage Capture Host Contract",
@@ -515,6 +540,22 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+        /// <summary>
+        /// How many times a needle occurs in a source file, for once-only construction contracts.
+        /// </summary>
+        private static int CountOccurrences(string haystack, string needle)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = haystack.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += needle.Length;
+            }
+
+            return count;
         }
 
         #endregion

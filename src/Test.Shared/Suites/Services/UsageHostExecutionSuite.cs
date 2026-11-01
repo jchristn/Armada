@@ -61,14 +61,20 @@ namespace Test.Shared.Suites.Services
                     HostId = "host-exec-1",
                     Runtime = AgentRuntimeEnum.ClaudeCode,
                     Mode = UsageCaptureModeEnum.Custom,
-                    TimeoutSeconds = 10
+                    TimeoutSeconds = 10,
+                    DispatchedUtc = DateTime.UtcNow
                 };
+
+                // An observation time inside the accepted bounds (recent, with a reset inside its window):
+                // the runner validates a reported time instead of replacing an out-of-range one.
+                DateTime captured = WholeSeconds(DateTime.UtcNow.AddMinutes(-1));
+                DateTime resets = captured.AddMinutes(65);
                 host.CommandJson = CommandJson("/bin/echo", new string[]
                 {
                     "{\"schemaVersion\":1,\"status\":\"Ok\",\"accountKey\":\"acct-raw-7\",\"provider\":\"anthropic\","
-                    + "\"capturedUtc\":\"2026-10-27T13:00:00Z\",\"source\":\"Custom\",\"windows\":["
+                    + "\"capturedUtc\":\"" + IsoUtc(captured) + "\",\"source\":\"Custom\",\"windows\":["
                     + "{\"name\":\"five_hour\",\"usedPercent\":62,\"used\":62500,\"limit\":100000,\"unit\":\"percent\","
-                    + "\"windowMinutes\":300,\"resetsUtc\":\"2026-10-27T14:05:00Z\"}]}"
+                    + "\"windowMinutes\":300,\"resetsUtc\":\"" + IsoUtc(resets) + "\"}]}"
                 });
 
                 UsageProbeResult result = await runner.CaptureAsync(host).ConfigureAwait(false);
@@ -80,7 +86,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(62, result.Windows[0].UsedPercent, "the utilization round-trips");
                 AssertEqual(62500, result.Windows[0].Used, "the usage count round-trips");
                 AssertEqual(100000, result.Windows[0].Limit, "the limit round-trips");
-                AssertEqual(new DateTime(2026, 10, 27, 14, 5, 0, DateTimeKind.Utc), result.Windows[0].ResetsUtc, "the reset time round-trips");
+                AssertEqual(resets, result.Windows[0].ResetsUtc, "the reset time round-trips");
+                AssertEqual(captured, result.CapturedUtc, "an in-bounds observation time round-trips as reported");
                 AssertNull(result.ErrorCode, "a valid capture has no error code");
 
                 // The host owns the final account key: the raw provider identity is HMAC'd with the
@@ -406,7 +413,10 @@ namespace Test.Shared.Suites.Services
 
                 UsageCaptureGroup group = new UsageCaptureGroup
                 {
-                    GroupKey = "slots-group",
+                    // The group key matches what the scheduler derives for this captain (its credential host,
+                    // runtime and Auto mode), so the commit path can verify the member against it.
+                    GroupKey = UsageAccountResolver.GroupKey(TenantId, "host-slots", AgentRuntimeEnum.ClaudeCode, null),
+                    ConfigurationRevision = UsageAccountResolver.ConfigurationRevision("host-slots", AgentRuntimeEnum.ClaudeCode, null),
                     TenantId = TenantId,
                     HostId = "host-slots",
                     Runtime = AgentRuntimeEnum.ClaudeCode,
@@ -436,6 +446,74 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, after.RecoveryAttempts, "a capture never touches recovery");
             }));
 
+            cases.Add(CaseAsync("custom_probe_rejects_out_of_range_observation_times", "A reported observation time outside the accepted bounds is refused, never replaced with a fresh one", TestTags.Negative, async () =>
+            {
+                LoggingModule logging = CreateLogging();
+                UsageProbeHostRunner runner = new UsageProbeHostRunner(logging, new UsageAccountResolver("host-exec-ts", new string('e', 64)));
+
+                // A capture dated far in the future (or far in the past) must not become a fresh success by
+                // substituting the host's clock: the answer is refused with a stable code and no account key.
+                List<string> outOfRange = new List<string>
+                {
+                    "{\"schemaVersion\":1,\"status\":\"Ok\",\"accountKey\":\"acct-ts\",\"capturedUtc\":\"2099-01-01T00:00:00Z\"}",
+                    "{\"schemaVersion\":1,\"status\":\"Ok\",\"accountKey\":\"acct-ts\",\"capturedUtc\":\"2000-01-01T00:00:00Z\"}"
+                };
+
+                foreach (string payload in outOfRange)
+                {
+                    UsageProbeHost host = NewCustomHost("host-exec-ts", CommandJson("/bin/echo", new string[] { payload }));
+                    UsageProbeResult result = await runner.CaptureAsync(host).ConfigureAwait(false);
+                    AssertEqual(UsageSnapshotStatusEnum.Failed, result.Status, "an out-of-range observation time is a failed attempt: " + payload);
+                    AssertEqual("MalformedOutput", result.ErrorCode, "the refusal names the malformed output: " + payload);
+                    AssertNull(result.AccountKey, "a refused observation time never yields an account key");
+                    AssertTrue(result.CapturedUtc < new DateTime(2098, 1, 1, 0, 0, 0, DateTimeKind.Utc), "no manufactured timestamp is returned: " + payload);
+                }
+
+                // A missing observation time is filled with the dispatch time (nothing was claimed), and a
+                // recent one round-trips exactly as reported.
+                UsageProbeHost absent = NewCustomHost("host-exec-ts", CommandJson("/bin/echo", new string[]
+                {
+                    "{\"schemaVersion\":1,\"status\":\"Ok\",\"accountKey\":\"acct-ts\"}"
+                }));
+                absent.DispatchedUtc = WholeSeconds(DateTime.UtcNow.AddSeconds(-30));
+                UsageProbeResult filled = await runner.CaptureAsync(absent).ConfigureAwait(false);
+                AssertEqual(UsageSnapshotStatusEnum.Ok, filled.Status, "a capture without an observation time is accepted");
+                AssertEqual(absent.DispatchedUtc, filled.CapturedUtc, "the dispatch time fills an absent observation time");
+
+                DateTime recent = WholeSeconds(DateTime.UtcNow.AddMinutes(-2));
+                UsageProbeHost reported = NewCustomHost("host-exec-ts", CommandJson("/bin/echo", new string[]
+                {
+                    "{\"schemaVersion\":1,\"status\":\"Ok\",\"accountKey\":\"acct-ts\",\"capturedUtc\":\"" + IsoUtc(recent) + "\"}"
+                }));
+                UsageProbeResult kept = await runner.CaptureAsync(reported).ConfigureAwait(false);
+                AssertEqual(UsageSnapshotStatusEnum.Ok, kept.Status, "a recent observation time is accepted");
+                AssertEqual(recent, kept.CapturedUtc, "an in-bounds observation time is kept as reported");
+            }));
+
+            cases.Add(CaseAsync("custom_probe_refuses_oversized_output", "Output past the accepted size is refused instead of parsed as a truncated prefix", TestTags.Negative, async () =>
+            {
+                LoggingModule logging = CreateLogging();
+                UsageProbeHostRunner runner = new UsageProbeHostRunner(logging, new UsageAccountResolver("host-exec-size", new string('f', 64)));
+
+                // Valid JSON followed by enough whitespace to pass the 64 KiB output cap: the whole answer is
+                // measured, so this is refused rather than trimmed into an accepted document.
+                string payload = "{\"schemaVersion\":1,\"status\":\"Ok\",\"accountKey\":\"acct-size\"}";
+                string oversized = "printf '%s' '" + payload + "'; head -c 70000 /dev/zero | tr '\\0' ' '";
+                UsageProbeHost host = NewCustomHost("host-exec-size", CommandJson("/bin/sh", new string[] { "-c", oversized }));
+                UsageProbeResult result = await runner.CaptureAsync(host).ConfigureAwait(false);
+                AssertEqual(UsageSnapshotStatusEnum.Failed, result.Status, "output past the accepted size is a failed attempt");
+                AssertEqual("MalformedOutput", result.ErrorCode, "the refusal names the oversized output");
+                AssertNull(result.AccountKey, "an oversized answer never yields an account key");
+
+                // The cap is on the answer's size, not on trailing whitespace inside it: a document with a
+                // modest amount of padding stays a valid capture.
+                string padded = "printf '%s' '" + payload + "'; head -c 4096 /dev/zero | tr '\\0' ' '";
+                UsageProbeHost paddedHost = NewCustomHost("host-exec-size", CommandJson("/bin/sh", new string[] { "-c", padded }));
+                UsageProbeResult accepted = await runner.CaptureAsync(paddedHost).ConfigureAwait(false);
+                AssertEqual(UsageSnapshotStatusEnum.Ok, accepted.Status, "a padded answer inside the cap is accepted");
+                AssertNull(accepted.ErrorCode, "an answer inside the cap has no error code");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Usage Host Execution",
@@ -461,6 +539,24 @@ namespace Test.Shared.Suites.Services
         private static string CommandJson(string executable, string[] arguments)
         {
             return "{\"executable\":\"" + executable + "\",\"arguments\":" + System.Text.Json.JsonSerializer.Serialize(arguments) + "}";
+        }
+
+        /// <summary>
+        /// A UTC timestamp in the wire format the Custom contract reports (the runner validates it against
+        /// the accepted bounds, so fixtures must stay inside them).
+        /// </summary>
+        private static string IsoUtc(DateTime utc)
+        {
+            return utc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// A timestamp truncated to whole seconds, so a value sent through the wire format compares equal to
+        /// the value parsed back from it.
+        /// </summary>
+        private static DateTime WholeSeconds(DateTime utc)
+        {
+            return new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, utc.Minute, utc.Second, DateTimeKind.Utc);
         }
 
         private static string SplitCommandJson()

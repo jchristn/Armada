@@ -503,6 +503,281 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("scheduler_lease_lookup_traverses_pages_of_newer_jobs", "An unexpired lease behind newer active jobs is still found, so no second attempt starts", TestTags.Positive, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
+
+                UsageCaptureGroup group = new UsageCaptureGroup
+                {
+                    GroupKey = UsageAccountResolver.GroupKey(TenantId, fixture.Accounts.HostId, AgentRuntimeEnum.ClaudeCode, null),
+                    ConfigurationRevision = UsageAccountResolver.ConfigurationRevision(fixture.Accounts.HostId, AgentRuntimeEnum.ClaudeCode, null),
+                    TenantId = TenantId,
+                    HostId = fixture.Accounts.HostId,
+                    Runtime = AgentRuntimeEnum.ClaudeCode,
+                    Mode = UsageCaptureModeEnum.Auto,
+                    EffectiveIntervalSeconds = 300,
+                    MemberCaptainIds = new List<string> { "cpt_paged_lease" }
+                };
+
+                // A previous process holds this group's lease: an active UsageProbe job named for the group.
+                DateTime now = DateTime.UtcNow;
+                Job lease = new Job(UsageAccountResolver.JobName(group.GroupKey), JobKindEnum.UsageProbe)
+                {
+                    TenantId = TenantId,
+                    Status = JobStatusEnum.Running,
+                    CreatedUtc = now,
+                    LastUpdateUtc = now
+                };
+                lease = await fixture.Database.Jobs.CreateAsync(lease).ConfigureAwait(false);
+
+                // 201 newer active capture jobs (other groups' leases) sort ahead of it, so this group's
+                // lease is on the page after the first one.
+                for (int i = 0; i < 201; i++)
+                {
+                    Job newer = new Job(UsageAccountResolver.JobName(TenantId + "|host|ClaudeCode|fp-" + i), JobKindEnum.UsageProbe)
+                    {
+                        TenantId = TenantId,
+                        Status = i % 2 == 0 ? JobStatusEnum.Running : JobStatusEnum.Queued,
+                        CreatedUtc = now.AddSeconds(i + 1),
+                        LastUpdateUtc = now.AddSeconds(i + 1)
+                    };
+                    await fixture.Database.Jobs.CreateAsync(newer).ConfigureAwait(false);
+                }
+
+                // The held lease is reported, not replayed: no second attempt for the group may start.
+                UsageCaptureAttempt attempt = await fixture.Service.TryStartAsync(group, null).ConfigureAwait(false);
+                AssertFalse(attempt.Started, "an unexpired lease behind newer jobs still blocks a new attempt");
+                AssertTrue(attempt.JoinedExisting, "the attempt reports the existing lease");
+                AssertEqual("LeaseHeld", attempt.SkippedReason, "the refusal names the held lease");
+                AssertEqual(lease.Id, attempt.JobId, "the held lease is this group's own job");
+                AssertFalse(fixture.Service.IsInFlight(group.GroupKey), "no flight was started for the held lease");
+            }));
+
+            cases.Add(CaseAsync("scheduler_gate_wait_consumes_the_lease", "Waiting for a concurrency slot consumes the attempt's lease, before execution and before commit", TestTags.Negative, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
+                fixture.Settings.UsageCapture.MaximumConcurrentProbes = 1;
+                fixture.Settings.UsageCapture.MaximumConcurrentProbesPerHost = 1;
+
+                string hostId = fixture.Accounts.HostId;
+                UsageCaptureGroup first = new UsageCaptureGroup
+                {
+                    GroupKey = UsageAccountResolver.GroupKey(TenantId, hostId, AgentRuntimeEnum.ClaudeCode, null),
+                    ConfigurationRevision = UsageAccountResolver.ConfigurationRevision(hostId, AgentRuntimeEnum.ClaudeCode, null),
+                    TenantId = TenantId,
+                    HostId = hostId,
+                    Runtime = AgentRuntimeEnum.ClaudeCode,
+                    Mode = UsageCaptureModeEnum.Auto,
+                    EffectiveIntervalSeconds = 300,
+                    MemberCaptainIds = new List<string> { "cpt_wait_first" }
+                };
+                UsageCaptureGroup second = new UsageCaptureGroup
+                {
+                    GroupKey = UsageAccountResolver.GroupKey(TenantId, hostId, AgentRuntimeEnum.Codex, "fp-wait"),
+                    ConfigurationRevision = UsageAccountResolver.ConfigurationRevision(hostId, AgentRuntimeEnum.Codex, "fp-wait"),
+                    TenantId = TenantId,
+                    HostId = hostId,
+                    Runtime = AgentRuntimeEnum.Codex,
+                    Mode = UsageCaptureModeEnum.Custom,
+                    CommandJson = "{\"executable\":\"/opt/wait\",\"arguments\":[]}",
+                    CommandFingerprint = "fp-wait",
+                    EffectiveIntervalSeconds = 300,
+                    MemberCaptainIds = new List<string> { "cpt_wait_second" }
+                };
+
+                // The first attempt takes the single concurrency slot and holds the probe; the second one
+                // queues behind it, its lease clock already running.
+                fixture.Executor.Hold = true;
+                UsageCaptureAttempt running = await fixture.Service.TryStartAsync(first, null).ConfigureAwait(false);
+                AssertTrue(running.Started, "the first attempt starts and takes the only concurrency slot");
+                for (int i = 0; i < 100 && fixture.Executor.Calls < 1; i++) await Task.Delay(50).ConfigureAwait(false);
+                AssertEqual(1, fixture.Executor.Calls, "the first attempt reached the credential host");
+
+                UsageCaptureAttempt queued = await fixture.Service.TryStartAsync(second, null).ConfigureAwait(false);
+                AssertTrue(queued.Started, "the second attempt is accepted and waits for a slot");
+
+                // Both leases expire while the first probe is still held: the wait counts against them.
+                fixture.Clock.Advance(TimeSpan.FromSeconds(fixture.Service.LeaseWindow.TotalSeconds + 5));
+                fixture.Executor.Release();
+                fixture.Executor.Hold = false; // any probe that should not run answers immediately and is caught below
+
+                UsageCaptureAttemptResult runningResult = await AwaitAsync(running.Completion).ConfigureAwait(false);
+                AssertFalse(runningResult.Persisted, "a result past its lease is never applied");
+                AssertEqual("LeaseExpired", runningResult.DiscardedReason, "the held attempt's own lease expired while it ran");
+
+                UsageCaptureAttemptResult queuedResult = await AwaitAsync(queued.Completion).ConfigureAwait(false);
+                AssertFalse(queuedResult.Persisted, "an attempt whose lease expired while it queued commits nothing");
+                AssertEqual("LeaseExpired", queuedResult.DiscardedReason, "the wait for a slot consumed the queued attempt's lease");
+                AssertEqual("LeaseExpired", queuedResult.ErrorCode, "the discard names the lease expiry");
+                AssertEqual(1, fixture.Executor.Calls, "the queued attempt never reached the credential host");
+
+                foreach (string jobId in new string[] { running.JobId!, queued.JobId! })
+                {
+                    Job? job = await fixture.Database.Jobs.ReadAsync(jobId).ConfigureAwait(false);
+                    AssertNotNull(job, "the attempt's job row survives");
+                    AssertEqual(JobStatusEnum.Failed, job!.Status, "the expired attempt's job fails");
+                    AssertEqual("LeaseExpired", job.ErrorReason, "the job names the lease expiry");
+                }
+
+                UsageSnapshotQuery query = new UsageSnapshotQuery { TenantId = TenantId, PageSize = 10 };
+                EnumerationResult<UsageSnapshot> snapshots = await fixture.Database.UsageSnapshots.EnumerateAsync(query).ConfigureAwait(false);
+                AssertEqual(0, snapshots.Objects.Count, "no snapshot is committed for an expired lease");
+            }));
+
+            cases.Add(CaseAsync("scheduler_configuration_changes_cancel_and_reject_stale_writes", "A disabled switch and a disabled captain stop their in-flight captures and never persist a stale result", TestTags.Negative, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
+                Captain captain = await fixture.CreateCaptainAsync("switch", 300).ConfigureAwait(false);
+                UsageCaptureScheduler scheduler = fixture.CreateScheduler();
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+                UsageCaptureGroup group = scheduler.Groups()[0];
+
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(group.GroupKey) ?? fixture.Clock.Now());
+                fixture.Executor.Hold = true;
+                UsageCaptureAttempt attempt = await fixture.Service.TryStartAsync(group, captain.Id).ConfigureAwait(false);
+                AssertTrue(attempt.Started, "the attempt starts while capture is enabled");
+
+                // The operator disables capture while the probe is held: the answer is a stale write.
+                fixture.Settings.UsageCapture.Enabled = false;
+                fixture.Executor.Release();
+                UsageCaptureAttemptResult result = await AwaitAsync(attempt.Completion).ConfigureAwait(false);
+                AssertFalse(result.Persisted, "a result captured while capture was disabled is never applied");
+                AssertEqual("CaptureDisabled", result.DiscardedReason, "the discard names the disabled switch");
+                AssertNull(result.Snapshot, "no snapshot is returned for a discarded attempt");
+
+                Job? job = await fixture.Database.Jobs.ReadAsync(attempt.JobId!).ConfigureAwait(false);
+                AssertNotNull(job, "the discarded attempt's job row survives");
+                AssertEqual(JobStatusEnum.Failed, job!.Status, "the discarded attempt's job fails");
+                AssertEqual("CaptureDisabled", job.ErrorReason, "the job names the disabled switch");
+
+                UsageSnapshotQuery snapshots = new UsageSnapshotQuery { TenantId = TenantId, PageSize = 10 };
+                AssertEqual(0, (await fixture.Database.UsageSnapshots.EnumerateAsync(snapshots).ConfigureAwait(false)).Objects.Count, "no snapshot was committed while capture was disabled");
+
+                // A tick that observes the switch off cancels the work it still has in flight: the probe
+                // stops instead of running to its deadline, and the generation change discards its result.
+                fixture.Settings.UsageCapture.Enabled = true;
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(group.GroupKey) ?? fixture.Clock.Now());
+                fixture.Executor.Hold = true;
+                UsageCaptureAttempt held = await fixture.Service.TryStartAsync(group, captain.Id).ConfigureAwait(false);
+                AssertTrue(held.Started, "the second attempt starts while capture is enabled");
+                long generation = fixture.Service.Generation;
+
+                fixture.Settings.UsageCapture.Enabled = false;
+                List<UsageCaptureAttempt> ticked = await scheduler.TickAsync().ConfigureAwait(false);
+                AssertEqual(0, ticked.Count, "a disabled switch starts nothing");
+                AssertTrue(fixture.Service.Generation > generation, "the tick invalidates the generation when it observes capture disabled");
+
+                UsageCaptureAttemptResult cancelled = await AwaitAsync(held.Completion).ConfigureAwait(false);
+                AssertFalse(cancelled.Persisted, "the cancelled probe's result is never applied");
+                AssertEqual("SettingsGenerationChanged", cancelled.DiscardedReason, "the invalidation discards the in-flight result");
+                AssertEqual("ProbeCancelled", cancelled.ErrorCode, "the probe was cancelled rather than run to its deadline");
+                AssertFalse(fixture.Service.IsInFlight(group.GroupKey), "the flight is cleaned up");
+
+                Job? cancelledJob = await fixture.Database.Jobs.ReadAsync(held.JobId!).ConfigureAwait(false);
+                AssertNotNull(cancelledJob, "the cancelled attempt's job row survives");
+                AssertEqual(JobStatusEnum.Failed, cancelledJob!.Status, "the cancelled attempt's job fails");
+                AssertEqual("SettingsGenerationChanged", cancelledJob.ErrorReason, "the job names the configuration change");
+            }));
+
+            cases.Add(CaseAsync("scheduler_captain_disabled_mid_flight_is_not_attributed", "A captain that opts out mid-flight is not attributed the result; a group left with no member commits nothing", TestTags.Negative, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
+                Captain kept = await fixture.CreateCaptainAsync("kept", 300).ConfigureAwait(false);
+                Captain dropped = await fixture.CreateCaptainAsync("dropped", 300).ConfigureAwait(false);
+
+                UsageCaptureScheduler scheduler = fixture.CreateScheduler();
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+                UsageCaptureGroup group = scheduler.Groups()[0];
+                AssertEqual(2, group.MemberCaptainIds.Count, "both captains share the group");
+
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(group.GroupKey) ?? fixture.Clock.Now());
+                fixture.Executor.Hold = true;
+                UsageCaptureAttempt attempt = await fixture.Service.TryStartAsync(group, kept.Id).ConfigureAwait(false);
+
+                // The dropped captain opts out while the probe is held.
+                dropped.UsageCaptureEnabled = false;
+                await fixture.Database.Captains.UpdateAsync(dropped).ConfigureAwait(false);
+
+                fixture.Executor.Release();
+                UsageCaptureAttemptResult result = await AwaitAsync(attempt.Completion).ConfigureAwait(false);
+                AssertTrue(result.Persisted, "the still-capturing member's result is committed");
+                List<string> members = await fixture.Database.UsageSnapshots.ReadCaptainsAsync(result.Snapshot!.Id, TenantId).ConfigureAwait(false);
+                AssertEqual(1, members.Count, "only the still-capturing captain is linked to the snapshot");
+                AssertTrue(members.Contains(kept.Id), "the captain that still captures is linked");
+                AssertFalse(members.Contains(dropped.Id), "the captain that opted out mid-flight is not attributed");
+                List<UsageAccountMembership> droppedMemberships = await fixture.Database.UsageMemberships.ReadActiveAsync(TenantId, dropped.Id).ConfigureAwait(false);
+                AssertEqual(0, droppedMemberships.Count, "no membership is opened for a captain that opted out mid-flight");
+
+                // The opt-out is a configuration change: the rebuild invalidates and the group keeps one member.
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+                UsageCaptureGroup single = scheduler.Groups()[0];
+                AssertEqual(1, single.MemberCaptainIds.Count, "the rebuilt group keeps only the capturing captain");
+                AssertTrue(single.MemberCaptainIds.Contains(kept.Id), "the remaining member is the captain that still captures");
+
+                // A group whose only member opts out while its probe runs has nothing left to attribute.
+                fixture.Clock.Set(fixture.Service.NextEligibleUtc(single.GroupKey) ?? fixture.Clock.Now());
+                fixture.Executor.Hold = true;
+                UsageCaptureAttempt singleAttempt = await fixture.Service.TryStartAsync(single, kept.Id).ConfigureAwait(false);
+                AssertTrue(singleAttempt.Started, "the single-member attempt starts");
+
+                kept.UsageCaptureEnabled = false;
+                await fixture.Database.Captains.UpdateAsync(kept).ConfigureAwait(false);
+                fixture.Executor.Release();
+
+                UsageCaptureAttemptResult discarded = await AwaitAsync(singleAttempt.Completion).ConfigureAwait(false);
+                AssertFalse(discarded.Persisted, "a group with no member left commits nothing");
+                AssertEqual("NoMembers", discarded.DiscardedReason, "the discard names the empty group");
+
+                Job? noMembers = await fixture.Database.Jobs.ReadAsync(singleAttempt.JobId!).ConfigureAwait(false);
+                AssertNotNull(noMembers, "the discarded attempt's job row survives");
+                AssertEqual(JobStatusEnum.Failed, noMembers!.Status, "the discarded attempt's job fails");
+                AssertEqual("NoMembers", noMembers.ErrorReason, "the job names the empty group");
+
+                // The disabled attempt's result is never written: the earlier snapshot is still the last one.
+                UsageSnapshotQuery query = new UsageSnapshotQuery { TenantId = TenantId, PageSize = 10 };
+                EnumerationResult<UsageSnapshot> snapshots = await fixture.Database.UsageSnapshots.EnumerateAsync(query).ConfigureAwait(false);
+                AssertEqual(1, snapshots.Objects.Count, "only the attributed snapshot exists");
+            }));
+
+            cases.Add(CaseAsync("scheduler_dockless_captain_stays_unresolved_without_live_harbors", "A dockless captain stays unresolved while Harbors are disconnected, and only a Harbor-free deployment resolves locally", TestTags.Negative, async () =>
+            {
+                using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
+                LoggingModule logging = CreateLogging();
+                HarborConnectionManager manager = new HarborConnectionManager(new HarborService(fixture.Database, logging), logging, null);
+
+                Captain dockless = await fixture.CreateCaptainAsync("dockless", 300).ConfigureAwait(false);
+
+                InProcessHarbor harbor = await InProcessHarbor.ConnectAsync(
+                    manager, "hbr_disconnect", TenantId, null, new Armada.Runtimes.AgentRuntimeFactory(logging), new string[] { "git" }, logging).ConfigureAwait(false);
+                try
+                {
+                    UsageProbeHost? connected = await fixture.Accounts.TryResolveHostAsync(fixture.Database, manager, dockless, fixture.Settings).ConfigureAwait(false);
+                    AssertNull(connected, "a dockless captain in a split deployment resolves no host while a Harbor is connected");
+
+                    // The Harbor goes away. The number of live connections is not credential ownership: the
+                    // registered Harbor still makes this a split deployment, so the captain stays unresolved
+                    // instead of being captured on the Admiral's credentials.
+                    await manager.OnDisconnectedAsync("hbr_disconnect").ConfigureAwait(false);
+                    AssertFalse(manager.HasConnectedHarbors(), "no Harbor is connected");
+                    UsageProbeHost? offline = await fixture.Accounts.TryResolveHostAsync(fixture.Database, manager, dockless, fixture.Settings).ConfigureAwait(false);
+                    AssertNull(offline, "a disconnected Harbor does not make a dockless captain resolve to the Admiral host");
+                }
+                finally
+                {
+                    harbor.Dispose();
+                }
+
+                // A deployment with no Harbor registered at all is standalone: the Admiral's own host holds
+                // the credentials.
+                using TestDatabaseFixture standalone = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
+                Captain local = await standalone.CreateCaptainAsync("standalone", 300).ConfigureAwait(false);
+                HarborConnectionManager empty = new HarborConnectionManager(new HarborService(standalone.Database, logging), logging, null);
+                UsageProbeHost? resolved = await standalone.Accounts.TryResolveHostAsync(standalone.Database, empty, local, standalone.Settings).ConfigureAwait(false);
+                AssertNotNull(resolved, "a deployment with no Harbor at all resolves a credential host");
+                AssertEqual(standalone.Accounts.HostId, resolved!.HostId, "a standalone deployment's credential host is the Admiral's own");
+                AssertNull(resolved.HarborId, "no Harbor is named for a standalone deployment");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Usage Capture Scheduler",
@@ -711,10 +986,14 @@ namespace Test.Shared.Suites.Services
 
             public bool Hold { get; set; } = false;
 
+            /// <summary>How many probes reached the credential host through this stub.</summary>
+            public int Calls { get; private set; } = 0;
+
             private readonly SemaphoreSlim _Gate = new SemaphoreSlim(0);
 
             public Task<HostCommandResult> RunAsync(HostCommandRequest request, CancellationToken token = default)
             {
+                Calls++;
                 if (!Hold) return Task.FromResult(Reply(Result));
                 return HeldAsync(token);
             }
