@@ -72,6 +72,31 @@ with a visible 2 pixel accent outline. The narrow dark-theme rendering was also
 visually inspected. This was a built-CSS fixture, not a live authenticated server
 browser session. Full device end-to-end flows were not run.
 
+## Stage-check rework: relay shutdown
+
+The stage-check failure in
+`Services.RemoteDashboardRelayService.handle_async_web_socket_open_drops_proxy_session_subprotocol`
+exposed concurrent shutdown by service disposal and receive-loop cleanup. The
+relay now elects one close owner before cancellation can wake the receive loop.
+This is a necessary scope extension explicitly requested by the retry brief;
+the captain Active implementation remains unchanged.
+
+Rework checks on SDK 10.0.401 / net10.0:
+
+- `dotnet build src/Test.Smoke/Test.Smoke.csproj -c Release --framework net10.0 --no-restore`:
+  passed, zero warnings/errors.
+- `dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-restore -- --suites Services.RemoteDashboardRelayService`:
+  all six cases passed, including eight concurrent disposals after the known
+  WebSocket upgrade and a 32-caller single-owner regression.
+- Mutation: allowing every close contender to proceed failed the ownership
+  assertion with expected 1, actual 32 (exit 1). Restoring the guard passed (exit 0).
+- `dotnet test "src/Test.Smoke/Test.Smoke.csproj" -c Release --framework net10.0 --no-build`:
+  passed (one aggregate fact, zero failures, 2 minutes 46 seconds).
+
+The earlier Active surface, migration, routing, API and rendered-layout evidence
+above belongs to the implementation attempt. Those individual checks were not
+rerun during this relay-only rework. The smoke gate was rerun as requested.
+
 ## Landing and required release follow-up
 
 Voyage `vyg_mvxc33sx_97SzD7UnXCc` is configured for `MergeAndPush`. During worker
