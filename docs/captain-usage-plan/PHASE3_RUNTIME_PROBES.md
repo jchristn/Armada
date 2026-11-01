@@ -110,12 +110,23 @@ phase that persists passive observations; phase 3 delivers and proves the decisi
 | Compare-and-set | captain_service_compare_and_set_refuses_older_samples | PASS |
 | Rejections preserve last-good | rejected_observation_preserves_last_good (real capture service commit) | PASS |
 | Secrets in logs, excerpts, fixtures | `Services.UsageSecrets` (5 cases) | PASS |
+| Headers reported before any body byte is read; count/length caps; failed and cancelled requests report nothing (Test Engineer) | `Services.UsageParsers` rate_limit_handler_reports_headers_before_the_body_is_read | PASS |
+| Reset bounds inclusive at -24h/+8d, offset conversion, incomplete/over-limit/zero/signed headers reject (Test Engineer) | reset_converter_bounds_and_header_failures | PASS |
+| 100 vs 99.99, skew and freshness edges, NaN/infinite windows, latest reset bounds the hold (Test Engineer) | `Services.UsageQuarantine` quota_policy_boundaries_and_invalid_windows | PASS |
+| Assigned-idle and stopping captains never held, default hold length, legacy quota reason, argument guards (Test Engineer) | captain_service_quota_edge_states | PASS |
 
 Guard-removal proofs: making the provider-default path skip the capture handler fails the transport case
 ("expected <1> but got <0>"); removing the compare-and-set fails the CAS case ("expected <SkippedStale> but
 got <Released>"); removing the tree kill fails the cleanup case ("the app-server process is terminated was
 false"); letting non-Ok statuses route fails the policy case; letting a release clear a foreign hold fails the
 CaptainService case; dropping the decoder harvest fails both Claude cases.
+
+Test Engineer proofs: buffering the response body before observing it in `UsageRateLimitHandler` fails only the
+ordering case ("Error while copying content to a stream" after the 10 second gate; the transport case still
+passes, so it does not prove ordering on its own); returning no failure for an incomplete header pair fails
+both header cases ("expected <Failed> but got <Unsupported>"); treating 99 percent as exhausted fails the
+boundary case ("expected <Release> but got <Hold>"); dropping the `CurrentMissionId` check in
+`ApplyUsageQuotaAsync` fails the edge-state case ("expected <SkippedBusy> but got <Held>").
 
 ## Not verified
 

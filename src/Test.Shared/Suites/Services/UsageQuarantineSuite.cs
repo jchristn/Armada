@@ -247,6 +247,92 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(UsageQuotaActionEnum.NoChange, decision.Action, "a rejected observation never routes");
             }));
 
+            cases.Add(CaseAsync("quota_policy_boundaries_and_invalid_windows", "Exactly 100 holds and 99.99 releases; the skew and freshness edges are inclusive; NaN and infinite windows never route; the latest reset bounds the hold", TestTags.Negative, () =>
+            {
+                DateTime now = new DateTime(2026, 10, 31, 12, 0, 0, DateTimeKind.Utc);
+                Captain captain = NewCaptain("opus");
+                AssertThrows<ArgumentNullException>(() => UsageQuotaPolicy.Evaluate(null!, Observation(now), null, 300, now), "a null captain is refused");
+                AssertThrows<ArgumentNullException>(() => UsageQuotaPolicy.Evaluate(captain, null!, null, 300, now), "a null observation is refused");
+
+                AssertEqual(UsageQuotaActionEnum.Release, UsageQuotaPolicy.Evaluate(captain, Observation(now, Window("five_hour", 99.99, now.AddHours(1))), null, 300, now).Action, "99.99 percent is below the limit");
+                AssertEqual(UsageQuotaActionEnum.Hold, UsageQuotaPolicy.Evaluate(captain, Observation(now, Window("five_hour", 100, now.AddHours(1))), null, 300, now).Action, "exactly 100 percent is exhausted");
+                AssertEqual(UsageQuotaActionEnum.Hold, UsageQuotaPolicy.Evaluate(captain, Observation(now, Window("five_hour", 150, now.AddHours(1))), null, 300, now).Action, "an overage above 100 percent is exhausted");
+
+                foreach (double invalid in new[] { Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity })
+                {
+                    UsageQuotaDecision decision = UsageQuotaPolicy.Evaluate(captain, Observation(now, Window("five_hour", invalid, now.AddHours(1))), null, 300, now);
+                    AssertEqual("NoApplicableWindows", decision.ReasonCode, invalid + " neither holds nor releases");
+                }
+
+                UsageQuotaDecision mixed = UsageQuotaPolicy.Evaluate(captain, Observation(now, Window("five_hour", Double.NaN, now.AddHours(1)), Window("seven_day", 100, now.AddDays(3))), null, 300, now);
+                AssertEqual(UsageQuotaActionEnum.Hold, mixed.Action, "a NaN window does not mask a real exhausted window");
+                AssertEqual(1, mixed.ExhaustedWindows.Count, "only the real window is named");
+
+                UsageQuotaDecision longest = UsageQuotaPolicy.Evaluate(captain, Observation(now, Window("five_hour", 100, now.AddHours(2)), Window("seven_day", 100, now.AddDays(3)), Window("daily", 100, null)), null, 300, now);
+                AssertEqual(now.AddDays(3), longest.HoldUntilUtc, "the latest reported reset bounds the hold; a window without a reset does not shorten it");
+                AssertEqual(3, longest.ExhaustedWindows.Count, "every exhausted window is named");
+
+                AssertEqual(UsageQuotaActionEnum.Hold, UsageQuotaPolicy.Evaluate(captain, Observation(now + UsageQuotaPolicy.MaximumFutureSkew, Window("five_hour", 100, now.AddHours(1))), null, 300, now).Action, "an observation at the skew limit is accepted");
+                AssertEqual("FutureObservation", UsageQuotaPolicy.Evaluate(captain, Observation(now + UsageQuotaPolicy.MaximumFutureSkew + TimeSpan.FromSeconds(1), Window("five_hour", 100, now.AddHours(1))), null, 300, now).ReasonCode, "one second beyond the skew limit is refused");
+                AssertEqual(UsageQuotaActionEnum.Hold, UsageQuotaPolicy.Evaluate(captain, Observation(now.AddSeconds(-600), Window("five_hour", 100, now.AddHours(1))), null, 300, now).Action, "an observation exactly at the horizon is fresh");
+                AssertEqual("Stale", UsageQuotaPolicy.Evaluate(captain, Observation(now.AddSeconds(-600).AddTicks(-1), Window("five_hour", 10, now.AddHours(1))), null, 300, now).ReasonCode, "a stale low sample never releases");
+                AssertEqual(TimeSpan.FromSeconds(120), UsageQuotaPolicy.FreshnessHorizon(-5), "a negative interval falls back to the floor");
+
+                UsageProbeResult unknownStatus = Observation(now, Window("five_hour", 100, now.AddHours(1)));
+                unknownStatus.Status = UsageSnapshotStatusEnum.Failed;
+                unknownStatus.ErrorCode = "MalformedOutput";
+                AssertEqual("NotAuthoritative", UsageQuotaPolicy.Evaluate(captain, unknownStatus, null, 300, now).ReasonCode, "a rejected observation that still carries windows never routes");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(CaseAsync("captain_service_quota_edge_states", "Idle captains with a mission and stopped captains are never held; a hold without a reset uses the quarantine default; argument guards hold", TestTags.Negative, async () =>
+            {
+                using TestDatabase db = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                CaptainService service = await CreateCaptainServiceAsync(db).ConfigureAwait(false);
+                DateTime now = DateTime.UtcNow;
+                UsageQuotaDecision hold = UsageQuotaPolicy.Evaluate(NewCaptain(null), Observation(now, Window("five_hour", 100, now.AddHours(2))), null, 300, now);
+
+                await AssertThrowsAsync<ArgumentNullException>(() => service.ApplyUsageQuotaAsync("", hold), "an empty captain id is refused").ConfigureAwait(false);
+                await AssertThrowsAsync<ArgumentNullException>(() => service.ApplyUsageQuotaAsync("cpt_x", null!), "a null decision is refused").ConfigureAwait(false);
+
+                Captain assigned = await CreateCaptainAsync(db, "quota-assigned", CaptainStateEnum.Idle, null).ConfigureAwait(false);
+                assigned.CurrentMissionId = "msn_quota_assigned";
+                assigned = await db.Driver.Captains.UpdateAsync(assigned).ConfigureAwait(false);
+                AssertEqual(UsageQuotaOutcomeEnum.SkippedBusy, await service.ApplyUsageQuotaAsync(assigned.Id, hold).ConfigureAwait(false), "an idle captain that already holds a mission is never held");
+                Captain assignedAfter = (await db.Driver.Captains.ReadAsync(assigned.Id).ConfigureAwait(false))!;
+                AssertEqual(CaptainStateEnum.Idle, assignedAfter.State, "the assigned captain keeps its state");
+                AssertNull(assignedAfter.QuarantineReason, "no quota reason is written to an assigned captain");
+
+                Captain stopping = await CreateCaptainAsync(db, "quota-stopping", CaptainStateEnum.Stopping, null).ConfigureAwait(false);
+                AssertEqual(UsageQuotaOutcomeEnum.SkippedBusy, await service.ApplyUsageQuotaAsync(stopping.Id, hold).ConfigureAwait(false), "a stopping captain is never moved into a quota hold");
+                AssertEqual(CaptainStateEnum.Stopping, (await db.Driver.Captains.ReadAsync(stopping.Id).ConfigureAwait(false))!.State, "the stopping captain keeps its state");
+
+                Captain noReset = await CreateCaptainAsync(db, "quota-noreset", CaptainStateEnum.Idle, null).ConfigureAwait(false);
+                UsageQuotaDecision unbounded = new UsageQuotaDecision { Action = UsageQuotaActionEnum.Hold, ReasonCode = "Exhausted", ObservedUtc = now, HoldUntilUtc = null, ExhaustedWindows = new List<string> { "five_hour" } };
+                DateTime before = DateTime.UtcNow;
+                AssertEqual(UsageQuotaOutcomeEnum.Held, await service.ApplyUsageQuotaAsync(noReset.Id, unbounded).ConfigureAwait(false), "a hold without a reported end is still applied");
+                Captain unboundedAfter = (await db.Driver.Captains.ReadAsync(noReset.Id).ConfigureAwait(false))!;
+                ArmadaSettings defaults = new ArmadaSettings();
+                AssertNotNull(unboundedAfter.QuarantineUntilUtc, "the hold always has an end");
+                AssertTrue(unboundedAfter.QuarantineUntilUtc!.Value >= before.AddMinutes(defaults.CaptainQuarantineMinutes).AddSeconds(-2)
+                    && unboundedAfter.QuarantineUntilUtc!.Value <= DateTime.UtcNow.AddMinutes(defaults.CaptainQuarantineMinutes).AddSeconds(2),
+                    "a hold without a reset ends after the configured quarantine minutes: " + unboundedAfter.QuarantineUntilUtc.Value.ToString("o"));
+
+                // A quota-owned reason without a readable observation marker (for example written by an older
+                // build) is still quota-owned, so a fresh release clears it instead of stranding the captain.
+                Captain legacy = await CreateCaptainAsync(db, "quota-legacy", CaptainStateEnum.Quarantined, UsageQuotaHold.ReasonPrefix + "five_hour exhausted").ConfigureAwait(false);
+                UsageQuotaDecision release = UsageQuotaPolicy.Evaluate(NewCaptain(null), Observation(now, Window("five_hour", 5, now.AddHours(2))), null, 300, now);
+                AssertEqual(UsageQuotaOutcomeEnum.Released, await service.ApplyUsageQuotaAsync(legacy.Id, release).ConfigureAwait(false), "a quota-owned hold without a marker is released by a fresh low sample");
+
+                // The reason round-trips its observation time at second precision for compare-and-set.
+                string reason = UsageQuotaHold.FormatReason(new[] { "five_hour", " ", "seven_day" }, new DateTime(2026, 10, 31, 12, 0, 5, 900, DateTimeKind.Utc));
+                AssertTrue(UsageQuotaHold.IsQuotaOwned(reason), "the formatted reason is quota-owned");
+                AssertTrue(UsageQuotaHold.TryReadObservedUtc(reason, out DateTime parsed), "the observation time is readable");
+                AssertEqual(new DateTime(2026, 10, 31, 12, 0, 5, DateTimeKind.Utc), parsed, "the observation time is recorded to the second");
+                AssertFalse(UsageQuotaHold.TryReadObservedUtc("operator hold", out DateTime _), "a foreign reason carries no observation time");
+                AssertFalse(UsageQuotaHold.IsQuotaOwned("Usage quota: manual"), "the prefix is case-sensitive so an operator note is never treated as quota-owned");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Usage Capture Quarantine Policy",

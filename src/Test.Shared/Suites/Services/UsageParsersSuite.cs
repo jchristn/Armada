@@ -4,6 +4,8 @@ namespace Test.Shared.Suites.Services
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
+    using System.Net;
+    using System.Net.Http;
     using System.Text;
     using System.Text.Json;
     using System.Threading;
@@ -537,6 +539,150 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("rate_limit_handler_reports_headers_before_the_body_is_read", "The handler reports allowlisted headers once, before a single body byte is read, bounded by count and length; failures and cancellation report nothing", TestTags.Reliability, async () =>
+            {
+                DateTime fixedNow = new DateTime(2026, 10, 31, 12, 0, 0, DateTimeKind.Utc);
+                List<UsageHeaderObservation> seen = new List<UsageHeaderObservation>();
+                using GatedBodyStream body = new GatedBodyStream(Encoding.UTF8.GetBytes("streamed body"));
+                StubResponseHandler inner = new StubResponseHandler(request =>
+                {
+                    HttpResponseMessage response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(body), RequestMessage = request };
+                    response.Headers.TryAddWithoutValidation("x-ratelimit-limit-requests", "100");
+                    response.Headers.TryAddWithoutValidation("x-ratelimit-remaining-requests", "0");
+                    response.Headers.TryAddWithoutValidation("x-ratelimit-reset-requests", "30s");
+                    response.Headers.TryAddWithoutValidation("x-ratelimit-oversized", new string('9', UsageRateLimitHandler.MaximumValueChars + 1));
+                    response.Headers.TryAddWithoutValidation("x-api-key", "sk-response-echo-secret-0001");
+                    response.Headers.TryAddWithoutValidation("set-cookie", "session=secret-cookie-0001");
+                    for (int i = 0; i < 40; i++) response.Headers.TryAddWithoutValidation("x-ratelimit-extra-" + i, i.ToString());
+                    return response;
+                });
+
+                using (HttpClient client = new HttpClient(new UsageRateLimitHandler(o => { lock (seen) seen.Add(o); }, inner, () => fixedNow)))
+                {
+                    using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "http://usage-fixture.invalid/v1/chat/completions");
+                    using HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                    AssertEqual(1, seen.Count, "exactly one observation is reported as soon as the headers arrive");
+                    AssertEqual(0, body.Reads, "no body byte was read before the observation was reported");
+                    UsageHeaderObservation observation = seen[0];
+                    AssertEqual(200, observation.StatusCode, "the status is recorded");
+                    AssertEqual(fixedNow, observation.ObservedUtc, "the observation time comes from the handler clock");
+                    AssertEqual("usage-fixture.invalid", observation.RequestHost, "the request host is recorded without its path");
+                    AssertTrue(observation.Headers.Count <= UsageRateLimitHandler.MaximumHeaders, "the header count is bounded: " + observation.Headers.Count);
+                    AssertFalse(observation.Headers.ContainsKey("x-ratelimit-oversized"), "an oversized value is dropped");
+                    AssertFalse(observation.Headers.ContainsKey("x-api-key"), "a credential-shaped response header is never kept");
+                    AssertFalse(observation.Headers.ContainsKey("set-cookie"), "a cookie is never kept");
+                    foreach (KeyValuePair<string, string> header in observation.Headers)
+                        AssertFalse(header.Value.Contains("secret", StringComparison.OrdinalIgnoreCase), "no kept header carries a secret: " + header.Key);
+
+                    UsageProbeResult parsed = HeaderUsageCapture.Parse(observation);
+                    AssertEqual(UsageSnapshotStatusEnum.Ok, parsed.Status, "the kept headers parse");
+                    AssertEqual(fixedNow.AddSeconds(30), parsed.Windows[0].ResetsUtc, "a relative reset counts from the observation time");
+
+                    body.Open();
+                    string text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    AssertEqual("streamed body", text, "the body is delivered unchanged after capture");
+                    AssertEqual(1, seen.Count, "reading the body reports nothing more");
+                }
+
+                // A success without any rate-limit header reports nothing; an error status reports status only.
+                List<UsageHeaderObservation> quiet = new List<UsageHeaderObservation>();
+                HttpStatusCode next = HttpStatusCode.OK;
+                StubResponseHandler plain = new StubResponseHandler(request => new HttpResponseMessage(next) { Content = new StringContent("{}"), RequestMessage = request });
+                using (HttpClient client = new HttpClient(new UsageRateLimitHandler(o => quiet.Add(o), plain, () => fixedNow)))
+                {
+                    using (HttpResponseMessage ok = await client.GetAsync("http://usage-fixture.invalid/ok").ConfigureAwait(false)) { }
+                    AssertEqual(0, quiet.Count, "a success without rate-limit headers reports nothing");
+                    next = HttpStatusCode.ServiceUnavailable;
+                    using (HttpResponseMessage failed = await client.GetAsync("http://usage-fixture.invalid/down").ConfigureAwait(false)) { }
+                    AssertEqual(1, quiet.Count, "an error status is reported even without headers");
+                    AssertEqual(0, quiet[0].Headers.Count, "nothing beyond the status is kept");
+                    AssertEqual(UsageSnapshotStatusEnum.Failed, HeaderUsageCapture.Parse(quiet[0]).Status, "a header-less 503 is Failed, never Ok");
+                    next = HttpStatusCode.TooManyRequests;
+                    using (HttpResponseMessage limited = await client.GetAsync("http://usage-fixture.invalid/limited").ConfigureAwait(false)) { }
+                    AssertEqual("ProviderRateLimited", HeaderUsageCapture.Parse(quiet[1]).ErrorCode, "a header-less 429 is a rate-limit failure, never an empty success");
+                    AssertNotEqual(UsageSnapshotStatusEnum.Ok, HeaderUsageCapture.Parse(quiet[1]).Status, "a header-less 429 never reads as Ok");
+                }
+
+                // A transport failure and a cancelled request report nothing and still surface to the caller.
+                List<UsageHeaderObservation> none = new List<UsageHeaderObservation>();
+                StubResponseHandler throwing = new StubResponseHandler(request => throw new HttpRequestException("connection refused"));
+                using (HttpClient client = new HttpClient(new UsageRateLimitHandler(o => none.Add(o), throwing, () => fixedNow)))
+                {
+                    await AssertThrowsAsync<HttpRequestException>(() => client.GetAsync("http://usage-fixture.invalid/refused"), "a transport failure surfaces unchanged").ConfigureAwait(false);
+                }
+
+                using CancellationTokenSource cts = new CancellationTokenSource();
+                StubResponseHandler hanging = new StubResponseHandler(null, async (request, ct) =>
+                {
+                    await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+                    return new HttpResponseMessage(HttpStatusCode.OK);
+                });
+                using (HttpClient client = new HttpClient(new UsageRateLimitHandler(o => none.Add(o), hanging, () => fixedNow)))
+                {
+                    Task<HttpResponseMessage> pending = client.GetAsync("http://usage-fixture.invalid/hang", cts.Token);
+                    cts.Cancel();
+                    await AssertThrowsAsync<OperationCanceledException>(() => pending, "cancellation surfaces to the caller").ConfigureAwait(false);
+                }
+
+                AssertEqual(0, none.Count, "neither a failed transport nor a cancelled request is reported");
+                AssertThrows<ArgumentNullException>(() => new UsageRateLimitHandler(null!, new StubResponseHandler(r => new HttpResponseMessage())), "a null sink is refused");
+                AssertThrows<ArgumentNullException>(() => new UsageRateLimitHandler(o => { }, null!), "a null inner handler is refused");
+            }));
+
+            cases.Add(CaseAsync("reset_converter_bounds_and_header_failures", "Reset bounds are inclusive at -24h and +8d from the observation; offsets convert to UTC; incomplete or malformed headers reject the whole observation", TestTags.Negative, () =>
+            {
+                DateTime observed = new DateTime(2026, 10, 31, 12, 0, 0, DateTimeKind.Utc);
+                long epoch = new DateTimeOffset(observed).ToUnixTimeSeconds();
+                AssertEqual(observed.AddDays(8), UsageResetConverter.FromEpochSeconds(epoch + 8 * 86400, observed), "exactly eight days ahead is accepted");
+                AssertNull(UsageResetConverter.FromEpochSeconds(epoch + 8 * 86400 + 1, observed), "one second beyond eight days is refused");
+                AssertEqual(observed.AddHours(-24), UsageResetConverter.FromEpochSeconds(epoch - 86400, observed), "exactly 24 hours in the past is accepted");
+                AssertNull(UsageResetConverter.FromEpochSeconds(epoch - 86400 - 1, observed), "one second older than 24 hours is refused");
+                AssertNull(UsageResetConverter.FromEpochSeconds(0, observed), "a zero epoch is absent, not 1970");
+                AssertNull(UsageResetConverter.FromEpochSeconds(-5, observed), "a negative epoch is refused");
+                AssertNull(UsageResetConverter.FromEpochSeconds(Int64.MaxValue, observed), "an unrepresentable epoch is refused, never thrown");
+                AssertNull(UsageResetConverter.FromEpochSeconds(null, observed), "null stays null, never zero");
+                AssertEqual(observed.AddHours(1), UsageResetConverter.FromRfc3339("2026-10-31T15:00:00+02:00", observed), "an offset timestamp converts to UTC");
+                AssertEqual(observed.AddHours(1), UsageResetConverter.FromRfc3339("2026-10-31T13:00:00Z", observed), "a Z timestamp stays absolute");
+                AssertNull(UsageResetConverter.FromRfc3339("not-a-timeZ", observed), "garbage ending in Z is refused");
+                AssertNull(UsageResetConverter.FromRfc3339("2026-11-30T13:00:00Z", observed), "an absolute reset a month out is refused");
+                AssertEqual(observed.AddSeconds(120), UsageResetConverter.FromRetryAfter("120", observed), "numeric Retry-After counts from the observation");
+                AssertNull(UsageResetConverter.FromRetryAfter("-1", observed), "a negative Retry-After is refused");
+                AssertNull(UsageResetConverter.FromRetryAfter("NaN", observed), "a NaN Retry-After is refused");
+                AssertNull(UsageResetConverter.FromRetryAfter("soon", observed), "a free-text Retry-After is refused");
+                AssertNull(UsageResetConverter.FromDuration("", observed), "an empty duration is absent");
+                AssertNull(UsageResetConverter.FromDuration("5", observed), "a unitless duration is refused");
+                AssertNull(UsageResetConverter.FromDuration("200h", observed), "a duration beyond eight days is refused");
+                AssertNull(UsageResetConverter.FromRelativeSeconds(Double.PositiveInfinity, observed), "an infinite relative reset is refused");
+
+                Dictionary<string, string> incomplete = new Dictionary<string, string> { { "x-ratelimit-limit-requests", "100" } };
+                UsageProbeResult partial = HeaderUsageCapture.Parse(Headers(observed, 200, incomplete));
+                AssertEqual(UsageSnapshotStatusEnum.Failed, partial.Status, "a limit without its remaining header is rejected, never a guessed window");
+                AssertEqual("MalformedHeaders", partial.ErrorCode, "the rejection is named");
+                AssertEqual(0, partial.Windows.Count, "a rejected observation carries no windows");
+
+                Dictionary<string, string> overLimit = new Dictionary<string, string> { { "x-ratelimit-limit-tokens", "100" }, { "x-ratelimit-remaining-tokens", "101" } };
+                AssertEqual("MalformedHeaders", HeaderUsageCapture.Parse(Headers(observed, 200, overLimit)).ErrorCode, "remaining above the limit is rejected");
+                Dictionary<string, string> zeroLimit = new Dictionary<string, string> { { "x-ratelimit-limit-tokens", "0" }, { "x-ratelimit-remaining-tokens", "0" } };
+                AssertEqual("MalformedHeaders", HeaderUsageCapture.Parse(Headers(observed, 200, zeroLimit)).ErrorCode, "a zero limit is rejected, never a divide by zero");
+                Dictionary<string, string> signed = new Dictionary<string, string> { { "x-ratelimit-limit-tokens", "100" }, { "x-ratelimit-remaining-tokens", "-1" } };
+                AssertEqual("MalformedHeaders", HeaderUsageCapture.Parse(Headers(observed, 200, signed)).ErrorCode, "a signed remaining count is rejected");
+                Dictionary<string, string> badReset = new Dictionary<string, string>
+                {
+                    { "anthropic-ratelimit-requests-limit", "50" },
+                    { "anthropic-ratelimit-requests-remaining", "10" },
+                    { "anthropic-ratelimit-requests-reset", "2026-10-31T13:00:00" }
+                };
+                AssertEqual("MalformedHeaders", HeaderUsageCapture.Parse(Headers(observed, 200, badReset)).ErrorCode, "an offset-less reset rejects the observation instead of dropping the reset");
+                AssertEqual(UsageSnapshotStatusEnum.Unsupported, HeaderUsageCapture.Parse(null).Status, "no observation at all is Unsupported, never Ok");
+
+                Dictionary<string, string> exhausted = new Dictionary<string, string> { { "x-ratelimit-limit-requests", "100" }, { "x-ratelimit-remaining-requests", "0" }, { "x-ratelimit-reset-requests", "1m" } };
+                UsageProbeResult full = HeaderUsageCapture.Parse(Headers(observed, 200, exhausted));
+                AssertEqual(100.0, full.Windows[0].UsedPercent, "remaining zero is 100 percent used");
+                AssertEqual(observed, full.CapturedUtc, "the observation time is the capture time");
+                AssertEqual(UsageCaptureSourceEnum.Headers, full.Source, "the source is Headers");
+                return Task.CompletedTask;
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Usage Capture Runtime Parsers",
@@ -661,6 +807,13 @@ namespace Test.Shared.Suites.Services
             return count;
         }
 
+        private static UsageHeaderObservation Headers(DateTime observed, int status, Dictionary<string, string> headers)
+        {
+            UsageHeaderObservation observation = new UsageHeaderObservation { StatusCode = status, ObservedUtc = observed };
+            foreach (KeyValuePair<string, string> header in headers) observation.Headers[header.Key] = header.Value;
+            return observation;
+        }
+
         private static LoggingModule CreateLogging()
         {
             LoggingModule logging = new LoggingModule();
@@ -681,6 +834,99 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Types
+
+        /// <summary>
+        /// An inner HTTP handler that answers from a delegate without any network.
+        /// </summary>
+        private sealed class StubResponseHandler : HttpMessageHandler
+        {
+            private readonly Func<HttpRequestMessage, HttpResponseMessage>? _Respond;
+            private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>? _RespondAsync;
+
+            public StubResponseHandler(Func<HttpRequestMessage, HttpResponseMessage>? respond, Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>? respondAsync = null)
+            {
+                _Respond = respond;
+                _RespondAsync = respondAsync;
+            }
+
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                if (_RespondAsync != null) return _RespondAsync(request, cancellationToken);
+                return Task.FromResult(_Respond!(request));
+            }
+        }
+
+        /// <summary>
+        /// A body stream that counts reads and refuses to deliver bytes until opened, so a test can prove the
+        /// headers were reported before any body read.
+        /// </summary>
+        private sealed class GatedBodyStream : Stream
+        {
+            private readonly MemoryStream _Inner;
+            private readonly SemaphoreSlim _Gate = new SemaphoreSlim(0, 1);
+            private int _Reads = 0;
+
+            public GatedBodyStream(byte[] bytes)
+            {
+                _Inner = new MemoryStream(bytes);
+            }
+
+            public int Reads => Volatile.Read(ref _Reads);
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+            public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+            public void Open()
+            {
+                _Gate.Release();
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                Interlocked.Increment(ref _Reads);
+                if (!_Gate.Wait(TimeSpan.FromSeconds(10))) throw new IOException("the body was read before the test opened it");
+                _Gate.Release();
+                return _Inner.Read(buffer, offset, count);
+            }
+
+            public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                Interlocked.Increment(ref _Reads);
+                if (!await _Gate.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false)) throw new IOException("the body was read before the test opened it");
+                _Gate.Release();
+                return _Inner.Read(buffer, offset, count);
+            }
+
+            public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                Interlocked.Increment(ref _Reads);
+                if (!await _Gate.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false)) throw new IOException("the body was read before the test opened it");
+                _Gate.Release();
+                return _Inner.Read(buffer.Span);
+            }
+
+            public override void Flush()
+            {
+            }
+
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing)
+                {
+                    _Inner.Dispose();
+                    _Gate.Dispose();
+                }
+
+                base.Dispose(disposing);
+            }
+        }
 
         private sealed class CustomCommand
         {
