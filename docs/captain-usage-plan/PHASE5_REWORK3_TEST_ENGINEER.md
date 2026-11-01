@@ -132,3 +132,24 @@ required correction and blocked outcome above still apply.
   The empty-page in-flight concern remains untested and is not a finding.
 
 Outcome remains BLOCKED under the Affected Case and required correction above.
+
+## Resolution after the automatic rework limit
+
+The cooldown finding is resolved in src/Armada.Dashboard/src/lib/useUsage.ts.
+An HTTP 429 now records a cooldown deadline: the server's nextEligibleUtc, or
+USAGE_UNKNOWN_COOLDOWN_MS (60 seconds) from now when it is absent or unparseable.
+A timer clears the cooldown at the deadline on a mounted card, every completed
+latest read (event refresh, retry or post-capture follow-up) clears it once
+expired, and switching captains drops it. A server-supplied time already in the
+past clears immediately, so the existing test now uses a future deadline.
+
+Permanent regressions in CaptainUsageCard.test.tsx:
+- `allows capture again after cooldown expires and an event refreshes usage`
+  (the Test Engineer's reproduction, plus a second capture after recovery).
+- `re-enables Capture now on a mounted card when the cooldown deadline passes`.
+- `recovers from a cooldown whose next eligible time is unknown`.
+
+All three fail against the previous hook (3 failed / 10 passed) and pass with
+the fix (13 passed). Full checks from src/Armada.Dashboard: `npm ci` exit 0,
+`npm run build` exit 0, `npm run test:run` 230 files / 1577 tests passed.
+`dotnet build src/Armada.sln`: 0 warnings, 0 errors.

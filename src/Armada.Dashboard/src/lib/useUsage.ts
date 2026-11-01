@@ -8,6 +8,10 @@ import { USAGE_LATEST_BATCH_LIMIT, chunkIds } from './usage';
 export const USAGE_MAX_PAGES_PER_BATCH = 5;
 /** Delay before the follow-up read after a queued capture (the probe runs on the host in the background). */
 export const USAGE_POST_CAPTURE_REFRESH_MS = 5000;
+/** Cooldown assumed after HTTP 429 when the server omits nextEligibleUtc, so Capture now never stays blocked. */
+export const USAGE_UNKNOWN_COOLDOWN_MS = 60000;
+/** Longest single timer used to wait out a cooldown (setTimeout overflows above 2^31-1 ms). */
+const MAX_TIMER_MS = 2147483647;
 
 export type UsageLoadStatus = 'loading' | 'error' | 'ready';
 
@@ -114,6 +118,34 @@ export function useCaptainUsage(captainId: string | undefined): CaptainUsage {
   const [feedback, setFeedback] = useState<CaptureFeedback>({ kind: 'idle' });
   const sequence = useRef(0);
   const followUp = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cooldownUntil = useRef<number | null>(null);
+
+  const clearCooldown = useCallback(() => {
+    if (cooldownTimer.current) clearTimeout(cooldownTimer.current);
+    cooldownTimer.current = null;
+    cooldownUntil.current = null;
+    setFeedback((prev) => (prev.kind === 'cooldown' ? { kind: 'idle' } : prev));
+  }, []);
+
+  const clearExpiredCooldown = useCallback(() => {
+    if (cooldownUntil.current !== null && Date.now() >= cooldownUntil.current) clearCooldown();
+  }, [clearCooldown]);
+
+  const armCooldownTimer = useCallback(() => {
+    if (cooldownTimer.current) clearTimeout(cooldownTimer.current);
+    cooldownTimer.current = null;
+    if (cooldownUntil.current === null) return;
+    const remaining = cooldownUntil.current - Date.now();
+    if (remaining <= 0) { clearCooldown(); return; }
+    cooldownTimer.current = setTimeout(() => {
+      cooldownTimer.current = null;
+      if (cooldownUntil.current !== null && Date.now() >= cooldownUntil.current) clearCooldown();
+      else armCooldownTimerRef.current();
+    }, Math.min(remaining, MAX_TIMER_MS));
+  }, [clearCooldown]);
+  const armCooldownTimerRef = useRef(armCooldownTimer);
+  armCooldownTimerRef.current = armCooldownTimer;
 
   useEffect(() => {
     if (!captainId) return;
@@ -126,20 +158,31 @@ export function useCaptainUsage(captainId: string | undefined): CaptainUsage {
         setTruncated((result.totalPages ?? 1) > 1);
         setError('');
         setStatus('ready');
+        clearExpiredCooldown();
       })
       .catch((err: unknown) => {
         if (current !== sequence.current) return;
         setError(err instanceof Error ? err.message : String(err));
         setStatus('error');
+        clearExpiredCooldown();
       });
-  }, [captainId, revision, attempt]);
+  }, [captainId, revision, attempt, clearExpiredCooldown]);
 
-  useEffect(() => () => { if (followUp.current) clearTimeout(followUp.current); }, []);
+  // A cooldown belongs to one captain; switching captains on a mounted card must not carry it over.
+  useEffect(() => clearCooldown, [captainId, clearCooldown]);
+
+  useEffect(() => () => {
+    if (followUp.current) clearTimeout(followUp.current);
+    if (cooldownTimer.current) clearTimeout(cooldownTimer.current);
+  }, []);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   const capture = useCallback(async () => {
     if (!captainId) return;
+    if (cooldownTimer.current) clearTimeout(cooldownTimer.current);
+    cooldownTimer.current = null;
+    cooldownUntil.current = null;
     setFeedback({ kind: 'capturing' });
     try {
       const result = await captureCaptainUsage(captainId);
@@ -155,12 +198,19 @@ export function useCaptainUsage(captainId: string | undefined): CaptainUsage {
       if (err instanceof ApiError) {
         const data = (err.data ?? {}) as { nextEligibleUtc?: string | null; data?: { nextEligibleUtc?: string | null } };
         if (err.status === 409) { setFeedback({ kind: 'disabled', message: err.message }); return; }
-        if (err.status === 429) { setFeedback({ kind: 'cooldown', nextEligibleUtc: data.nextEligibleUtc ?? data.data?.nextEligibleUtc ?? null }); return; }
+        if (err.status === 429) {
+          const nextEligibleUtc = data.nextEligibleUtc ?? data.data?.nextEligibleUtc ?? null;
+          const parsed = nextEligibleUtc ? Date.parse(nextEligibleUtc) : Number.NaN;
+          cooldownUntil.current = Number.isNaN(parsed) ? Date.now() + USAGE_UNKNOWN_COOLDOWN_MS : parsed;
+          setFeedback({ kind: 'cooldown', nextEligibleUtc: Number.isNaN(parsed) ? null : nextEligibleUtc });
+          armCooldownTimer();
+          return;
+        }
         if (err.status === 503) { setFeedback({ kind: 'offline', message: err.message }); return; }
       }
       setFeedback({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
     }
-  }, [captainId]);
+  }, [captainId, armCooldownTimer]);
 
   return { status, views, truncated, error, retry, capture, feedback };
 }

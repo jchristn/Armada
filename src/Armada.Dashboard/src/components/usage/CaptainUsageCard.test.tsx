@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import CaptainUsageCard from './CaptainUsageCard';
 import { ApiError, captureCaptainUsage, getUsageLatest, updateCaptain } from '../../api/client';
 import type { Captain, UsageSnapshotView } from '../../types/models';
+import { USAGE_UNKNOWN_COOLDOWN_MS } from '../../lib/useUsage';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -140,10 +141,71 @@ describe('CaptainUsageCard', () => {
     expect(captureCaptainUsage).toHaveBeenCalledWith('cpt_a');
     expect(await screen.findByText('Capture queued. The card refreshes when the observation is stored.')).toBeInTheDocument();
     await waitFor(() => expect(getUsageLatest).toHaveBeenCalledTimes(2));
-    vi.mocked(captureCaptainUsage).mockRejectedValueOnce(new ApiError('cooldown', 429, { code: 'Cooldown', nextEligibleUtc: '2026-11-01T11:00:00Z' }));
+    vi.mocked(captureCaptainUsage).mockRejectedValueOnce(new ApiError('cooldown', 429, { code: 'Cooldown', nextEligibleUtc: future }));
     await userEvent.click(screen.getByRole('button', { name: 'Capture now' }));
-    expect(await screen.findByText('Captured recently. Next capture allowed at at(2026-11-01T11:00:00Z).')).toBeInTheDocument();
+    expect(await screen.findByText(`Captured recently. Next capture allowed at at(${future}).`)).toBeInTheDocument();
     expect((screen.getByRole('button', { name: 'Capture now' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('allows capture again after cooldown expires and an event refreshes usage', async () => {
+    vi.mocked(getUsageLatest).mockResolvedValue(page([view('Ok')]) as never);
+    const nextEligibleUtc = new Date(Date.now() + 60_000).toISOString();
+    vi.mocked(captureCaptainUsage).mockRejectedValueOnce(new ApiError('cooldown', 429, { code: 'Cooldown', nextEligibleUtc }));
+    const onSaved = vi.fn();
+    const { rerender } = render(<MemoryRouter><CaptainUsageCard captain={baseCaptain} canManage onCaptainSaved={onSaved} /></MemoryRouter>);
+    await screen.findAllByRole('progressbar');
+    await userEvent.click(screen.getByRole('button', { name: 'Capture now' }));
+    expect(await screen.findByText(`Captured recently. Next capture allowed at at(${nextEligibleUtc}).`)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Capture now' })).toBeDisabled();
+    const expired = Date.parse(nextEligibleUtc) + 60_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(expired);
+    try {
+      revision.value = 1;
+      rerender(<MemoryRouter><CaptainUsageCard captain={baseCaptain} canManage onCaptainSaved={onSaved} /></MemoryRouter>);
+      await waitFor(() => expect(getUsageLatest).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Capture now' })).toBeEnabled());
+      expect(screen.queryByText(/Captured recently/)).not.toBeInTheDocument();
+      vi.mocked(captureCaptainUsage).mockResolvedValueOnce({ jobId: 'job_2', status: 'Queued', joinedExisting: false, nextEligibleUtc: null } as never);
+      await userEvent.click(screen.getByRole('button', { name: 'Capture now' }));
+      expect(captureCaptainUsage).toHaveBeenCalledTimes(2);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('re-enables Capture now on a mounted card when the cooldown deadline passes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(getUsageLatest).mockResolvedValue(page([view('Ok')]) as never);
+      const nextEligibleUtc = new Date(Date.now() + 30_000).toISOString();
+      vi.mocked(captureCaptainUsage).mockRejectedValueOnce(new ApiError('cooldown', 429, { code: 'Cooldown', nextEligibleUtc }));
+      renderCard();
+      await screen.findAllByRole('progressbar');
+      await userEvent.click(screen.getByRole('button', { name: 'Capture now' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Capture now' })).toBeDisabled());
+      await act(async () => { await vi.advanceTimersByTimeAsync(31_000); });
+      expect(screen.getByRole('button', { name: 'Capture now' })).toBeEnabled();
+      expect(getUsageLatest).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('recovers from a cooldown whose next eligible time is unknown', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(getUsageLatest).mockResolvedValue(page([view('Ok')]) as never);
+      vi.mocked(captureCaptainUsage).mockRejectedValueOnce(new ApiError('cooldown', 429, { code: 'Cooldown' }));
+      renderCard();
+      await screen.findAllByRole('progressbar');
+      await userEvent.click(screen.getByRole('button', { name: 'Capture now' }));
+      expect(await screen.findByText('Captured recently. Next capture allowed at the next eligible time.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Capture now' })).toBeDisabled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(USAGE_UNKNOWN_COOLDOWN_MS + 1_000); });
+      expect(screen.getByRole('button', { name: 'Capture now' })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('refetches when a usage event bumps the revision', async () => {
