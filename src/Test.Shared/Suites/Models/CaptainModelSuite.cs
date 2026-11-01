@@ -27,6 +27,18 @@ namespace Test.Shared.Suites.Models
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(Case("active_defaults_and_serialization", "Active defaults true for omitted JSON and round-trips false independently of State", TestTags.Positive, () =>
+            {
+                AssertTrue(new Captain().Active);
+                AssertTrue(JsonSerializer.Deserialize<Captain>("{}")!.Active);
+                Captain disabled = JsonSerializer.Deserialize<Captain>("{\"Active\":false}")!;
+                AssertFalse(disabled.Active);
+                AssertEqual(CaptainStateEnum.Idle, disabled.State);
+                AssertFalse(JsonSerializer.Deserialize<Captain>(JsonSerializer.Serialize(disabled))!.Active);
+                AssertThrows<ArgumentException>(() => Armada.Core.Services.CaptainEligibility.RequireActive(disabled));
+                disabled.Active = true;
+                Armada.Core.Services.CaptainEligibility.RequireActive(disabled);
+            }));
 
             cases.Add(Case("default_constructor_generates_id_with_prefix", "Captain default constructor generates id with prefix", TestTags.Positive, () =>
             {

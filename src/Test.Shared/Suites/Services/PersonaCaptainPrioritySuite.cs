@@ -22,6 +22,16 @@ namespace Test.Shared.Suites.Services
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(Case("inactive_priority_reactivation", () =>
+            {
+                Persona persona = Hierarchy();
+                Captain captain = new Captain("disabled", AgentRuntimeEnum.Codex) { Active = false };
+                AssertNull(PersonaCaptainPrioritySelector.Select(persona, new[] { captain }));
+                AssertNull(CaptainTierSelector.Select(new[] { captain }, null));
+                captain.Active = true;
+                AssertEqual(captain.Id, PersonaCaptainPrioritySelector.Select(persona, new[] { captain })?.Id);
+                AssertEqual(captain.Id, CaptainTierSelector.Select(new[] { captain }, null)?.Id);
+            }));
             cases.Add(Case("ordered_runtime_classes", () =>
             {
                 Persona persona = Hierarchy();

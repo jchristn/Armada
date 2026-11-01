@@ -26,7 +26,8 @@ namespace Armada.Core.Database.Interfaces
         /// <summary>
         /// Update a captain.
         /// </summary>
-        Task<Captain> UpdateAsync(Captain captain, CancellationToken token = default);
+        /// <remarks>Set updateActive only for an intentional configuration edit; operational snapshots preserve eligibility.</remarks>
+        Task<Captain> UpdateAsync(Captain captain, CancellationToken token = default, bool updateActive = false);
 
         /// <summary>
         /// Set or clear a captain's CLI tool permission policy. <see cref="UpdateAsync"/> never writes this column, so

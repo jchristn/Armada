@@ -154,6 +154,7 @@ namespace Armada.Core.Services
         public Task<ModelProbeRun> StartCaptainAsync(Captain captain, ModelEndpoint? endpoint, ModelProbeDepthEnum depth, ModelEvaluationOptions? options, string? tenantId, string? userId, CancellationToken token = default)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
+            CaptainEligibility.RequireActive(captain);
             return StartAsync(ModelProbeTargetEnum.Captain, captain, endpoint, depth, options, tenantId, userId, token);
         }
 
@@ -293,6 +294,7 @@ namespace Armada.Core.Services
         public static string InferenceHostFor(Captain captain, ModelEndpoint? endpoint)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
+            CaptainEligibility.RequireActive(captain);
             if (endpoint == null) return "vendor:" + captain.Runtime;
             if (Uri.TryCreate(endpoint.BaseUrl?.Trim(), UriKind.Absolute, out Uri? uri) && !String.IsNullOrEmpty(uri.Host))
                 return uri.IsLoopback ? "localhost" : uri.Host.ToLowerInvariant();

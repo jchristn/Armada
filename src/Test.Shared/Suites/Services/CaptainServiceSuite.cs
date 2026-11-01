@@ -38,6 +38,27 @@ namespace Test.Shared.Suites.Services
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(CaseAsync("inactive_recovery_preserves_held_work", "Recovery rechecks Active and preserves held work without launching or spending attempts", TestTags.Positive, async () =>
+            {
+                using TestDatabase db = await TestDatabaseHelper.CreateDatabaseAsync();
+                CaptainService service = new CaptainService(CreateLogging(), db.Driver, CreateSettings(), new StubGitService(), new StubDockService());
+                int launches = 0;
+                service.OnLaunchAgent = (c, m, d) => { launches++; return Task.FromResult(123); };
+                Mission mission = await db.Driver.Missions.CreateAsync(new Mission("held inactive") { Status = MissionStatusEnum.InProgress });
+                Captain stale = await db.Driver.Captains.CreateAsync(new Captain("held inactive") { State = CaptainStateEnum.Working, CurrentMissionId = mission.Id });
+                Captain disabled = (await db.Driver.Captains.ReadAsync(stale.Id))!;
+                disabled.Active = false;
+                await db.Driver.Captains.UpdateAsync(disabled, updateActive: true);
+                await service.TryRecoverAsync(stale);
+                AssertEqual(0, launches);
+                Captain stored = (await db.Driver.Captains.ReadAsync(stale.Id))!;
+                AssertFalse(stored.Active);
+                AssertEqual(0, stored.RecoveryAttempts);
+                AssertEqual(CaptainStateEnum.Working, stored.State);
+                AssertEqual(mission.Id, stored.CurrentMissionId);
+                AssertEqual(MissionStatusEnum.InProgress, (await db.Driver.Missions.ReadAsync(mission.Id))!.Status);
+            }));
+
 
             cases.Add(CaseAsync("recall_unconfirmed_stop_preserves_assignment", "Recall cannot release a captain or reclaim a dock after its stop failed", TestTags.Negative, async () =>
             {

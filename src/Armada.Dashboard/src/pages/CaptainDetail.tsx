@@ -56,6 +56,7 @@ type CaptainDetailFormState = {
   tier: string;
   allowedPersonas: string;
   preferredPersona: string;
+  active?: boolean;
   autoApprove: boolean;
   /** CLI tool permission policy; null inherits. Saved through its own endpoint. */
   cliPermissionPolicy: CliPermissionPolicy | null;
@@ -377,10 +378,14 @@ export default function CaptainDetail() {
                 {t('Missions requiring a tier route to captains at or above it. Leave on Auto to classify from the model name.')}
               </span>
             </label>
+            <label className="checkbox-row captain-active-field">
+              <input type="checkbox" checked={form.active ?? true} onChange={e => setForm({ ...form, active: e.target.checked })} />
+              <span>{t('Active')}</span>
+            </label>
             {supportsAutoApproveSwitch(form.runtime) && (
-              <label className="captain-auto-approve-field" title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)}>
+              <label className="checkbox-row captain-auto-approve-field" title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)}>
                 <input type="checkbox" checked={form.autoApprove} onChange={e => setForm({ ...form, autoApprove: e.target.checked })} title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)} />
-                {' '}{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}
+                <span>{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}</span>
               </label>
             )}
             <div className="captain-cli-policy-field">
@@ -506,6 +511,7 @@ export default function CaptainDetail() {
         <div className="detail-field">
           <span className="detail-label" title={t('Idle is free for work, Working is on a mission, Planning, Refining and Analyzing are reserved, Stalled has gone silent, Quarantined is skipped by dispatch for a while.')}>{t('State')}</span>
           <StatusBadge status={captain.state} />
+          <span>{t('Active')}: {t(captain.active === false ? 'No' : 'Yes')}</span>
         </div>
         {captain.state === 'Quarantined' && (
           <div className="detail-field">

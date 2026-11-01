@@ -8,6 +8,11 @@ namespace Armada.Helm.Commands
     /// </summary>
     public class CaptainUpdateSettings : BaseSettings
     {
+        /// <summary>Whether this captain may accept new work.</summary>
+        [Description("Whether the captain may accept new work (true or false)")]
+        [CommandOption("--active")]
+        public bool? Active { get; set; }
+
         /// <summary>
         /// Captain name or ID.
         /// </summary>

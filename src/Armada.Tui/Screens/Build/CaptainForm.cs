@@ -164,6 +164,7 @@ namespace Armada.Tui.Screens.Build
             cliPolicy.CanFocus = canManagePolicy;
             Armada.Tui.Approvals.CliPermissionPolicyChoice.GuardBypass(screen.Context, cliPolicy, () => canManagePolicy);
 
+            OpsCheckField active = new OpsCheckField("Active", editing?.Active ?? true);
             OpsCheckField autoApprove = new OpsCheckField("Auto-approve agent tool use (runs the CLI with its permission-bypass flag)", editing == null || CaptainRuntimeOptions.GetAutoApprove(editing));
 
             MuxCaptainOptions mux = (editing != null && editing.Runtime == AgentRuntimeEnum.Mux ? SafeMux(editing) : null) ?? new MuxCaptainOptions();
@@ -219,6 +220,7 @@ namespace Armada.Tui.Screens.Build
             dialog.AddField("Inference Endpoint", endpoint);
             dialog.AddField("Reasoning effort", effort);
             dialog.AddField("Capability tier", tier, detail ? "Missions requiring a tier route to captains at or above it. Leave on Auto to classify from the model name." : null);
+            dialog.AddField("Active", active);
             dialog.AddField("Auto-approve", autoApprove);
             dialog.AddField("CLI tool permissions", cliPolicy, "How this captain handles shell commands, file edits, and fetches that need permission. Inherit: missions follow the auto-approve option when it is set, then the server default; Ask conversations use the server default (Settings > CLI Tool Permissions). A conversation can override it." + (canManagePolicy ? "" : " Only admins can change this."));
             dialog.AddField("Mux Config Directory", muxConfig);
@@ -380,6 +382,7 @@ namespace Armada.Tui.Screens.Build
                 options.MaxTokens = Int32.TryParse(muxMaxTokens.Value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int max) ? max : (int?)null;
                 options.SystemPromptPath = muxPrompt.Value;
                 options.ApprovalPolicy = muxPolicy.Value;
+                body.Active = active.Checked;
                 body.RuntimeOptionsJson = RuntimeOptionsJson(r, options, autoApprove.Checked);
                 CliPermissionPolicyEnum? chosenPolicy = Armada.Tui.Approvals.CliPermissionPolicyChoice.Parse(cliPolicy.Value);
                 string label = body.Name;

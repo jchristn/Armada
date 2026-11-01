@@ -2417,7 +2417,10 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF COL_LENGTH('token_usage', 'membership_id') IS NULL ALTER TABLE token_usage ADD membership_id NVARCHAR(64) NULL;",
                     @"IF COL_LENGTH('token_usage', 'reported_cost') IS NULL ALTER TABLE token_usage ADD reported_cost FLOAT NULL;",
                     @"IF COL_LENGTH('token_usage', 'cost_currency') IS NULL ALTER TABLE token_usage ADD cost_currency NVARCHAR(16) NULL;",
-                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_token_usage_tenant_source_created') CREATE INDEX idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);")
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_token_usage_tenant_source_created') CREATE INDEX idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);"),
+
+                new SchemaMigration(112, "Add captain Active eligibility (existing captains remain active)",
+                    @"IF COL_LENGTH('captains', 'active') IS NULL ALTER TABLE captains ADD active BIT NOT NULL DEFAULT 1;")
 
 
             };

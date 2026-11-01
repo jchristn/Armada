@@ -116,6 +116,7 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
             <AppText variant="title" accessibilityRole="header" style={styles.flex}>{captain.name}</AppText>
             <TierBadge tier={captain.tier} />
             <StatusBadge label={captain.state} tone={statusTone(captain.state)} />
+            <AppText>{t('Active')}: {t(captain.active === false ? 'No' : 'Yes')}</AppText>
           </View>
           {resource.error ? <Banner tone="danger" title={resource.error} /> : null}
           {captain.state === 'Quarantined' ? (

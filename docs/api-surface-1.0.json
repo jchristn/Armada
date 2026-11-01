@@ -9574,6 +9574,11 @@
       "resource": "Captain:Create",
       "arguments": [
         {
+          "name": "active",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "name": "allowedPersonas",
           "type": "string",
           "required": false
@@ -15871,6 +15876,11 @@
       "resource": "Captain:Update",
       "arguments": [
         {
+          "name": "active",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "name": "allowedPersonas",
           "type": "string",
           "required": false
@@ -22039,6 +22049,14 @@
         },
         {
           "kind": "option",
+          "name": "active",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean?",
+          "required": false
+        },
+        {
+          "kind": "option",
           "name": "json",
           "short": null,
           "valueKind": "flag",
@@ -22458,6 +22476,14 @@
           "valueKind": "scalar",
           "type": "String",
           "required": true
+        },
+        {
+          "kind": "option",
+          "name": "active",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean?",
+          "required": false
         },
         {
           "kind": "option",

@@ -367,7 +367,7 @@ namespace Armada.Core.Services
                 return blocker;
             }
 
-            List<Captain> idleCaptains = allCaptains.Where(c => c.State == CaptainStateEnum.Idle).ToList();
+            List<Captain> idleCaptains = allCaptains.Where(c => c.Active && c.State == CaptainStateEnum.Idle).ToList();
             if (idleCaptains.Count > 0)
             {
                 bool eligible = await IsAnyCaptainEligibleAsync(idleCaptains, mission, token).ConfigureAwait(false);

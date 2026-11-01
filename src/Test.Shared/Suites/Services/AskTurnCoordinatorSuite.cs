@@ -37,6 +37,30 @@ namespace Test.Shared.Suites.Services
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(CaseAsync("inactive_captain_preserves_turn_and_rejects_new_work", "Disabling preserves an in-flight Ask turn, rejects new turns and summaries, and reactivation works", async () =>
+            {
+                using AskTestHarness h = await AskTestHarness.CreateAsync().ConfigureAwait(false);
+                AuthContext owner = AskTestHarness.User("usr_active");
+                Captain captain = await NewCaptainAsync(h, "usr_active");
+                AskThread thread = await h.Threads.CreateThreadAsync(owner, new AskThreadCreateRequest { CaptainId = captain.Id });
+                h.Runner.Gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                AssertEqual(202, (await h.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "Known request" })).StatusCode);
+                AssertTrue(await AskTestHarness.WaitUntilAsync(() => Task.FromResult(h.Runner.Calls.Count == 1), 10000));
+                captain.Active = false;
+                await h.Db.Driver.Captains.UpdateAsync(captain, updateActive: true);
+                h.Runner.Gate.SetResult(true);
+                await WaitForTurnEndAsync(h, thread.Id);
+                AssertEqual(2, (await h.Threads.EnumerateMessagesAsync(owner, thread.Id, null))!.Messages.Count);
+                AssertEqual(409, (await h.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "Refused" })).StatusCode);
+                AssertEqual(409, (await h.Turns.SummarizeAsync(owner, thread.Id)).StatusCode);
+                AssertEqual(1, h.Runner.Calls.Count);
+                captain.Active = true;
+                await h.Db.Driver.Captains.UpdateAsync(captain, updateActive: true);
+                AssertEqual(202, (await h.Turns.SendMessageAsync(owner, thread.Id, new AskMessageSendRequest { Content = "Resumed" })).StatusCode);
+                await WaitForTurnEndAsync(h, thread.Id);
+                AssertEqual(2, h.Runner.Calls.Count);
+            }));
+
 
             cases.Add(CaseAsync("turn_persists_reply_and_tool_calls", "A turn runs in the background and persists the reply and its tool calls", async () =>
             {

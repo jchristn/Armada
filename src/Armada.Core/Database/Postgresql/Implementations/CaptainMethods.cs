@@ -63,8 +63,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, reasoning_effort, tier, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc, usage_capture_enabled, usage_capture_interval_seconds, usage_capture_mode, usage_capture_command)
-                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @reasoning_effort, @tier, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc, @usage_capture_enabled, @usage_capture_interval_seconds, @usage_capture_mode, @usage_capture_command);";
+                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, reasoning_effort, tier, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc, usage_capture_enabled, usage_capture_interval_seconds, usage_capture_mode, usage_capture_command, active)
+                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @reasoning_effort, @tier, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc, @usage_capture_enabled, @usage_capture_interval_seconds, @usage_capture_mode, @usage_capture_command, @active);";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)captain.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)captain.UserId ?? DBNull.Value);
@@ -94,6 +94,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@active", captain.Active);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -165,7 +166,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
         /// <param name="captain">Captain to update.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Updated captain.</returns>
-        public async Task<Captain> UpdateAsync(Captain captain, CancellationToken token = default)
+        /// <param name="updateActive">True only for an intentional Active configuration edit.</param>
+        public async Task<Captain> UpdateAsync(Captain captain, CancellationToken token = default, bool updateActive = false)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             captain.LastUpdateUtc = DateTime.UtcNow;
@@ -202,6 +204,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         usage_capture_interval_seconds = @usage_capture_interval_seconds,
                         usage_capture_mode = @usage_capture_mode,
                         usage_capture_command = @usage_capture_command,
+                        active = CASE WHEN @update_active = TRUE THEN @active ELSE active END,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
@@ -230,6 +233,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@active", captain.Active);
+                    cmd.Parameters.AddWithValue("@update_active", updateActive);
                     cmd.Parameters.AddWithValue("@last_update_utc", captain.LastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -528,7 +533,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         current_dock_id = @current_dock_id,
                         last_heartbeat_utc = @last_heartbeat_utc,
                         last_update_utc = @last_update_utc
-                        WHERE id = @id AND state = 'Idle';";
+                        WHERE id = @id AND state = 'Idle' AND active = TRUE;";
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", CaptainStateEnum.Working.ToString());
                     cmd.Parameters.AddWithValue("@current_mission_id", missionId);
@@ -877,7 +882,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         current_dock_id = @current_dock_id,
                         last_heartbeat_utc = @last_heartbeat_utc,
                         last_update_utc = @last_update_utc
-                        WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle';";
+                        WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle' AND active = TRUE;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", CaptainStateEnum.Working.ToString());
@@ -907,7 +912,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.CommandText = @"UPDATE captains SET
                         state = @state,
                         last_update_utc = @last_update_utc
-                        WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle';";
+                        WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle' AND active = TRUE;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
@@ -1129,6 +1134,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             }
             catch { }
             try { captain.UsageCaptureCommand = NullableString(reader["usage_capture_command"]); } catch { }
+            try { captain.Active = Convert.ToBoolean(reader["active"]); } catch { }
             return captain;
         }
 

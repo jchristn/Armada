@@ -195,6 +195,9 @@ namespace Armada.Core.Services
         public async Task TryRecoverAsync(Captain captain, CancellationToken token = default)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
+            // Recovery starts another process; disabling a captain must not launch it or change its held work.
+            Captain currentEligibility = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false) ?? captain;
+            if (!currentEligibility.Active) return;
             _AwaitingHarbor.TryRemove(captain.Id, out _);
 
             try

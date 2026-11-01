@@ -37,6 +37,27 @@ namespace Test.Shared.Suites.Services
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(CaseAsync("inactive_explicit_and_auto_assignment_rejected", "Inactive captains are excluded even when explicitly requested; reactivation restores routing", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    Harness h = await BuildHarnessAsync(testDb.Driver);
+                    Captain captain = await AddCaptainAsync(testDb.Driver, "Disabled", CaptainStateEnum.Idle);
+                    captain.Active = false;
+                    await testDb.Driver.Captains.UpdateAsync(captain, updateActive: true);
+                    Mission mission = await AddMissionAsync(testDb.Driver, h.Vessel, "inactive", MissionStatusEnum.Pending);
+                    AssertNotNull(await h.Missions.GetAssignmentBlockerAsync(mission));
+                    AssertFalse(await h.Missions.TryAssignAsync(mission, h.Vessel));
+                    await AddCaptainAsync(testDb.Driver, "Active alternative", CaptainStateEnum.Idle);
+                    mission.RequestedCaptainId = captain.Id;
+                    await testDb.Driver.Missions.UpdateAsync(mission);
+                    AssertFalse(await h.Missions.TryAssignAsync(mission, h.Vessel));
+                    AssertNull((await testDb.Driver.Captains.ReadAsync(captain.Id))!.CurrentMissionId);
+                    captain.Active = true;
+                    await testDb.Driver.Captains.UpdateAsync(captain, updateActive: true);
+                    AssertEqual(MissionAssignmentBlockerReasonEnum.AwaitingDispatch, (await h.Missions.GetAssignmentBlockerAsync(mission))!.Reason);
+                }
+            }));
 
             cases.Add(CaseAsync("not_pending_has_no_blocker", "A mission that is not Pending has no assignment blocker", TestTags.Negative, async () =>
             {

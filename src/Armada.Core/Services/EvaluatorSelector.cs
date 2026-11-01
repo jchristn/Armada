@@ -33,7 +33,7 @@ namespace Armada.Core.Services
             if (endpointOf == null) throw new ArgumentNullException(nameof(endpointOf));
 
             List<Captain> ordered = idle
-                .Where(c => c != null && c.State == CaptainStateEnum.Idle)
+                .Where(c => c != null && c.Active && c.State == CaptainStateEnum.Idle)
                 .Where(c => String.IsNullOrEmpty(candidateCaptainId) || !String.Equals(c.Id, candidateCaptainId, StringComparison.Ordinal))
                 .Where(c => !c.QuarantineUntilUtc.HasValue || c.QuarantineUntilUtc.Value <= DateTime.UtcNow)
                 .OrderByDescending(c => (int)(c.Tier ?? CaptainTierEnum.Standard))

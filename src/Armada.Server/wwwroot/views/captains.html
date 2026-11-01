@@ -73,7 +73,7 @@
                                 <td class="col-checkbox"><input type="checkbox" :checked="selectedCaptains.includes(cpt.id)" @change="toggleCaptainSelection(cpt.id)" title="Select this captain"></td>
                                 <td class="clickable" @click.stop="openEditCaptain(cpt)"><strong x-text="cpt.name"></strong></td>
                                 <td class="mono text-dim"><span class="id-display"><span x-text="cpt.id"></span><button class="copy-btn" @click.stop="copyId(cpt.id, $event)" title="Copy ID"></button></span></td>
-                                <td><span class="tag" :class="(cpt.state || '').toLowerCase()" x-text="cpt.state" :title="statusTooltip(cpt.state)"></span></td>
+                                <td><span class="tag" :class="(cpt.state || '').toLowerCase()" x-text="cpt.state" :title="statusTooltip(cpt.state)"></span> <span x-text="cpt.active === false ? 'Inactive' : 'Active'"></span></td>
                                 <td x-text="cpt.runtime || 'ClaudeCode'"></td>
                                 <td>
                                     <span x-show="cpt.currentMissionId" class="id-display"><a class="mono" href="#" @click.prevent="navigate('missions', 'mission-detail', cpt.currentMissionId)" x-text="cpt.currentMissionId"></a><button class="copy-btn" @click.stop="copyId(cpt.currentMissionId, $event)" title="Copy ID"></button></span>
@@ -120,6 +120,7 @@
                     </div>
                     <div class="detail-grid">
                         <div class="detail-field"><span class="detail-label">ID</span><span class="id-display"><span class="mono" x-text="detail.id"></span><button class="copy-btn" @click.stop="copyId(detail.id, $event)" title="Copy ID"></button></span></div>
+                        <div class="detail-field"><span class="detail-label">Active</span><span x-text="detail.active === false ? 'No' : 'Yes'"></span></div>
                         <div class="detail-field"><span class="detail-label">State</span><span class="tag" :class="(detail.state || '').toLowerCase()" x-text="detail.state" :title="statusTooltip(detail.state)"></span></div>
                         <div class="detail-field"><span class="detail-label">Runtime</span><span x-text="detail.runtime || 'ClaudeCode'"></span></div>
                         <div class="detail-field"><span class="detail-label">Model</span><span x-text="detail.model || 'Runtime default'"></span></div>

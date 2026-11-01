@@ -23,10 +23,18 @@ function captain(over: Partial<Captain> = {}): Captain {
 }
 
 describe('captainForm', () => {
+  it('defaults Active for older captains and preserves explicit false in both payloads', () => {
+    expect(emptyCaptainForm().active).toBe(true);
+    expect(captainFormFromCaptain(captain()).active).toBe(true);
+    const form = captainFormFromCaptain(captain({ active: false }));
+    expect(form.active).toBe(false);
+    expect(buildCaptainPayload(form).active).toBe(false);
+    expect(buildCaptainCreatePayload(form).active).toBe(false);
+  });
   it('builds the create payload like the Captains page did', () => {
     const form = { ...emptyCaptainForm(), name: 'Ada', runtime: 'Codex', model: '  gpt-5 ', autoApprove: false, cliPermissionPolicy: 'Refuse' as const };
     expect(buildCaptainCreatePayload(form)).toEqual({
-      name: 'Ada', runtime: 'Codex', model: 'gpt-5', modelEndpointId: null, reasoningEffort: null, tier: null,
+      active: true, name: 'Ada', runtime: 'Codex', model: 'gpt-5', modelEndpointId: null, reasoningEffort: null, tier: null,
       runtimeOptionsJson: '{"autoApprove":false}', cliPermissionPolicy: 'Refuse',
     });
     expect(buildCaptainPayload(form)).not.toHaveProperty('cliPermissionPolicy');

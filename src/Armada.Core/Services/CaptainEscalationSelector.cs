@@ -26,7 +26,7 @@ namespace Armada.Core.Services
             ArgumentNullException.ThrowIfNull(mission);
             ArgumentNullException.ThrowIfNull(voyageMissions);
             List<Captain> captains = await database.Captains.EnumerateAsync(token).ConfigureAwait(false);
-            List<Captain> eligible = captains.Where(c => c.Id != failedCaptainId && c.TenantId == mission.TenantId
+            List<Captain> eligible = captains.Where(c => c.Active && c.Id != failedCaptainId && c.TenantId == mission.TenantId
                 && (c.UserId == null || c.UserId == mission.UserId)
                 && (c.State == CaptainStateEnum.Idle || c.State == CaptainStateEnum.Working)
                 && (!c.QuarantineUntilUtc.HasValue || c.QuarantineUntilUtc <= DateTime.UtcNow)

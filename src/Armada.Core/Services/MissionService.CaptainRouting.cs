@@ -69,6 +69,11 @@ namespace Armada.Core.Services
         {
             CaptainEligibilityContext context = new CaptainEligibilityContext();
             context.RoutingPersona = RoutingPersona(mission);
+            if (!String.IsNullOrEmpty(mission.RequestedCaptainId))
+            {
+                Captain? requested = await _Database.Captains.ReadAsync(mission.RequestedCaptainId, token).ConfigureAwait(false);
+                context.InactiveRequestedCaptain = requested?.Active == false;
+            }
             // Review authors only change eligibility when they are excluded; otherwise they are merely less preferred.
             if (_Settings.ExcludeReviewAuthorsFromJudge)
                 context.ExcludedAuthors = await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false);
@@ -88,6 +93,8 @@ namespace Armada.Core.Services
         {
             // Mirrors FindAvailableCaptainAsync: a requested (dictated) captain that is idle is always eligible, as is the
             // persona's default captain; otherwise the persona fence, the tier floor and the persona's priorities apply.
+            if (context.InactiveRequestedCaptain) return "requested captain is inactive; enable Active before assigning new work";
+            if (!captain.Active) return "inactive; enable Active before assigning new work";
             if (context.ExcludedAuthors.Contains(captain.Id)) return "authored an earlier stage";
             if (!CaptainVisibleToMission(captain, mission)) return "belongs to another tenant or user";
             if (captain.QuarantineUntilUtc.HasValue && captain.QuarantineUntilUtc > DateTime.UtcNow) return "quarantined";
@@ -207,9 +214,14 @@ namespace Armada.Core.Services
             string? persona = RoutingPersona(mission);
             CaptainTierEnum? requiredTier = mission.Tier;
             string? requestedCaptainId = mission.RequestedCaptainId;
+            if (!String.IsNullOrEmpty(requestedCaptainId))
+            {
+                Captain? requested = await _Database.Captains.ReadAsync(requestedCaptainId, token).ConfigureAwait(false);
+                if (requested?.Active == false) return null;
+            }
             // Only idle captains are eligible for assignment
             List<Captain> idleCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle, token).ConfigureAwait(false);
-            idleCaptains = idleCaptains.Where(c => CaptainVisibleToMission(c, mission) &&
+            idleCaptains = idleCaptains.Where(c => c.Active && CaptainVisibleToMission(c, mission) &&
                 (!c.QuarantineUntilUtc.HasValue || c.QuarantineUntilUtc <= DateTime.UtcNow)).ToList();
             HashSet<string> reviewAuthors = await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false);
             if (_Settings.ExcludeReviewAuthorsFromJudge)
@@ -590,6 +602,7 @@ namespace Armada.Core.Services
             public HashSet<string> ExcludedAuthors { get; set; } = new HashSet<string>(StringComparer.Ordinal);
             public bool EscalatedToRequestedCaptain { get; set; } = false;
             public bool StrictCaptainOverride { get; set; } = false;
+            public bool InactiveRequestedCaptain { get; set; } = false;
             public string? DefaultCaptainId { get; set; } = null;
             public Persona? Persona { get; set; } = null;
             public WorkerEnvelopeGate? EnvelopeGate { get; set; } = null;

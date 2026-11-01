@@ -2746,7 +2746,10 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"ALTER TABLE token_usage ADD COLUMN membership_id TEXT;",
                     @"ALTER TABLE token_usage ADD COLUMN reported_cost REAL;",
                     @"ALTER TABLE token_usage ADD COLUMN cost_currency TEXT;",
-                    @"CREATE INDEX IF NOT EXISTS idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);")
+                    @"CREATE INDEX IF NOT EXISTS idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);"),
+
+                new SchemaMigration(112, "Add captain Active eligibility (existing captains remain active)",
+                    @"ALTER TABLE captains ADD COLUMN active INTEGER NOT NULL DEFAULT 1;")
 
 
 

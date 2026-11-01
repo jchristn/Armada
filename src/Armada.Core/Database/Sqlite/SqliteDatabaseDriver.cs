@@ -748,6 +748,7 @@ namespace Armada.Core.Database.Sqlite
             }
             catch { }
             try { captain.UsageCaptureCommand = NullableString(reader["usage_capture_command"]); } catch { }
+            try { captain.Active = Convert.ToBoolean(reader["active"]); } catch { }
             return captain;
         }
 
