@@ -310,6 +310,9 @@ namespace Test.Shared.Infrastructure
             logging.Settings.LogFilename = logPath;
 
             ArmadaSettings settings = new ArmadaSettings();
+            // Production capture defaults on. Test servers explicitly opt out so their long-lived
+            // health loops never read the developer's provider credentials. Capture suites opt in.
+            settings.UsageCapture.Enabled = false;
             Settings = settings;
             settings.DataDirectory = TempDir;
             // Keep any settings save (PUT /api/v1/settings, restore) inside the temp directory, never ~/.armada.

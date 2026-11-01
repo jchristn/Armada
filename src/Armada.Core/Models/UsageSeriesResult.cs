@@ -1,8 +1,9 @@
 namespace Armada.Core.Models
 {
-    using System;
     using System.Collections.Generic;
+    using System;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>Bounded chart series without invented zero utilization.</summary>
     public class UsageSeriesResult
@@ -23,6 +24,7 @@ namespace Armada.Core.Models
         public string GroupBy { get; set; } = "account";
 
         /// <summary>Series for this response.</summary>
+        [CollectionBound(100)]
         public List<UsageSeries> Series { get; set; } = new List<UsageSeries>();
 
         /// <summary>Coverage for this response.</summary>

@@ -7,7 +7,7 @@ namespace Armada.Core.Enums
     /// Where one usage snapshot's numbers came from. The source is recorded with every snapshot so the
     /// dashboard can label confidence (Official, Undocumented, Estimated) and so quarantine policy can
     /// accept only authoritative fresh sources. Auto capture uses only verified read-only sources that
-    /// spend no inference quota; PTY scraping requires a separate explicit opt-in and Custom runs an
+    /// spend no inference quota; PTY fallback respects the global permission switch and Custom runs an
     /// administrator-chosen local executable.
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -26,7 +26,7 @@ namespace Armada.Core.Enums
         SessionLog,
 
         /// <summary>
-        /// Opt-in interactive screen capture; never an automatic fallback.
+        /// Bounded interactive fallback after a recognized idle prompt; prohibited when the global switch is off.
         /// </summary>
         [EnumMember(Value = "Pty")]
         Pty,

@@ -24,13 +24,13 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 518 | 15 |
+| REST routes | 521 | 15 |
 | MCP tools | 264 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 77 | 0 |
 | CLI commands | 97 | 0 |
-| Settings keys | 324 | 12 |
+| Settings keys | 325 | 12 |
 
 ## REST API
 
@@ -468,9 +468,12 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/token-usage/summary` | Authenticated |  | 200 `TokenUsageSummaryResult`, 400 |  |
 | POST | `/api/v1/token-usage/synthetic` | AdminOnly | `TokenUsageSyntheticRequest` | 200 `TokenUsageSyntheticResult`, 400, 409 `ApiErrorResponse` |  |
 | GET | `/api/v1/usage/latest` | Authenticated |  | 200 `EnumerationResult<UsageSnapshotView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| POST | `/api/v1/usage/latest/enumerate` | Authenticated | `UsageQuery` (optional) | 200 `EnumerationResult<UsageSnapshotView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/usage/missions` | Authenticated |  | 200 `UsageMissionResult`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| POST | `/api/v1/usage/missions/enumerate` | Authenticated | `UsageQuery` (optional) | 200 `UsageMissionResult`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/usage/series` | Authenticated |  | 200 `UsageSeriesResult`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/usage/snapshots` | Authenticated |  | 200 `EnumerationResult<UsageSnapshotView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| POST | `/api/v1/usage/snapshots/enumerate` | Authenticated | `UsageQuery` (optional) | 200 `EnumerationResult<UsageSnapshotView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 429 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/users` | Authenticated |  | 200 `EnumerationResult<UserMaster>` |  |
 | POST | `/api/v1/users` | TenantAdmin |  | 201 `UserMaster`, 400, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/users/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<UserMaster>` |  |
@@ -1360,8 +1363,9 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `transientOutageGraceMinutes` | int | `10` |  |
 | `transientResumeDelaySeconds` | int | `5` |  |
 | `usageCapture` | object |  |  |
-| `usageCapture.allowPtyFallback` | bool | `false` |  |
-| `usageCapture.enabled` | bool | `false` |  |
+| `usageCapture.allowPtyFallback` | bool? | `null` |  |
+| `usageCapture.defaultsRevision` | int | `2` |  |
+| `usageCapture.enabled` | bool? | `null` |  |
 | `usageCapture.maximumBackoffSeconds` | int | `3600` |  |
 | `usageCapture.maximumConcurrentProbes` | int | `4` |  |
 | `usageCapture.maximumConcurrentProbesPerHost` | int | `1` |  |

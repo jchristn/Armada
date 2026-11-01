@@ -148,13 +148,12 @@ namespace Armada.Core.Models
         public CliPermissionPolicyEnum? CliPermissionPolicy { get; set; } = null;
 
         /// <summary>
-        /// Whether this captain participates in account usage capture. Default false: capture stays disabled
-        /// until explicitly enabled, and old or minimally deserialized captains stay disabled. An explicit
-        /// JSON null reads as false. Auto and Custom mode both additionally require this to be true; Disabled
-        /// mode opts the captain out of limit capture and account membership regardless of this flag.
+        /// Whether this captain participates in account usage capture. Null and omitted values inherit true.
+        /// Explicit false opts out; Disabled mode always opts out regardless of this flag. The nullable
+        /// choice is preserved on the wire so metadata write-back does not persist a resolved default.
         /// </summary>
         [JsonConverter(typeof(UsageCaptureEnabledJsonConverter))]
-        public bool UsageCaptureEnabled { get; set; } = false;
+        public bool? UsageCaptureEnabled { get; set; } = null;
 
         /// <summary>
         /// Requested seconds between usage captures for this captain. Default 300, clamped to 60..86400 in
@@ -203,7 +202,7 @@ namespace Armada.Core.Models
         /// Whether usage capture is effectively active for this captain: enabled AND not opted out with
         /// Disabled mode. Derived; not stored.
         /// </summary>
-        public bool UsageCaptureActive => UsageCaptureEnabled && UsageCaptureMode != UsageCaptureModeEnum.Disabled;
+        public bool UsageCaptureActive => (UsageCaptureEnabled ?? true) && UsageCaptureMode != UsageCaptureModeEnum.Disabled;
 
         /// <summary>
         /// Current state of the captain.

@@ -90,7 +90,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@quarantine_reason", (object?)captain.QuarantineReason ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@created_utc", captain.CreatedUtc);
                     cmd.Parameters.AddWithValue("@last_update_utc", captain.LastUpdateUtc);
-                    cmd.Parameters.AddWithValue("@usage_capture_enabled", captain.UsageCaptureEnabled);
+                    cmd.Parameters.AddWithValue("@usage_capture_enabled", (object?)captain.UsageCaptureEnabled ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);
@@ -229,7 +229,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@tier", (object?)captain.Tier?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@quarantine_until_utc", captain.QuarantineUntilUtc.HasValue ? (object)captain.QuarantineUntilUtc.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@quarantine_reason", (object?)captain.QuarantineReason ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@usage_capture_enabled", captain.UsageCaptureEnabled);
+                    cmd.Parameters.AddWithValue("@usage_capture_enabled", (object?)captain.UsageCaptureEnabled ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);
@@ -1124,7 +1124,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             catch { }
             try { captain.QuarantineUntilUtc = NullableDateTime(reader["quarantine_until_utc"]); } catch { }
             try { captain.QuarantineReason = NullableString(reader["quarantine_reason"]); } catch { }
-            try { captain.UsageCaptureEnabled = reader["usage_capture_enabled"] != DBNull.Value && Convert.ToBoolean(reader["usage_capture_enabled"]); } catch { }
+            try { captain.UsageCaptureEnabled = reader["usage_capture_enabled"] == DBNull.Value ? null : Convert.ToBoolean(reader["usage_capture_enabled"]); } catch { }
             try { captain.UsageCaptureIntervalSeconds = Convert.ToInt32(reader["usage_capture_interval_seconds"]); } catch { }
             try
             {

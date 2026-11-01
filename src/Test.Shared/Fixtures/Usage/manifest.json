@@ -80,6 +80,46 @@
       "provenance": "ArmadaSource",
       "verified": false,
       "notes": "This is the contract shape defined by CAPTAIN_USAGE_PLAN.md, not a capture from an installed executable. accountKey is a placeholder for the host HMAC; no executable exists on this host."
+    },
+    {
+      "file": "claude-oauth-usage-v1.sanitized.json",
+      "runtime": "ClaudeCode",
+      "interface": "OAuth usage v1 root/window projection",
+      "provenance": "InstalledBinaryString",
+      "verified": false,
+      "notes": "Phase 6 synthetic parser fixture. Numbers and timestamps invented. See PROBE_INTERFACES.md phase 6 evidence; this file is not a raw provider capture."
+    },
+    {
+      "file": "gemini-quota-v1internal.sanitized.json",
+      "runtime": "Gemini",
+      "interface": "Code Assist retrieveUserQuota v1internal",
+      "provenance": "InstalledSchema",
+      "verified": false,
+      "notes": "Phase 6 synthetic parser fixture. Numbers and timestamps invented. See PROBE_INTERFACES.md phase 6 evidence; this file is not a raw provider capture."
+    },
+    {
+      "file": "claude-usage-pty-v1.sanitized.json",
+      "runtime": "ClaudeCode",
+      "interface": "synthetic /usage percentage UI",
+      "provenance": "InstalledBinaryString",
+      "verified": false,
+      "notes": "Phase 6 synthetic parser fixture. Numbers and timestamps invented. See PROBE_INTERFACES.md phase 6 evidence; this file is not a raw provider capture."
+    },
+    {
+      "file": "gemini-stats-session-v066.sanitized.json",
+      "runtime": "Gemini",
+      "interface": "synthetic /stats accounting without quota",
+      "provenance": "InstalledSchema",
+      "verified": false,
+      "notes": "Phase 6 synthetic parser fixture. Numbers and timestamps invented. See PROBE_INTERFACES.md phase 6 evidence; this file is not a raw provider capture."
+    },
+    {
+      "file": "gemini-encrypted-credentials-v066.sanitized.json",
+      "runtime": "Gemini",
+      "interface": "CLI 0.66 read-only encrypted main-account store",
+      "provenance": "InstalledSchema",
+      "verified": false,
+      "notes": "Synthetic Node-generated scrypt/AES-256-GCM interoperability fixture. Fixed invented host, user and token; no real credential was captured."
     }
   ],
   "unavailable": [

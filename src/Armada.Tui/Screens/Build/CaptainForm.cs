@@ -130,6 +130,14 @@ namespace Armada.Tui.Screens.Build
             runtime.Required = true;
             if (currentRuntime != null) runtime.SetValue(currentRuntime);
 
+            SelectField<string> usageEnabled = screen.NewSelect("Capture account usage", new List<SelectOption<string>> { new SelectOption<string>("inherit", loc.T("Inherit (enabled)")), new SelectOption<string>("true", loc.T("Enabled")), new SelectOption<string>("false", loc.T("Disabled")) });
+            usageEnabled.SetValue(editing?.UsageCaptureEnabled?.ToString().ToLowerInvariant() ?? "inherit");
+            SelectField<string> usageMode = screen.NewSelect("Capture mode", new List<SelectOption<string>> { new SelectOption<string>("Auto", loc.T("Auto")), new SelectOption<string>("Disabled", loc.T("Disabled")), new SelectOption<string>("Custom", loc.T("Custom executable")) });
+            usageMode.SetValue(editing?.UsageCaptureMode.ToString() ?? "Auto");
+            InputField usageInterval = new InputField { Value = (editing?.UsageCaptureIntervalSeconds ?? 300).ToString(CultureInfo.InvariantCulture) };
+            usageInterval.Validator = text => Int32.TryParse(text, out int seconds) && seconds >= 60 && seconds <= 86400 ? null : loc.T("Interval must be a whole number of seconds from 60 to 86400.");
+            InputField usageCommand = new InputField { Value = editing?.UsageCaptureCommand ?? "" };
+
             InputField model = new InputField();
             model.Value = editing?.Model ?? "";
             model.Placeholder = "e.g., gpt-5.4-mini";
@@ -223,6 +231,10 @@ namespace Armada.Tui.Screens.Build
             dialog.AddField("Active", active);
             dialog.AddField("Auto-approve", autoApprove);
             dialog.AddField("CLI tool permissions", cliPolicy, "How this captain handles shell commands, file edits, and fetches that need permission. Inherit: missions follow the auto-approve option when it is set, then the server default; Ask conversations use the server default (Settings > CLI Tool Permissions). A conversation can override it." + (canManagePolicy ? "" : " Only admins can change this."));
+            dialog.AddField("Capture account usage", usageEnabled);
+            dialog.AddField("Capture mode", usageMode);
+            dialog.AddField("Requested interval", usageInterval);
+            dialog.AddField("Custom command JSON", usageCommand);
             dialog.AddField("Mux Config Directory", muxConfig);
             dialog.AddField("Mux Endpoint", muxEndpoint);
             dialog.AddField("", muxPick);
@@ -359,6 +371,10 @@ namespace Armada.Tui.Screens.Build
             {
                 AgentRuntimeEnum r = runtime.Value ?? AgentRuntimeEnum.ClaudeCode;
                 Captain body = editing != null ? CopyOf(editing) : new Captain(name.Value.Trim());
+                body.UsageCaptureEnabled = usageEnabled.Value == "inherit" ? null : usageEnabled.Value == "true";
+                body.UsageCaptureIntervalSeconds = Int32.Parse(usageInterval.Value, CultureInfo.InvariantCulture);
+                body.UsageCaptureMode = Enum.Parse<UsageCaptureModeEnum>(usageMode.Value!);
+                body.UsageCaptureCommand = body.UsageCaptureMode == UsageCaptureModeEnum.Custom ? usageCommand.Value : null;
                 body.Name = name.Value.Trim();
                 body.Runtime = r;
                 body.SystemInstructions = String.IsNullOrEmpty(instructions.Text) ? null : instructions.Text;

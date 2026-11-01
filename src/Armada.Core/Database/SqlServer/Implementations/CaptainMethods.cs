@@ -84,7 +84,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@quarantine_reason", (object?)captain.QuarantineReason ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@created_utc", SqlServerDatabaseDriver.ToIso8601(captain.CreatedUtc));
                     cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(captain.LastUpdateUtc));
-                    cmd.Parameters.AddWithValue("@usage_capture_enabled", captain.UsageCaptureEnabled);
+                    cmd.Parameters.AddWithValue("@usage_capture_enabled", (object?)captain.UsageCaptureEnabled ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);
@@ -204,7 +204,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@last_process_alive_utc", captain.LastProcessAliveUtc.HasValue ? (object)captain.LastProcessAliveUtc.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@quarantine_until_utc", captain.QuarantineUntilUtc.HasValue ? (object)SqlServerDatabaseDriver.ToIso8601(captain.QuarantineUntilUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@quarantine_reason", (object?)captain.QuarantineReason ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@usage_capture_enabled", captain.UsageCaptureEnabled);
+                    cmd.Parameters.AddWithValue("@usage_capture_enabled", (object?)captain.UsageCaptureEnabled ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);

@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Services;
     /// <summary>Capture union: queued receipt, or the original paged passive observations.</summary>
     public class UsageCaptureResult : UsageCaptureReceipt
     {
@@ -8,6 +9,7 @@ namespace Armada.Core.Models
         public UsageCaptureResult() { Status = "Passive"; }
 
         /// <summary>Passive observations; null for queued active captures.</summary>
+        [CollectionBound(100)]
         public List<UsageSnapshotView>? Objects { get; set; }
         /// <summary>Passive page number.</summary>
         public int PageNumber { get; set; }

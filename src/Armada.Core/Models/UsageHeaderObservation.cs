@@ -1,7 +1,8 @@
 namespace Armada.Core.Models
 {
-    using System;
     using System.Collections.Generic;
+    using System;
+    using Armada.Core.Services;
 
     /// <summary>
     /// The allowlisted rate-limit response headers one inference response carried, captured by
@@ -32,6 +33,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Allowlisted headers keyed by lower-case name. Never null.
         /// </summary>
+        [CollectionBound(32)]
         public Dictionary<string, string> Headers
         {
             get => _Headers;

@@ -2457,7 +2457,12 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"CREATE INDEX IF NOT EXISTS idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);"),
 
                 new SchemaMigration(112, "Add captain Active eligibility (existing captains remain active)",
-                    @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;")
+                    @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;"),
+
+                new SchemaMigration(113, "Reset usage defaults to inherited enabled capture",
+                    @"ALTER TABLE captains ALTER COLUMN usage_capture_enabled DROP NOT NULL;",
+                    @"ALTER TABLE captains ALTER COLUMN usage_capture_enabled DROP DEFAULT;",
+                    @"UPDATE captains SET usage_capture_enabled = NULL;")
 
 
             };

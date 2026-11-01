@@ -33,7 +33,7 @@ namespace Test.Shared.Suites.E2E
                     E2ETenantUser b = await E2ETenantUser.CreateAsync(fx.AuthClient, "usage-b").ConfigureAwait(false);
                     E2ETenantUser regular = await E2ETenantUser.CreateAsync(fx.AuthClient, "usage-regular", false, a.TenantId).ConfigureAwait(false);
                     using DatabaseDriver db = await UsageTestData.OpenAsync(fx).ConfigureAwait(false);
-                    Captain captain = await db.Captains.CreateAsync(new Captain { TenantId = a.TenantId, Name = "private-tenant-a" }).ConfigureAwait(false);
+                    Captain captain = await db.Captains.CreateAsync(new Captain { TenantId = a.TenantId, Name = "private-tenant-a", UsageCaptureEnabled = false }).ConfigureAwait(false);
                     DateTime now = DateTime.UtcNow;
                     UsageSnapshot sa = await UsageTestData.SnapshotAsync(db, a.TenantId, now, "same-account", new List<string> { captain.Id }).ConfigureAwait(false);
                     UsageSnapshot sb = await UsageTestData.SnapshotAsync(db, b.TenantId, now, "same-account", new List<string>()).ConfigureAwait(false);

@@ -9,6 +9,10 @@ namespace Armada.Client.Models
     {
         #region Public-Members
 
+        /// <summary>Global account capture choices and bounds.</summary>
+        public Armada.Core.Settings.UsageCaptureSettings? UsageCapture { get; set; }
+
+
         /// <summary>Mission/event/signal retention in days; zero disables expiry. Null leaves it unchanged on update.</summary>
         public int? DataRetentionDays { get; set; } = null;
 

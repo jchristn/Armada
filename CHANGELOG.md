@@ -6,6 +6,13 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Captain account usage (phase 6)
+
+- Account usage capture and the Claude/Gemini PTY fallback now default on. Missing/null values inherit on; explicit false and Disabled mode opt out. Native TUI/mobile views show account/host limits, capture state, settings and expiring cooldowns.
+- **Upgrade action:** migration 113 resets existing captain capture flags to unset. Settings files without `UsageCapture.DefaultsRevision: 2` reset `Enabled` and `AllowPtyFallback` once. This also resets opt-outs saved by earlier v1.2.0 builds; turn capture or PTY fallback off again after upgrading if required.
+- Add host-local Claude OAuth and Gemini Code Assist quota readers, bounded enumerate forms, collection declarations and seven-day raw snapshot pruning. Unsupported and missing-auth sources never fabricate utilization. Hourly rollups remain planned.
+
+
 ### Captain usage dashboard prerequisites
 
 - Add an authenticated latest-usage `captainIds` batch filter for 1..100 distinct

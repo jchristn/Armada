@@ -5,11 +5,11 @@ namespace Armada.Core.Services
     using System.Text.Json.Serialization;
 
     /// <summary>
-    /// Reads the captain UsageCaptureEnabled flag. An explicit JSON null reads as the disabled default (false);
+    /// Reads the captain UsageCaptureEnabled flag. An explicit JSON null preserves the inherited enabled default;
     /// true and false read as-is and every other token (strings, numbers, objects) is still rejected with a
-    /// <see cref="JsonException"/>, so malformed values cannot silently enable capture. Writes a boolean.
+    /// <see cref="JsonException"/>, so malformed values cannot silently enable capture. Writes the nullable choice.
     /// </summary>
-    public class UsageCaptureEnabledJsonConverter : JsonConverter<bool>
+    public class UsageCaptureEnabledJsonConverter : JsonConverter<bool?>
     {
         #region Public-Methods
 
@@ -17,12 +17,12 @@ namespace Armada.Core.Services
         public override bool HandleNull => true;
 
         /// <inheritdoc />
-        public override bool Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        public override bool? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             switch (reader.TokenType)
             {
                 case JsonTokenType.Null:
-                    return false;
+                    return null;
                 case JsonTokenType.True:
                     return true;
                 case JsonTokenType.False:
@@ -33,9 +33,10 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options)
+        public override void Write(Utf8JsonWriter writer, bool? value, JsonSerializerOptions options)
         {
-            writer.WriteBooleanValue(value);
+            if (value.HasValue) writer.WriteBooleanValue(value.Value);
+            else writer.WriteNullValue();
         }
 
         #endregion

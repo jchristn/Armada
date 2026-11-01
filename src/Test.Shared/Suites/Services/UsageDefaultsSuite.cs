@@ -13,9 +13,9 @@ namespace Test.Shared.Suites.Services
     /// <summary>
     /// Descriptors for usage capture defaults (AC1 Services.UsageDefaults): the fixed cross-runtime captain
     /// contract and the server settings behind it. Minimally deserialized captains ({}) and captains with
-    /// explicit nulls stay disabled with the default 300-second interval, Auto mode and no Custom command;
+    /// explicit nulls inherit enabled capture with the default 300-second interval, Auto mode and no Custom command;
     /// interval bounds clamp consistently in the model setters; Disabled mode always wins; unknown enum
-    /// strings are rejected; the UsageCaptureSettings defaults (disabled, 60-second minimum interval,
+    /// strings are rejected; the UsageCaptureSettings defaults (inherited enabled, 60-second minimum interval,
     /// opt-in PTY, 20-second probe timeout, concurrency and excerpt caps, 7/90-day retention) and their
     /// clamps are stable through ArmadaSettings; and the windows JSON codec tolerates empty, null and
     /// malformed input without crashing.
@@ -38,33 +38,33 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(Case("captain_minimal_json_keeps_disabled_defaults", "A minimally deserialized captain stays disabled with 300/Auto", TestTags.Positive, () =>
+            cases.Add(Case("captain_minimal_json_keeps_enabled_defaults", "A minimally deserialized captain inherits enabled with 300/Auto", TestTags.Positive, () =>
             {
                 Captain empty = JsonSerializer.Deserialize<Captain>("{}")!;
                 AssertNotNull(empty, "captain deserializes");
-                AssertFalse(empty.UsageCaptureEnabled, "{} keeps usage capture disabled");
+                AssertTrue(empty.UsageCaptureEnabled == null, "{} preserves the inherited choice");
                 AssertEqual(300, empty.UsageCaptureIntervalSeconds, "{} keeps the default interval");
                 AssertEqual(UsageCaptureModeEnum.Auto, empty.UsageCaptureMode, "{} keeps the default Auto mode");
                 AssertNull(empty.UsageCaptureCommand, "{} keeps no command");
-                AssertFalse(empty.UsageCaptureActive, "{} captain is not effectively active");
+                AssertTrue(empty.UsageCaptureActive, "{} captain is not effectively active");
 
                 Captain explicitFalse = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureEnabled\":false}")!;
-                AssertFalse(explicitFalse.UsageCaptureEnabled, "explicit false stays disabled");
+                AssertFalse(explicitFalse.UsageCaptureEnabled == true, "explicit false stays disabled");
                 AssertFalse(explicitFalse.UsageCaptureActive, "explicit false is not active");
 
                 Captain nullCommand = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureCommand\":null}")!;
                 AssertNull(nullCommand.UsageCaptureCommand, "explicit null command normalizes to null");
-                AssertFalse(nullCommand.UsageCaptureActive, "explicit null command does not enable capture");
+                AssertTrue(nullCommand.UsageCaptureActive, "explicit null command does not enable capture");
             }));
 
-            cases.Add(Case("usage_global_json_omitted_null_and_empty_keep_defaults", "Omitted, null and empty global blocks keep capture disabled", TestTags.Positive, () =>
+            cases.Add(Case("usage_global_json_omitted_null_and_empty_keep_defaults", "Omitted, null and empty global blocks inherit enabled capture", TestTags.Positive, () =>
             {
                 foreach (string json in new string[] { "{}", "{\"UsageCapture\":null}", "{\"UsageCapture\":{}}" })
                 {
                     ArmadaSettings settings = JsonSerializer.Deserialize<ArmadaSettings>(json)!;
                     AssertNotNull(settings.UsageCapture, "global block is restored");
-                    AssertFalse(settings.UsageCapture.Enabled, "capture stays disabled");
-                    AssertFalse(settings.UsageCapture.AllowPtyFallback, "PTY stays opt-in");
+                    AssertTrue(settings.UsageCapture.EffectiveEnabled, "capture inherits enabled");
+                    AssertTrue(settings.UsageCapture.EffectiveAllowPtyFallback, "PTY stays opt-in");
                     AssertEqual(60, settings.UsageCapture.MinimumIntervalSeconds, "default minimum");
                     AssertEqual(20, settings.UsageCapture.ProbeTimeoutSeconds, "default timeout");
                     AssertEqual(4, settings.UsageCapture.MaximumConcurrentProbes, "default concurrency");
@@ -85,8 +85,8 @@ namespace Test.Shared.Suites.Services
                 ArmadaSettings restored = JsonSerializer.Deserialize<ArmadaSettings>(JsonSerializer.Serialize(settings))!;
                 foreach (UsageCaptureSettings usage in new UsageCaptureSettings[] { settings.UsageCapture, restored.UsageCapture })
                 {
-                    AssertTrue(usage.Enabled, "explicit enable survives");
-                    AssertTrue(usage.AllowPtyFallback, "explicit PTY override survives");
+                    AssertTrue(usage.Enabled == true, "explicit enable survives");
+                    AssertTrue(usage.AllowPtyFallback == true, "explicit PTY override survives");
                     AssertEqual(60, usage.MinimumIntervalSeconds, "minimum clamps");
                     AssertEqual(300, usage.ProbeTimeoutSeconds, "timeout clamps");
                     AssertEqual(1, usage.MaximumConcurrentProbes, "concurrency clamps");
@@ -122,7 +122,7 @@ namespace Test.Shared.Suites.Services
                     string json = "{\"UsageCaptureCommand\":" + JsonSerializer.Serialize(command) + "}";
                     Captain captain = JsonSerializer.Deserialize<Captain>(json)!;
                     AssertNull(captain.UsageCaptureCommand, "blank command normalizes through JSON");
-                    AssertFalse(captain.UsageCaptureActive, "blank command cannot enable default captain");
+                    AssertTrue(captain.UsageCaptureActive, "blank command cannot enable default captain");
                 }
             }));
 
@@ -140,7 +140,7 @@ namespace Test.Shared.Suites.Services
                         Captain captain = JsonSerializer.Deserialize<Captain>(payload)!;
                         AssertEqual(UsageCaptureModeEnum.Custom, captain.UsageCaptureMode, "Custom getter exposes the stored command");
                         AssertNull(captain.UsageCaptureCommand, "blank command is normalized rather than hidden by Auto mode");
-                        AssertFalse(captain.UsageCaptureActive, "Custom does not enable omitted capture flag");
+                        AssertTrue(captain.UsageCaptureActive, "Custom does not enable omitted capture flag");
                         Captain restored = JsonSerializer.Deserialize<Captain>(JsonSerializer.Serialize(captain))!;
                         AssertNull(restored.UsageCaptureCommand, "normalized command survives round trip");
                         AssertEqual(300, restored.UsageCaptureIntervalSeconds, "omitted interval retains default");
@@ -153,7 +153,7 @@ namespace Test.Shared.Suites.Services
                 string json = "{\"UsageCaptureEnabled\":true,\"UsageCaptureIntervalSeconds\":900,"
                     + "\"UsageCaptureMode\":\"Custom\",\"UsageCaptureCommand\":\"{\\\"executable\\\":\\\"/opt/usage/read-quota\\\",\\\"arguments\\\":[\\\"--json\\\"]}\"}";
                 Captain captain = JsonSerializer.Deserialize<Captain>(json)!;
-                AssertTrue(captain.UsageCaptureEnabled, "enabled flag deserializes");
+                AssertTrue(captain.UsageCaptureEnabled == true, "enabled flag deserializes");
                 AssertEqual(900, captain.UsageCaptureIntervalSeconds, "interval deserializes");
                 AssertEqual(UsageCaptureModeEnum.Custom, captain.UsageCaptureMode, "Custom mode deserializes");
                 AssertNotNull(captain.UsageCaptureCommand, "command deserializes");
@@ -161,7 +161,7 @@ namespace Test.Shared.Suites.Services
 
                 string serialized = JsonSerializer.Serialize(captain);
                 Captain roundTripped = JsonSerializer.Deserialize<Captain>(serialized)!;
-                AssertTrue(roundTripped.UsageCaptureEnabled, "enabled flag round-trips");
+                AssertTrue(roundTripped.UsageCaptureEnabled == true, "enabled flag round-trips");
                 AssertEqual(900, roundTripped.UsageCaptureIntervalSeconds, "interval round-trips");
                 AssertEqual(UsageCaptureModeEnum.Custom, roundTripped.UsageCaptureMode, "mode round-trips");
                 AssertEqual(captain.UsageCaptureCommand, roundTripped.UsageCaptureCommand, "command round-trips");
@@ -217,7 +217,7 @@ namespace Test.Shared.Suites.Services
                 AssertNull(captain.UsageCaptureCommand, "whitespace command normalizes to null");
             }));
 
-            cases.Add(Case("captain_explicit_null_settings_keep_defaults", "Explicit null captain usage settings keep disabled/300/Auto, per field and combined", TestTags.Positive, () =>
+            cases.Add(Case("captain_explicit_null_settings_keep_defaults", "Explicit null captain usage settings inherit enabled/300/Auto, per field and combined", TestTags.Positive, () =>
             {
                 JsonSerializerOptions web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
                 foreach (JsonSerializerOptions? options in new JsonSerializerOptions?[] { null, web })
@@ -225,31 +225,31 @@ namespace Test.Shared.Suites.Services
                     string label = options == null ? "default options" : "web options";
 
                     Captain enabledNull = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureEnabled\":null}", options)!;
-                    AssertFalse(enabledNull.UsageCaptureEnabled, label + ": null enabled reads as false");
+                    AssertTrue(enabledNull.UsageCaptureEnabled == null, label + ": null enabled reads as false");
                     AssertEqual(300, enabledNull.UsageCaptureIntervalSeconds, label + ": null enabled keeps the interval default");
 
                     Captain intervalNull = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureIntervalSeconds\":null}", options)!;
                     AssertEqual(300, intervalNull.UsageCaptureIntervalSeconds, label + ": null interval reads as 300");
-                    AssertFalse(intervalNull.UsageCaptureEnabled, label + ": null interval keeps capture disabled");
+                    AssertTrue(intervalNull.UsageCaptureEnabled == null, label + ": null interval inherits enabled capture");
 
                     Captain modeNull = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureMode\":null}", options)!;
                     AssertEqual(UsageCaptureModeEnum.Auto, modeNull.UsageCaptureMode, label + ": null mode reads as Auto");
-                    AssertFalse(modeNull.UsageCaptureActive, label + ": null mode is not active");
+                    AssertTrue(modeNull.UsageCaptureActive, label + ": null mode is not active");
 
                     Captain commandNull = JsonSerializer.Deserialize<Captain>("{\"UsageCaptureCommand\":null}", options)!;
                     AssertNull(commandNull.UsageCaptureCommand, label + ": null command reads as null");
 
                     Captain combined = JsonSerializer.Deserialize<Captain>(
                         "{\"UsageCaptureEnabled\":null,\"UsageCaptureIntervalSeconds\":null,\"UsageCaptureMode\":null,\"UsageCaptureCommand\":null}", options)!;
-                    AssertFalse(combined.UsageCaptureEnabled, label + ": combined nulls keep capture disabled");
+                    AssertTrue(combined.UsageCaptureEnabled == null, label + ": combined nulls inherit enabled capture");
                     AssertEqual(300, combined.UsageCaptureIntervalSeconds, label + ": combined nulls keep 300");
                     AssertEqual(UsageCaptureModeEnum.Auto, combined.UsageCaptureMode, label + ": combined nulls keep Auto");
                     AssertNull(combined.UsageCaptureCommand, label + ": combined nulls keep no command");
-                    AssertFalse(combined.UsageCaptureActive, label + ": combined nulls are not active");
+                    AssertTrue(combined.UsageCaptureActive, label + ": combined nulls are not active");
 
                     Captain explicitValues = JsonSerializer.Deserialize<Captain>(
                         "{\"UsageCaptureEnabled\":true,\"UsageCaptureIntervalSeconds\":120,\"UsageCaptureMode\":\"Disabled\"}", options)!;
-                    AssertTrue(explicitValues.UsageCaptureEnabled, label + ": explicit true still reads");
+                    AssertTrue(explicitValues.UsageCaptureEnabled == true, label + ": explicit true still reads");
                     AssertEqual(120, explicitValues.UsageCaptureIntervalSeconds, label + ": explicit interval still reads");
                     AssertEqual(UsageCaptureModeEnum.Disabled, explicitValues.UsageCaptureMode, label + ": explicit mode still reads");
 
@@ -323,15 +323,15 @@ namespace Test.Shared.Suites.Services
                 AssertThrows<JsonException>(() => JsonSerializer.Deserialize<Captain>("{\"UsageCaptureMode\":\"Bogus\"}"));
             }));
 
-            cases.Add(Case("usage_capture_settings_defaults", "ArmadaSettings.UsageCapture defaults to the disabled contract", TestTags.Positive, () =>
+            cases.Add(Case("usage_capture_settings_defaults", "ArmadaSettings.UsageCapture defaults to the inherited enabled contract", TestTags.Positive, () =>
             {
                 ArmadaSettings defaults = JsonSerializer.Deserialize<ArmadaSettings>("{}")!;
                 AssertNotNull(defaults.UsageCapture, "settings never deserialize a null UsageCapture block");
 
                 UsageCaptureSettings usage = defaults.UsageCapture;
-                AssertFalse(usage.Enabled, "global switch defaults off");
+                AssertTrue(usage.EffectiveEnabled, "global switch defaults on");
                 AssertEqual(60, usage.MinimumIntervalSeconds, "default minimum interval is 60");
-                AssertFalse(usage.AllowPtyFallback, "PTY fallback defaults off");
+                AssertTrue(usage.EffectiveAllowPtyFallback, "PTY fallback defaults on");
                 AssertEqual(20, usage.ProbeTimeoutSeconds, "default probe timeout is 20 seconds");
                 AssertEqual(4, usage.MaximumConcurrentProbes, "default overall concurrency is 4");
                 AssertEqual(1, usage.MaximumConcurrentProbesPerHost, "default per-host concurrency is 1");
@@ -341,12 +341,12 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(90, usage.RollupRetentionDays, "rollups default to 90 days");
 
                 ArmadaSettings constructed = new ArmadaSettings();
-                AssertFalse(constructed.UsageCapture.Enabled, "constructed settings default to disabled capture");
+                AssertTrue(constructed.UsageCapture.EffectiveEnabled, "constructed settings default to enabled capture");
                 AssertEqual(60, constructed.UsageCapture.MinimumIntervalSeconds, "constructed minimum interval matches");
 
                 ArmadaSettings restored = new ArmadaSettings();
                 restored.UsageCapture = null!;
-                AssertFalse(restored.UsageCapture.Enabled, "assigning null restores the default settings");
+                AssertTrue(restored.UsageCapture.EffectiveEnabled, "assigning null restores the default settings");
             }));
 
             cases.Add(Case("usage_capture_settings_clamp_bounds", "Every UsageCaptureSettings bound clamps consistently", TestTags.Positive, () =>

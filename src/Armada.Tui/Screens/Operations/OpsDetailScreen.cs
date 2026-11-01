@@ -160,6 +160,7 @@ namespace Armada.Tui.Screens.Operations
 
             Tabs.Add(key, label);
             _Panels.Add(panel);
+            Tabs.CanFocus = _Panels.Count > 1;
             if (_Panels.Count == 1) ShowPanel();
             return panel;
         }
@@ -187,6 +188,7 @@ namespace Armada.Tui.Screens.Operations
                 OpsScreenAction action = a;
                 ActionMenuItem item = new ActionMenuItem((a.Danger ? "! " : "") + Tr(a.DynamicLabel != null ? a.DynamicLabel() : a.Label), () => action.Run(), a.Key != null ? KeyLabelOf(a.Key) : "");
                 item.Destructive = a.Danger;
+                item.Enabled = a.CanExecute;
                 items.Add(item);
             }
 
@@ -201,7 +203,7 @@ namespace Armada.Tui.Screens.Operations
         public bool RunAction(string id)
         {
             OpsScreenAction? action = Actions.FirstOrDefault(a => a.Id == id);
-            if (action == null || !action.Available) return false;
+            if (action == null || !action.CanExecute) return false;
             action.Run();
             return true;
         }
@@ -224,11 +226,11 @@ namespace Armada.Tui.Screens.Operations
             {
                 OpsScreenAction action = a;
                 ArmadaCommand c = a.Key != null
-                    ? new ArmadaCommand(ScreenKey + "." + a.Id, a.Label, CommandMenuEnum.Actions, () => { if (action.Available) action.Run(); }, a.Key)
-                    : new ArmadaCommand(ScreenKey + "." + a.Id, a.Label, CommandMenuEnum.Actions, () => { if (action.Available) action.Run(); });
+                    ? new ArmadaCommand(ScreenKey + "." + a.Id, a.Label, CommandMenuEnum.Actions, () => { if (action.CanExecute) action.Run(); }, a.Key)
+                    : new ArmadaCommand(ScreenKey + "." + a.Id, a.Label, CommandMenuEnum.Actions, () => { if (action.CanExecute) action.Run(); });
                 c.Group = Title;
                 c.Dispatch = false;
-                c.IsEnabled = () => action.Available;
+                c.IsEnabled = () => action.CanExecute;
                 list.Add(c);
             }
 
@@ -252,7 +254,7 @@ namespace Armada.Tui.Screens.Operations
 
                 foreach (OpsScreenAction a in Actions)
                 {
-                    if (a.Key != null && MatchesKey(a.Key, key) && a.Available)
+                    if (a.Key != null && MatchesKey(a.Key, key) && a.CanExecute)
                     {
                         a.Run();
                         return true;
@@ -308,6 +310,7 @@ namespace Armada.Tui.Screens.Operations
                 if (a != null)
                 {
                     b.Visible = a.Available;
+                    b.Enabled = a.CanExecute;
                     b.Label = a.DynamicLabel != null ? a.DynamicLabel() : a.Label;
                 }
             }
@@ -421,7 +424,7 @@ namespace Armada.Tui.Screens.Operations
             foreach (OpsScreenAction a in Actions.Where(a => a.Toolbar))
             {
                 OpsScreenAction action = a;
-                Button b = new Button(a.Label, () => { if (action.Available) action.Run(); });
+                Button b = new Button(a.Label, () => { if (action.CanExecute) action.Run(); });
                 b.Hint = a.Key != null ? KeyLabelOf(a.Key) : null;
                 a.Tag = b;
                 ActionBar.Add(b);

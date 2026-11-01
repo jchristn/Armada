@@ -1460,7 +1460,11 @@ namespace Armada.Core.Database.Mysql
                     @"CREATE INDEX idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);"),
 
                 new SchemaMigration(112, "Add captain Active eligibility (existing captains remain active)",
-                    @"ALTER TABLE captains ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1;")
+                    @"ALTER TABLE captains ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1;"),
+
+                new SchemaMigration(113, "Reset usage defaults to inherited enabled capture",
+                    @"ALTER TABLE captains MODIFY COLUMN usage_capture_enabled TINYINT(1) NULL DEFAULT NULL;",
+                    @"UPDATE captains SET usage_capture_enabled = NULL;")
 
 
             };

@@ -35,7 +35,7 @@ namespace Armada.Client
                 object? value = property.GetValue(query);
                 if (value == null) continue;
                 string name = property.Name == "FromUtc" ? "from" : property.Name == "ToUtc" ? "to" : Char.ToLowerInvariant(property.Name[0]) + property.Name.Substring(1);
-                string text = value is DateTime date ? date.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) : Convert.ToString(value, CultureInfo.InvariantCulture)!;
+                string text = value is List<string> ids ? String.Join(",", ids) : value is DateTime date ? date.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) : Convert.ToString(value, CultureInfo.InvariantCulture)!;
                 parts.Add(name + "=" + Uri.EscapeDataString(text));
             }
             return "/api/v1/usage/" + resource + "?" + String.Join("&", parts);

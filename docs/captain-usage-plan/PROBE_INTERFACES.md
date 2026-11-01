@@ -78,7 +78,7 @@ Provenance labels used below:
   additional consent is unverified, so it stays `Undocumented`.
 - Confidence: Undocumented for the endpoint, Official for the interactive UI, Official for the
   harness stream shape.
-- Fixtures: `claude-rate-limit-event.sanitized.jsonl`.
+- Fixtures: `claude-rate-limit-event.sanitized.jsonl`; phase 6 `claude-oauth-usage-v1.sanitized.json` and `claude-usage-pty-v1.sanitized.json` (synthetic values; host verification below).
 - Next step: replace the passive fixture with a live `rate_limit_event` captured from a real
   mission, and obtain an authenticated, opt-in reading of the usage endpoint before enabling the
   adapter.
@@ -145,7 +145,7 @@ Provenance labels used below:
   matching counter unit and a reset timezone.
 - Timestamps: none from a generic error body. A configured budget boundary is an Armada estimate.
 - Confidence: Unavailable for account limits, Estimated for configured budgets.
-- Fixtures: `gemini-resource-exhausted.sanitized.json` (error shape only).
+- Fixtures: `gemini-resource-exhausted.sanitized.json` (error shape only); phase 6 `gemini-quota-v1internal.sanitized.json` and `gemini-stats-session-v066.sanitized.json` and `gemini-encrypted-credentials-v066.sanitized.json` (synthetic values; host limitations below).
 - Next step: recheck if Google publishes a read-only quota endpoint for the installed CLI; until
   then Gemini stays estimated and cannot quarantine a captain.
 
@@ -286,3 +286,17 @@ Nothing in this evidence enables an adapter. Unverified details stay `Unsupporte
 `Estimated`, `AuthMissing` or `Unavailable`, all of which are inert for routing. Token recording,
 existing token charts, mission routing, launch slots and every default (`UsageCaptureEnabled`
 false, interval 300, mode Auto) are unchanged by phase 0.
+
+## Phase 6 host spike (2026-11-01)
+
+Host: macOS arm64. Claude Code 2.1.316; Gemini CLI 0.66.0 installed in an isolated temporary prefix. No chat turn or model prompt was submitted.
+
+- Claude: existing host-local OAuth credential, read-only GET `https://api.anthropic.com/api/oauth/usage` with the CLI OAuth beta header returned HTTP 200. The production `ClaudeUsageProbe` then returned Ok with one non-null quota window and a host-derived account identity. Neither the credential, raw account UUID nor unprojected body was logged or saved. The observed root also had experimental, billing, list and boolean fields; the parser ignores them rather than deserializing every root value as a quota window.
+- Claude PTY `/usage`: the isolated reader encountered CLI trust/setup and returned `PtyInteractionRequired` without answering it. This verifies refusal and cleanup; it is not evidence of a successful quota scrape. Parser fixtures exercise the known percentage UI shape separately.
+- Gemini: installed source calls `POST /v1internal:loadCodeAssist` to resolve the existing project and `POST /v1internal:retrieveUserQuota` with `{project}`. It consumes `buckets[].modelId`, `remainingFraction`, `resetTime` and optional counter fields. The probe implements only the two read operations, never onboarding or content generation. Source anchor: [Code Assist server](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/code_assist/server.ts). The installed 0.66.0 bundle was inspected as well.
+- No signed-in Gemini account was available: the production active probe returned `AuthMissing/CredentialUnavailable`; the isolated PTY reader returned `PtyInteractionRequired` without answering setup. An authenticated Gemini success remains unverified. Deterministic transport tests validate the quota-only request path, parser and host-local HMAC; they are not live-provider evidence.
+- Both isolated PTY processes exited after their attempts. No setup, trust, login or consent answer was sent. The `/stats` parser refuses session totals when quota data is absent. Live happy-path PTY scraping remains unverified for both CLIs.
+
+The phase 6 fixtures are synthetic values shaped after the selected interface, not raw account records. Provider interfaces remain undocumented and version-sensitive. These limits are also recorded in PHASE6_CAPTURE.md.
+
+The installed Gemini 0.66 source uses keytar service `gemini-cli-oauth`, account `main-account`, or `gemini-credentials.json` with scrypt (N=16384, r=8, p=1) and AES-256-GCM. The legacy `oauth_creds.json` is migration input. Armada reads these stores directly without invoking CLI migration, keychain write probes or token refresh. The native read uses macOS security, Linux secret-tool or Windows CredRead; the encrypted fixture was produced by Node's vendor-compatible crypto format. A read-only Google OAuth userinfo call (also used by the installed CLI) verifies the stored token against the active profile before quota is attributed. Native authenticated stores remain unverified without a signed-in Gemini account on each OS.

@@ -59,10 +59,10 @@ export default function UsageCaptureFields({ captain, canEdit, onSaved }: UsageC
       {!canEdit && <p className="text-dim">{t('Only an administrator can change usage capture for this captain.')}</p>}
       <div className="form-group usage-capture-toggle">
         <label htmlFor={fieldId('enabled')}>
-          <input id={fieldId('enabled')} type="checkbox" checked={form.enabled} onChange={(e) => update({ enabled: e.target.checked })} />
+          <input id={fieldId('enabled')} type="checkbox" checked={form.enabled ?? true} onChange={(e) => update({ enabled: e.target.checked })} />
           {' '}{t('Capture account usage for this captain')}
         </label>
-        <span className="text-dim">{t('Off by default. Capture reads account limits without sending a prompt.')}</span>
+        <span className="text-dim">{t('Capture reads account limits without sending a prompt.')} {form.enabled === null && t('Inherit (enabled)')}</span>
       </div>
       <div className="usage-capture-grid">
         <div className="form-group">

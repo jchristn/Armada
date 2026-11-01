@@ -1,10 +1,10 @@
 import type { UsageCaptureSettings } from '../types/models';
 
-/** Server defaults (UsageCaptureSettings.cs): capture is disabled by default. */
+/** Server defaults (UsageCaptureSettings.cs): unset capture inherits enabled. */
 export const USAGE_SETTINGS_DEFAULTS: UsageCaptureSettings = {
-  enabled: false,
+  enabled: null,
   minimumIntervalSeconds: 60,
-  allowPtyFallback: false,
+  allowPtyFallback: null,
   probeTimeoutSeconds: 20,
   maximumConcurrentProbes: 4,
   maximumConcurrentProbesPerHost: 1,
@@ -26,8 +26,8 @@ export const USAGE_SETTINGS_BOUNDS = {
 export type UsageSettingsNumericField = keyof typeof USAGE_SETTINGS_BOUNDS;
 
 export interface UsageSettingsFormState {
-  enabled: boolean;
-  allowPtyFallback: boolean;
+  enabled: boolean | null;
+  allowPtyFallback: boolean | null;
   values: Record<UsageSettingsNumericField, string>;
 }
 
@@ -36,7 +36,7 @@ export function usageSettingsFormFrom(group: Partial<UsageCaptureSettings> | nul
   const merged: UsageCaptureSettings = { ...USAGE_SETTINGS_DEFAULTS, ...(group ?? {}) };
   const values = {} as Record<UsageSettingsNumericField, string>;
   for (const key of Object.keys(USAGE_SETTINGS_BOUNDS) as UsageSettingsNumericField[]) values[key] = String(merged[key]);
-  return { enabled: merged.enabled === true, allowPtyFallback: merged.allowPtyFallback === true, values };
+  return { enabled: merged.enabled ?? null, allowPtyFallback: merged.allowPtyFallback ?? null, values };
 }
 
 /** Fields whose text is not a whole number inside the server bounds. */

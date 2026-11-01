@@ -35,6 +35,12 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public Func<bool>? When { get; set; } = null;
 
+        /// <summary>Whether a visible action can execute. False keeps a dimmed button with its reason label.</summary>
+        public Func<bool>? EnabledWhen { get; set; } = null;
+
+        /// <summary>Whether visibility and enabled conditions permit execution.</summary>
+        public bool CanExecute => Available && (EnabledWhen == null || EnabledWhen());
+
         /// <summary>
         /// Handler.
         /// </summary>

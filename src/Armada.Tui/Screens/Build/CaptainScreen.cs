@@ -8,6 +8,7 @@ namespace Armada.Tui.Screens.Build
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Activity;
     using Armada.Tui.Screens.Kit;
     using Armada.Tui.Screens.Operations;
     using Armada.Tui.Services;
@@ -30,6 +31,12 @@ namespace Armada.Tui.Screens.Build
         /// Captain id from the route.
         /// </summary>
         public string CaptainId { get; }
+
+        private readonly OpsDocumentView _Usage = new OpsDocumentView();
+        private List<UsageSnapshotView>? _UsageViews;
+        private string? _UsageError;
+        private bool _UsageCapturing;
+        private DateTime _UsageNextEligible;
 
         /// <summary>
         /// The captain once loaded.
@@ -102,9 +109,17 @@ namespace Armada.Tui.Screens.Build
             Action("dock", "Open Dock", () => Context.Navigate("/docks/" + Uri.EscapeDataString(Captain!.CurrentDockId!)), "k", () => !String.IsNullOrEmpty(Captain?.CurrentDockId));
             Action("copy-id", "Copy ID", () => Copy(CaptainId, "Captain ID"), "y");
 
+            Action("usage", "View Usage", () => SelectPanel("usage"), "U", () => Captain != null, true);
+            OpsScreenAction captureAction = Action("capture-usage", "Capture now", CaptureUsage, "C", () => Captain != null && (Context.Session.IsGlobalAdmin || Context.Session.IsTenantAdmin), true);
+            captureAction.EnabledWhen = () => Captain?.UsageCaptureActive == true && !_UsageCapturing && Context.Clock.UtcNow >= _UsageNextEligible;
+            captureAction.DynamicLabel = () => Captain?.UsageCaptureActive == false ? "Capture disabled" : Context.Clock.UtcNow < _UsageNextEligible ? "Capture cooldown" : "Capture now";
+            _Usage.Builder = doc => UsagePresentation.Build(Captain?.UsageCaptureActive == false ? doc.Field("Usage", Tr("Capture disabled")) : doc, _UsageViews, _UsageError, Context.Clock.UtcNow);
+            SubscribeCoalesced("usage.snapshot", Load);
             Overview.Builder = BuildOverview;
             AddPanel("overview", "Overview", Overview);
             AddPanel("missions", "Recent Missions", MissionGrid);
+            AddPanel("usage", "Usage", _Usage);
+            if (route.Query.TryGetValue("section", out string? section) && section == "usage") SelectPanel("usage");
             SubscribeCoalesced("captain.changed", Load);
             Load();
         }
@@ -116,6 +131,7 @@ namespace Armada.Tui.Screens.Build
         /// <inheritdoc />
         public override void Load()
         {
+            Call((client, token) => client.GetUsageLatestAsync(new UsageQuery { CaptainId = CaptainId }, token), result => { _UsageViews = result?.Objects ?? new List<UsageSnapshotView>(); _UsageError = null; _Usage.Invalidate(); }, null, error => { _UsageError = Tr("Usage could not be loaded."); _Usage.Invalidate(); });
             bool initial = !Loaded;
             Call(async (c, t) =>
             {
@@ -255,6 +271,25 @@ namespace Armada.Tui.Screens.Build
                     Context.Navigate("/captains");
                 }, "Remove failed.");
             }, "Remove");
+        }
+
+        private void CaptureUsage()
+        {
+            if (_UsageCapturing || Captain?.UsageCaptureActive != true || Context.Clock.UtcNow < _UsageNextEligible) return;
+            _UsageCapturing = true;
+            Call((client, token) => client.CaptureCaptainUsageAsync(CaptainId, null, token), receipt =>
+            {
+                _UsageCapturing = false;
+                _UsageNextEligible = receipt?.NextEligibleUtc ?? (receipt?.Status == "Passive" ? DateTime.MinValue : Context.Clock.UtcNow.AddSeconds(60));
+                _UsageError = Tr(receipt?.Status == "Passive" ? "Fresh" : "Capture queued");
+                _Usage.Invalidate();
+            }, null, error =>
+            {
+                _UsageCapturing = false;
+                if (error is ArmadaApiException api && api.StatusCode == 429) { _UsageNextEligible = UsageCooldown.Resolve(api, Context.Clock.UtcNow); _UsageError = Tr("Capture cooldown"); }
+                else _UsageError = Tr("Capture failed") + ": " + error.Message;
+                _Usage.Invalidate();
+            });
         }
 
         private OpsDocument BuildOverview(OpsDocument doc)

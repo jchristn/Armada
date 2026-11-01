@@ -117,7 +117,7 @@ namespace Armada.Core.Services
             // The switch's transition is tracked from the setting the scheduler is built with, so the first
             // tick of a server that starts (or stays) disabled does not invalidate work that never existed;
             // only a genuine enabled-to-disabled transition cancels what is still in flight.
-            _CaptureEnabledLastTick = settings.UsageCapture.Enabled;
+            _CaptureEnabledLastTick = settings.UsageCapture.EffectiveEnabled;
         }
 
         #endregion
@@ -176,7 +176,7 @@ namespace Armada.Core.Services
                         ConfigurationRevision = host.ConfigurationRevision,
                         RequestedIntervalSeconds = captain.UsageCaptureIntervalSeconds,
                         EffectiveIntervalSeconds = Math.Max(captain.UsageCaptureIntervalSeconds, minimum),
-                        AllowPty = _Settings.UsageCapture.AllowPtyFallback
+                        AllowPty = _Settings.UsageCapture.EffectiveAllowPtyFallback
                     };
                     groups[key] = group;
                 }
@@ -291,7 +291,7 @@ namespace Armada.Core.Services
         public async Task<List<UsageCaptureAttempt>> TickAsync(CancellationToken token = default)
         {
             List<UsageCaptureAttempt> receipts = new List<UsageCaptureAttempt>();
-            if (!_Settings.UsageCapture.Enabled)
+            if (!_Settings.UsageCapture.EffectiveEnabled)
             {
                 // The switch that just turned off invalidates the capture it still has in flight: the
                 // running probes stop and their results are discarded instead of being applied to an

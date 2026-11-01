@@ -98,10 +98,10 @@ export default function UsageCaptureSettingsPanel({ canEdit }: UsageCaptureSetti
           <legend>{t('Server switch')}</legend>
           <div className="form-group usage-capture-toggle">
             <label htmlFor="usage-settings-enabled">
-              <input id="usage-settings-enabled" type="checkbox" checked={form.enabled} onChange={(e) => { setForm((f) => ({ ...f, enabled: e.target.checked })); setMessage(null); }} />
+              <input id="usage-settings-enabled" type="checkbox" checked={form.enabled ?? true} onChange={(e) => { setForm((f) => ({ ...f, enabled: e.target.checked })); setMessage(null); }} />
               {' '}{t('Enable account usage capture on this server')}
             </label>
-            <span className="text-dim">{t('Off by default. Even when on, only captains with capture enabled are read.')}</span>
+            <span className="text-dim">{form.enabled === null ? t('Inherit (enabled)') : t('Capture reads account limits without sending a prompt.')}</span>
           </div>
           {disabling && (
             <p className="usage-form-error" role="status">
@@ -122,10 +122,10 @@ export default function UsageCaptureSettingsPanel({ canEdit }: UsageCaptureSetti
           </div>
           <div className="form-group usage-capture-toggle">
             <label htmlFor="usage-settings-pty">
-              <input id="usage-settings-pty" type="checkbox" checked={form.allowPtyFallback} onChange={(e) => { setForm((f) => ({ ...f, allowPtyFallback: e.target.checked })); setMessage(null); }} />
+              <input id="usage-settings-pty" type="checkbox" checked={form.allowPtyFallback ?? true} onChange={(e) => { setForm((f) => ({ ...f, allowPtyFallback: e.target.checked })); setMessage(null); }} />
               {' '}{t('Allow interactive terminal (PTY) fallback')}
             </label>
-            <span className="text-dim">{t('Permission only: no verified PTY adapter ships with this release, so turning this on does not add PTY capture.')}</span>
+            <span className="text-dim">{t('Allow interactive terminal (PTY) fallback')}</span>
           </div>
           <p className="text-dim">{t('Snapshot and rollup retention are set with the other retention settings.')}</p>
           {errors.length > 0 && <p className="usage-form-error" role="alert">{t('Fix the highlighted values: each must be a whole number inside its range.')}</p>}

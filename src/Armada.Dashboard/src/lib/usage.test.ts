@@ -50,8 +50,8 @@ describe('usage thresholds and window selection', () => {
 });
 
 describe('captain capture form', () => {
-  it('a minimally deserialized captain yields the disabled/Auto/300 defaults', () => {
-    expect(usageCaptureFormFromCaptain({})).toEqual({ enabled: false, mode: 'Auto', interval: '300', executable: '', argumentsText: '' });
+  it('a minimally deserialized captain preserves the inherited enabled/Auto/300 defaults', () => {
+    expect(usageCaptureFormFromCaptain({})).toEqual({ enabled: null, mode: 'Auto', interval: '300', executable: '', argumentsText: '' });
   });
 
   it('round-trips a fully populated Custom captain', () => {
@@ -76,8 +76,8 @@ describe('server usage settings form', () => {
   it('missing or empty groups yield the disabled-by-default server values', () => {
     for (const group of [null, undefined, {}]) {
       const form = usageSettingsFormFrom(group);
-      expect(form.enabled).toBe(false);
-      expect(form.allowPtyFallback).toBe(false);
+      expect(form.enabled).toBe(null);
+      expect(form.allowPtyFallback).toBe(null);
       expect(form.values.minimumIntervalSeconds).toBe('60');
       expect(usageSettingsErrors(form)).toEqual([]);
     }

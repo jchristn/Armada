@@ -249,7 +249,7 @@ namespace Armada.Core.Services
 
             DateTime now = Now();
 
-            if (!_Settings.UsageCapture.Enabled)
+            if (!_Settings.UsageCapture.EffectiveEnabled)
                 return Skipped(null, null, "CaptureDisabled");
 
             if (group.MemberCaptainIds.Count == 0)
@@ -267,7 +267,7 @@ namespace Armada.Core.Services
             {
                 now = Now();
 
-                if (!_Settings.UsageCapture.Enabled)
+                if (!_Settings.UsageCapture.EffectiveEnabled)
                     return Skipped(null, null, "CaptureDisabled");
 
                 // Manual capture (and a tick) join an existing flight: one attempt, one job id, one snapshot.
@@ -421,7 +421,7 @@ namespace Armada.Core.Services
 
                         // A capture that is disabled while its probe was held is a stale write too: the
                         // operator asked for the account not to be read, and the answer is never applied.
-                        if (!_Settings.UsageCapture.Enabled)
+                        if (!_Settings.UsageCapture.EffectiveEnabled)
                             return await DiscardAsync(job, "CaptureDisabled", probe, attemptToken).ConfigureAwait(false);
 
                         // No result may be applied after its lease expired: a slow attempt whose window passed
@@ -489,7 +489,7 @@ namespace Armada.Core.Services
                     // The stale-write guards apply to a failure result too: a configuration change or a
                     // disabled switch means this attempt's answer belongs to a configuration that no longer
                     // exists, and it is never persisted.
-                    if (generation != Generation || !_Settings.UsageCapture.Enabled)
+                    if (generation != Generation || !_Settings.UsageCapture.EffectiveEnabled)
                     {
                         _ = await _Jobs.TryFinishAsync(job.Id, JobStatusEnum.Failed, null, "SettingsGenerationChanged", CancellationToken.None).ConfigureAwait(false);
                         return new UsageCaptureAttemptResult { Status = failure.Status, ErrorCode = failure.ErrorCode, DiscardedReason = "SettingsGenerationChanged" };

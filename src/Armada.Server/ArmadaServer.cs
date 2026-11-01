@@ -1023,12 +1023,12 @@ namespace Armada.Server
             _BlackBox?.Insights.Background.Start();
             _ModelAlertService.Start();
 
-            // Usage capture is disabled by default; when it is on, rebuild the capture groups now so the
+            // Rebuild the default-on capture groups now so the
             // scheduler starts from a complete picture (with randomized initial due times).
             try
             {
                 await _UsageCaptureScheduler.RebuildAsync(_TokenSource.Token).ConfigureAwait(false);
-                if (_Settings.UsageCapture.Enabled)
+                if (_Settings.UsageCapture.EffectiveEnabled)
                     _Logging.Debug(_Header + "usage capture scheduler started with " + _UsageCaptureScheduler.Groups().Count + " group(s)");
             }
             catch (Exception ex)

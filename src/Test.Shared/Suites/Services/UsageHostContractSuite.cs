@@ -436,7 +436,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(UsageCaptureKindEnum.Active, AgentRuntimeCapabilities.UsageCapture(AgentRuntimeEnum.Codex).Kind, "Codex captures actively");
                 AssertEqual(UsageCaptureKindEnum.Active, AgentRuntimeCapabilities.UsageCapture(AgentRuntimeEnum.Custom).Kind, "a Custom executable captures actively");
                 AssertEqual(UsageCaptureKindEnum.Passive, AgentRuntimeCapabilities.UsageCapture(AgentRuntimeEnum.ApiEndpoint).Kind, "an API endpoint captures passively");
-                AssertEqual(UsageCaptureKindEnum.Estimated, AgentRuntimeCapabilities.UsageCapture(AgentRuntimeEnum.Gemini).Kind, "Gemini captures an estimate");
+                AssertEqual(UsageCaptureKindEnum.Active, AgentRuntimeCapabilities.UsageCapture(AgentRuntimeEnum.Gemini).Kind, "Gemini has an active quota read");
 
                 AgentRuntimeEnum[] unsupported = new AgentRuntimeEnum[]
                 {
@@ -520,7 +520,7 @@ namespace Test.Shared.Suites.Services
                 // The scheduler is the component that decides what a disabled switch means: its own
                 // disabled branch invalidates the generation once, on the transition, and starts nothing.
                 string schedulerSource = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "src", "Armada.Core", "Services", "UsageCaptureScheduler.cs"));
-                AssertTrue(schedulerSource.Contains("if (!_Settings.UsageCapture.Enabled)", StringComparison.Ordinal), "the scheduler owns the disabled-switch branch");
+                AssertTrue(schedulerSource.Contains("if (!_Settings.UsageCapture.EffectiveEnabled)", StringComparison.Ordinal), "the scheduler owns the disabled-switch branch");
 
                 return Task.CompletedTask;
             }));

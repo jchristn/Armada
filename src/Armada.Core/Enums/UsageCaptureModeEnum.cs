@@ -6,7 +6,7 @@ namespace Armada.Core.Enums
     /// <summary>
     /// How a captain participates in account usage capture. Disabled always wins: a captain in Disabled
     /// mode is opted out of limit capture and account membership regardless of <c>UsageCaptureEnabled</c>.
-    /// Auto and Custom both additionally require <c>UsageCaptureEnabled</c> to be true. Auto uses only
+    /// Auto and Custom both additionally require <c>UsageCaptureEnabled</c> to be true or unset. Auto uses only
     /// verified read-only sources; Custom runs the configured local executable (UsageCaptureCommand).
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]

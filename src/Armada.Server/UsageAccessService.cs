@@ -180,7 +180,7 @@ namespace Armada.Server
             }
             if (AgentRuntimeCapabilities.UsageCapture(captain.Runtime).Kind == UsageCaptureKindEnum.Passive)
                 return await LatestAsync(caller, query).ConfigureAwait(false);
-            if (!captain.UsageCaptureEnabled) throw new UsageRequestException(409, "CaptureDisabled");
+            if (!captain.UsageCaptureActive) throw new UsageRequestException(409, "CaptureDisabled");
             await _Scheduler.RebuildAsync().ConfigureAwait(false);
             UsageCaptureGroup? group = _Scheduler.Groups().FirstOrDefault(g => g.TenantId == query.TenantId && g.MemberCaptainIds.Contains(captainId));
             if (group == null) throw new UsageRequestException(503, "HostUnavailable");

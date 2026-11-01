@@ -13,11 +13,17 @@ namespace Armada.Core.Settings
         #region Public-Members
 
         /// <summary>
-        /// Whether account usage capture runs at all. Default false: capture is disabled by default and
+        /// Whether account usage capture runs at all. Null inherits enabled capture and
         /// only a captain that is enabled and not in Disabled mode participates. Turning it off stops
         /// scheduled and manual active probes and passive limit persistence, but never token recording.
         /// </summary>
-        public bool Enabled { get; set; } = false;
+        public bool? Enabled { get; set; } = null;
+
+        /// <summary>Whether capture is enabled after resolving the inherited default.</summary>
+        public bool EffectiveEnabled => Enabled ?? true;
+
+        /// <summary>One-time default reset revision; revision 2 preserves subsequent explicit opt-outs.</summary>
+        public int DefaultsRevision { get; set; } = 2;
 
         /// <summary>
         /// Global floor for the effective capture interval, in seconds. Default 60, clamped to 60..86400.
@@ -30,10 +36,12 @@ namespace Armada.Core.Settings
         }
 
         /// <summary>
-        /// Whether the opt-in PTY screen-scraping source may be used at all. Default false; PTY is never an
-        /// automatic fallback, so with this off a PTY probe is refused regardless of a captain's request.
+        /// Whether the PTY fallback may be used. Null inherits true; explicit false prohibits it.
         /// </summary>
-        public bool AllowPtyFallback { get; set; } = false;
+        public bool? AllowPtyFallback { get; set; } = null;
+
+        /// <summary>Whether the default-on interactive fallback is permitted.</summary>
+        public bool EffectiveAllowPtyFallback => AllowPtyFallback ?? true;
 
         /// <summary>
         /// Host execution deadline for one probe, in seconds. Default 20, clamped to 1..300. The process

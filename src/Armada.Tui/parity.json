@@ -1275,9 +1275,9 @@
       "kind": "api",
       "key": "captureCaptainUsage",
       "status": "implemented",
-      "tui": "ArmadaClient.CaptureCaptainUsageAsync",
+      "tui": "UsageLimitsScreen",
       "workstream": "W0.2",
-      "notes": "Usage | ArmadaClient method only; no TUI usage screen yet: reviewed exception in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
     {
       "kind": "api",
@@ -3051,9 +3051,9 @@
       "kind": "api",
       "key": "getUsageLatest",
       "status": "implemented",
-      "tui": "ArmadaClient.GetUsageLatestAsync",
+      "tui": "UsageLimitsScreen",
       "workstream": "W0.2",
-      "notes": "Usage | ArmadaClient method only; no TUI usage screen yet: reviewed exception in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
     {
       "kind": "api",
@@ -3061,7 +3061,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetUsageMissionsAsync",
       "workstream": "W0.2",
-      "notes": "Usage | ArmadaClient method only; no TUI usage screen yet: reviewed exception in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
     {
       "kind": "api",
@@ -3069,7 +3069,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetUsageSeriesAsync",
       "workstream": "W0.2",
-      "notes": "Usage | ArmadaClient method only; no TUI usage screen yet: reviewed exception in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
     {
       "kind": "api",
@@ -3077,7 +3077,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetUsageSnapshotsAsync",
       "workstream": "W0.2",
-      "notes": "Usage | ArmadaClient method only; no TUI usage screen yet: reviewed exception in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
     {
       "kind": "api",

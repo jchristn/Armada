@@ -608,15 +608,15 @@ namespace Test.Shared.Suites.Database
                     DatabaseDriver driver = testDb.Driver;
 
                     Captain plain = await driver.Captains.CreateAsync(new Captain("usage-default-captain"), ct).ConfigureAwait(false);
-                    AssertFalse(plain.UsageCaptureEnabled, "new captain keeps capture disabled");
+                    AssertNull(plain.UsageCaptureEnabled, "new captain keeps capture disabled");
                     AssertEqual(300, plain.UsageCaptureIntervalSeconds, "new captain requests the default interval");
                     AssertEqual(UsageCaptureModeEnum.Auto, plain.UsageCaptureMode, "new captain defaults to Auto");
                     AssertNull(plain.UsageCaptureCommand, "new captain has no command");
-                    AssertFalse(plain.UsageCaptureActive, "new captain is not effectively active");
+                    AssertTrue(plain.UsageCaptureActive, "new captain is not effectively active");
 
                     Captain? readPlain = await driver.Captains.ReadAsync(plain.Id, ct).ConfigureAwait(false);
                     AssertNotNull(readPlain, "plain captain readable");
-                    AssertFalse(readPlain!.UsageCaptureEnabled, "disabled default survives storage");
+                    AssertNull(readPlain!.UsageCaptureEnabled, "disabled default survives storage");
                     AssertEqual(300, readPlain.UsageCaptureIntervalSeconds, "interval default survives storage");
                     AssertEqual(UsageCaptureModeEnum.Auto, readPlain.UsageCaptureMode, "Auto mode survives storage");
                     AssertNull(readPlain.UsageCaptureCommand, "null command survives storage");
@@ -630,7 +630,7 @@ namespace Test.Shared.Suites.Database
 
                     Captain? readConfigured = await driver.Captains.ReadAsync(configured.Id, ct).ConfigureAwait(false);
                     AssertNotNull(readConfigured, "configured captain readable");
-                    AssertTrue(readConfigured!.UsageCaptureEnabled, "enabled flag round-trips");
+                    AssertTrue(readConfigured!.UsageCaptureEnabled == true, "enabled flag round-trips");
                     AssertEqual(900, readConfigured.UsageCaptureIntervalSeconds, "interval round-trips");
                     AssertEqual(UsageCaptureModeEnum.Custom, readConfigured.UsageCaptureMode, "Custom mode round-trips");
                     AssertEqual(configured.UsageCaptureCommand, readConfigured.UsageCaptureCommand, "command round-trips");
@@ -674,7 +674,7 @@ namespace Test.Shared.Suites.Database
                         AssertEqual(300, read.UsageCaptureIntervalSeconds, created.Name + ": default interval stored");
                         if (created.Name == "all-null")
                         {
-                            AssertFalse(read.UsageCaptureEnabled, "explicit null settings persist as disabled");
+                            AssertFalse(read.UsageCaptureEnabled == true, "explicit null settings persist as disabled");
                             AssertEqual(UsageCaptureModeEnum.Auto, read.UsageCaptureMode, "explicit null settings persist as Auto");
                         }
 
@@ -799,7 +799,8 @@ namespace Test.Shared.Suites.Database
                         Captain? legacyCaptain = await driver.Captains.ReadAsync("cpt_legacy_upgrade", ct).ConfigureAwait(false);
                         AssertNotNull(legacyCaptain, "legacy captain survives the upgrade");
                         AssertEqual("Legacy Captain", legacyCaptain!.Name, "legacy captain name survives");
-                        AssertFalse(legacyCaptain.UsageCaptureEnabled, "legacy captain stays disabled after the upgrade");
+                        AssertNull(legacyCaptain.UsageCaptureEnabled, "legacy capture flag resets to inherited on");
+                        AssertTrue(legacyCaptain.UsageCaptureActive, "legacy captain inherits enabled capture after the upgrade");
                         AssertEqual(300, legacyCaptain.UsageCaptureIntervalSeconds, "legacy captain gets the default interval");
                         AssertEqual(UsageCaptureModeEnum.Auto, legacyCaptain.UsageCaptureMode, "legacy captain gets the default mode");
                         AssertNull(legacyCaptain.UsageCaptureCommand, "legacy captain gets no command");

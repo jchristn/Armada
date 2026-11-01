@@ -217,7 +217,7 @@ namespace Test.Shared.Suites.E2E
                     await UsageTestData.PutAsync(client, path, "{\"Name\":\"usage-edit-probe-renamed\"}", HttpStatusCode.OK).ConfigureAwait(false);
                     Captain renamed = await UsageTestData.GetAsync<Captain>(client, path).ConfigureAwait(false);
                     AssertEqual("usage-edit-probe-renamed", renamed.Name);
-                    AssertTrue(renamed.UsageCaptureEnabled, "unrelated name edit must preserve enabled capture");
+                    AssertTrue(renamed.UsageCaptureEnabled == true, "unrelated name edit must preserve enabled capture");
                     AssertEqual(120, renamed.UsageCaptureIntervalSeconds, "unrelated edit preserves the interval");
                     AssertEqual(UsageCaptureModeEnum.Custom, renamed.UsageCaptureMode, "unrelated edit preserves Custom mode");
                     AssertEqual(command, renamed.UsageCaptureCommand, "unrelated edit preserves the Custom command");
@@ -234,14 +234,14 @@ namespace Test.Shared.Suites.E2E
                     {
                         await UsageTestData.PutAsync(client, path, invalid, HttpStatusCode.BadRequest).ConfigureAwait(false);
                         Captain unchanged = await UsageTestData.GetAsync<Captain>(client, path).ConfigureAwait(false);
-                        AssertTrue(unchanged.UsageCaptureEnabled, "rejected edit stores nothing: " + invalid);
+                        AssertTrue(unchanged.UsageCaptureEnabled == true, "rejected edit stores nothing: " + invalid);
                         AssertEqual(command, unchanged.UsageCaptureCommand, "rejected edit keeps the command: " + invalid);
                     }
 
                     // Explicit values apply: interval clamps to the 60 second floor, disable is honored.
                     await UsageTestData.PutAsync(client, path, "{\"UsageCaptureEnabled\":false,\"UsageCaptureIntervalSeconds\":5}", HttpStatusCode.OK).ConfigureAwait(false);
                     Captain disabled = await UsageTestData.GetAsync<Captain>(client, path).ConfigureAwait(false);
-                    AssertFalse(disabled.UsageCaptureEnabled, "explicit false disables capture");
+                    AssertFalse(disabled.UsageCaptureEnabled == true, "explicit false disables capture");
                     AssertEqual(60, disabled.UsageCaptureIntervalSeconds, "explicit interval is clamped, not ignored");
                     AssertEqual(command, disabled.UsageCaptureCommand, "omitted command survives an explicit toggle");
 
@@ -253,16 +253,26 @@ namespace Test.Shared.Suites.E2E
                     await UsageTestData.PutAsync(client, path, "{\"UsageCaptureMode\":\"Custom\"}", HttpStatusCode.BadRequest).ConfigureAwait(false);
                     AssertEqual(UsageCaptureModeEnum.Auto, (await UsageTestData.GetAsync<Captain>(client, path).ConfigureAwait(false)).UsageCaptureMode, "rejected switch to Custom stores nothing");
 
-                    // Create: invalid Custom is rejected; a minimal body keeps disabled/300/Auto defaults.
+                    // Create: invalid Custom is rejected; a minimal body keeps inherited enabled/300/Auto defaults.
                     await UsageTestData.PostAsync(client, "/api/v1/captains", "{\"Name\":\"usage-create-bad\",\"UsageCaptureEnabled\":true,\"UsageCaptureMode\":\"Custom\"}", HttpStatusCode.BadRequest).ConfigureAwait(false);
                     string created = await UsageTestData.PostAsync(client, "/api/v1/captains", "{\"Name\":\"usage-create-default\"}", HttpStatusCode.Created).ConfigureAwait(false);
                     Captain minimal = JsonHelper.Deserialize<Captain>(created);
-                    AssertFalse(minimal.UsageCaptureEnabled, "capture defaults off");
+                    AssertNull(minimal.UsageCaptureEnabled, "capture preserves the inherited choice");
+                    AssertTrue(minimal.UsageCaptureActive, "minimal REST create defaults on");
+                    string minimalPath = "/api/v1/captains/" + minimal.Id;
+                    await UsageTestData.PutAsync(client, minimalPath, "{\"UsageCaptureEnabled\":false}", HttpStatusCode.OK).ConfigureAwait(false);
+                    AssertFalse((await UsageTestData.GetAsync<Captain>(client, minimalPath).ConfigureAwait(false)).UsageCaptureActive);
+                    await UsageTestData.PutAsync(client, minimalPath, "{\"UsageCaptureEnabled\":null}", HttpStatusCode.OK).ConfigureAwait(false);
+                    Captain inherited = await UsageTestData.GetAsync<Captain>(client, minimalPath).ConfigureAwait(false);
+                    AssertNull(inherited.UsageCaptureEnabled);
+                    AssertTrue(inherited.UsageCaptureActive, "explicit null restores inheritance on update");
+                    string optedOutJson = await UsageTestData.PostAsync(client, "/api/v1/captains", "{\"Name\":\"usage-create-off\",\"UsageCaptureEnabled\":false}", HttpStatusCode.Created).ConfigureAwait(false);
+                    AssertFalse(JsonHelper.Deserialize<Captain>(optedOutJson).UsageCaptureActive, "explicit false survives REST create");
                     AssertEqual(300, minimal.UsageCaptureIntervalSeconds);
                     AssertEqual(UsageCaptureModeEnum.Auto, minimal.UsageCaptureMode);
                     string createdCustom = await UsageTestData.PostAsync(client, "/api/v1/captains", "{\"Name\":\"usage-create-custom\",\"UsageCaptureEnabled\":true,\"UsageCaptureIntervalSeconds\":600,\"UsageCaptureMode\":\"Custom\",\"UsageCaptureCommand\":" + System.Text.Json.JsonSerializer.Serialize(command) + "}", HttpStatusCode.Created).ConfigureAwait(false);
                     Captain custom = await UsageTestData.GetAsync<Captain>(client, "/api/v1/captains/" + JsonHelper.Deserialize<Captain>(createdCustom).Id).ConfigureAwait(false);
-                    AssertTrue(custom.UsageCaptureEnabled, "create stores enabled capture");
+                    AssertTrue(custom.UsageCaptureEnabled == true, "create stores enabled capture");
                     AssertEqual(600, custom.UsageCaptureIntervalSeconds);
                     AssertEqual(command, custom.UsageCaptureCommand, "create stores the Custom command");
                 }),

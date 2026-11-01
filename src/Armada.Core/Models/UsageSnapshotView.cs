@@ -1,8 +1,9 @@
 namespace Armada.Core.Models
 {
-    using System;
     using System.Collections.Generic;
+    using System;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>Sanitized account observation, with no raw diagnostic excerpt.</summary>
     public class UsageSnapshotView
@@ -22,6 +23,7 @@ namespace Armada.Core.Models
         /// <summary>AccountKey: account usage contract.</summary>
         public string? AccountKey { get; set; }
         /// <summary>CaptainIds: account usage contract.</summary>
+        [CollectionBound(100)]
         public List<string> CaptainIds { get; set; } = new List<string>();
         /// <summary>CapturedUtc: account usage contract.</summary>
         public DateTime CapturedUtc { get; set; }
@@ -30,6 +32,7 @@ namespace Armada.Core.Models
         /// <summary>ErrorCode: account usage contract.</summary>
         public string? ErrorCode { get; set; }
         /// <summary>Windows: account usage contract.</summary>
+        [CollectionBound(32)]
         public List<UsageWindow> Windows { get; set; } = new List<UsageWindow>();
         /// <summary>Stale: account usage contract.</summary>
         public bool Stale { get; set; }

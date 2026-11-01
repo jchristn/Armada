@@ -1,8 +1,9 @@
 namespace Armada.Core.Models
 {
-    using System;
     using System.Collections.Generic;
+    using System;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>One independent account/window limit or token currency series.</summary>
     public class UsageSeries
@@ -29,6 +30,7 @@ namespace Armada.Core.Models
         public string? CostCurrency { get; set; } = null;
 
         /// <summary>Points identity or samples.</summary>
+        [CollectionBound(576)]
         public List<UsageSeriesPoint> Points { get; set; } = new List<UsageSeriesPoint>();
 
     }

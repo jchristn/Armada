@@ -55,7 +55,7 @@ namespace Armada.Core.Database.Interfaces
         Task<List<string>> ReadCaptainsAsync(string snapshotId, string tenantId, CancellationToken token = default);
 
         /// <summary>
-        /// Delete snapshots observed before the cutoff, together with their member links, and return the
+        /// Delete at most 500 snapshots observed before the cutoff, together with their member links, and return the
         /// number of snapshots removed. Used by the retention pass; deletes both tables consistently.
         /// </summary>
         /// <param name="capturedBeforeUtc">Exclusive cutoff on the observation time.</param>

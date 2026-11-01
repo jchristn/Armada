@@ -7358,6 +7358,29 @@
       "experimental": false
     },
     {
+      "method": "POST",
+      "route": "/api/v1/usage/latest/enumerate",
+      "auth": "Authenticated",
+      "resource": "Usage:Read",
+      "requestType": "UsageQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<UsageSnapshotView>",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "429": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Usage"
+      ],
+      "summary": "Enumerate usage latest",
+      "experimental": false
+    },
+    {
       "method": "GET",
       "route": "/api/v1/usage/missions",
       "auth": "Authenticated",
@@ -7378,6 +7401,29 @@
         "Usage"
       ],
       "summary": "Read usage attributed to completed missions",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/usage/missions/enumerate",
+      "auth": "Authenticated",
+      "resource": "Usage:Read",
+      "requestType": "UsageQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "UsageMissionResult",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "429": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Usage"
+      ],
+      "summary": "Enumerate usage missions",
       "experimental": false
     },
     {
@@ -7424,6 +7470,29 @@
         "Usage"
       ],
       "summary": "Read sanitized usage snapshots",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/usage/snapshots/enumerate",
+      "auth": "Authenticated",
+      "resource": "Usage:Read",
+      "requestType": "UsageQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<UsageSnapshotView>",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "429": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Usage"
+      ],
+      "summary": "Enumerate usage snapshots",
       "experimental": false
     },
     {
@@ -28898,14 +28967,20 @@
     },
     {
       "key": "usageCapture.allowPtyFallback",
-      "type": "bool",
-      "default": "false",
+      "type": "bool?",
+      "default": "null",
+      "experimental": false
+    },
+    {
+      "key": "usageCapture.defaultsRevision",
+      "type": "int",
+      "default": "2",
       "experimental": false
     },
     {
       "key": "usageCapture.enabled",
-      "type": "bool",
-      "default": "false",
+      "type": "bool?",
+      "default": "null",
       "experimental": false
     },
     {

@@ -72,6 +72,7 @@ namespace Test.Shared.Suites.E2E
             ["GET /api/v1/doctor"] = "Diagnostics report",
             ["GET /api/v1/server/rebuild/status"] = "One rebuild status",
             ["GET /api/v1/settings"] = "Settings object",
+            ["GET /api/v1/usage/series"] = "Bounded chart summary: at most 20 independent series with 576 points each; no stored row collection",
             ["GET /api/v1/token-usage/summary"] = "Aggregated summary buckets",
             ["GET /api/v1/vessel-health/summary"] = "Aggregated summary",
             ["GET /api/v1/vessels/import/browse"] = "One page of one directory listing (VesselBrowseResult carries PageNumber, PageSize, TotalPages, TotalRecords)",

@@ -80,7 +80,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                     cmd.Parameters.AddWithValue("@quarantine_reason", (object?)captain.QuarantineReason ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@created_utc", ToIso8601(captain.CreatedUtc));
                     cmd.Parameters.AddWithValue("@last_update_utc", ToIso8601(captain.LastUpdateUtc));
-                    cmd.Parameters.AddWithValue("@usage_capture_enabled", captain.UsageCaptureEnabled);
+                    cmd.Parameters.AddWithValue("@usage_capture_enabled", (object?)captain.UsageCaptureEnabled ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);
@@ -216,7 +216,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                     cmd.Parameters.AddWithValue("@last_process_alive_utc", captain.LastProcessAliveUtc.HasValue ? (object)ToIso8601(captain.LastProcessAliveUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@quarantine_until_utc", captain.QuarantineUntilUtc.HasValue ? (object)ToIso8601(captain.QuarantineUntilUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@quarantine_reason", (object?)captain.QuarantineReason ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@usage_capture_enabled", captain.UsageCaptureEnabled);
+                    cmd.Parameters.AddWithValue("@usage_capture_enabled", (object?)captain.UsageCaptureEnabled ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);
@@ -1164,7 +1164,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 captain.CliPermissionPolicy = !String.IsNullOrEmpty(cliPolicy) && Enum.TryParse<CliPermissionPolicyEnum>(cliPolicy, out CliPermissionPolicyEnum parsedPolicy) ? parsedPolicy : (CliPermissionPolicyEnum?)null;
             }
             catch { captain.CliPermissionPolicy = null; }
-            try { captain.UsageCaptureEnabled = reader["usage_capture_enabled"] != DBNull.Value && Convert.ToBoolean(reader["usage_capture_enabled"]); } catch { }
+            try { captain.UsageCaptureEnabled = reader["usage_capture_enabled"] == DBNull.Value ? null : Convert.ToBoolean(reader["usage_capture_enabled"]); } catch { }
             try { captain.UsageCaptureIntervalSeconds = Convert.ToInt32(reader["usage_capture_interval_seconds"]); } catch { }
             try
             {

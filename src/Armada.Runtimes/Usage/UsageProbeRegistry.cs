@@ -6,12 +6,10 @@ namespace Armada.Runtimes.Usage
     using SyslogLogging;
 
     /// <summary>
-    /// The production runtime probe registry handed to <see cref="UsageProbeHostRunner"/> on the Admiral (Local
-    /// mode) and on every Harbor (Split mode). Only verified read-only sources are active (D4): Codex reads its
-    /// local app-server. Claude Code's undocumented OAuth endpoint, Gemini, OpenCode, Cursor, Mux, Pi and the
-    /// Custom runtime without a Custom command answer Unsupported with a stable code and reason; ApiEndpoint is
-    /// passive (headers harvested from existing inference calls) and is never actively probed. No probe sends
-    /// a model prompt and PTY is never an automatic fallback.
+    /// The production read-only runtime registry on Admiral and Harbor credential hosts. Claude Code reads
+    /// OAuth usage, Codex reads app-server limits, and Gemini reads Code Assist quota. Claude and Gemini may
+    /// use the bounded interactive fallback when permitted. ApiEndpoint harvests only existing responses;
+    /// other runtimes without a verified source remain Unsupported. No built-in probe sends a model prompt.
     /// </summary>
     public class UsageProbeRegistry
     {
@@ -53,11 +51,11 @@ namespace Armada.Runtimes.Usage
             switch (runtime)
             {
                 case AgentRuntimeEnum.ClaudeCode:
-                    return new ClaudeUsageProbe();
+                    return new ClaudeUsageProbe(_Accounts);
                 case AgentRuntimeEnum.Codex:
                     return new CodexUsageProbe(_Accounts, _CodexExecutable);
                 case AgentRuntimeEnum.Gemini:
-                    return new GeminiUsageProbe();
+                    return new GeminiUsageProbe(_Accounts);
                 case AgentRuntimeEnum.OpenCode:
                     return new OpenCodeUsageProbe();
                 case AgentRuntimeEnum.ApiEndpoint:

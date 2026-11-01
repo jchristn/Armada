@@ -165,7 +165,7 @@ namespace Test.Shared.Suites.Services
                     await File.WriteAllTextAsync(tempFile, original).ConfigureAwait(false);
 
                     ArmadaSettings loaded = await ArmadaSettings.LoadAsync(tempFile).ConfigureAwait(false);
-                    AssertTrue(loaded.WriteBack(), "an older file is rewritten");
+                    AssertFalse(loaded.WriteBack(), "load already persisted the revision and complete defaults; write-back is idempotent");
 
                     string written = await File.ReadAllTextAsync(tempFile).ConfigureAwait(false);
                     AssertContains("\"advertisedMcpBaseUrl\": \"http://localhost:" + Constants.DefaultMcpPort + "/mcp\"", written, "derived MCP URL is written");

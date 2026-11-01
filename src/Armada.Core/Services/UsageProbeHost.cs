@@ -60,9 +60,8 @@ namespace Armada.Core.Services
         public string? CommandJson { get; set; } = null;
 
         /// <summary>
-        /// Whether the captain's probe request may fall back to the opt-in PTY scraping source. The host
-        /// still refuses it unless the server-wide <c>UsageCapture.AllowPtyFallback</c> switch is set; PTY
-        /// is never an automatic fallback.
+        /// Whether the server permits the default-on interactive fallback for this request. Only Claude
+        /// Code and Gemini use it, and only after recognizing an idle input, without sending a model prompt.
         /// </summary>
         public bool AllowPty { get; set; } = false;
 

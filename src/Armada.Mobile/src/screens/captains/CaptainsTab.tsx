@@ -1,7 +1,7 @@
 import { useRouter, type Href } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { deleteCaptain, listCaptains } from '@dashboard/api/client';
+import { deleteCaptain, getUsageLatest, listCaptains } from '@dashboard/api/client';
 import { canCaptainStartPlanning } from '@dashboard/lib/captains';
 import type { Captain } from '@dashboard/types/models';
 import { ListPane } from '../../build/ListPane';
@@ -15,6 +15,7 @@ import { planningHref } from '../../navigation/legacyRedirects';
 import { useNotifications } from '../../notifications/NotificationContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/typography';
+import { captainHeadline, captainCaptureActive } from '@dashboard/lib/usage';
 import { CaptainDetailScreen } from './CaptainDetailScreen';
 import { CaptainFormSheet } from './CaptainFormSheet';
 import { TierBadge } from './TierBadge';
@@ -71,6 +72,7 @@ export function CaptainsTab() {
   const { colors } = useTheme();
   const router = useRouter();
   const { pushToast } = useNotifications();
+  const [usagePage, setUsagePage] = useState(0);
   const [filters, setFilters] = useState<CaptainFilters>(DEFAULT_FILTERS);
   const [userScope, setUserScope] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -88,6 +90,10 @@ export function CaptainsTab() {
   );
   const captains = useMemo(() => resource.data ?? [], [resource.data]);
   const rows = useMemo(() => filterCaptains(captains, filters), [captains, filters]);
+  useEffect(() => setUsagePage(0), [filters.search, filters.runtime, filters.state, userScope]);
+  const visibleRows = rows.slice(usagePage * 25, (usagePage + 1) * 25);
+  const visibleIds = visibleRows.map((c) => c.id).join(",");
+  const usage = useLiveResource(() => visibleIds ? getUsageLatest({ captainIds: visibleIds, pageSize: 100 }) : Promise.resolve(null), [visibleIds], { live: ["usage."] });
   const runtimes = useMemo(() => Array.from(new Set(captains.map((c) => c.runtime).filter(Boolean))).sort(), [captains]);
 
   const actions = useCaptainActions('list', (action, captain) => {
@@ -124,7 +130,9 @@ export function CaptainsTab() {
   }
 
   const renderRow = ({ item }: { item: Captain }) => {
+    const headline = captainHeadline((usage.data?.objects ?? []).filter((v) => v.captainIds.includes(item.id)));
     const subtitle = [
+      !captainCaptureActive(item) ? t("Capture disabled") : headline?.window?.usedPercent != null ? `${headline.window.usedPercent}% · ${t("Usage")}` : t(usage.error ? "Usage could not be loaded." : usage.loading ? "Loading usage..." : "No usage observed yet"),
       item.runtime,
       `${t('Active')}: ${t(item.active === false ? 'No' : 'Yes')}`,
       item.state === 'Quarantined' && item.quarantineUntilUtc ? t('until {{time}}', { time: formatRelativeTime(item.quarantineUntilUtc) }) : null,
@@ -156,6 +164,7 @@ export function CaptainsTab() {
       <SwipeRow
         testID={`captain-swipe-${item.name}`}
         actions={[
+          { key: 'usage', label: t('View Usage'), icon: 'stats-chart-outline', onPress: () => selection.open(item.id) },
           { key: 'edit', label: t('Edit'), icon: 'create-outline', onPress: () => setForm({ open: true, captain: item }) },
           { key: 'stop', label: t('Stop'), icon: 'stop-circle-outline', onPress: () => actions.request('stop', item) },
           { key: 'delete', label: t('Delete'), icon: 'trash-outline', tone: 'danger', onPress: () => actions.request('delete', item) },
@@ -187,7 +196,7 @@ export function CaptainsTab() {
   const master = (
     <ListPane
       testID="captains-list"
-      items={rows}
+      items={visibleRows}
       keyOf={(c) => c.id}
       renderItem={renderRow}
       loading={resource.loading}
@@ -201,7 +210,7 @@ export function CaptainsTab() {
         { key: 'new', icon: 'add', label: t('Create Captain'), onPress: () => setForm({ open: true, captain: null }) },
       ]}
       summary={resource.data ? t('{{count}} captains', { count: rows.length }) : null}
-      header={header}
+      header={<><View><Button label={t('Previous')} disabled={usagePage === 0} onPress={() => setUsagePage(usagePage - 1)} /><Button label={t('Next')} disabled={(usagePage + 1) * 25 >= rows.length} onPress={() => setUsagePage(usagePage + 1)} /></View>{header}</>}
       emptyTitle={captains.length > 0 ? t('No captains match the current filters.') : t('No captains configured.')}
       emptyMessage={t('AI agent harness processes that execute missions. Monitor state, current mission, and captain lifecycle.')}
       emptyAction={captains.length > 0 ? undefined : { label: t('Create Captain'), onPress: () => setForm({ open: true, captain: null }) }}
@@ -252,6 +261,7 @@ export function CaptainsTab() {
             {canCaptainStartPlanning(menuFor) ? (
               <MenuItem icon="bulb-outline" label={t('Start Planning')} onPress={() => { const c = menuFor; setMenuFor(null); router.push(planningHref(null, { captainId: c.id }) as Href); }} />
             ) : null}
+            <MenuItem icon="stats-chart-outline" label={t('View Usage')} onPress={() => { const c = menuFor; setMenuFor(null); selection.open(c.id); }} />
             <MenuItem icon="create-outline" label={t('Edit')} onPress={() => { const c = menuFor; setMenuFor(null); setForm({ open: true, captain: c }); }} />
             <MenuItem icon="copy-outline" label={t('Duplicate')} onPress={() => { const c = menuFor; setMenuFor(null); void actions.duplicate(c).then((created) => { if (created) { void resource.reload(); selection.open(created.id); } }); }} />
             <MenuItem icon="notifications-outline" label={t('View Notifications')} onPress={() => { setMenuFor(null); router.push('/inbox' as Href); }} />

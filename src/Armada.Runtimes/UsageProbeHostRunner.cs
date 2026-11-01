@@ -90,15 +90,13 @@ namespace Armada.Runtimes
             if (probe == null)
             {
                 // No placeholder probes: a runtime without a registered read-only adapter answers
-                // Unsupported. PTY scraping is a separate opt-in source and is never an automatic fallback,
-                // so it is only mentioned when the explicit opt-in switch is on, and even then this build
-                // ships no PTY probe.
+                // Unsupported. A host without a runtime registry cannot select a safe interactive adapter.
                 UsageCaptureCapability capability = AgentRuntimeCapabilities.UsageCapture(host.Runtime);
                 if (!capability.Supported)
                     return UsageProbeResult.Unsupported(UnsupportedCode(host.Runtime), capability.Reason);
 
                 string reason = "no usage probe adapter is registered for " + host.Runtime + " in this build yet"
-                    + (host.AllowPty ? "; the separately opted-in PTY source is not implemented in this build either" : "");
+                    + (host.AllowPty ? "; PTY fallback requires a registered read-only runtime adapter" : "");
                 return UsageProbeResult.Unsupported("RuntimeProbeUnavailable", reason);
             }
 

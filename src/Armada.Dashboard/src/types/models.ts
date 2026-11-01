@@ -268,7 +268,7 @@ export interface Captain {
   /** CLI tool permission policy for this captain's CLI sessions; null or absent inherits (see CliPermissionPolicy). */
   cliPermissionPolicy?: CliPermissionPolicy | null;
   /** Account usage capture switch; absent on older servers means off. */
-  usageCaptureEnabled?: boolean;
+  usageCaptureEnabled?: boolean | null;
   /** Requested capture interval in seconds (60..86400, default 300). */
   usageCaptureIntervalSeconds?: number;
   /** Auto, Disabled or Custom. */
@@ -4767,9 +4767,11 @@ export interface UsageMissionFilter extends UsageFilter {
 
 /** Server-wide capture settings (GET/PUT /api/v1/settings usageCapture group). */
 export interface UsageCaptureSettings {
-  enabled: boolean;
+  enabled: boolean | null;
+  effectiveEnabled?: boolean;
+  defaultsRevision?: number;
   minimumIntervalSeconds: number;
-  allowPtyFallback: boolean;
+  allowPtyFallback: boolean | null;
   probeTimeoutSeconds: number;
   maximumConcurrentProbes: number;
   maximumConcurrentProbesPerHost: number;

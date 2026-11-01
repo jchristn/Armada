@@ -206,7 +206,7 @@ namespace Armada.Core.Services
                 Runtime = captain.Runtime,
                 Mode = captain.UsageCaptureMode,
                 CommandJson = commandJson,
-                AllowPty = settings.UsageCapture.AllowPtyFallback,
+                AllowPty = settings.UsageCapture.EffectiveAllowPtyFallback,
                 TimeoutSeconds = settings.UsageCapture.ProbeTimeoutSeconds,
                 ConfigurationRevision = ConfigurationRevision(hostId, captain.Runtime, commandFingerprint),
                 DispatchedUtc = DateTime.UtcNow

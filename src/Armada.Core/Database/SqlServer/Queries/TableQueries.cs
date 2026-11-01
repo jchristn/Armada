@@ -2420,7 +2420,12 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_token_usage_tenant_source_created') CREATE INDEX idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);"),
 
                 new SchemaMigration(112, "Add captain Active eligibility (existing captains remain active)",
-                    @"IF COL_LENGTH('captains', 'active') IS NULL ALTER TABLE captains ADD active BIT NOT NULL DEFAULT 1;")
+                    @"IF COL_LENGTH('captains', 'active') IS NULL ALTER TABLE captains ADD active BIT NOT NULL DEFAULT 1;"),
+
+                new SchemaMigration(113, "Reset usage defaults to inherited enabled capture",
+                    @"DECLARE @constraint sysname; SELECT @constraint = dc.name FROM sys.default_constraints dc JOIN sys.columns c ON c.default_object_id = dc.object_id WHERE dc.parent_object_id = OBJECT_ID('captains') AND c.name = 'usage_capture_enabled'; IF @constraint IS NOT NULL EXEC('ALTER TABLE captains DROP CONSTRAINT [' + @constraint + ']');",
+                    @"ALTER TABLE captains ALTER COLUMN usage_capture_enabled BIT NULL;",
+                    @"UPDATE captains SET usage_capture_enabled = NULL;")
 
 
             };

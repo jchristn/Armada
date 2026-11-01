@@ -326,6 +326,13 @@ namespace Armada.Tui.Screens.Admin
             VesselHealthCriterionEnum.ArmadaReadiness, VesselHealthCriterionEnum.MissionOutcomes,
         };
 
+        private readonly SelectField<string> _UsageEnabled = new SelectField<string>();
+        private readonly SelectField<string> _UsagePty = new SelectField<string>();
+        private readonly InputField _UsageInterval = new InputField();
+        private readonly InputField _UsageTimeout = new InputField();
+        private readonly InputField _UsageConcurrency = new InputField();
+        private readonly InputField _UsageHostConcurrency = new InputField();
+        private readonly InputField _UsageBackoff = new InputField();
         private readonly Dictionary<string, ServerSettingsGroup> _Groups = new Dictionary<string, ServerSettingsGroup>(StringComparer.Ordinal);
         private readonly Dictionary<IWidget, ServerSettingsGroup> _MemberGroups = new Dictionary<IWidget, ServerSettingsGroup>();
         private readonly List<KeyValuePair<FormRow, TextBlock>> _Notes = new List<KeyValuePair<FormRow, TextBlock>>();
@@ -641,6 +648,7 @@ namespace Armada.Tui.Screens.Admin
             BuildRepositoryHealth();
             BuildImportAndFleet();
             BuildCliPermissions();
+            BuildUsage();
             BuildRetention();
             BuildBlackBoxRetention();
             BuildAsk();
@@ -797,6 +805,44 @@ namespace Armada.Tui.Screens.Admin
             AddTracked(g, "Owner approval", PermissionsOwnerApproval, "When on, the owner of a conversation or mission may allow or deny its requests. Admins and tenant admins can always decide; only they can create rules.");
             foreach (IWidget w in new IWidget[] { PermissionsAskDefault, PermissionsMissionDefault, PermissionsTimeout, PermissionsTimeoutDecision, PermissionsOwnerApproval }) _AdminOnlyEditable.Add(w);
             AddButtons(g);
+        }
+
+        private void BuildUsage()
+        {
+            Form.AddSection("Usage capture");
+            if (!IsAdmin) AddNote("Only administrators can change these settings.");
+            foreach (IWidget widget in new IWidget[] { _UsageEnabled, _UsagePty, _UsageInterval, _UsageTimeout, _UsageConcurrency, _UsageHostConcurrency, _UsageBackoff }) _AdminOnlyEditable.Add(widget);
+            ServerSettingsGroup group = Group("usageCapture", "Save Usage Settings", SaveUsage, () => DiscardGroup("usageCapture"));
+            foreach (SelectField<string> field in new[] { _UsageEnabled, _UsagePty })
+            {
+                field.ModalHost = Context.Modals;
+                field.Options = new List<SelectOption<string>> { new SelectOption<string>("inherit", Context.Loc.T("Inherit (enabled)")), new SelectOption<string>("true", Context.Loc.T("Enabled")), new SelectOption<string>("false", Context.Loc.T("Disabled")) };
+                field.SetValue("inherit");
+            }
+            AddTracked(group, "Capture account usage", _UsageEnabled, null);
+            AddTracked(group, "Allow PTY fallback", _UsagePty, null);
+            AddNumber(group, "Minimum interval", _UsageInterval, "60..86400", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 60, 86400));
+            AddNumber(group, "Probe timeout", _UsageTimeout, "1..300", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 1, 300));
+            AddNumber(group, "Maximum concurrent probes", _UsageConcurrency, "1..64", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 1, 64));
+            AddNumber(group, "Maximum probes per host", _UsageHostConcurrency, "1..64", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 1, 64));
+            AddNumber(group, "Maximum backoff", _UsageBackoff, "60..86400", v => ServerSettingsRules.WholeNumberRange(Context.Loc, v, 60, 86400));
+            AddButtons(group);
+        }
+        private void SaveUsage()
+        {
+            if (!IsAdmin) return;
+            SaveWith(_Groups["usageCapture"], () =>
+            {
+                UsageCaptureSettings usage = Settings?.UsageCapture ?? new UsageCaptureSettings();
+                usage.Enabled = _UsageEnabled.Value == "inherit" ? null : _UsageEnabled.Value == "true";
+                usage.AllowPtyFallback = _UsagePty.Value == "inherit" ? null : _UsagePty.Value == "true";
+                usage.MinimumIntervalSeconds = IntOf(_UsageInterval);
+                usage.ProbeTimeoutSeconds = IntOf(_UsageTimeout);
+                usage.MaximumConcurrentProbes = IntOf(_UsageConcurrency);
+                usage.MaximumConcurrentProbesPerHost = IntOf(_UsageHostConcurrency);
+                usage.MaximumBackoffSeconds = IntOf(_UsageBackoff);
+                return new SettingsData { UsageCapture = usage };
+            }, "Usage settings saved and applied.");
         }
 
         private void BuildRetention()
@@ -1023,6 +1069,7 @@ namespace Armada.Tui.Screens.Admin
             foreach (ServerSettingsGroup g in _Groups.Values) g.Editable = !locked && Settings != null;
             _Groups["repositoryHealth"].Editable = !locked && IsAdmin && Settings != null;
             // CLI tool permissions are global-admin settings; everyone else sees them read-only.
+            _Groups["usageCapture"].Editable = !locked && IsAdmin && Settings != null;
             _Groups["permissions"].Editable = !locked && IsAdmin && Settings != null;
             if (Form.Scope.Focused is ArmadaWidget focused && !focused.CanFocus) Form.Scope.FocusFirst();
         }
@@ -1101,6 +1148,17 @@ namespace Armada.Tui.Screens.Admin
                 FleetDefaultTimeout.Value = Num(fa.DefaultTimeoutSeconds);
                 FleetMaxOutput.Value = Num(fa.MaxOutputBytes);
                 FleetRetention.Value = Num(fa.RunRetentionDays);
+            });
+            Apply("usageCapture", force, () =>
+            {
+                UsageCaptureSettings usage = s.UsageCapture ?? new UsageCaptureSettings();
+                _UsageEnabled.SetValue(usage.Enabled?.ToString().ToLowerInvariant() ?? "inherit");
+                _UsagePty.SetValue(usage.AllowPtyFallback?.ToString().ToLowerInvariant() ?? "inherit");
+                _UsageInterval.Value = Num(usage.MinimumIntervalSeconds);
+                _UsageTimeout.Value = Num(usage.ProbeTimeoutSeconds);
+                _UsageConcurrency.Value = Num(usage.MaximumConcurrentProbes);
+                _UsageHostConcurrency.Value = Num(usage.MaximumConcurrentProbesPerHost);
+                _UsageBackoff.Value = Num(usage.MaximumBackoffSeconds);
             });
             Apply("retention", force, () =>
             {

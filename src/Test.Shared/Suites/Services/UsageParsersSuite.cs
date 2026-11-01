@@ -499,13 +499,13 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(2, streamCapture.Latest()!.Windows.Count, "both windows were retained from the streamed response");
             }));
 
-            cases.Add(CaseAsync("builtin_probes_never_prompt_and_unsupported_stays_unsupported", "Every built-in probe except the verified Codex read answers Unsupported without starting anything; PTY is never a fallback", TestTags.Negative, async () =>
+            cases.Add(CaseAsync("builtin_probes_never_prompt_and_unsupported_stays_unsupported", "Unsupported runtimes invent no quota and the active read-only adapters are registered", TestTags.Negative, async () =>
             {
                 UsageAccountResolver accounts = new UsageAccountResolver("host-parsers-5", new string('1', 64));
                 UsageProbeRegistry registry = new UsageProbeRegistry(CreateLogging(), accounts, "/nonexistent/armada-codex");
                 foreach (AgentRuntimeEnum runtime in Enum.GetValues<AgentRuntimeEnum>())
                 {
-                    if (runtime == AgentRuntimeEnum.Codex) continue;
+                    if (runtime == AgentRuntimeEnum.Codex || runtime == AgentRuntimeEnum.ClaudeCode || runtime == AgentRuntimeEnum.Gemini) continue;
                     foreach (bool pty in new[] { false, true })
                     {
                         UsageProbeHost host = Host(runtime);
@@ -519,11 +519,8 @@ namespace Test.Shared.Suites.Services
                     }
                 }
 
-                UsageProbeHost claude = Host(AgentRuntimeEnum.ClaudeCode);
-                claude.AllowPty = true;
-                UsageProbeResult claudeResult = await registry.Resolve(AgentRuntimeEnum.ClaudeCode).CaptureAsync(claude).ConfigureAwait(false);
-                AssertEqual(ClaudeUsageProbe.UnverifiedCode, claudeResult.ErrorCode, "the unverified Claude endpoint is not enabled");
-                AssertContains("never sent as a prompt", claudeResult.RawExcerpt!, "the opted-in PTY source is not a prompt");
+                AssertTrue(registry.Resolve(AgentRuntimeEnum.ClaudeCode) is ClaudeUsageProbe, "Claude active reader registered");
+                AssertTrue(registry.Resolve(AgentRuntimeEnum.Gemini) is GeminiUsageProbe, "Gemini active reader registered");
 
                 UsageProbeHostRunner runner = new UsageProbeHostRunner(CreateLogging(), accounts, registry.Resolve);
                 UsageProbeResult codexAbsent = await runner.CaptureAsync(Host(AgentRuntimeEnum.Codex)).ConfigureAwait(false);

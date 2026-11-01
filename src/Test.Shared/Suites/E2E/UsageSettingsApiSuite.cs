@@ -28,14 +28,14 @@ namespace Test.Shared.Suites.E2E
         {
             return new TestSuiteDescriptor(Suite, "Usage capture settings API", new List<TestCaseDescriptor>
             {
-                new TestCaseDescriptor(Suite, "get_defaults", "GET exposes the disabled-by-default capture settings group", async ct =>
+                new TestCaseDescriptor(Suite, "get_defaults", "GET exposes inherited default-on capture settings", async ct =>
                 {
                     string dir = TestTemp.NewDirectory("usage_settings_defaults");
                     using InProcessArmadaServer server = await InProcessArmadaServer.StartAsync(dir,
-                        new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(dir, "armada.db") }).ConfigureAwait(false);
+                        new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(dir, "armada.db") }, settings => settings.UsageCapture.Enabled = null).ConfigureAwait(false);
                     using HttpResponseMessage response = await server.Client.GetAsync("/api/v1/settings", ct).ConfigureAwait(false);
                     UsageCaptureSettings actual = await ReadAsync(response).ConfigureAwait(false);
-                    AssertFalse(actual.Enabled); AssertFalse(actual.AllowPtyFallback);
+                    AssertTrue(actual.EffectiveEnabled); AssertTrue(actual.EffectiveAllowPtyFallback);
                     AssertEqual(60, actual.MinimumIntervalSeconds); AssertEqual(20, actual.ProbeTimeoutSeconds);
                     AssertEqual(4, actual.MaximumConcurrentProbes); AssertEqual(1, actual.MaximumConcurrentProbesPerHost);
                     AssertEqual(3600, actual.MaximumBackoffSeconds); AssertEqual(2048, actual.MaximumExcerptBytes);
@@ -54,15 +54,15 @@ namespace Test.Shared.Suites.E2E
                         JsonHelper.ToJsonContent(new { UsageCapture = new { Enabled = true } }), ct).ConfigureAwait(false))
                     {
                         UsageCaptureSettings actual = await ReadAsync(response).ConfigureAwait(false);
-                        AssertTrue(actual.Enabled, "minimal request binds Enabled");
+                        AssertTrue(actual.Enabled == true, "minimal request binds Enabled");
                         AssertEqual(60, actual.MinimumIntervalSeconds, "omitted members take model defaults");
                     }
                     AssertTrue(Object.ReferenceEquals(live, server.Settings.UsageCapture), "retained passive/access references stay live");
-                    AssertTrue(live.Enabled); AssertTrue(capture.Generation > generation, "update invalidates in-flight work immediately");
+                    AssertTrue(live.EffectiveEnabled); AssertTrue(capture.Generation > generation, "update invalidates in-flight work immediately");
                     using (HttpResponseMessage response = await server.Client.GetAsync("/api/v1/settings", ct).ConfigureAwait(false))
-                        AssertTrue((await ReadAsync(response).ConfigureAwait(false)).Enabled, "GET reload observes enabled capture");
+                        AssertTrue((await ReadAsync(response).ConfigureAwait(false)).Enabled == true, "GET reload observes enabled capture");
                     ArmadaSettings persisted = await ArmadaSettings.LoadAsync(Path.Combine(dir, "settings.json")).ConfigureAwait(false);
-                    AssertTrue(persisted.UsageCapture.Enabled, "persisted enable survives file reload");
+                    AssertTrue(persisted.UsageCapture.Enabled == true, "persisted enable survives file reload");
 
                     using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new
                     {
@@ -76,7 +76,7 @@ namespace Test.Shared.Suites.E2E
                         AssertEqual(1, bounded.MaximumConcurrentProbes); AssertEqual(64, bounded.MaximumConcurrentProbesPerHost);
                         AssertEqual(60, bounded.MaximumBackoffSeconds); AssertEqual(65536, bounded.MaximumExcerptBytes);
                         AssertEqual(1, bounded.RawSnapshotRetentionDays); AssertEqual(1825, bounded.RollupRetentionDays);
-                        AssertTrue(bounded.AllowPtyFallback);
+                        AssertTrue(bounded.EffectiveAllowPtyFallback);
                     }
                     persisted = await ArmadaSettings.LoadAsync(Path.Combine(dir, "settings.json")).ConfigureAwait(false);
                     AssertEqual(JsonSerializer.Serialize(live), JsonSerializer.Serialize(persisted.UsageCapture), "all effective bounds persist");
@@ -84,7 +84,7 @@ namespace Test.Shared.Suites.E2E
                     foreach (string body in new[] { "{}", "{\"UsageCapture\":null}", "{\"MaxCaptains\":3}" })
                     {
                         using HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", new StringContent(body, Encoding.UTF8, "application/json"), ct).ConfigureAwait(false);
-                        AssertTrue((await ReadAsync(response).ConfigureAwait(false)).AllowPtyFallback, "omission/null leaves prior group intact");
+                        AssertTrue((await ReadAsync(response).ConfigureAwait(false)).AllowPtyFallback == true, "omission/null leaves prior group intact");
                     }
                     AssertEqual(generation, capture.Generation, "unrelated edits do not invalidate probes");
                     int captains = server.Settings.MaxCaptains;
@@ -94,7 +94,7 @@ namespace Test.Shared.Suites.E2E
                         using HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", new StringContent(body, Encoding.UTF8, "application/json"), ct).ConfigureAwait(false);
                         AssertStatusCode(HttpStatusCode.BadRequest, response, "invalid JSON/type rejected");
                         AssertEqual(captains, server.Settings.MaxCaptains, "no partial mutation");
-                        AssertTrue(live.Enabled); AssertEqual(generation, capture.Generation);
+                        AssertTrue(live.EffectiveEnabled); AssertEqual(generation, capture.Generation);
                     }
                     E2ETenantUser tenant = await E2ETenantUser.CreateAsync(server.Client, "usage-settings-admin").ConfigureAwait(false);
                     using HttpClient tenantClient = tenant.CreateClient(server.BaseUrl);
@@ -105,14 +105,14 @@ namespace Test.Shared.Suites.E2E
                         AssertStatusCode(status, read, "server-wide settings require global admin");
                         using HttpResponseMessage write = await client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageCapture = new { Enabled = false } }), ct).ConfigureAwait(false);
                         AssertStatusCode(status, write, "unauthorized update rejected");
-                        AssertTrue(live.Enabled); AssertEqual(generation, capture.Generation);
+                        AssertTrue(live.EffectiveEnabled); AssertEqual(generation, capture.Generation);
                     }
                     using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageCapture = new { Enabled = false } }), ct).ConfigureAwait(false))
-                        AssertFalse((await ReadAsync(response).ConfigureAwait(false)).Enabled, "explicit disable applies");
-                    AssertFalse(live.Enabled, "existing passive/access references observe disable");
+                        AssertFalse((await ReadAsync(response).ConfigureAwait(false)).Enabled == true, "explicit disable applies");
+                    AssertFalse(live.Enabled == true, "existing passive/access references observe disable");
                     AssertTrue(capture.Generation > generation, "disable cancels old generation immediately");
                     persisted = await ArmadaSettings.LoadAsync(Path.Combine(dir, "settings.json")).ConfigureAwait(false);
-                    AssertFalse(persisted.UsageCapture.Enabled);
+                    AssertFalse(persisted.UsageCapture.EffectiveEnabled);
                 })
             });
         }

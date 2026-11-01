@@ -539,6 +539,9 @@ namespace Armada.Core.Authorization
             Add("POST", "/api/v1/activity/synthetic", "TokenUsage", ResourceOperationEnum.Create, PermissionLevel.AdminOnly);
 
             // TokenUsageRoutes
+            Add("POST", "/api/v1/usage/snapshots/enumerate", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/usage/latest/enumerate", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/usage/missions/enumerate", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/usage/snapshots", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/usage/latest", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/usage/series", "Usage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

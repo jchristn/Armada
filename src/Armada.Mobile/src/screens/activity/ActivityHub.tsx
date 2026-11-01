@@ -10,6 +10,7 @@ import { HistoryTab } from './HistoryTab';
 import { JobsScreen } from './JobsScreen';
 import { OperationsTab } from './OperationsTab';
 import { RequestsTab } from './RequestsTab';
+import { UsageView } from '../usage/UsageView';
 import { TokenUsageTab } from './TokenUsageTab';
 
 const eventRoute = (id: string) => `/events/${id}`;
@@ -38,6 +39,7 @@ export function ActivityHub() {
     { key: 'requests', label: 'API Requests', render: () => <RequestsTab /> },
     { key: 'events', label: 'Events', render: () => <OperationsTab List={EventsList} Detail={EventDetail} route={eventRoute} /> },
     { key: 'signals', label: 'Signals', render: () => <OperationsTab List={SignalsList} Detail={SignalDetail} route={signalRoute} /> },
+    { key: 'limits', label: 'Limits', render: () => <UsageView /> },
     { key: 'tokens', label: 'Token Usage', render: () => <TokenUsageTab /> },
     { key: 'jobs', label: 'Jobs', render: () => <JobsScreen embedded /> },
   ];

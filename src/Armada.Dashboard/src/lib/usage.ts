@@ -38,7 +38,7 @@ export const USAGE_LEVEL_TEXT: Record<UsageLevel, string> = {
 /** True when the captain's own switch and mode let the scheduler capture it. */
 export function captainCaptureActive(captain: Pick<Captain, 'usageCaptureEnabled' | 'usageCaptureMode' | 'usageCaptureActive'>): boolean {
   if (typeof captain.usageCaptureActive === 'boolean') return captain.usageCaptureActive;
-  return captain.usageCaptureEnabled === true && captain.usageCaptureMode !== 'Disabled';
+  return captain.usageCaptureEnabled !== false && captain.usageCaptureMode !== 'Disabled';
 }
 
 /** Presentation state of one observation. Ok becomes stale once the server marks it stale. */
@@ -59,10 +59,10 @@ export function viewKind(view: UsageSnapshotView): UsageDisplayKind {
  */
 export function highestApplicableWindow(view: UsageSnapshotView, nowMs: number = Date.now()): UsageWindow | null {
   let best: UsageWindow | null = null;
-  for (const window of view.windows ?? []) {
-    if (window.usedPercent === null || window.usedPercent === undefined || Number.isNaN(window.usedPercent)) continue;
-    if (window.resetsUtc && Date.parse(window.resetsUtc) <= nowMs) continue;
-    if (!best || (window.usedPercent as number) > (best.usedPercent as number)) best = window;
+  for (const quotaWindow of view.windows ?? []) {
+    if (quotaWindow.usedPercent === null || quotaWindow.usedPercent === undefined || Number.isNaN(quotaWindow.usedPercent)) continue;
+    if (quotaWindow.resetsUtc && Date.parse(quotaWindow.resetsUtc) <= nowMs) continue;
+    if (!best || (quotaWindow.usedPercent as number) > (best.usedPercent as number)) best = quotaWindow;
   }
   return best;
 }
@@ -73,10 +73,10 @@ export function captainHeadline(views: UsageSnapshotView[], nowMs: number = Date
   const ranked = [...views].sort((a, b) => rank(a) - rank(b));
   let chosen: { view: UsageSnapshotView; window: UsageWindow | null } | null = null;
   for (const view of ranked) {
-    const window = highestApplicableWindow(view, nowMs);
-    if (!chosen) { chosen = { view, window }; continue; }
+    const quotaWindow = highestApplicableWindow(view, nowMs);
+    if (!chosen) { chosen = { view, window: quotaWindow }; continue; }
     if (rank(view) > rank(chosen.view)) break;
-    if (window && (!chosen.window || (window.usedPercent as number) > (chosen.window.usedPercent as number))) chosen = { view, window };
+    if (quotaWindow && (!chosen.window || (quotaWindow.usedPercent as number) > (chosen['window'].usedPercent as number))) chosen = { view, window: quotaWindow };
   }
   return chosen;
 }

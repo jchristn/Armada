@@ -67,7 +67,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(2, group.MemberCaptainIds.Count, "both captains are members of the group");
                 AssertEqual(300, group.RequestedIntervalSeconds, "the group runs at the shortest requested interval");
                 AssertEqual(600, group.EffectiveIntervalSeconds, "the global minimum floors the effective interval");
-                AssertFalse(group.AllowPty, "PTY stays opt-in on the group");
+                AssertTrue(group.AllowPty, "PTY fallback defaults on for the group");
                 AssertEqual(0, scheduler.UnresolvedCaptains().Count, "standalone captains resolve to the Admiral host");
 
                 // Two different Custom command identities never share a group even on the same runtime and
@@ -1200,7 +1200,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(AgentRuntimeEnum.ClaudeCode, host.Runtime, "the host context names the group's runtime");
                 AssertEqual(UsageCaptureModeEnum.Auto, host.Mode, "the host context names the group's capture mode");
                 AssertNull(host.CommandJson, "Auto mode sends no custom command");
-                AssertFalse(host.AllowPty, "PTY stays opt-in and is never requested by default");
+                AssertTrue(host.AllowPty, "PTY fallback is requested by default");
                 AssertEqual(25, host.TimeoutSeconds, "the host context bounds the probe deadline");
                 AssertEqual(autoGroup.ConfigurationRevision, host.ConfigurationRevision, "the host context carries the configuration revision the answer is applied against");
                 AssertEqual(fixture.Clock.Now(), host.DispatchedUtc, "the host context records the dispatch time on the shared clock");

@@ -1,7 +1,7 @@
 import type { Captain, UsageCaptureMode } from '../types/models';
 
 export interface UsageCaptureFormState {
-  enabled: boolean;
+  enabled: boolean | null;
   mode: UsageCaptureMode;
   interval: string;
   executable: string;
@@ -13,7 +13,7 @@ export const USAGE_INTERVAL_MAX = 86400;
 export const USAGE_INTERVAL_DEFAULT = 300;
 const SHELL_SYNTAX = /[;|&<>`'"]|\$\(/;
 
-/** Form state from a captain; a minimally deserialized captain (no usage fields) yields off/Auto/300. */
+/** Form state from a captain; a minimally deserialized captain (no usage fields) yields inherited on/Auto/300. */
 export function usageCaptureFormFromCaptain(captain: Partial<Captain>): UsageCaptureFormState {
   let executable = '';
   let args: string[] = [];
@@ -27,7 +27,7 @@ export function usageCaptureFormFromCaptain(captain: Partial<Captain>): UsageCap
     }
   }
   return {
-    enabled: captain.usageCaptureEnabled === true,
+    enabled: captain.usageCaptureEnabled ?? null,
     mode: captain.usageCaptureMode ?? 'Auto',
     interval: String(captain.usageCaptureIntervalSeconds ?? USAGE_INTERVAL_DEFAULT),
     executable,

@@ -1322,10 +1322,10 @@
     {
       "kind": "api",
       "key": "captureCaptainUsage",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/usage/UsageView.tsx",
       "workstream": "W3.2",
-      "notes": "Usage | no mobile usage screen yet; dashboard-first Phase 5, reviewed in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
     {
       "kind": "api",
@@ -3098,34 +3098,34 @@
     {
       "kind": "api",
       "key": "getUsageLatest",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/usage/UsageView.tsx",
       "workstream": "W3.2",
-      "notes": "Usage | no mobile usage screen yet; dashboard-first Phase 5, reviewed in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
     {
       "kind": "api",
       "key": "getUsageMissions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/usage/UsageView.tsx",
       "workstream": "W3.2",
-      "notes": "Usage | no mobile usage screen yet; dashboard-first Phase 5, reviewed in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
     {
       "kind": "api",
       "key": "getUsageSeries",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/usage/UsageView.tsx",
       "workstream": "W3.2",
-      "notes": "Usage | no mobile usage screen yet; dashboard-first Phase 5, reviewed in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
     {
       "kind": "api",
       "key": "getUsageSnapshots",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/usage/UsageView.tsx",
       "workstream": "W3.2",
-      "notes": "Usage | no mobile usage screen yet; dashboard-first Phase 5, reviewed in docs/captain-usage-plan/DASHBOARD_PARITY.md"
+      "notes": "Phase 6: account/host Limits view, captain usage and capture configuration; shared read contracts remain available."
     },
     {
       "kind": "api",

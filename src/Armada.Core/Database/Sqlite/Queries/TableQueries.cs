@@ -2749,7 +2749,12 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"CREATE INDEX IF NOT EXISTS idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);"),
 
                 new SchemaMigration(112, "Add captain Active eligibility (existing captains remain active)",
-                    @"ALTER TABLE captains ADD COLUMN active INTEGER NOT NULL DEFAULT 1;")
+                    @"ALTER TABLE captains ADD COLUMN active INTEGER NOT NULL DEFAULT 1;"),
+
+                new SchemaMigration(113, "Reset usage defaults to inherited enabled capture",
+                    @"ALTER TABLE captains RENAME COLUMN usage_capture_enabled TO usage_capture_enabled_legacy;",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_enabled INTEGER DEFAULT NULL;",
+                    @"ALTER TABLE captains DROP COLUMN usage_capture_enabled_legacy;")
 
 
 

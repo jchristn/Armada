@@ -75,6 +75,7 @@ namespace Armada.Tui.Routing
                 new HubTab("requests", "API Requests", "RequestHistoryScreen", "W7.2"),
                 new HubTab("events", "Events", "EventsScreen", "W7.3"),
                 new HubTab("signals", "Signals", "SignalsScreen", "W7.4"),
+                new HubTab("limits", "Limits", "UsageLimitsScreen", "AC6"),
                 new HubTab("tokens", "Token Usage", "TokenUsageScreen", "W7.5"),
                 new HubTab("jobs", "Jobs", "JobsScreen", "W3.11"));
             HubDefinition configuration = new HubDefinition("tab",

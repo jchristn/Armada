@@ -74,11 +74,11 @@ describe('Settings usage capture', () => {
     vi.mocked(getUsageLatest).mockResolvedValue({ objects: [], totalRecords: 3, totalPages: 3, pageNumber: 1, pageSize: 1, success: true, totalMs: 0 } as never);
   });
 
-  it('shows the disabled-by-default values when the server sends no usage group', async () => {
+  it('shows inherited enabled values when the server sends no usage group', async () => {
     vi.mocked(getSettings).mockResolvedValue({ ...baseSettings } as never);
     render(<Settings />);
     const toggle = await screen.findByLabelText('Enable account usage capture on this server') as HTMLInputElement;
-    expect(toggle.checked).toBe(false);
+    expect(toggle.checked).toBe(true);
     expect((screen.getByLabelText('Minimum interval (seconds)') as HTMLInputElement).value).toBe('60');
     expect((screen.getByLabelText('Concurrent captures per host') as HTMLInputElement).value).toBe('1');
   });

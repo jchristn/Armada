@@ -1170,6 +1170,14 @@ namespace Armada.Core.Settings
             settings.SettingsFilePath = path;
             settings.NormalizePaths();
             settings.ApplyDerivedDefaults();
+            UsageDefaultsFile? previous = JsonSerializer.Deserialize<UsageDefaultsFile>(json, _SerializerOptions);
+            if ((previous?.UsageCapture?.DefaultsRevision ?? 0) < 2)
+            {
+                settings.UsageCapture.Enabled = null;
+                settings.UsageCapture.AllowPtyFallback = null;
+                settings.UsageCapture.DefaultsRevision = 2;
+                settings.WriteBack(path);
+            }
             return settings;
         }
 

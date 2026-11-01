@@ -738,7 +738,7 @@ namespace Armada.Core.Database.Sqlite
                 captain.CliPermissionPolicy = !String.IsNullOrEmpty(cliPolicy) && Enum.TryParse<CliPermissionPolicyEnum>(cliPolicy, out CliPermissionPolicyEnum parsedPolicy) ? parsedPolicy : (CliPermissionPolicyEnum?)null;
             }
             catch { captain.CliPermissionPolicy = null; }
-            try { captain.UsageCaptureEnabled = reader["usage_capture_enabled"] != DBNull.Value && Convert.ToInt64(reader["usage_capture_enabled"]) == 1; } catch { }
+            try { captain.UsageCaptureEnabled = reader["usage_capture_enabled"] == DBNull.Value ? null : Convert.ToInt64(reader["usage_capture_enabled"]) == 1; } catch { }
             try { captain.UsageCaptureIntervalSeconds = Convert.ToInt32(reader["usage_capture_interval_seconds"]); } catch { }
             try
             {

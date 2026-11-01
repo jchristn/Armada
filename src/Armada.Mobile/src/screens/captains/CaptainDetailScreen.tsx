@@ -18,6 +18,7 @@ import { useLocale } from '../../i18n/LocaleContext';
 import { planningHref } from '../../navigation/legacyRedirects';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing, typography } from '../../theme/typography';
+import { UsageView } from '../usage/UsageView';
 import { CaptainChat } from './CaptainChat';
 import { CaptainFormSheet } from './CaptainFormSheet';
 import { CaptainLogView } from './CaptainLogView';
@@ -143,6 +144,7 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
             <Button label={t('Remove')} icon="trash-outline" variant="danger" onPress={() => actions.request('delete', captain)} testID="captain-remove" />
           </ActionRow>
 
+          <UsageView captain={captain} />
           <Section title={t('Captain')}>
             <InfoRow label={t('ID')} value={captain.id} mono />
             <InfoRow label={t('Tenant ID')} value={captain.tenantId} mono />

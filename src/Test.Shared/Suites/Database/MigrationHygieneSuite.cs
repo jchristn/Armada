@@ -231,6 +231,11 @@ namespace Test.Shared.Suites.Database
         private static bool IsReviewedLegacyStatement(string provider, int version, string statement)
         {
             string normalized = Regex.Replace(statement, @"\s+", " ").Trim();
+            // Phase 6 deliberately discards pre-revision-2 false choices. SQLite cannot alter column
+            // nullability, so v113 replaces only this flag; the captain row and all other data survive.
+            if (provider == "Sqlite" && version == 113 &&
+                (normalized == "ALTER TABLE captains RENAME COLUMN usage_capture_enabled TO usage_capture_enabled_legacy;" ||
+                 normalized == "ALTER TABLE captains DROP COLUMN usage_capture_enabled_legacy;")) return true;
             if (provider == "Sqlite")
             {
                 // v8: captains.max_parallelism removed (column superseded by per-captain single-mission slots).

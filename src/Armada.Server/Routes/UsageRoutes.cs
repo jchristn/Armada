@@ -29,6 +29,14 @@ namespace Armada.Server.Routes
                 api => ReadMetadata(api, "series").WithTag("Usage").WithSummary("Read bounded usage series").WithResponse(200, OpenApiJson.For<UsageSeriesResult>("Series")).WithSecurity("ApiKey"));
             app.Get("/api/v1/usage/missions", req => Read(req, authenticate, authz, "missions"),
                 api => ReadMetadata(api, "missions").WithTag("Usage").WithSummary("Read usage attributed to completed missions").WithResponse(200, OpenApiJson.For<UsageMissionResult>("Missions")).WithSecurity("ApiKey"));
+            foreach (string resource in new[] { "snapshots", "latest", "missions" })
+            {
+                string kind = resource;
+                app.Post("/api/v1/usage/" + kind + "/enumerate", req => Read(req, authenticate, authz, kind, true),
+                    api => ErrorMetadata(api).WithTag("Usage").WithSummary("Enumerate usage " + kind)
+                        .WithRequestBody(OpenApiJson.BodyFor<UsageQuery>("Usage filters and pagination", false))
+                        .WithResponse(200, kind == "missions" ? OpenApiJson.For<UsageMissionResult>("Missions") : OpenApiJson.For<EnumerationResult<UsageSnapshotView>>("Usage page")).WithSecurity("ApiKey"));
+            }
             app.Post("/api/v1/captains/{id}/usage/capture", async (ApiRequest req) =>
             {
                 AuthContext? caller = await Authorize(req, authenticate, authz).ConfigureAwait(false);
@@ -73,20 +81,21 @@ namespace Armada.Server.Routes
             return api;
         }
 
-        private async Task<object> Read(ApiRequest req, Func<HttpContextBase, Task<AuthContext>> authenticate, IAuthorizationService authz, string kind)
+        private async Task<object> Read(ApiRequest req, Func<HttpContextBase, Task<AuthContext>> authenticate, IAuthorizationService authz, string kind, bool body = false)
         {
             AuthContext? caller = await Authorize(req, authenticate, authz).ConfigureAwait(false);
             if (caller == null) return Error(req);
             try
             {
-                await _Service.ScopeAsync(caller, new UsageQuery { TenantId = req.Query.GetValueOrDefault("tenantId"), CaptainId = req.Query.GetValueOrDefault("captainId"), CaptainIds = ReadCaptainIds(req), HarborId = req.Query.GetValueOrDefault("harborId") }).ConfigureAwait(false);
-                UsageQuery query = Parse(req);
+                if (!body) await _Service.ScopeAsync(caller, new UsageQuery { TenantId = req.Query.GetValueOrDefault("tenantId"), CaptainId = req.Query.GetValueOrDefault("captainId"), CaptainIds = ReadCaptainIds(req), HarborId = req.Query.GetValueOrDefault("harborId") }).ConfigureAwait(false);
+                UsageQuery query = body ? (String.IsNullOrWhiteSpace(req.Http.Request.DataAsString) ? new UsageQuery() : JsonSerializer.Deserialize<UsageQuery>(req.Http.Request.DataAsString, _Options) ?? new UsageQuery()) : Parse(req);
                 return kind switch {
                     "snapshots" => await _Service.SnapshotsAsync(caller, query).ConfigureAwait(false),
                     "latest" => await _Service.LatestAsync(caller, query).ConfigureAwait(false),
                     "series" => await _Service.SeriesAsync(caller, query).ConfigureAwait(false),
                     _ => await _Service.MissionsAsync(caller, query).ConfigureAwait(false) };
             }
+            catch (JsonException) { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid JSON body." }; }
             catch (Exception ex) when (RouteErrorMapper.IsMapped(ex)) { return Map(req, ex); }
         }
 

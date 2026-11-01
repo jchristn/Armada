@@ -23,9 +23,9 @@ namespace Armada.Core.Database.Postgresql.Queries
 
         internal const string SnapshotCaptainsSelect = "SELECT captain_id FROM usage_snapshot_captains WHERE snapshot_id = @snapshot_id AND tenant_id = @tenant_id ORDER BY captain_id;";
 
-        internal const string SnapshotDeleteOlderThan = "DELETE FROM usage_snapshots WHERE captured_utc < @captured_before;";
+        internal const string SnapshotDeleteOlderThan = "DELETE FROM usage_snapshots WHERE id IN (SELECT id FROM usage_snapshots WHERE captured_utc < @captured_before ORDER BY captured_utc, id LIMIT 500);";
 
-        internal const string SnapshotCaptainsDeleteOlderThan = "DELETE FROM usage_snapshot_captains WHERE captured_utc < @captured_before;";
+        internal const string SnapshotCaptainsDeleteOlderThan = "DELETE FROM usage_snapshot_captains WHERE snapshot_id IN (SELECT id FROM usage_snapshots WHERE captured_utc < @captured_before ORDER BY captured_utc, id LIMIT 500);";
 
         internal const string SnapshotDeleteByTenant = "DELETE FROM usage_snapshots WHERE tenant_id = @tenant_id;";
 

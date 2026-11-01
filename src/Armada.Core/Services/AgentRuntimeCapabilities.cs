@@ -39,7 +39,7 @@ namespace Armada.Core.Services
         {
             new UsageCaptureCapability(AgentRuntimeEnum.ClaudeCode, UsageCaptureKindEnum.Active),
             new UsageCaptureCapability(AgentRuntimeEnum.Codex, UsageCaptureKindEnum.Active),
-            new UsageCaptureCapability(AgentRuntimeEnum.Gemini, UsageCaptureKindEnum.Estimated),
+            new UsageCaptureCapability(AgentRuntimeEnum.Gemini, UsageCaptureKindEnum.Active),
             new UsageCaptureCapability(AgentRuntimeEnum.Cursor, "Cursor has no verified account limit interface; its provider rejects without structured quota data."),
             new UsageCaptureCapability(AgentRuntimeEnum.Mux, "Mux runs locally and its provider rate-limit headers are not observable by Armada; per-run stats are accounting, not remaining capacity."),
             new UsageCaptureCapability(AgentRuntimeEnum.OpenCode, "OpenCode local stats are session accounting; no remaining quota source exists for its configured provider."),

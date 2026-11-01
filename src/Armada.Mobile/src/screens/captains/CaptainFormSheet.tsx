@@ -27,6 +27,8 @@ import { Banner } from '../../components/ui/Banner';
 import { SelectField, type SelectOption } from '../../components/ui/SelectSheet';
 import { useLocale } from '../../i18n/LocaleContext';
 import { useNotifications } from '../../notifications/NotificationContext';
+import { UsageCaptureFields } from '../usage/UsageCaptureFields';
+import { buildUsageCapturePayload, usageCaptureFormFromCaptain, usageCaptureFormError, USAGE_CAPTURE_FORM_ERROR_TEXT } from '@dashboard/lib/usageCaptureForm';
 import { MuxFields } from './MuxFields';
 
 export interface CaptainFormSheetProps {
@@ -48,6 +50,7 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
   const { isAdmin, isTenantAdmin } = useAuth();
   const { pushToast } = useNotifications();
   const canManageCliPolicy = isAdmin || isTenantAdmin;
+  const [usage, setUsage] = useState(() => usageCaptureFormFromCaptain(captain ?? {}));
   const [form, setForm] = useState<CaptainFormState>(emptyCaptainForm());
   const [endpoints, setEndpoints] = useState<ModelEndpoint[]>([]);
   const [saving, setSaving] = useState(false);
@@ -55,6 +58,7 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
 
   useEffect(() => {
     if (!open) return;
+    setUsage(usageCaptureFormFromCaptain(captain ?? {}));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- opening the sheet resets the form to the captain
     setForm(captain ? captainFormFromCaptain(captain, { withEndpoint: true, withPersonas: true }) : { ...emptyCaptainForm(), allowedPersonas: '', preferredPersona: '' });
     setError(null);
@@ -76,6 +80,8 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
     if (saving) return;
     if (!form.name.trim()) { setError(t('Name is required.')); return; }
     if (!form.runtime) { setError(t('Select runtime...')); return; }
+    const usageError = usageCaptureFormError(usage);
+    if (usageError) { setError(t(USAGE_CAPTURE_FORM_ERROR_TEXT[usageError])); return; }
     const formError = captainFormError(form);
     if (formError) { setError(t(captainFormErrorMessage(formError))); return; }
     setSaving(true);
@@ -83,11 +89,11 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
     try {
       let saved: Captain | null;
       if (captain) {
-        saved = (await updateCaptain(captain.id, buildCaptainPayload(form))) ?? null;
+        saved = (await updateCaptain(captain.id, { ...buildCaptainPayload(form), ...buildUsageCapturePayload(usage) })) ?? null;
         if (cliPolicyChanged(captain, form)) await setCaptainCliPermissionPolicy(captain.id, form.cliPermissionPolicy);
         pushToast('success', t('Captain "{{name}}" saved.', { name: form.name }));
       } else {
-        saved = (await createCaptain(buildCaptainCreatePayload(form))) ?? null;
+        saved = (await createCaptain({ ...buildCaptainCreatePayload(form), ...buildUsageCapturePayload(usage) })) ?? null;
         pushToast('success', t('Captain "{{name}}" created.', { name: form.name }));
       }
       onSaved(saved);
@@ -112,6 +118,7 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
         </FormActions>
       )}
     >
+      <UsageCaptureFields value={usage} onChange={setUsage} />
       {error ? <Banner tone="danger" title={error} testID="captain-form-error" /> : null}
       <TextField label={t('Name')} value={form.name} onChangeText={(v) => patch({ name: v })} autoCapitalize="none" testID="captain-form-name" />
       <SelectField label={t('Runtime')} value={form.runtime} options={runtimeOptions} onChange={(v) => patch({ runtime: v })} closeLabel={t('Close')} placeholder={t('Select runtime...')} testID="captain-form-runtime" />
