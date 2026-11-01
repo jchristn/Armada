@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { getUsageLatest } from '../api/client';
 import { USAGE_MAX_PAGES_PER_BATCH, useLatestUsageForCaptains } from './useUsage';
 
@@ -35,6 +35,33 @@ describe('useLatestUsageForCaptains', () => {
     expect(getUsageLatest).toHaveBeenCalledTimes(USAGE_MAX_PAGES_PER_BATCH);
     expect(hook.current.truncated).toBe(true);
     expect(hook.current.byCaptain.get('cpt_a')?.length).toBe(USAGE_MAX_PAGES_PER_BATCH);
+  });
+
+  it('reports an HTTP failure distinctly from empty success and retries the same batch', async () => {
+    vi.mocked(getUsageLatest).mockRejectedValueOnce(new Error('service unavailable'))
+      .mockResolvedValueOnce(result([], 1, 'empty') as never);
+    const { result: hook } = renderHook(() => useLatestUsageForCaptains(['cpt_a']));
+    await waitFor(() => expect(hook.current.status).toBe('error'));
+    expect(hook.current.byCaptain.size).toBe(0);
+    act(() => hook.current.retry());
+    await waitFor(() => expect(hook.current.status).toBe('ready'));
+    expect(hook.current.byCaptain.size).toBe(0);
+    expect(getUsageLatest).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(getUsageLatest).mock.calls[0]).toEqual(vi.mocked(getUsageLatest).mock.calls[1]);
+  });
+
+  it('ignores a late response from the previous nonempty captain page', async () => {
+    let resolveOld!: (value: never) => void;
+    vi.mocked(getUsageLatest).mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
+      .mockResolvedValueOnce(result(['cpt_b'], 1, 'uss_b') as never);
+    const { result: hook, rerender } = renderHook(({ ids }) => useLatestUsageForCaptains(ids), { initialProps: { ids: ['cpt_a'] } });
+    expect(getUsageLatest).toHaveBeenCalledWith({ captainIds: 'cpt_a', pageNumber: 1, pageSize: 100 });
+    rerender({ ids: ['cpt_b'] });
+    await waitFor(() => expect(hook.current.byCaptain.has('cpt_b')).toBe(true));
+    await act(async () => resolveOld(result(['cpt_a'], 1, 'uss_a') as never));
+    expect(hook.current.byCaptain.has('cpt_a')).toBe(false);
+    expect(hook.current.byCaptain.has('cpt_b')).toBe(true);
+    expect(hook.current.requests).toBe(1);
   });
 
   it('makes no request for an empty page', async () => {
