@@ -4,6 +4,63 @@ Branch: armada/codex-1/msn_mvxf3n23_V1oCE5oqulg
 Mission: msn_mvxf3n23_V1oCE5oqulg
 State: BLOCKED; do not land as a completed AC4 implementation.
 
+## Worker rework 2: dependency prerequisite independently confirmed
+
+Mission msn_mvxfz2no_gNyvd2ig9qQ inspected the complete preceding handoff
+hoa_mvxfzcd6_1Kmhk5SdCb6 and current source at 111580ee4. Its sole finding
+remains unresolved: capture_captain_usage with arguments {} returns a tool
+result with isError=true instead of JSON-RPC error.code -32602. The existing
+E2E.UsageTenantIsolation.mcp_missing_argument_is_protocol_error regression was
+executed unchanged and reproduced the exact response recorded below.
+
+Current McpUsageTools still declares captainId required. ArmadaServer's
+RegisterAdaptedTool passes that schema to McpHttpServer.RegisterTool, so its
+handler cannot change pre-handler validation. The installed Voltaic 2.4.0
+README explicitly documents validation before handlers (line 86) and invalid
+arguments becoming isError results (line 1544). Its public XML API exposes no
+schema-validation policy hook or original tools/call delegate. Replacing that
+shared dispatcher or patching the external dependency is the necessary
+prerequisite outside the declared Phase 4 components. The mission's explicit
+scope rules require reporting this boundary rather than expanding it. The
+prior stage's production-change prohibition applies to that Test Engineer
+stage; it is not the reason this Worker is blocked.
+
+No production behavior, schema, contract artifact, or test assertion was
+changed. Removing requiredness or accepting isError would weaken AC4, and
+neither was done. No additional duplicate known-failing regression was added.
+This evidence-only change does not warrant a product changelog entry.
+
+Fresh local commands with SDK 10.0.401 (newest installed; target net10.0),
+using exec_command because run_process is unavailable:
+
+- `dotnet restore src/Armada.sln --verbosity quiet`: exit 0.
+- `dotnet build src/Armada.sln -c Release --no-restore --verbosity quiet`:
+  exit 0, zero warnings and errors.
+- `dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build -- --suites E2E.Usage,E2E.UsageTenantIsolation,Client.Contract.Usage,E2E.ApiContract,E2E.Authorization,Client.Coverage,Client.RouteSurface`:
+  exit 1; 40 total, 39 passed, 1 failed, 0 skipped. Only the missing-argument
+  protocol case failed; the response has result.isError=true and no error.code.
+- `dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build -- --suites Services.Usage,Services.UsageDefaults`:
+  exit 0; 93 passed, 0 failed, 0 skipped.
+- `git fetch origin main`: exit 0; fresh origin/main remains
+  30358ef7824534abd6e7448cb2fc9d3c116355e1.
+- `git merge-base --is-ancestor 1eeb9e5853710e49dfe0c9ef9a88f16aaa23c176 origin/main`
+  and `git merge-base --is-ancestor f4e88920fde7a664bbb95ea001d5b92c4148b720 origin/main`:
+  each exit 0.
+
+AC4 remains unmet. Adjacent D1 account-owned sample deduplication, [from,to)
+ranges, tenant A/B isolation and explicit admin scope passed. D5 persisted
+attribution, old-account membership, nullable attribution and safe mission joins
+passed. Empty/default/error reads, pagination, SDK calls and post-commit tenant
+event routing/reconnect passed. Phase 2/3 preservation checks passed, including
+host cancellation, scheduler slots, stream EOF, local HTTP capture and secrets.
+These observations concern the named local suites, not complete production
+delivery. All earlier nonblocking limitations remain unverified: live capture
+202/429/503 status matrix, full captain-session role matrix, external databases,
+Postman execution, production attribution wiring, independent new Test Engineer
+and Judge approval, publication and landing. No full suite or phases 5-7 work
+was attempted. Pipeline checks were not bypassed. The landing blocker is the
+unsupported pre-handler validation policy in the pinned dependency.
+
 ## Test Engineer rework 1: independent reproduction
 
 Mission msn_mvxfpf3f_hdwaKlcd5YL inspected worker commit
