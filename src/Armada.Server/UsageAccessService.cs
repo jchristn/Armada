@@ -35,6 +35,17 @@ namespace Armada.Server
                 throw new UnauthorizedAccessException("An explicit foreign tenant requires a global admin.");
             query.TenantId = String.IsNullOrEmpty(query.TenantId) ? caller.TenantId : query.TenantId;
             if (String.IsNullOrEmpty(query.TenantId)) throw new UnauthorizedAccessException("A tenant is required.");
+            if (query.CaptainIds != null)
+            {
+                if (query.CaptainIds.Count < 1 || query.CaptainIds.Count > 100 || query.CaptainIds.Any(String.IsNullOrWhiteSpace)
+                    || query.CaptainIds.Distinct(StringComparer.Ordinal).Count() != query.CaptainIds.Count || query.CaptainId != null)
+                    throw new ArgumentException("captainIds requires 1..100 distinct nonempty IDs and cannot be combined with captainId.");
+                foreach (string id in query.CaptainIds)
+                {
+                    Captain? member = await _Database.Captains.ReadAsync(id).ConfigureAwait(false);
+                    if (member == null || member.TenantId != query.TenantId) throw new KeyNotFoundException("Captain not found.");
+                }
+            }
             if (!String.IsNullOrEmpty(query.CaptainId))
             {
                 Captain? captain = await _Database.Captains.ReadAsync(query.CaptainId).ConfigureAwait(false);
@@ -62,6 +73,7 @@ namespace Armada.Server
         public async Task<EnumerationResult<UsageSnapshotView>> SnapshotsAsync(AuthContext caller, UsageQuery query)
         {
             await ScopeAsync(caller, query).ConfigureAwait(false);
+            if (query.CaptainIds != null) throw new ArgumentException("captainIds is supported only by latest.");
             ValidateRange(query);
             int requestedPage = query.PageNumber, requestedSize = query.PageSize;
             bool filterHost = query.HostId != null;
@@ -118,6 +130,7 @@ namespace Armada.Server
                 } while (membershipPage.TotalPages >= membershipQuery.PageNumber);
 
                 if (query.CaptainId != null && !members.Contains(query.CaptainId)) continue;
+                if (query.CaptainIds != null && !query.CaptainIds.Any(members.Contains)) continue;
                 UsageSnapshot? snapshot = id == null ? null : await _Database.UsageSnapshots.ReadAsync(id, query.TenantId!).ConfigureAwait(false);
                 if (query.HarborId != null && state.HostId != query.HarborId) continue;
                 DateTime capturedUtc = (failed ? state.LastErrorCapturedUtc : state.LastGoodCapturedUtc) ?? state.LastUpdateUtc;
@@ -139,14 +152,16 @@ namespace Armada.Server
         /// <summary>SeriesAsync: account usage contract.</summary>
         public async Task<UsageSeriesResult> SeriesAsync(AuthContext caller, UsageQuery query)
         {
-            await ScopeAsync(caller, query).ConfigureAwait(false); ValidateRange(query, true);
+            await ScopeAsync(caller, query).ConfigureAwait(false);
+            if (query.CaptainIds != null) throw new ArgumentException("captainIds is supported only by latest."); ValidateRange(query, true);
             return await _Aggregation.SeriesAsync(query).ConfigureAwait(false);
         }
 
         /// <summary>MissionsAsync: account usage contract.</summary>
         public async Task<UsageMissionResult> MissionsAsync(AuthContext caller, UsageQuery query)
         {
-            await ScopeAsync(caller, query).ConfigureAwait(false); ValidateRange(query, true);
+            await ScopeAsync(caller, query).ConfigureAwait(false);
+            if (query.CaptainIds != null) throw new ArgumentException("captainIds is supported only by latest."); ValidateRange(query, true);
             return await _Aggregation.MissionsAsync(query).ConfigureAwait(false);
         }
 

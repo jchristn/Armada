@@ -10238,6 +10238,17 @@ Foreign captain and Harbor identifiers return 404 before secondary input validat
 
 Identity filters are `captainId`, `harborId`, `hostId`, `runtime`, `provider` and
 `accountKey`. Paging defaults to page 1, size 25, with size bounded to 1..100.
+Latest additionally accepts `captainIds`, a comma-separated batch of 1..100
+unique nonempty captain IDs. Every ID must belong to the selected tenant;
+missing/foreign IDs return 404 before secondary filters are parsed. Empty batches,
+duplicates, more than 100 IDs, or combining `captainIds` with `captainId` return 400.
+The filter is applied before account pagination. Shared accounts appear once and
+keep their full tenant-scoped member list. Captains without observations produce
+no row, not zero usage. The batch does not disable paging: request `pageSize=100`
+and follow `TotalPages` when a selected captain has multiple account contexts.
+Split visible pages larger than 100 captains into bounded batches. The other
+usage endpoints reject this latest-only filter with 400.
+
 Ranges use UTC ISO-8601 `from` and `to`, inclusive start and exclusive end.
 Snapshots default to the last 24 hours; series and missions require both dates.
 Invalid, reversed and over-90-day ranges return 400. Missions also require

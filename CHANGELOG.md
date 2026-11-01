@@ -6,6 +6,13 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Captain usage dashboard prerequisites
+
+- Add an authenticated latest-usage `captainIds` batch filter for 1..100 distinct
+  tenant-visible captains. Filter before account paging, preserve shared accounts,
+  and reject invalid batches or foreign IDs. This delivers the batch prerequisite;
+  the Phase 5 dashboard remains incomplete.
+
 ### Account usage query and public surfaces (Phase 4)
 
 - MCP `capture_captain_usage` called without its required `captainId` (empty

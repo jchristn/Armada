@@ -26,6 +26,63 @@ namespace Test.Shared.Suites.E2E
         {
             return new TestSuiteDescriptor(Suite, "Usage queries and contracts", new List<TestCaseDescriptor>
             {
+                new TestCaseDescriptor(Suite, "latest_batch_captains", "Latest batch filters before paging, deduplicates shared accounts and authorizes every ID", async ct =>
+                {
+                    E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                    E2ETenantUser owner = await E2ETenantUser.CreateAsync(fx.AuthClient, "usage-batch").ConfigureAwait(false);
+                    E2ETenantUser foreign = await E2ETenantUser.CreateAsync(fx.AuthClient, "usage-batch-foreign").ConfigureAwait(false);
+                    using HttpClient client = owner.CreateClient(fx.BaseUrl);
+                    using DatabaseDriver db = await UsageTestData.OpenAsync(fx).ConfigureAwait(false);
+                    Captain a = await db.Captains.CreateAsync(new Captain { TenantId = owner.TenantId, Name = "a" }).ConfigureAwait(false);
+                    Captain b = await db.Captains.CreateAsync(new Captain { TenantId = owner.TenantId, Name = "b" }).ConfigureAwait(false);
+                    Captain empty = await db.Captains.CreateAsync(new Captain { TenantId = owner.TenantId, Name = "empty" }).ConfigureAwait(false);
+                    Captain hidden = await db.Captains.CreateAsync(new Captain { TenantId = foreign.TenantId, Name = "hidden" }).ConfigureAwait(false);
+                    DateTime now = DateTime.UtcNow.AddMinutes(-1);
+                    foreach (string account in new[] { "unrelated", "selected" })
+                    {
+                        UsageSnapshot sample = await UsageTestData.SnapshotAsync(db, owner.TenantId, now, account, new List<string> { a.Id, b.Id }).ConfigureAwait(false);
+                        await db.UsageSnapshots.UpsertLatestStateAsync(new UsageLatestState { TenantId = owner.TenantId, HostId = sample.HostId, Runtime = sample.Runtime, Provider = sample.Provider, AccountKey = account, LastGoodStatus = UsageSnapshotStatusEnum.Ok, LastGoodSnapshotId = sample.Id, LastGoodCapturedUtc = now, LastGoodWindowsJson = sample.WindowsJson }).ConfigureAwait(false);
+                        if (account == "selected")
+                            foreach (Captain captain in new[] { a, b })
+                                await db.UsageMemberships.CreateAsync(new UsageAccountMembership { TenantId = owner.TenantId, CaptainId = captain.Id, HostId = sample.HostId, Runtime = sample.Runtime, Provider = sample.Provider, AccountKey = account, EffectiveFromUtc = now.AddHours(-1) }).ConfigureAwait(false);
+                    }
+                    string path = "/api/v1/usage/latest?captainIds=" + a.Id + "," + b.Id + "," + empty.Id + "&pageSize=1";
+                    EnumerationResult<UsageSnapshotView> result = await UsageTestData.GetAsync<EnumerationResult<UsageSnapshotView>>(client, path).ConfigureAwait(false);
+                    AssertEqual(1L, result.TotalRecords, "batch filter happens before paging");
+                    AssertEqual("selected", result.Objects.Single().AccountKey);
+                    AssertEqual(2, result.Objects.Single().CaptainIds.Count, "shared account appears once and keeps membership");
+                    EnumerationResult<UsageSnapshotView> missing = await UsageTestData.GetAsync<EnumerationResult<UsageSnapshotView>>(client, "/api/v1/usage/latest?captainIds=" + empty.Id).ConfigureAwait(false);
+                    AssertEqual(0L, missing.TotalRecords, "no sample is not zero usage");
+                    using (HttpResponseMessage openApiResponse = await fx.AuthClient.GetAsync("/openapi.json").ConfigureAwait(false))
+                    {
+                        openApiResponse.EnsureSuccessStatusCode();
+                        using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(await openApiResponse.Content.ReadAsStringAsync().ConfigureAwait(false));
+                        System.Text.Json.JsonElement parameter = document.RootElement.GetProperty("paths").GetProperty("/api/v1/usage/latest").GetProperty("get").GetProperty("parameters").EnumerateArray().Single(p => p.GetProperty("name").GetString() == "captainIds");
+                        AssertEqual("query", parameter.GetProperty("in").GetString());
+                        AssertTrue(parameter.GetProperty("description").GetString()!.Contains("1..100"), "batch bounds are published");
+                    }
+                    List<string> maximumBatch = new List<string> { a.Id, b.Id, empty.Id };
+                    for (int n = maximumBatch.Count; n < 100; n++)
+                        maximumBatch.Add((await db.Captains.CreateAsync(new Captain { TenantId = owner.TenantId, Name = "batch-boundary-" + n }).ConfigureAwait(false)).Id);
+                    EnumerationResult<UsageSnapshotView> maximum = await UsageTestData.GetAsync<EnumerationResult<UsageSnapshotView>>(client, "/api/v1/usage/latest?captainIds=" + String.Join(",", maximumBatch)).ConfigureAwait(false);
+                    AssertEqual(1L, maximum.TotalRecords, "100 visible IDs is accepted without inventing rows for missing observations");
+                    await UsageTestData.StatusAsync(client, path + "&tenantId=" + foreign.TenantId, HttpStatusCode.Forbidden).ConfigureAwait(false);
+                    await UsageTestData.StatusAsync(fx.AuthClient, path, HttpStatusCode.NotFound).ConfigureAwait(false);
+                    EnumerationResult<UsageSnapshotView> admin = await UsageTestData.GetAsync<EnumerationResult<UsageSnapshotView>>(fx.AuthClient, path + "&tenantId=" + owner.TenantId).ConfigureAwait(false);
+                    AssertEqual(1L, admin.TotalRecords, "global admin must explicitly select the batch tenant");
+                    foreach (string ids in new[] { "", a.Id + ",", a.Id + "," + a.Id, String.Join(",", Enumerable.Range(0, 101).Select(n => "cpt_" + n)) })
+                        await UsageTestData.StatusAsync(client, "/api/v1/usage/latest?captainIds=" + ids, HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    await UsageTestData.StatusAsync(client, path + "&captainId=" + a.Id, HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    await UsageTestData.StatusAsync(client, path.Replace(empty.Id, hidden.Id), HttpStatusCode.NotFound).ConfigureAwait(false);
+                    await UsageTestData.StatusAsync(client, path.Replace(empty.Id, hidden.Id) + "&bucketMinutes=bad", HttpStatusCode.NotFound).ConfigureAwait(false);
+                    EnumerationResult<UsageSnapshotView> encoded = await UsageTestData.GetAsync<EnumerationResult<UsageSnapshotView>>(client, path.Replace(",", "%2C")).ConfigureAwait(false);
+                    AssertEqual(1L, encoded.TotalRecords, "encoded batch separator is decoded exactly once");
+                    await UsageTestData.StatusAsync(client, path.Replace(empty.Id, "cpt_missing"), HttpStatusCode.NotFound).ConfigureAwait(false);
+                    await UsageTestData.StatusAsync(fx.UnauthClient, path, HttpStatusCode.Unauthorized).ConfigureAwait(false);
+                    await UsageTestData.StatusAsync(client, "/api/v1/usage/snapshots?captainIds=" + a.Id, HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    foreach (string route in new[] { "series", "missions" })
+                        await UsageTestData.StatusAsync(client, "/api/v1/usage/" + route + "?captainIds=" + a.Id, HttpStatusCode.BadRequest).ConfigureAwait(false);
+                }),
                 new TestCaseDescriptor(Suite, "empty_defaults_and_errors", "Empty reads have bounded defaults and invalid inputs use HTTP errors", async ct =>
                 {
                     E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);

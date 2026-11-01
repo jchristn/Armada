@@ -17431,7 +17431,7 @@
                                 }
                             ]
                         },
-                        "description": "One row per account group. Last-good windows retain their original timestamp after failures. Empty Objects is valid."
+                        "description": "One row per account group. Last-good windows retain their original timestamp after failures. Empty Objects is valid. Optional captainIds is a comma-separated batch of 1..100 unique tenant-visible captain IDs, incompatible with captainId. Filtering precedes account paging; shared accounts appear once with full membership. Follow TotalPages for multiple account contexts. Empty/duplicate/oversized batches return 400; any missing or foreign captain returns 404. Example: /api/v1/usage/latest?captainIds={{captainId}}&pageSize=100."
                     },
                     "event": [
                         {

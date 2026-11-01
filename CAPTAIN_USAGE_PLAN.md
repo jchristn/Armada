@@ -213,6 +213,10 @@ use existing authenticated permissions; capture/edit actions retain admin checks
 AC5 navigation tests must cover each state and the selected captain's destination.
 
 Usage is the highest applicable fresh window, accompanied by its name and freshness. Below75%=normal, 75..89%=warning, >=90%=danger; text percentages and status labels carry the same meaning without color. Unsupported, Estimated, AuthMissing and Failed rows have explicit next actions. A batch latest request hydrates the visible page without one request per captain.
+The latest-only `captainIds` filter accepts 1..100 distinct tenant-visible IDs,
+filters before account paging, and keeps shared accounts canonical. Split larger
+visible captain pages into bounded batches and follow account pages or display
+explicit truncation guidance; missing observations must never imply zero usage.
 
 ![Captains usage column](docs/captain-usage-plan/mockups/02-captains.png)
 

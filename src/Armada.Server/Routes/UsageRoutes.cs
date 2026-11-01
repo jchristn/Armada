@@ -65,6 +65,8 @@ namespace Armada.Server.Routes
             ErrorMetadata(api);
             foreach (string name in new[] { "captainId", "harborId", "hostId", "runtime", "provider", "accountKey", "tenantId", "from", "to", "pageNumber", "pageSize" })
                 api.WithParameter(OpenApiParameterMetadata.Query(name, name == "tenantId" ? "Explicit tenant (global administrator only; omission uses caller tenant)" : name == "pageSize" ? "Default 25, range 1..100" : name == "pageNumber" ? "Default 1" : "Usage filter; UTC ranges are half-open [from,to), at most 90 days", (kind == "series" || kind == "missions") && (name == "from" || name == "to") || kind == "missions" && name == "provider"));
+            if (kind == "latest")
+                api.WithParameter(OpenApiParameterMetadata.Query("captainIds", "Comma-separated 1..100 distinct tenant-visible captain IDs; incompatible with captainId. Filters before account paging. Shared accounts appear once with full membership. Missing observations return no row, never zero.", false));
             if (kind == "series" || kind == "missions")
                 foreach (string name in new[] { "metric", "groupBy", "bucketMinutes", "window", "model", "sortBy", "sortDirection" })
                     api.WithParameter(OpenApiParameterMetadata.Query(name, "Series or mission filter; buckets 5/60/360, metric limits/tokens, groupBy account/provider", false));
@@ -77,7 +79,7 @@ namespace Armada.Server.Routes
             if (caller == null) return Error(req);
             try
             {
-                await _Service.ScopeAsync(caller, new UsageQuery { TenantId = req.Query.GetValueOrDefault("tenantId"), CaptainId = req.Query.GetValueOrDefault("captainId"), HarborId = req.Query.GetValueOrDefault("harborId") }).ConfigureAwait(false);
+                await _Service.ScopeAsync(caller, new UsageQuery { TenantId = req.Query.GetValueOrDefault("tenantId"), CaptainId = req.Query.GetValueOrDefault("captainId"), CaptainIds = ReadCaptainIds(req), HarborId = req.Query.GetValueOrDefault("harborId") }).ConfigureAwait(false);
                 UsageQuery query = Parse(req);
                 return kind switch {
                     "snapshots" => await _Service.SnapshotsAsync(caller, query).ConfigureAwait(false),
@@ -102,12 +104,20 @@ namespace Armada.Server.Routes
             return RouteErrorMapper.ToResponse(req, ex, 409);
         }
 
+        private static List<string>? ReadCaptainIds(ApiRequest req)
+        {
+            if (!req.Http.Request.QuerystringExists("captainIds")) return null;
+            string text = req.Query.GetValueOrDefault("captainIds") ?? String.Empty;
+            return new List<string>(Uri.UnescapeDataString(text.Replace("+", " ")).Split(','));
+        }
+
         private static UsageQuery Parse(ApiRequest req)
         {
             UsageQuery result = new UsageQuery();
             foreach (System.Reflection.PropertyInfo property in typeof(UsageQuery).GetProperties())
             {
                 string name = Char.ToLowerInvariant(property.Name[0]) + property.Name.Substring(1);
+                if (property.Name == "CaptainIds") { result.CaptainIds = ReadCaptainIds(req); continue; }
                 string? text = req.Query.GetValueOrDefault(name);
                 if (property.Name == "FromUtc") text = req.Query.GetValueOrDefault("from") ?? text;
                 if (property.Name == "ToUtc") text = req.Query.GetValueOrDefault("to") ?? text;

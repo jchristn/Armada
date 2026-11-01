@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System;
+    using System.Collections.Generic;
     using Armada.Core.Enums;
 
     /// <summary>
@@ -19,6 +20,9 @@ namespace Armada.Core.Models
         /// Only snapshots whose triggering captain or member links match this captain, or null.
         /// </summary>
         public string? CaptainId { get; set; } = null;
+
+        /// <summary>Optional latest-only batch filter, 1..100 distinct captain IDs. Every ID is tenant-authorized.</summary>
+        public List<string>? CaptainIds { get; set; } = null;
 
         /// <summary>
         /// Only snapshots captured on this Harbor, or null.
