@@ -104,3 +104,31 @@ View Usage navigation and existing token-chart regressions remain green.
 No production changes or known-failing tests were retained. Backend mutation
 lifecycle, visual matrix, full suites and main landing were not rerun. The
 required correction and blocked outcome above still apply.
+
+
+## Revalidation at start commit c2743d0d9
+
+- npm ci: exit 0; audit reports 2 moderate and 2 high vulnerabilities.
+- Temporary test `CaptainUsageCard > recovers after expired cooldown`:
+  reject capture with HTTP 429 and nextEligibleUtc 60 seconds ahead, advance
+  Date.now by 120 seconds, increment usage revision and await the second latest
+  request. Expected enabled Capture now; actual disabled with cooldown title.
+  `npx vitest run src/components/usage/CaptainUsageCard.test.tsx`: exit 1,
+  10 passed / 1 failed at toBeEnabled. Restored the original file in finally.
+- An initial temporary fixture outside the describe block failed on inherited
+  mock call counts; it was corrected into the describe block before the result
+  above. This initial fixture failure is not product evidence.
+- Restored command: `npx vitest run
+  src/components/usage/CaptainUsageCard.test.tsx
+  src/pages/CaptainsUsage.test.tsx src/pages/CaptainDetailUsage.test.tsx
+  src/pages/TokenUsage.test.tsx src/lib/useUsage.test.tsx
+  src/lib/usageCatalog.test.ts`: exit 0, 6 files / 34 tests passed.
+- Prior View Usage finding: resolved by current navigation/focus regressions.
+  Prior captain edit lifecycle finding: not independently rerun this turn.
+  Prior cooldown finding: unresolved, reproduced above.
+- No production changes or known-failing tests retained. No new permanent
+  coverage added. Full suites deferred per stage instruction. Build, backend,
+  real provider, visual/keyboard matrix and main landing not checked this turn.
+  The empty-page in-flight concern remains untested and is not a finding.
+
+Outcome remains BLOCKED under the Affected Case and required correction above.
