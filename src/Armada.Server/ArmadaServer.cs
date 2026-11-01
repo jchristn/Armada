@@ -1555,7 +1555,15 @@ namespace Armada.Server
             // Status, health, doctor, settings, server control
             SlotManager slotManager = new SlotManager(Path.Combine(_Settings.DataDirectory, "bin"), retentionCount: _Settings.RebuildSlotRetentionCount);
             ServerRebuildService rebuildService = new ServerRebuildService(_Database, _Settings, slotManager, new LocalHostCommandExecutor(), _Logging, () => Stop(), _HarborConnectionManager);
-            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync, () => RestartOverride?.Invoke()) { BlackBox = _BlackBox }
+            new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync, () => RestartOverride?.Invoke())
+            {
+                BlackBox = _BlackBox,
+                OnUsageCaptureSettingsChanged = async () =>
+                {
+                    _UsageCapture.Invalidate();
+                    await _UsageCaptureScheduler.RebuildAsync().ConfigureAwait(false);
+                }
+            }
                 .Register(_App, authenticate, _AuthorizationService);
 
             new StorageRoutes(_StorageInventory, _JsonOptions).Register(_App, authenticate, _AuthorizationService);

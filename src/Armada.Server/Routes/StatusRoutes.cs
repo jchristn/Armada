@@ -42,6 +42,9 @@ namespace Armada.Server.Routes
         /// </summary>
         public Armada.Core.BlackBox.BlackBoxRuntime? BlackBox { get; set; } = null;
 
+        /// <summary>Cancel capture work and rebuild schedules after persisted usage settings change.</summary>
+        public Func<Task>? OnUsageCaptureSettingsChanged { get; set; }
+
         /// <summary>
         /// Instantiate.
         /// </summary>
@@ -490,8 +493,17 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
-                SettingsUpdateRequest body = JsonSerializer.Deserialize<SettingsUpdateRequest>(req.Http.Request.DataAsString, _jsonOptions)
-                    ?? throw new InvalidOperationException("Request body could not be deserialized as SettingsUpdateRequest.");
+                SettingsUpdateRequest body;
+                try
+                {
+                    body = JsonSerializer.Deserialize<SettingsUpdateRequest>(req.Http.Request.DataAsString, _jsonOptions)
+                        ?? throw new JsonException("Settings object required.");
+                }
+                catch (JsonException)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid settings JSON or field type." };
+                }
 
                 // Lists stored in settings are bounded (docs/ENUMERATION.md); checked before anything is applied.
                 try
@@ -595,6 +607,23 @@ namespace Armada.Server.Routes
                     _settings.Permissions = body.Permissions;
                 if (body.Ask != null)
                     _settings.Ask = body.Ask;
+                if (body.UsageCapture != null)
+                {
+                    // UsageAccessService and passive header handlers retain this object. Apply in place,
+                    // so the global switch and bounds take effect on every existing request path.
+                    UsageCaptureSettings incoming = body.UsageCapture;
+                    UsageCaptureSettings current = _settings.UsageCapture;
+                    current.Enabled = incoming.Enabled;
+                    current.MinimumIntervalSeconds = incoming.MinimumIntervalSeconds;
+                    current.AllowPtyFallback = incoming.AllowPtyFallback;
+                    current.ProbeTimeoutSeconds = incoming.ProbeTimeoutSeconds;
+                    current.MaximumConcurrentProbes = incoming.MaximumConcurrentProbes;
+                    current.MaximumConcurrentProbesPerHost = incoming.MaximumConcurrentProbesPerHost;
+                    current.MaximumBackoffSeconds = incoming.MaximumBackoffSeconds;
+                    current.MaximumExcerptBytes = incoming.MaximumExcerptBytes;
+                    current.RawSnapshotRetentionDays = incoming.RawSnapshotRetentionDays;
+                    current.RollupRetentionDays = incoming.RollupRetentionDays;
+                }
                 if (body.Push != null)
                 {
                     // The access token comes back from GET redacted; a redacted value keeps the stored token.
@@ -620,6 +649,9 @@ namespace Armada.Server.Routes
 
                 await _settings.SaveAsync().ConfigureAwait(false);
 
+                if (body.UsageCapture != null && OnUsageCaptureSettingsChanged != null)
+                    await OnUsageCaptureSettingsChanged().ConfigureAwait(false);
+
                 if (body.BlackBox != null && BlackBox != null)
                     _ = BlackBox.ApplySettingsChanged(previousBlackBoxRetention);
 
@@ -633,7 +665,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Settings")
                 .WithSummary("Update server settings")
-                .WithDescription("Accepts partial update of editable settings. Validates values and persists to settings file. Lists are bounded: Import.AllowedRoots, Import.ExcludedDirectoryNames and FleetActions.OfflineHarborIds hold at most 256 entries each (400 with Data.Code CollectionLimitExceeded otherwise); RepositoryHealth.ScoredCriteria and Push.Categories keep one entry per defined value.")
+                .WithDescription("Accepts partial update of editable settings. Validates values and persists to settings file. UsageCapture omission/null preserves the group; a supplied object replaces it using defaults for omitted members. Invalid field types return 400 before mutation. UsageCapture numeric bounds clamp: MinimumIntervalSeconds 60..86400, ProbeTimeoutSeconds 1..300, MaximumConcurrentProbes/MaximumConcurrentProbesPerHost 1..64, MaximumBackoffSeconds 60..86400, MaximumExcerptBytes 256..65536, RawSnapshotRetentionDays 1..365, RollupRetentionDays 7..1825. Lists are bounded: Import.AllowedRoots, Import.ExcludedDirectoryNames and FleetActions.OfflineHarborIds hold at most 256 entries each (400 with Data.Code CollectionLimitExceeded otherwise); RepositoryHealth.ScoredCriteria and Push.Categories keep one entry per defined value.")
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/server/reset", async (ApiRequest req) =>
@@ -764,6 +796,7 @@ namespace Armada.Server.Routes
             {
                 DataRetentionDays = _settings.DataRetentionDays,
                 RequestHistoryRetentionDays = _settings.RequestHistoryRetentionDays,
+                UsageCapture = _settings.UsageCapture,
                 AdmiralPort = _settings.AdmiralPort,
                 McpPort = _settings.McpPort,
                 MaxCaptains = _settings.MaxCaptains,

@@ -204,6 +204,14 @@ The card separates each window, shows exact reset time plus countdown, last capt
 
 ### Captains list
 
+Every Captains table row must include an ActionMenu item labeled exactly `View Usage`
+in English, translated through the shared catalog. It opens the selected captain's
+detail usage section at a stable route/anchor, preserves captain scope and supports
+the existing menu's keyboard navigation. Keep it available for disabled,
+unsupported and no-data captains so their explanations remain reachable. Reads
+use existing authenticated permissions; capture/edit actions retain admin checks.
+AC5 navigation tests must cover each state and the selected captain's destination.
+
 Usage is the highest applicable fresh window, accompanied by its name and freshness. Below75%=normal, 75..89%=warning, >=90%=danger; text percentages and status labels carry the same meaning without color. Unsupported, Estimated, AuthMissing and Failed rows have explicit next actions. A batch latest request hydrates the visible page without one request per captain.
 
 ![Captains usage column](docs/captain-usage-plan/mockups/02-captains.png)

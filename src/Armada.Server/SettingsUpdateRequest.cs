@@ -26,6 +26,12 @@ namespace Armada.Server
     /// </summary>
     public class SettingsUpdateRequest
     {
+        /// <summary>
+        /// Optional usage capture group replacement. Omission or null preserves the group;
+        /// omitted members use UsageCaptureSettings defaults and numeric bounds are clamped.
+        /// </summary>
+        public UsageCaptureSettings? UsageCapture { get; set; }
+
         /// <summary>Optional completed mission/event/signal retention in days; zero disables expiry.</summary>
         public int? DataRetentionDays { get; set; }
 
