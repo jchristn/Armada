@@ -9,6 +9,28 @@ stdio public surface, independently reproduced in Test Engineer rework 3.
 
 Mission: msn_mvxg8z3z_CppHN9bkIIJ. Production code was not modified.
 
+Independent resumed-stage recheck (2026-11-01): start commit 5a0c4f8f8
+already contained the tests and blocker below. Fresh source inspection confirms
+the guard still accepts only McpHttpServer and McpStdioCommand still registers
+the tools without equivalent validation. Using installed SDK 10.0.401,
+`dotnet build src/Armada.sln -c Release --verbosity quiet` exited 0 with
+0 warnings and 0 errors. Running the built Helm with the two messages below
+in a fresh worktree-local ARMADA_DATA_DIR again returned result.isError=true
+for request 2, with no error.code; the -32602 assertion was false. The process
+exited 0 after stdin closed and the temporary fixture was removed.
+`dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build -- --suites E2E.UsageTenantIsolation`
+exited 0: 6 passed, 0 failed, 0 skipped. These HTTP passes do not resolve the
+stdio defect. Fresh `git fetch origin main` still resolved to
+30358ef7824534abd6e7448cb2fc9d3c116355e1; both required Phase 3 ancestor checks
+and the origin/main-to-HEAD ancestor check exited 0. AC4 remains blocked;
+the prior HTTP finding is resolved and the stdio finding is unresolved.
+`dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build -- --suites E2E.Usage,Client.Contract.Usage`
+also exited 0: 17 passed, 0 failed, 0 skipped (the E2E.Usage prefix includes
+UsageTenantIsolation). This rechecks D1 account ownership, D5 persisted
+attribution, half-open boundaries, empty/error results, stable pagination,
+tenant isolation, SDK forwarding and post-commit events/reconnect. No full
+suite, external-provider or Postman collection run was performed on resume.
+
 Added E2E.UsageTenantIsolation.mcp_stateless_required_argument_and_recovery.
 It sends real authenticated /mcp requests using revision 2026-07-28, routing
 headers and protocol/client-capability metadata. Omitted, null, empty and
