@@ -58,8 +58,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, reasoning_effort, tier, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, state, current_mission_id, current_dock_id, process_id, recovery_attempts, quarantine_until_utc, quarantine_reason, last_heartbeat_utc, created_utc, last_update_utc, last_process_alive_utc, usage_capture_enabled, usage_capture_interval_seconds, usage_capture_mode, usage_capture_command)
-                            VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @reasoning_effort, @tier, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @quarantine_until_utc, @quarantine_reason, @last_heartbeat_utc, @created_utc, @last_update_utc, @last_process_alive_utc, @usage_capture_enabled, @usage_capture_interval_seconds, @usage_capture_mode, @usage_capture_command);";
+                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, reasoning_effort, tier, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, state, current_mission_id, current_dock_id, process_id, recovery_attempts, quarantine_until_utc, quarantine_reason, last_heartbeat_utc, created_utc, last_update_utc, last_process_alive_utc, usage_capture_enabled, usage_capture_interval_seconds, usage_capture_mode, usage_capture_command, active)
+                            VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @reasoning_effort, @tier, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @quarantine_until_utc, @quarantine_reason, @last_heartbeat_utc, @created_utc, @last_update_utc, @last_process_alive_utc, @usage_capture_enabled, @usage_capture_interval_seconds, @usage_capture_mode, @usage_capture_command, @active);";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)captain.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)captain.UserId ?? DBNull.Value);
@@ -89,6 +89,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@active", captain.Active ? 1 : 0);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
             }
@@ -143,7 +144,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         }
 
         /// <inheritdoc />
-        public async Task<Captain> UpdateAsync(Captain captain, CancellationToken token = default)
+        public async Task<Captain> UpdateAsync(Captain captain, CancellationToken token = default, bool updateActive = false)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             captain.LastUpdateUtc = DateTime.UtcNow;
@@ -180,6 +181,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                             usage_capture_interval_seconds = @usage_capture_interval_seconds,
                             usage_capture_mode = @usage_capture_mode,
                             usage_capture_command = @usage_capture_command,
+                        active = CASE WHEN @update_active = 1 THEN @active ELSE active END,
                             last_update_utc = @last_update_utc
                             WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
@@ -208,6 +210,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@active", captain.Active ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@update_active", updateActive ? 1 : 0);
                     cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(captain.LastUpdateUtc));
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -460,7 +464,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                             current_dock_id = @current_dock_id,
                             last_heartbeat_utc = @last_heartbeat_utc,
                             last_update_utc = @last_update_utc
-                            WHERE id = @id AND state = 'Idle';";
+                            WHERE id = @id AND state = 'Idle' AND active = 1;";
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", CaptainStateEnum.Working.ToString());
                     cmd.Parameters.AddWithValue("@current_mission_id", missionId);
@@ -802,7 +806,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                             current_dock_id = @current_dock_id,
                             last_heartbeat_utc = @last_heartbeat_utc,
                             last_update_utc = @last_update_utc
-                            WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle';";
+                            WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle' AND active = 1;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", CaptainStateEnum.Working.ToString());
@@ -832,7 +836,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.CommandText = @"UPDATE captains SET
                         state = @state,
                         last_update_utc = @last_update_utc
-                        WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle';";
+                        WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle' AND active = 1;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", state.ToString());

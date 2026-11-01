@@ -2454,7 +2454,10 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS membership_id TEXT;",
                     @"ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS reported_cost DOUBLE PRECISION;",
                     @"ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS cost_currency TEXT;",
-                    @"CREATE INDEX IF NOT EXISTS idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);")
+                    @"CREATE INDEX IF NOT EXISTS idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);"),
+
+                new SchemaMigration(112, "Add captain Active eligibility (existing captains remain active)",
+                    @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;")
 
 
             };

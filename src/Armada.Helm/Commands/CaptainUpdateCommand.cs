@@ -78,6 +78,7 @@ namespace Armada.Helm.Commands
                 UserId = current.UserId,
                 Name = String.IsNullOrWhiteSpace(settings.Name) ? current.Name : settings.Name.Trim(),
                 Runtime = runtime,
+                Active = settings.Active ?? current.Active,
                 ModelEndpointId = modelEndpointId,
                 Model = settings.Model != null ? (String.IsNullOrWhiteSpace(settings.Model) ? null : settings.Model.Trim()) : current.Model,
                 SystemInstructions = current.SystemInstructions,

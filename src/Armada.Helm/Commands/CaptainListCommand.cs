@@ -51,6 +51,7 @@ namespace Armada.Helm.Commands
             table.AddColumn("[bold]Id[/]");
             table.AddColumn("[bold]Name[/]");
             table.AddColumn("[bold]Runtime[/]");
+            table.AddColumn("[bold]Active[/]");
             table.AddColumn("[bold]State[/]");
             table.AddColumn("[bold]Mission[/]");
             table.AddColumn("[bold]Heartbeat[/]");
@@ -80,6 +81,7 @@ namespace Armada.Helm.Commands
                     $"[dim]{Markup.Escape(captain.Id)}[/]",
                     $"[bold]{Markup.Escape(captain.Name)}[/]",
                     $"{captain.Runtime}",
+                    captain.Active ? "Yes" : "No",
                     $"[{stateColor}]{captain.State}[/]",
                     missionCell,
                     heartbeat);

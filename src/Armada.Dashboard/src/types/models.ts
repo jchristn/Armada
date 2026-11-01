@@ -247,6 +247,8 @@ export type VoyageStatus = 'Open' | 'InProgress' | 'Complete' | 'Failed' | 'Canc
 export type CaptainState = 'Idle' | 'Working' | 'Planning' | 'Refining' | 'Stalled' | 'Stopping' | 'Quarantined' | 'Analyzing';
 
 export interface Captain {
+  /** New-work eligibility; absent on older servers means active. */
+  active?: boolean;
   id: string;
   tenantId: string | null;
   name: string;

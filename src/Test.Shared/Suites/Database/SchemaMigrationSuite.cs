@@ -32,6 +32,32 @@ namespace Test.Shared.Suites.Database
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(CaseAsync("active_migration_preserves_existing_and_new_captains", "Migration 112 backfills existing captains and defaults future inserts to active", TestTags.Positive, async () =>
+            {
+                using (SqliteConnection conn = new SqliteConnection("Data Source=:memory:"))
+                {
+                    await conn.OpenAsync();
+                    using (SqliteCommand cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "CREATE TABLE captains (id TEXT PRIMARY KEY, state TEXT); INSERT INTO captains VALUES ('old', 'Working');";
+                        await cmd.ExecuteNonQueryAsync();
+                        foreach (SchemaMigration migration in Armada.Core.Database.Sqlite.Queries.TableQueries.GetMigrations())
+                        {
+                            if (migration.Version != 112) continue;
+                            foreach (string sql in migration.Statements)
+                            {
+                                cmd.CommandText = sql;
+                                await cmd.ExecuteNonQueryAsync();
+                            }
+                        }
+                        cmd.CommandText = "INSERT INTO captains (id, state) VALUES ('new', 'Idle'); SELECT COUNT(*) FROM captains WHERE active = 1;";
+                        AssertEqual(2L, (long)(await cmd.ExecuteScalarAsync())!);
+                        cmd.CommandText = "SELECT state FROM captains WHERE id = 'old';";
+                        AssertEqual("Working", (string)(await cmd.ExecuteScalarAsync())!);
+                    }
+                }
+            }));
+
 
             cases.Add(Case("schema_migration_valid_construction", "SchemaMigration valid construction", TestTags.Positive, () =>
             {

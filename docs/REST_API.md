@@ -10840,6 +10840,7 @@ A worker AI agent instance executing missions.
 | `ReasoningEffort` | string? | null | Reasoning-effort level (`ReasoningEffortEnum`) translated to each runtime's native control; null uses the runtime default |
 | `Tier` | string? | null | Capability/cost tier (`CaptainTierEnum`); null auto-classifies from the model name (8B parameters or fewer is Economy, unknown is Standard; a Claude Code, Codex or Gemini captain with no model can also take Premium work) |
 | `RuntimeOptionsJson` | string? | null | Runtime-specific options as JSON |
+| `Active` | bool | true | New-work eligibility, independent of State. POST defaults true; PUT changes only when supplied. False excludes automatic and explicit assignments, Ask, planning, refinement and evaluation. Running work is preserved; true restores eligibility. |
 | `CliPermissionPolicy` | [CliPermissionPolicyEnum](#clipermissionpolicyenum)? | null | CLI tool permission policy for the captain's own tools; null inherits (the legacy `autoApprove` option, then the server default). Accepted on create; captain updates keep it; change it with `PUT /api/v1/captains/{id}/cli-permission-policy` |
 | `QuarantineUntilUtc` | datetime? | null | Captain is excluded from dispatch until this time |
 | `QuarantineReason` | string? | null | Why the captain was quarantined |

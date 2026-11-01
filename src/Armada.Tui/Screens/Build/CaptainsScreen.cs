@@ -70,6 +70,7 @@ namespace Armada.Tui.Screens.Build
             RuntimeFilter = TextFilter("Runtime", 12, "Filter...");
             StateFilter = TextFilter("State", 12, "Filter...");
 
+            Column("active", "Active", c => c.Active ? "Yes" : "No", 1);
             Column("name", "Name", c => c.Name + (c.Tier.HasValue ? "  [" + Tr(c.Tier.Value.ToString()) + "]" : ""), 3, null, c => c.Name.ToLowerInvariant()).Pinned = true;
             Column("id", "ID", c => c.Id, 0, 26);
             Column("runtime", "Runtime", c => c.Runtime.ToString(), 0, 12, c => c.Runtime.ToString().ToLowerInvariant());

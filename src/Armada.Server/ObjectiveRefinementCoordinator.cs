@@ -92,6 +92,7 @@ namespace Armada.Server
 
             if (!captain.SupportsPlanningSessions)
                 throw new InvalidOperationException(captain.PlanningSessionSupportReason ?? "This captain runtime is not supported for refinement sessions.");
+            Armada.Core.Services.CaptainEligibility.RequireActive(captain);
             if (captain.State != CaptainStateEnum.Idle)
                 throw new CaptainNotIdleException(captain.Id, captain.State, "Captain " + captain.Name + " is not idle.");
 
@@ -199,6 +200,7 @@ namespace Armada.Server
             if (String.IsNullOrWhiteSpace(content)) throw new ArgumentNullException(nameof(content));
 
             session = await RequireSessionAsync(session.Id, token).ConfigureAwait(false);
+            Armada.Core.Services.CaptainEligibility.RequireActive(await _Database.Captains.ReadAsync(session.CaptainId, token).ConfigureAwait(false) ?? throw new KeyNotFoundException("Captain not found: " + session.CaptainId));
             if (session.Status != ObjectiveRefinementSessionStatusEnum.Active)
                 throw new InvalidOperationException("Objective refinement session " + session.Id + " is not ready for a new message.");
             TurnState turn = new TurnState();
@@ -323,6 +325,7 @@ namespace Armada.Server
                 Objective objective = await RequireObjectiveAsync(session.ObjectiveId, token).ConfigureAwait(false);
                 ObjectiveRefinementMessage sourceMessage = await ResolveSourceMessageAsync(session, request.MessageId, token).ConfigureAwait(false);
                 Captain captain = await RequireCaptainAsync(session.CaptainId, token).ConfigureAwait(false);
+                Armada.Core.Services.CaptainEligibility.RequireActive(captain);
                 Vessel? vessel = await TryReadVesselAsync(session.VesselId, token).ConfigureAwait(false);
                 List<ObjectiveRefinementMessage> messages = await _Database.ObjectiveRefinementMessages
                     .EnumerateBySessionAsync(session.Id, token)
@@ -673,6 +676,7 @@ namespace Armada.Server
                 if (IsStopRequested(session.Id))
                     return;
 
+                Armada.Core.Services.CaptainEligibility.RequireActive(await _Database.Captains.ReadAsync(captain.Id).ConfigureAwait(false) ?? captain);
                 int processId = await runtime.StartAsync(
                     ResolveWorkingDirectory(vessel),
                     prompt,
@@ -948,6 +952,7 @@ namespace Armada.Server
 
             try
             {
+                Armada.Core.Services.CaptainEligibility.RequireActive(await _Database.Captains.ReadAsync(captain.Id).ConfigureAwait(false) ?? captain);
                 processId = await runtime.StartAsync(
                     ResolveWorkingDirectory(vessel),
                     prompt,

@@ -126,6 +126,7 @@ export function CaptainsTab() {
   const renderRow = ({ item }: { item: Captain }) => {
     const subtitle = [
       item.runtime,
+      `${t('Active')}: ${t(item.active === false ? 'No' : 'Yes')}`,
       item.state === 'Quarantined' && item.quarantineUntilUtc ? t('until {{time}}', { time: formatRelativeTime(item.quarantineUntilUtc) }) : null,
       item.currentMissionId ? `${t('Current Mission')}: ${item.currentMissionId.substring(0, 8)}...` : null,
       item.lastHeartbeatUtc ? `${t('Heartbeat')}: ${formatRelativeTime(item.lastHeartbeatUtc)}` : null,

@@ -209,6 +209,7 @@ namespace Armada.Core.Services
 
             Captain? captain = await _Database.Captains.ReadAsync(tenantId, request.CaptainId.Trim(), token).ConfigureAwait(false);
             if (captain == null) throw new VesselImportRequestException(VesselImportCategorizationCodes.CategorizationCaptainNotFound, "Captain not found: " + request.CaptainId, nameof(request));
+            CaptainEligibility.RequireActive(captain);
         }
 
         /// <inheritdoc />
@@ -706,6 +707,7 @@ namespace Armada.Core.Services
 
                     Captain? captain = String.IsNullOrEmpty(captainId) ? null : await _Database.Captains.ReadAsync(tenantId, captainId).ConfigureAwait(false);
                     if (captain == null) throw new KeyNotFoundException("Captain not found: " + (String.IsNullOrEmpty(captainId) ? "(none)" : captainId) + ".");
+                    CaptainEligibility.RequireActive(captain);
 
                     reserved = await _Database.Captains.TryReserveAsync(tenantId, captain.Id, CaptainStateEnum.Analyzing).ConfigureAwait(false);
                     if (!reserved)

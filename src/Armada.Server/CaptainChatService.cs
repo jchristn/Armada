@@ -136,6 +136,7 @@ namespace Armada.Server
                     ? await _Database.Captains.ReadAsync(auth.TenantId!, captainId, token).ConfigureAwait(false)
                     : await _Database.Captains.ReadAsync(auth.TenantId!, auth.UserId!, captainId, token).ConfigureAwait(false);
             if (captain == null) return Fail("Captain not found.");
+            if (!captain.Active) return Fail("Captain is inactive. Enable Active before starting new work.");
 
             // The editable Ask Armada system prompt (Configuration > Prompts, template 'ask.system').
             string? askSystemPrompt = null;
@@ -667,6 +668,7 @@ namespace Armada.Server
 
                 try
                 {
+                    Armada.Core.Services.CaptainEligibility.RequireActive(await _Database.Captains.ReadAsync(captain.Id).ConfigureAwait(false) ?? captain);
                     processId = await runtime.StartAsync(
                         remoteRuntime != null ? String.Empty : workingDirectory,
                         prompt,

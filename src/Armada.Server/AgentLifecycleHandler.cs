@@ -964,6 +964,8 @@ namespace Armada.Server
         /// </summary>
         public async Task<int> HandleLaunchAgentAsync(Captain captain, Mission mission, Dock dock)
         {
+            Captain currentEligibility = await _Database.Captains.ReadAsync(captain.Id).ConfigureAwait(false) ?? captain;
+            CaptainEligibility.RequireActive(currentEligibility);
             _Logging.Info(_Header + "launching " + captain.Runtime + " agent for captain " + captain.Id);
             if (captain.Runtime == AgentRuntimeEnum.ApiEndpoint)
             {

@@ -56,6 +56,7 @@ namespace Armada.Helm.Commands
             {
                 Name = settings.Name,
                 Runtime = runtime,
+                Active = settings.Active ?? true,
                 ModelEndpointId = runtime == AgentRuntimeEnum.ApiEndpoint ? settings.ModelEndpointId?.Trim() : null,
                 Model = String.IsNullOrWhiteSpace(settings.Model) ? null : settings.Model.Trim(),
                 RuntimeOptionsJson = runtimeOptionsJson

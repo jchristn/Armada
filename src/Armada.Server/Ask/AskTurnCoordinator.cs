@@ -154,6 +154,11 @@ namespace Armada.Server.Ask
 
             AskThread? thread = await _Threads.GetThreadAsync(auth, threadId, token).ConfigureAwait(false);
             if (thread == null) return new AskTurnStart(404, null, "Thread not found");
+            if (!String.IsNullOrEmpty(thread.CaptainId))
+            {
+                Captain? chosen = await _Database.Captains.ReadAsync(thread.CaptainId, token).ConfigureAwait(false);
+                if (chosen?.Active == false) return new AskTurnStart(409, null, "Captain is inactive. Enable Active before starting new work.");
+            }
 
             AskTurnHandle? handle = null;
             if (!String.IsNullOrEmpty(thread.CaptainId))
@@ -219,6 +224,11 @@ namespace Armada.Server.Ask
         {
             AskThread? thread = await _Threads.GetThreadAsync(auth, threadId, token).ConfigureAwait(false);
             if (thread == null) return new AskTurnStart(404, null, "Thread not found");
+            if (!String.IsNullOrEmpty(thread.CaptainId))
+            {
+                Captain? chosen = await _Database.Captains.ReadAsync(thread.CaptainId, token).ConfigureAwait(false);
+                if (chosen?.Active == false) return new AskTurnStart(409, null, "Captain is inactive. Enable Active before starting new work.");
+            }
 
             AskTurnHandle handle = new AskTurnHandle(thread.Id, thread.CaptainId, "Summary");
             if (!_Running.TryAdd(thread.Id, handle)) return new AskTurnStart(409, null, "A captain turn is already running in this conversation");
@@ -336,7 +346,7 @@ namespace Armada.Server.Ask
             if (_Running.ContainsKey(thread.Id)) return null;
 
             Captain? captain = await _Database.Captains.ReadAsync(thread.CaptainId!, token).ConfigureAwait(false);
-            if (captain == null || captain.State != CaptainStateEnum.Idle) return null;
+            if (captain == null || !captain.Active || captain.State != CaptainStateEnum.Idle) return null;
             if (!TryReserveCaptain(captain.Id)) return null;
 
             try
@@ -573,6 +583,7 @@ namespace Armada.Server.Ask
 
                 Captain? captain = await _Database.Captains.ReadAsync(handle.CaptainId!).ConfigureAwait(false);
                 if (captain == null) throw new InvalidOperationException("The conversation's captain no longer exists.");
+                Armada.Core.Services.CaptainEligibility.RequireActive(captain);
                 AcquireCaptain(captain.Id);
                 reserved = true;
 
@@ -702,7 +713,7 @@ namespace Armada.Server.Ask
                 if (!String.IsNullOrEmpty(thread.CaptainId))
                 {
                     Captain? captain = await _Database.Captains.ReadAsync(thread.CaptainId!).ConfigureAwait(false);
-                    if (captain != null)
+                    if (captain != null && captain.Active)
                     {
                         CaptainChatTurnOptions options = new CaptainChatTurnOptions();
                         ApplyCliPermissions(options, thread, captain, false);

@@ -253,6 +253,13 @@ namespace Armada.Core.Services
             if (missionDescriptions == null || missionDescriptions.Count == 0)
                 throw new ArgumentException("At least one mission is required", nameof(missionDescriptions));
             RequireDispatchLimits(missionDescriptions, selectedPlaybooks);
+            foreach (string captainId in missionDescriptions.Select(m => m.RequestedCaptainId)
+                .Concat(MissionService.DeserializeCaptainOverrides(captainOverridesJson).Select(o => o.CaptainId))
+                .Where(id => !String.IsNullOrEmpty(id)).Select(id => id!).Distinct())
+            {
+                Captain? requested = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+                if (requested != null) CaptainEligibility.RequireActive(requested);
+            }
 
             // Verify vessel exists
             Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
@@ -362,6 +369,13 @@ namespace Armada.Core.Services
             if (missionDescriptions == null || missionDescriptions.Count == 0)
                 throw new ArgumentException("At least one mission is required", nameof(missionDescriptions));
             RequireDispatchLimits(missionDescriptions, selectedPlaybooks);
+            foreach (string captainId in missionDescriptions.Select(m => m.RequestedCaptainId)
+                .Concat(MissionService.DeserializeCaptainOverrides(captainOverridesJson).Select(o => o.CaptainId))
+                .Where(id => !String.IsNullOrEmpty(id)).Select(id => id!).Distinct())
+            {
+                Captain? requested = await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
+                if (requested != null) CaptainEligibility.RequireActive(requested);
+            }
 
             // Verify vessel exists
             Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);

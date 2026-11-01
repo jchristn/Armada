@@ -35,6 +35,33 @@ namespace Test.Shared.Suites.Database
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(CaseAsync("active_persistence_claim_and_reactivation", "Inactive rows reject claims; reactivation restores eligibility without changing runtime State", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    Captain captain = await db.Captains.CreateAsync(new Captain("active-test"));
+                    AssertTrue((await db.Captains.ReadAsync(captain.Id))!.Active);
+                    captain.Active = false;
+                    await db.Captains.UpdateAsync(captain, updateActive: true);
+                    AssertFalse((await db.Captains.ReadAsync(captain.Id))!.Active);
+                    AssertFalse(await db.Captains.TryClaimAsync(captain.Id, "msn_disabled", null));
+                    captain.Active = true;
+                    await db.Captains.UpdateAsync(captain, updateActive: true);
+                    AssertTrue(await db.Captains.TryClaimAsync(captain.Id, "msn_enabled", null));
+                    Captain working = (await db.Captains.ReadAsync(captain.Id))!;
+                    working.Active = false;
+                    await db.Captains.UpdateAsync(working, updateActive: true);
+                    Captain stored = (await db.Captains.ReadAsync(captain.Id))!;
+                    AssertFalse(stored.Active);
+                    working.Active = true;
+                    await db.Captains.UpdateAsync(working);
+                    AssertFalse((await db.Captains.ReadAsync(captain.Id))!.Active);
+                    AssertEqual(CaptainStateEnum.Working, stored.State);
+                    AssertEqual("msn_enabled", stored.CurrentMissionId);
+                }
+            }));
+
 
             cases.Add(CaseAsync("captain_create", "Captain_Create", TestTags.Positive, async () =>
             {

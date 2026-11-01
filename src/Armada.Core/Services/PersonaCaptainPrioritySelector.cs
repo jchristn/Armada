@@ -81,7 +81,7 @@ namespace Armada.Core.Services
                 ? persona.CaptainPriorities.Take(1) : persona.CaptainPriorities;
             foreach (PersonaCaptainPriority priority in priorities)
             {
-                Captain? selected = eligibleCaptains.Where(c => Matches(priority, c))
+                Captain? selected = eligibleCaptains.Where(c => c.Active && Matches(priority, c))
                     .OrderByDescending(c => PersonaCatalog.Matches(c.PreferredPersona, persona.Name))
                     .ThenBy(c => c.Id, StringComparer.Ordinal).FirstOrDefault();
                 if (selected != null) return selected;

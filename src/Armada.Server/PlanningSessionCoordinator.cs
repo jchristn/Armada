@@ -126,6 +126,7 @@ namespace Armada.Server
             if (!captain.SupportsPlanningSessions)
                 throw new InvalidOperationException(captain.PlanningSessionSupportReason ?? "This captain runtime is not supported for planning sessions.");
 
+            Armada.Core.Services.CaptainEligibility.RequireActive(captain);
             if (captain.State != CaptainStateEnum.Idle)
                 throw new CaptainNotIdleException(captain.Id, captain.State, "Captain " + captain.Name + " is not idle.");
 
@@ -259,6 +260,7 @@ namespace Armada.Server
             if (String.IsNullOrWhiteSpace(content)) throw new ArgumentNullException(nameof(content));
 
             session = await RequireSessionAsync(session.Id, token).ConfigureAwait(false);
+            Armada.Core.Services.CaptainEligibility.RequireActive(await _Database.Captains.ReadAsync(session.CaptainId, token).ConfigureAwait(false) ?? throw new KeyNotFoundException("Captain not found: " + session.CaptainId));
             if (session.Status != PlanningSessionStatusEnum.Active)
                 throw new InvalidOperationException("Planning session " + session.Id + " is not ready for a new message.");
 
@@ -855,6 +857,7 @@ namespace Armada.Server
                 if (IsStopRequested(session.Id))
                     return;
 
+                Armada.Core.Services.CaptainEligibility.RequireActive(await _Database.Captains.ReadAsync(captain.Id).ConfigureAwait(false) ?? captain);
                 int processId = await runtime.StartAsync(
                     dock.WorktreePath ?? vessel.WorkingDirectory ?? vessel.LocalPath ?? Directory.GetCurrentDirectory(),
                     prompt,
@@ -1234,6 +1237,7 @@ namespace Armada.Server
 
             try
             {
+                Armada.Core.Services.CaptainEligibility.RequireActive(await _Database.Captains.ReadAsync(captain.Id).ConfigureAwait(false) ?? captain);
                 processId = await runtime.StartAsync(
                     session.DockId != null
                         ? (await RequireDockAsync(session.DockId, token).ConfigureAwait(false)).WorktreePath ?? vessel.WorkingDirectory ?? vessel.LocalPath ?? Directory.GetCurrentDirectory()

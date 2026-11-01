@@ -409,6 +409,7 @@ export default function Captains() {
       render: (c) => (
         <>
           <StatusBadge status={c.state} />
+          <span>{t('Active')}: {t(c.active === false ? 'No' : 'Yes')}</span>
           {c.state === 'Quarantined' && (
             <span className="tag stalled" title={c.quarantineReason ? t('Quarantined: dispatch skips this captain until the time shown. Reason: {{reason}}', { reason: c.quarantineReason }) : t('Quarantined: dispatch skips this captain until the time shown, then it returns to Idle.')} style={{ marginLeft: '0.35rem' }}>
               {c.quarantineUntilUtc ? t('until {{time}}', { time: formatRelativeTime(c.quarantineUntilUtc) }) : t('quarantined')}
@@ -540,10 +541,14 @@ export default function Captains() {
                 </select>
               </label>
             </div>
+            <label className="checkbox-row captain-active-field">
+              <input type="checkbox" checked={form.active ?? true} onChange={e => setForm({ ...form, active: e.target.checked })} />
+              <span>{t('Active')}</span>
+            </label>
             {supportsAutoApproveSwitch(form.runtime) && (
-              <label className="captain-auto-approve-field" title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)}>
+              <label className="checkbox-row captain-auto-approve-field" title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)}>
                 <input type="checkbox" checked={form.autoApprove} onChange={e => setForm({ ...form, autoApprove: e.target.checked })} title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)} />
-                {' '}{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}
+                <span>{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}</span>
               </label>
             )}
             <div className="captain-cli-policy-field">

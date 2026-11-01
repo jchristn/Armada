@@ -5,6 +5,9 @@ namespace Armada.Server.Mcp
     /// </summary>
     public class CaptainUpdateArgs
     {
+        /// <summary>New-work eligibility; omitted values preserve defaults or existing settings.</summary>
+        public bool? Active { get; set; }
+
         /// <summary>
         /// Captain ID (cpt_ prefix).
         /// </summary>

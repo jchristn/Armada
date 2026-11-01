@@ -147,6 +147,7 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
         hint={t('Missions requiring a tier route to captains at or above it. Leave on Auto to classify from the model name.')}
         testID="captain-form-tier"
       />
+      <SwitchField label={t('Active')} value={form.active ?? true} onChange={(v) => patch({ active: v })} testID="captain-form-active" />
       {supportsAutoApproveSwitch(form.runtime) ? (
         <SwitchField
           label={t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}

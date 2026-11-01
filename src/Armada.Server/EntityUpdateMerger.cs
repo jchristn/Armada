@@ -119,6 +119,7 @@ namespace Armada.Server
             if (presence == null) throw new ArgumentNullException(nameof(presence));
 
             if (!presence.Has(nameof(Captain.Name)) || String.IsNullOrEmpty(incoming.Name)) incoming.Name = existing.Name;
+            if (!presence.Has(nameof(Captain.Active))) incoming.Active = existing.Active;
             if (!presence.Has(nameof(Captain.Runtime))) incoming.Runtime = existing.Runtime;
             if (!presence.Has(nameof(Captain.Model))) incoming.Model = existing.Model;
             if (!presence.Has(nameof(Captain.ModelEndpointId))) incoming.ModelEndpointId = existing.ModelEndpointId;

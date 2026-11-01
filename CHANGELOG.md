@@ -6,6 +6,12 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Captain Active setting
+
+- Add persisted captain `Active` eligibility (default true, including migration of existing rows) across REST, MCP, Dashboard, mobile, TUI, Helm and the legacy web UI. Disabled captains cannot accept new work; runtime State and in-flight work are preserved. Operational snapshots cannot overwrite an Active configuration edit.
+- Align Dashboard captain auto-approve and Active checkboxes with the inline form convention, preserving keyboard focus and wrapping labels on narrow screens.
+
+
 ### Recovery validation
 
 - Recover preserved AC2 and model collection bounds together. Harbor launches clear inherited MCP

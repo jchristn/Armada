@@ -210,6 +210,9 @@ namespace Armada.Core.Models
         /// </summary>
         public CaptainStateEnum State { get; set; } = CaptainStateEnum.Idle;
 
+        /// <summary>Whether this captain may accept new work. Disabling leaves in-flight work running.</summary>
+        public bool Active { get; set; } = true;
+
         /// <summary>
         /// Currently assigned mission identifier.
         /// </summary>

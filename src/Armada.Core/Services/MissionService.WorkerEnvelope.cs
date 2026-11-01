@@ -326,7 +326,7 @@ namespace Armada.Core.Services
             /// </summary>
             public bool CanEscalateTo(Captain captain, Mission mission)
             {
-                if (Pinned) return false;
+                if (!captain.Active || Pinned) return false;
                 if (Exclusions.ContainsKey(captain.Id)) return false;
                 if (!MayRunWorker(captain)) return false;
                 if (mission.Tier.HasValue && !CaptainTierSelector.CanHandle(captain, mission.Tier.Value)) return false;
@@ -359,7 +359,7 @@ namespace Armada.Core.Services
 
             private static bool MayRunWorker(Captain captain)
             {
-                return String.IsNullOrEmpty(captain.AllowedPersonas) || CaptainAllowsPersona(captain, PersonaCatalog.Worker);
+                return captain.Active && (String.IsNullOrEmpty(captain.AllowedPersonas) || CaptainAllowsPersona(captain, PersonaCatalog.Worker));
             }
         }
 

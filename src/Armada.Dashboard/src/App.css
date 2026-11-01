@@ -5339,6 +5339,23 @@ table.table-dense td { padding-left: 0.45rem; padding-right: 0.45rem; }
     margin-top: 0.3rem;
 }
 
+/* Captain switches follow the inline checkbox convention, including narrow dialog widths. */
+.modal label.captain-auto-approve-field,
+.modal label.captain-active-field {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.modal label.captain-auto-approve-field input[type="checkbox"],
+.modal label.captain-active-field input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+    padding: 0;
+    flex: 0 0 auto;
+}
+
 /* Inline checkbox + label text on a single centered row (used in create/edit modals). */
 .checkbox-row {
     display: flex;

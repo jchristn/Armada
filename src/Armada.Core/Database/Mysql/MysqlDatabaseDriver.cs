@@ -1457,7 +1457,10 @@ namespace Armada.Core.Database.Mysql
                     @"ALTER TABLE token_usage ADD COLUMN membership_id VARCHAR(64) NULL;",
                     @"ALTER TABLE token_usage ADD COLUMN reported_cost DOUBLE NULL;",
                     @"ALTER TABLE token_usage ADD COLUMN cost_currency VARCHAR(16) NULL;",
-                    @"CREATE INDEX idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);")
+                    @"CREATE INDEX idx_token_usage_tenant_source_created ON token_usage(tenant_id, source, created_utc);"),
+
+                new SchemaMigration(112, "Add captain Active eligibility (existing captains remain active)",
+                    @"ALTER TABLE captains ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1;")
 
 
             };

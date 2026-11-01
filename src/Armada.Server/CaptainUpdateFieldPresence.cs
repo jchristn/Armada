@@ -16,6 +16,9 @@ namespace Armada.Server
     {
         #region Public-Members
 
+        /// <summary>Active eligibility (presence only).</summary>
+        public bool? Active { get => null; set => Mark(nameof(Active)); }
+
         /// <summary>Captain name (presence only).</summary>
         public string? Name { get => null; set => Mark(nameof(Name)); }
 

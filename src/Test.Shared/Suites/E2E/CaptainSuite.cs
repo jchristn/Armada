@@ -36,6 +36,43 @@ namespace Test.Shared.Suites.E2E
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(CaseAsync("active_mcp_roundtrip", "MCP creates inactive captains, preserves omitted Active, and reactivates", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                using HttpClient mcp = new HttpClient { BaseAddress = fx.McpClient.BaseAddress };
+                mcp.DefaultRequestHeaders.Add("X-Api-Key", fx.ApiKey);
+                string name = "mcp-active-" + Guid.NewGuid().ToString("N");
+                await McpTestCalls.CallToolAsync(mcp, "create_captain", new { name, active = false });
+                EnumerationResult<Captain> page = await JsonHelper.DeserializeAsync<EnumerationResult<Captain>>(await fx.AuthClient.GetAsync("/api/v1/captains?name=" + name));
+                Captain captain = page.Objects.Single(c => c.Name == name);
+                AssertFalse(captain.Active);
+                await McpTestCalls.CallToolAsync(mcp, "update_captain", new { captainId = captain.Id, name });
+                AssertFalse((await JsonHelper.DeserializeAsync<Captain>(await fx.AuthClient.GetAsync("/api/v1/captains/" + captain.Id))).Active);
+                await McpTestCalls.CallToolAsync(mcp, "update_captain", new { captainId = captain.Id, active = true });
+                AssertTrue((await JsonHelper.DeserializeAsync<Captain>(await fx.AuthClient.GetAsync("/api/v1/captains/" + captain.Id))).Active);
+            }));
+            cases.Add(CaseAsync("active_rest_roundtrip_and_omitted_update", "REST Active defaults true, persists false, survives omitted updates, and reactivates", TestTags.Positive, async () =>
+            {
+                E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
+                HttpClient client = fx.AuthClient;
+                HttpResponseMessage created = await client.PostAsync("/api/v1/captains", JsonHelper.ToJsonContent(new { Name = "active-" + Guid.NewGuid().ToString("N") }));
+                AssertEqual(HttpStatusCode.Created, created.StatusCode);
+                Captain captain = await JsonHelper.DeserializeAsync<Captain>(created);
+                AssertTrue(captain.Active);
+                foreach (bool active in new[] { false, true })
+                {
+                    HttpResponseMessage updated = await client.PutAsync("/api/v1/captains/" + captain.Id, JsonHelper.ToJsonContent(new { Active = active }));
+                    AssertEqual(HttpStatusCode.OK, updated.StatusCode);
+                    HttpResponseMessage omitted = await client.PutAsync("/api/v1/captains/" + captain.Id, JsonHelper.ToJsonContent(new { Name = captain.Name }));
+                    AssertEqual(HttpStatusCode.OK, omitted.StatusCode);
+                    Captain read = await JsonHelper.DeserializeAsync<Captain>(await client.GetAsync("/api/v1/captains/" + captain.Id));
+                    AssertEqual(active, read.Active);
+                    AssertEqual(Armada.Core.Enums.CaptainStateEnum.Idle, read.State);
+                }
+                HttpResponseMessage disabled = await client.PostAsync("/api/v1/captains", JsonHelper.ToJsonContent(new { Name = "disabled-" + Guid.NewGuid().ToString("N"), Active = false }));
+                AssertEqual(HttpStatusCode.Created, disabled.StatusCode);
+                AssertFalse((await JsonHelper.DeserializeAsync<Captain>(disabled)).Active);
+            }));
 
             #region Create
 
