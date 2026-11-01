@@ -1714,6 +1714,13 @@ namespace Armada.Server
 
             // Captains
             new CaptainRoutes(_Database, _Admiral, _Settings, _AgentLifecycle, _CaptainTools, EmitEventAsync, _JsonOptions, _PlanningSessions, _ObjectiveRefinementSessions)
+            {
+                OnUsageCaptureConfigurationChanged = async () =>
+                {
+                    _UsageCapture.Invalidate();
+                    await _UsageCaptureScheduler.RebuildAsync().ConfigureAwait(false);
+                }
+            }
                 .Register(_App, authenticate, _AuthorizationService);
 
             // Runtime helpers

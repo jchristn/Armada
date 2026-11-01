@@ -129,6 +129,18 @@ namespace Armada.Server
             if (!presence.Has(nameof(Captain.ReasoningEffort))) incoming.ReasoningEffort = existing.ReasoningEffort;
             if (!presence.Has(nameof(Captain.Tier))) incoming.Tier = existing.Tier;
             if (!presence.Has(nameof(Captain.RuntimeOptionsJson))) incoming.RuntimeOptionsJson = existing.RuntimeOptionsJson;
+            // Usage capture configuration: an omitted field keeps the stored value, so an unrelated edit (for example a
+            // rename) never disables capture or drops a Custom command. Mode is restored before the command because
+            // leaving Custom clears the command; an omitted command in a body that switches into Custom keeps the
+            // stored command only when one exists.
+            if (!presence.Has(nameof(Captain.UsageCaptureEnabled))) incoming.UsageCaptureEnabled = existing.UsageCaptureEnabled;
+            if (!presence.Has(nameof(Captain.UsageCaptureIntervalSeconds))) incoming.UsageCaptureIntervalSeconds = existing.UsageCaptureIntervalSeconds;
+            if (!presence.Has(nameof(Captain.UsageCaptureMode))) incoming.UsageCaptureMode = existing.UsageCaptureMode;
+            if (!presence.Has(nameof(Captain.UsageCaptureCommand)))
+            {
+                string? storedCommand = existing.UsageCaptureCommand;
+                if (storedCommand != null) incoming.UsageCaptureCommand = storedCommand;
+            }
 
             incoming.Id = existing.Id;
             incoming.TenantId = existing.TenantId;

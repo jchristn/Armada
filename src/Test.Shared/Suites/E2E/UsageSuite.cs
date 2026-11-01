@@ -201,6 +201,83 @@ namespace Test.Shared.Suites.E2E
                     AssertEqual(1L, tokens.Coverage.NonMissionRecords);
                     UsageMissionResult moved = await UsageTestData.GetAsync<UsageMissionResult>(client, "/api/v1/usage/missions?" + range + "&provider=anthropic&accountKey=new").ConfigureAwait(false);
                     AssertEqual(0L, moved.TotalRecords, "current captain membership cannot rewrite historical work");
+                }),
+                new TestCaseDescriptor(Suite, "captain_usage_edit_lifecycle", "Captain create/edit/save keeps omitted usage fields, applies explicit ones and rejects invalid Custom commands before storage", async ct =>
+                {
+                    E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                    E2ETenantUser owner = await E2ETenantUser.CreateAsync(fx.AuthClient, "usage-edit").ConfigureAwait(false);
+                    using HttpClient client = owner.CreateClient(fx.BaseUrl);
+                    using DatabaseDriver db = await UsageTestData.OpenAsync(fx).ConfigureAwait(false);
+                    string command = "{\"executable\":\"/opt/usage/read-quota\",\"arguments\":[\"--json\"]}";
+                    Captain seeded = new Captain { TenantId = owner.TenantId, UserId = owner.UserId, Name = "usage-edit-probe", UsageCaptureEnabled = true, UsageCaptureIntervalSeconds = 120, UsageCaptureMode = UsageCaptureModeEnum.Custom, UsageCaptureCommand = command };
+                    seeded = await db.Captains.CreateAsync(seeded).ConfigureAwait(false);
+                    string path = "/api/v1/captains/" + seeded.Id;
+
+                    // Unrelated edit: every usage field survives (this failed before the fix: enabled read back false).
+                    await UsageTestData.PutAsync(client, path, "{\"Name\":\"usage-edit-probe-renamed\"}", HttpStatusCode.OK).ConfigureAwait(false);
+                    Captain renamed = await UsageTestData.GetAsync<Captain>(client, path).ConfigureAwait(false);
+                    AssertEqual("usage-edit-probe-renamed", renamed.Name);
+                    AssertTrue(renamed.UsageCaptureEnabled, "unrelated name edit must preserve enabled capture");
+                    AssertEqual(120, renamed.UsageCaptureIntervalSeconds, "unrelated edit preserves the interval");
+                    AssertEqual(UsageCaptureModeEnum.Custom, renamed.UsageCaptureMode, "unrelated edit preserves Custom mode");
+                    AssertEqual(command, renamed.UsageCaptureCommand, "unrelated edit preserves the Custom command");
+
+                    // Invalid Custom commands are rejected before storage; the stored configuration is unchanged.
+                    foreach (string invalid in new[]
+                    {
+                        "{\"UsageCaptureMode\":\"Custom\",\"UsageCaptureCommand\":null}",
+                        "{\"UsageCaptureMode\":\"Custom\",\"UsageCaptureCommand\":\"not json\"}",
+                        "{\"UsageCaptureMode\":\"Custom\",\"UsageCaptureCommand\":\"{\\\"executable\\\":\\\"read-quota; rm -rf /\\\"}\"}",
+                        "{\"UsageCaptureMode\":\"Custom\",\"UsageCaptureCommand\":\"{\\\"executable\\\":\\\"  \\\"}\"}",
+                        "{\"UsageCaptureEnabled\":false,\"UsageCaptureMode\":\"Custom\",\"UsageCaptureCommand\":\"{\\\"executable\\\":\\\"/bin/q\\\",\\\"arguments\\\":[1]}\"}"
+                    })
+                    {
+                        await UsageTestData.PutAsync(client, path, invalid, HttpStatusCode.BadRequest).ConfigureAwait(false);
+                        Captain unchanged = await UsageTestData.GetAsync<Captain>(client, path).ConfigureAwait(false);
+                        AssertTrue(unchanged.UsageCaptureEnabled, "rejected edit stores nothing: " + invalid);
+                        AssertEqual(command, unchanged.UsageCaptureCommand, "rejected edit keeps the command: " + invalid);
+                    }
+
+                    // Explicit values apply: interval clamps to the 60 second floor, disable is honored.
+                    await UsageTestData.PutAsync(client, path, "{\"UsageCaptureEnabled\":false,\"UsageCaptureIntervalSeconds\":5}", HttpStatusCode.OK).ConfigureAwait(false);
+                    Captain disabled = await UsageTestData.GetAsync<Captain>(client, path).ConfigureAwait(false);
+                    AssertFalse(disabled.UsageCaptureEnabled, "explicit false disables capture");
+                    AssertEqual(60, disabled.UsageCaptureIntervalSeconds, "explicit interval is clamped, not ignored");
+                    AssertEqual(command, disabled.UsageCaptureCommand, "omitted command survives an explicit toggle");
+
+                    // Leaving Custom clears the command; returning to Custom without a command is rejected.
+                    await UsageTestData.PutAsync(client, path, "{\"UsageCaptureMode\":\"Auto\"}", HttpStatusCode.OK).ConfigureAwait(false);
+                    Captain auto = await UsageTestData.GetAsync<Captain>(client, path).ConfigureAwait(false);
+                    AssertEqual(UsageCaptureModeEnum.Auto, auto.UsageCaptureMode);
+                    AssertNull(auto.UsageCaptureCommand, "Auto mode stores no command");
+                    await UsageTestData.PutAsync(client, path, "{\"UsageCaptureMode\":\"Custom\"}", HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    AssertEqual(UsageCaptureModeEnum.Auto, (await UsageTestData.GetAsync<Captain>(client, path).ConfigureAwait(false)).UsageCaptureMode, "rejected switch to Custom stores nothing");
+
+                    // Create: invalid Custom is rejected; a minimal body keeps disabled/300/Auto defaults.
+                    await UsageTestData.PostAsync(client, "/api/v1/captains", "{\"Name\":\"usage-create-bad\",\"UsageCaptureEnabled\":true,\"UsageCaptureMode\":\"Custom\"}", HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    string created = await UsageTestData.PostAsync(client, "/api/v1/captains", "{\"Name\":\"usage-create-default\"}", HttpStatusCode.Created).ConfigureAwait(false);
+                    Captain minimal = JsonHelper.Deserialize<Captain>(created);
+                    AssertFalse(minimal.UsageCaptureEnabled, "capture defaults off");
+                    AssertEqual(300, minimal.UsageCaptureIntervalSeconds);
+                    AssertEqual(UsageCaptureModeEnum.Auto, minimal.UsageCaptureMode);
+                    string createdCustom = await UsageTestData.PostAsync(client, "/api/v1/captains", "{\"Name\":\"usage-create-custom\",\"UsageCaptureEnabled\":true,\"UsageCaptureIntervalSeconds\":600,\"UsageCaptureMode\":\"Custom\",\"UsageCaptureCommand\":" + System.Text.Json.JsonSerializer.Serialize(command) + "}", HttpStatusCode.Created).ConfigureAwait(false);
+                    Captain custom = await UsageTestData.GetAsync<Captain>(client, "/api/v1/captains/" + JsonHelper.Deserialize<Captain>(createdCustom).Id).ConfigureAwait(false);
+                    AssertTrue(custom.UsageCaptureEnabled, "create stores enabled capture");
+                    AssertEqual(600, custom.UsageCaptureIntervalSeconds);
+                    AssertEqual(command, custom.UsageCaptureCommand, "create stores the Custom command");
+                }),
+                new TestCaseDescriptor(Suite, "captain_usage_edit_invalidates_capture", "Saved captain usage configuration changes invalidate in-flight capture and rebuild schedules", ct =>
+                {
+                    string server = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "src", "Armada.Server", "ArmadaServer.cs"));
+                    int routes = server.IndexOf("new CaptainRoutes(", StringComparison.Ordinal);
+                    AssertTrue(routes >= 0, "CaptainRoutes is composed");
+                    string composition = server.Substring(routes, Math.Min(600, server.Length - routes));
+                    AssertContains("OnUsageCaptureConfigurationChanged", composition, "captain routes receive the usage invalidation callback");
+                    AssertContains("_UsageCapture.Invalidate()", composition, "callback discards in-flight attempts");
+                    AssertContains("_UsageCaptureScheduler.RebuildAsync()", composition, "callback rebuilds schedules");
+                    string routesSource = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "src", "Armada.Server", "Routes", "CaptainRoutes.cs"));
+                    AssertContains("CaptainUsageCaptureValidator.ConfigurationChanged(existing, updated)", routesSource, "update detects configuration changes against the stored record");
+                    return Task.CompletedTask;
                 })
             });
         }
@@ -225,6 +302,24 @@ namespace Test.Shared.Suites.E2E
             using HttpResponseMessage response = await client.GetAsync(path).ConfigureAwait(false);
             AssertEqual(HttpStatusCode.OK, response.StatusCode, path + ": " + await response.Content.ReadAsStringAsync().ConfigureAwait(false));
             return await JsonHelper.DeserializeAsync<T>(response).ConfigureAwait(false);
+        }
+
+        internal static async Task<string> PutAsync(HttpClient client, string path, string json, HttpStatusCode expected)
+        {
+            using StringContent content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            using HttpResponseMessage response = await client.PutAsync(path, content).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            AssertEqual(expected, response.StatusCode, "PUT " + path + " " + json + ": " + body);
+            return body;
+        }
+
+        internal static async Task<string> PostAsync(HttpClient client, string path, string json, HttpStatusCode expected)
+        {
+            using StringContent content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            using HttpResponseMessage response = await client.PostAsync(path, content).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            AssertEqual(expected, response.StatusCode, "POST " + path + " " + json + ": " + body);
+            return body;
         }
 
         internal static async Task StatusAsync(HttpClient client, string path, HttpStatusCode expected)

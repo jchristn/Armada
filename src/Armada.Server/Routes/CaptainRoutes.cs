@@ -31,6 +31,12 @@ namespace Armada.Server.Routes
         private readonly ObjectiveRefinementCoordinator? _objectiveRefinementSessions;
 
         /// <summary>
+        /// Invoked after a captain create or update stored a usage capture configuration that differs from the
+        /// previous one, so in-flight captures computed under the old configuration are discarded and schedules rebuild.
+        /// </summary>
+        public Func<Task>? OnUsageCaptureConfigurationChanged { get; set; }
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         /// <param name="database">Database driver.</param>
@@ -179,6 +185,12 @@ namespace Armada.Server.Routes
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
                 EntityUpdateMerger.NormalizeCaptainRuntimeOptions(captain);
+                string? createUsageError = CaptainUsageCaptureValidator.Validate(captain);
+                if (createUsageError != null)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = createUsageError };
+                }
                 CaptainModelValidationFailure? createValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(captain).ConfigureAwait(false);
                 if (createValidationError != null)
                 {
@@ -187,6 +199,8 @@ namespace Armada.Server.Routes
                 }
                 await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_database, captain).ConfigureAwait(false);
                 captain = await _database.Captains.CreateAsync(captain).ConfigureAwait(false);
+                if (captain.UsageCaptureActive && OnUsageCaptureConfigurationChanged != null)
+                    await OnUsageCaptureConfigurationChanged().ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
                 return captain;
             },
@@ -304,6 +318,13 @@ namespace Armada.Server.Routes
                 // that does not edit personas) keeps its stored value. An explicit null still clears it.
                 CaptainUpdateFieldPresence presence = CaptainUpdateFieldPresence.FromJson(req.Http.Request.DataAsString, _jsonOptions);
                 updated = EntityUpdateMerger.MergeCaptain(existing, updated, presence);
+                string? updateUsageError = CaptainUsageCaptureValidator.Validate(updated);
+                if (updateUsageError != null)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = updateUsageError };
+                }
+                bool usageConfigurationChanged = CaptainUsageCaptureValidator.ConfigurationChanged(existing, updated);
                 CaptainModelValidationFailure? updateValidationError = await _agentLifecycle.ValidateCaptainModelDetailedAsync(updated).ConfigureAwait(false);
                 if (updateValidationError != null)
                 {
@@ -312,12 +333,14 @@ namespace Armada.Server.Routes
                 }
                 await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_database, updated).ConfigureAwait(false);
                 updated = await _database.Captains.UpdateAsync(updated, updateActive: presence.Has(nameof(Captain.Active))).ConfigureAwait(false);
+                if (usageConfigurationChanged && OnUsageCaptureConfigurationChanged != null)
+                    await OnUsageCaptureConfigurationChanged().ConfigureAwait(false);
                 return (object)updated;
             },
             api => api
                 .WithTag("Captains")
                 .WithSummary("Update a captain")
-                .WithDescription("Partially updates a captain: only the configuration fields present in the body change (an explicit null clears a field); omitted fields keep their stored values. Operational fields (state, process, mission) are preserved.")
+                .WithDescription("Partially updates a captain: only the configuration fields present in the body change (an explicit null clears a field); omitted fields keep their stored values, including the usage capture fields. Custom usage capture requires a valid executable/argument command (400 otherwise, nothing stored). Operational fields (state, process, mission) are preserved.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain ID (cpt_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<Captain>("Updated captain data", true))
                 .WithResponse(200, OpenApiJson.For<Captain>("Updated captain"))

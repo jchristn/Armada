@@ -49,6 +49,18 @@ namespace Armada.Server
         /// <summary>Runtime options JSON (presence only).</summary>
         public string? RuntimeOptionsJson { get => null; set => Mark(nameof(RuntimeOptionsJson)); }
 
+        /// <summary>Usage capture enabled switch (presence only; any JSON shape counts as present).</summary>
+        public object? UsageCaptureEnabled { get => null; set => Mark(nameof(UsageCaptureEnabled)); }
+
+        /// <summary>Usage capture interval in seconds (presence only).</summary>
+        public object? UsageCaptureIntervalSeconds { get => null; set => Mark(nameof(UsageCaptureIntervalSeconds)); }
+
+        /// <summary>Usage capture mode (presence only).</summary>
+        public object? UsageCaptureMode { get => null; set => Mark(nameof(UsageCaptureMode)); }
+
+        /// <summary>Custom usage capture command JSON (presence only).</summary>
+        public object? UsageCaptureCommand { get => null; set => Mark(nameof(UsageCaptureCommand)); }
+
         #endregion
 
         #region Private-Members
