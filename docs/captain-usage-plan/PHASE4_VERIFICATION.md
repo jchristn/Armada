@@ -4,6 +4,47 @@ Branch: armada/codex-1/msn_mvxf3n23_V1oCE5oqulg
 Mission: msn_mvxf3n23_V1oCE5oqulg
 State: BLOCKED; do not land as a completed AC4 implementation.
 
+## Test Engineer rework 1: independent reproduction
+
+Mission msn_mvxfpf3f_hdwaKlcd5YL inspected worker commit
+d954b67ac9d744fd9f79f13867d60efb85097510 and fetched the complete prior
+handoff hoa_mvxfwq4a_cUorPC8hldo. Its sole reported blocker is unresolved.
+No production code or test assertions were changed; existing coverage already
+reproduces the defect, so no additional known-failing test was committed.
+
+Independent commands (SDK 10.0.401, newest installed project target net10.0):
+
+- `dotnet restore src/Armada.sln --verbosity quiet`: exit 0.
+- `dotnet build src/Armada.sln -c Release --no-restore --verbosity quiet`:
+  exit 0, zero warnings and errors.
+- `dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build -- --suites E2E.Usage,E2E.UsageTenantIsolation,Client.Contract.Usage,E2E.ApiContract,E2E.Authorization,Client.Coverage,Client.RouteSurface`:
+  exit 1; 39 passed, 1 failed, 0 skipped.
+- `dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build -- --suites Services.Usage,Services.UsageDefaults`:
+  exit 0; 93 passed, 0 failed, 0 skipped.
+- `git fetch origin main`: exit 0; origin/main is
+  30358ef7824534abd6e7448cb2fc9d3c116355e1.
+- `git merge-base --is-ancestor 1eeb9e5853710e49dfe0c9ef9a88f16aaa23c176 origin/main`
+  and `git merge-base --is-ancestor f4e88920fde7a664bbb95ea001d5b92c4148b720 origin/main`:
+  each exit 0.
+
+Affected case: src/Test.Shared/Suites/E2E/UsageTenantIsolationSuite.cs:61,
+E2E.UsageTenantIsolation.mcp_missing_argument_is_protocol_error. An authenticated
+MCP tools/call for capture_captain_usage with arguments {} must return JSON-RPC
+error.code -32602 under AC4. The live server instead returns result.isError=true
+with text reporting missing captainId and no error.code. Preserve required
+captainId in the schema and correct pre-handler validation error dispatch in
+the dependency/shared dispatcher. This is a production defect outside the Test
+Engineer role's permitted changes and remains the precise landing blocker.
+
+D1 canonical sample deduplication, half-open ranges and A/B isolation passed;
+D5 completion attribution and mission joins passed. SDK live calls, post-commit
+event visibility, tenant fanout and reconnect passed. Phase 2/3 usage regression
+checks passed, including cancellation, stale scheduling, stream completion and
+secret redaction. Suite discovery is automatic in ArmadaTestSuites.cs.
+These are local shared-suite checks. No new coverage, Postman execution,
+external-provider database checks, full capture status/role matrix, production
+deployment, full suite run or Judge approval is claimed. AC4 remains incomplete.
+
 ## Worker rework 1: unresolved dependency boundary
 
 Mission msn_mvxfpf3f_nc0oI4RmB6Y rechecked the complete prior handoff
