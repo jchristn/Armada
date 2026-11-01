@@ -76,8 +76,8 @@ namespace Armada.Core.Services
         private readonly ConcurrentDictionary<string, GroupState> _GroupStates = new ConcurrentDictionary<string, GroupState>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, InFlightAttempt> _InFlight = new ConcurrentDictionary<string, InFlightAttempt>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _StartLocks = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.Ordinal);
-        private readonly ConcurrentDictionary<string, SemaphoreSlim> _HostGates = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.Ordinal);
-        private readonly SemaphoreSlim _OverallGate;
+        private readonly ConcurrentDictionary<string, UsageConcurrencyGate> _HostGates = new ConcurrentDictionary<string, UsageConcurrencyGate>(StringComparer.Ordinal);
+        private readonly UsageConcurrencyGate _OverallGate;
         private readonly Random _JitterRandom = new Random();
 
         #endregion
@@ -120,7 +120,7 @@ namespace Armada.Core.Services
             _Jitter = jitter ?? DefaultJitter;
             _Lifetime = lifetime;
             _ConfigurationCancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
-            _OverallGate = new SemaphoreSlim(Math.Max(1, settings.UsageCapture.MaximumConcurrentProbes));
+            _OverallGate = new UsageConcurrencyGate(settings.UsageCapture.MaximumConcurrentProbes);
         }
 
         #endregion
@@ -145,6 +145,10 @@ namespace Armada.Core.Services
                 _ConfigurationCancellation.Dispose();
                 _ConfigurationCancellation = CancellationTokenSource.CreateLinkedTokenSource(_Lifetime);
             }
+
+            // A settings change can move either concurrency bound: resize every gate now so attempts
+            // already queued under the old bounds are admitted (or held back) by the new ones.
+            ApplyConcurrencyLimits();
 
             _Logging.Info(_Header + "settings generation invalidated to " + Generation + "; in-flight captures stop and groups reschedule");
         }
@@ -388,10 +392,14 @@ namespace Armada.Core.Services
                 if (!await _Jobs.TryStartAsync(job, 10, _Lifetime).ConfigureAwait(false))
                     return new UsageCaptureAttemptResult { DiscardedReason = "JobNotStartable", ErrorCode = "JobNotStartable" };
 
+                // Both gates take their capacity from the CURRENT settings before every wait: a changed
+                // overall or per-host limit governs this and every later attempt, while permits already
+                // held are still returned to the gate that granted them.
+                _OverallGate.SetCapacity(_Settings.UsageCapture.MaximumConcurrentProbes);
                 await _OverallGate.WaitAsync(attemptToken).ConfigureAwait(false);
                 try
                 {
-                    SemaphoreSlim hostGate = HostGate(group.HostId);
+                    UsageConcurrencyGate hostGate = HostGate(group.HostId);
                     await hostGate.WaitAsync(attemptToken).ConfigureAwait(false);
                     try
                     {
@@ -934,9 +942,20 @@ namespace Armada.Core.Services
             };
         }
 
-        private SemaphoreSlim HostGate(string hostId)
+        private UsageConcurrencyGate HostGate(string hostId)
         {
-            return _HostGates.GetOrAdd(hostId, _ => new SemaphoreSlim(Math.Max(1, _Settings.UsageCapture.MaximumConcurrentProbesPerHost)));
+            int capacity = _Settings.UsageCapture.MaximumConcurrentProbesPerHost;
+            UsageConcurrencyGate gate = _HostGates.GetOrAdd(hostId, _ => new UsageConcurrencyGate(capacity));
+            gate.SetCapacity(capacity);
+            return gate;
+        }
+
+        private void ApplyConcurrencyLimits()
+        {
+            _OverallGate.SetCapacity(_Settings.UsageCapture.MaximumConcurrentProbes);
+            int perHost = _Settings.UsageCapture.MaximumConcurrentProbesPerHost;
+            foreach (UsageConcurrencyGate gate in _HostGates.Values)
+                gate.SetCapacity(perHost);
         }
 
         private double DefaultJitter()

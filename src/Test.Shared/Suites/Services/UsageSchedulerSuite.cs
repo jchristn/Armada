@@ -985,6 +985,21 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("scheduler_lowered_overall_limit_governs_later_attempts", "Lowering the server-wide probe limit and rebuilding admits only one probe at a time afterwards", TestTags.Negative, async () =>
+            {
+                await ConcurrencyLimitChangeAsync(overall: true, lower: true).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("scheduler_lowered_host_limit_governs_later_attempts", "Lowering the per-host probe limit after the host gate exists admits only one probe on that host afterwards", TestTags.Negative, async () =>
+            {
+                await ConcurrencyLimitChangeAsync(overall: false, lower: true).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("scheduler_raised_limits_admit_more_later_attempts", "Raising both probe limits and rebuilding lets two probes on one host run together afterwards", TestTags.Positive, async () =>
+            {
+                await ConcurrencyLimitChangeAsync(overall: true, lower: false).ConfigureAwait(false);
+            }));
+
             cases.Add(CaseAsync("scheduler_settings_change_cancels_and_reschedules", "A scheduling settings change cancels the work queued under the old bounds and reschedules from scratch", TestTags.Negative, async () =>
             {
                 using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
@@ -1238,6 +1253,89 @@ namespace Test.Shared.Suites.Services
         }
 
         /// <summary>
+        /// Change a concurrency bound after both gates exist and prove the next attempts obey the NEW
+        /// bound. The service starts at four/four (or one/one when raising), runs one capture so the
+        /// host gate is created and cached at the old capacity, then the limit changes and the scheduler
+        /// rebuilds (the scheduling revision includes both bounds, so the rebuild invalidates). Two
+        /// distinct groups on ONE host are then started with the executor held: a lowered limit lets
+        /// exactly one reach the host until it is released, a raised limit lets both reach it together.
+        /// Every attempt still commits, so no permit is stranded by the resize.
+        /// </summary>
+        private static async Task ConcurrencyLimitChangeAsync(bool overall, bool lower)
+        {
+            int initial = lower ? 4 : 1;
+            using TestDatabaseFixture fixture = await TestDatabaseFixture.CreateAsync(capture: new UsageCaptureSettings
+            {
+                Enabled = true,
+                MinimumIntervalSeconds = 60,
+                MaximumConcurrentProbes = initial,
+                MaximumConcurrentProbesPerHost = initial
+            }).ConfigureAwait(false);
+
+            Captain captain = await fixture.CreateCaptainAsync(lower ? (overall ? "limit-overall" : "limit-host") : "limit-raise", 300).ConfigureAwait(false);
+            UsageCaptureScheduler scheduler = fixture.CreateScheduler();
+            await scheduler.RebuildAsync().ConfigureAwait(false);
+
+            string hostId = fixture.Accounts.HostId;
+            string tag = lower ? (overall ? "overall" : "host") : "raise";
+
+            // One capture on the host creates and caches its gate at the old capacity.
+            UsageCaptureAttempt warm = await fixture.Service.TryStartAsync(HostGroup(hostId, AgentRuntimeEnum.Gemini, "fp-limit-warm-" + tag, "cpt_limit_warm_" + tag), null).ConfigureAwait(false);
+            AssertTrue(warm.Started, "the warm-up capture starts");
+            UsageCaptureAttemptResult warmResult = await AwaitAsync(warm.Completion).ConfigureAwait(false);
+            AssertTrue(warmResult.Persisted, "the warm-up capture commits and initializes the host gate");
+            int baseline = fixture.Executor.Calls;
+
+            long generation = fixture.Service.Generation;
+            if (lower)
+            {
+                if (overall) fixture.Settings.UsageCapture.MaximumConcurrentProbes = 1;
+                else fixture.Settings.UsageCapture.MaximumConcurrentProbesPerHost = 1;
+            }
+            else
+            {
+                fixture.Settings.UsageCapture.MaximumConcurrentProbes = 2;
+                fixture.Settings.UsageCapture.MaximumConcurrentProbesPerHost = 2;
+            }
+
+            await scheduler.RebuildAsync().ConfigureAwait(false);
+            AssertTrue(fixture.Service.Generation > generation, "a concurrency limit change invalidates the scheduling generation");
+
+            fixture.Executor.Hold = true;
+            UsageCaptureAttempt first = await fixture.Service.TryStartAsync(HostGroup(hostId, AgentRuntimeEnum.Codex, "fp-limit-a-" + tag, "cpt_limit_a_" + tag), null).ConfigureAwait(false);
+            UsageCaptureAttempt second = await fixture.Service.TryStartAsync(HostGroup(hostId, AgentRuntimeEnum.Codex, "fp-limit-b-" + tag, "cpt_limit_b_" + tag), null).ConfigureAwait(false);
+            AssertTrue(first.Started, "the first attempt after the change starts (" + first.SkippedReason + ")");
+            AssertTrue(second.Started, "the second attempt after the change starts");
+
+            int expected = lower ? 1 : 2;
+            for (int i = 0; i < 100 && fixture.Executor.Calls < baseline + expected; i++) await Task.Delay(50).ConfigureAwait(false);
+            // A settle window so an attempt the old capacity would wrongly admit has time to arrive.
+            await Task.Delay(500).ConfigureAwait(false);
+            AssertEqual(expected, fixture.Executor.Calls - baseline,
+                lower ? "only one probe reaches the host under the lowered limit" : "both probes reach the host under the raised limits");
+
+            if (lower)
+            {
+                // Releasing the holder admits the queued attempt: the resize never strands a permit.
+                fixture.Executor.Release();
+                for (int i = 0; i < 100 && fixture.Executor.Calls < baseline + 2; i++) await Task.Delay(50).ConfigureAwait(false);
+                AssertEqual(2, fixture.Executor.Calls - baseline, "the queued probe runs once the first releases its permit");
+                fixture.Executor.Release();
+            }
+            else
+            {
+                fixture.Executor.Release();
+                fixture.Executor.Release();
+            }
+
+            UsageCaptureAttemptResult firstResult = await AwaitAsync(first.Completion).ConfigureAwait(false);
+            UsageCaptureAttemptResult secondResult = await AwaitAsync(second.Completion).ConfigureAwait(false);
+            AssertTrue(firstResult.Persisted, "the first attempt commits under the new limit");
+            AssertTrue(secondResult.Persisted, "the second attempt commits under the new limit");
+            AssertNotNull(captain.Id, "the scheduling captain exists");
+        }
+
+        /// <summary>
         /// A hand-built group pinned to one host, so a case can place several groups on the same or on
         /// distinct hosts without depending on dock resolution.
         /// </summary>
@@ -1444,8 +1542,12 @@ namespace Test.Shared.Suites.Services
 
             public Task<HostCommandResult> RunAsync(HostCommandRequest request, CancellationToken token = default)
             {
-                Calls++;
-                Requests.Add(request);
+                // Two attempts can dispatch concurrently (the raised-limit case), so count under a lock.
+                lock (Requests)
+                {
+                    Calls++;
+                    Requests.Add(request);
+                }
                 if (!String.IsNullOrWhiteSpace(ThrowMessage)) throw new InvalidOperationException(ThrowMessage);
                 if (!Hold) return Task.FromResult(Reply(Result));
                 return HeldAsync(token);
