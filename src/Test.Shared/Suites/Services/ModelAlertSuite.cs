@@ -171,6 +171,26 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, empty.TargetCount, "minimal input target default");
             }));
 
+            cases.Add(DbCase("evaluation_lists_at_limit_not_truncated", "Exactly 1000 targets and 1000 raised alerts are all listed and the evaluation does not report truncation", async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                await CreateProfileAsync(db, Tenant).ConfigureAwait(false);
+                for (int i = 0; i < ModelAlertEvaluation.MaxTargets - 1; i++)
+                {
+                    await db.StageOutcomes.CreateAsync(Outcome("msn_edge_" + i, false, 1, o => o.VesselId = "vsl_edge_" + i)).ConfigureAwait(false);
+                }
+                ModelAlertSettings settings = new ModelAlertSettings { IncludeVessels = true };
+                settings.Thresholds.Defaults.FirstPassMinMissions = 1;
+                ModelAlertService service = new ModelAlertService(db, Quiet(), () => settings);
+                ModelAlertEvaluation result = await service.EvaluateAsync(Tenant, _Now).ConfigureAwait(false);
+                AssertEqual(ModelAlertEvaluation.MaxTargets, result.TargetCount, "all-vessels plus 999 individual vessels");
+                AssertEqual(ModelAlertEvaluation.MaxTargets, result.Targets.Count, "every target listed at the limit");
+                AssertEqual(ModelAlertEvaluation.MaxRaised, result.RaisedCount, "raised count at the limit");
+                AssertEqual(ModelAlertEvaluation.MaxRaised, result.Raised.Count, "every raised alert listed at the limit");
+                AssertFalse(result.Truncated, "no truncation reported at exactly the limit");
+            }));
+
             cases.Add(DbCase("raise_dedupe_resolve_reopen", "A crossed condition raises one alert; later passes keep the same row, resolve it when the condition clears and reopen the same row when it returns; nothing else changes", async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

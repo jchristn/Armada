@@ -356,6 +356,32 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(Case("excluded_list_bounded_summary_counts_all", "With 1001 excluded captains the recorded decision lists the first 1000 by name while its summary counts all 1001", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    Harness harness = await BuildHarnessAsync(testDb.Driver, new WorkerEnvelope { MinServedContextTokens = 200000 }).ConfigureAwait(false);
+                    int total = WorkerEnvelopeDecision.MaxExcluded + 1;
+                    for (int i = 0; i < total; i++)
+                        await AddCaptainAsync(testDb.Driver, "bound-" + i.ToString("D4"), CaptainStateEnum.Idle, CaptainTierEnum.Economy, null).ConfigureAwait(false);
+                    Mission mission = await AddMissionAsync(testDb.Driver, harness.Vessel, null).ConfigureAwait(false);
+
+                    AssertFalse(await harness.Missions.TryAssignAsync(mission, harness.Vessel).ConfigureAwait(false), "no captain meets the envelope");
+                    List<WorkerEnvelopeDecision> decisions = await EnvelopeEventsAsync(testDb.Driver, mission.Id).ConfigureAwait(false);
+                    AssertEqual(1, decisions.Count, "one decision event");
+                    WorkerEnvelopeDecision decision = decisions[0];
+                    AssertEqual(WorkerEnvelopeOutcomeEnum.NoEligibleCaptain, decision.Outcome, "no eligible captain");
+                    AssertEqual(WorkerEnvelopeDecision.MaxExcluded, decision.Excluded.Count, "stored list bounded");
+                    AssertEqual("bound-0000", decision.Excluded[0].CaptainName, "ordered by name");
+                    AssertFalse(decision.Excluded.Any(e => e.CaptainName == "bound-1000"), "the captain past the limit is the one dropped");
+                    AssertContains(total + " captain(s) excluded", decision.Summary ?? "", "summary counts every excluded captain");
+                    CollectionBounds.Validate(decision);
+
+                    AssertFalse(await harness.Missions.TryAssignAsync(mission, harness.Vessel).ConfigureAwait(false), "still waiting");
+                    AssertEqual(1, (await EnvelopeEventsAsync(testDb.Driver, mission.Id).ConfigureAwait(false)).Count, "an unchanged decision is not recorded again");
+                }
+            }));
+
             cases.Add(Case("mission_envelope_tightens_vessel_default", "A mission's tighter envelope is combined with the vessel default at dispatch", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))

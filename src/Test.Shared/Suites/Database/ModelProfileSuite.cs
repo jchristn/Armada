@@ -377,6 +377,51 @@ namespace Test.Shared.Suites.Database
                 AssertTrue(second.CompatibleWith.SequenceEqual(new[] { fresh.Id }), "a basis with room is marked directly");
             }));
 
+            cases.Add(CaseAsync("revisions_at_limit_not_truncated", "A profile with exactly 500 revisions returns all of them and its scorecard groups all of them without reporting truncation", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                ModelProfile profile = new ModelProfile { Identity = new ModelProfileIdentity { Runtime = "Mux" } };
+                await db.ModelProfiles.CreateAsync(profile, "key-exact").ConfigureAwait(false);
+                List<ModelProfileRevision> created = new List<ModelProfileRevision>();
+                for (int i = 0; i < ModelProfile.MaxRevisions; i++)
+                    created.Add(await db.ModelProfiles.CreateRevisionAsync(new ModelProfileRevision { ProfileId = profile.Id, RuntimeVersion = i + ".0.0", FirstSeenUtc = _Fixed.AddMinutes(i) }).ConfigureAwait(false));
+
+                ModelProfileAccessService access = new ModelProfileAccessService(db, QuietLogging());
+                AuthContext admin = new AuthContext { IsAuthenticated = true, IsAdmin = true, UserId = "usr_admin" };
+                ModelProfile read = await access.GetAsync(admin, profile.Id).ConfigureAwait(false);
+                AssertEqual(ModelProfile.MaxRevisions, read.Revisions.Count, "nothing dropped at the limit");
+                AssertEqual(created[0].Id, read.Revisions[0].Id, "the oldest revision is kept at the limit");
+
+                ModelScorecard card = await new ModelScorecardService(db, QuietLogging()).ComputeAsync(profile, new ModelScorecardRequest { Persona = "Worker" }, _Fixed.AddDays(1)).ConfigureAwait(false);
+                AssertEqual(ModelProfile.MaxRevisions, card.Groups.SelectMany(g => g.RevisionIds).Count(), "every revision grouped");
+                AssertTrue(card.Groups.Any(g => g.RevisionIds.Contains(created[0].Id)), "the oldest revision is grouped at the limit");
+                AssertFalse(card.Truncated, "no truncation reported at exactly the limit");
+            }));
+
+            cases.Add(CaseAsync("advisory_unpooled_when_every_pool_member_full", "When the basis and every revision pooled with it already hold 100 marks, a Full Evaluate report is recorded unpooled and no revision exceeds the limit", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DatabaseDriver db = testDb.Driver;
+                ModelProfile profile = new ModelProfile { Identity = new ModelProfileIdentity { Runtime = "Mux" } };
+                await db.ModelProfiles.CreateAsync(profile, "key-clique").ConfigureAwait(false);
+                List<string> clique = new List<string>();
+                for (int i = 0; i <= ModelProfileRevision.MaxCompatibleWith; i++)
+                    clique.Add((await db.ModelProfiles.CreateRevisionAsync(new ModelProfileRevision { ProfileId = profile.Id, RuntimeVersion = "3." + i + ".0", FirstSeenUtc = _Fixed.AddMinutes(i) }).ConfigureAwait(false)).Id);
+                foreach (string id in clique)
+                    await db.ModelProfiles.SetCompatibleWithAsync(id, clique.Where(other => other != id).ToList()).ConfigureAwait(false);
+                foreach (ModelProfileRevision revision in await db.ModelProfiles.ReadRevisionsAsync(profile.Id).ConfigureAwait(false))
+                    AssertEqual(ModelProfileRevision.MaxCompatibleWith, revision.CompatibleWith.Count, "fixture: " + revision.Id + " is full");
+
+                ModelProfileRevision basis = (await db.ModelProfiles.ReadRevisionAsync(clique[0]).ConfigureAwait(false))!;
+                ModelProfileRevision advisory = await new ModelProfileService(db, QuietLogging()).RecordEvaluationAsync(new ModelProfileResolution { Profile = profile, Revision = basis }, new ModelEvaluationReport { RunId = "mpr_nowhere", Complete = true }).ConfigureAwait(false);
+                AssertEqual(0, advisory.CompatibleWith.Count, "the advisory revision is not pooled");
+                AssertEqual("mpr_nowhere", advisory.EvaluationRunId, "the report is still recorded");
+                AssertEqual(0, (await db.ModelProfiles.ReadRevisionAsync(advisory.Id).ConfigureAwait(false))!.CompatibleWith.Count, "no mark stored for the advisory");
+                foreach (ModelProfileRevision revision in await db.ModelProfiles.ReadRevisionsAsync(profile.Id).ConfigureAwait(false))
+                    AssertTrue(revision.CompatibleWith.Count <= ModelProfileRevision.MaxCompatibleWith, revision.Id + " within the limit");
+            }));
+
             cases.Add(CaseAsync("captain_reference_roundtrip", "Captain.ModelProfileId round-trips through LinkCaptainAsync, survives a full captain update, and serializes on the API model", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
