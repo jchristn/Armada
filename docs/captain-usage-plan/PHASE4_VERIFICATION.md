@@ -4,6 +4,56 @@ Branch: armada/codex-1/msn_mvxf3n23_V1oCE5oqulg
 Mission: msn_mvxf3n23_V1oCE5oqulg
 State: BLOCKED; do not land as a completed AC4 implementation.
 
+## Worker rework 1: unresolved dependency boundary
+
+Mission msn_mvxfpf3f_nc0oI4RmB6Y rechecked the complete prior handoff
+hoa_mvxfpn0h_FyaJfkshKpN and its single blocking finding. No production
+code or regression assertion was changed. The existing named regression still
+reproduces the violation; AC4 is not complete and this branch must not land.
+
+The pinned Voltaic 2.4.0 README documents pre-handler input-schema validation
+as an isError result. Its public McpHttpServer API has no validation-error
+policy hook. Upstream source at the package's repository commit
+f9b5c0daeae97f6f624fa9e1a71fcbe8a26a6b14 confirms that RequestReceived
+callbacks swallow exceptions, so throwing McpProtocolException from that event
+cannot implement the required protocol error. Throwing from McpUsageTools
+also cannot affect missing required properties because validation precedes the
+handler. NuGet's published version index was checked: 2.4.0 is the newest
+published version. A dependency patch exposing a schema-validation error policy,
+or replacement of the shared dispatcher, is required. Neither dropping the
+required schema nor rewriting a post-send diagnostic event is a valid fix.
+The dependency/dispatcher work exceeds the declared Phase 4 components; it is
+reported as a landing prerequisite rather than silently vendored or bypassed.
+
+Fresh checks with SDK 10.0.401, target net10.0:
+
+- `dotnet restore src/Armada.sln --verbosity quiet`: exit 0.
+- `dotnet build src/Armada.sln --no-restore --verbosity quiet`: exit 0;
+  zero warnings and errors.
+- `dotnet run --project src/Test.Automated --framework net10.0 --no-build -- --suites E2E.Usage,E2E.UsageTenantIsolation,Client.Contract.Usage,E2E.ApiContract,E2E.Authorization,Client.Coverage,Client.RouteSurface`:
+  exit 1; 39/40 passed, one failed, none skipped. The failure is
+  mcp_missing_argument_is_protocol_error: expected -32602; observed
+  result.isError=true and missing required captainId text, with no error.code.
+- `dotnet run --project src/Test.Automated --framework net10.0 --no-build -- --suites Services.Usage,Services.UsageDefaults`:
+  exit 0; 93/93 passed, none skipped.
+- `git fetch origin main`: exit 0; origin/main remains
+  30358ef7824534abd6e7448cb2fc9d3c116355e1.
+- `git merge-base --is-ancestor 1eeb9e5853710e49dfe0c9ef9a88f16aaa23c176 origin/main`:
+  exit 0.
+- `git merge-base --is-ancestor f4e88920fde7a664bbb95ea001d5b92c4148b720 origin/main`:
+  exit 0.
+
+D1 account ownership/half-open range, tenant isolation and explicit admin scope
+checks passed. D5 persisted attribution and stable mission-page checks passed.
+Event commit/fanout/reconnect and Client.Contract.Usage passed. Phase 2/3 usage
+service checks passed, including cancellation, stale generations, stream EOF,
+local HTTP header capture and secrets. These are local shared-suite results,
+not evidence for the remaining live 202/429/503 capture matrix, full role
+matrix, external databases, production attribution or Postman execution.
+No publication, landing, full test suite, UI work, independent Judge review or
+successful AC4 delivery is claimed. Existing collection and contract artifacts
+remain unchanged because the intended contract has not changed.
+
 ## Independent Test Engineer verification
 
 Mission msn_mvxf3pw9_kmi4XfQqGAd independently checked worker commit
