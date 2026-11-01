@@ -2,8 +2,80 @@
 
 Branch: armada/codex-1/msn_mvxf3n23_V1oCE5oqulg
 Mission: msn_mvxf3n23_V1oCE5oqulg
-State: AC4 missing-argument protocol finding RESOLVED in worker rework 3 (see
-below). Earlier sections are kept as the historical record of the blocker.
+State: HTTP missing-argument finding resolved; AC4 remains BLOCKED on the
+stdio public surface, independently reproduced in Test Engineer rework 3.
+
+## Test Engineer rework 3: HTTP verified, stdio protocol defect remains
+
+Mission: msn_mvxg8z3z_CppHN9bkIIJ. Production code was not modified.
+
+Added E2E.UsageTenantIsolation.mcp_stateless_required_argument_and_recovery.
+It sends real authenticated /mcp requests using revision 2026-07-28, routing
+headers and protocol/client-capability metadata. Omitted, null, empty and
+mis-cased arguments return -32602 with no result and preserve request ID 37.
+A subsequent usage_status succeeds through the original dispatcher. Initial
+fixture attempts lacked required stateless transport metadata and failed;
+the corrected fixture passes. Existing /rpc missing-argument and dispatch
+regressions also pass. These resolve the prior HTTP finding, not all AC4.
+
+Affected case: src/Armada.Helm/Commands/McpStdioCommand.cs:90. The stdio server
+registers the same usage tools but does not install the missing-argument guard.
+AC4 requires missing required MCP arguments to be protocol errors without a
+transport exception. Reproduced with the built Release net10.0 Helm executable
+in a fresh temporary directory under this worktree, setting ARMADA_DATA_DIR
+only for the subprocess and using --profile local. No existing user database
+or settings were used. Send these newline-delimited messages, waiting for the
+initialize response before tools/call and keeping stdin open until its reply:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"usage-verifier","version":"1"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"capture_captain_usage","arguments":{}}}
+```
+
+Command: dotnet src/Armada.Helm/bin/Release/net10.0/Armada.Helm.dll mcp stdio --profile local
+
+Expected: error.code -32602, missing captainId information, no result.
+Actual (process exit 0 after closing stdin):
+
+```json
+{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"Tool 'capture_captain_usage' arguments is missing required property 'captainId'."}],"isError":true},"id":2}
+```
+
+Required correction: apply the opted-in protocol validation to the stdio
+dispatcher too, preserving schema validation/default dispatch for other tools,
+and add a live stdio protocol regression. This requires Worker production work
+outside this Test Engineer's allowed changes. No known-failing test is committed.
+
+Independent commands (SDK 10.0.401, newest installed project-targeted SDK):
+
+- dotnet restore src/Armada.sln --verbosity quiet: exit 0.
+- dotnet build src/Armada.sln -c Release --no-restore --verbosity quiet:
+  exit 0, 0 warnings, 0 errors.
+- dotnet run --project src/Test.Automated -c Release --framework net10.0 -- --suites E2E.UsageTenantIsolation:
+  final exit 0, 6/6 passed.
+- dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build -- --suites E2E.Usage,E2E.UsageTenantIsolation,Client.Contract.Usage,E2E.ApiContract,E2E.Authorization,Client.Coverage,Client.RouteSurface,E2E.McpTenantIsolation,E2E.McpTool,Services.Usage --results phase4-final-results.json:
+  final exit 0, 284/284 passed, zero skipped. This includes Phase 2 host,
+  cancellation, scheduler and concurrency regressions and Phase 3 parser,
+  quarantine and secrets regressions. It does not cover the stdio failure
+  reproduced separately above. The initial broad run was 283/284 because the
+  new test fixture lacked stateless transport metadata; no product assertion
+  was removed to obtain the final pass.
+- git fetch origin main: origin/main is
+  30358ef7824534abd6e7448cb2fc9d3c116355e1. Both required Phase 3 commits
+  1eeb9e5853710e49dfe0c9ef9a88f16aaa23c176 and
+  f4e88920fde7a664bbb95ea001d5b92c4148b720 are ancestors (exit 0 each).
+  origin/main is an ancestor of this branch (exit 0).
+
+AC4/D1/D5 existing cases map to account_owned_samples_half_open,
+missions_use_persisted_attribution, rest_roles_and_explicit_tenant,
+commit_fanout_reconnect, and Client.Contract.Usage. Suite registration is
+automatic through IArmadaTestSuite discovery in ArmadaTestSuites.cs.
+Postman api-engineer/api-testing guidance was applied using existing repository
+contracts; no workspace was initialized or published. Postman collection
+execution, external database providers, NUnit/xUnit and the full smoke host
+were not run. Live HTTP 202/429/503 capture outcomes and the complete role
+matrix remain uncovered. Landing must wait for the stdio correction and normal
+pipeline checks; this Test Engineer does not authorize landing.
 
 ## Worker rework 3: missing required MCP argument is -32602
 

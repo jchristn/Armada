@@ -100,6 +100,45 @@ namespace Test.Shared.Suites.E2E
                     string listed = await McpTestCalls.CallToolAsync(admin, "usage_status", new { }).ConfigureAwait(false);
                     AssertNull(JsonHelper.Deserialize<McpRpcEnvelope>(listed).Error, "usage_status has no required argument: " + listed);
                 }),
+                new TestCaseDescriptor(Suite, "mcp_stateless_required_argument_and_recovery", "Stateless MCP rejects omitted and mis-cased required arguments and still dispatches subsequent reads", async ct =>
+                {
+                    E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                    using HttpClient admin = new HttpClient { BaseAddress = fx.McpClient.BaseAddress };
+                    admin.DefaultRequestHeaders.Add("X-Api-Key", fx.ApiKey);
+                    admin.DefaultRequestHeaders.Add("MCP-Protocol-Version", "2026-07-28");
+                    admin.DefaultRequestHeaders.Add("Mcp-Method", "tools/call");
+                    admin.DefaultRequestHeaders.Add("Mcp-Name", "capture_captain_usage");
+                    string[] parameters = new[]
+                    {
+                        "{\"name\":\"capture_captain_usage\"}",
+                        "{\"name\":\"capture_captain_usage\",\"arguments\":null}",
+                        "{\"name\":\"capture_captain_usage\",\"arguments\":{}}",
+                        "{\"name\":\"capture_captain_usage\",\"arguments\":{\"CaptainId\":\"cpt_wrong_case\"}}"
+                    };
+                    foreach (string arguments in parameters)
+                    {
+                        string statelessArguments = arguments.Insert(1, "\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},");
+                        using StringContent content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":37,\"method\":\"tools/call\",\"params\":" + statelessArguments + "}", System.Text.Encoding.UTF8, "application/json");
+                        using HttpResponseMessage response = await admin.PostAsync("/mcp", content, ct).ConfigureAwait(false);
+                        string body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                        AssertTrue(response.IsSuccessStatusCode, "protocol error is an MCP response: " + body);
+                        McpRpcEnvelope envelope = JsonHelper.Deserialize<McpRpcEnvelope>(body);
+                        AssertEqual(-32602, envelope.Error?.Code ?? 0, "stateless missing argument: " + body);
+                        AssertNull(envelope.Result, "protocol errors carry no result: " + body);
+                        AssertContains("\"id\":37", body, "request correlation survives guard dispatch");
+                        AssertContains("captainId", envelope.Error?.Message ?? String.Empty);
+                    }
+                    admin.DefaultRequestHeaders.Remove("Mcp-Name");
+                    admin.DefaultRequestHeaders.Add("Mcp-Name", "usage_status");
+                    using StringContent valid = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":38,\"method\":\"tools/call\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},\"name\":\"usage_status\",\"arguments\":{}}}", System.Text.Encoding.UTF8, "application/json");
+                    using HttpResponseMessage recovered = await admin.PostAsync("/mcp", valid, ct).ConfigureAwait(false);
+                    string recoveredBody = await recovered.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    AssertTrue(recovered.IsSuccessStatusCode, recoveredBody);
+                    McpRpcEnvelope recoveredEnvelope = JsonHelper.Deserialize<McpRpcEnvelope>(recoveredBody);
+                    AssertNull(recoveredEnvelope.Error, "valid calls recover after invalid params: " + recoveredBody);
+                    AssertNotNull(recoveredEnvelope.Result, "recovery must execute the original dispatcher");
+                    AssertFalse(recoveredBody.Contains("\"isError\":true", StringComparison.Ordinal), recoveredBody);
+                }),
                 new TestCaseDescriptor(Suite, "mcp_required_guard_unit_contract", "Guard installs on the pinned MCP library and only flags absent declared arguments", ct =>
                 {
                     IReadOnlyDictionary<string, IReadOnlyList<string>> map = McpUsageTools.ProtocolRequiredArguments;
