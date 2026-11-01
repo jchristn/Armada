@@ -4,6 +4,59 @@ Branch: armada/codex-1/msn_mvxf3n23_V1oCE5oqulg
 Mission: msn_mvxf3n23_V1oCE5oqulg
 State: BLOCKED; do not land as a completed AC4 implementation.
 
+## Independent Test Engineer verification
+
+Mission msn_mvxf3pw9_kmi4XfQqGAd independently checked worker commit
+e2c86026d13e130dc1bc8154093626fbd9c881fb. The prior blocking finding
+is unresolved. No production code or assertions were changed, and no new
+known-failing tests were added. Existing named cases already reproduce the defect.
+
+Selected installed SDK 10.0.401 and target net10.0 (8.0.425 is also installed).
+Commands below used /usr/local/share/dotnet/dotnet; actual exit codes were kept.
+
+- `dotnet restore src/Armada.sln --verbosity quiet`: exit 0.
+- `dotnet build src/Armada.sln --no-restore --verbosity quiet`: exit 0,
+  zero warnings and errors.
+- `dotnet run --project src/Test.Automated --framework net10.0 -- --suites E2E.Usage,E2E.UsageTenantIsolation,Client.Contract.Usage,E2E.ApiContract,E2E.Authorization,Client.Coverage,Client.RouteSurface`:
+  exit 1; 40 total, 39 passed, one failed, none skipped. Prefix matching also
+  executed E2E.UsageAggregation and E2E.UsageEvents.
+- `dotnet run --project src/Test.Automated --framework net10.0 --no-build -- --suites Services.Usage,Services.UsageDefaults`:
+  exit 0; 93 total, all passed, none skipped. This includes Phase 2 cancellation,
+  timeout, backoff, stale generation, slot conservation and scheduler cases;
+  Phase 3 parser, stream EOF, capture-before-request, quarantine and secrets cases;
+  and deserialization defaults, nulls, empty blocks and explicit bounds.
+
+AC4 failure: E2E.UsageTenantIsolation.mcp_missing_argument_is_protocol_error
+calls capture_captain_usage with an empty object using an authenticated admin.
+Expected JSON-RPC error.code -32602. Actual response:
+
+```json
+{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"Tool 'capture_captain_usage' arguments is missing required property 'captainId'."}],"isError":true},"id":2}
+```
+
+Source locations: McpUsageTools.cs declares captainId required and guards blank
+values; Armada.Server.csproj still pins Voltaic 2.4.0. The required correction
+is to return a JSON-RPC invalid-params error for missing required arguments
+without dropping schema requiredness or weakening the protocol assertion.
+Dependency or dispatcher changes belong to the Worker, outside this test stage.
+
+D1 cases account_owned_samples_half_open, rest_roles_and_explicit_tenant and
+mcp_tenant_scope passed. D5 cases missions_use_persisted_attribution and
+mission_metadata_and_stable_pages passed. commit_fanout_reconnect and all three
+aggregation boundary cases passed. SDK live calls and passive timestamp
+preservation passed. These results do not resolve the AC4 protocol defect.
+
+Fresh `git fetch origin main` exited 0 and origin/main remained
+30358ef7824534abd6e7448cb2fc9d3c116355e1. Independent
+`git merge-base --is-ancestor <commit> origin/main` commands each exited 0 for
+1eeb9e5853710e49dfe0c9ef9a88f16aaa23c176 and
+f4e88920fde7a664bbb95ea001d5b92c4148b720.
+
+Prior unverified paths listed below remain unverified here: live 202/429/503
+capture responses, the full captain-session role matrix, external database
+providers, Postman assertion execution and end-to-end production attribution.
+No full test suite, UI builds, dependency patch, or landing was attempted.
+
 ## Blocking acceptance case
 
 AC4 requires missing required MCP arguments to return JSON-RPC invalid params
