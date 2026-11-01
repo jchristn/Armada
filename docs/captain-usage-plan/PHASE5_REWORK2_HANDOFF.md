@@ -170,3 +170,62 @@ Raw generated result files were removed after recording these observations.
 
 No files deleted. Necessary production scope extension is limited to the batch
 contract explicitly named by finding 1. No Phase 6/7 implementation was added.
+
+## Independent Test Engineer verification (2026-11-01)
+
+Reviewed the complete prior-stage MCP artifact hoa_mvy3jnvb_TjgDTz5iU9A,
+its commit d05c55ec7 manifest, current source and the acceptance requirements.
+No production code or test assertions changed. No new tests were added because
+this stage cannot implement the missing product behavior or commit failing tests.
+
+### Coverage Added
+
+Independent rerun evidence only:
+- `PATH="$HOME/.nvm/versions/node/v24.21.0/bin:$PATH" npm ci --prefix src/Armada.Dashboard`: exit 0.
+- `PATH="$HOME/.nvm/versions/node/v24.21.0/bin:$PATH" npm run build --prefix src/Armada.Dashboard`: exit 0.
+- `PATH="$HOME/.nvm/versions/node/v24.21.0/bin:$PATH" npm --prefix src/Armada.Dashboard run test:run -- src/pages/TokenUsage.test.tsx`: exit 0, 2 tests passed. Named cases verify shared captain/model/time filters and model token-type totals.
+- `/usr/local/share/dotnet/dotnet run --project src/Test.Automated -c Release --framework net10.0 -- --suites E2E.Usage,E2E.UsageSettingsApi,Client.RouteSurface --results phase5-te-results.json`: exit 0, 25 passed, 0 failed/skipped. Uses real fixture HTTP services, not a Postman collection or a provider mock. Existing tests are more specific than the saved collection for these guarantees.
+
+### Negative Paths
+
+Existing E2E.Usage.latest_batch_captains passed independently, establishing the
+batch prerequisite including invalid inputs and authorization. Existing usage
+settings defaults and invalid/unauthorized PUT cases passed independently;
+these establish global settings, not captain mutation preservation. Prior
+batch/global-settings findings are resolved within their documented scope.
+Prior captain lifecycle finding remains unresolved by source inspection:
+CaptainUpdateFieldPresence has no usage fields and EntityUpdateMerger.MergeCaptain
+(lines 115-154) never copies omitted usage values. The prior live HTTP
+configuration-loss diagnostic was not rerun; it remains prior-stage evidence.
+PTY adapter absence remains a documented limitation, not a verified capability.
+
+### Affected Case
+
+File: src/Armada.Dashboard/src/pages/Captains.tsx:442
+Requirement: AC5 and the plan's exact English View Usage row action, including
+keyboard operation and disabled/unsupported/no-data reachability.
+Scenario: inspect a captain row's ActionMenu items. Expected: View Usage opens
+that captain's stable usage destination. Actual: items include View Detail,
+Edit and View Tools but no View Usage. CaptainDetail has no usage section;
+its sole usage text is the quarantine explanation. This is source evidence,
+not a browser interaction claim. Required correction: Worker must implement
+the scoped action, destination, permission rules, localized states and tests,
+and complete the remaining AC5 dashboard requirements after prerequisites.
+
+File: src/Armada.Server/EntityUpdateMerger.cs:115
+Requirement: AC5 capture configuration persistence through unrelated edits.
+Prior reproducible input: seed enabled capture, interval 120, mode Custom and
+valid executable JSON; PUT only a new name, then GET. Expected: prior capture
+configuration preserved. Prior observed actual: enabled becomes false. Current
+source still omits usage preservation. Required correction: Worker must fix and
+cover captain mutation validation, omission semantics and scheduler invalidation.
+
+### Residual Risks
+
+Full suites intentionally skipped under post-stage-check instructions. No new
+AC5 component/navigation/settings/drilldown tests, catalog gate, visual matrix,
+keyboard inspection, parity verification or actual main landing verified.
+Those criteria remain outstanding, not superseded by passing prerequisites.
+Dependency restore reports 2 moderate and 2 high audit findings; no dependency
+changes attempted. Generated test report removed after recording the result.
+Outcome: BLOCKED; return to Worker. Build and token-chart success do not establish AC5.
