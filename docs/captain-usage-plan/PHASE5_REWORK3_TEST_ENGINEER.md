@@ -82,3 +82,25 @@ viewport/theme/keyboard matrix, and actual main landing were not independently
 verified. No merge or landing was performed. Worker visual/backend claims remain
 inherited evidence, not results of this review. The tentative empty-page request
 invalidation concern was not exercised and is not asserted as another finding.
+
+## Revalidation at start commit 4a564ca21
+
+The existing cooldown finding remains unresolved in the current source.
+Independent rerun on 2026-11-01:
+- `npm ci`: exit 0; 4 audit vulnerabilities reported (2 moderate, 2 high).
+- Temporary `recovers capture after cooldown expiry and event refresh` in
+  CaptainUsageCard.test.tsx: capture rejects with 429 and nextEligibleUtc one
+  minute ahead; Date.now advances to one minute after expiry; usage revision
+  increments; the second latest read completes. Capture now remains disabled.
+  `npx vitest run src/components/usage/CaptainUsageCard.test.tsx`: exit 1,
+  10 passed / 1 failed at toBeEnabled. Original test file restored in finally.
+- Restored targeted run: `npx vitest run
+  src/components/usage/CaptainUsageCard.test.tsx
+  src/pages/CaptainsUsage.test.tsx src/pages/CaptainDetailUsage.test.tsx
+  src/pages/TokenUsage.test.tsx src/lib/useUsage.test.tsx
+  src/lib/usageCatalog.test.ts`: exit 0, 6 files / 34 tests passed.
+
+View Usage navigation and existing token-chart regressions remain green.
+No production changes or known-failing tests were retained. Backend mutation
+lifecycle, visual matrix, full suites and main landing were not rerun. The
+required correction and blocked outcome above still apply.
