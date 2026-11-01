@@ -5,10 +5,15 @@ namespace Test.Shared.Suites.E2E
     using System.Linq;
     using System.Net;
     using System.Net.Http;
+    using System.Threading.Tasks;
     using Armada.Core.Database;
     using Armada.Core.Models;
+    using Armada.Server.Mcp;
+    using Armada.Server.Mcp.Tools;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
+    using Voltaic.Core;
+    using Voltaic.Mcp;
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>Independent REST and MCP coverage for account tenant ownership and explicit admin scope.</summary>
@@ -65,6 +70,53 @@ namespace Test.Shared.Suites.E2E
                     admin.DefaultRequestHeaders.Add("X-Api-Key", fx.ApiKey);
                     string missing = await McpTestCalls.CallToolAsync(admin, "capture_captain_usage", new { }).ConfigureAwait(false);
                     AssertContains("-32602", missing, "missing required argument is JSON-RPC invalid params");
+                    McpRpcEnvelope envelope = JsonHelper.Deserialize<McpRpcEnvelope>(missing);
+                    AssertNotNull(envelope.Error, "protocol error object: " + missing);
+                    AssertEqual(-32602, envelope.Error!.Code, "error.code: " + missing);
+                    AssertNull(envelope.Result, "a protocol error carries no tool result: " + missing);
+                    AssertContains("captainId", envelope.Error.Message ?? String.Empty, "error names the missing argument");
+                    AssertFalse(missing.Contains("\"isError\"", StringComparison.Ordinal), "not a tool execution error: " + missing);
+                    AssertContains("\"data\":{\"tool\":\"capture_captain_usage\",\"argument\":\"captainId\"}", missing, "error.data names the tool and argument");
+
+                    string nullArguments = await McpTestCalls.CallToolAsync(admin, "capture_captain_usage", null!).ConfigureAwait(false);
+                    AssertEqual(-32602, JsonHelper.Deserialize<McpRpcEnvelope>(nullArguments).Error?.Code ?? 0, "absent arguments object is also invalid params: " + nullArguments);
+                    string onlyHarbor = await McpTestCalls.CallToolAsync(admin, "capture_captain_usage", new { harborId = "hbr_only" }).ConfigureAwait(false);
+                    AssertEqual(-32602, JsonHelper.Deserialize<McpRpcEnvelope>(onlyHarbor).Error?.Code ?? 0, "optional arguments do not satisfy required captainId: " + onlyHarbor);
+                }),
+                new TestCaseDescriptor(Suite, "mcp_required_guard_keeps_default_dispatch", "Present captainId reaches the handler; type errors and other tools keep the library's tool-result validation", async ct =>
+                {
+                    E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);
+                    using HttpClient admin = new HttpClient { BaseAddress = fx.McpClient.BaseAddress };
+                    admin.DefaultRequestHeaders.Add("X-Api-Key", fx.ApiKey);
+                    string unknown = await McpTestCalls.CallToolAsync(admin, "capture_captain_usage", new { captainId = "cpt_usage_guard_missing" }).ConfigureAwait(false);
+                    AssertNull(JsonHelper.Deserialize<McpRpcEnvelope>(unknown).Error, "a present captainId is not a protocol error: " + unknown);
+                    AssertContains("NotFound", unknown, "the handler ran and resolved the captain");
+                    string wrongType = await McpTestCalls.CallToolAsync(admin, "capture_captain_usage", new { captainId = 42 }).ConfigureAwait(false);
+                    AssertNull(JsonHelper.Deserialize<McpRpcEnvelope>(wrongType).Error, "type validation stays a tool result: " + wrongType);
+                    AssertContains("\"isError\":true", wrongType, "type validation is an isError result");
+                    string otherTool = await McpTestCalls.CallToolAsync(admin, "get_captain", new { }).ConfigureAwait(false);
+                    AssertNull(JsonHelper.Deserialize<McpRpcEnvelope>(otherTool).Error, "tools outside the usage guard keep the default form: " + otherTool);
+                    AssertContains("\"isError\":true", otherTool, "other tools still answer missing required arguments with isError");
+                    string listed = await McpTestCalls.CallToolAsync(admin, "usage_status", new { }).ConfigureAwait(false);
+                    AssertNull(JsonHelper.Deserialize<McpRpcEnvelope>(listed).Error, "usage_status has no required argument: " + listed);
+                }),
+                new TestCaseDescriptor(Suite, "mcp_required_guard_unit_contract", "Guard installs on the pinned MCP library and only flags absent declared arguments", ct =>
+                {
+                    IReadOnlyDictionary<string, IReadOnlyList<string>> map = McpUsageTools.ProtocolRequiredArguments;
+                    AssertEqual("captainId", map["capture_captain_usage"].Single(), "guard list mirrors the capture schema");
+                    AssertFalse(map.ContainsKey("usage_status"), "usage_status has no required argument");
+                    string tool;
+                    AssertEqual("captainId", McpRequiredArgumentGuard.FindMissing(new RpcParameters("{\"name\":\"capture_captain_usage\",\"arguments\":{}}"), map, out tool));
+                    AssertEqual("capture_captain_usage", tool);
+                    AssertEqual("captainId", McpRequiredArgumentGuard.FindMissing(new RpcParameters("{\"name\":\"capture_captain_usage\"}"), map, out tool), "absent arguments object");
+                    AssertNull(McpRequiredArgumentGuard.FindMissing(new RpcParameters("{\"name\":\"capture_captain_usage\",\"arguments\":{\"captainId\":\"cpt_x\"}}"), map, out tool), "present argument");
+                    AssertEqual("captainId", McpRequiredArgumentGuard.FindMissing(new RpcParameters("{\"name\":\"capture_captain_usage\",\"arguments\":{\"CaptainId\":\"cpt_x\"}}"), map, out tool), "required names are case-sensitive, as in JSON Schema");
+                    AssertNull(McpRequiredArgumentGuard.FindMissing(new RpcParameters("{\"name\":\"get_captain\",\"arguments\":{}}"), map, out tool), "tools outside the map are untouched");
+                    AssertNull(McpRequiredArgumentGuard.FindMissing(new RpcParameters("{\"name\":\"capture_captain_usage\",\"arguments\":[1]}"), map, out tool), "non-object arguments are left to library validation");
+                    AssertNull(McpRequiredArgumentGuard.FindMissing(null, map, out tool), "null params");
+                    McpHttpServer server = new McpHttpServer("127.0.0.1", 1);
+                    AssertTrue(McpRequiredArgumentGuard.Install(server, map), "the pinned MCP library's tools/call dispatcher is captured; a dependency upgrade that hides it must fail here");
+                    return Task.CompletedTask;
                 }),
                 new TestCaseDescriptor(Suite, "mcp_tenant_scope", "MCP shares tenant isolation with REST", async ct =>
                 {

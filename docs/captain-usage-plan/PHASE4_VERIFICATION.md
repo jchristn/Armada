@@ -2,7 +2,77 @@
 
 Branch: armada/codex-1/msn_mvxf3n23_V1oCE5oqulg
 Mission: msn_mvxf3n23_V1oCE5oqulg
-State: BLOCKED; do not land as a completed AC4 implementation.
+State: AC4 missing-argument protocol finding RESOLVED in worker rework 3 (see
+below). Earlier sections are kept as the historical record of the blocker.
+
+## Worker rework 3: missing required MCP argument is -32602
+
+Finding (Test Engineer msn_mvxfz2no_hqirk5ZkZqj, handoff
+hoa_mvxg9a2i_jsGdeURo5p8): `capture_captain_usage` with `{}` returned
+`result.isError=true` instead of JSON-RPC `error.code` -32602. Resolved.
+
+Fix. Earlier rounds concluded Voltaic 2.4.0 offered no hook. A scratch probe
+against the pinned package showed that `McpHttpServer.RegisterMethod("tools/call", ...)`
+replaces the protocol method and that an `McpProtocolException.InvalidParams`
+thrown from it is answered as `error.code` -32602 (HTTP 200) on both the
+session (`/rpc`, 2024-11-05) and stateless (`/mcp`, 2026-07-28) paths. Mutating
+the request in `RequestReceived` has no effect. The new
+`src/Armada.Server/Mcp/McpRequiredArgumentGuard.cs` captures Voltaic's original
+`tools/call` delegate from the server's method table, then registers a wrapper
+that throws InvalidParams (message names the argument, `error.data`
+`{ tool, argument }`) when an opted-in tool omits a declared required argument
+and otherwise calls the original delegate unchanged (schema validation, rate
+limits, `McpToolCallContext`, result shaping all still run). Only the tools in
+`McpUsageTools.ProtocolRequiredArguments` opt in (`capture_captain_usage` ->
+`captainId`); the same array is the tool schema's `required` list, so the
+schema still declares `captainId` required. If a future Voltaic hides the method
+table, `Install` returns false, the server logs a warning and keeps default
+behavior, and `mcp_required_guard_unit_contract` fails.
+
+Regressions (E2E.UsageTenantIsolation):
+
+- `mcp_missing_argument_is_protocol_error` (unchanged first assertion, now also
+  typed): `{}`, `arguments: null` and `{ harborId }` each give `error.code`
+  -32602, no `result`, no `isError`, message names `captainId`, and `error.data`
+  is `{"tool":"capture_captain_usage","argument":"captainId"}`.
+- `mcp_required_guard_keeps_default_dispatch`: a present unknown `captainId`
+  reaches the handler (NotFound, no protocol error); `captainId: 42` stays an
+  `isError` schema result; `get_captain {}` (not opted in) stays `isError`;
+  `usage_status {}` succeeds.
+- `mcp_required_guard_unit_contract`: `FindMissing` flags absent arguments
+  (including an absent arguments object and a case-mismatched key), ignores
+  other tools, non-object arguments and null params; `Install` succeeds on a
+  fresh `McpHttpServer` from the pinned package.
+
+Bite proof: with the `Install` call disabled (`if (false && ...)`) in
+ArmadaServer.cs, `E2E.UsageTenantIsolation` failed 4/5 with exactly the
+reported response
+(`{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"Tool 'capture_captain_usage' arguments is missing required property 'captainId'."}],"isError":true},"id":2}`);
+restored, 5/5 passed.
+
+Adjacent finding fixed: `E2E.McpTool` `ToolsList_ContainsAllExpectedToolNames`
+failed on this branch ("Tool list should contain get_release") with and without
+the guard. It read only the first page of the paginated `tools/list` (100 per
+page); the inferred cause is that the Phase 4 tool `capture_captain_usage`
+pushed `get_release` onto page 2 (main was not re-run to confirm). The case now
+follows `nextCursor` through `McpToolClient.ListToolsAsync`, as the stdio
+parity case already did, and also expects both usage tools.
+
+Commands (SDK 10.0.401, net10.0, Release):
+
+- `dotnet build src/Armada.sln -c Release`: exit 0, 0 warnings, 0 errors.
+- `dotnet run --project src/Test.Automated -c Release --framework net10.0 --no-build -- --suites E2E.Usage,E2E.UsageTenantIsolation,E2E.UsageEvents,E2E.UsageAggregationContract,Client.Contract.Usage,E2E.ApiContract,E2E.Authorization,Client.Coverage,Client.RouteSurface,E2E.McpTenantIsolation,E2E.McpTool,Services.Usage`:
+  exit 0; 283 total, 283 passed.
+- `... --suites E2E.UsageTenantIsolation` after the final assertion edit: exit 0, 5/5.
+- `git fetch origin main`: origin/main 30358ef7824534abd6e7448cb2fc9d3c116355e1;
+  `git merge-base --is-ancestor` for 1eeb9e585 and f4e88920f against origin/main:
+  exit 0 each; origin/main is an ancestor of this branch.
+
+Not covered: the `armada mcp stdio` server (Voltaic `McpServer`) does not install
+the guard, so a stdio client still gets `isError` for a missing `captainId`.
+Smoke host, NUnit/xUnit hosts, external database providers and Postman execution
+were not run in this round.
+
 
 ## Test Engineer rework 2: independent verification
 

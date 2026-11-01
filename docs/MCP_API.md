@@ -7863,10 +7863,12 @@ can explicitly select one tenant; omission does not combine tenants.
 
 `capture_captain_usage` requires `captainId`; optional `harborId` must match the
 resolved host. It requires tenant administration and remains an Ask mutation.
-The intended AC4 contract requires missing arguments to be JSON-RPC protocol
-errors (-32602). This branch does not yet meet that requirement: pinned Voltaic
-2.4.0 validates the required schema before Armada handlers and returns
-`result.isError` instead. The regression remains failing; this is a landing blocker. The tool returns the
+A call that omits `captainId` (an empty or absent `arguments` object) is a
+JSON-RPC protocol error, not a tool result:
+`{"jsonrpc":"2.0","error":{"code":-32602,"message":"Tool 'capture_captain_usage' arguments is missing required property 'captainId'.","data":{"tool":"capture_captain_usage","argument":"captainId"}},"id":2}`.
+Required names are case-sensitive, as in JSON Schema. A `captainId` of the
+wrong type is still a schema-validation tool result with `isError: true`, and
+other tools keep that form for missing arguments too. The tool returns the
 same queued receipt or original passive observation as REST. Shared attempts
 return the existing JobId with JoinedExisting. Disabled capture, cooldown and
 unavailable hosts are explicit errors; AuthMissing observations remain readable

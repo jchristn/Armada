@@ -1,6 +1,7 @@
 namespace Armada.Server.Mcp.Tools
 {
     using System;
+    using System.Collections.Generic;
     using System.Text.Json;
     using Armada.Core.Services;
     using Armada.Core.Models;
@@ -8,6 +9,17 @@ namespace Armada.Server.Mcp.Tools
     /// <summary>Account usage tools with the same caller scope as REST.</summary>
     public static class McpUsageTools
     {
+        private static readonly string[] _CaptureRequired = new[] { "captainId" };
+
+        /// <summary>
+        /// Usage tools whose missing required arguments are answered with the JSON-RPC invalid-params protocol error
+        /// (-32602) by <see cref="McpRequiredArgumentGuard"/>. The same arrays are the tools' schema <c>required</c> lists.
+        /// </summary>
+        public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> ProtocolRequiredArguments = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            { "capture_captain_usage", _CaptureRequired }
+        };
+
         /// <summary>Register: account usage contract.</summary>
         public static void Register(RegisterToolDelegate register, UsageAccessService? service)
         {
@@ -22,7 +34,7 @@ namespace Armada.Server.Mcp.Tools
                     return query.FromUtc.HasValue || query.ToUtc.HasValue ? (object)await service.SnapshotsAsync(McpToolHelpers.ResolveCallerContext(), query).ConfigureAwait(false) : await service.LatestAsync(McpToolHelpers.ResolveCallerContext(), query).ConfigureAwait(false);
                 });
             register("capture_captain_usage", "Capture usage for a tenant-owned captain. Requires tenant administrator. Returns an idempotent queued job receipt; disabled capture is Conflict, cooldown is rate limited and offline host is Unavailable.",
-                new { type = "object", properties = new { captainId = new { type = "string" }, harborId = new { type = "string" } }, required = new[] { "captainId" } },
+                new { type = "object", properties = new { captainId = new { type = "string" }, harborId = new { type = "string" } }, required = _CaptureRequired },
                 async args => {
                     if (service == null) return (object)McpToolError.Unavailable("Usage service unavailable.");
                     UsageCaptureArgs request = Read<UsageCaptureArgs>(args, options);

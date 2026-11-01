@@ -206,15 +206,15 @@ namespace Test.Shared.Suites.E2E
             cases.Add(CaseAsync("tools_list_contains_all_expected_tool_names", "ToolsList_ContainsAllExpectedToolNames", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
-                HttpClient mcpClient = fx.McpClient;
-                string sessionId = await InitMcpSessionAsync(mcpClient);
-
-                JsonElement result = await SendMcpRequestAsync(mcpClient, sessionId, "tools/list", new { }).ConfigureAwait(false);
-                JsonElement tools = result.GetProperty("tools");
                 List<string> toolNames = new List<string>();
-                foreach (JsonElement tool in tools.EnumerateArray())
+                Dictionary<string, string> headers = new Dictionary<string, string> { ["X-Api-Key"] = fx.ApiKey };
+                using (Armada.Runtimes.Mcp.McpToolClient client = new Armada.Runtimes.Mcp.McpToolClient("http://127.0.0.1:" + fx.McpPort + "/mcp", null, headers, null, 60))
                 {
-                    toolNames.Add(tool.GetProperty("name").GetString()!);
+                    // tools/list is paginated (100 per page); the client follows nextCursor so a tool on a later page
+                    // is not reported missing when the catalog grows.
+                    await client.InitializeAsync().ConfigureAwait(false);
+                    foreach (Armada.Runtimes.Mcp.McpRemoteTool tool in await client.ListToolsAsync().ConfigureAwait(false))
+                        toolNames.Add(tool.Name);
                 }
 
                 string[] expected = new string[]
@@ -257,7 +257,9 @@ namespace Test.Shared.Suites.E2E
                     "cancel_merge",
                     "process_merge_queue",
                     "get_release",
-                    "create_release"
+                    "create_release",
+                    "usage_status",
+                    "capture_captain_usage"
                 };
 
                 foreach (string name in expected)

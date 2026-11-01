@@ -8,10 +8,17 @@ All notable changes to Armada are documented in this file.
 
 ### Account usage query and public surfaces (Phase 4)
 
-- **Pending acceptance:** missing required MCP arguments still return the pinned
-  transport tool error instead of AC4's required JSON-RPC protocol error. See
-  `docs/captain-usage-plan/PHASE4_VERIFICATION.md`; this implementation is blocked
-  from landing as complete.
+- MCP `capture_captain_usage` called without its required `captainId` (empty
+  or absent `arguments`) now answers a JSON-RPC invalid-params protocol error
+  (`error.code` -32602, `error.data` `{ tool, argument }`) instead of an
+  `isError` tool result. `McpRequiredArgumentGuard` wraps the MCP library's
+  `tools/call` dispatcher only for the usage tools listed in
+  `McpUsageTools.ProtocolRequiredArguments`; every other call, wrong-type
+  arguments and every other tool keep the previous behavior. The schema still
+  declares `captainId` required.
+- Tests: `E2E.McpTool` `ToolsList_ContainsAllExpectedToolNames` follows the
+  paginated `tools/list` cursor; the new `capture_captain_usage` tool had moved
+  `get_release` onto the second page.
 
 - Add tenant-scoped account snapshot/latest queries, bounded limit/token series,
   completion-time mission drill-down, and capture receipts across REST, MCP and

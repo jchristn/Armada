@@ -949,6 +949,10 @@ namespace Armada.Server
             _McpServer.RateLimits.ToolCallsPerSecond = _Settings.Mcp.ToolCallsPerSecond;
             _McpServer.AuthenticationHandler = AuthenticateMcpRequestAsync;
             RegisterMcpTools();
+            // AC4: a usage tool call that omits a declared required argument is a JSON-RPC invalid-params protocol
+            // error (-32602), not an isError tool result. Other tools keep Voltaic's default dispatch unchanged.
+            if (!Armada.Server.Mcp.McpRequiredArgumentGuard.Install(_McpServer, Armada.Server.Mcp.Tools.McpUsageTools.ProtocolRequiredArguments))
+                _Logging.Warn(_Header + "MCP required-argument guard not installed; the MCP library's tools/call dispatcher could not be captured");
             // Black box resources and prompts (Voltaic resource templates and prompts; plan 8.2).
             if (_BlackBox != null) Armada.Server.Mcp.Tools.McpBlackBoxResources.Register(_McpServer, _BlackBox.Service);
             // Black box recovery runs and recommendation applies execute their recorded action through the registered
