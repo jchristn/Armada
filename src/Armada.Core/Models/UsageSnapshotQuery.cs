@@ -3,6 +3,7 @@ namespace Armada.Core.Models
     using System;
     using System.Collections.Generic;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// Filters and paging for listing usage snapshots, newest observation first with a stable id
@@ -22,6 +23,7 @@ namespace Armada.Core.Models
         public string? CaptainId { get; set; } = null;
 
         /// <summary>Optional latest-only batch filter, 1..100 distinct captain IDs. Every ID is tenant-authorized.</summary>
+        [CollectionBound(100, Reason = "Latest-usage batch of 1..100 distinct captain IDs, validated by UsageAccessService")]
         public List<string>? CaptainIds { get; set; } = null;
 
         /// <summary>
