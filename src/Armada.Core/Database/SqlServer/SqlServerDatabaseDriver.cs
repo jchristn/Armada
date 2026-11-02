@@ -586,6 +586,11 @@ namespace Armada.Core.Database.SqlServer
             captain.UserId = NullableString(reader["user_id"]);
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
+            captain.MaxConcurrency = Convert.ToInt32(reader["max_concurrency"]);
+            captain.ActiveMissionCount = Convert.ToInt32(reader["active_mission_count"]);
+            captain.CurrentSessionId = reader["current_session_id"] == DBNull.Value ? null : reader["current_session_id"].ToString();
+            try { captain.ActiveMissionIds = System.Text.Json.JsonSerializer.Deserialize<List<string>>(reader["active_mission_ids"].ToString() ?? "[]") ?? new List<string>(); } catch (IndexOutOfRangeException) { }
+
             try { captain.Model = NullableString(reader["model"]); } catch { }
             try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
             try { captain.ModelProfileId = NullableString(reader["model_profile_id"]); } catch { }
@@ -699,6 +704,8 @@ namespace Armada.Core.Database.SqlServer
             mission.CompletedUtc = FromIso8601Nullable(reader["completed_utc"]);
             try { mission.TotalRuntimeMs = reader["total_runtime_ms"] == DBNull.Value ? null : Convert.ToInt64(reader["total_runtime_ms"]); } catch { }
             mission.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
+            mission.StallRecoveryAttempts = Convert.ToInt32(reader["stall_recovery_attempts"]);
+            try { mission.LastHeartbeatUtc = reader["last_heartbeat_utc"] == DBNull.Value ? null : FromIso8601(reader["last_heartbeat_utc"].ToString()!); } catch (IndexOutOfRangeException) { }
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
             try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }

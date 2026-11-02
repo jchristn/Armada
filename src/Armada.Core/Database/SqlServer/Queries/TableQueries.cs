@@ -2447,7 +2447,20 @@ namespace Armada.Core.Database.SqlServer.Queries
                 new SchemaMigration(117, "Add vessel voyage and mission admission limits",
                     @"ALTER TABLE vessels ADD max_parallel_voyages INT NOT NULL DEFAULT 1;",
                     @"ALTER TABLE vessels ADD max_parallel_missions_per_voyage INT NOT NULL DEFAULT 4;",
-                    @"UPDATE vessels SET max_parallel_voyages = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END, max_parallel_missions_per_voyage = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END;")
+                    @"UPDATE vessels SET max_parallel_voyages = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END, max_parallel_missions_per_voyage = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END;"),
+
+                new SchemaMigration(118, "Add durable captain mission slots and per-mission heartbeat",
+                    @"ALTER TABLE missions ADD stall_recovery_attempts INT NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE captains ADD max_concurrency INT NOT NULL DEFAULT 1;",
+                    @"ALTER TABLE captains ADD active_mission_count INT NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE captains ADD current_session_id NVARCHAR(450) NULL;",
+                    @"ALTER TABLE missions ADD last_heartbeat_utc NVARCHAR(450) NULL;",
+                    @"IF OBJECT_ID('captain_mission_slots','U') IS NULL CREATE TABLE captain_mission_slots (mission_id NVARCHAR(450) NOT NULL PRIMARY KEY, captain_id NVARCHAR(450) NOT NULL, process_id INT NULL, dock_id NVARCHAR(450) NULL, FOREIGN KEY(captain_id) REFERENCES captains(id) ON DELETE CASCADE);",
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='idx_captain_mission_slots_captain') CREATE INDEX idx_captain_mission_slots_captain ON captain_mission_slots(captain_id);",
+                    @"UPDATE captains SET max_concurrency = CASE WHEN runtime IN ('ApiEndpoint','Mux') THEN 4 ELSE 1 END, current_session_id = CASE WHEN state IN ('Planning','Refining','Analyzing') THEN current_mission_id ELSE NULL END;",
+                    @"INSERT INTO captain_mission_slots(mission_id,captain_id,process_id,dock_id) SELECT m.id,m.captain_id,m.process_id,m.dock_id FROM missions m JOIN captains c ON c.id=m.captain_id WHERE m.status IN ('Assigned','InProgress') AND NOT EXISTS (SELECT 1 FROM captain_mission_slots s WHERE s.mission_id=m.id);",
+                    @"UPDATE captains SET current_session_id=COALESCE((SELECT MIN(p.id) FROM planning_sessions p WHERE p.captain_id=captains.id AND p.status='Active'),(SELECT MIN(r.id) FROM objective_refinement_sessions r WHERE r.captain_id=captains.id AND r.status='Active'),current_session_id) WHERE state IN ('Planning','Refining');",
+                    @"UPDATE captains SET active_mission_count=(SELECT COUNT(*) FROM captain_mission_slots s WHERE s.captain_id=captains.id);")
 
 
             };

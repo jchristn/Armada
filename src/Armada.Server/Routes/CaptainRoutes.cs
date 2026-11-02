@@ -182,6 +182,12 @@ namespace Armada.Server.Routes
                 }
                 Captain captain = JsonSerializer.Deserialize<Captain>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Captain.");
+                captain.MaxConcurrency = captain.MaxConcurrencySpecified
+                    ? ConcurrencyClamp.CaptainLimit(captain.MaxConcurrency, _settings.Concurrency.MaxCaptainConcurrency)
+                    : CaptainConcurrencyDefaults.For(captain.Runtime, _settings.Concurrency);
+                captain.ActiveMissionCount = 0;
+                captain.ActiveMissionIds.Clear();
+                captain.CurrentSessionId = null;
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
                 EntityUpdateMerger.NormalizeCaptainRuntimeOptions(captain);
@@ -332,7 +338,8 @@ namespace Armada.Server.Routes
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = updateValidationError.Message, Data = updateValidationError };
                 }
                 await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_database, updated).ConfigureAwait(false);
-                updated = await _database.Captains.UpdateAsync(updated, updateActive: presence.Has(nameof(Captain.Active))).ConfigureAwait(false);
+                updated.MaxConcurrency = ConcurrencyClamp.CaptainLimit(updated.MaxConcurrency, _settings.Concurrency.MaxCaptainConcurrency);
+                updated = await _database.Captains.UpdateAsync(updated, updateActive: presence.Has(nameof(Captain.Active)), updateConcurrency: presence.Has(nameof(Captain.MaxConcurrency))).ConfigureAwait(false);
                 if (usageConfigurationChanged && OnUsageCaptureConfigurationChanged != null)
                     await OnUsageCaptureConfigurationChanged().ConfigureAwait(false);
                 return (object)updated;

@@ -9803,6 +9803,11 @@
           "required": false
         },
         {
+          "name": "maxConcurrency",
+          "type": "integer",
+          "required": false
+        },
+        {
           "name": "model",
           "type": "string",
           "required": false
@@ -16108,6 +16113,11 @@
           "name": "captainId",
           "type": "string",
           "required": true
+        },
+        {
+          "name": "maxConcurrency",
+          "type": "integer",
+          "required": false
         },
         {
           "name": "model",

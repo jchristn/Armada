@@ -185,6 +185,12 @@ namespace Armada.Core.Models
         /// </summary>
         public int? ProcessId { get; set; } = null;
 
+        /// <summary>Last actual output heartbeat of this mission, independent of sibling output.</summary>
+        public DateTime? LastHeartbeatUtc { get; set; } = null;
+
+        /// <summary>Stall recovery attempts for this mission, independent of siblings.</summary>
+        public int StallRecoveryAttempts { get; set; }
+
         /// <summary>
         /// Pull request URL if created.
         /// </summary>

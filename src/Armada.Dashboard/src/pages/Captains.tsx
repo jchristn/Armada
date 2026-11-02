@@ -439,6 +439,10 @@ export default function Captains() {
       render: (c) => <CaptainUsageCell captain={c} views={usage.byCaptain.get(c.id)} status={usage.status} />,
     },
     {
+      key: 'slots', label: t('Missions'), headerTitle: t('Running missions / captain limit'), cellClassName: 'cell-nowrap',
+      render: c => `${c.activeMissionCount ?? (c.currentMissionId ? 1 : 0)} / ${c.maxConcurrency ?? 1}`,
+    },
+    {
       key: 'evaluations', label: t('Evaluations'), headerTitle: t('All evaluations of this captain'), interactive: true,
       render: (c) => <Link to={evaluationsListPath(c.id)}>{t('Evaluations')}</Link>,
     },
@@ -558,6 +562,13 @@ export default function Captains() {
                 </select>
               </label>
             </div>
+            <label>
+              {t('Maximum concurrent missions')}
+              <input aria-label={t('Maximum concurrent missions')} type="number" min="1" max="256" step="1" value={form.maxConcurrency ?? ''}
+                placeholder={form.runtime === 'ApiEndpoint' || form.runtime === 'Mux' ? '4' : '1'}
+                onChange={event => setForm({ ...form, maxConcurrency: event.target.value })}
+                title={t('Most missions this captain can run at once. Blank uses the server default on create. Lowering the limit leaves running missions alone. Planning sessions remain exclusive.')} />
+            </label>
             <label className="checkbox-row captain-active-field">
               <input type="checkbox" checked={form.active ?? true} onChange={e => setForm({ ...form, active: e.target.checked })} />
               <span>{t('Active')}</span>

@@ -94,6 +94,21 @@ namespace Armada.Core.Services
                 : await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
             if (captain == null) throw new KeyNotFoundException("Captain not found: " + captainId);
 
+            if (captain.ActiveMissionCount > 0)
+            {
+                await _Database.Captains.UpdateStateAsync(captainId, CaptainStateEnum.Stopping, token).ConfigureAwait(false);
+                List<Mission> held = (await _Database.Missions.EnumerateByCaptainAsync(captainId, token).ConfigureAwait(false))
+                    .Where(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress || m.Status == MissionStatusEnum.Verifying).ToList();
+                foreach (Mission mission in held)
+                    await RecallAssignmentAsync(captain.ForMission(mission), tenantId, stopContext, token).ConfigureAwait(false);
+                return;
+            }
+            await RecallAssignmentAsync(captain, tenantId, stopContext, token).ConfigureAwait(false);
+        }
+
+        private async Task RecallAssignmentAsync(Captain captain, string? tenantId, OperatorStopContext stopContext, CancellationToken token)
+        {
+            string captainId = captain.Id;
             _Logging.Info(_Header + "recalling captain " + captainId);
 
             // Stop agent process
@@ -164,6 +179,8 @@ namespace Armada.Core.Services
 
             // Clear captain assignment
             captain.State = CaptainStateEnum.Idle;
+            if (!String.IsNullOrEmpty(captain.CurrentMissionId))
+                await _Database.Captains.TryReleaseFromMissionAsync(captain.Id, captain.CurrentMissionId, token).ConfigureAwait(false);
             captain.CurrentMissionId = null;
             captain.CurrentDockId = null;
             captain.ProcessId = null;
@@ -180,7 +197,9 @@ namespace Armada.Core.Services
             {
                 if (!DockHosts.Harbors.IsConnected(waiting.Value)) continue;
                 if (!_AwaitingHarbor.TryRemove(waiting.Key, out _)) continue;
-                Captain? captain = await _Database.Captains.ReadAsync(waiting.Key, token).ConfigureAwait(false);
+                Mission? waitingMission = await _Database.Missions.ReadAsync(waiting.Key, token).ConfigureAwait(false);
+                Captain? owner = waitingMission?.CaptainId == null ? null : await _Database.Captains.ReadAsync(waitingMission.CaptainId, token).ConfigureAwait(false);
+                Captain? captain = owner == null || waitingMission == null ? null : owner.ForMission(waitingMission);
                 // Only a captain still holding its mission with no process is waiting; anything else has moved on.
                 if (captain == null || captain.State != CaptainStateEnum.Working || captain.ProcessId.HasValue || String.IsNullOrEmpty(captain.CurrentMissionId)) continue;
                 if (captain.RecoveryAttempts >= _Settings.MaxRecoveryAttempts) continue;
@@ -197,8 +216,8 @@ namespace Armada.Core.Services
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             // Recovery starts another process; disabling a captain must not launch it or change its held work.
             Captain currentEligibility = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false) ?? captain;
-            if (!currentEligibility.Active) return;
-            _AwaitingHarbor.TryRemove(captain.Id, out _);
+            if (!currentEligibility.Active || currentEligibility.State == CaptainStateEnum.Stopping) return;
+            _AwaitingHarbor.TryRemove(captain.CurrentMissionId ?? captain.Id, out _);
 
             try
             {
@@ -209,6 +228,12 @@ namespace Armada.Core.Services
                 Mission? mission = !String.IsNullOrEmpty(captain.CurrentMissionId)
                     ? await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false)
                     : null;
+
+                if (mission != null)
+                {
+                    mission.StallRecoveryAttempts = captain.RecoveryAttempts;
+                    await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                }
 
                 Dock? dock = !String.IsNullOrEmpty(captain.CurrentDockId)
                     ? await _Database.Docks.ReadAsync(captain.CurrentDockId, token).ConfigureAwait(false)
@@ -366,7 +391,7 @@ namespace Armada.Core.Services
                         // this attempt and wait: the captain stays Working with no process, and the next stall check
                         // retries recovery, so a Harbor that reconnects within the remaining attempts gets the mission back.
                         _Logging.Warn(_Header + "recovery relaunch for captain " + captain.Id + " refused (attempt " + captain.RecoveryAttempts + "/" + _Settings.MaxRecoveryAttempts + "); retrying when the Harbor reconnects, or at the next stall check: " + refused.Message);
-                        if (!String.IsNullOrEmpty(dock.HarborId)) _AwaitingHarbor[captain.Id] = dock.HarborId!;
+                        if (!String.IsNullOrEmpty(dock.HarborId)) _AwaitingHarbor[mission.Id] = dock.HarborId!;
                         captain.ProcessId = null;
                         captain.LastHeartbeatUtc = DateTime.UtcNow;
                         captain.LastUpdateUtc = DateTime.UtcNow;
@@ -407,6 +432,14 @@ namespace Armada.Core.Services
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
 
+            if (!String.IsNullOrEmpty(captain.CurrentMissionId))
+            {
+                await _Database.Captains.TryReleaseFromMissionAsync(captain.Id, captain.CurrentMissionId, token).ConfigureAwait(false);
+                Captain? current = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
+                if (current != null) { captain.State = current.State; captain.ActiveMissionCount = current.ActiveMissionCount; captain.ActiveMissionIds = current.ActiveMissionIds; }
+                return;
+            }
+            captain.CurrentSessionId = null;
             captain.State = CaptainStateEnum.Idle;
             captain.CurrentMissionId = null;
             captain.CurrentDockId = null;
@@ -469,6 +502,15 @@ namespace Armada.Core.Services
                 captain.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
                 return UsageQuotaOutcomeEnum.Extended;
+            }
+
+            if (captain.State == CaptainStateEnum.Working && captain.ActiveMissionCount > 0)
+            {
+                captain.State = CaptainStateEnum.Quarantined;
+                captain.QuarantineUntilUtc = until;
+                captain.QuarantineReason = reason;
+                await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                return UsageQuotaOutcomeEnum.Held;
             }
 
             if (captain.State != CaptainStateEnum.Idle || !String.IsNullOrEmpty(captain.CurrentMissionId))

@@ -120,6 +120,10 @@ namespace Armada.Server
 
             if (!presence.Has(nameof(Captain.Name)) || String.IsNullOrEmpty(incoming.Name)) incoming.Name = existing.Name;
             if (!presence.Has(nameof(Captain.Active))) incoming.Active = existing.Active;
+            if (!presence.Has(nameof(Captain.MaxConcurrency))) incoming.MaxConcurrency = existing.MaxConcurrency;
+            incoming.ActiveMissionCount = existing.ActiveMissionCount;
+            incoming.ActiveMissionIds = existing.ActiveMissionIds;
+            incoming.CurrentSessionId = existing.CurrentSessionId;
             if (!presence.Has(nameof(Captain.Runtime))) incoming.Runtime = existing.Runtime;
             if (!presence.Has(nameof(Captain.Model))) incoming.Model = existing.Model;
             if (!presence.Has(nameof(Captain.ModelEndpointId))) incoming.ModelEndpointId = existing.ModelEndpointId;

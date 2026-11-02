@@ -96,6 +96,9 @@ namespace Armada.Core.Enums
         VoyageMissionLimit,
 
         /// <summary>The deployment has no free running mission slot.</summary>
-        GlobalMissionLimit
+        GlobalMissionLimit,
+
+        /// <summary>Eligible captains have no free mission slots.</summary>
+        CaptainConcurrencyLimit
     }
 }

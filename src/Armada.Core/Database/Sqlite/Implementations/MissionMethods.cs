@@ -204,7 +204,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
 
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "UPDATE missions SET last_update_utc = @last_update_utc WHERE id = @id;";
+                    cmd.CommandText = "UPDATE missions SET last_heartbeat_utc = @last_update_utc, last_update_utc = @last_update_utc WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(lastUpdateUtc));
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -910,7 +910,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                             status = @status,
                             mode = @mode,
                             priority = @priority,
-                            redispatch_attempts = @redispatch_attempts, output_repair_attempts = @output_repair_attempts, noop_redispatch_attempts = @noop_redispatch_attempts, is_rescue = @is_rescue, is_evaluation = @is_evaluation, worker_envelope_json = @worker_envelope_json, rework_round = @rework_round, rework_escalated = @rework_escalated,
+                            stall_recovery_attempts = @stall_recovery_attempts, redispatch_attempts = @redispatch_attempts, output_repair_attempts = @output_repair_attempts, noop_redispatch_attempts = @noop_redispatch_attempts, is_rescue = @is_rescue, is_evaluation = @is_evaluation, worker_envelope_json = @worker_envelope_json, rework_round = @rework_round, rework_escalated = @rework_escalated,
                             tier = @tier,
                             parent_mission_id = @parent_mission_id,
                             branch_name = @branch_name,
@@ -951,6 +951,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@status", mission.Status.ToString());
                     cmd.Parameters.AddWithValue("@mode", mission.Mode.ToString());
                     cmd.Parameters.AddWithValue("@priority", mission.Priority);
+                    cmd.Parameters.AddWithValue("@stall_recovery_attempts", mission.StallRecoveryAttempts);
                     cmd.Parameters.AddWithValue("@redispatch_attempts", mission.RedispatchAttempts);
                     cmd.Parameters.AddWithValue("@output_repair_attempts", mission.OutputRepairAttempts);
                     cmd.Parameters.AddWithValue("@noop_redispatch_attempts", mission.NoOpRedispatchAttempts);
@@ -1021,8 +1022,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
             using (SqliteCommand cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
-                cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description, status, mode, priority, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, worker_envelope_json, rework_round, rework_escalated, tier, parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, last_blackbox_entry_id, start_commit, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, created_utc, started_utc, completed_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description, @status, @mode, @priority, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @worker_envelope_json, @rework_round, @rework_escalated, @tier, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @last_blackbox_entry_id, @start_commit, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
+                cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description, status, mode, priority, stall_recovery_attempts, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, worker_envelope_json, rework_round, rework_escalated, tier, parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, last_blackbox_entry_id, start_commit, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, created_utc, started_utc, completed_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description, @status, @mode, @priority, @stall_recovery_attempts, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @worker_envelope_json, @rework_round, @rework_escalated, @tier, @parent_mission_id, @branch_name, @dock_id, @process_id, @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @last_blackbox_entry_id, @start_commit, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
                 cmd.Parameters.AddWithValue("@id", mission.Id);
                 cmd.Parameters.AddWithValue("@tenant_id", (object?)mission.TenantId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@user_id", (object?)mission.UserId ?? DBNull.Value);
@@ -1036,7 +1037,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 cmd.Parameters.AddWithValue("@status", mission.Status.ToString());
                 cmd.Parameters.AddWithValue("@mode", mission.Mode.ToString());
                 cmd.Parameters.AddWithValue("@priority", mission.Priority);
-                cmd.Parameters.AddWithValue("@redispatch_attempts", mission.RedispatchAttempts);
+                cmd.Parameters.AddWithValue("@stall_recovery_attempts", mission.StallRecoveryAttempts);
+                    cmd.Parameters.AddWithValue("@redispatch_attempts", mission.RedispatchAttempts);
                 cmd.Parameters.AddWithValue("@output_repair_attempts", mission.OutputRepairAttempts);
                 cmd.Parameters.AddWithValue("@noop_redispatch_attempts", mission.NoOpRedispatchAttempts);
                 cmd.Parameters.AddWithValue("@is_rescue", (mission.IsRescue ? 1 : 0));

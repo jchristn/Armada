@@ -119,6 +119,7 @@ export function buildCaptainDuplicatePayload(captain: Captain): Partial<Captain>
   return {
     name: duplicateDisplayName(captain.name),
     runtime: captain.runtime,
+    maxConcurrency: captain.maxConcurrency,
     systemInstructions: captain.systemInstructions ?? null,
     model: captain.model ?? null,
     allowedPersonas: captain.allowedPersonas ?? null,

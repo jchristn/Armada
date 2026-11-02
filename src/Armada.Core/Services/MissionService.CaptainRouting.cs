@@ -205,6 +205,8 @@ namespace Armada.Core.Services
                         break;
                 }
 
+                if (captain.State == CaptainStateEnum.Working && captain.ActiveMissionCount > 0)
+                    status.Detail = captain.ActiveMissionCount + " / " + captain.MaxConcurrency + " mission slots in use";
                 blocker.Captains.Add(status);
             }
         }
@@ -220,8 +222,9 @@ namespace Armada.Core.Services
                 if (requested?.Active == false) return null;
             }
             // Only idle captains are eligible for assignment
-            List<Captain> idleCaptains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle, token).ConfigureAwait(false);
-            idleCaptains = idleCaptains.Where(c => c.Active && CaptainVisibleToMission(c, mission) &&
+            List<Captain> idleCaptains = await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false);
+            foreach (Captain candidate in idleCaptains) candidate.MaxConcurrency = ConcurrencyClamp.CaptainLimit(candidate.MaxConcurrency, _Settings.Concurrency.MaxCaptainConcurrency);
+            idleCaptains = idleCaptains.Where(c => c.HasMissionCapacity && CaptainVisibleToMission(c, mission) &&
                 (!c.QuarantineUntilUtc.HasValue || c.QuarantineUntilUtc <= DateTime.UtcNow)).ToList();
             HashSet<string> reviewAuthors = await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false);
             if (_Settings.ExcludeReviewAuthorsFromJudge)

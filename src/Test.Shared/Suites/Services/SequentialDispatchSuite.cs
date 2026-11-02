@@ -42,6 +42,53 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("captain_slots_complete_fail_recover", "One captain isolates completion, failure and recovery of its three missions", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = testDb.Driver;
+                ArmadaSettings settings = CreateSettings();
+                settings.MaxRecoveryAttempts = 2;
+                ServiceSet services = CreateServices(CreateLogging(), db, settings, new StubGitService());
+                TestFixture fixture = await SetupFixtureAsync(db, captainCount: 1, missionCount: 3);
+                Captain captain = fixture.Captains[0];
+                captain.MaxConcurrency = 3;
+                await db.Captains.UpdateAsync(captain, updateConcurrency: true);
+                foreach (Mission mission in fixture.Missions) AssertTrue(await services.Missions.TryAssignAsync(mission, fixture.Vessel));
+                List<Mission> running = await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress);
+                AssertEqual(3, running.Count);
+                AssertEqual(3, (await db.Captains.ReadAsync(captain.Id))!.ActiveMissionCount);
+                // Pass the aggregate record intentionally: completion must scope itself to the requested mission.
+                await services.Missions.HandleCompletionAsync((await db.Captains.ReadAsync(captain.Id))!, running[1].Id);
+                Captain after = (await db.Captains.ReadAsync(captain.Id))!;
+                AssertEqual(2, after.ActiveMissionCount);
+                AssertEqual(CaptainStateEnum.Working, after.State);
+                AssertEqual(MissionStatusEnum.WorkProduced, (await db.Missions.ReadAsync(running[1].Id))!.Status);
+                AssertEqual(running[0].ProcessId, (await db.Missions.ReadAsync(running[0].Id))!.ProcessId);
+                AssertEqual(running[2].ProcessId, (await db.Missions.ReadAsync(running[2].Id))!.ProcessId);
+                await services.Missions.HandleCompletionAsync(after, running[1].Id);
+                AssertEqual(2, (await db.Captains.ReadAsync(captain.Id))!.ActiveMissionCount, "duplicate completion does not release a sibling");
+                // Recover a non-primary assignment; its dock and PID belong to that mission only.
+                Mission recovery = (await db.Missions.ReadAsync(running[2].Id))!;
+                Dock dock = (await db.Docks.ReadAsync(recovery.DockId!))!;
+                Directory.CreateDirectory(dock.WorktreePath);
+                int? siblingPid = (await db.Missions.ReadAsync(running[0].Id))!.ProcessId;
+                await services.Captains.TryRecoverAsync(after.ForMission(recovery));
+                recovery = (await db.Missions.ReadAsync(recovery.Id))!;
+                AssertTrue(recovery.ProcessId != running[2].ProcessId, "recovered mission receives its own new PID");
+                AssertEqual(1, recovery.StallRecoveryAttempts);
+                AssertEqual(siblingPid, (await db.Missions.ReadAsync(running[0].Id))!.ProcessId);
+                AssertEqual(2, (await db.Captains.ReadAsync(captain.Id))!.ActiveMissionCount);
+                // A new service instance must recognize every durable slot when checking startup liveness.
+                AdmiralService admiral = new AdmiralService(CreateLogging(), db, settings, services.Captains, services.Missions,
+                    new VoyageService(CreateLogging(), db), services.Docks);
+                List<int> checkedPids = new List<int>();
+                admiral.OnIsProcessTracked = pid => { checkedPids.Add(pid); return true; };
+                await admiral.CleanupStaleCaptainsAsync();
+                AssertTrue(checkedPids.Contains(siblingPid!.Value));
+                AssertTrue(checkedPids.Contains(recovery.ProcessId!.Value));
+                AssertEqual(2, (await db.Captains.ReadAsync(captain.Id))!.ActiveMissionCount);
+            }));
+
             cases.Add(CaseAsync("concurrent_dispatch_respects_voyage_limit", "Concurrent dispatch admits exactly the configured number then reuses slots", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

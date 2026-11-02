@@ -8,6 +8,6 @@ armada_resolve_framework "$@"
 REPORT="${ARMADA_CONCURRENCY_TEST_RESULTS:-${TMPDIR:-/tmp}/armada-concurrency-results.json}"
 npm --prefix "${REPO_ROOT}/src/Armada.Dashboard" run build
 dotnet run --project "${REPO_ROOT}/src/Test.Automated" -c Release $ARMADA_DOTNET_FRAMEWORK_ARGS -- \
-  --suites E2E.Concurrency,Services.ConcurrencySettings,Services.SequentialDispatch,Services.MissionAssignmentBlocker,Services.PipelineDispatch,Services.CaptainRouting \
+  --suites E2E.CaptainConcurrency,Database.CaptainConcurrency,Services.AgentLifecycleHandler,E2E.Concurrency,Services.ConcurrencySettings,Services.SequentialDispatch,Services.MissionAssignmentBlocker,Services.PipelineDispatch,Services.CaptainRouting \
   --results "${REPORT}"
 echo "Concurrency test report: ${REPORT}"

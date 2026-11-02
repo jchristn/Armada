@@ -12,12 +12,13 @@ Captain usage management and the mobile applications shipped in v1.2.0. This pla
 - [x] Start M1 with shared bounds, `ConcurrencySettings`, runtime-specific captain default helpers, settings-file normalization, and boundary/round-trip tests.
 - [x] Vessel vertical slice: migration 117 across all providers, model/storage mapping, numeric editors in Dashboard/Mobile/TUI, REST/MCP operations, shared admission explanations and serialized check/claim. Tested with 50 simultaneous dispatch requests and a live HTTP/git/process scenario; see [test guide](docs/CONCURRENCY_TESTING.md).
 - [ ] Finish M1: model/DTO changes, new migrations 117-121 and all four database providers' atomic slot operations and mapping.
-- [ ] M2-M3: multi-mission lifecycle and race-free admission. Vessel and global admission gates are active; captain lifecycle still uses one mission per captain.
+- [x] Captain vertical slice: migration 118 and atomic slots across all providers; per-mission lifecycle, heartbeat/recovery budgets, cancellation, recall and Harbor reconnection; REST/MCP/WebSocket fields and Dashboard/Mobile/TUI capacity editors. HTTP/git/process tests exercise three missions on one captain, vacancy refill, crash/restart and lowering limits without preemption.
+- [ ] Finish M2-M3: remove legacy captain pointers in migration 121, unify admission evaluation and invariants, release captain reservations during verification, and complete the full stress matrix. Vessel/global gates and captain capacity admission are active.
 - [ ] M4-M5: hierarchy, branch ownership, wait telemetry and Grafana.
 - [ ] M6-M10: public operations and all interactive clients. The new `Concurrency` group is currently a settings-file foundation, not an editable REST/MCP settings group.
 - [ ] M11: final integration, release documentation, migration/upgrade validation, and the complete concurrency stress matrix.
 
-The new defaults do not backfill or alter existing captain or vessel behavior until their migrations and admission/lifecycle work land. The existing global `MaxConcurrentMissions` settings-file guard now clamps negative input to 1 (not unlimited) and values above 10000 to 10000.
+Migration 117 preserves existing vessel admission behavior. Migration 118 changes existing ApiEndpoint/Mux captains to concurrency 4 and CLI captains to 1; set endpoint-backed captains to 1 to retain serial operation. The existing global `MaxConcurrentMissions` settings-file guard now clamps negative input to 1 (not unlimited) and values above 10000 to 10000.
 
 ## 1. Goals
 

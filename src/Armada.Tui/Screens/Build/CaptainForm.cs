@@ -96,6 +96,7 @@ namespace Armada.Tui.Screens.Build
             Captain copy = new Captain(BuildText.DuplicateName(captain.Name), captain.Runtime);
             copy.SystemInstructions = captain.SystemInstructions;
             copy.Model = captain.Model;
+            copy.MaxConcurrency = captain.MaxConcurrency;
             copy.AllowedPersonas = captain.AllowedPersonas;
             copy.PreferredPersona = captain.PreferredPersona;
             copy.RuntimeOptionsJson = captain.RuntimeOptionsJson;
@@ -176,6 +177,8 @@ namespace Armada.Tui.Screens.Build
             cliPolicy.CanFocus = canManagePolicy;
             Armada.Tui.Approvals.CliPermissionPolicyChoice.GuardBypass(screen.Context, cliPolicy, () => canManagePolicy);
 
+            InputField concurrency = new InputField { Value = editing?.MaxConcurrency.ToString(CultureInfo.InvariantCulture) ?? "" };
+            concurrency.Validator = value => String.IsNullOrWhiteSpace(value) || (Int32.TryParse(value, out int n) && n >= 1 && n <= 256) ? null : "Enter 1 to 256, or leave blank for the default.";
             OpsCheckField active = new OpsCheckField("Active", editing?.Active ?? true);
             OpsCheckField autoApprove = new OpsCheckField("Auto-approve agent tool use (runs the CLI with its permission-bypass flag)", editing == null || CaptainRuntimeOptions.GetAutoApprove(editing));
 
@@ -232,6 +235,7 @@ namespace Armada.Tui.Screens.Build
             dialog.AddField("Inference Endpoint", endpoint);
             dialog.AddField("Reasoning effort", effort);
             dialog.AddField("Capability tier", tier, detail ? "Missions requiring a tier route to captains at or above it. Leave on Auto to classify from the model name." : null);
+            dialog.AddField("Maximum Concurrent Missions", concurrency, "CLI defaults to 1; ApiEndpoint and Mux to 4. Lowering capacity leaves running missions alone.");
             dialog.AddField("Active", active);
             dialog.AddField("Auto-approve", autoApprove);
             dialog.AddField("CLI tool permissions", cliPolicy, "How this captain handles shell commands, file edits, and fetches that need permission. Inherit: missions follow the auto-approve option when it is set, then the server default; Ask conversations use the server default (Settings > CLI Tool Permissions). A conversation can override it." + (canManagePolicy ? "" : " Only admins can change this."));
@@ -398,6 +402,7 @@ namespace Armada.Tui.Screens.Build
                 body.UsageCaptureCommand = body.UsageCaptureMode == UsageCaptureModeEnum.Custom ? usageCommand.Value : null;
                 body.Name = name.Value.Trim();
                 body.Runtime = r;
+                if (Int32.TryParse(concurrency.Value, out int maxConcurrency)) body.MaxConcurrency = maxConcurrency;
                 body.SystemInstructions = String.IsNullOrEmpty(instructions.Text) ? null : instructions.Text;
                 body.Model = String.IsNullOrWhiteSpace(model.Value) ? null : model.Value.Trim();
                 body.ModelEndpointId = r == AgentRuntimeEnum.ApiEndpoint && !String.IsNullOrEmpty(endpoint.Value) ? endpoint.Value : null;

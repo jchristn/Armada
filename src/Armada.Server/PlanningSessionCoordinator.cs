@@ -188,6 +188,7 @@ namespace Armada.Server
                 await _Database.PlanningSessions.UpdateAsync(session, token).ConfigureAwait(false);
 
                 captain.State = CaptainStateEnum.Planning;
+                captain.CurrentSessionId = session.Id;
                 captain.CurrentMissionId = null;
                 captain.CurrentDockId = dock.Id;
                 captain.ProcessId = null;
@@ -228,6 +229,7 @@ namespace Armada.Server
                     if (failedCaptain != null)
                     {
                         failedCaptain.State = CaptainStateEnum.Idle;
+                        failedCaptain.CurrentSessionId = null;
                         failedCaptain.CurrentMissionId = null;
                         failedCaptain.CurrentDockId = null;
                         failedCaptain.ProcessId = null;
@@ -737,6 +739,7 @@ namespace Armada.Server
                     }
 
                     captain.State = CaptainStateEnum.Planning;
+                captain.CurrentSessionId = session.Id;
                     captain.CurrentMissionId = null;
                     captain.CurrentDockId = recoveredSession.DockId;
                     captain.ProcessId = null;
@@ -990,6 +993,7 @@ namespace Armada.Server
                             captain.ProcessId = null;
                             if (captain.State != CaptainStateEnum.Planning)
                                 captain.State = CaptainStateEnum.Planning;
+                captain.CurrentSessionId = session.Id;
                             captain.LastHeartbeatUtc = DateTime.UtcNow;
                             captain.LastUpdateUtc = DateTime.UtcNow;
                             await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
@@ -1478,6 +1482,7 @@ namespace Armada.Server
                 if (captain != null)
                 {
                     captain.State = CaptainStateEnum.Idle;
+                    captain.CurrentSessionId = null;
                     captain.CurrentMissionId = null;
                     captain.CurrentDockId = null;
                     captain.ProcessId = null;

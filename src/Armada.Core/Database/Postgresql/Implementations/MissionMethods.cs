@@ -223,7 +223,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "UPDATE missions SET last_update_utc = @last_update_utc WHERE id = @id;";
+                    cmd.CommandText = "UPDATE missions SET last_heartbeat_utc = @last_update_utc, last_update_utc = @last_update_utc WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@last_update_utc", lastUpdateUtc);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -866,7 +866,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         reviewed_by_user_id = @reviewed_by_user_id, review_requested_utc = @review_requested_utc,
                         reviewed_utc = @reviewed_utc, review_deadline_utc = @review_deadline_utc,
                         total_runtime_ms = @total_runtime_ms,
-                        redispatch_attempts = @redispatch_attempts, output_repair_attempts = @output_repair_attempts, noop_redispatch_attempts = @noop_redispatch_attempts, is_rescue = @is_rescue, is_evaluation = @is_evaluation, worker_envelope_json = @worker_envelope_json, rework_round = @rework_round, rework_escalated = @rework_escalated, tier = @tier,
+                        stall_recovery_attempts = @stall_recovery_attempts, redispatch_attempts = @redispatch_attempts, output_repair_attempts = @output_repair_attempts, noop_redispatch_attempts = @noop_redispatch_attempts, is_rescue = @is_rescue, is_evaluation = @is_evaluation, worker_envelope_json = @worker_envelope_json, rework_round = @rework_round, rework_escalated = @rework_escalated, tier = @tier,
                         started_utc = @started_utc, completed_utc = @completed_utc,
                         last_update_utc = @last_update_utc
                         WHERE id = @id" + ExpectedStatusClause(cmd, expectedStatuses) + (expectedLastUpdateUtc.HasValue ? " AND last_update_utc = @expected_last_update_utc" : "") + ";";
@@ -936,7 +936,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@reviewed_utc", mission.ReviewedUtc.HasValue ? (object)mission.ReviewedUtc.Value : DBNull.Value);
             cmd.Parameters.AddWithValue("@review_deadline_utc", mission.ReviewDeadlineUtc.HasValue ? (object)mission.ReviewDeadlineUtc.Value : DBNull.Value);
             cmd.Parameters.AddWithValue("@total_runtime_ms", mission.TotalRuntimeMs.HasValue ? (object)mission.TotalRuntimeMs.Value : DBNull.Value);
-            cmd.Parameters.AddWithValue("@redispatch_attempts", mission.RedispatchAttempts);
+            cmd.Parameters.AddWithValue("@stall_recovery_attempts", mission.StallRecoveryAttempts);
+                    cmd.Parameters.AddWithValue("@redispatch_attempts", mission.RedispatchAttempts);
             cmd.Parameters.AddWithValue("@output_repair_attempts", mission.OutputRepairAttempts);
             cmd.Parameters.AddWithValue("@noop_redispatch_attempts", mission.NoOpRedispatchAttempts);
             cmd.Parameters.AddWithValue("@is_rescue", mission.IsRescue);
@@ -1046,6 +1047,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             mission.CompletedUtc = NullableDateTime(reader["completed_utc"]);
             try { mission.TotalRuntimeMs = NullableLong(reader["total_runtime_ms"]); } catch { }
             mission.LastUpdateUtc = DateTime.SpecifyKind((DateTime)reader["last_update_utc"], DateTimeKind.Utc);
+            mission.StallRecoveryAttempts = Convert.ToInt32(reader["stall_recovery_attempts"]);
+            try { mission.LastHeartbeatUtc = reader["last_heartbeat_utc"] == DBNull.Value ? null : DateTime.SpecifyKind((DateTime)reader["last_heartbeat_utc"], DateTimeKind.Utc); } catch (IndexOutOfRangeException) { }
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
             try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }

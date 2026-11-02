@@ -1,5 +1,9 @@
 # Armada REST API Reference
 
+## v1.3.0 development: captain capacity
+
+Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The legacy singular mission/dock fields remain until migration 121; use active mission IDs to find each mission’s dock and process. See [testing](CONCURRENCY_TESTING.md).
+
 **Version:** 1.3.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
@@ -1278,7 +1282,7 @@ Each result has a `Status` of `Pass`, `Warn`, or `Fail`. Stalled-captain and fai
 
 Returns current server settings including ports, agent configuration, system paths, and remote-control tunnel configuration. `LandingMode` is the global (default) landing mode, `MergeAndPush` unless changed (see [MERGING.md](MERGING.md#landing-mode)). `RemoteControl.Password` is always returned as `********`, and `RemoteControl.EnrollmentToken` is returned as `********` when set.
 
-**v1.3.0 development:** the new `Concurrency` group is currently settings-file configuration only. It is not part of this response or the editable `PUT /api/v1/settings` body yet. Its normalized defaults prepare the later captain-slot and vessel/hierarchy admission milestones; they do not activate those gates. See [implementation progress](../CONCURRENCY_IMPROVEMENTS.md#implementation-progress-v130).
+**v1.3.0 development:** the new `Concurrency` group is currently settings-file configuration only. It is not part of this response or the editable `PUT /api/v1/settings` body yet. Its defaults and captain ceiling apply to creation/admission; vessel and captain gates are active. Hierarchy settings prepare a later milestone. See [implementation progress](../CONCURRENCY_IMPROVEMENTS.md#implementation-progress-v130).
 
 **Permission:** AdminOnly
 

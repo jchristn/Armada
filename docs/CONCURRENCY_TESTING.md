@@ -38,4 +38,15 @@ New vessel defaults can be set in the `Concurrency` settings-file group. Explici
 
 ## Current scope
 
-This is a usable vessel admission slice of the v1.3.0 plan. A single captain still owns one running mission. Multi-slot captains, hierarchy/branch strategies, persisted wait intervals and Grafana changes remain in the plan. SQLite has live migration and end-to-end coverage; the other providers' migration/query implementations compile and pass migration hygiene checks, but have not been exercised against database servers in this increment.
+This is a usable vessel and multi-mission captain slice of the v1.3.0 plan. Hierarchy/branch strategies, persisted wait intervals, unified admission/invariants, final legacy-field removal and Grafana changes remain in the plan. SQLite has live migration and end-to-end coverage; the other providers' migration/query implementations compile and pass migration hygiene checks, but have not been exercised against database servers in this increment.
+
+## Multi-mission captain contract
+
+Captain create/update/read accepts `maxConcurrency` (1..256, bounded by the server ceiling). Omitted values default to 1 for CLI runtimes and 4 for ApiEndpoint/Mux; configured defaults apply on server creation. Reads expose server-owned `activeMissionCount`, `activeMissionIds` and `currentSessionId`. Lowering capacity does not stop existing missions. Planning/refinement/analysis remain exclusive. A mission owns a durable slot keyed by mission ID; claiming also assigns the mission atomically. Releasing one slot is idempotent and preserves siblings, including during quarantine. Migration 118 adds slot storage and backfills active assignments. The singular legacy pointer fields remain compatibility surfaces until the final removal migration.
+
+
+## Test one captain end to end
+
+The same script runs `E2E.CaptainConcurrency`: one captain with capacity 3 runs three real processes in three docks while a fourth mission waits. It cancels a non-primary mission, checks duplicate cancellation, refills the vacancy, crashes another process and restarts its mission while its siblings remain alive. HTTP updates lower and restore capacity and verify that partial edits cannot spoof ownership or reset capacity. Stopping the captain recalls every assignment. `Services.AgentLifecycleHandler` additionally verifies three Harbor processes reconnect to one captain with separate output streams and durable process identities.
+
+To exercise this with your own runtime, build/run the branch, open a vessel and set both vessel limits to Unlimited (or sufficient explicit values). Open a captain and set **Maximum concurrent missions** to 3, then dispatch four independent audit missions targeting that captain. The captain shows three active mission links and the fourth waits with `CaptainConcurrencyLimit`. Cancel one from its mission page and observe the fourth start on the next scheduler tick. Keep your actual endpoint/runtime/global caps high enough to permit three; a lower cap still takes precedence. Use an isolated test repository for coding missions. Planning/refinement cannot reserve the busy captain. Verification currently retains a captain reservation until checks settle.

@@ -219,6 +219,37 @@ namespace Armada.Core.Models
         /// </summary>
         public CaptainStateEnum State { get; set; } = CaptainStateEnum.Idle;
 
+        /// <summary>Maximum simultaneous missions; CLI defaults to one and endpoint/Mux to four.</summary>
+        public int MaxConcurrency { get => _MaxConcurrency ?? CaptainConcurrencyDefaults.For(Runtime); set => _MaxConcurrency = ConcurrencyClamp.CaptainLimit(value); }
+        private int? _MaxConcurrency;
+        /// <summary>Whether the caller supplied a concurrency limit.</summary>
+        [JsonIgnore]
+        public bool MaxConcurrencySpecified => _MaxConcurrency.HasValue;
+        /// <summary>Server-owned number of durable mission slots.</summary>
+        public int ActiveMissionCount { get; set; }
+        /// <summary>Server-owned mission identifiers occupying this captain.</summary>
+        [CollectionBound(Constants.CaptainConcurrencyCeiling, Reason = "Bounded by the captain concurrency ceiling; ActiveMissionCount carries the total")]
+        public List<string> ActiveMissionIds { get; set; } = new List<string>();
+        /// <summary>Exclusive planning, refinement or analysis session, when any.</summary>
+        public string? CurrentSessionId { get; set; }
+        /// <summary>Whether another mission can be admitted without interrupting existing work.</summary>
+        [JsonIgnore]
+        public bool HasMissionCapacity => Active && CurrentSessionId == null && ActiveMissionCount < MaxConcurrency
+            && (State == CaptainStateEnum.Idle || (State == CaptainStateEnum.Working && ActiveMissionCount > 0));
+        /// <summary>Check durable ownership, retaining legacy assignments during the staged migration.</summary>
+        public bool HoldsMission(string id) => ActiveMissionIds.Contains(id) || CurrentMissionId == id;
+        /// <summary>Make a transient mission-scoped view; never change another mission's process/dock context.</summary>
+        public Captain ForMission(Mission mission)
+        {
+            Captain scoped = (Captain)MemberwiseClone();
+            scoped.CurrentMissionId = mission.Id;
+            scoped.CurrentDockId = mission.DockId;
+            scoped.ProcessId = mission.ProcessId;
+            scoped.RecoveryAttempts = ActiveMissionCount > 0 ? mission.StallRecoveryAttempts : RecoveryAttempts;
+            scoped.LastHeartbeatUtc = mission.LastHeartbeatUtc ?? mission.StartedUtc ?? LastHeartbeatUtc;
+            return scoped;
+        }
+
         /// <summary>Whether this captain may accept new work. Disabling leaves in-flight work running.</summary>
         public bool Active { get; set; } = true;
 

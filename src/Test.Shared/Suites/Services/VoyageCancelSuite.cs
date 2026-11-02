@@ -100,6 +100,26 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("cancel_nonprimary_slot_preserves_sibling", "Voyage cancellation releases only its own non-primary captain slot", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = fixture.Driver;
+                Captain owner = await db.Captains.CreateAsync(new Captain("shared") { MaxConcurrency = 3 });
+                Voyage firstVoyage = await db.Voyages.CreateAsync(new Voyage("first") { Status = VoyageStatusEnum.InProgress });
+                Voyage secondVoyage = await db.Voyages.CreateAsync(new Voyage("second") { Status = VoyageStatusEnum.InProgress });
+                Mission first = await CreateMissionAsync(db, firstVoyage.Id, MissionStatusEnum.Pending, null);
+                Mission second = await CreateMissionAsync(db, secondVoyage.Id, MissionStatusEnum.Pending, null);
+                AssertTrue(await db.Captains.TryClaimAsync(owner.Id, first.Id, null));
+                AssertTrue(await db.Captains.TryClaimAsync(owner.Id, second.Id, null));
+                await CreateDispatcher(db).CancelVoyageAsync(secondVoyage.Id);
+                Captain after = (await db.Captains.ReadAsync(owner.Id))!;
+                AssertEqual(1, after.ActiveMissionCount);
+                AssertTrue(after.HoldsMission(first.Id));
+                AssertFalse(after.ActiveMissionIds.Contains(second.Id));
+                AssertEqual(CaptainStateEnum.Working, after.State);
+                AssertEqual(MissionStatusEnum.Assigned, (await db.Missions.ReadAsync(first.Id))!.Status);
+            }));
+
             cases.Add(CaseAsync("cancel_finished_voyage_is_noop", "Cancelling a finished voyage changes nothing", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))

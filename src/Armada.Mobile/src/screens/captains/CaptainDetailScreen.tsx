@@ -186,6 +186,8 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
           ) : null}
 
           <Section title={t('Activity')}>
+            <InfoRow label={t('Running missions')} value={`${captain.activeMissionCount ?? (captain.currentMissionId ? 1 : 0)} / ${captain.maxConcurrency ?? 1}`} />
+            {(captain.activeMissionIds ?? []).map(id => <ListRow key={id} title={id} onPress={() => router.push(`/missions/${encodeURIComponent(id)}` as Href)} />)}
             {captain.currentMissionId ? (
               <ListRow title={t('Current Mission')} subtitle={captain.currentMissionId} onPress={() => router.push(`/missions/${captain.currentMissionId}` as Href)} testID="captain-current-mission" />
             ) : <InfoRow label={t('Current Mission')} value={null} />}

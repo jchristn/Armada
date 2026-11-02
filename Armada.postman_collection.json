@@ -4534,7 +4534,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"claude-sonnet-4-20250514\",\n  \"SystemInstructions\": \"You are a testing specialist. Always run tests before committing.\"\n}"
+                            "raw": "{\n  \"Name\": \"captain-1\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"claude-sonnet-4-20250514\",\n  \"SystemInstructions\": \"You are a testing specialist. Always run tests before committing.\",\n  \"maxConcurrency\": 1\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/captains",
@@ -4796,7 +4796,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"claude-sonnet-4-20250514\",\n  \"SystemInstructions\": \"Focus on code quality and always run linting before commits.\"\n}"
+                            "raw": "{\n  \"Name\": \"Updated Captain Name\",\n  \"Runtime\": \"ClaudeCode\",\n  \"Model\": \"claude-sonnet-4-20250514\",\n  \"SystemInstructions\": \"Focus on code quality and always run linting before commits.\",\n  \"maxConcurrency\": 1\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/captains/{{captainId}}",
@@ -5017,7 +5017,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Name\": \"demo-captain\",\n  \"Runtime\": \"ClaudeCode\"\n}"
+                            "raw": "{\n  \"Name\": \"demo-captain\",\n  \"Runtime\": \"ClaudeCode\",\n  \"maxConcurrency\": 1\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/captains",

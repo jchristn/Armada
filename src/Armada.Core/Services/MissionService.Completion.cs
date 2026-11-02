@@ -395,6 +395,7 @@ namespace Armada.Core.Services
                 mission = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
             }
             if (mission == null) return;
+            captain = captain.ForMission(mission);
             if (expectedVersion.HasValue && (mission.LastUpdateUtc != expectedVersion.Value
                 || mission.ProcessId.HasValue || (mission.Status != MissionStatusEnum.InProgress && mission.Status != MissionStatusEnum.Testing)))
             {

@@ -144,6 +144,7 @@ export const ASSIGNMENT_BLOCKER_TITLES: Record<MissionAssignmentBlockerReason, s
   VesselVoyageLimit: 'Vessel voyage limit',
   VoyageMissionLimit: 'Voyage mission limit',
   GlobalMissionLimit: 'Global mission limit',
+  CaptainConcurrencyLimit: 'Captain mission limit',
   VesselConcurrencyLimit: 'Vessel runs one mission at a time',
   NoCaptains: 'No captains',
   NoIdleCaptain: 'Waiting for a captain',

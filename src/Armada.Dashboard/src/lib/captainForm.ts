@@ -18,6 +18,7 @@ export type CaptainFormState = {
   allowedPersonas?: string;
   preferredPersona?: string;
   active?: boolean;
+  maxConcurrency?: string;
   autoApprove: boolean;
   /** CLI tool permission policy; null inherits. Saved through its own endpoint on edit. */
   cliPermissionPolicy: CliPermissionPolicy | null;
@@ -86,6 +87,7 @@ export function captainFormFromCaptain(c: Captain, options: { withEndpoint?: boo
   const form: CaptainFormState = {
     name: c.name,
     active: c.active ?? true,
+    maxConcurrency: String(c.maxConcurrency ?? (c.runtime === 'ApiEndpoint' || c.runtime === 'Mux' ? 4 : 1)),
     runtime: c.runtime || options.defaultRuntime || '',
     systemInstructions: c.systemInstructions ?? '',
     model: c.model ?? '',
@@ -138,6 +140,8 @@ export function buildCaptainPayload(form: CaptainFormState): Record<string, unkn
   if ('preferredPersona' in form) payload.preferredPersona = form.preferredPersona?.trim() ? form.preferredPersona.trim() : null;
   payload.runtimeOptionsJson = applyAutoApprove(buildMuxRuntimeOptionsJson(form.runtime, form), form.autoApprove || !supportsAutoApproveSwitch(form.runtime));
   delete payload.autoApprove;
+  if (form.maxConcurrency?.trim()) payload.maxConcurrency = Math.min(256, Math.max(1, Math.trunc(Number(form.maxConcurrency) || 1)));
+  else delete payload.maxConcurrency;
   delete payload.muxConfigDirectory;
   delete payload.muxEndpoint;
   delete payload.muxBaseUrl;

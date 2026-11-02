@@ -19,6 +19,9 @@ namespace Armada.Server
         /// <summary>Active eligibility (presence only).</summary>
         public bool? Active { get => null; set => Mark(nameof(Active)); }
 
+        /// <summary>Mission capacity (presence only).</summary>
+        public int? MaxConcurrency { get => null; set => Mark(nameof(MaxConcurrency)); }
+
         /// <summary>Captain name (presence only).</summary>
         public string? Name { get => null; set => Mark(nameof(Name)); }
 

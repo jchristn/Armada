@@ -154,6 +154,7 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
         hint={t('Missions requiring a tier route to captains at or above it. Leave on Auto to classify from the model name.')}
         testID="captain-form-tier"
       />
+      <TextField label={t('Maximum concurrent missions')} value={form.maxConcurrency ?? ''} onChangeText={maxConcurrency => patch({ maxConcurrency })} keyboardType="number-pad" placeholder={form.runtime === 'ApiEndpoint' || form.runtime === 'Mux' ? '4' : '1'} hint={t('Most missions this captain can run at once. Blank uses the server default on create. Planning sessions remain exclusive.')} testID="captain-form-concurrency" />
       <SwitchField label={t('Active')} value={form.active ?? true} onChange={(v) => patch({ active: v })} testID="captain-form-active" />
       {supportsAutoApproveSwitch(form.runtime) ? (
         <SwitchField

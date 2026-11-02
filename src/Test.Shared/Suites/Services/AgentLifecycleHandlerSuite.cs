@@ -1007,6 +1007,48 @@ namespace Test.Shared.Suites.Services
                 }));
             }
 
+            cases.Add(CaseAsync("one_captain_restores_three_harbor_assignments", "A restarted captain reattaches all three Harbor missions and keeps their process/output ownership separate", TestTags.Reliability, async () =>
+            {
+                using TestDatabase db = await TestDatabaseHelper.CreateDatabaseAsync();
+                AgentLifecycleHandler handler = CreateHandler(db.Driver, out ArmadaSettings settings);
+                List<HarborMissionSeed> seeds = new List<HarborMissionSeed>();
+                for (int i = 0; i < 3; i++) seeds.Add(await SeedHarborMissionAsync(db.Driver, settings, AgentRuntimeEnum.ApiEndpoint, "_slot" + i));
+                Captain owner = seeds[0].Captain;
+                owner.MaxConcurrency = 3;
+                await db.Driver.Captains.UpdateAsync(owner, updateConcurrency: true);
+                foreach (HarborMissionSeed seed in seeds)
+                {
+                    seed.Mission.CaptainId = owner.Id;
+                    seed.Job.CaptainId = owner.Id;
+                    await db.Driver.Missions.UpdateAsync(seed.Mission);
+                    await db.Driver.HarborJobs.UpdateAsync(seed.Job);
+                }
+                await db.Driver.Captains.ReconcileMissionSlotsAsync();
+                HarborConnectionManager manager = new HarborConnectionManager(new HarborService(db.Driver, CreateLogging()), CreateLogging(), null);
+                handler.SetHarborConnections(manager);
+                AssertEqual(3, await handler.RestoreHarborMissionsAsync());
+                AssertEqual(0, await handler.RestoreHarborMissionsAsync(), "repeat restore is idempotent");
+                List<int> pids = new List<int>();
+                for (int i = 0; i < seeds.Count; i++)
+                {
+                    Mission mission = (await db.Driver.Missions.ReadAsync(seeds[i].Mission.Id))!;
+                    pids.Add(mission.ProcessId!.Value);
+                    AssertEqual(mission.ProcessId, await db.Driver.Captains.ReadMissionProcessAsync(owner.Id, mission.Id));
+                    await manager.OnMessageAsync(seeds[i].Dock.HarborId!, new Armada.Core.Harbor.HarborOutput { JobId = seeds[i].Job.JobId, Data = "only-slot-" + i });
+                    string output = handler.GetAndClearMissionOutput(mission.Id) ?? "";
+                    AssertContains("only-slot-" + i, output);
+                    foreach (int other in Enumerable.Range(0, 3).Where(n => n != i)) AssertFalse(output.Contains("only-slot-" + other));
+                }
+                AssertEqual(3, pids.Distinct().Count());
+                handler.DetachHarborMissions();
+                AgentLifecycleHandler next = CreateHandler(db.Driver, out _);
+                HarborConnectionManager nextManager = new HarborConnectionManager(new HarborService(db.Driver, CreateLogging()), CreateLogging(), null);
+                next.SetHarborConnections(nextManager);
+                AssertEqual(3, await next.RestoreHarborMissionsAsync(), "a fresh handler restores every slot again");
+                AssertEqual(3, (await db.Driver.Captains.ReadAsync(owner.Id))!.ActiveMissionCount);
+                next.DetachHarborMissions();
+            }));
+
             cases.Add(CaseAsync("unconfirmed_stop_is_restored_until_owned_exit", "Restart retains an unconfirmed stop and intentional exit does not trigger mission completion", TestTags.Reliability, async () =>
             {
                 using TestDatabase db = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);

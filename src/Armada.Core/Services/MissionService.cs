@@ -368,7 +368,8 @@ namespace Armada.Core.Services
                 return blocker;
             }
 
-            List<Captain> idleCaptains = allCaptains.Where(c => c.Active && c.State == CaptainStateEnum.Idle).ToList();
+            foreach (Captain candidate in allCaptains) candidate.MaxConcurrency = ConcurrencyClamp.CaptainLimit(candidate.MaxConcurrency, _Settings.Concurrency.MaxCaptainConcurrency);
+            List<Captain> idleCaptains = allCaptains.Where(c => c.HasMissionCapacity).ToList();
             if (idleCaptains.Count > 0)
             {
                 bool eligible = await IsAnyCaptainEligibleAsync(idleCaptains, mission, token).ConfigureAwait(false);
@@ -401,7 +402,10 @@ namespace Armada.Core.Services
                 return blocker;
             }
 
-            blocker.Reason = MissionAssignmentBlockerReasonEnum.NoIdleCaptain;
+            blocker.Reason = allCaptains.Any(c => c.State == CaptainStateEnum.Working && c.ActiveMissionCount > 0)
+                ? MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit : MissionAssignmentBlockerReasonEnum.NoIdleCaptain;
+            if (blocker.Reason == MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit)
+                blocker.SetBlockingMissions(allCaptains.SelectMany(c => c.ActiveMissionIds));
             await DescribeCaptainsAsync(blocker, allCaptains, mission, token).ConfigureAwait(false);
             List<DateTime> quarantineEnds = allCaptains
                 .Where(c => c.State == CaptainStateEnum.Quarantined && c.QuarantineUntilUtc.HasValue)
@@ -663,7 +667,7 @@ namespace Armada.Core.Services
             // Claim the captain before any slow work. The claim is atomic (only an Idle captain is taken), so a
             // concurrent dispatcher can never take it in the gap, and from here on the captain names this mission,
             // which keeps orphan recovery from reverting the assignment while its dock is being provisioned.
-            bool claimed = await _Database.Captains.TryClaimAsync(captain.Id, mission.Id, null, token).ConfigureAwait(false);
+            bool claimed = await _Database.Captains.TryClaimAsync(captain.Id, mission.Id, null, token, _Settings.Concurrency.MaxCaptainConcurrency).ConfigureAwait(false);
             if (!claimed)
             {
                 _Logging.Info(_Header + "captain " + captain.Id + " was claimed by another mission before " + mission.Id + " could take it; retrying next cycle");
@@ -674,7 +678,7 @@ namespace Armada.Core.Services
             mission.CaptainId = captain.Id;
             mission.Status = MissionStatusEnum.Assigned;
             mission.LastUpdateUtc = DateTime.UtcNow;
-            bool assignmentRecorded = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Pending }, token).ConfigureAwait(false);
+            bool assignmentRecorded = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, token).ConfigureAwait(false);
             if (!assignmentRecorded)
             {
                 // Someone else moved the mission (cancelled, or assigned by another caller) after it was read.
@@ -1105,7 +1109,7 @@ namespace Armada.Core.Services
             bool anyEndpoint = idleCaptains.Any(c => !String.IsNullOrEmpty(c.ModelEndpointId));
             if (runtimeLimits.Count == 0 && !anyEndpoint) return idleCaptains;
 
-            List<Captain> working = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Working, token).ConfigureAwait(false);
+            List<Captain> working = (await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false)).Where(c => c.ActiveMissionCount > 0 || c.State == CaptainStateEnum.Working).ToList();
             Dictionary<string, ModelEndpoint?> endpoints = new Dictionary<string, ModelEndpoint?>(StringComparer.Ordinal);
             async Task<ModelEndpoint?> EndpointOf(Captain captain)
             {
@@ -1126,14 +1130,14 @@ namespace Armada.Core.Services
                     ModelEndpoint? endpoint = await EndpointOf(busy).ConfigureAwait(false);
                     if (endpoint == null) continue;
                     string key = EndpointCapacityKey(endpoint);
-                    workingByEndpoint[key] = (workingByEndpoint.TryGetValue(key, out int count) ? count : 0) + 1;
+                    workingByEndpoint[key] = (workingByEndpoint.TryGetValue(key, out int count) ? count : 0) + Math.Max(1, busy.ActiveMissionCount);
                 }
             }
 
             List<Captain> admitted = new List<Captain>();
             foreach (Captain candidate in idleCaptains)
             {
-                if (runtimeLimits.TryGetValue(candidate.Runtime, out int runtimeLimit) && working.Count(w => w.Runtime == candidate.Runtime) >= runtimeLimit)
+                if (runtimeLimits.TryGetValue(candidate.Runtime, out int runtimeLimit) && working.Where(w => w.Runtime == candidate.Runtime).Sum(w => Math.Max(1, w.ActiveMissionCount)) >= runtimeLimit)
                 {
                     _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": " + candidate.Runtime + " is at its MaxConcurrent of " + runtimeLimit);
                     continue;

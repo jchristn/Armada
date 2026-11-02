@@ -249,6 +249,10 @@ export type VoyageStatus = 'Open' | 'InProgress' | 'Complete' | 'Failed' | 'Canc
 export type CaptainState = 'Idle' | 'Working' | 'Planning' | 'Refining' | 'Stalled' | 'Stopping' | 'Quarantined' | 'Analyzing';
 
 export interface Captain {
+  maxConcurrency?: number;
+  activeMissionCount?: number;
+  activeMissionIds?: string[];
+  currentSessionId?: string | null;
   /** New-work eligibility; absent on older servers means active. */
   active?: boolean;
   id: string;
@@ -428,6 +432,7 @@ export type MissionAssignmentBlockerReason =
   | 'VesselVoyageLimit'
   | 'VoyageMissionLimit'
   | 'GlobalMissionLimit'
+  | 'CaptainConcurrencyLimit'
   | 'NoCaptains'
   | 'NoIdleCaptain'
   | 'NoEligibleCaptain';

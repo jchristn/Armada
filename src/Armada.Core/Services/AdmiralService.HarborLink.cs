@@ -438,7 +438,7 @@ namespace Armada.Core.Services
         private async Task<CaptainLinkEpisode> LoadEpisodeAsync(Captain captain, Mission? mission, int? processId, CancellationToken token)
         {
             string? missionId = mission?.Id ?? captain.CurrentMissionId;
-            if (_LinkEpisodes.TryGetValue(captain.Id, out CaptainLinkEpisode? cached))
+            if (_LinkEpisodes.TryGetValue(captain.CurrentMissionId ?? captain.Id, out CaptainLinkEpisode? cached))
             {
                 if (String.Equals(cached.MissionId, missionId, StringComparison.Ordinal) && (cached.ProcessId == processId || !cached.IsOpen))
                 {
@@ -448,7 +448,7 @@ namespace Armada.Core.Services
 
                 // The captain moved on (another mission or a relaunched process): its old episode no longer applies.
                 await CloseEpisodeAsync(captain, String.Equals(mission?.Id, cached.MissionId, StringComparison.Ordinal) ? mission : null, cached, CaptainReconcileOutcomeEnum.Superseded, null, token).ConfigureAwait(false);
-                _LinkEpisodes.TryRemove(captain.Id, out CaptainLinkEpisode? _);
+                _LinkEpisodes.TryRemove(captain.CurrentMissionId ?? captain.Id, out CaptainLinkEpisode? _);
             }
 
             CaptainLinkEpisode episode = await RehydrateEpisodeAsync(captain.Id, missionId, processId, token).ConfigureAwait(false);
@@ -458,7 +458,7 @@ namespace Armada.Core.Services
             }
 
             episode.ProcessId = processId;
-            _LinkEpisodes[captain.Id] = episode;
+            _LinkEpisodes[captain.CurrentMissionId ?? captain.Id] = episode;
             return episode;
         }
 

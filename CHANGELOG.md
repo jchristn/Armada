@@ -15,7 +15,8 @@ All notable changes to Armada are documented in this file.
 - Add persisted `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage` vessel limits, migration 117 for all four providers, and conservative 1/1 or unlimited backfills from the previous flag. New vessels default to 1/4; zero means unlimited.
 - Serialize admission check/claim across dispatch entry points, enforce the global mission cap at assignment, retain voyage slots through review/landing, and report the holding missions with `VesselVoyageLimit` and `VoyageMissionLimit` explanations.
 - Expose numeric limits in Dashboard, Mobile and TUI vessel forms, setup wizards and detail views, plus REST and MCP. Add a model-free HTTP/git/process end-to-end scenario and a 50-request dispatch race test.
-- Multi-mission captain lifecycle, hierarchy and wait telemetry remain in progress. Legacy fields remain stored until their planned removal migration; the old vessel flag no longer controls dispatch. See [testing instructions](docs/CONCURRENCY_TESTING.md).
+- Add multi-mission captains: runtime defaults (CLI 1, ApiEndpoint/Mux 4), atomic durable mission slots in migration 118, per-mission heartbeat/recovery, independent completion/cancellation and restart/Harbor reconnection. Read-only active mission IDs/counts accompany capacity editors in Dashboard, Mobile and TUI and REST/MCP/WebSocket fields. Lowering capacity preserves running missions; planning/refinement remain exclusive.
+- Hierarchy, wait telemetry and final admission integration remain in progress. Legacy fields remain stored until their planned removal migration; the old vessel flag no longer controls dispatch. See [testing instructions](docs/CONCURRENCY_TESTING.md).
 
 ### Dashboard navigation
 

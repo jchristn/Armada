@@ -221,7 +221,7 @@ namespace Armada.Server.Mcp.Tools
                                 Objects = captains.Objects.Select(c => new
                                 {
                                     c.Id, c.TenantId, c.UserId, c.Name, c.Runtime, c.State,
-                                    c.CurrentMissionId, c.CurrentDockId, c.ProcessId,
+                                    c.MaxConcurrency, c.ActiveMissionCount, c.ActiveMissionIds, c.CurrentSessionId, c.CurrentMissionId, c.CurrentDockId, c.ProcessId,
                                     c.RecoveryAttempts, c.LastHeartbeatUtc, c.CreatedUtc, c.LastUpdateUtc,
                                     SystemInstructionsLength = c.SystemInstructions?.Length ?? 0
                                 }).ToList(),

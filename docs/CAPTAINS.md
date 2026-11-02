@@ -1,5 +1,9 @@
 # Captain Support Matrix
 
+## v1.3.0 development: captain capacity
+
+Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The legacy singular mission/dock fields remain until migration 121; use active mission IDs to find each mission’s dock and process. See [testing](CONCURRENCY_TESTING.md).
+
 A captain is whatever actually does the work on a mission: a coding-agent CLI that Armada launches as a child
 process, or an in-process loop that talks to an inference endpoint directly. Armada ships eight runtimes. They are not
 equal. Claude Code gets the most attention in the code (token streaming, tool cards), Mux,

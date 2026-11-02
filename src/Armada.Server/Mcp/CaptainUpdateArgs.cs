@@ -16,6 +16,10 @@ namespace Armada.Server.Mcp
         /// <summary>
         /// New display name.
         /// </summary>
+        /// <summary>Maximum simultaneous missions, clamped to 1..the server ceiling.</summary>
+        public int? MaxConcurrency { get; set; }
+
+        /// <summary>Captain name.</summary>
         public string? Name { get; set; }
 
         /// <summary>

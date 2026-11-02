@@ -877,9 +877,15 @@ namespace Armada.Server
         {
             if (_HarborConnections == null) return 0;
             int restored = 0;
-            List<Captain> captains = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Working, token).ConfigureAwait(false);
-            foreach (Captain captain in captains)
+            List<Captain> captains = (await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false))
+                .Where(c => c.State == CaptainStateEnum.Working || c.ActiveMissionCount > 0).ToList();
+            foreach (Captain owner in captains)
+            foreach (Mission assignment in (await _Database.Missions.EnumerateByCaptainAsync(owner.Id, token).ConfigureAwait(false)).Where(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress))
             {
+                Captain captain = owner.ActiveMissionCount > 0 ? owner.ForMission(assignment) : owner;
+                int? recordedProcess = await _Database.Captains.ReadMissionProcessAsync(owner.Id, assignment.Id, token).ConfigureAwait(false);
+                if (recordedProcess.HasValue && assignment.ProcessId.HasValue && recordedProcess != assignment.ProcessId) continue;
+                if (!captain.ProcessId.HasValue && recordedProcess.HasValue) captain.ProcessId = recordedProcess;
                 if (!captain.ProcessId.HasValue || String.IsNullOrEmpty(captain.CurrentMissionId) || _RemoteMissionRuntimes.ContainsKey(captain.CurrentMissionId)) continue;
                 Mission? mission = await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
                 if (mission == null || (mission.Status != MissionStatusEnum.InProgress && mission.Status != MissionStatusEnum.Assigned)
@@ -914,6 +920,7 @@ namespace Armada.Server
                 {
                     captain.ProcessId = restoredProcess;
                     mission.ProcessId = restoredProcess;
+                    await _Database.Captains.TrySetProcessAsync(captain.Id, mission.Id, restoredProcess, token).ConfigureAwait(false);
                     await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                 }

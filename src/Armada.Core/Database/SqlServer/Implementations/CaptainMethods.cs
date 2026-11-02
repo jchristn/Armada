@@ -14,7 +14,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
     /// <summary>
     /// SQL Server implementation of captain database operations.
     /// </summary>
-    public class CaptainMethods : ICaptainMethods
+    public partial class CaptainMethods : ICaptainMethods
     {
         #region Private-Members
 
@@ -69,6 +69,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@system_instructions", (object?)captain.SystemInstructions ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@allowed_personas", (object?)captain.AllowedPersonas ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@preferred_persona", (object?)captain.PreferredPersona ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@max_concurrency", captain.MaxConcurrency);
+                    cmd.Parameters.AddWithValue("@current_session_id", (object?)captain.CurrentSessionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@runtime_options_json", (object?)captain.RuntimeOptionsJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@cli_permission_policy", (object?)captain.CliPermissionPolicy?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@reasoning_effort", (object?)captain.ReasoningEffort?.ToString() ?? DBNull.Value);
@@ -107,7 +109,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains WHERE id = @id;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -130,7 +132,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains WHERE name = @name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE name = @name;";
                     cmd.Parameters.AddWithValue("@name", name);
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -144,7 +146,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
         }
 
         /// <inheritdoc />
-        public async Task<Captain> UpdateAsync(Captain captain, CancellationToken token = default, bool updateActive = false)
+        public async Task<Captain> UpdateAsync(Captain captain, CancellationToken token = default, bool updateActive = false, bool updateConcurrency = false)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
             captain.LastUpdateUtc = DateTime.UtcNow;
@@ -165,12 +167,14 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         allowed_personas = @allowed_personas,
                         preferred_persona = @preferred_persona,
                         runtime_options_json = @runtime_options_json,
+                            max_concurrency = CASE WHEN @update_concurrency = 1 THEN @max_concurrency ELSE max_concurrency END,
+                            current_session_id = @current_session_id,
                         reasoning_effort = @reasoning_effort,
                         tier = @tier,
-                        state = @state,
-                        current_mission_id = @current_mission_id,
-                        current_dock_id = @current_dock_id,
-                        process_id = @process_id,
+                        state = CASE WHEN active_mission_count > 0 AND state IN ('Quarantined','Stopping') AND @state = 'Working' THEN state WHEN active_mission_count > 0 AND @state = 'Idle' THEN CASE WHEN state='Quarantined' AND @quarantine_until_utc IS NULL AND @quarantine_reason IS NULL THEN 'Working' ELSE state END WHEN active_mission_count > 0 AND @state IN ('Planning','Refining','Analyzing') THEN state WHEN active_mission_count > 1 AND @state = 'Stalled' THEN 'Working' ELSE @state END,
+                        current_mission_id = CASE WHEN active_mission_count > 0 THEN current_mission_id ELSE @current_mission_id END,
+                        current_dock_id = CASE WHEN active_mission_count > 0 THEN current_dock_id ELSE @current_dock_id END,
+                        process_id = CASE WHEN active_mission_count > 0 THEN process_id ELSE @process_id END,
                         recovery_attempts = @recovery_attempts,
                         last_heartbeat_utc = @last_heartbeat_utc,
                         last_process_alive_utc = @last_process_alive_utc,
@@ -194,6 +198,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@system_instructions", (object?)captain.SystemInstructions ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@allowed_personas", (object?)captain.AllowedPersonas ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@preferred_persona", (object?)captain.PreferredPersona ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@max_concurrency", captain.MaxConcurrency);
+                    cmd.Parameters.AddWithValue("@current_session_id", (object?)captain.CurrentSessionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@runtime_options_json", (object?)captain.RuntimeOptionsJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@reasoning_effort", (object?)captain.ReasoningEffort?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@tier", (object?)captain.Tier?.ToString() ?? DBNull.Value);
@@ -213,6 +219,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@usage_capture_harbor_id", (object?)captain.UsageCaptureHarborId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", captain.Active ? 1 : 0);
                     cmd.Parameters.AddWithValue("@update_active", updateActive ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@update_concurrency", updateConcurrency ? 1 : 0);
                     cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(captain.LastUpdateUtc));
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -293,7 +300,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains ORDER BY name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains ORDER BY name;";
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
@@ -315,7 +322,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains WHERE state = @state ORDER BY name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE state = @state ORDER BY name;";
                     cmd.Parameters.AddWithValue("@state", state.ToString());
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -338,7 +345,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"UPDATE captains SET state = @state, last_update_utc = @last_update_utc WHERE id = @id;";
+                    cmd.CommandText = @"UPDATE captains SET state = CASE WHEN @state='Idle' AND active_mission_count>0 THEN 'Working' ELSE @state END, last_update_utc = @last_update_utc WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
                     cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(DateTime.UtcNow));
@@ -435,7 +442,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 List<Captain> results = new List<Captain>();
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains" + whereClause +
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains" + whereClause +
                         " ORDER BY created_utc " + orderDirection +
                         " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
                     foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
@@ -479,7 +486,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains WHERE tenant_id = @tenantId AND id = @id;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND id = @id;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", id);
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
@@ -528,7 +535,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains WHERE tenant_id = @tenantId ORDER BY name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId ORDER BY name;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -552,7 +559,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains WHERE tenant_id = @tenantId AND name = @name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND name = @name;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@name", name);
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
@@ -577,7 +584,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains WHERE tenant_id = @tenantId AND state = @state ORDER BY name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND state = @state ORDER BY name;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
@@ -602,7 +609,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"UPDATE captains SET state = @state, last_update_utc = @last_update_utc WHERE tenant_id = @tenantId AND id = @id;";
+                    cmd.CommandText = @"UPDATE captains SET state = CASE WHEN @state='Idle' AND active_mission_count>0 THEN 'Working' ELSE @state END, last_update_utc = @last_update_utc WHERE tenant_id = @tenantId AND id = @id;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
@@ -676,7 +683,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         current_dock_id = @current_dock_id,
                         last_heartbeat_utc = @last_heartbeat_utc,
                         last_update_utc = @last_update_utc
-                        WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle' AND active = 1;";
+                        WHERE tenant_id = @tenantId AND id = @id AND active_mission_count = 0 AND state = 'Idle' AND active = 1;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", CaptainStateEnum.Working.ToString());
@@ -705,7 +712,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.CommandText = @"UPDATE captains SET
                         state = @state,
                         last_update_utc = @last_update_utc
-                        WHERE tenant_id = @tenantId AND id = @id AND state = 'Idle' AND active = 1;";
+                        WHERE tenant_id = @tenantId AND id = @id AND active_mission_count = 0 AND state = 'Idle' AND active = 1;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
@@ -785,7 +792,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 List<Captain> results = new List<Captain>();
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains" + whereClause + " ORDER BY created_utc " + orderDirection + " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains" + whereClause + " ORDER BY created_utc " + orderDirection + " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
                     foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -810,7 +817,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@userId", userId);
                     cmd.Parameters.AddWithValue("@id", id);
@@ -858,7 +865,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains WHERE tenant_id = @tenantId AND user_id = @userId ORDER BY name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND user_id = @userId ORDER BY name;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@userId", userId);
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
@@ -920,7 +927,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 List<Captain> results = new List<Captain>();
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT * FROM captains" + whereClause + " ORDER BY created_utc " + orderDirection + " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT '[' + STRING_AGG('\"' + STRING_ESCAPE(s.mission_id,'json') + '\"',',') + ']' FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains" + whereClause + " ORDER BY created_utc " + orderDirection + " OFFSET " + query.Offset + " ROWS FETCH NEXT " + query.PageSize + " ROWS ONLY;";
                     foreach (SqlParameter p in parameters) cmd.Parameters.Add(new SqlParameter(p.ParameterName, p.Value));
                     using (SqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -934,120 +941,27 @@ namespace Armada.Core.Database.SqlServer.Implementations
         }
 
         /// <inheritdoc />
-        public async Task<bool> TryClaimAsync(string captainId, string missionId, string? dockId, CancellationToken token = default)
+        public async Task<bool> TryClaimAsync(string captainId, string missionId, string? dockId, CancellationToken token = default, int ceiling = 256)
         {
-            if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
-            if (string.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
-
-            DateTime now = DateTime.UtcNow;
-
-            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
-            {
-                await conn.OpenAsync(token).ConfigureAwait(false);
-                using (SqlCommand cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = @"UPDATE captains SET
-                        state = @state,
-                        current_mission_id = @current_mission_id,
-                        current_dock_id = @current_dock_id,
-                        last_heartbeat_utc = @last_heartbeat_utc,
-                        last_update_utc = @last_update_utc
-                        WHERE id = @id AND state = 'Idle' AND active = 1;";
-                    cmd.Parameters.AddWithValue("@id", captainId);
-                    cmd.Parameters.AddWithValue("@state", CaptainStateEnum.Working.ToString());
-                    cmd.Parameters.AddWithValue("@current_mission_id", missionId);
-                    cmd.Parameters.AddWithValue("@current_dock_id", (object?)dockId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@last_heartbeat_utc", SqlServerDatabaseDriver.ToIso8601(now));
-                    cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(now));
-                    int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                    return rowsAffected > 0;
-                }
-            }
+            return await WithSlotsAsync(store => store.ClaimAsync(captainId, missionId, dockId, token, ceiling), token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
-        public async Task<bool> TryReleaseFromMissionAsync(string captainId, string missionId, CancellationToken token = default)
+        public async Task<bool> TryReleaseFromMissionAsync(string captainId, string missionId, CancellationToken token = default, CaptainStateEnum? emptyState = null)
         {
-            if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
-            if (string.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
-
-            DateTime now = DateTime.UtcNow;
-
-            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
-            {
-                await conn.OpenAsync(token).ConfigureAwait(false);
-                using (SqlCommand cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = @"UPDATE captains SET
-                        state = 'Idle',
-                        current_mission_id = NULL,
-                        current_dock_id = NULL,
-                        process_id = NULL,
-                        recovery_attempts = 0,
-                        last_update_utc = @last_update_utc
-                        WHERE id = @id AND current_mission_id = @current_mission_id AND state IN ('Working', 'Stalled', 'Stopping');";
-                    cmd.Parameters.AddWithValue("@id", captainId);
-                    cmd.Parameters.AddWithValue("@current_mission_id", missionId);
-                    cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(now));
-                    int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                    return rowsAffected > 0;
-                }
-            }
+            return await WithSlotsAsync(store => store.ReleaseAsync(captainId, missionId, token, emptyState), token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
         public async Task<bool> TrySetDockAsync(string captainId, string missionId, string dockId, CancellationToken token = default)
         {
-            if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
-            if (string.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
-            if (string.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
-
-            DateTime now = DateTime.UtcNow;
-
-            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
-            {
-                await conn.OpenAsync(token).ConfigureAwait(false);
-                using (SqlCommand cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = @"UPDATE captains SET
-                        current_dock_id = @current_dock_id,
-                        last_update_utc = @last_update_utc
-                        WHERE id = @id AND current_mission_id = @current_mission_id AND state IN ('Working', 'Stalled', 'Stopping');";
-                    cmd.Parameters.AddWithValue("@id", captainId);
-                    cmd.Parameters.AddWithValue("@current_mission_id", missionId);
-                    cmd.Parameters.AddWithValue("@current_dock_id", dockId);
-                    cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(now));
-                    int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                    return rowsAffected > 0;
-                }
-            }
+            return await WithSlotsAsync(store => store.SetAssignmentAsync(captainId, missionId, "current_dock_id", dockId, token), token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
         public async Task<bool> TrySetProcessAsync(string captainId, string missionId, int processId, CancellationToken token = default)
         {
-            if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
-            if (string.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
-
-            DateTime now = DateTime.UtcNow;
-
-            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
-            {
-                await conn.OpenAsync(token).ConfigureAwait(false);
-                using (SqlCommand cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = @"UPDATE captains SET
-                        process_id = @process_id,
-                        last_update_utc = @last_update_utc
-                        WHERE id = @id AND current_mission_id = @current_mission_id AND state IN ('Working', 'Stalled', 'Stopping');";
-                    cmd.Parameters.AddWithValue("@id", captainId);
-                    cmd.Parameters.AddWithValue("@current_mission_id", missionId);
-                    cmd.Parameters.AddWithValue("@process_id", processId);
-                    cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(now));
-                    int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                    return rowsAffected > 0;
-                }
-            }
+            return await WithSlotsAsync(store => store.SetAssignmentAsync(captainId, missionId, "process_id", processId, token), token).ConfigureAwait(false);
         }
 
         #endregion

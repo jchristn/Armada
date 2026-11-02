@@ -95,6 +95,16 @@ describe('captainForm', () => {
     expect(captainFormError(detail)).toBeNull();
   });
 
+  it('round trips capacity and leaves blank creation to the server runtime default', () => {
+    expect(buildCaptainCreatePayload({ ...emptyCaptainForm(), name: 'new', runtime: 'Mux' })).not.toHaveProperty('maxConcurrency');
+    const form = captainFormFromCaptain(captain({ maxConcurrency: 3 }));
+    expect(form.maxConcurrency).toBe('3');
+    expect(buildCaptainPayload(form).maxConcurrency).toBe(3);
+    expect(buildCaptainPayload({ ...form, maxConcurrency: '0' }).maxConcurrency).toBe(1);
+    expect(buildCaptainPayload({ ...form, maxConcurrency: '300' }).maxConcurrency).toBe(256);
+    expect(buildCaptainPayload({ ...form, maxConcurrency: '2.9' }).maxConcurrency).toBe(2);
+  });
+
   it('detects CLI policy changes and lifecycle actions', () => {
     expect(cliPolicyChanged(captain(), { cliPermissionPolicy: null })).toBe(false);
     expect(cliPolicyChanged(captain({ cliPermissionPolicy: 'Bypass' }), { cliPermissionPolicy: null })).toBe(true);

@@ -321,6 +321,7 @@ namespace Armada.Tui.Screens.Build
             doc.Field("Reasoning effort", c.ReasoningEffort?.ToString() ?? Tr("Runtime default"));
             doc.Field("Capability tier", c.Tier.HasValue ? Tr(c.Tier.Value.ToString()) : Tr("Auto (classify from model)"));
             doc.Field("Active", c.Active ? "Yes" : "No");
+            doc.Field("Running Missions", c.ActiveMissionCount + " / " + c.MaxConcurrency);
             doc.Field("State", StatusBadge.Label(c.State), StatusBadge.Style(c.State, doc.Theme));
             if (c.State == CaptainStateEnum.Quarantined)
             {

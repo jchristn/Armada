@@ -118,32 +118,21 @@ namespace Armada.Core.Services
             {
                 if (mission.Status != MissionStatusEnum.Pending && mission.Status != MissionStatusEnum.Assigned && mission.Status != MissionStatusEnum.Blocked) continue;
 
-                if (!String.IsNullOrEmpty(mission.CaptainId))
-                {
-                    Captain? captain = await _Database.Captains.ReadAsync(mission.CaptainId, token).ConfigureAwait(false);
-                    if (captain != null && captain.CurrentMissionId == mission.Id)
-                    {
-                        List<Mission> otherMissions = (await _Database.Missions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
-                            .Where(om => om.Id != mission.Id && (om.Status == MissionStatusEnum.InProgress || om.Status == MissionStatusEnum.Assigned))
-                            .ToList();
-                        if (otherMissions.Count == 0)
-                        {
-                            captain.State = CaptainStateEnum.Idle;
-                            captain.CurrentMissionId = null;
-                            captain.CurrentDockId = null;
-                            captain.ProcessId = null;
-                            captain.RecoveryAttempts = 0;
-                            captain.LastUpdateUtc = DateTime.UtcNow;
-                            await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
-                        }
-                    }
-                }
-
                 MissionStatusEnum missionStatusBefore = mission.Status;
                 mission.Status = MissionStatusEnum.Cancelled;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                if (!String.IsNullOrEmpty(mission.CaptainId))
+                {
+                    Captain? owner = await _Database.Captains.ReadAsync(mission.CaptainId, token).ConfigureAwait(false);
+                    // Legacy snapshots may have other work without durable slots until reconciliation.
+                    bool legacySibling = owner?.ActiveMissionCount == 0 &&
+                        (await _Database.Missions.EnumerateByCaptainAsync(mission.CaptainId, token).ConfigureAwait(false))
+                        .Any(other => other.Id != mission.Id && (other.Status == MissionStatusEnum.Assigned || other.Status == MissionStatusEnum.InProgress));
+                    if (!legacySibling)
+                        await _Database.Captains.TryReleaseFromMissionAsync(mission.CaptainId, mission.Id, token).ConfigureAwait(false);
+                }
                 await _Admiral.BlackBox.RecordMissionFailureAsync(mission, missionStatusBefore, BlackBoxStepEnum.OperatorTransition,
                     context => context.Reason = "The fleet action run that dispatched voyage " + voyageId + " was cancelled.", token).ConfigureAwait(false);
             }
