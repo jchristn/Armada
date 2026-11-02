@@ -173,6 +173,9 @@ describe('Evaluation detail', () => {
     expect(screen.getByTestId('evaluation-summary')).toHaveTextContent('4 passed, 1 failed, 1 could not run');
     for (const link of screen.getAllByRole('link', { name: 'qwen-one' })) expect(link).toHaveAttribute('href', '/captains/cpt_1');
     expect(screen.getByRole('link', { name: 'Captains' })).toHaveAttribute('href', '/captains');
+    const trail = screen.getByRole('navigation', { name: 'Breadcrumbs' });
+    expect(within(trail).getByText('mpr_1')).toHaveAttribute('aria-current', 'page');
+    expect(within(trail).getByRole('link', { name: 'qwen-one' })).toHaveAttribute('href', '/captains/cpt_1');
     expect(screen.getByRole('link', { name: 'All evaluations of this captain' })).toHaveAttribute('href', '/evaluations?captainId=cpt_1');
     expect(screen.getByRole('link', { name: 'Evaluations' })).toHaveAttribute('href', '/evaluations?captainId=cpt_1');
     const probes = screen.getByRole('table', { name: 'Probe results' });

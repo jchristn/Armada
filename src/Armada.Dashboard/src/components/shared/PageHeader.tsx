@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
+import Breadcrumbs, { type BreadcrumbItem } from './Breadcrumbs';
 
 interface PageHeaderProps {
   title: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
   /** Optional breadcrumb rendered above the title (detail pages). */
-  breadcrumb?: ReactNode;
+  breadcrumb?: readonly BreadcrumbItem[];
 }
 
 /**
@@ -16,7 +17,7 @@ interface PageHeaderProps {
 export default function PageHeader({ title, subtitle, actions, breadcrumb }: PageHeaderProps) {
   return (
     <>
-      {breadcrumb && <div className="breadcrumb">{breadcrumb}</div>}
+      {breadcrumb && <Breadcrumbs items={breadcrumb} />}
       <div className="page-header">
         <div>
           <h2>{title}</h2>

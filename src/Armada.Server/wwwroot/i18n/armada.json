@@ -278,6 +278,7 @@
         "Storage": "Almacenamiento"
       },
       "phrases": {
+        "Breadcrumbs": "Ruta de navegación",
         "Probe type": "Tipo de prueba",
         "Pass/fail": "Aprobado/fallido",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "Esta carpeta tiene más subdirectorios de los que se pueden listar. Abre una carpeta más concreta para ver el resto.",
@@ -7475,6 +7476,7 @@
         "Storage": "存储"
       },
       "phrases": {
+        "Breadcrumbs": "面包屑导航",
         "Probe type": "探测类型",
         "Pass/fail": "通过/失败",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "此文件夹的子目录超出可列出的数量。请打开范围更小的文件夹查看其余内容。",
@@ -13780,6 +13782,7 @@
         "Storage": "儲存空間"
       },
       "phrases": {
+        "Breadcrumbs": "麵包屑導覽",
         "Probe type": "探測類型",
         "Pass/fail": "通過/失敗",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "此資料夾的子目錄超出可列出的數量。請開啟範圍更小的資料夾查看其餘內容。",
@@ -20010,6 +20013,7 @@
         "Storage": "儲存空間"
       },
       "phrases": {
+        "Breadcrumbs": "導覽路徑",
         "Probe type": "探測類型",
         "Pass/fail": "通過/失敗",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "呢個資料夾嘅子目錄多過可以列出嘅數量。請打開範圍細啲嘅資料夾睇其餘內容。",
@@ -26260,6 +26264,7 @@
         "Storage": "ストレージ"
       },
       "phrases": {
+        "Breadcrumbs": "パンくずリスト",
         "Probe type": "プローブの種類",
         "Pass/fail": "合格/不合格",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "このフォルダーには一覧表示できる数を超えるサブディレクトリがあります。残りを表示するには、より絞り込んだフォルダーを開いてください。",
@@ -32496,6 +32501,7 @@
         "Storage": "Speicher"
       },
       "phrases": {
+        "Breadcrumbs": "Brotkrumennavigation",
         "Probe type": "Prüfungstyp",
         "Pass/fail": "Bestanden/Fehlgeschlagen",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "Dieser Ordner hat mehr Unterverzeichnisse, als angezeigt werden können. Öffnen Sie einen engeren Ordner, um den Rest zu sehen.",
@@ -38736,6 +38742,7 @@
         "Storage": "Stockage"
       },
       "phrases": {
+        "Breadcrumbs": "Fil d’Ariane",
         "Probe type": "Type de test",
         "Pass/fail": "Réussite/échec",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "Ce dossier contient plus de sous-dossiers qu'il n'est possible d'afficher. Ouvrez un dossier plus précis pour voir le reste.",
@@ -44976,6 +44983,7 @@
         "Storage": "Archiviazione"
       },
       "phrases": {
+        "Breadcrumbs": "Percorso di navigazione",
         "Probe type": "Tipo di test",
         "Pass/fail": "Superato/fallito",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "Questa cartella contiene più sottocartelle di quante se ne possano elencare. Apri una cartella più specifica per vedere il resto.",

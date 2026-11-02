@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { createPlaybook, deletePlaybook, getPlaybook, updatePlaybook } from '../api/client';
 import type { Playbook } from '../types/models';
 import { useAuth } from '../context/AuthContext';
@@ -156,11 +156,10 @@ export default function PlaybookDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/playbooks">{t('Playbooks')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Playbook') : fileName}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Playbooks'), to: '/playbooks' },
+          { label: createMode ? t('New Playbook') : fileName },
+        ]}
         title={createMode ? t('Create Playbook') : fileName}
         actions={
           <>

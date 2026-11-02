@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { dispatchWarningsFrom } from '../lib/dispatchPreview';
 import DispatchPreview from '../components/blackbox/DispatchWarnings';
 import { createPipeline, getPipeline, updatePipeline, deletePipeline, listPersonas, listVessels, createVoyage, apiErrorMessage } from '../api/client';
@@ -244,11 +244,10 @@ export default function PipelineDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/pipelines">{t('Pipelines')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{pipeline.name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Pipelines'), to: '/pipelines' },
+          { label: pipeline.name },
+        ]}
         title={pipeline.name}
         actions={
           <>

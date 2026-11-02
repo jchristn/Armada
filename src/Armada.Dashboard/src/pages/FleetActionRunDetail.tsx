@@ -193,7 +193,11 @@ export default function FleetActionRunDetail() {
       <div>
         <PageHeader
           title={t('Fleet action run')}
-          breadcrumb={<><Link to="/fleet-actions?tab=runs">{t('Fleet Actions')}</Link> / <span className="mono">{id}</span></>}
+          breadcrumb={[
+            { label: t('Fleet Actions'), to: '/fleet-actions' },
+            { label: t('Runs'), to: '/fleet-actions?tab=runs' },
+            { label: id },
+          ]}
         />
         <ErrorState message={runError || t('Run not found.')} onRetry={() => void refresh()} />
       </div>
@@ -211,7 +215,11 @@ export default function FleetActionRunDetail() {
   return (
     <div className="fleet-run-detail">
       <PageHeader
-        breadcrumb={<><Link to="/fleet-actions?tab=runs">{t('Fleet Actions')}</Link> / <Link to="/fleet-actions?tab=runs">{t('Runs')}</Link> / <span className="mono">{run.id}</span></>}
+        breadcrumb={[
+          { label: t('Fleet Actions'), to: '/fleet-actions' },
+          { label: t('Runs'), to: '/fleet-actions?tab=runs' },
+          { label: run.id },
+        ]}
         title={(
           <span className="fleet-run-title">
             <span>{run.actionName}</span>

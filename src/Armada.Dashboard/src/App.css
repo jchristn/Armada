@@ -758,26 +758,21 @@ body {
 h2 { font-size: 1.5rem; margin-bottom: 1rem; font-weight: 600; }
 h3 { font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: 600; margin-top: 1rem; }
 
-/* Breadcrumbs */
-.breadcrumb,
-.breadcrumbs {
+/* Every page uses the shared Breadcrumbs component. */
+.breadcrumb {
     margin-bottom: 1rem;
     font-size: 0.85rem;
+    line-height: 1.5;
     color: var(--text-dim);
     min-width: 0;
     overflow-wrap: anywhere;
 }
-.breadcrumb a,
-.breadcrumbs a { color: var(--accent); text-decoration: none; }
-.breadcrumb a:hover,
-.breadcrumbs a:hover { text-decoration: underline; }
-.breadcrumb-sep,
-.bc-sep { margin: 0 0.4rem; }
-.bc-copy-btn { opacity: 0.3; vertical-align: middle; margin-left: 0.15rem; }
-.breadcrumb:hover .bc-copy-btn,
-.breadcrumbs:hover .bc-copy-btn { opacity: 0.5; }
-.breadcrumb .bc-copy-btn:hover,
-.breadcrumbs .bc-copy-btn:hover { opacity: 1; }
+.breadcrumb ol { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.5rem; list-style: none; margin: 0; padding: 0; }
+.breadcrumb li { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; max-width: 100%; }
+.breadcrumb a { color: var(--accent); text-decoration: none; min-width: 0; }
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb [aria-current="page"] { min-width: 0; }
+.breadcrumb-sep { flex: 0 0 auto; color: var(--text-dim); }
 
 /* View header with actions */
 .view-header,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   createWorkflowProfile,
   deleteWorkflowProfile,
@@ -336,11 +336,10 @@ export default function WorkflowProfileDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/workflow-profiles">{t('Workflow Profiles')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Workflow Profile') : name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Workflow Profiles'), to: '/workflow-profiles' },
+          { label: createMode ? t('New Workflow Profile') : name },
+        ]}
         title={createMode ? t('Create Workflow Profile') : name}
         actions={
           <>

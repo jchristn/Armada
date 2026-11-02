@@ -214,11 +214,10 @@ export default function PersonaDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/personas">{t('Personas')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{persona.name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Personas'), to: '/personas' },
+          { label: persona.name },
+        ]}
         title={persona.name}
         actions={
           <>

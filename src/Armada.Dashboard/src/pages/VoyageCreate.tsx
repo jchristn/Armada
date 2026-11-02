@@ -1,6 +1,7 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import RunApprovalFields, { DEFAULT_RUN_APPROVALS } from '../components/shared/RunApprovalFields';
 import { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { listVessels, listPipelines, createVoyage } from '../api/client';
 import DispatchPreview from '../components/blackbox/DispatchWarnings';
 import { dispatchWarningsFrom } from '../lib/dispatchPreview';
@@ -78,11 +79,10 @@ export default function VoyageCreate() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, fontSize: 13 }}>
-        <Link to="/voyages">{t('Voyages')}</Link>
-        <span style={{ color: 'var(--text-muted)' }}>/</span>
-        <span>{t('Create Voyage')}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Voyages'), to: '/voyages' },
+        { label: t('Create Voyage') },
+      ]} />
 
       <h2 style={{ marginBottom: 20 }}>{t('Create Voyage')}</h2>
 

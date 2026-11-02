@@ -440,11 +440,10 @@ export default function MissionDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/missions">{t('Missions')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{mission.title}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Missions'), to: '/missions' },
+          { label: mission.title },
+        ]}
         title={<>{mission.title} <EvaluationBadge isEvaluation={mission.isEvaluation} /></>}
         actions={
           <>

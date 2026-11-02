@@ -438,11 +438,10 @@ export default function RunbookDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/runbooks">{t('Runbooks')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Runbook') : title}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Runbooks'), to: '/runbooks' },
+          { label: createMode ? t('New Runbook') : title },
+        ]}
         title={createMode ? t('Create Runbook') : title}
         actions={
           <>

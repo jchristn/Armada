@@ -1,5 +1,6 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   createWorkspaceDirectory,
   deleteWorkspaceEntry,
@@ -821,11 +822,10 @@ export default function Workspace() {
   return (
     <div className="workspace-page">
       {deletion.dialog}
-      <div className="breadcrumbs">
-        <Link to="/workspace" title={t('Back to the Workspace vessel picker.')}>{t('Workspace')}</Link>
-        <span className="bc-sep">&gt;</span>
-        <span>{currentVessel?.name || vesselId}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Workspace'), to: '/workspace', title: t('Back to the Workspace vessel picker.') },
+        { label: currentVessel?.name || vesselId },
+      ]} />
 
       <div className="workspace-header">
         <div className="workspace-header-body">

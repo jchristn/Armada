@@ -187,11 +187,10 @@ export default function VesselDetail() {
     <div>
       {/* Breadcrumb */}
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/vessels" title={t('Back to the list of all vessels.')}>{t('Vessels')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{vessel.name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Vessels'), to: '/vessels', title: t('Back to the list of all vessels.') },
+          { label: vessel.name },
+        ]}
         title={vessel.name}
         actions={
           <>

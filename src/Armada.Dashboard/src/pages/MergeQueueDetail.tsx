@@ -178,11 +178,10 @@ export default function MergeQueueDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/merge-queue">{t('Merge Queue')}</Link> <span className="breadcrumb-sep">&gt;</span> <span className="mono">{entry.id}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Merge Queue'), to: '/merge-queue' },
+          { label: entry.id },
+        ]}
         title={t('Merge Entry')}
         actions={
           <>

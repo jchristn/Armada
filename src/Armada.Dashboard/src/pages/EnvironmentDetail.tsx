@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   createEnvironment,
   deleteEnvironment,
@@ -259,11 +259,10 @@ export default function EnvironmentDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/environments">{t('Environments')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Environment') : name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Environments'), to: '/environments' },
+          { label: createMode ? t('New Environment') : name },
+        ]}
         title={createMode ? t('Create Environment') : name}
         actions={
           <>

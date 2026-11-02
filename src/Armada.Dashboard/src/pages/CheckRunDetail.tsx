@@ -124,11 +124,10 @@ export default function CheckRunDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/checks">{t('Checks')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{run.label || run.id}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Checks'), to: '/checks' },
+          { label: run.label || run.id },
+        ]}
         title={run.label || run.type}
         actions={
           <>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { createSkill, deleteSkill, getSkill, updateSkill } from '../api/client';
 import type { Skill } from '../types/models';
 import { useAuth } from '../context/AuthContext';
@@ -103,11 +103,10 @@ export default function SkillDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/skills">{t('Skills')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Skill') : name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Skills'), to: '/skills' },
+          { label: createMode ? t('New Skill') : name },
+        ]}
         title={createMode ? t('Create Skill') : name}
         actions={
           <>

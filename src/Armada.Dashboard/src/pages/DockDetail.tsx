@@ -1,3 +1,4 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
@@ -77,11 +78,10 @@ export default function DockDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div className="breadcrumb" style={{ marginBottom: 16, fontSize: 13 }}>
-        <Link to="/docks" title={t('Back to the list of all docks.')}>{t('Docks')}</Link>
-        <span className="text-muted"> / </span>
-        <span className="mono">{dock.id}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Docks'), to: '/docks', title: t('Back to the list of all docks.') },
+        { label: dock.id },
+      ]} />
 
       <ErrorModal error={error} onClose={() => setError('')} />
 

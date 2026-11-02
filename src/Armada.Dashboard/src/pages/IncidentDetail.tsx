@@ -376,11 +376,10 @@ export default function IncidentDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/incidents">{t('Incidents')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Incident') : title}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Incidents'), to: '/incidents' },
+          { label: createMode ? t('New Incident') : title },
+        ]}
         title={createMode ? t('Create Incident') : title}
         actions={
           <>

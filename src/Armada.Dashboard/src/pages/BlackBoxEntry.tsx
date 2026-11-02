@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useLocale } from '../context/LocaleContext';
 import PageHeader from '../components/shared/PageHeader';
 import BlackBoxPanel from '../components/blackbox/BlackBoxPanel';
@@ -12,7 +12,10 @@ export default function BlackBoxEntry() {
   return (
     <div>
       <PageHeader
-        breadcrumb={<><Link to={BLACKBOX_PATH}>{t('Black Box')}</Link> <span className="breadcrumb-sep">&gt;</span> <span className="mono">{id}</span></>}
+        breadcrumb={[
+          { label: t('Black Box'), to: BLACKBOX_PATH },
+          { label: id },
+        ]}
         title={t('Black box entry')}
         subtitle={t('Where, how and why a mission or voyage failed, with the evidence and the ways to recover.')}
       />

@@ -1,3 +1,4 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import ActionMenu from '../components/shared/ActionMenu';
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
@@ -236,11 +237,10 @@ export default function VoyageDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, fontSize: 13 }}>
-        <Link to="/voyages">{t('Voyages')}</Link>
-        <span style={{ color: 'var(--text-muted)' }}>/</span>
-        <span>{voyage.title || voyage.id}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Voyages'), to: '/voyages' },
+        { label: voyage.title || voyage.id },
+      ]} />
 
       <ErrorModal error={error} onClose={() => setError('')} />
 

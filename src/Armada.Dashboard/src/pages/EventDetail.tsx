@@ -1,3 +1,4 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
@@ -83,11 +84,10 @@ export default function EventDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div style={{ marginBottom: 16, fontSize: 13 }}>
-        <Link to="/events">{t('Events')}</Link>
-        <span className="text-muted"> / </span>
-        <span className="mono">{event.id}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Events'), to: '/events' },
+        { label: event.id },
+      ]} />
 
       <ErrorModal error={error} onClose={() => setError('')} />
 

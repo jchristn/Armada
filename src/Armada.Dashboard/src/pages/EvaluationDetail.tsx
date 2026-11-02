@@ -79,13 +79,14 @@ export default function EvaluationDetail({ pollMs }: EvaluationDetailProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, refreshVersion, page]);
 
-  const breadcrumb = <>
-    {run?.targetKind === 'Captain' && run.captainId && <>
-      <Link to="/captains">{t('Captains')}</Link><span> / </span>
-      <Link to={`/captains/${encodeURIComponent(run.captainId)}`}>{run.captainName || run.captainId}</Link><span> / </span>
-    </>}
-    <Link to={evaluationsListPath(run?.captainId)}>{t('Evaluations')}</Link>
-  </>;
+  const breadcrumb = [
+    ...(run?.targetKind === 'Captain' && run.captainId ? [
+      { label: t('Captains'), to: '/captains' },
+      { label: run.captainName || run.captainId, to: `/captains/${encodeURIComponent(run.captainId)}` },
+    ] : []),
+    { label: t('Evaluations'), to: evaluationsListPath(run?.captainId) },
+    { label: id },
+  ];
   const battery = run?.batteryProgress;
   const batteryResults = run?.batteryResults ?? [];
   const totalPages = Math.max(1, run?.batteryResultsPage?.totalPages ?? 1);

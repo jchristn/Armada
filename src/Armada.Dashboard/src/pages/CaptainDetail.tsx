@@ -321,11 +321,10 @@ export default function CaptainDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/captains">{t('Captains')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{captain.name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Captains'), to: '/captains' },
+          { label: captain.name },
+        ]}
         title={captain.name}
         actions={
           <>

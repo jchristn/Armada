@@ -832,17 +832,10 @@ export default function ObjectiveDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to={canonicalListPath}>{t('Backlog')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Backlog Item') : title}</span>
-            {!isBacklogPath && !createMode && objective && (
-              <>
-                <span className="breadcrumb-sep">&gt;</span>
-                <Link to={canonicalItemPath(objective.id)} title={t('Open this item at its standard /backlog address, the link to bookmark or share.')}>{t('Canonical Backlog Route')}</Link>
-              </>
-            )}
-          </>
-        }
+        breadcrumb={[
+          { label: t('Backlog'), to: canonicalListPath },
+          { label: createMode ? t('New Backlog Item') : title },
+        ]}
         title={createMode ? t('Create Backlog Item') : title}
         subtitle={
           !createMode && objective ? (
@@ -857,6 +850,9 @@ export default function ObjectiveDetail() {
         }
         actions={
           <>
+          {!isBacklogPath && !createMode && objective && (
+            <Link className="btn btn-sm" to={canonicalItemPath(objective.id)} title={t('Open this item at its standard /backlog address, the link to bookmark or share.')}>{t('Canonical Backlog Route')}</Link>
+          )}
           {!createMode && (
             <button className="btn btn-sm" onClick={() => setJsonData({ open: true, title, data: objective })} title={t('Show the raw backlog item record as the API returns it.')}>
               {t('View JSON')}

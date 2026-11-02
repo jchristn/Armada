@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   createProjectProfile,
   deleteProjectProfile,
@@ -174,11 +174,10 @@ export default function ProjectProfileDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/project-profiles">{t('Project Profiles')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Project Profile') : name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Project Profiles'), to: '/project-profiles' },
+          { label: createMode ? t('New Project Profile') : name },
+        ]}
         title={createMode ? t('Create Project Profile') : name}
         actions={
           <>

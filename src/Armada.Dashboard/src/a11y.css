@@ -32,7 +32,6 @@
 
 /* Links inside running text must not rely on color alone. */
 .breadcrumb a,
-.breadcrumbs a,
 p a:not(.btn),
 li > a:not(.btn):not([class]),
 .text-block a:not(.btn) {

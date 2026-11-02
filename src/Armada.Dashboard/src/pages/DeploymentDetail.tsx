@@ -434,11 +434,10 @@ export default function DeploymentDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/deployments">{t('Deployments')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Deployment') : title}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Deployments'), to: '/deployments' },
+          { label: createMode ? t('New Deployment') : title },
+        ]}
         title={createMode ? t('Create Deployment') : title}
         actions={
           <>

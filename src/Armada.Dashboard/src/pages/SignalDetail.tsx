@@ -1,3 +1,4 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
@@ -87,11 +88,10 @@ export default function SignalDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div className="breadcrumb" style={{ marginBottom: 16, fontSize: 13 }}>
-        <Link to="/signals">{t('Signals')}</Link>
-        <span className="text-muted"> / </span>
-        <span className="mono">{signal.id}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Signals'), to: '/signals' },
+        { label: signal.id },
+      ]} />
 
       <ErrorModal error={error} onClose={() => setError('')} />
 

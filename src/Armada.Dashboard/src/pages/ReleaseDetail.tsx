@@ -367,11 +367,10 @@ export default function ReleaseDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/releases">{t('Releases')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Release') : title}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Releases'), to: '/releases' },
+          { label: createMode ? t('New Release') : title },
+        ]}
         title={createMode ? t('Create Release') : title}
         actions={
           <>
