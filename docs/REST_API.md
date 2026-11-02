@@ -10266,6 +10266,24 @@ usage endpoints reject this latest-only filter with 400.
 
 Ranges use UTC ISO-8601 `from` and `to`, inclusive start and exclusive end.
 Snapshots default to the last 24 hours; series and missions require both dates.
+Latest has no implicit date cutoff: old observations remain visible with their original
+age and stale flag. Explicit dates still restrict latest observations. Latest supports
+`sortBy=captainId|hostId|runtime|limits|updated|interval` (default `updated`) and
+`sortDirection=ascending|descending` (default descending), before paging, with stable
+account ID tie-breaking. The legacy `totalTokens` default maps to `updated`.
+`UsageSnapshotView.AccountId` is the stable persisted `ust_` account-state ID;
+`Id` remains the selected observation ID for compatibility.
+
+Migration 116 makes capture atomic across the raw observation, latest account state
+and durable captain links on every database provider. Requested/effective intervals
+and the capture-context fingerprint are stored with account state. After a restart,
+an identity-less failure can update a uniquely matching persisted account while
+retaining its provider, last-good windows and observation timestamp. Ambiguous or
+changed credential contexts never invent an account identity. Upgrade recovers
+missing latest projections from retained raw observations and backfills captain
+links. Original observation dates are retained. Keep the configured database on
+persistent storage; rebuilding an empty database cannot recover deleted history.
+
 Invalid, reversed and over-90-day ranges return 400. Missions also require
 `provider`. Empty reads return zero rows or points, never zero utilization samples.
 

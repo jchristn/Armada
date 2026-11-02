@@ -2,6 +2,7 @@ namespace Armada.Server
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Linq;
     using System.Threading.Tasks;
     using Armada.Core.Database;
@@ -16,6 +17,7 @@ namespace Armada.Server
         private readonly UsageCaptureScheduler _Scheduler;
         private readonly UsageAggregationService _Aggregation;
         private readonly HarborConnectionManager? _Harbors;
+        private readonly Armada.Core.Settings.UsageCaptureSettings _Settings;
 
         /// <summary>UsageAccessService: account usage contract.</summary>
         public UsageAccessService(DatabaseDriver database, UsageCaptureService capture, UsageCaptureScheduler scheduler, Armada.Core.Settings.UsageCaptureSettings? settings = null, HarborConnectionManager? harbors = null)
@@ -23,7 +25,8 @@ namespace Armada.Server
             _Database = database;
             _Capture = capture;
             _Scheduler = scheduler;
-            _Aggregation = new UsageAggregationService(database, settings);
+            _Settings = settings ?? new Armada.Core.Settings.UsageCaptureSettings();
+            _Aggregation = new UsageAggregationService(database, _Settings);
             _Harbors = harbors;
         }
 
@@ -108,8 +111,13 @@ namespace Armada.Server
         public async Task<EnumerationResult<UsageSnapshotView>> LatestAsync(AuthContext caller, UsageQuery query)
         {
             using UsageTelemetryOperation telemetry = UsageTelemetry.Start("latest-query");
+            Stopwatch timer = Stopwatch.StartNew();
             await ScopeAsync(caller, query).ConfigureAwait(false);
-            ValidateRange(query);
+            string sortBy = query.SortBy == "totalTokens" ? "updated" : query.SortBy;
+            if (!new[] { "captainId", "hostId", "runtime", "limits", "updated", "interval" }.Contains(sortBy)) throw new ArgumentException("Unsupported latest sortBy.");
+            if (query.SortDirection != "ascending" && query.SortDirection != "descending") throw new ArgumentException("sortDirection must be ascending or descending.");
+            // Current state has no implicit history window. Explicit dates still use the shared validation.
+            if (query.FromUtc.HasValue || query.ToUtc.HasValue) ValidateRange(query);
             UsageLatestStateQuery storageQuery = new UsageLatestStateQuery {
                 TenantId = query.TenantId, HostId = query.HostId, Runtime = query.Runtime, Provider = query.Provider, AccountKey = query.AccountKey,
                 PageNumber = 1, PageSize = 1000 };
@@ -124,33 +132,59 @@ namespace Armada.Server
             {
                 bool failed = state.LastErrorCapturedUtc.HasValue && (!state.LastGoodCapturedUtc.HasValue || state.LastErrorCapturedUtc >= state.LastGoodCapturedUtc);
                 string? id = failed ? state.LastErrorSnapshotId : state.LastGoodSnapshotId;
-                List<string> members = new List<string>();
-                UsageMembershipQuery membershipQuery = new UsageMembershipQuery { TenantId = query.TenantId, HostId = state.HostId, Runtime = state.Runtime, AccountKey = state.AccountKey, OpenOnly = true, PageSize = 1000 };
-                EnumerationResult<UsageAccountMembership> membershipPage;
-                do {
-                    membershipPage = await _Database.UsageMemberships.EnumerateAsync(membershipQuery).ConfigureAwait(false);
-                    members.AddRange(membershipPage.Objects.Select(m => m.CaptainId)); membershipQuery.PageNumber++;
-                } while (membershipPage.TotalPages >= membershipQuery.PageNumber);
+                List<string> members = await _Database.UsageSnapshots.ReadLatestCaptainsAsync(state.Id, query.TenantId!).ConfigureAwait(false);
+                // Upgrade fallback for legacy projections; new capture always commits durable member links.
+                if (members.Count == 0)
+                {
+                    UsageMembershipQuery membershipQuery = new UsageMembershipQuery { TenantId = query.TenantId, HostId = state.HostId, Runtime = state.Runtime, AccountKey = state.AccountKey, OpenOnly = true, PageSize = 1000 };
+                    EnumerationResult<UsageAccountMembership> membershipPage;
+                    do {
+                        membershipPage = await _Database.UsageMemberships.EnumerateAsync(membershipQuery).ConfigureAwait(false);
+                        members.AddRange(membershipPage.Objects.Select(m => m.CaptainId)); membershipQuery.PageNumber++;
+                    } while (membershipPage.TotalPages >= membershipQuery.PageNumber);
+                }
 
                 if (query.CaptainId != null && !members.Contains(query.CaptainId)) continue;
                 if (query.CaptainIds != null && !query.CaptainIds.Any(members.Contains)) continue;
                 UsageSnapshot? snapshot = id == null ? null : await _Database.UsageSnapshots.ReadAsync(id, query.TenantId!).ConfigureAwait(false);
                 if (query.HarborId != null && state.HostId != query.HarborId) continue;
                 DateTime capturedUtc = (failed ? state.LastErrorCapturedUtc : state.LastGoodCapturedUtc) ?? state.LastUpdateUtc;
-                if (capturedUtc < query.FromUtc || capturedUtc >= query.ToUtc) continue;
-                UsageCaptureGroup? group = _Scheduler.Groups().FirstOrDefault(g => g.TenantId == query.TenantId && g.HostId == state.HostId && g.Runtime == state.Runtime && g.MemberCaptainIds.Any(members.Contains));
-                int interval = group?.EffectiveIntervalSeconds ?? 300;
-                rows.Add(new UsageSnapshotView { Id = id, TenantId = state.TenantId, HostId = state.HostId, HarborId = snapshot?.HarborId ?? (state.HostId.StartsWith("hbr_", StringComparison.Ordinal) ? state.HostId : null),
-                    Runtime = state.Runtime, Provider = state.Provider, AccountKey = state.AccountKey, CaptainIds = members,
+                if ((query.FromUtc.HasValue && capturedUtc < query.FromUtc.Value) || (query.ToUtc.HasValue && capturedUtc >= query.ToUtc.Value)) continue;
+                int requestedInterval = state.RequestedIntervalSeconds ?? 300;
+                if (!state.RequestedIntervalSeconds.HasValue)
+                {
+                    List<int> configured = new List<int>();
+                    foreach (string member in members.Distinct(StringComparer.Ordinal))
+                    {
+                        Captain? captain = await _Database.Captains.ReadAsync(query.TenantId!, member).ConfigureAwait(false);
+                        if (captain != null) configured.Add(captain.UsageCaptureIntervalSeconds);
+                    }
+                    if (configured.Count > 0) requestedInterval = configured.Min();
+                }
+                int interval = state.EffectiveIntervalSeconds ?? Math.Max(requestedInterval, _Settings.MinimumIntervalSeconds);
+                rows.Add(new UsageSnapshotView { Id = id, AccountId = state.Id, TenantId = state.TenantId, HostId = state.HostId, HarborId = snapshot?.HarborId ?? (state.HostId.StartsWith("hbr_", StringComparison.Ordinal) ? state.HostId : null),
+                    Runtime = state.Runtime, Provider = state.Provider, AccountKey = state.AccountKey, CaptainIds = members.Distinct(StringComparer.Ordinal).OrderBy(member => member, StringComparer.Ordinal).ToList(),
                     CapturedUtc = (failed ? state.LastErrorCapturedUtc : state.LastGoodCapturedUtc) ?? state.LastUpdateUtc,
                     ObservedUtc = state.LastGoodCapturedUtc, Status = (failed ? state.LastErrorStatus : state.LastGoodStatus) ?? Armada.Core.Enums.UsageSnapshotStatusEnum.Failed,
                     ErrorCode = failed ? state.LastErrorCode : null, Windows = UsageWindowsJson.Deserialize(state.LastGoodWindowsJson),
                     Stale = failed || !state.LastGoodCapturedUtc.HasValue || state.LastGoodCapturedUtc.Value.AddSeconds(interval * 2) < DateTime.UtcNow,
-                    RequestedIntervalSeconds = group?.RequestedIntervalSeconds ?? 300, EffectiveIntervalSeconds = interval, CapabilityReason = AgentRuntimeCapabilities.UsageCapture(state.Runtime).Reason });
+                    RequestedIntervalSeconds = requestedInterval, EffectiveIntervalSeconds = interval, CapabilityReason = AgentRuntimeCapabilities.UsageCapture(state.Runtime).Reason });
             }
             telemetry.Complete();
+            Func<UsageSnapshotView, IComparable?> key = sortBy switch {
+                "captainId" => row => row.CaptainIds.FirstOrDefault(),
+                "hostId" => row => row.HostId,
+                "runtime" => row => row.Runtime.ToString(),
+                "limits" => row => row.Windows.Select(window => window.UsedPercent).Max(),
+                "interval" => row => row.EffectiveIntervalSeconds,
+                _ => row => row.ObservedUtc ?? row.CapturedUtc
+            };
+            IEnumerable<UsageSnapshotView> ordered = query.SortDirection == "ascending"
+                ? rows.OrderBy(key).ThenBy(row => row.AccountId, StringComparer.Ordinal)
+                : rows.OrderByDescending(key).ThenBy(row => row.AccountId, StringComparer.Ordinal);
             int count = rows.Count;
-            return new EnumerationResult<UsageSnapshotView> { Objects = rows.Skip((query.PageNumber - 1) * query.PageSize).Take(query.PageSize).ToList(), PageNumber = query.PageNumber, PageSize = query.PageSize, TotalRecords = count, TotalPages = (int)Math.Ceiling(count / (double)query.PageSize) };
+            List<UsageSnapshotView> visible = ordered.Skip((query.PageNumber - 1) * query.PageSize).Take(query.PageSize).ToList();
+            return new EnumerationResult<UsageSnapshotView> { TotalMs = Math.Round(timer.Elapsed.TotalMilliseconds, 2), Objects = visible, PageNumber = query.PageNumber, PageSize = query.PageSize, TotalRecords = count, TotalPages = (int)Math.Ceiling(count / (double)query.PageSize) };
         }
 
         /// <summary>SeriesAsync: account usage contract.</summary>

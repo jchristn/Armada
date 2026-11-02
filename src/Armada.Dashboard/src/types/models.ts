@@ -4629,6 +4629,7 @@ export interface UsageWindow {
 
 /** Sanitized latest or historical account observation, shared by every member captain. */
 export interface UsageSnapshotView {
+  accountId?: string | null;
   id: string | null;
   tenantId: string | null;
   hostId: string | null;
@@ -4735,6 +4736,8 @@ export interface UsageMissionResult extends EnumerationResult<UsageMissionRow> {
 
 /** Identity filters shared by the usage reads; ranges are UTC ISO-8601 [from,to). */
 export interface UsageFilter {
+  sortBy?: string;
+  sortDirection?: 'ascending' | 'descending';
   captainId?: string;
   harborId?: string;
   hostId?: string;

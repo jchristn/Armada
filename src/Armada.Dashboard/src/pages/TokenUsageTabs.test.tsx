@@ -77,6 +77,7 @@ describe('Token usage tabs', () => {
     expect(screen.getAllByRole('tablist')).toHaveLength(1);
     expect(screen.getByRole('combobox', { name: 'Range' }).closest('form')).toBe(screen.getByRole('combobox', { name: 'Window' }).closest('form'));
     fireEvent.click(screen.getByRole('tab', { name: 'Account Limits' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Filters' }));
     await screen.findByRole('combobox', { name: 'Provider' });
     await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('source=usage-limits'));
   });
@@ -136,6 +137,7 @@ describe('Token usage tabs', () => {
   it('retains filter values after a failed request and offers a retry', async () => {
     vi.mocked(getUsageLatest).mockRejectedValue(new Error('latest unavailable'));
     renderAt('/activity?tab=limits&provider=anthropic&hostId=hbr_laptop');
+    fireEvent.click(await screen.findByRole('button', { name: 'Filters' }));
     await waitFor(() => expect(getUsageLatest).toHaveBeenCalledWith(expect.objectContaining({ provider: 'anthropic', hostId: 'hbr_laptop' })));
     expect((await screen.findAllByText('latest unavailable')).length).toBeGreaterThan(0);
     expect(screen.getByRole('combobox', { name: 'Provider' })).toHaveValue('anthropic');
@@ -151,7 +153,8 @@ describe('Token usage tabs', () => {
   it('opens the Limits tab with the provider history filters from a captain usage link', async () => {
     vi.mocked(getUsageLatest).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 25, totalPages: 1, totalRecords: 0, objects: [], totalMs: 1 });
     renderAt('/activity?tab=limits&provider=anthropic&accountKey=acct_x&hostId=hbr_y');
-    await waitFor(() => expect(getUsageLatest).toHaveBeenCalledWith({ provider: 'anthropic', accountKey: 'acct_x', hostId: 'hbr_y', pageNumber: 1, pageSize: 25 }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Filters' }));
+    await waitFor(() => expect(getUsageLatest).toHaveBeenCalledWith({ provider: 'anthropic', accountKey: 'acct_x', hostId: 'hbr_y', pageNumber: 1, pageSize: 25, sortBy: 'updated', sortDirection: 'descending' }));
     expect(screen.getByRole('combobox', { name: 'Account' })).toHaveValue('acct_x');
   });
 });

@@ -10,6 +10,8 @@ namespace Armada.Core.Models
     {
         /// <summary>Id: account usage contract.</summary>
         public string? Id { get; set; }
+        /// <summary>Stable persisted account-state identifier, when this is a latest-state view.</summary>
+        public string? AccountId { get; set; }
         /// <summary>TenantId: account usage contract.</summary>
         public string? TenantId { get; set; }
         /// <summary>HostId: account usage contract.</summary>

@@ -137,6 +137,15 @@ namespace Armada.Core.Models
         /// </summary>
         public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
 
+        /// <summary>Safe fingerprint of the capture group and its configuration, used to recover account context after restart.</summary>
+        public string? CaptureContextKey { get; set; }
+
+        /// <summary>Requested capture interval persisted with the observation; null for legacy metadata.</summary>
+        public int? RequestedIntervalSeconds { get; set; }
+
+        /// <summary>Effective shared interval persisted with the observation; null for legacy metadata.</summary>
+        public int? EffectiveIntervalSeconds { get; set; }
+
         #endregion
 
         #region Private-Members

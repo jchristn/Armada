@@ -32,17 +32,20 @@ namespace Armada.Core.Database.Sqlite.Queries
         internal const string SnapshotCaptainsDeleteByTenant = "DELETE FROM usage_snapshot_captains WHERE tenant_id = @tenant_id;";
 
         internal const string LatestStateUpsert = @"INSERT INTO usage_latest_state
-            (id, tenant_id, host_id, runtime, provider, account_key,
+            (id, tenant_id, host_id, runtime, provider, account_key, capture_context_key, requested_interval_seconds, effective_interval_seconds,
              last_good_snapshot_id, last_good_captured_utc, last_good_received_utc, last_good_status, last_good_windows_json,
              last_error_snapshot_id, last_error_captured_utc, last_error_status, last_error_code,
              expired_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @host_id, @runtime, @provider, @account_key,
+            (@id, @tenant_id, @host_id, @runtime, @provider, @account_key, @capture_context_key, @requested_interval_seconds, @effective_interval_seconds,
              @last_good_snapshot_id, @last_good_captured_utc, @last_good_received_utc, @last_good_status, @last_good_windows_json,
              @last_error_snapshot_id, @last_error_captured_utc, @last_error_status, @last_error_code,
              @expired_utc, @last_update_utc)
             ON CONFLICT(tenant_id, host_id, runtime, account_key) DO UPDATE SET
-                provider = excluded.provider,
+                provider = COALESCE(excluded.provider, usage_latest_state.provider),
+                capture_context_key = COALESCE(excluded.capture_context_key, usage_latest_state.capture_context_key),
+                requested_interval_seconds = COALESCE(excluded.requested_interval_seconds, usage_latest_state.requested_interval_seconds),
+                effective_interval_seconds = COALESCE(excluded.effective_interval_seconds, usage_latest_state.effective_interval_seconds),
                 last_good_snapshot_id = CASE WHEN excluded.last_good_snapshot_id IS NULL THEN usage_latest_state.last_good_snapshot_id ELSE excluded.last_good_snapshot_id END,
                 last_good_captured_utc = CASE WHEN excluded.last_good_snapshot_id IS NULL THEN usage_latest_state.last_good_captured_utc ELSE excluded.last_good_captured_utc END,
                 last_good_received_utc = CASE WHEN excluded.last_good_snapshot_id IS NULL THEN usage_latest_state.last_good_received_utc ELSE excluded.last_good_received_utc END,

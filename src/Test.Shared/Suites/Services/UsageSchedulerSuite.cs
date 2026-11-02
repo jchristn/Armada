@@ -1322,6 +1322,33 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(generation, fixture.Service.Generation, "no invalidation happened across the disabled-to-enabled sequence");
             }));
 
+            cases.Add(CaseAsync("restart_failure_recovers_persisted_account_context", "An identity-less failure after restart updates the known account without losing its last good observation", TestTags.Positive, async () =>
+            {
+                using TestDatabaseFixture original = await TestDatabaseFixture.CreateAsync().ConfigureAwait(false);
+                Captain captain = await original.CreateCustomCaptainAsync("restart-account", "{\"executable\":\"/opt/usage\",\"arguments\":[]}").ConfigureAwait(false);
+                UsageCaptureScheduler scheduler = original.CreateScheduler();
+                await scheduler.RebuildAsync().ConfigureAwait(false);
+                UsageCaptureGroup group = scheduler.Groups().Single();
+                original.Executor.Result = OkResult();
+                UsageCaptureAttempt attempt = await original.Service.TryStartAsync(group, captain.Id, manual: true).ConfigureAwait(false);
+                UsageCaptureAttemptResult first = await AwaitAsync(attempt.Completion).ConfigureAwait(false);
+                AssertTrue(first.Persisted, "first observation: " + (first.ErrorCode ?? first.DiscardedReason ?? attempt.SkippedReason));
+                UsageLatestState before = (await original.Database.UsageSnapshots.EnumerateLatestStatesAsync(new UsageLatestStateQuery { TenantId = TenantId }).ConfigureAwait(false)).Objects.Single();
+                using TestDatabaseFixture restarted = TestDatabaseFixture.AttachAsync(original);
+                restarted.Executor.Result = new UsageProbeResult { Status = UsageSnapshotStatusEnum.Failed, ErrorCode = "HostUnavailable", CapturedUtc = first.Snapshot!.CapturedUtc.AddMinutes(1) };
+                UsageCaptureAttempt next = await restarted.Service.TryStartAsync(group, captain.Id, manual: true).ConfigureAwait(false);
+                UsageCaptureAttemptResult failure = await AwaitAsync(next.Completion).ConfigureAwait(false);
+                AssertTrue(failure.Persisted, "restart failure: " + (failure.ErrorCode ?? failure.DiscardedReason ?? next.SkippedReason));
+                UsageLatestState after = (await original.Database.UsageSnapshots.EnumerateLatestStatesAsync(new UsageLatestStateQuery { TenantId = TenantId }).ConfigureAwait(false)).Objects.Single();
+                AssertEqual(before.Id, after.Id);
+                AssertEqual(before.AccountKey, after.AccountKey);
+                AssertEqual("anthropic", after.Provider);
+                AssertEqual(first.Snapshot.Id, after.LastGoodSnapshotId);
+                AssertEqual(failure.Snapshot!.Id, after.LastErrorSnapshotId);
+                AssertEqual("HostUnavailable", after.LastErrorCode);
+                AssertEqual(captain.Id, (await original.Database.UsageSnapshots.ReadLatestCaptainsAsync(after.Id, TenantId).ConfigureAwait(false)).Single());
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Usage Capture Scheduler",

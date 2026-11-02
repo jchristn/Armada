@@ -52,11 +52,19 @@ namespace Armada.Core.Database.Sqlite.Implementations
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task<UsageSnapshot> CreateAsync(UsageSnapshot snapshot, List<string>? captainIds, CancellationToken token = default)
+        public Task<UsageSnapshot> CreateAsync(UsageSnapshot snapshot, List<string>? captainIds, CancellationToken token = default) => CreateWithLatestStateAsync(snapshot, captainIds, null, token);
+
+        /// <inheritdoc />
+        public async Task<UsageSnapshot> CreateWithLatestStateAsync(UsageSnapshot snapshot, List<string>? captainIds, UsageLatestState? latestState, CancellationToken token = default)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (String.IsNullOrEmpty(snapshot.TenantId)) throw new ArgumentNullException(nameof(snapshot), "Snapshot tenant id is required.");
             if (String.IsNullOrEmpty(snapshot.HostId)) throw new ArgumentNullException(nameof(snapshot), "Snapshot host id is required.");
+
+            if (latestState != null && (latestState.TenantId != snapshot.TenantId || latestState.HostId != snapshot.HostId || latestState.Runtime != snapshot.Runtime
+                || (!String.IsNullOrEmpty(snapshot.AccountKey) && latestState.AccountKey != snapshot.AccountKey)
+                || (latestState.LastGoodSnapshotId != snapshot.Id && latestState.LastErrorSnapshotId != snapshot.Id)))
+                throw new ArgumentException("The latest state must describe the same tenant, host, account and observation.", nameof(latestState));
 
             List<string> members = (captainIds ?? new List<string>())
                 .Where(id => !String.IsNullOrWhiteSpace(id))
@@ -96,9 +104,47 @@ namespace Armada.Core.Database.Sqlite.Implementations
                         SqliteCommandHelper.AddDate(cmd, "@captured_utc", snapshot.CapturedUtc);
                     }, token).ConfigureAwait(false);
                 }
+                if (latestState != null)
+                {
+                    await SqliteCommandHelper.ExecuteAsync(conn, tx, UsageSnapshotQueries.LatestStateUpsert, command => BindLatestState(command, latestState), token).ConfigureAwait(false);
+                    List<UsageLatestState> saved = await SqliteCommandHelper.QueryAsync(conn, tx, UsageSnapshotQueries.LatestStateSelectByKey, command =>
+                    {
+                        SqliteCommandHelper.Add(command, "@tenant_id", latestState.TenantId);
+                        SqliteCommandHelper.Add(command, "@host_id", latestState.HostId);
+                        SqliteCommandHelper.Add(command, "@runtime", latestState.Runtime.ToString());
+                        SqliteCommandHelper.Add(command, "@account_key", latestState.AccountKey);
+                    }, LatestStateFromReader, token).ConfigureAwait(false);
+                    string stateId = saved.Single().Id;
+                    await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM usage_latest_state_captains WHERE tenant_id = @tenant_id AND latest_state_id = @state_id;", command =>
+                    {
+                        SqliteCommandHelper.Add(command, "@tenant_id", latestState.TenantId);
+                        SqliteCommandHelper.Add(command, "@state_id", stateId);
+                    }, token).ConfigureAwait(false);
+                    foreach (string captainId in members)
+                    {
+                        await SqliteCommandHelper.ExecuteAsync(conn, tx, "INSERT INTO usage_latest_state_captains (tenant_id, latest_state_id, captain_id) VALUES (@tenant_id, @state_id, @captain_id);", command =>
+                        {
+                            SqliteCommandHelper.Add(command, "@tenant_id", latestState.TenantId);
+                            SqliteCommandHelper.Add(command, "@state_id", stateId);
+                            SqliteCommandHelper.Add(command, "@captain_id", captainId);
+                        }, token).ConfigureAwait(false);
+                    }
+                }
             }, token).ConfigureAwait(false);
 
             return snapshot;
+        }
+
+        /// <inheritdoc />
+        public Task<List<string>> ReadLatestCaptainsAsync(string stateId, string tenantId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(stateId)) throw new ArgumentNullException(nameof(stateId));
+            if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
+            return SqliteCommandHelper.QueryAsync(_ConnectionString, "SELECT captain_id FROM usage_latest_state_captains WHERE tenant_id = @tenant_id AND latest_state_id = @state_id ORDER BY captain_id;", command =>
+            {
+                SqliteCommandHelper.Add(command, "@tenant_id", tenantId);
+                SqliteCommandHelper.Add(command, "@state_id", stateId);
+            }, reader => reader["captain_id"].ToString()!, token);
         }
 
         /// <inheritdoc />
@@ -403,6 +449,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
             SqliteCommandHelper.Add(cmd, "@runtime", state.Runtime.ToString());
             SqliteCommandHelper.Add(cmd, "@provider", String.IsNullOrEmpty(state.Provider) ? null : state.Provider);
             SqliteCommandHelper.Add(cmd, "@account_key", state.AccountKey);
+            SqliteCommandHelper.Add(cmd, "@capture_context_key", state.CaptureContextKey);
+            SqliteCommandHelper.Add(cmd, "@requested_interval_seconds", state.RequestedIntervalSeconds);
+            SqliteCommandHelper.Add(cmd, "@effective_interval_seconds", state.EffectiveIntervalSeconds);
             SqliteCommandHelper.Add(cmd, "@last_good_snapshot_id", String.IsNullOrEmpty(state.LastGoodSnapshotId) ? null : state.LastGoodSnapshotId);
             SqliteCommandHelper.AddDate(cmd, "@last_good_captured_utc", state.LastGoodCapturedUtc);
             SqliteCommandHelper.AddDate(cmd, "@last_good_received_utc", state.LastGoodReceivedUtc);
@@ -445,6 +494,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
             state.HostId = reader["host_id"].ToString()!;
             state.Runtime = SqliteCommandHelper.ReadEnum(reader["runtime"], AgentRuntimeEnum.ClaudeCode);
             state.Provider = SqliteCommandHelper.ReadString(reader["provider"]);
+            state.CaptureContextKey = SqliteCommandHelper.ReadString(reader["capture_context_key"]);
+            state.RequestedIntervalSeconds = reader["requested_interval_seconds"] == DBNull.Value ? null : SqliteCommandHelper.ReadInt(reader["requested_interval_seconds"], 300);
+            state.EffectiveIntervalSeconds = reader["effective_interval_seconds"] == DBNull.Value ? null : SqliteCommandHelper.ReadInt(reader["effective_interval_seconds"], 300);
             state.AccountKey = reader["account_key"].ToString()!;
             state.LastGoodSnapshotId = SqliteCommandHelper.ReadString(reader["last_good_snapshot_id"]);
             state.LastGoodCapturedUtc = SqliteCommandHelper.ReadNullableDate(reader["last_good_captured_utc"]);

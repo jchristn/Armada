@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getUsageLatest } from '../../api/client';
 import { useLocale } from '../../context/LocaleContext';
@@ -7,6 +7,8 @@ import { captainUsagePath, viewKind } from '../../lib/usage';
 import type { EnumerationResult, UsageSnapshotView } from '../../types/models';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import UsageState from './UsageState';
+import { useAutoRefresh } from '../../lib/useAutoRefresh';
+import { usePersistedPageSize } from '../../lib/usePersistedPageSize';
 import CopyButton from '../shared/CopyButton';
 import UsageWindowBar from './UsageWindowBar';
 
@@ -23,7 +25,10 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const revision = useUsageRevision();
   const [pageNumber, setPageNumber] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [storedPageSize, setPageSize] = usePersistedPageSize('usage-account-limits');
+  const pageSize = Math.min(MAX_PAGE_SIZE, storedPageSize);
+  const requestVersion = useRef(0);
+  const [sort, setSort] = useState<{ field: string; dir: 'asc' | 'desc' }>({ field: 'updated', dir: 'desc' });
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<EnumerationResult<UsageSnapshotView> | null>(null);
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading');
@@ -36,29 +41,32 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
     setPageNumber(1);
   }
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
+    const version = ++requestVersion.current;
     setStatus('loading');
-    getUsageLatest({ provider: provider || undefined, accountKey: accountKey || undefined, hostId: hostId || undefined, pageNumber, pageSize })
-      .then((data) => {
-        if (cancelled) return;
-        setResult(data);
-        setError('');
-        setStatus('ready');
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
-        setStatus('error');
-      });
-    return () => { cancelled = true; };
-  }, [provider, accountKey, hostId, pageNumber, pageSize, revision, attempt]);
+    try {
+      const data = await getUsageLatest({ provider: provider || undefined, accountKey: accountKey || undefined, hostId: hostId || undefined, pageNumber, pageSize, sortBy: sort.field, sortDirection: sort.dir === 'asc' ? 'ascending' : 'descending' });
+      if (version !== requestVersion.current) return;
+      setResult(data);
+      setError('');
+      setStatus('ready');
+    } catch (err: unknown) {
+      if (version !== requestVersion.current) return;
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus('error');
+    }
+  }, [provider, accountKey, hostId, pageNumber, pageSize, sort]);
+  useEffect(() => {
+    void load();
+    return () => { requestVersion.current++; };
+  }, [load, revision, attempt]);
+  const { seconds, setSeconds } = useAutoRefresh('usage-account-limits', () => { void load(); });
 
   const rows = result?.objects ?? [];
 
   const columns: DataTableColumn<UsageSnapshotView>[] = [
     {
-      key: 'captains',
+      key: 'captains', sortKey: 'captainId',
       label: t('Captain ID'),
       required: true,
       interactive: true,
@@ -71,15 +79,15 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
       ),
     },
     {
-      key: 'host', label: t('Host ID'), interactive: true,
+      key: 'host', sortKey: 'hostId', label: t('Host ID'), interactive: true,
       render: (view) => {
         const host = view.harborId ?? view.hostId;
         return host ? <span className="id-display"><span className="mono" title={host}>{host}</span><CopyButton text={host} /></span> : '-';
       },
     },
-    { key: 'runtime', label: t('Runtime'), render: (view) => view.runtime },
+    { key: 'runtime', sortKey: 'runtime', label: t('Runtime'), render: (view) => view.runtime },
     {
-      key: 'limits',
+      key: 'limits', sortKey: 'limits',
       label: t('Limits'),
       className: 'usage-limits-cell',
       render: (view) => {
@@ -97,13 +105,13 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
       },
     },
     {
-      key: 'observed',
+      key: 'observed', sortKey: 'updated',
       label: t('Updated'),
       cellTitle: (view) => (view.observedUtc ? formatDateTime(view.observedUtc) : undefined),
       render: (view) => (view.observedUtc ? formatRelativeTime(view.observedUtc) : <span className="text-dim">{t('Never')}</span>),
     },
     {
-      key: 'interval',
+      key: 'interval', sortKey: 'interval',
       label: t('Interval'),
       headerTitle: t('Requested and effective capture interval for this account. Captains that share the account share one schedule.'),
       cellTitle: (view) => t('Every {{effective}}s (requested {{requested}}s)', { effective: view.effectiveIntervalSeconds, requested: view.requestedIntervalSeconds }),
@@ -111,38 +119,38 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
     },
   ];
 
-  if (status === 'error') {
-    return (
-      <div className="usage-limits-error">
-        <UsageState kind="error" onRetry={() => setAttempt((n) => n + 1)} />
-        {error && <p className="text-dim">{error}</p>}
-      </div>
-    );
-  }
 
   return (
+    <>
+    {status === 'error' && <div role="alert"><UsageState kind="error" onRetry={() => setAttempt((n) => n + 1)} /><p className="text-dim">{error}</p></div>}
     <DataTable
       tableKey="usage-account-limits"
+      className="request-history-table"
+      autoRefresh={{ seconds, onChange: setSeconds }}
+      onRefresh={load}
+      sort={{ ...sort, onSort: (field) => { setSort((previous) => ({ field, dir: previous.field === field && previous.dir === 'asc' ? 'desc' : 'asc' })); setPageNumber(1); } }}
       ariaLabel={t('Limits grouped by account and host')}
       columns={columns}
       rows={rows}
-      rowKey={(view) => view.id ?? `${view.hostId}|${view.runtime}|${view.provider}|${view.accountKey}`}
+      rowKey={(view) => view.accountId ?? view.id ?? `${view.hostId}|${view.runtime}|${view.provider}|${view.accountKey}`}
       placeholder={status === 'loading' && !result ? <UsageState kind="loading" /> : undefined}
-      emptyMessage={
+      emptyMessage={status === 'error' ? <UsageState kind="error" compact /> :
         <div className="usage-limits-empty">
           <strong>{t('No account usage has been captured yet')}</strong>
           <p className="text-dim">{t('Turn on usage capture in Settings and on each captain. Until an observation is stored, consumption is unknown, not zero.')}</p>
         </div>
       }
-      wrapClassName="usage-table-scroll"
+      wrapClassName="request-history-table-wrap"
       pagination={{
         pageNumber,
         pageSize,
+        totalMs: result?.totalMs,
         totalPages: result?.totalPages ?? 1,
         totalRecords: result?.totalRecords ?? 0,
         onPageChange: setPageNumber,
         onPageSizeChange: (size) => { setPageSize(Math.min(MAX_PAGE_SIZE, size)); setPageNumber(1); },
       }}
     />
+    </>
   );
 }

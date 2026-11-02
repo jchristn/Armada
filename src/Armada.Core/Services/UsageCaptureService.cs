@@ -648,10 +648,10 @@ namespace Armada.Core.Services
                 ErrorCode = probe.ErrorCode
             };
 
-            snapshot = await _Database.UsageSnapshots.CreateAsync(snapshot, memberCaptainIds, token).ConfigureAwait(false);
+            UsageLatestState? latestState = await BuildLatestStateAsync(group, memberCaptainIds, snapshot, token).ConfigureAwait(false);
+            snapshot = await _Database.UsageSnapshots.CreateWithLatestStateAsync(snapshot, memberCaptainIds, latestState, token).ConfigureAwait(false);
 
             await ReconcileMembershipsAsync(group, memberCaptainIds, probe, receivedUtc, token).ConfigureAwait(false);
-            await UpsertLatestStateAsync(group, snapshot, token).ConfigureAwait(false);
             try { SnapshotCommitted?.Invoke(snapshot, memberCaptainIds); }
             catch (Exception ex) { _Logging.Warn(_Header + "usage event delivery failed: " + ex.Message); }
             UsageTelemetry.ObservationAge(snapshot.CapturedUtc);
@@ -778,54 +778,69 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task UpsertLatestStateAsync(UsageCaptureGroup group, UsageSnapshot snapshot, CancellationToken token)
+        private static string CaptureContextKey(UsageCaptureGroup group) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(new string?[] { group.GroupKey, group.ConfigurationRevision }))));
+
+        private async Task<UsageLatestState?> BuildLatestStateAsync(UsageCaptureGroup group, List<string> members, UsageSnapshot snapshot, CancellationToken token)
         {
             string? accountKey = snapshot.AccountKey;
             bool observedIdentity = !String.IsNullOrWhiteSpace(accountKey);
             if (!observedIdentity)
             {
-                // A failure that could not observe the account identity (the host was unreachable) is
-                // still about the account this group last observed: the error is stored against it. An
-                // identity nobody ever observed never merges captains into an unknown group.
-                accountKey = _GroupStates.TryGetValue(group.GroupKey, out GroupState? state) ? state.LastAccountKey : null;
-                if (String.IsNullOrWhiteSpace(accountKey)) return;
-            }
-
-            try
-            {
-                bool good = snapshot.Status == UsageSnapshotStatusEnum.Ok || snapshot.Status == UsageSnapshotStatusEnum.Estimated;
-                UsageLatestState state = new UsageLatestState
+                accountKey = _GroupStates.TryGetValue(group.GroupKey, out GroupState? cached) ? cached.LastAccountKey : null;
+                if (String.IsNullOrWhiteSpace(accountKey))
                 {
-                    TenantId = group.TenantId,
-                    HostId = group.HostId,
-                    Runtime = group.Runtime,
-                    Provider = snapshot.Provider,
-                    AccountKey = accountKey!,
-                    LastUpdateUtc = snapshot.ReceivedUtc
-                };
-
-                if (good && observedIdentity)
-                {
-                    state.LastGoodSnapshotId = snapshot.Id;
-                    state.LastGoodCapturedUtc = snapshot.CapturedUtc;
-                    state.LastGoodReceivedUtc = snapshot.ReceivedUtc;
-                    state.LastGoodStatus = snapshot.Status;
-                    state.LastGoodWindowsJson = snapshot.WindowsJson;
+                    HashSet<string> persisted = new HashSet<string>(StringComparer.Ordinal);
+                    UsageLatestStateQuery query = new UsageLatestStateQuery { TenantId = group.TenantId, HostId = group.HostId, Runtime = group.Runtime, PageSize = 1000 };
+                    while (true)
+                    {
+                        EnumerationResult<UsageLatestState> page = await _Database.UsageSnapshots.EnumerateLatestStatesAsync(query, token).ConfigureAwait(false);
+                        foreach (UsageLatestState saved in page.Objects)
+                        {
+                            if (saved.CaptureContextKey != CaptureContextKey(group)) continue;
+                            List<string> savedMembers = await _Database.UsageSnapshots.ReadLatestCaptainsAsync(saved.Id, group.TenantId, token).ConfigureAwait(false);
+                            if (savedMembers.Exists(members.Contains)) persisted.Add(saved.AccountKey);
+                        }
+                        if (query.PageNumber >= page.TotalPages || page.Objects.Count == 0) break;
+                        query.PageNumber++;
+                    }
+                    foreach (string captainId in group.Mode == UsageCaptureModeEnum.Auto && persisted.Count == 0 ? members : new List<string>())
+                    {
+                        List<UsageAccountMembership> memberships = await _Database.UsageMemberships.ReadActiveAsync(group.TenantId, captainId, token).ConfigureAwait(false);
+                        foreach (UsageAccountMembership membership in memberships)
+                            if (membership.HostId == group.HostId && membership.Runtime == group.Runtime
+                                && String.Equals(membership.ConfigurationRevision, group.ConfigurationRevision, StringComparison.Ordinal)) persisted.Add(membership.AccountKey);
+                    }
+                    // Do not guess an account when configuration or identity is ambiguous.
+                    if (persisted.Count == 1) accountKey = System.Linq.Enumerable.Single(persisted);
                 }
-                else
-                {
-                    state.LastErrorSnapshotId = snapshot.Id;
-                    state.LastErrorCapturedUtc = snapshot.CapturedUtc;
-                    state.LastErrorStatus = snapshot.Status;
-                    state.LastErrorCode = snapshot.ErrorCode;
-                }
+                if (String.IsNullOrWhiteSpace(accountKey)) return null;
+            }
 
-                await _Database.UsageSnapshots.UpsertLatestStateAsync(state, token).ConfigureAwait(false);
-            }
-            catch (Exception e)
+            bool good = observedIdentity && (snapshot.Status == UsageSnapshotStatusEnum.Ok || snapshot.Status == UsageSnapshotStatusEnum.Estimated);
+            UsageLatestState state = new UsageLatestState
             {
-                _Logging.Warn(_Header + "could not upsert the latest usage state for account " + accountKey + ": " + e.Message);
+                TenantId = group.TenantId, HostId = group.HostId, Runtime = group.Runtime,
+                Provider = snapshot.Provider, AccountKey = accountKey!, LastUpdateUtc = snapshot.ReceivedUtc,
+                RequestedIntervalSeconds = group.RequestedIntervalSeconds, EffectiveIntervalSeconds = group.EffectiveIntervalSeconds,
+                CaptureContextKey = CaptureContextKey(group)
+            };
+            if (good)
+            {
+                state.LastGoodSnapshotId = snapshot.Id;
+                state.LastGoodCapturedUtc = snapshot.CapturedUtc;
+                state.LastGoodReceivedUtc = snapshot.ReceivedUtc;
+                state.LastGoodStatus = snapshot.Status;
+                state.LastGoodWindowsJson = snapshot.WindowsJson;
             }
+            else
+            {
+                state.LastErrorSnapshotId = snapshot.Id;
+                state.LastErrorCapturedUtc = snapshot.CapturedUtc;
+                state.LastErrorStatus = snapshot.Status;
+                state.LastErrorCode = snapshot.ErrorCode;
+            }
+            return state;
         }
 
         private DateTime? ScheduleNext(UsageCaptureGroup group, UsageProbeResult probe, DateTime now)

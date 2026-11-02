@@ -74,7 +74,11 @@ namespace Armada.Server.Routes
             foreach (string name in new[] { "captainId", "harborId", "hostId", "runtime", "provider", "accountKey", "tenantId", "from", "to", "pageNumber", "pageSize" })
                 api.WithParameter(OpenApiParameterMetadata.Query(name, name == "tenantId" ? "Explicit tenant (global administrator only; omission uses caller tenant)" : name == "pageSize" ? "Default 25, range 1..100" : name == "pageNumber" ? "Default 1" : "Usage filter; UTC ranges are half-open [from,to), at most 90 days", (kind == "series" || kind == "missions") && (name == "from" || name == "to") || kind == "missions" && name == "provider"));
             if (kind == "latest")
-                api.WithParameter(OpenApiParameterMetadata.Query("captainIds", "Comma-separated 1..100 distinct tenant-visible captain IDs; incompatible with captainId. Filters before account paging. Shared accounts appear once with full membership. Missing observations return no row, never zero.", false));
+            {
+                api.WithParameter(OpenApiParameterMetadata.Query("sortBy", "captainId, hostId, runtime, limits, updated (default), or interval", false));
+                api.WithParameter(OpenApiParameterMetadata.Query("sortDirection", "ascending or descending (default)", false));
+                api.WithParameter(OpenApiParameterMetadata.Query("captainIds", "Comma-separated 1..100 distinct tenant-visible captain IDs; incompatible with captainId. Filters before account paging. Shared accounts appear once with full membership. Missing observations return no row, never zero. Without explicit dates, latest state has no age cutoff.", false));
+            }
             if (kind == "series" || kind == "missions")
                 foreach (string name in new[] { "metric", "groupBy", "bucketMinutes", "window", "model", "sortBy", "sortDirection" })
                     api.WithParameter(OpenApiParameterMetadata.Query(name, "Series or mission filter; buckets 5/60/360, metric limits/tokens, groupBy account/provider", false));

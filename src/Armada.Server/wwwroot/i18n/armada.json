@@ -115,6 +115,7 @@
   "locales": {
     "es": {
       "terms": {
+        "Filters": "Filtros",
         "Dashboard": "Panel",
         "Dispatch": "Despacho",
         "Voyages": "Viajes",
@@ -7365,6 +7366,7 @@
     },
     "zh-Hans": {
       "terms": {
+        "Filters": "\u7b5b\u9009\u6761\u4ef6",
         "Dashboard": "仪表板",
         "Dispatch": "派发",
         "Voyages": "航程",
@@ -13666,6 +13668,7 @@
     },
     "zh-Hant": {
       "terms": {
+        "Filters": "\u7be9\u9078\u689d\u4ef6",
         "Dashboard": "儀表板",
         "Dispatch": "派送",
         "Voyages": "航程",
@@ -19924,6 +19927,7 @@
     },
     "yue-Hant": {
       "terms": {
+        "Filters": "\u7be9\u9078\u689d\u4ef6",
         "Dashboard": "儀表板",
         "Dispatch": "派送",
         "Voyages": "航程",
@@ -26148,6 +26152,7 @@
     },
     "ja": {
       "terms": {
+        "Filters": "\u30d5\u30a3\u30eb\u30bf\u30fc",
         "Dashboard": "ダッシュボード",
         "Dispatch": "ディスパッチ",
         "Voyages": "航海",
@@ -32388,6 +32393,7 @@
     },
     "de": {
       "terms": {
+        "Filters": "Filter",
         "Dashboard": "Dashboard",
         "Dispatch": "Dispatch",
         "Voyages": "Voyages",
@@ -38619,6 +38625,7 @@
     },
     "fr": {
       "terms": {
+        "Filters": "Filtres",
         "Dashboard": "Tableau de bord",
         "Dispatch": "Envoi",
         "Voyages": "Voyages",
@@ -44850,6 +44857,7 @@
     },
     "it": {
       "terms": {
+        "Filters": "Filtri",
         "Dashboard": "Dashboard",
         "Dispatch": "Invio",
         "Voyages": "Viaggi",

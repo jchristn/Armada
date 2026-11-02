@@ -33,17 +33,20 @@ namespace Armada.Core.Database.Mysql.Queries
         internal const string SnapshotCaptainsDeleteByTenant = "DELETE FROM usage_snapshot_captains WHERE tenant_id = @tenant_id;";
 
         internal const string LatestStateUpsert = @"INSERT INTO usage_latest_state
-            (id, tenant_id, host_id, runtime, provider, account_key,
+            (id, tenant_id, host_id, runtime, provider, account_key, capture_context_key, requested_interval_seconds, effective_interval_seconds,
              last_good_snapshot_id, last_good_captured_utc, last_good_received_utc, last_good_status, last_good_windows_json,
              last_error_snapshot_id, last_error_captured_utc, last_error_status, last_error_code,
              expired_utc, last_update_utc)
             VALUES
-            (@id, @tenant_id, @host_id, @runtime, @provider, @account_key,
+            (@id, @tenant_id, @host_id, @runtime, @provider, @account_key, @capture_context_key, @requested_interval_seconds, @effective_interval_seconds,
              @last_good_snapshot_id, @last_good_captured_utc, @last_good_received_utc, @last_good_status, @last_good_windows_json,
              @last_error_snapshot_id, @last_error_captured_utc, @last_error_status, @last_error_code,
              @expired_utc, @last_update_utc)
             ON DUPLICATE KEY UPDATE
-                provider = VALUES(provider),
+                provider = COALESCE(VALUES(provider), provider),
+                capture_context_key = COALESCE(VALUES(capture_context_key), capture_context_key),
+                requested_interval_seconds = COALESCE(VALUES(requested_interval_seconds), requested_interval_seconds),
+                effective_interval_seconds = COALESCE(VALUES(effective_interval_seconds), effective_interval_seconds),
                 last_good_snapshot_id = IF(VALUES(last_good_snapshot_id) IS NULL, last_good_snapshot_id, VALUES(last_good_snapshot_id)),
                 last_good_captured_utc = IF(VALUES(last_good_snapshot_id) IS NULL, last_good_captured_utc, VALUES(last_good_captured_utc)),
                 last_good_received_utc = IF(VALUES(last_good_snapshot_id) IS NULL, last_good_received_utc, VALUES(last_good_received_utc)),

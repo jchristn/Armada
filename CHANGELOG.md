@@ -8,6 +8,14 @@ All notable changes to Armada are documented in this file.
 
 ### Captain usage history and operations
 
+- Commit observations, latest account state and durable captain links atomically on
+  all four database providers. Persist capture intervals/context, recover missing
+  projections during migration 116, and retain original observations after restart
+  without an implicit 24-hour cutoff on latest reads.
+- Match Account Limits to API Requests: collapsible Filters card, immediate dropdown
+  filters, Reset, shared refresh/auto-refresh controls, persisted page size, column
+  selection, backend sorting and query timing.
+
 - Complete account usage contract documentation and variable-driven Postman read,
   enumerate, capture and error examples; declare host/account filters in MCP.
 - Preserve hourly quota history before raw pruning in atomic provider transactions.

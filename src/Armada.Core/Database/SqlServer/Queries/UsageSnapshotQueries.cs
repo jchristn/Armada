@@ -36,7 +36,10 @@ namespace Armada.Core.Database.SqlServer.Queries
             USING (SELECT @tenant_id AS tenant_id, @host_id AS host_id, @runtime AS runtime, @account_key AS account_key) AS source
             ON target.tenant_id = source.tenant_id AND target.host_id = source.host_id AND target.runtime = source.runtime AND target.account_key = source.account_key
             WHEN MATCHED THEN UPDATE SET
-                provider = @provider,
+                provider = COALESCE(@provider, target.provider),
+                capture_context_key = COALESCE(@capture_context_key, target.capture_context_key),
+                requested_interval_seconds = COALESCE(@requested_interval_seconds, target.requested_interval_seconds),
+                effective_interval_seconds = COALESCE(@effective_interval_seconds, target.effective_interval_seconds),
                 last_good_snapshot_id = CASE WHEN @last_good_snapshot_id IS NULL THEN target.last_good_snapshot_id ELSE @last_good_snapshot_id END,
                 last_good_captured_utc = CASE WHEN @last_good_snapshot_id IS NULL THEN target.last_good_captured_utc ELSE @last_good_captured_utc END,
                 last_good_received_utc = CASE WHEN @last_good_snapshot_id IS NULL THEN target.last_good_received_utc ELSE @last_good_received_utc END,
@@ -49,12 +52,12 @@ namespace Armada.Core.Database.SqlServer.Queries
                 expired_utc = @expired_utc,
                 last_update_utc = @last_update_utc
             WHEN NOT MATCHED THEN INSERT
-                (id, tenant_id, host_id, runtime, provider, account_key,
+                (id, tenant_id, host_id, runtime, provider, account_key, capture_context_key, requested_interval_seconds, effective_interval_seconds,
                  last_good_snapshot_id, last_good_captured_utc, last_good_received_utc, last_good_status, last_good_windows_json,
                  last_error_snapshot_id, last_error_captured_utc, last_error_status, last_error_code,
                  expired_utc, last_update_utc)
             VALUES
-                (@id, @tenant_id, @host_id, @runtime, @provider, @account_key,
+                (@id, @tenant_id, @host_id, @runtime, @provider, @account_key, @capture_context_key, @requested_interval_seconds, @effective_interval_seconds,
                  @last_good_snapshot_id, @last_good_captured_utc, @last_good_received_utc, @last_good_status, @last_good_windows_json,
                  @last_error_snapshot_id, @last_error_captured_utc, @last_error_status, @last_error_code,
                  @expired_utc, @last_update_utc);";

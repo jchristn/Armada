@@ -27,6 +27,21 @@ namespace Armada.Core.Database.Interfaces
         /// <exception cref="ArgumentNullException">Thrown when the snapshot, its tenant, host or any member id is null or empty.</exception>
         Task<UsageSnapshot> CreateAsync(UsageSnapshot snapshot, List<string>? captainIds, CancellationToken token = default);
 
+        /// <summary>Commit a sanitized snapshot, snapshot links, latest summary and durable current member links in one transaction.</summary>
+        /// <param name="snapshot">Observation to store.</param>
+        /// <param name="captainIds">Captured member IDs.</param>
+        /// <param name="latestState">Matching account summary, or null when identity is unavailable.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The stored snapshot.</returns>
+        Task<UsageSnapshot> CreateWithLatestStateAsync(UsageSnapshot snapshot, List<string>? captainIds, UsageLatestState? latestState, CancellationToken token = default);
+
+        /// <summary>Read the persisted latest account member IDs independently of raw history retention and scheduler state.</summary>
+        /// <param name="stateId">Account-state ID.</param>
+        /// <param name="tenantId">Tenant scope.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Ordered captured members.</returns>
+        Task<List<string>> ReadLatestCaptainsAsync(string stateId, string tenantId, CancellationToken token = default);
+
         /// <summary>
         /// Read one snapshot by id.
         /// </summary>

@@ -860,6 +860,66 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
+            cases.Add(Case("atomic_capture_survives_database_reopen", "Atomic latest state retains stable identity, members and intervals after reopen and raw retention", TestTags.Positive, async ct =>
+            {
+                using IsolatedTestDatabase isolated = await IsolatedTestDatabase.CreateAsync("usage_restart", token: ct).ConfigureAwait(false);
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                UsageSnapshot snapshot = new UsageSnapshot { TenantId = "ten_restart", HostId = "host", AccountKey = "account", Provider = "anthropic", CapturedUtc = DateTime.UtcNow.AddDays(-8), ReceivedUtc = DateTime.UtcNow.AddDays(-8), Status = UsageSnapshotStatusEnum.Ok, WindowsJson = "[]" };
+                UsageLatestState state = new UsageLatestState { TenantId = snapshot.TenantId, HostId = snapshot.HostId, Runtime = snapshot.Runtime, AccountKey = snapshot.AccountKey!, Provider = snapshot.Provider, LastGoodSnapshotId = snapshot.Id, LastGoodCapturedUtc = snapshot.CapturedUtc, LastGoodWindowsJson = snapshot.WindowsJson, RequestedIntervalSeconds = 120, EffectiveIntervalSeconds = 180, CaptureContextKey = "restart-context" };
+                using (DatabaseDriver first = DatabaseDriverFactory.Create(isolated.Settings, logging))
+                {
+                    await first.InitializeAsync(ct).ConfigureAwait(false);
+                    await first.UsageSnapshots.CreateWithLatestStateAsync(snapshot, new List<string> { "cpt_a", "cpt_b", "cpt_a" }, state, ct).ConfigureAwait(false);
+                    await first.UsageSnapshots.DeleteOlderThanAsync(DateTime.UtcNow.AddDays(-7), ct).ConfigureAwait(false);
+                }
+                using (DatabaseDriver reopened = DatabaseDriverFactory.Create(isolated.Settings, logging))
+                {
+                    await reopened.InitializeAsync(ct).ConfigureAwait(false);
+                    UsageLatestState saved = (await reopened.UsageSnapshots.EnumerateLatestStatesAsync(new UsageLatestStateQuery { TenantId = snapshot.TenantId }, ct).ConfigureAwait(false)).Objects.Single();
+                    AssertEqual(state.Id, saved.Id);
+                    AssertEqual(120, saved.RequestedIntervalSeconds);
+                    AssertEqual(180, saved.EffectiveIntervalSeconds);
+                    AssertEqual("restart-context", saved.CaptureContextKey);
+                    AssertEqual(snapshot.CapturedUtc, saved.LastGoodCapturedUtc);
+                    AssertEqual(2, (await reopened.UsageSnapshots.ReadLatestCaptainsAsync(saved.Id, snapshot.TenantId!, ct).ConfigureAwait(false)).Count);
+                    AssertEqual(0, (await reopened.UsageSnapshots.ReadLatestCaptainsAsync(saved.Id, "ten_other", ct).ConfigureAwait(false)).Count);
+                    AssertNull(await reopened.UsageSnapshots.ReadAsync(snapshot.Id, snapshot.TenantId!, ct).ConfigureAwait(false));
+                    UsageSnapshot conflicting = new UsageSnapshot { TenantId = snapshot.TenantId, HostId = snapshot.HostId, AccountKey = "other", Runtime = snapshot.Runtime };
+                    UsageLatestState invalid = new UsageLatestState { Id = saved.Id, TenantId = snapshot.TenantId, HostId = snapshot.HostId, AccountKey = "other", Runtime = snapshot.Runtime, LastErrorSnapshotId = conflicting.Id };
+                    bool rejected = false;
+                    try { await reopened.UsageSnapshots.CreateWithLatestStateAsync(conflicting, new List<string> { "cpt_other" }, invalid, ct).ConfigureAwait(false); }
+                    catch (Exception) { rejected = true; }
+                    AssertTrue(rejected, "projection primary key conflict must fail capture");
+                    AssertNull(await reopened.UsageSnapshots.ReadAsync(conflicting.Id, snapshot.TenantId!, ct).ConfigureAwait(false), "raw write rolled back with projection");
+                    AssertEqual(0, (await reopened.UsageSnapshots.ReadCaptainsAsync(conflicting.Id, snapshot.TenantId!, ct).ConfigureAwait(false)).Count);
+                }
+            }));
+
+            cases.Add(Case("v115_raw_observations_recover_latest_on_upgrade", "Upgrade recovers missing latest projection and durable member identity from raw observations", TestTags.Positive, async ct =>
+            {
+                using IsolatedTestDatabase isolated = await IsolatedTestDatabase.CreateAsync("usage_recover", token: ct).ConfigureAwait(false);
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                if (isolated.Type == DatabaseTypeEnum.Sqlite) await ApplyMigrationsUpToV110(isolated.SqlitePath!, ct, 115).ConfigureAwait(false);
+                else await ApplyServerMigrationsUpToV110(isolated.Settings, logging, ct, 115).ConfigureAwait(false);
+                UsageSnapshot good = new UsageSnapshot { TenantId = "ten_recover", HostId = "host", AccountKey = "account", Provider = "anthropic", Status = UsageSnapshotStatusEnum.Ok, CapturedUtc = DateTime.UtcNow.AddHours(-2), WindowsJson = "[]" };
+                UsageSnapshot error = new UsageSnapshot { TenantId = good.TenantId, HostId = good.HostId, AccountKey = good.AccountKey, Status = UsageSnapshotStatusEnum.Failed, CapturedUtc = DateTime.UtcNow.AddHours(-1), ErrorCode = "HostUnavailable" };
+                using DatabaseDriver driver = DatabaseDriverFactory.Create(isolated.Settings, logging);
+                await driver.UsageSnapshots.CreateAsync(good, new List<string> { "cpt_recovered" }, ct).ConfigureAwait(false);
+                await driver.UsageSnapshots.CreateAsync(error, new List<string> { "cpt_recovered" }, ct).ConfigureAwait(false);
+                await driver.InitializeAsync(ct).ConfigureAwait(false);
+                UsageLatestState saved = (await driver.UsageSnapshots.EnumerateLatestStatesAsync(new UsageLatestStateQuery { TenantId = good.TenantId }, ct).ConfigureAwait(false)).Objects.Single();
+                AssertEqual(good.Id, saved.LastGoodSnapshotId);
+                AssertEqual(error.Id, saved.LastErrorSnapshotId);
+                AssertEqual("anthropic", saved.Provider);
+                AssertEqual("HostUnavailable", saved.LastErrorCode);
+                AssertEqual(good.CapturedUtc, saved.LastGoodCapturedUtc);
+                AssertEqual("cpt_recovered", (await driver.UsageSnapshots.ReadLatestCaptainsAsync(saved.Id, good.TenantId!, ct).ConfigureAwait(false)).Single());
+                await driver.InitializeAsync(ct).ConfigureAwait(false);
+                AssertEqual(1L, (await driver.UsageSnapshots.EnumerateLatestStatesAsync(new UsageLatestStateQuery { TenantId = good.TenantId }, ct).ConfigureAwait(false)).TotalRecords);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Usage Persistence",
@@ -921,7 +981,7 @@ namespace Test.Shared.Suites.Database
             }
         }
 
-        private static async Task ApplyServerMigrationsUpToV110(DatabaseSettings settings, LoggingModule logging, CancellationToken token)
+        private static async Task ApplyServerMigrationsUpToV110(DatabaseSettings settings, LoggingModule logging, CancellationToken token, int maximumVersion = 110)
         {
             using (DatabaseDriver driver = DatabaseDriverFactory.Create(settings, logging))
             using (DbConnection connection = CreateUpgradeConnection(settings))
@@ -941,7 +1001,7 @@ namespace Test.Shared.Suites.Database
                     ?? throw new InvalidOperationException("Provider migration executor missing");
                 foreach (SchemaMigration migration in driver.GetMigrationsForVerification())
                 {
-                    if (migration.Version > 110) continue;
+                    if (migration.Version > maximumVersion) continue;
                     using (DbTransaction transaction = await connection.BeginTransactionAsync(token).ConfigureAwait(false))
                     {
                         Task execution = (Task)(executor.Invoke(executor.IsStatic ? null : driver, new object[] { connection, transaction, migration, token })
@@ -971,7 +1031,7 @@ namespace Test.Shared.Suites.Database
             }
         }
 
-        private static async Task ApplyMigrationsUpToV110(string path, CancellationToken token)
+        private static async Task ApplyMigrationsUpToV110(string path, CancellationToken token, int maximumVersion = 110)
         {
             using (SqliteConnection conn = new SqliteConnection("Data Source=" + path))
             {
@@ -990,7 +1050,7 @@ namespace Test.Shared.Suites.Database
                 List<SchemaMigration> migrations = TableQueries.GetMigrations();
                 foreach (SchemaMigration migration in migrations)
                 {
-                    if (migration.Version >= 111) continue;
+                    if (migration.Version > maximumVersion) continue;
 
                     using (SqliteTransaction tx = conn.BeginTransaction())
                     {

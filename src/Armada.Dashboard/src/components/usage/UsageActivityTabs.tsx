@@ -109,18 +109,26 @@ function UsageFilterForm({ fields, series = [], children }: { fields: FilterFiel
   };
 
   return (
-    <form className={`usage-filter-form${children ? '' : ' filter-bar usage-table-filters'}`} onSubmit={apply} aria-label={t('Usage filters')}>
+    <form className={children ? 'usage-filter-form' : 'request-filter-grid'} onSubmit={apply} aria-label={t('Usage filters')}>
       {children}
       {fields.map((field) => (
-        <label key={field.param} className="usage-filter-field" title={t(field.title)}>
-          <span className={children ? undefined : 'sr-only'}>{t(field.label)}</span>
+        <label key={field.param} className={children ? "usage-filter-field" : "request-filter-field"} title={t(field.title)}>
+          <span>{t(field.label)}</span>
           <select
-            className="filter-select"
+            className={children ? "filter-select" : undefined}
             name={field.param}
             value={draft[field.param] ?? ''}
-            onChange={(e) => setDraft((prev) => ({ ...prev, [field.param]: e.target.value }))}
+            onChange={(e) => {
+              const value = e.target.value;
+              setDraft((prev) => ({ ...prev, [field.param]: value }));
+              if (!children) {
+                const next = new URLSearchParams(params);
+                if (value) next.set(field.param, value); else next.delete(field.param);
+                setParams(next);
+              }
+            }}
           >
-            <option value="">{t(children ? 'All' : field.label)}</option>
+            <option value="">{t('All')}</option>
             {draft[field.param] && !choices[field.param].has(draft[field.param]) && (
               <option value={draft[field.param]}>{field.param === 'window' ? usageWindowLabel({ name: draft[field.param] }, t) : field.param === 'accountKey' ? accountAlias(draft[field.param]) : draft[field.param]}</option>
             )}
@@ -131,10 +139,10 @@ function UsageFilterForm({ fields, series = [], children }: { fields: FilterFiel
         </label>
       ))}
       {optionsError && <div role="alert"><span>{optionsError}</span> <button type="button" className="btn btn-sm" onClick={() => setAttempt((n) => n + 1)}>{t('Refresh')}</button></div>}
-      <div className="usage-filter-actions">
+      {children && <div className="usage-filter-actions">
         <button type="submit" className="btn btn-sm" title={t('Apply these filters.')}>{t('Apply')}</button>
         <button type="button" className="btn btn-sm" onClick={clear} title={t('Remove the provider, account and host filters.')}>{t('Clear filters')}</button>
-      </div>
+      </div>}
     </form>
   );
 }
@@ -302,10 +310,27 @@ export function UsageOverviewTab() {
 
 /** Limits tab: filters plus the account and host table. */
 export function UsageLimitsTab() {
-  const [params] = useSearchParams();
+  const { t } = useLocale();
+  const [params, setParams] = useSearchParams();
+  const [expanded, setExpanded] = useState(false);
+  const active = IDENTITY_FIELDS.some((field) => params.has(field.param));
   return (
     <div className="usage-limits">
-      <UsageFilterForm fields={IDENTITY_FIELDS} />
+      <div className="card request-history-filters-card">
+        <div className="request-card-header">
+          <button type="button" className="collapsible-header" aria-label={t('Filters')} aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
+            <span className="collapsible-caret" aria-hidden="true">{expanded ? '▾' : '▸'}</span>
+            <span className="collapsible-title">{t('Filters')}</span>
+            {active && <span className="filter-active-pill">{t('Active')}</span>}
+          </button>
+          {expanded && <button type="button" className="btn btn-sm" onClick={() => {
+            const next = new URLSearchParams(params);
+            for (const field of IDENTITY_FIELDS) next.delete(field.param);
+            setParams(next);
+          }}>{t('Reset')}</button>}
+        </div>
+        {expanded && <div className="request-card-body"><UsageFilterForm fields={IDENTITY_FIELDS} /></div>}
+      </div>
       <AccountLimitsTable
         provider={params.get('provider') || undefined}
         accountKey={params.get('accountKey') || undefined}

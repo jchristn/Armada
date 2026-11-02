@@ -40,8 +40,8 @@ namespace Test.Shared.Suites.E2E
                     DateTime now = DateTime.UtcNow.AddMinutes(-1);
                     foreach (string account in new[] { "unrelated", "selected" })
                     {
-                        UsageSnapshot sample = await UsageTestData.SnapshotAsync(db, owner.TenantId, now, account, new List<string> { a.Id, b.Id }).ConfigureAwait(false);
-                        await db.UsageSnapshots.UpsertLatestStateAsync(new UsageLatestState { TenantId = owner.TenantId, HostId = sample.HostId, Runtime = sample.Runtime, Provider = sample.Provider, AccountKey = account, LastGoodStatus = UsageSnapshotStatusEnum.Ok, LastGoodSnapshotId = sample.Id, LastGoodCapturedUtc = now, LastGoodWindowsJson = sample.WindowsJson }).ConfigureAwait(false);
+                        UsageSnapshot sample = await UsageTestData.SnapshotAsync(db, owner.TenantId, account == "unrelated" ? now.AddHours(-1) : now, account, new List<string> { a.Id, b.Id }).ConfigureAwait(false);
+                        await db.UsageSnapshots.UpsertLatestStateAsync(new UsageLatestState { TenantId = owner.TenantId, HostId = sample.HostId, Runtime = sample.Runtime, Provider = sample.Provider, AccountKey = account, LastGoodStatus = UsageSnapshotStatusEnum.Ok, LastGoodSnapshotId = sample.Id, LastGoodCapturedUtc = sample.CapturedUtc, LastGoodWindowsJson = sample.WindowsJson }).ConfigureAwait(false);
                         if (account == "selected")
                             foreach (Captain captain in new[] { a, b })
                                 await db.UsageMemberships.CreateAsync(new UsageAccountMembership { TenantId = owner.TenantId, CaptainId = captain.Id, HostId = sample.HostId, Runtime = sample.Runtime, Provider = sample.Provider, AccountKey = account, EffectiveFromUtc = now.AddHours(-1) }).ConfigureAwait(false);
@@ -51,6 +51,13 @@ namespace Test.Shared.Suites.E2E
                     AssertEqual(1L, result.TotalRecords, "batch filter happens before paging");
                     AssertEqual("selected", result.Objects.Single().AccountKey);
                     AssertEqual(2, result.Objects.Single().CaptainIds.Count, "shared account appears once and keeps membership");
+                    EnumerationResult<UsageSnapshotView> oldest = await UsageTestData.GetAsync<EnumerationResult<UsageSnapshotView>>(client, "/api/v1/usage/latest?sortBy=updated&sortDirection=ascending&pageSize=1").ConfigureAwait(false);
+                    AssertEqual("unrelated", oldest.Objects.Single().AccountKey, "sorting precedes paging");
+                    EnumerationResult<UsageSnapshotView> newest = await UsageTestData.GetAsync<EnumerationResult<UsageSnapshotView>>(client, "/api/v1/usage/latest?sortBy=updated&sortDirection=descending&pageSize=1").ConfigureAwait(false);
+                    AssertEqual("selected", newest.Objects.Single().AccountKey);
+                    AssertTrue(newest.TotalMs > 0, "shared table receives measured query time");
+                    await UsageTestData.StatusAsync(client, "/api/v1/usage/latest?sortBy=unsupported", HttpStatusCode.BadRequest).ConfigureAwait(false);
+
                     EnumerationResult<UsageSnapshotView> missing = await UsageTestData.GetAsync<EnumerationResult<UsageSnapshotView>>(client, "/api/v1/usage/latest?captainIds=" + empty.Id).ConfigureAwait(false);
                     AssertEqual(0L, missing.TotalRecords, "no sample is not zero usage");
                     using (HttpResponseMessage openApiResponse = await fx.AuthClient.GetAsync("/openapi.json").ConfigureAwait(false))
@@ -136,12 +143,18 @@ namespace Test.Shared.Suites.E2E
                     Harbor harbor = await db.Harbors.CreateAsync(new Harbor { TenantId = owner.TenantId, Name = "retained-host" }).ConfigureAwait(false);
                     DateTime observed = DateTime.UtcNow.AddDays(-8);
                     UsageSnapshot snapshot = new UsageSnapshot { TenantId = owner.TenantId, HostId = harbor.Id, HarborId = harbor.Id, AccountKey = "retained", Provider = "anthropic", CapturedUtc = observed, ReceivedUtc = observed, Status = UsageSnapshotStatusEnum.Ok, WindowsJson = UsageWindowsJson.Serialize(new List<UsageWindow> { new UsageWindow { Name = "five_hour", UsedPercent = 42 } }) };
-                    await db.UsageSnapshots.CreateAsync(snapshot, new List<string> { captain.Id }).ConfigureAwait(false);
-                    await db.UsageMemberships.CreateAsync(new UsageAccountMembership { TenantId = owner.TenantId, CaptainId = captain.Id, HostId = harbor.Id, AccountKey = "retained", Provider = "anthropic", EffectiveFromUtc = observed.AddHours(-1) }).ConfigureAwait(false);
-                    await db.UsageSnapshots.UpsertLatestStateAsync(new UsageLatestState { TenantId = owner.TenantId, HostId = harbor.Id, AccountKey = "retained", Provider = "anthropic", LastGoodSnapshotId = snapshot.Id, LastGoodCapturedUtc = observed, LastGoodWindowsJson = snapshot.WindowsJson }).ConfigureAwait(false);
+                    UsageLatestState state = new UsageLatestState { TenantId = owner.TenantId, HostId = harbor.Id, Runtime = snapshot.Runtime, AccountKey = "retained", Provider = "anthropic", LastGoodSnapshotId = snapshot.Id, LastGoodCapturedUtc = observed, LastGoodWindowsJson = snapshot.WindowsJson, RequestedIntervalSeconds = 120, EffectiveIntervalSeconds = 600 };
+                    await db.UsageSnapshots.CreateWithLatestStateAsync(snapshot, new List<string> { captain.Id }, state).ConfigureAwait(false);
                     await db.UsageSnapshots.DeleteOlderThanAsync(DateTime.UtcNow.AddDays(-7)).ConfigureAwait(false);
                     AssertNull(await db.UsageSnapshots.ReadAsync(snapshot.Id, owner.TenantId).ConfigureAwait(false), "fixture actually expired raw snapshot");
                     string identity = "&captainId=" + captain.Id + "&harborId=" + harbor.Id;
+                    EnumerationResult<UsageSnapshotView> current = await UsageTestData.GetAsync<EnumerationResult<UsageSnapshotView>>(client, "/api/v1/usage/latest?captainId=" + captain.Id).ConfigureAwait(false);
+                    AssertEqual(1L, current.TotalRecords, "latest state has no implicit 24-hour cutoff");
+                    AssertEqual(state.Id, current.Objects.Single().AccountId, "latest exposes stable account identity");
+                    AssertEqual(120, current.Objects.Single().RequestedIntervalSeconds);
+                    AssertEqual(600, current.Objects.Single().EffectiveIntervalSeconds);
+                    AssertEqual(observed, current.Objects.Single().ObservedUtc);
+
                     EnumerationResult<UsageSnapshotView> retained = await UsageTestData.GetAsync<EnumerationResult<UsageSnapshotView>>(client, "/api/v1/usage/latest?" + UsageTestData.Range(observed.AddHours(-1), observed.AddHours(1)) + identity).ConfigureAwait(false);
                     AssertEqual(1L, retained.TotalRecords); AssertEqual(captain.Id, retained.Objects.Single().CaptainIds.Single());
                     AssertEqual(harbor.Id, retained.Objects.Single().HarborId); AssertEqual(observed, retained.Objects.Single().ObservedUtc); AssertTrue(retained.Objects.Single().Stale);

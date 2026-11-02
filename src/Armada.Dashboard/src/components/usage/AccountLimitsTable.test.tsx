@@ -35,16 +35,16 @@ function renderTable(props: { provider?: string; accountKey?: string; hostId?: s
 }
 
 describe('AccountLimitsTable', () => {
-  beforeEach(() => { vi.mocked(getUsageLatest).mockReset(); });
+  beforeEach(() => { vi.mocked(getUsageLatest).mockReset(); localStorage.clear(); });
 
   it('lists one row per account with member captains linking to their usage section', async () => {
     vi.mocked(getUsageLatest).mockResolvedValue(page([view()]));
     renderTable({ provider: 'anthropic', hostId: 'hbr_laptop' });
     await waitFor(() => expect(screen.getByRole('link', { name: 'cpt_a' })).toHaveAttribute('href', '/captains/cpt_a?section=usage'));
     expect(screen.getByRole('link', { name: 'cpt_b' })).toHaveAttribute('href', '/captains/cpt_b?section=usage');
-    expect(getUsageLatest).toHaveBeenCalledWith({ provider: 'anthropic', accountKey: undefined, hostId: 'hbr_laptop', pageNumber: 1, pageSize: 25 });
+    expect(getUsageLatest).toHaveBeenCalledWith({ provider: 'anthropic', accountKey: undefined, hostId: 'hbr_laptop', pageNumber: 1, pageSize: 25, sortBy: 'updated', sortDirection: 'descending' });
     const table = screen.getByRole('table', { name: 'Limits grouped by account and host' });
-    expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Captain ID', 'Host ID', 'Runtime', 'Limits', 'Updated', 'Interval']);
+    expect(within(table).getAllByRole('columnheader').map((header) => header.querySelector('.th-sort-label')?.textContent ?? header.textContent?.replace(/[⇅↕↑↓▲▼]/g, '').trim())).toEqual(['Captain ID', 'Host ID', 'Runtime', 'Limits', 'Updated', 'Interval']);
     expect(screen.getByRole('progressbar', { name: '5-hour limit usage' })).toHaveAttribute('aria-valuenow', '82');
     expect(screen.getByText('600s')).toBeInTheDocument();
     expect(screen.getByText('600s').closest('td')).toHaveAttribute('title', 'Every 600s (requested 300s)');
@@ -94,4 +94,18 @@ describe('AccountLimitsTable', () => {
     expect(within(table).getByRole('link', { name: 'cpt_a' })).toBeInTheDocument();
     expect(getUsageLatest).toHaveBeenCalledTimes(2);
   });
+  it('uses shared refresh, auto-refresh, sorting and table layout controls', async () => {
+    vi.mocked(getUsageLatest).mockResolvedValue(page([view()]));
+    renderTable();
+    const table = await screen.findByRole('table');
+    expect(table).toHaveClass('request-history-table');
+    expect(table.closest('.request-history-table-wrap')).not.toBeNull();
+    expect(screen.getByRole('combobox', { name: /Auto.refresh/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Runtime' }));
+    await waitFor(() => expect(getUsageLatest).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy: 'runtime', sortDirection: 'ascending', pageNumber: 1 })));
+    const calls = vi.mocked(getUsageLatest).mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(getUsageLatest).toHaveBeenCalledTimes(calls + 1));
+  });
+
 });
