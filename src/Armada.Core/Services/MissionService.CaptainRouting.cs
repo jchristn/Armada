@@ -221,7 +221,7 @@ namespace Armada.Core.Services
                 Captain? requested = await _Database.Captains.ReadAsync(requestedCaptainId, token).ConfigureAwait(false);
                 if (requested?.Active == false) return null;
             }
-            // Only idle captains are eligible for assignment
+            // Idle or Working captains with free, non-exclusive capacity are eligible.
             List<Captain> idleCaptains = await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false);
             foreach (Captain candidate in idleCaptains) candidate.MaxConcurrency = ConcurrencyClamp.CaptainLimit(candidate.MaxConcurrency, _Settings.Concurrency.MaxCaptainConcurrency);
             idleCaptains = idleCaptains.Where(c => c.HasMissionCapacity && CaptainVisibleToMission(c, mission) &&
@@ -357,6 +357,10 @@ namespace Armada.Core.Services
                 CaptainTierEnum bestTier = tierEligible.Min(CaptainTierSelector.EffectiveTier);
                 eligible = tierEligible.Where(c => CaptainTierSelector.EffectiveTier(c) == bestTier).ToList();
             }
+
+            // Preserve routing preferences, then spread equivalent work by occupied slots.
+            // LastUpdateUtc is the idle/assignment tie-breaker, with Id making ties deterministic.
+            eligible = eligible.OrderBy(c => c.ActiveMissionCount).ThenBy(c => c.LastUpdateUtc).ThenBy(c => c.Id, StringComparer.Ordinal).ToList();
 
             // Prefer captains whose PreferredPersona matches
             if (!String.IsNullOrEmpty(persona))

@@ -1,8 +1,8 @@
 # Armada REST API Reference
 
-## v1.3.0 development: captain capacity
+## v1.3.0 development: parallelization and concurrency
 
-Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The legacy singular mission/dock fields remain until migration 121; use active mission IDs to find each mission’s dock and process. See [testing](CONCURRENCY_TESTING.md).
+Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The legacy singular mission/dock fields remain until migration 121; use active mission IDs to find each mission’s dock and process. Admission serializes vessel checks separately from shared capacity claims, with bounded lock waits. A lock timeout leaves the mission Pending for retry; no new endpoint or request field is needed. Equivalent captains with fewer occupied slots are preferred after explicit/persona/tier routing. See [testing](CONCURRENCY_TESTING.md).
 
 **Version:** 1.3.0
 **Base URL:** `http://localhost:7890`

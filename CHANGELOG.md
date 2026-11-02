@@ -6,6 +6,8 @@ All notable changes to Armada are documented in this file.
 
 ## v1.3.0 (in development)
 
+v1.3.0 focuses on **parallelization and concurrency**: more independent work in flight, bounded capacity, clear waiting reasons, and isolated recovery.
+
 ### Concurrency (in progress)
 
 - Begin [captain slots, vessel voyage/mission limits, and mission hierarchy](CONCURRENCY_IMPROVEMENTS.md) on `feature/v1.3.0`.
@@ -17,6 +19,11 @@ All notable changes to Armada are documented in this file.
 - Expose numeric limits in Dashboard, Mobile and TUI vessel forms, setup wizards and detail views, plus REST and MCP. Add a model-free HTTP/git/process end-to-end scenario and a 50-request dispatch race test.
 - Add multi-mission captains: runtime defaults (CLI 1, ApiEndpoint/Mux 4), atomic durable mission slots in migration 118, per-mission heartbeat/recovery, independent completion/cancellation and restart/Harbor reconnection. Read-only active mission IDs/counts accompany capacity editors in Dashboard, Mobile and TUI and REST/MCP/WebSocket fields. Lowering capacity preserves running missions; planning/refinement remain exclusive.
 - Hierarchy, wait telemetry and final admission integration remain in progress. Legacy fields remain stored until their planned removal migration; the old vessel flag no longer controls dispatch. See [testing instructions](docs/CONCURRENCY_TESTING.md).
+
+### Scheduling admission
+
+- Serialize vessel gates per vessel, then shared global/runtime/endpoint/captain claims with a fixed lock order. Both waits are bounded; timed-out requests retry on the next cycle and increment `armada.admission.lock_timeouts` by gate. Idle registry entries are removed, and neither lock is held while provisioning docks or launching processes.
+- Spread equivalent work across eligible captains with fewer occupied slots while preserving explicit captain selection, persona preferences, priority classes and tier routing. Add lock isolation/cleanup and 200-mission mixed-limit regression coverage.
 
 ### Dashboard navigation
 
@@ -1723,6 +1730,11 @@ Focus: stickiness and reliability -- making Armada a daily driver through per-pr
 - Added an `inbox` MCP tool so agent harnesses can answer "is there anything waiting on me / that needs my attention / any action items from Armada?". It returns the same consolidated attention list as the dashboard's Needs You and the `armada inbox` CLI (REST: `GET /api/v1/inbox`), with counts and per-item kind/severity/title/detail/entity/href.
 - Broadened the inbox definitions beyond missions + stalled captains to cover the full human-in-the-loop / human-out-of-the-loop set: missions in Review, landing-failed and failed missions, **failed merges**, **deployments pending approval**, **failed/verification-failed deployments**, and stalled captains. Purely informational events (completions, normal progress) are excluded.
 - Documented in MCP_API.md (with the kind/severity table) and added the tool to every `INSTRUCTIONS_FOR_*` orchestrator reference.
+
+### Scheduling admission
+
+- Serialize vessel gates per vessel, then shared global/runtime/endpoint/captain claims with a fixed lock order. Both waits are bounded; timed-out requests retry on the next cycle and increment `armada.admission.lock_timeouts` by gate. Idle registry entries are removed, and neither lock is held while provisioning docks or launching processes.
+- Spread equivalent work across eligible captains with fewer occupied slots while preserving explicit captain selection, persona preferences, priority classes and tier routing. Add lock isolation/cleanup and 200-mission mixed-limit regression coverage.
 
 ### Dashboard navigation consolidation
 - Regrouped the dashboard from ~35 nav destinations across 6 sections to ~13 workflow-grouped destinations, without removing any capability: every folded page is reachable as a tab, a filter, the notification bell, or the command palette, and every old route redirects.

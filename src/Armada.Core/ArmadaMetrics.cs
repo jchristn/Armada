@@ -20,6 +20,10 @@ namespace Armada.Core
 
         private static readonly Meter _Meter = new Meter(MeterName);
 
+        /// <summary>Bounded admission waits that timed out; gate is vessel or capacity.</summary>
+        public static readonly Counter<long> AdmissionLockTimeouts =
+            _Meter.CreateCounter<long>("armada.admission.lock_timeouts");
+
         /// <summary>Missions that reached Failed.</summary>
         public static readonly Counter<long> MissionsFailed =
             _Meter.CreateCounter<long>("armada.missions.failed", null, "Missions failed");

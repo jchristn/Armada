@@ -148,11 +148,11 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 
 ---
 
-## v1.3.0 development
+## v1.3.0 development: parallelization and concurrency
 
-Work on [concurrency improvements](CONCURRENCY_IMPROVEMENTS.md) is underway on `feature/v1.3.0`. Vessel voyage and mission admission limits are now usable through the Dashboard, Mobile, TUI, REST and MCP. Assignment checks and claims are serialized; voyages retain admission through review and landing, while running mission slots refill after agent completion. See [the end-to-end test guide](docs/CONCURRENCY_TESTING.md). One captain can now run multiple missions with independent docks, processes and recovery. Configure Maximum concurrent missions on a captain; CLI defaults to 1 and ApiEndpoint/Mux to 4. Hierarchy, wait telemetry and the final removal of legacy fields remain in the plan.
+v1.3.0 focuses on **parallelization and concurrency**: running independent work safely across vessels and within each captain. Work on [concurrency improvements](CONCURRENCY_IMPROVEMENTS.md) is underway on `feature/v1.3.0`. Vessel voyage and mission admission limits are now usable through the Dashboard, Mobile, TUI, REST and MCP. Assignment checks and claims are serialized; voyages retain admission through review and landing, while running mission slots refill after agent completion. See [the end-to-end test guide](docs/CONCURRENCY_TESTING.md). One captain can now run multiple missions with independent docks, processes and recovery. Configure Maximum concurrent missions on a captain; CLI defaults to 1 and ApiEndpoint/Mux to 4. Hierarchy, wait telemetry and the final removal of legacy fields remain in the plan.
 
-This development branch identifies packages and images as v1.3.0. Those images have not been published by this change; use the v1.2.0 release for deployed environments until a v1.3.0 release is available.
+This development branch identifies packages and images as v1.3.0. Development images are rebuilt with `./build-all.sh v1.3.0` after each completed segment; this also updates `latest`. These are development builds; v1.2.0 remains the stable release.
 
 ## What's New in v1.2.0
 

@@ -69,7 +69,7 @@ namespace Armada.Core.Services
 
         /// <summary>
         /// Select from eligible idle captains in hierarchy order. Within a class, prefer the persona's
-        /// preferred captains, then stable captain id order. Null means no available match.
+        /// preferred captains, then the fewest occupied slots and stable captain id order. Null means no available match.
         /// </summary>
         /// <exception cref="ArgumentNullException">The persona or eligible captain list is null.</exception>
         public static Captain? Select(Persona persona, IReadOnlyList<Captain> eligibleCaptains)
@@ -83,7 +83,7 @@ namespace Armada.Core.Services
             {
                 Captain? selected = eligibleCaptains.Where(c => c.Active && Matches(priority, c))
                     .OrderByDescending(c => PersonaCatalog.Matches(c.PreferredPersona, persona.Name))
-                    .ThenBy(c => c.Id, StringComparer.Ordinal).FirstOrDefault();
+                    .ThenBy(c => c.ActiveMissionCount).ThenBy(c => c.Id, StringComparer.Ordinal).FirstOrDefault();
                 if (selected != null) return selected;
             }
             return null;

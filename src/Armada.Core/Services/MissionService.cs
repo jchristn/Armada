@@ -118,9 +118,10 @@ namespace Armada.Core.Services
             "AGENTS.override.md"
         };
 
-        // Serialize the short read/check/claim boundary across all entry points. Release before
-        // provisioning or launching: completion callbacks may dispatch more work synchronously.
-        private readonly SemaphoreSlim _AdmissionLock = new SemaphoreSlim(1, 1);
+        // Lock order is vessel, then capacity. Release both before provisioning/launching:
+        // completion callbacks may dispatch more work synchronously.
+        private readonly VesselAdmissionLockRegistry _VesselAdmissionLocks = new VesselAdmissionLockRegistry();
+        private readonly SemaphoreSlim _CapacityLock = new SemaphoreSlim(1, 1);
 
         /// <summary>
         /// Tracks in-flight mission assignment operations by mission ID.
@@ -440,15 +441,18 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            bool admissionHeld = false;
+            IDisposable? vesselAdmission = null;
+            bool capacityHeld = false;
             try
             {
-                if (!await _AdmissionLock.WaitAsync(TimeSpan.FromSeconds(_Settings.Concurrency.AdmissionLockTimeoutSeconds), token).ConfigureAwait(false))
+                TimeSpan admissionTimeout = TimeSpan.FromSeconds(_Settings.Concurrency.AdmissionLockTimeoutSeconds);
+                vesselAdmission = await _VesselAdmissionLocks.TryEnterAsync(vessel.Id, admissionTimeout, token).ConfigureAwait(false);
+                if (vesselAdmission == null)
                 {
-                    _Logging.Warn(_Header + "admission lock timed out for mission " + mission.Id + "; retrying next dispatch cycle");
+                    ArmadaMetrics.AdmissionLockTimeouts.Add(1, new KeyValuePair<string, object?>("gate", "vessel"));
+                    _Logging.Warn(_Header + "vessel admission lock timed out for mission " + mission.Id + "; retrying next dispatch cycle");
                     return false;
                 }
-                admissionHeld = true;
                 Mission? latestMission = null;
                 if (!String.IsNullOrEmpty(mission.TenantId))
                 {
@@ -463,6 +467,7 @@ namespace Armada.Core.Services
                     mission = latestMission;
                 }
 
+                if (!String.IsNullOrEmpty(mission.VesselId) && mission.VesselId != vessel.Id) return false;
                 if (mission.Status != MissionStatusEnum.Pending)
                 {
                     _Logging.Debug(_Header + "mission " + mission.Id + " is " + mission.Status +
@@ -596,8 +601,6 @@ namespace Armada.Core.Services
                 _Logging.Debug(_Header + "mission " + mission.Id + " waits: " + admission.Summary);
                 return false;
             }
-            if (await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false) != null) return false;
-
             // Two missions continuing one branch (two slices that both build on an earlier slice) cannot share it: git
             // refuses a second worktree for a checked-out branch. The later one waits and then stacks on the first.
             List<Mission> branchHolders = BranchHolders(mission, activeMissions);
@@ -607,6 +610,17 @@ namespace Armada.Core.Services
                 return false;
             }
 
+
+            // Only shared capacity checks and the claim serialize across vessels. Vessel gates
+            // above run independently, so a blocked voyage cannot stall unrelated vessels.
+            if (!await _CapacityLock.WaitAsync(admissionTimeout, token).ConfigureAwait(false))
+            {
+                ArmadaMetrics.AdmissionLockTimeouts.Add(1, new KeyValuePair<string, object?>("gate", "capacity"));
+                _Logging.Warn(_Header + "capacity admission lock timed out for mission " + mission.Id + "; retrying next dispatch cycle");
+                return false;
+            }
+            capacityHeld = true;
+            if (await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false) != null) return false;
 
             // Resolve the mission's preferred captain + fallback tier (per-persona default / voyage override)
             // before assignment, so per-step captain selection applies to every mission of a step, including
@@ -687,8 +701,10 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            _AdmissionLock.Release();
-            admissionHeld = false;
+            _CapacityLock.Release();
+            capacityHeld = false;
+            vesselAdmission.Dispose();
+            vesselAdmission = null;
 
             captain.State = CaptainStateEnum.Working;
             captain.CurrentMissionId = mission.Id;
@@ -902,7 +918,8 @@ namespace Armada.Core.Services
             }
             finally
             {
-                if (admissionHeld) _AdmissionLock.Release();
+                if (capacityHeld) _CapacityLock.Release();
+                vesselAdmission?.Dispose();
                 _InFlightAssignments.TryRemove(mission.Id, out _);
             }
         }

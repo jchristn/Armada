@@ -42,6 +42,92 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("admission_lock_isolation_cleanup", "Different vessels proceed independently; timeout and cancellation release registry entries", TestTags.Positive, async () =>
+            {
+                VesselAdmissionLockRegistry registry = new VesselAdmissionLockRegistry();
+                using IDisposable first = (await registry.TryEnterAsync("first", TimeSpan.FromSeconds(1)))!;
+                using (IDisposable? second = await registry.TryEnterAsync("second", TimeSpan.FromSeconds(1))) AssertNotNull(second);
+                AssertEqual(1, registry.Count);
+                AssertNull(await registry.TryEnterAsync("first", TimeSpan.Zero));
+                using CancellationTokenSource cancelled = new CancellationTokenSource();
+                cancelled.Cancel();
+                bool observed = false;
+                try { await registry.TryEnterAsync("first", TimeSpan.FromSeconds(1), cancelled.Token); }
+                catch (OperationCanceledException) { observed = true; }
+                AssertTrue(observed);
+                first.Dispose(); first.Dispose();
+                AssertEqual(0, registry.Count, "no stale vessel lock entries after a timeout, cancellation or double disposal");
+                await Task.WhenAll(Enumerable.Range(0, 200).Select(async i =>
+                {
+                    using IDisposable lease = (await registry.TryEnterAsync("vessel-" + i % 5, TimeSpan.FromSeconds(5)))!;
+                    await Task.Yield();
+                }));
+                AssertEqual(0, registry.Count);
+            }));
+
+            cases.Add(CaseAsync("balanced_captain_slots", "Equivalent captains share load while explicit selection still wins", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                var db = fixture.Driver;
+                ServiceSet services = CreateServices(CreateLogging(), db, CreateSettings(), new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 2, missionCount: 3);
+                work.Vessel.MaxParallelMissionsPerVoyage = 4;
+                foreach (Captain captain in work.Captains)
+                { captain.MaxConcurrency = 3; await db.Captains.UpdateAsync(captain, updateConcurrency: true); }
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[0], work.Vessel));
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[1], work.Vessel));
+                List<Captain> busy = await db.Captains.EnumerateAsync();
+                AssertTrue(busy.All(c => c.ActiveMissionCount == 1), "fill the idle peer before stacking work on one captain");
+                work.Missions[2].RequestedCaptainId = busy[0].Id;
+                await db.Missions.UpdateAsync(work.Missions[2]);
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[2], work.Vessel));
+                AssertEqual(busy[0].Id, (await db.Missions.ReadAsync(work.Missions[2].Id))!.CaptainId);
+            }));
+
+            cases.Add(CaseAsync("two_hundred_missions_mixed_limits", "200 missions across five vessels and ten captains make progress without exceeding mixed limits", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                var db = fixture.Driver;
+                ArmadaSettings settings = CreateSettings();
+                settings.MaxConcurrentMissions = 7;
+                ServiceSet services = CreateServices(CreateLogging(), db, settings, new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 10, missionCount: 200);
+                int nextPid = 2000;
+                services.Captains.OnLaunchAgent = (_, _, _) => Task.FromResult(Interlocked.Increment(ref nextPid));
+                List<Vessel> vessels = new List<Vessel> { work.Vessel };
+                for (int i = 1; i < 5; i++) vessels.Add(await db.Vessels.CreateAsync(new Vessel("vessel-" + i, "https://github.com/test/repo")));
+                foreach (Vessel vessel in vessels)
+                { vessel.MaxParallelVoyages = 2; vessel.MaxParallelMissionsPerVoyage = 2; await db.Vessels.UpdateAsync(vessel); }
+                List<Voyage> voyages = new List<Voyage>();
+                for (int i = 0; i < 10; i++) voyages.Add(await db.Voyages.CreateAsync(new Voyage("voyage-" + i) { Status = VoyageStatusEnum.InProgress }));
+                for (int i = 0; i < work.Captains.Count; i++)
+                { work.Captains[i].MaxConcurrency = 2 + i % 2; await db.Captains.UpdateAsync(work.Captains[i], updateConcurrency: true); }
+                for (int i = 0; i < work.Missions.Count; i++)
+                { work.Missions[i].VesselId = vessels[i % 5].Id; work.Missions[i].VoyageId = voyages[i % 10].Id; await db.Missions.UpdateAsync(work.Missions[i]); }
+                int completed = 0;
+                // Eight concurrent dispatcher requests plus the scheduler's next request per wave.
+                for (int wave = 0; completed < 200 && wave < 200; wave++)
+                {
+                    List<Mission> pending = await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending);
+                    await Task.WhenAll(pending.Take(9).Select(m => Task.Run(() => services.Missions.TryAssignAsync(m, vessels.First(v => v.Id == m.VesselId)))));
+                    List<Mission> running = await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress);
+                    AssertTrue(running.Count > 0, "open capacity must make progress");
+                    AssertTrue(running.Count <= 7, "global cap");
+                    foreach (IGrouping<string?, Mission> group in running.GroupBy(m => m.VoyageId)) AssertTrue(group.Count() <= 2, "voyage mission cap");
+                    foreach (Captain captain in await db.Captains.EnumerateAsync()) AssertTrue(captain.ActiveMissionCount <= captain.MaxConcurrency, "captain cap");
+                    foreach (Mission mission in running)
+                    {
+                        mission.Status = MissionStatusEnum.Complete;
+                        mission.ProcessId = null;
+                        await db.Missions.UpdateAsync(mission);
+                        AssertTrue(await db.Captains.TryReleaseFromMissionAsync(mission.CaptainId!, mission.Id));
+                        completed++;
+                    }
+                }
+                AssertEqual(200, completed);
+                AssertTrue((await db.Captains.EnumerateAsync()).All(c => c.ActiveMissionCount == 0));
+            }));
+
             cases.Add(CaseAsync("captain_slots_complete_fail_recover", "One captain isolates completion, failure and recovery of its three missions", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
