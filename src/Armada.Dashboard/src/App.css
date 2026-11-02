@@ -9750,7 +9750,7 @@ a.btn:hover { text-decoration: none; }
     margin-bottom: 1.25rem;
     align-items: baseline;
     display: grid;
-    grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr) minmax(7rem, 10rem) minmax(0, 1fr);
+    grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
     gap: 0.85rem 1.25rem;
 }
 .evaluation-detail-fields dt { font-size: 0.8rem; color: var(--text-dim); }
@@ -9764,18 +9764,23 @@ a.btn:hover { text-decoration: none; }
 .evaluation-battery-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
 .evaluation-section .data-table td, .evaluation-section .data-table tbody th { vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
 .evaluation-section .data-table tbody th { text-align: left; font-size: 0.85rem; font-weight: 600; text-transform: none; letter-spacing: normal; }
-.evaluation-probes-table { table-layout: fixed; width: 100%; }
-.evaluation-probes-table th:first-child { width: 24%; }
-.evaluation-probes-table thead th:nth-child(2) { width: 18%; }
-.evaluation-probes-table td:last-child { white-space: pre-wrap; line-height: 1.6; }
+.evaluation-probes-table { table-layout: auto; width: 100%; }
+/* Keep names and outcome badges at their intrinsic width; details own the remaining space. */
+.evaluation-section .evaluation-probes-table thead th:nth-child(-n+2),
+.evaluation-section .evaluation-probes-table tbody th,
+.evaluation-section .evaluation-probes-table td:nth-child(2) { width: 1%; white-space: nowrap; }
+.evaluation-probes-table td:last-child { white-space: normal; line-height: 1.5; }
+.evaluation-probes-table td:last-child > div { white-space: pre-wrap; }
+.evaluation-probes-table td:last-child > div + div { margin-top: 0.25rem; }
 .evaluation-section details { margin-top: 0.5rem; }
 .evaluation-section summary { cursor: pointer; color: var(--accent); font-size: 0.82rem; }
 @media (max-width: 1000px) {
-    .evaluation-detail-fields { grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr); }
+    .evaluation-detail-fields { grid-template-columns: max-content minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
     .evaluation-section { padding: 0.85rem; }
-    .evaluation-probes-table { min-width: 30rem; }
+    /* Scroll the table on phones rather than squeezing the details into a few characters per line. */
+    .evaluation-probes-table { min-width: 32rem; }
 }
 .evaluation-table-wrap { min-width: 0; max-width: 100%; }
 .evaluation-table-wrap pre {
@@ -9821,7 +9826,7 @@ a.btn:hover { text-decoration: none; }
     user-select: none;
 }
 .workspace-code-block { flex: 1 0 auto; padding: 0.75rem; font: inherit; }
-@media (max-width: 640px) {
+@media (max-width: 420px) {
     .evaluation-detail-fields { grid-template-columns: minmax(0, 1fr); gap: 0.2rem; padding: 0.85rem; }
     .evaluation-detail-fields dd { margin-bottom: 0.6rem; }
 }
