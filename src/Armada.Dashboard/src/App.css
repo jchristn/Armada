@@ -9511,8 +9511,7 @@ details.readiness-issue-collapsible { padding-top: 0.45rem; padding-bottom: 0.45
 .model-probe-evaluate-tokens progress { width: 10rem; max-width: 40vw; height: 0.6rem; accent-color: var(--accent); }
 .model-probe-evaluate .data-table caption { text-align: left; font-weight: 600; padding: 0.25rem 0 0.5rem; }
 
-/* Probe results and persona outcome lists */
-.model-probe-results,
+/* Persona outcome lists */
 .model-evaluation-personas {
     list-style: none;
     margin: 0;
@@ -9521,7 +9520,6 @@ details.readiness-issue-collapsible { padding-top: 0.45rem; padding-bottom: 0.45
     flex-direction: column;
     gap: 0.35rem;
 }
-.model-probe-results li,
 .model-evaluation-personas li {
     display: flex;
     flex-wrap: wrap;
@@ -9532,10 +9530,7 @@ details.readiness-issue-collapsible { padding-top: 0.45rem; padding-bottom: 0.45
     font-size: 0.85rem;
     line-height: 1.4;
 }
-.model-probe-results li:last-child,
 .model-evaluation-personas li:last-child { border-bottom: 0; }
-.model-probe-results .tag { flex: 0 0 auto; }
-.model-probe-results .tag.couldnotrun { background: var(--tag-review-bg); color: var(--tag-review-fg); }
 
 /* Full evaluation report block */
 .model-evaluation-report {
@@ -9760,10 +9755,12 @@ a.btn:hover { text-decoration: none; }
 .evaluation-section .data-table td, .evaluation-section .data-table tbody th { vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
 .evaluation-section .data-table tbody th { text-align: left; font-size: 0.85rem; font-weight: 600; text-transform: none; letter-spacing: normal; }
 .evaluation-probes-table { table-layout: auto; width: 100%; }
+.data-table.evaluation-probes-table td, .data-table.evaluation-probes-table tbody th { vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
+.data-table.evaluation-probes-table tbody th { text-align: left; font-size: 0.85rem; font-weight: 600; text-transform: none; letter-spacing: normal; }
 /* Keep names and outcome badges at their intrinsic width; details own the remaining space. */
-.evaluation-section .evaluation-probes-table thead th:nth-child(-n+2),
-.evaluation-section .evaluation-probes-table tbody th,
-.evaluation-section .evaluation-probes-table td:nth-child(2) { width: 1%; white-space: nowrap; }
+.data-table.evaluation-probes-table thead th:nth-child(-n+2),
+.data-table.evaluation-probes-table tbody th,
+.data-table.evaluation-probes-table td:nth-child(2) { width: 1%; white-space: nowrap; }
 .evaluation-probes-table td:last-child { white-space: normal; line-height: 1.5; }
 .evaluation-probes-table td:last-child > div { white-space: pre-wrap; }
 .evaluation-probes-table td:last-child > div + div { margin-top: 0.25rem; }
@@ -9793,7 +9790,6 @@ a.btn:hover { text-decoration: none; }
     margin: 0.75rem 0;
 }
 .model-probe-evaluate { min-width: 0; }
-.model-probe-results li > span:not(.tag) { min-width: 0; overflow-wrap: anywhere; }
 .model-probe-evaluate-tokens { flex-wrap: wrap; }
 .model-evaluation-report { overflow-wrap: anywhere; }
 

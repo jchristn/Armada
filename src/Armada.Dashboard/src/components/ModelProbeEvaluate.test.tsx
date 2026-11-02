@@ -144,6 +144,32 @@ describe('ModelProbeEvaluate', () => {
     await waitFor(() => expect(pushToast).toHaveBeenCalledWith('warning', 'Evaluation mpr_ep finished: Failed.', { label: 'View results', to: '/evaluations/mpr_ep' }));
   });
 
+  it('renders captain probe results in three columns with compact names, outcomes and complete details', async () => {
+    const completed = { ...COMPLETED, results: [
+      ...COMPLETED.results!,
+      { ...COMPLETED.results![0], id: 'r3', probe: 'OutputContract' as const, outcome: 'Passed' as const, summary: '3 of 3 answers met the contract exactly.', reason: null },
+    ] };
+    vi.mocked(listModelProbeRuns).mockResolvedValue(page([completed]));
+    vi.mocked(getModelProbeRun).mockResolvedValue(completed);
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />, { wrapper: MemoryRouter });
+    const table = await screen.findByRole('table', { name: 'Probe results' });
+    expect(within(table).getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Probe type', 'Pass/fail', 'Details']);
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(3);
+    const expected = [
+      ['ASCII and format', 'Failed', '2 em dashes'],
+      ['Served context', 'Could not run', 'vendor CLI hides the served context'],
+      ['Output contract', 'Passed', '3 of 3 answers met the contract exactly.'],
+    ];
+    rows.forEach((row, index) => {
+      expect(within(row).getByRole('rowheader')).toHaveTextContent(expected[index][0]);
+      const cells = within(row).getAllByRole('cell');
+      expect(cells).toHaveLength(2);
+      expect(cells[0]).toHaveTextContent(expected[index][1]);
+      expect(cells[1]).toHaveTextContent(expected[index][2]);
+    });
+  });
+
   it('shows the Open full results link for a loaded past run and no toast without a start', async () => {
     vi.mocked(listModelProbeRuns).mockResolvedValue(page([COMPLETED]));
     vi.mocked(getModelProbeRun).mockResolvedValue(COMPLETED);
@@ -271,7 +297,7 @@ describe('ModelProbeEvaluate', () => {
     expect(screen.getByText('ASCII and format')).toBeInTheDocument();
     expect(screen.getByText('2 em dashes', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('Could not run', { selector: '.tag' })).toBeInTheDocument();
-    expect(screen.getByText('(vendor CLI hides the served context)', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('vendor CLI hides the served context', { exact: false })).toBeInTheDocument();
   });
 
   it('evaluates a model endpoint and stops polling when the run fails', async () => {

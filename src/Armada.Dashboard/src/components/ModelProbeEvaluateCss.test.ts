@@ -14,7 +14,7 @@ const classes = [
   'model-probe-evaluate-status',
   'model-probe-evaluate-timing',
   'model-probe-evaluate-tokens',
-  'model-probe-results',
+  'evaluation-probes-table',
   'model-evaluation-report',
   'model-evaluation-personas',
   'model-evaluate-depth',

@@ -7,7 +7,7 @@ import { useOptionalNotifications } from '../context/NotificationContext';
 import { evaluationResultsPath } from '../lib/evaluationLinks';
 import ModelEvaluateDialog from './ModelEvaluateDialog';
 import StatusBadge from './shared/StatusBadge';
-import { FullReport, ModelProbeResultsList } from './evaluations/ModelProbeRunDetails';
+import { FullReport, ModelProbeResultsTable } from './evaluations/ModelProbeRunDetails';
 
 /** How often a queued or running probe run is polled. */
 export const MODEL_PROBE_POLL_MS = 3000;
@@ -265,7 +265,7 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
         {battery?.failureReason && <p className="text-danger">{battery.failureReason}</p>}
       </div>}
       {run?.failureReason && <p className="text-danger">{run.failureReason}</p>}
-      {run && <ModelProbeResultsList results={run.results ?? []} />}
+      {run && <ModelProbeResultsTable results={run.results ?? []} />}
       {finished && run?.report && <FullReport report={run.report} />}
       {run?.profileRevision && run.report?.profileRevisionId && <p>
         <a className="btn btn-sm mono" download={`${run.report.profileRevisionId}.json`} href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(run.profileRevision, null, 2))}`}>

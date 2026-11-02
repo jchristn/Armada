@@ -64,20 +64,24 @@ export function FullReport({ report }: { report: ModelEvaluationReport }) {
   );
 }
 
-/** The per-probe results of a run: probe, outcome tag, summary and the could-not-run or failure reason. */
-export function ModelProbeResultsList({ results }: { results: ModelProbeResult[] }) {
+/** Shared by captain cards, endpoint health and evaluation details, with compact name and outcome columns. */
+export function ModelProbeResultsTable({ results }: { results: ModelProbeResult[] }) {
   const { t } = useLocale();
   if (results.length === 0) return null;
   return (
-    <ul className="model-probe-results">
-      {results.map((result) => (
-        <li key={result.id || result.probe}>
-          <strong>{t(PROBE_LABELS[result.probe] ?? result.probe)}</strong>{' '}
-          <span className={`tag ${result.outcome.toLowerCase()}`}>{t(OUTCOME_LABELS[result.outcome] ?? result.outcome)}</span>
-          {result.summary && <span>{' '}{result.summary}</span>}
-          {result.reason && <span className="text-dim">{' '}({result.reason})</span>}
-        </li>
-      ))}
-    </ul>
+    <div className="table-wrap evaluation-table-wrap" role="region" aria-label={t('Probe results')} tabIndex={0}>
+      <table className="data-table evaluation-probes-table" aria-label={t('Probe results')}>
+        <thead><tr>{['Probe type', 'Pass/fail', 'Details'].map(label => <th scope="col" key={label}>{t(label)}</th>)}</tr></thead>
+        <tbody>{results.map(result => <tr key={result.id || result.probe}>
+          <th scope="row">{t(PROBE_LABELS[result.probe] ?? result.probe)}</th>
+          <td><span className={`tag ${result.outcome.toLowerCase()}`}>{t(OUTCOME_LABELS[result.outcome] ?? result.outcome)}</span></td>
+          <td>
+            {result.summary && <div>{result.summary}</div>}
+            {result.reason && <div className="text-dim">{result.reason}</div>}
+            {!result.summary && !result.reason && <span className="text-dim">—</span>}
+          </td>
+        </tr>)}</tbody>
+      </table>
+    </div>
   );
 }

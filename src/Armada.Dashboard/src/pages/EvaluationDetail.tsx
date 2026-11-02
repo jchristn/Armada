@@ -4,7 +4,7 @@ import { getModelProbeRun } from '../api/client';
 import type { ModelProbeRunWithBattery } from '../types/models';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
-import { FullReport, PROBE_LABELS, OUTCOME_LABELS } from '../components/evaluations/ModelProbeRunDetails';
+import { FullReport, ModelProbeResultsTable } from '../components/evaluations/ModelProbeRunDetails';
 import AutoRefreshSelect from '../components/shared/AutoRefreshSelect';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { useLocale } from '../context/LocaleContext';
@@ -134,20 +134,7 @@ export default function EvaluationDetail({ pollMs }: EvaluationDetailProps) {
           <section className="evaluation-section" aria-labelledby="evaluation-probes-title">
             <h3 id="evaluation-probes-title">{t('Probe results')}</h3>
             {(run.results ?? []).length > 0 ? (
-              <div className="table-wrap evaluation-table-wrap" role="region" aria-label={t('Probe results')} tabIndex={0}>
-                <table className="data-table evaluation-probes-table" aria-label={t('Probe results')}>
-                  <thead><tr>{['Probe type', 'Pass/fail', 'Details'].map(label => <th scope="col" key={label}>{t(label)}</th>)}</tr></thead>
-                  <tbody>{(run.results ?? []).map(result => <tr key={result.id || result.probe}>
-                    <th scope="row">{t(PROBE_LABELS[result.probe] ?? result.probe)}</th>
-                    <td><span className={`tag ${result.outcome.toLowerCase()}`}>{t(OUTCOME_LABELS[result.outcome] ?? result.outcome)}</span></td>
-                    <td>
-                      {result.summary && <div>{result.summary}</div>}
-                      {result.reason && <div className="text-dim">{result.reason}</div>}
-                      {!result.summary && !result.reason && <span className="text-dim">—</span>}
-                    </td>
-                  </tr>)}</tbody>
-                </table>
-              </div>
+              <ModelProbeResultsTable results={run.results ?? []} />
             ) : <p className="text-dim evaluation-empty">{isFinished(run) ? t('No probe results were recorded.') : t('Probes are still running.')}</p>}
           </section>
 
