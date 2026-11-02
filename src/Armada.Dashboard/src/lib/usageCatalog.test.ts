@@ -18,7 +18,7 @@ const PAGE_KEYS: Record<string, string[]> = {
     'Highest applicable account limit window for this captain, with its name and freshness. 75% and above is a warning, 90% and above is near the limit. A dash state never means zero usage.',
     'Usage shows the first account pages for these captains. Open a captain\'s usage section for every account.',
     'View Usage',
-    'Open this captain\'s usage section: account limits, capture state and capture settings, including why usage is unavailable.',
+    'Open Activity > Token Usage > Overview to view usage over time.',
   ],
   'TokenUsage.tsx': [
     'Overview',

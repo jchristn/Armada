@@ -7342,7 +7342,8 @@
         "{{count}}-day limit": "Límite de {{count}} días",
         "{{count}}-minute limit": "Límite de {{count}} minutos",
         "{{percent}} used": "{{percent}} usado",
-        "Weekly": "Semanal"
+        "Weekly": "Semanal",
+        "Open Activity > Token Usage > Overview to view usage over time.": "Abre Actividad > Uso de tokens > Resumen para ver el uso a lo largo del tiempo."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -13632,7 +13633,8 @@
         "{{count}}-day limit": "{{count}} 天限额",
         "{{count}}-minute limit": "{{count}} 分钟限额",
         "{{percent}} used": "已使用 {{percent}}",
-        "Weekly": "每周"
+        "Weekly": "每周",
+        "Open Activity > Token Usage > Overview to view usage over time.": "打开活动 > 令牌用量 > 概览，查看用量随时间的变化。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -19885,7 +19887,8 @@
         "{{count}}-day limit": "{{count}} 天限額",
         "{{count}}-minute limit": "{{count}} 分鐘限額",
         "{{percent}} used": "已使用 {{percent}}",
-        "Weekly": "每週"
+        "Weekly": "每週",
+        "Open Activity > Token Usage > Overview to view usage over time.": "開啟活動 > 權杖用量 > 概覽，查看用量隨時間的變化。"
       },
       "sections": {}
     },
@@ -26098,7 +26101,8 @@
         "{{count}}-day limit": "{{count}} 日限額",
         "{{count}}-minute limit": "{{count}} 分鐘限額",
         "{{percent}} used": "已用 {{percent}}",
-        "Weekly": "每週"
+        "Weekly": "每週",
+        "Open Activity > Token Usage > Overview to view usage over time.": "開啟活動 > Token 用量 > 概覽，查看用量隨時間嘅變化。"
       },
       "sections": {}
     },
@@ -32327,7 +32331,8 @@
         "{{count}}-day limit": "{{count}}日間の上限",
         "{{count}}-minute limit": "{{count}}分間の上限",
         "{{percent}} used": "{{percent}} 使用済み",
-        "Weekly": "週間"
+        "Weekly": "週間",
+        "Open Activity > Token Usage > Overview to view usage over time.": "アクティビティ > トークン使用量 > 概要を開き、使用量の推移を表示します。"
       },
       "sections": {}
     },
@@ -38547,7 +38552,8 @@
         "{{count}}-day limit": "{{count}}-Tage-Limit",
         "{{count}}-minute limit": "{{count}}-Minuten-Limit",
         "{{percent}} used": "{{percent}} genutzt",
-        "Weekly": "Wöchentlich"
+        "Weekly": "Wöchentlich",
+        "Open Activity > Token Usage > Overview to view usage over time.": "Aktivität > Token-Nutzung > Übersicht öffnen, um die Nutzung im Zeitverlauf anzuzeigen."
       },
       "sections": {}
     },
@@ -44767,7 +44773,8 @@
         "{{count}}-day limit": "Limite sur {{count}} jours",
         "{{count}}-minute limit": "Limite sur {{count}} minutes",
         "{{percent}} used": "{{percent}} utilisé",
-        "Weekly": "Hebdomadaire"
+        "Weekly": "Hebdomadaire",
+        "Open Activity > Token Usage > Overview to view usage over time.": "Ouvrir Activité > Utilisation des jetons > Vue d’ensemble pour voir l’utilisation au fil du temps."
       },
       "sections": {}
     },
@@ -50987,7 +50994,8 @@
         "{{count}}-day limit": "Limite di {{count}} giorni",
         "{{count}}-minute limit": "Limite di {{count}} minuti",
         "{{percent}} used": "{{percent}} utilizzato",
-        "Weekly": "Settimanale"
+        "Weekly": "Settimanale",
+        "Open Activity > Token Usage > Overview to view usage over time.": "Apri Attività > Utilizzo dei token > Panoramica per visualizzare l’utilizzo nel tempo."
       },
       "sections": {}
     }

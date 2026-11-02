@@ -238,7 +238,7 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
         {limits.length === 0 ? (
           <p className="text-dim usage-chart-empty">{t('No limit samples in this range. This is not zero usage.')}</p>
         ) : (
-          <svg className="usage-chart-svg" viewBox={`0 0 ${WIDTH} ${LIMITS_HEIGHT}`} role="group" aria-label={t('Limit utilization by account and window')}>
+          <svg className="usage-chart-svg usage-chart-limits" viewBox={`0 0 ${WIDTH} ${LIMITS_HEIGHT}`} role="group" aria-label={t('Limit utilization by account and window')}>
             <g className="usage-chart-grid" aria-hidden="true">
               {[0, 25, 50, 75, 100].map((tick) => (
                 <g key={tick}>

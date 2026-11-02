@@ -66,6 +66,7 @@ function renderCaptains() {
       <Routes>
         <Route path="/captains" element={<Captains />} />
         <Route path="/captains/:id" element={<DetailProbe />} />
+        <Route path="/activity" element={<DetailProbe />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -138,17 +139,17 @@ describe('Captains usage column and View Usage action', () => {
     expect(getUsageLatest).toHaveBeenCalledTimes(2);
   });
 
-  for (const [name, id] of [['ok-captain', 'cpt_ok'], ['disabled-captain', 'cpt_off'], ['unsupported-captain', 'cpt_unsup'], ['nodata-captain', 'cpt_none'], ['failed-captain', 'cpt_fail']] as const) {
-    it(`View Usage opens ${name}'s usage section`, async () => {
+  for (const [name] of [['ok-captain', 'cpt_ok'], ['disabled-captain', 'cpt_off'], ['unsupported-captain', 'cpt_unsup'], ['nodata-captain', 'cpt_none'], ['failed-captain', 'cpt_fail']] as const) {
+    it(`View Usage opens Token Usage Overview from ${name}`, async () => {
       renderCaptains();
       await screen.findByText(name);
       await userEvent.click(within(row(name)).getByRole('button', { name: 'Actions' }));
       await userEvent.click(await screen.findByRole('menuitem', { name: 'View Usage' }));
-      expect(await screen.findByTestId('detail')).toHaveTextContent(`/captains/${id}?section=usage`);
+      expect(await screen.findByTestId('detail')).toHaveTextContent('/activity?source=tokens&tab=overview');
     });
   }
 
-  it('View Usage is reachable with the keyboard only and keeps the selected captain', async () => {
+  it('View Usage is reachable with the keyboard only and opens Token Usage Overview', async () => {
     const user = userEvent.setup();
     renderCaptains();
     await screen.findByText('unsupported-captain');
@@ -160,7 +161,7 @@ describe('Captains usage column and View Usage action', () => {
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'View Usage' })).toHaveFocus();
     await user.keyboard('{Enter}');
-    expect(await screen.findByTestId('detail')).toHaveTextContent('/captains/cpt_unsup?section=usage');
+    expect(await screen.findByTestId('detail')).toHaveTextContent('/activity?source=tokens&tab=overview');
   });
 
   it('labels the action exactly View Usage in English', async () => {
