@@ -466,6 +466,44 @@ describe('ModelProbeEvaluate', () => {
     expect(evaluateCaptain).toHaveBeenCalledWith('cpt_1', 'Full', { evaluatorCaptainId: null, packs: [], personas: ['Judge'], runCount: null });
   });
 
+  it.each([
+    { name: 'all installed packs', allowed: null, pack: null, expected: ['Architect', 'Judge', 'Worker'] },
+    { name: 'selected packs', allowed: null, pack: 'csharp', expected: ['Judge', 'Worker'] },
+    { name: 'captain restrictions', allowed: '["Worker","Judge"]', pack: null, expected: ['Worker', 'Judge'] },
+  ])('All selects and submits every available persona respecting $name', async ({ allowed, pack, expected }) => {
+    vi.mocked(getCaptain).mockResolvedValue(captain({ allowedPersonas: allowed }));
+    vi.mocked(evaluateCaptain).mockResolvedValue(run({ depth: 'Full', status: 'Running' }));
+    vi.mocked(getModelProbeRun).mockResolvedValue(run({ depth: 'Full', status: 'Running' }));
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
+    await openDialog();
+    if (pack) await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Battery pack 1' }), pack);
+    await userEvent.click(screen.getByRole('button', { name: 'All' }));
+    const selected = screen.getAllByRole('combobox', { name: /^Persona / }) as HTMLSelectElement[];
+    expect(selected.map(select => select.value)).toEqual(expected);
+    // Repeating All replaces the selection, rather than appending duplicate rows.
+    await userEvent.click(screen.getByRole('button', { name: 'All' }));
+    expect(screen.getAllByRole('combobox', { name: /^Persona / })).toHaveLength(expected.length);
+    await userEvent.click(screen.getByRole('button', { name: 'Start evaluation' }));
+    expect(evaluateCaptain).toHaveBeenCalledWith('cpt_1', 'Full', {
+      evaluatorCaptainId: null, packs: pack ? [pack] : [], personas: expected, runCount: null,
+    });
+  });
+
+  it('disables All for Quick evaluations and when no personas are available', async () => {
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />, { wrapper: MemoryRouter });
+    await openDialog();
+    const all = screen.getByRole('button', { name: 'All' });
+    expect(all).toBeEnabled();
+    await userEvent.click(screen.getByRole('radio', { name: 'Quick' }));
+    expect(all).toBeDisabled();
+    await userEvent.click(screen.getByRole('radio', { name: 'Full' }));
+    expect(all).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    vi.mocked(listBatteryPacks).mockResolvedValue(page([]));
+    await openDialog();
+    expect(screen.getByRole('button', { name: 'All' })).toBeDisabled();
+  });
+
   it('the dialog offers only the allowed personas, starts Quick without options, and keeps open on a start error', async () => {
     vi.mocked(getCaptain).mockResolvedValue(captain({ allowedPersonas: '["Worker","Judge"]' }));
     vi.mocked(evaluateCaptain).mockRejectedValueOnce(new Error('No battery packs are installed.')).mockResolvedValue(run());

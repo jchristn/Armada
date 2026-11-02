@@ -203,7 +203,11 @@ export default function ModelEvaluateDialog({ open, captainId, submitting = fals
           {!loading && installedPacks.length === 0 && <p className="form-help text-dim">{t('No battery packs are installed.')}</p>}
         </div>
         <div className="form-field">
-          <span className="form-label">{t('Personas')}</span>
+          <div className="model-evaluate-section-heading">
+            <span className="form-label">{t('Personas')}</span>
+            <button type="button" className="btn btn-sm" title={t('All allowed personas')}
+              disabled={personaOptions.length === 0} onClick={() => setPersonas([...personaOptions])}>{t('All')}</button>
+          </div>
           <SelectionRows label={t('Persona')} values={personas.filter(p => !p || personaOptions.includes(p))} onChange={setPersonas}
             placeholder={t('All allowed personas')} options={personaOptions.map(persona => ({ value: persona, label: persona }))} />
           <p className="form-help text-dim">{t('None selected: every persona the captain is allowed.')}</p>
