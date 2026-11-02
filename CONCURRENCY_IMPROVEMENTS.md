@@ -2,7 +2,7 @@
 
 Status: implementation plan for v1.2.0. It is based on repository commit `27042d923f921e6ce63059502af06d213345263b`, inspected 2026-10-27. Nothing in product behavior has changed yet. Line numbers are as of that commit; re-check them before you edit. The owner's answers to the open questions were folded in on 2026-10-27 (section 17), so every decision below is final unless marked otherwise.
 
-v1.2.0 rests on three things: this plan, the mobile applications, and captain usage management ([CAPTAIN_USAGE_PLAN.md](CAPTAIN_USAGE_PLAN.md)). **This plan lands before captain usage management**; section 12 lists where the two touch.
+v1.2.0 rests on three things: this plan, the mobile applications, and captain usage management ([CAPTAIN_USAGE_PLAN.md](archive/CAPTAIN_USAGE_PLAN.md)). **This plan lands before captain usage management**; section 12 lists where the two touch.
 
 ## 1. Goals
 

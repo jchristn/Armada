@@ -220,9 +220,9 @@ Mockups retain Armada's system font, 14px base, blue accent, slate navigation, q
 
 The card separates each window, shows exact reset time plus countdown, last captured age, account/host and shared captains, and keeps Capture now beside interval details. A seven-day sparkline opens provider history. A failed capture leaves last-good windows visible with their original timestamp and a warning, not a misleading green 'fresh' bar.
 
-![Captain detail Usage card](docs/captain-usage-plan/mockups/01-captain-detail.png)
+![Captain detail Usage card](../docs/captain-usage-plan/mockups/01-captain-detail.png)
 
-[Standalone HTML](docs/captain-usage-plan/mockups/01-captain-detail.html)
+[Standalone HTML](../docs/captain-usage-plan/mockups/01-captain-detail.html)
 
 ### Captains list
 
@@ -241,49 +241,49 @@ filters before account paging, and keeps shared accounts canonical. Split larger
 visible captain pages into bounded batches and follow account pages or display
 explicit truncation guidance; missing observations must never imply zero usage.
 
-![Captains usage column](docs/captain-usage-plan/mockups/02-captains.png)
+![Captains usage column](../docs/captain-usage-plan/mockups/02-captains.png)
 
-[Standalone HTML](docs/captain-usage-plan/mockups/02-captains.html)
+[Standalone HTML](../docs/captain-usage-plan/mockups/02-captains.html)
 
 ### Provider history
 
 The two panels share a time scale and selection. The limit legend identifies accounts and windows rather than presenting a provider-wide percentage. Tokens can be grouped by provider. Selecting 13:00-14:00 opens the next screen; reset markers, missing data and Estimated source stay visible in tooltips and the accessible table.
 
-![Usage over time](docs/captain-usage-plan/mockups/03-history.png)
+![Usage over time](../docs/captain-usage-plan/mockups/03-history.png)
 
-[Standalone HTML](docs/captain-usage-plan/mockups/03-history.html)
+[Standalone HTML](../docs/captain-usage-plan/mockups/03-history.html)
 
 ### Mission drill-down
 
 The heading preserves the chosen bucket, host and account. Mission links, vessel, captain, tokens and nullable cost are visible together. The coverage notice explains why the percentage line need not track the listed missions.
 
-![Selected bucket missions](docs/captain-usage-plan/mockups/04-missions.png)
+![Selected bucket missions](../docs/captain-usage-plan/mockups/04-missions.png)
 
-[Standalone HTML](docs/captain-usage-plan/mockups/04-missions.html)
+[Standalone HTML](../docs/captain-usage-plan/mockups/04-missions.html)
 
 ### Limits grouped by account and host
 
 One account row owns its bars and polling schedule. Member captains are links beneath it. Account labels use a short HMAC display alias and an optional operator label, never email. Empty state explains how to enable capture and does not imply zero consumption.
 
-![Account and host limits](docs/captain-usage-plan/mockups/05-limits.png)
+![Account and host limits](../docs/captain-usage-plan/mockups/05-limits.png)
 
-[Standalone HTML](docs/captain-usage-plan/mockups/05-limits.html)
+[Standalone HTML](../docs/captain-usage-plan/mockups/05-limits.html)
 
 ### Captain edit
 
 Capture defaults on (phase 6); the form shows the inherited default distinctly from an explicit choice. Mode, interval, effective schedule and Custom executable contract are in one form section. PTY fallback follows the global AllowPtyFallback switch (default on) and is unavailable when a GlobalAdmin turns it off. Changing Custom configuration requires the same role as captain mutation; preserve unsaved edits on server validation failure. A captain update that omits the usage fields keeps their stored values (a rename never disables capture); an invalid Custom command is rejected with 400 before anything is stored; a saved configuration change invalidates in-flight capture and rebuilds schedules.
 
-![Captain capture form](docs/captain-usage-plan/mockups/06-edit.png)
+![Captain capture form](../docs/captain-usage-plan/mockups/06-edit.png)
 
-[Standalone HTML](docs/captain-usage-plan/mockups/06-edit.html)
+[Standalone HTML](../docs/captain-usage-plan/mockups/06-edit.html)
 
 ### Global settings
 
 A GlobalAdmin controls the server switch and minimum interval. Ordinary users see a read-only explanation. Save shows validation and an explicit success state; disabling capture shows which scheduled jobs will stop. Retention controls live with existing retention settings, not a second conflicting scheduler panel.
 
-![Usage capture settings](docs/captain-usage-plan/mockups/07-settings.png)
+![Usage capture settings](../docs/captain-usage-plan/mockups/07-settings.png)
 
-[Standalone HTML](docs/captain-usage-plan/mockups/07-settings.html)
+[Standalone HTML](../docs/captain-usage-plan/mockups/07-settings.html)
 
 ### TUI and mobile (phase 6)
 
