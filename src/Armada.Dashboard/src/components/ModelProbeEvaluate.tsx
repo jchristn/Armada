@@ -273,11 +273,12 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
       </p>}
       {history.length > 0 && <div className="table-wrap evaluation-table-wrap" role="region" aria-label={t('History')} tabIndex={0}><table className="data-table">
         <caption>{t('History')}</caption>
-        <thead><tr>{['Started', 'Depth', 'Status', 'Passed', 'Failed', 'Could not run', 'Report'].map(label => <th key={label}>{t(label)}</th>)}</tr></thead>
+        <thead><tr>{['Started', 'Depth', 'Status', 'Passed', 'Failed', 'Could not run', 'Report', 'View results'].map(label => <th key={label}>{t(label)}</th>)}</tr></thead>
         <tbody>{history.map(item => <tr key={item.id} aria-selected={run?.id === item.id}>
-          <td><button type="button" className="btn btn-sm" disabled={loading || starting} onClick={() => void selectRun(item.id)}>{item.startedUtc ?? item.createdUtc}</button></td>
+          <td><Link to={evaluationResultsPath(item.id)}>{item.startedUtc ?? item.createdUtc}</Link></td>
           <td>{item.depth}</td><td><StatusBadge status={item.status} /></td><td>{item.passedCount}</td><td>{item.failedCount}</td><td>{item.couldNotRunCount}</td>
           <td>{item.report ? (item.report.complete ? t('Report complete') : t('Incomplete')) : isFinished(item) ? (item.status === 'Completed' ? t('Completed') : t('Incomplete')) : t('Pending')}</td>
+          <td><Link to={evaluationResultsPath(item.id)}>{t('View results')}</Link></td>
         </tr>)}</tbody>
       </table></div>}
       {target === 'captain' && (

@@ -221,16 +221,36 @@ describe('ModelProbeEvaluate', () => {
     expect(getModelProbeRun).toHaveBeenCalledTimes(1);
   });
 
-  it('loads history details when clicked and exposes the exact revision download', async () => {
+  it('loads an explicitly selected history run and exposes the exact revision download', async () => {
     vi.mocked(listModelProbeRuns).mockResolvedValue(page([run({ status: 'Completed' }), run({ id: 'mpr_old', createdUtc: '2025-01-01', status: 'Completed' })]));
-    vi.mocked(getModelProbeRun).mockResolvedValueOnce(COMPLETED).mockResolvedValueOnce({ ...FULL, id: 'mpr_old',
+    vi.mocked(getModelProbeRun).mockResolvedValue({ ...FULL, id: 'mpr_old',
       report: { ...FULL.report!, profileId: 'mdl_1', profileRevisionId: 'mdv_1' }, profileRevision: { id: 'mdv_1' } });
-    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" />, { wrapper: MemoryRouter });
-    await waitFor(() => expect(screen.getByText('2 em dashes')).toBeInTheDocument());
-    await userEvent.click(screen.getByRole('button', { name: '2025-01-01' }));
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" evaluationRunId="mpr_old" />, { wrapper: MemoryRouter });
     expect(await screen.findByTestId('model-evaluation-report')).toHaveTextContent('Strong: single-file');
     expect(screen.getByRole('link', { name: 'mdv_1' })).toHaveAttribute('download', 'mdv_1.json');
     expect(getModelProbeRun).toHaveBeenLastCalledWith('mpr_old', true);
+  });
+
+  it.each(['Queued', 'Running', 'Completed', 'Failed', 'Cancelled'] as const)('opens %s history results directly under the dashboard basename', async status => {
+    const historyRun = run({ id: 'mpr_history', status });
+    vi.mocked(listModelProbeRuns).mockResolvedValue(page([historyRun]));
+    vi.mocked(getModelProbeRun).mockResolvedValue(historyRun);
+    function ResultsProbe() {
+      const location = useLocation();
+      return <p>results at {location.pathname}</p>;
+    }
+    render(<MemoryRouter basename="/dashboard" initialEntries={['/dashboard/captains/cpt_1']}>
+      <Routes>
+        <Route path="/captains/:id" element={<ModelProbeEvaluate target="captain" targetId="cpt_1" />} />
+        <Route path="/evaluations/:id" element={<ResultsProbe />} />
+      </Routes>
+    </MemoryRouter>);
+    const history = await screen.findByRole('table', { name: 'History' });
+    const started = within(history).getByRole('link', { name: historyRun.createdUtc });
+    expect(started).toHaveAttribute('href', '/dashboard/evaluations/mpr_history');
+    expect(within(history).getByRole('link', { name: 'View results' })).toHaveAttribute('href', '/dashboard/evaluations/mpr_history');
+    await userEvent.click(started);
+    expect(await screen.findByText('results at /evaluations/mpr_history')).toBeInTheDocument();
   });
 
   it('discards stale loads when the target changes', async () => {
