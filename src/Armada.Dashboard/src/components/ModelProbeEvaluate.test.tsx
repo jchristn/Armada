@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import catalogSource from '../../../Armada.Server/wwwroot/i18n/armada.json?raw';
 import componentSource from './ModelProbeEvaluate.tsx?raw';
@@ -378,11 +378,11 @@ describe('ModelProbeEvaluate', () => {
     expect(screen.queryByTestId('model-evaluate-family-note')).toBeNull();
 
     // Invalid packs cannot be picked; personas follow the selected packs when the captain allows all.
-    expect(screen.getByRole('checkbox', { name: /broken/ })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Architect' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('checkbox', { name: 'C# (csharp)' }));
-    expect(screen.queryByRole('checkbox', { name: 'Architect' })).toBeNull();
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Judge' }));
+    expect(screen.getByRole('option', { name: /broken/ })).toBeDisabled();
+    expect(screen.getByRole('option', { name: 'Architect' })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Battery pack 1' }), 'csharp');
+    expect(screen.queryByRole('option', { name: 'Architect' })).toBeNull();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Persona 1' }), 'Judge');
 
     const count = screen.getByLabelText('Run count');
     await userEvent.type(count, '11');
@@ -394,15 +394,41 @@ describe('ModelProbeEvaluate', () => {
     expect(evaluateCaptain).toHaveBeenCalledWith('cpt_1', 'Full', { evaluatorCaptainId: 'cpt_claude', packs: ['csharp'], personas: ['Judge'], runCount: 2 });
   });
 
+  it('adds and removes pack and persona dropdown rows without duplicate choices or blank submissions', async () => {
+    vi.mocked(evaluateCaptain).mockResolvedValue(run({ depth: 'Full', status: 'Running' }));
+    render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
+    await openDialog();
+    expect(screen.getAllByRole('combobox', { name: /Battery pack/ })).toHaveLength(1);
+    expect(screen.getAllByRole('combobox', { name: /Persona/ })).toHaveLength(1);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Battery pack 1' }), 'csharp');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Battery pack' }));
+    const secondPack = screen.getByRole('combobox', { name: 'Battery pack 2' });
+    expect(within(secondPack).getByRole('option', { name: 'C# (csharp)' })).toBeDisabled();
+    await userEvent.selectOptions(secondPack, 'python');
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Battery pack 1' }));
+    expect(screen.getByRole('combobox', { name: 'Battery pack 1' })).toHaveValue('python');
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Battery pack 1' }));
+    expect(screen.getByRole('combobox', { name: 'Battery pack 1' })).toHaveValue('');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Persona 1' }), 'Worker');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Persona' }));
+    const secondPersona = screen.getByRole('combobox', { name: 'Persona 2' });
+    expect(within(secondPersona).getByRole('option', { name: 'Worker' })).toBeDisabled();
+    await userEvent.selectOptions(secondPersona, 'Judge');
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Persona 1' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Persona' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Start evaluation' }));
+    expect(evaluateCaptain).toHaveBeenCalledWith('cpt_1', 'Full', { evaluatorCaptainId: null, packs: [], personas: ['Judge'], runCount: null });
+  });
+
   it('the dialog offers only the allowed personas, starts Quick without options, and keeps open on a start error', async () => {
     vi.mocked(getCaptain).mockResolvedValue(captain({ allowedPersonas: '["Worker","Judge"]' }));
     vi.mocked(evaluateCaptain).mockRejectedValueOnce(new Error('No battery packs are installed.')).mockResolvedValue(run());
     vi.mocked(getModelProbeRun).mockResolvedValue(COMPLETED);
     render(<ModelProbeEvaluate target="captain" targetId="cpt_1" pollMs={5} />, { wrapper: MemoryRouter });
     await openDialog();
-    expect(screen.getByRole('checkbox', { name: 'Worker' })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Judge' })).toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: 'Architect' })).toBeNull();
+    expect(screen.getByRole('option', { name: 'Worker' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Judge' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Architect' })).toBeNull();
 
     await userEvent.click(screen.getByRole('button', { name: 'Start evaluation' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('No battery packs are installed.');

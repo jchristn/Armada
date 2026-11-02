@@ -31,8 +31,32 @@ function parseAllowedPersonas(value: string | null | undefined): string[] {
   }
 }
 
-function toggle(list: string[], value: string): string[] {
-  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+function SelectionRows({ label, values, options, placeholder, onChange }: {
+  label: string; values: string[]; options: { value: string; label: string; disabled?: boolean }[];
+  placeholder: string; onChange: (values: string[]) => void;
+}) {
+  const { t } = useLocale();
+  const rows = values.length ? values : [''];
+  return <div className="model-evaluate-selections">
+    {rows.map((value, index) => <div className="model-evaluate-selection-row" key={index}>
+      <select aria-label={t('{{label}} {{number}}', { label, number: index + 1 })} value={value}
+        onChange={e => onChange(rows.map((item, i) => i === index ? e.target.value : item))}>
+        <option value="">{placeholder}</option>
+        {options.map(option => <option key={option.value} value={option.value}
+          disabled={option.disabled || (option.value !== value && rows.includes(option.value))}>{option.label}</option>)}
+      </select>
+      <button type="button" className="btn btn-sm" aria-label={t('Add {{label}}', { label })} title={t('Add {{label}}', { label })}
+        disabled={rows.includes('') || rows.length >= options.filter(option => !option.disabled).length}
+        onClick={() => onChange([...rows, ''])}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+      </button>
+      <button type="button" className="btn btn-sm btn-danger" aria-label={t('Remove {{label}} {{number}}', { label, number: index + 1 })}
+        title={t('Remove {{label}} {{number}}', { label, number: index + 1 })} disabled={rows.length === 1 && !value}
+        onClick={() => onChange(rows.filter((_, i) => i !== index))}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg>
+      </button>
+    </div>)}
+  </div>;
 }
 
 /**
@@ -84,7 +108,7 @@ export default function ModelEvaluateDialog({ open, captainId, submitting = fals
   const candidateFamily = candidate ? captainModelFamily(candidate) : null;
   const allowed = parseAllowedPersonas(candidate?.allowedPersonas);
   const validPacks = installedPacks.filter((p) => p.valid);
-  const packsInScope = packs.length > 0 ? validPacks.filter((p) => packs.includes(p.id)) : validPacks;
+  const packsInScope = packs.some(Boolean) ? validPacks.filter((p) => packs.includes(p.id)) : validPacks;
   const personaOptions = allowed.length > 0
     ? allowed
     : Array.from(new Set(packsInScope.flatMap((p) => (p.tasks ?? []).map((task) => task.persona ?? '').filter((x) => x !== '')))).sort();
@@ -100,7 +124,7 @@ export default function ModelEvaluateDialog({ open, captainId, submitting = fals
     const options: ModelEvaluationOptions = full
       ? {
         evaluatorCaptainId: evaluatorId || null,
-        packs,
+        packs: packs.filter(Boolean),
         personas: personas.filter((p) => personaOptions.includes(p)),
         runCount: runCountValue,
       }
@@ -131,6 +155,7 @@ export default function ModelEvaluateDialog({ open, captainId, submitting = fals
       onClose={onClose}
       dismissible={!submitting}
       footer={footer}
+      className="model-evaluate-dialog"
     >
       {loadError && <p role="alert" className="text-danger">{loadError}</p>}
       <fieldset className="model-evaluate-depth">
@@ -145,62 +170,46 @@ export default function ModelEvaluateDialog({ open, captainId, submitting = fals
         </label>
       </fieldset>
 
-      <fieldset disabled={!full || loading} style={{ border: 0, padding: 0, margin: 0 }}>
-        <label htmlFor="model-evaluate-evaluator"><strong>{t('Evaluator captain')}</strong></label>
-        <select id="model-evaluate-evaluator" value={evaluatorId} onChange={(e) => setEvaluatorId(e.target.value)} style={{ display: 'block', width: '100%' }}>
-          <option value="">{t('Automatic (highest-tier idle captain of another model family)')}</option>
-          {idleCaptains.map((c) => (
-            <option key={c.id} value={c.id}>
-              {candidateFamily && captainModelFamily(c) === candidateFamily
-                ? t('{{name}} (same model family)', { name: c.name })
-                : c.name}
-            </option>
-          ))}
-        </select>
-        {sameFamily && (
-          <p className="text-warning" data-testid="model-evaluate-family-note">
-            {t('{{name}} is of the same model family ({{family}}) as the evaluated captain; the report will carry a warning.', { name: evaluator!.name, family: candidateFamily ?? '' })}
-          </p>
-        )}
-        {!loading && idleCaptains.length === 0 && <p className="text-dim">{t('No other captain is idle.')}</p>}
-
-        <div style={{ marginTop: '0.75rem' }}>
-          <strong>{t('Battery packs')}</strong>{' '}
-          {/* A router Link, not a raw href: the SPA lives under the /dashboard basename, and a bare /battery
-              request goes to the Admiral (or the standalone nginx proxy) and answers a JSON 404. */}
-          <Link to="/captains?tab=battery" onClick={onClose}>{t('Manage packs')}</Link>{' '}
-          <span className="text-dim">{t('None selected: the packs matching your repositories\' languages.')}</span>
-          {!loading && installedPacks.length === 0 && <p className="text-dim">{t('No battery packs are installed.')}</p>}
-          <ul style={{ listStyle: 'none', margin: '0.25rem 0 0', padding: 0 }}>
-            {installedPacks.map((pack) => (
-              <li key={pack.id}>
-                <label title={pack.valid ? (pack.description ?? '') : pack.errors.join(' ')}>
-                  <input type="checkbox" checked={packs.includes(pack.id)} disabled={!pack.valid} onChange={() => setPacks(toggle(packs, pack.id))} />{' '}
-                  {pack.name ? `${pack.name} (${pack.id})` : pack.id}
-                  {!pack.valid && <span className="text-danger">{' '}{t('invalid')}</span>}
-                </label>
-              </li>
+      <fieldset disabled={!full || loading || submitting} className="form-fieldset form-stack">
+        <div className="form-field">
+          <label className="form-label" htmlFor="model-evaluate-evaluator">{t('Evaluator captain')}</label>
+          <select id="model-evaluate-evaluator" value={evaluatorId} onChange={(e) => setEvaluatorId(e.target.value)}>
+            <option value="">{t('Automatic (highest-tier idle captain of another model family)')}</option>
+            {idleCaptains.map((c) => (
+              <option key={c.id} value={c.id}>
+                {candidateFamily && captainModelFamily(c) === candidateFamily
+                  ? t('{{name}} (same model family)', { name: c.name })
+                  : c.name}
+              </option>
             ))}
-          </ul>
-        </div>
+          </select>
+          {sameFamily && (
+            <p className="text-warning" data-testid="model-evaluate-family-note">
+              {t('{{name}} is of the same model family ({{family}}) as the evaluated captain; the report will carry a warning.', { name: evaluator!.name, family: candidateFamily ?? '' })}
+            </p>
+          )}
+          {!loading && idleCaptains.length === 0 && <p className="text-dim">{t('No other captain is idle.')}</p>}
 
-        <div style={{ marginTop: '0.75rem' }}>
-          <strong>{t('Personas')}</strong>{' '}
-          <span className="text-dim">{t('None selected: every persona the captain is allowed.')}</span>
-          <ul style={{ listStyle: 'none', margin: '0.25rem 0 0', padding: 0 }}>
-            {personaOptions.map((persona) => (
-              <li key={persona}>
-                <label>
-                  <input type="checkbox" checked={personas.includes(persona)} onChange={() => setPersonas(toggle(personas, persona))} />{' '}
-                  {persona}
-                </label>
-              </li>
-            ))}
-          </ul>
         </div>
-
-        <div style={{ marginTop: '0.75rem' }}>
-          <label htmlFor="model-evaluate-run-count"><strong>{t('Run count')}</strong></label>{' '}
+        <div className="form-field">
+          <div className="model-evaluate-section-heading">
+            <span className="form-label">{t('Battery packs')}</span>
+            <Link className="btn btn-sm" to="/captains?tab=battery" onClick={onClose}>{t('Manage packs')}</Link>
+          </div>
+          <SelectionRows label={t('Battery pack')} values={packs} onChange={setPacks}
+            placeholder={t('Automatic (repository languages)')}
+            options={installedPacks.map(pack => ({ value: pack.id, label: `${pack.name ? `${pack.name} (${pack.id})` : pack.id}${pack.valid ? '' : ` — ${t('invalid')}`}`, disabled: !pack.valid }))} />
+          <p className="form-help text-dim">{t('None selected: the packs matching your repositories\' languages.')}</p>
+          {!loading && installedPacks.length === 0 && <p className="form-help text-dim">{t('No battery packs are installed.')}</p>}
+        </div>
+        <div className="form-field">
+          <span className="form-label">{t('Personas')}</span>
+          <SelectionRows label={t('Persona')} values={personas.filter(p => !p || personaOptions.includes(p))} onChange={setPersonas}
+            placeholder={t('All allowed personas')} options={personaOptions.map(persona => ({ value: persona, label: persona }))} />
+          <p className="form-help text-dim">{t('None selected: every persona the captain is allowed.')}</p>
+        </div>
+        <div className="form-field">
+          <label className="form-label" htmlFor="model-evaluate-run-count">{t('Run count')}</label>
           <input
             id="model-evaluate-run-count"
             type="number"
@@ -209,9 +218,9 @@ export default function ModelEvaluateDialog({ open, captainId, submitting = fals
             placeholder="3"
             value={runCount}
             onChange={(e) => setRunCount(e.target.value)}
-            style={{ width: '6rem' }}
-          />{' '}
-          <span className="text-dim">{t('Runs of each battery task, 1 to 10 (empty: 3).')}</span>
+            className="model-evaluate-run-count"
+          />
+          <span className="form-help text-dim">{t('Runs of each battery task, 1 to 10 (empty: 3).')}</span>
           {full && runCountInvalid && <p className="text-danger">{t('The run count must be a whole number from 1 to 10.')}</p>}
         </div>
       </fieldset>

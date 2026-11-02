@@ -7354,7 +7354,13 @@
         "Usage operations": "Operaciones de uso",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "Solo se muestran los registros de tokens conservados. El historial de cuotas no permite reconstruir el consumo eliminado.",
         "Only a global administrator can change server-wide usage capture settings.": "Solo un administrador global puede cambiar la configuración de captura de uso del servidor.",
-        "Host ID": "ID del host"
+        "Host ID": "ID del host",
+        "{{label}} {{number}}": "{{label}} {{number}}",
+        "Add {{label}}": "Añadir {{label}}",
+        "Remove {{label}} {{number}}": "Eliminar {{label}} {{number}}",
+        "Battery pack": "Paquete de pruebas",
+        "Automatic (repository languages)": "Automático (lenguajes del repositorio)",
+        "All allowed personas": "Todas las personas permitidas"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -13656,7 +13662,13 @@
         "Usage operations": "用量运行状况",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "仅显示保留的令牌记录。配额历史无法重建已删除的消耗记录。",
         "Only a global administrator can change server-wide usage capture settings.": "只有全局管理员可以更改服务器级用量采集设置。",
-        "Host ID": "主机 ID"
+        "Host ID": "主机 ID",
+        "{{label}} {{number}}": "{{label}} {{number}}",
+        "Add {{label}}": "添加{{label}}",
+        "Remove {{label}} {{number}}": "删除{{label}} {{number}}",
+        "Battery pack": "测试包",
+        "Automatic (repository languages)": "自动（仓库语言）",
+        "All allowed personas": "所有允许的角色"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -19921,7 +19933,13 @@
         "Usage operations": "用量運作狀況",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "僅顯示保留的權杖紀錄。配額歷史無法重建已刪除的消耗紀錄。",
         "Only a global administrator can change server-wide usage capture settings.": "只有全域管理員可以變更伺服器層級的用量擷取設定。",
-        "Host ID": "主機 ID"
+        "Host ID": "主機 ID",
+        "{{label}} {{number}}": "{{label}} {{number}}",
+        "Add {{label}}": "新增{{label}}",
+        "Remove {{label}} {{number}}": "刪除{{label}} {{number}}",
+        "Battery pack": "測試套件",
+        "Automatic (repository languages)": "自動（儲存庫語言）",
+        "All allowed personas": "所有允許的角色"
       },
       "sections": {}
     },
@@ -26146,7 +26164,13 @@
         "Usage operations": "用量運作狀況",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "只顯示保留嘅 Token 紀錄。配額歷史無法重建已刪除嘅消耗紀錄。",
         "Only a global administrator can change server-wide usage capture settings.": "只有全域管理員可以更改伺服器層級嘅用量擷取設定。",
-        "Host ID": "主機 ID"
+        "Host ID": "主機 ID",
+        "{{label}} {{number}}": "{{label}} {{number}}",
+        "Add {{label}}": "新增{{label}}",
+        "Remove {{label}} {{number}}": "刪除{{label}} {{number}}",
+        "Battery pack": "測試套件",
+        "Automatic (repository languages)": "自動（儲存庫語言）",
+        "All allowed personas": "所有允許嘅角色"
       },
       "sections": {}
     },
@@ -32387,7 +32411,13 @@
         "Usage operations": "使用量の運用状況",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "保持されているトークン記録のみを表示します。削除された消費量はクォータ履歴から復元できません。",
         "Only a global administrator can change server-wide usage capture settings.": "サーバー全体の使用量取得設定を変更できるのはグローバル管理者のみです。",
-        "Host ID": "ホスト ID"
+        "Host ID": "ホスト ID",
+        "{{label}} {{number}}": "{{label}} {{number}}",
+        "Add {{label}}": "{{label}}を追加",
+        "Remove {{label}} {{number}}": "{{label}} {{number}}を削除",
+        "Battery pack": "テストパック",
+        "Automatic (repository languages)": "自動（リポジトリの言語）",
+        "All allowed personas": "許可されたすべてのペルソナ"
       },
       "sections": {}
     },
@@ -38619,7 +38649,13 @@
         "Usage operations": "Nutzungsbetrieb",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "Es werden nur aufbewahrte Token-Datensätze angezeigt. Gelöschter Verbrauch lässt sich nicht aus dem Kontingentverlauf rekonstruieren.",
         "Only a global administrator can change server-wide usage capture settings.": "Nur ein globaler Administrator kann die serverweiten Einstellungen zur Nutzungserfassung ändern.",
-        "Host ID": "Host-ID"
+        "Host ID": "Host-ID",
+        "{{label}} {{number}}": "{{label}} {{number}}",
+        "Add {{label}}": "{{label}} hinzufügen",
+        "Remove {{label}} {{number}}": "{{label}} {{number}} entfernen",
+        "Battery pack": "Testpaket",
+        "Automatic (repository languages)": "Automatisch (Repository-Sprachen)",
+        "All allowed personas": "Alle erlaubten Personas"
       },
       "sections": {}
     },
@@ -44851,7 +44887,13 @@
         "Usage operations": "Suivi de l’utilisation",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "Seuls les enregistrements de jetons conservés sont affichés. L’historique des quotas ne permet pas de reconstituer la consommation supprimée.",
         "Only a global administrator can change server-wide usage capture settings.": "Seul un administrateur global peut modifier les paramètres de collecte d’utilisation du serveur.",
-        "Host ID": "ID de l’hôte"
+        "Host ID": "ID de l’hôte",
+        "{{label}} {{number}}": "{{label}} {{number}}",
+        "Add {{label}}": "Ajouter {{label}}",
+        "Remove {{label}} {{number}}": "Supprimer {{label}} {{number}}",
+        "Battery pack": "Pack de tests",
+        "Automatic (repository languages)": "Automatique (langages du dépôt)",
+        "All allowed personas": "Tous les personas autorisés"
       },
       "sections": {}
     },
@@ -51083,7 +51125,13 @@
         "Usage operations": "Operazioni di utilizzo",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "Sono mostrati solo i record di token conservati. Il consumo eliminato non può essere ricostruito dalla cronologia delle quote.",
         "Only a global administrator can change server-wide usage capture settings.": "Solo un amministratore globale può modificare le impostazioni di acquisizione utilizzo del server.",
-        "Host ID": "ID host"
+        "Host ID": "ID host",
+        "{{label}} {{number}}": "{{label}} {{number}}",
+        "Add {{label}}": "Aggiungi {{label}}",
+        "Remove {{label}} {{number}}": "Rimuovi {{label}} {{number}}",
+        "Battery pack": "Pacchetto di test",
+        "Automatic (repository languages)": "Automatico (linguaggi del repository)",
+        "All allowed personas": "Tutte le personas consentite"
       },
       "sections": {}
     }

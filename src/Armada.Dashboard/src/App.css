@@ -9582,6 +9582,12 @@ details.readiness-issue-collapsible { padding-top: 0.45rem; padding-bottom: 0.45
     cursor: pointer;
 }
 .model-evaluate-depth input[type="radio"] { width: auto; margin: 0; }
+.model-evaluate-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.model-evaluate-selections { display: flex; flex-direction: column; gap: 0.5rem; }
+.model-evaluate-selection-row { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.model-evaluate-selection-row select { flex: 1; min-width: 0; width: 0; }
+.model-evaluate-selection-row .btn { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 2rem; min-height: 2rem; }
+.model-evaluate-run-count { width: 6rem; max-width: 100%; }
 
 /* ==================== Account usage ==================== */
 .usage-card { padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
