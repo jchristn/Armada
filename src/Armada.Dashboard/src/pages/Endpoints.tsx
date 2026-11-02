@@ -685,7 +685,7 @@ export default function Endpoints() {
               </label>}
             </fieldset>}
             <ScopeSelect viewer={viewer} value={form.scope} onChange={(scope) => setForm({ ...form, scope })} />
-            <label className="checkbox-row" title={t(EP_ENABLED_TIP)}>
+            <label className="checkbox-row" style={{ display: 'flex' }} title={t(EP_ENABLED_TIP)}>
               <input type="checkbox" title={t(EP_ENABLED_TIP)} checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
               <span>{t('Enabled')}</span>
             </label>
