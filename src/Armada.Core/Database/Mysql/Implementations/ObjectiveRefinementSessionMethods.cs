@@ -301,7 +301,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 FleetId = MysqlDatabaseDriver.NullableString(reader["fleet_id"]),
                 VesselId = MysqlDatabaseDriver.NullableString(reader["vessel_id"]),
                 Title = reader["title"].ToString()!,
-                Status = ObjectivePersistenceHelper.ParseEnum(reader["status"], ObjectiveRefinementSessionStatusEnum.Created),
+                Status = ObjectivePersistenceHelper.ParseRefinementSessionStatus(reader["status"], reader["id"].ToString()!),
                 ProcessId = MysqlDatabaseDriver.NullableInt(reader["process_id"]),
                 FailureReason = MysqlDatabaseDriver.NullableString(reader["failure_reason"]),
                 CreatedUtc = DateTime.SpecifyKind(Convert.ToDateTime(reader["created_utc"]), DateTimeKind.Utc),
