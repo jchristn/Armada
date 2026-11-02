@@ -150,6 +150,13 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 
 ## What's New in v1.2.0
 
+Two anchor features help you understand a captain's available capacity and a model's fit for the work you assign:
+
+- **Check and monitor captain usage.** Check a captain's account usage on demand with **Capture now**, enable recurring capture, and monitor reported account limits, utilization, and reset windows over time. The dashboard brings usage checks and monitoring into the captain's detail page and the Account Limits view.
+- **Evaluate model fit for purpose by persona.** Evaluate a captain or model endpoint before assigning it a role such as Worker, Architect, or Judge. Quick probes check runtime behavior, including output contracts, tool calling, speed, and answer consistency. Full evaluations add task battery packs and selected personas, with per-persona outcomes and a report to help you judge suitability for your workload. Start an evaluation from Captains or a captain's Evaluations page, and follow its results while it runs or afterward.
+
+The release also includes:
+
 - **Mission and voyage black box.** Every failure, of any kind and including landing failures, writes an entry at the moment of failure: where, how and why it failed, the missions, files and directories it collided with, the configuration that would have prevented it, and ranked recovery paths with exact commands. Copy the **FIX THIS** brief into any coding agent, run a recovery path with a dry run and a confirmation, or ask Ask Armada for its opinion. Entries live in the database by default, or on disk, S3 and S3-compatible stores, Azure Blob, Google Cloud Storage, CIFS or NFS, with retention and garbage collection. See [Black box](#black-box-why-did-it-fail-and-what-now) and [docs/BLACKBOX.md](docs/BLACKBOX.md).
 - **pi runtime support.** [pi](https://pi.dev) (the pi coding agent) is a first-class captain runtime: missions, Ask turns, and planning sessions run `pi -p --mode json` with exact token usage and cost, provider-error detection (pi exits 0 on provider errors in JSON mode), and the scoped Armada MCP binding. `armada mcp install` configures pi's `~/.pi/agent/mcp.json`; Approve in Armada works through a shipped pi extension that sends each shell command to the Approvals center and Ask (it fails closed); Refuse removes both of pi's shell tools (`bash` and Windows `powershell`). Add one with:
 
@@ -158,10 +165,9 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
   ```
 
   See [docs/INSTRUCTIONS_FOR_PI.md](docs/INSTRUCTIONS_FOR_PI.md) (captain setup, permissions) and [docs/PI_AS_ORCHESTRATOR.md](docs/PI_AS_ORCHESTRATOR.md) (pi driving Armada over MCP).
-- **Model evaluation.** Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model digest, escalation record) and a suspected cause, with editable failure-cause rules over REST, MCP, and the clients.
-- **Evaluate a captain or model endpoint.** Quick probes check served context, output contract, format rules, tool calling, speed, and determinism; the fixture battery runs data-defined task packs (starting with C#) through real dispatch and grades the results.
+- **Stage outcome evidence.** Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model digest, escalation record) and a suspected cause, with editable failure-cause rules over REST, MCP, and the clients.
 - **Reader-aware handoffs.** Work is handed to the next stage in a form suited to the model that reads it.
-- **Captain usage visibility and management**, and mobile interfaces for the new surfaces.
+- **Mobile interfaces** for the new surfaces.
 
 Every change is in [CHANGELOG.md](CHANGELOG.md#v120-2026-10-29).
 

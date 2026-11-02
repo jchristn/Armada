@@ -156,11 +156,18 @@ All notable changes to Armada are documented in this file.
 
 ## v1.2.0 (2026-10-29)
 
+### Anchor features
+
+- **Captain usage checks and monitoring.** Check a captain's account usage on demand, configure recurring capture, and monitor reported account limits, utilization, and reset windows over time. The captain detail page exposes **Capture now** and capture settings; the Account Limits view brings the reported usage together for monitoring.
+- **Model fit-for-purpose evaluation by persona.** Evaluate how well a captain's model suits given personas and workloads before assigning it work. Quick probes check runtime behavior; Full evaluations run selected battery packs for selected personas and produce per-persona outcomes and a report. Start runs from Captains or a captain's Evaluations page, then open in-progress or completed results to inspect the evidence.
+
+### Release overview
+
 v1.2.0 adds the mission and voyage black box: every failure writes an entry that says where, how and why it
 failed, which missions and files it collided with, and how to recover, with a FIX THIS brief for any coding agent (see
-the first section below). It also adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
-its section below). The rest of the release is about model evaluation: knowing how well each model does the work
-it is given, and handing work to it in a form it can use. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
+the black box sections below). It also adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
+its section below). Model evaluation records how well each model does the work
+it is given. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
 digest, escalation record) and a suspected cause; Quick probes give a captain or model endpoint a probe-only
 **Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
 are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
