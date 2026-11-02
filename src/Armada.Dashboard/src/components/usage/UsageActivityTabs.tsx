@@ -115,6 +115,7 @@ function UsageFilterForm({ fields, series = [], children }: { fields: FilterFiel
         <label key={field.param} className="usage-filter-field" title={t(field.title)}>
           <span>{t(field.label)}</span>
           <select
+            className="filter-select"
             name={field.param}
             value={draft[field.param] ?? ''}
             onChange={(e) => setDraft((prev) => ({ ...prev, [field.param]: e.target.value }))}
@@ -253,13 +254,13 @@ export function UsageOverviewTab() {
       <UsageFilterForm fields={OVERVIEW_FIELDS} series={[...state.limits, ...state.tokens]}>
         <label className="usage-filter-field" title={t('Time range of both panels. 24 hours uses 5-minute buckets, 7 days hourly and 30 days 6-hour buckets.')}>
           <span>{t('Range')}</span>
-          <select value={range.value} onChange={(e) => setParam('range', e.target.value === USAGE_RANGES[0].value ? null : e.target.value)}>
+          <select className="filter-select" value={range.value} onChange={(e) => setParam('range', e.target.value === USAGE_RANGES[0].value ? null : e.target.value)}>
             {USAGE_RANGES.map((r) => <option key={r.value} value={r.value}>{t(r.label)}</option>)}
           </select>
         </label>
         <label className="usage-filter-field" title={t('Which panels to show.')}>
           <span>{t('Show')}</span>
-          <select value={metric} onChange={(e) => setParam('metric', e.target.value === 'both' ? null : e.target.value)}>
+          <select className="filter-select" value={metric} onChange={(e) => setParam('metric', e.target.value === 'both' ? null : e.target.value)}>
             <option value="both">{t('Limits and tokens')}</option>
             <option value="limits">{t('Limits only')}</option>
             <option value="tokens">{t('Tokens only')}</option>
