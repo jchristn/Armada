@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getUsageLatest, getUsageSeries } from '../../api/client';
 import { useLocale } from '../../context/LocaleContext';
@@ -10,6 +10,7 @@ import AccountLimitsTable from './AccountLimitsTable';
 import UsageMissionDrilldown from './UsageMissionDrilldown';
 import UsageOverTimeChart, { type UsageBucketSelection } from './UsageOverTimeChart';
 import UsageState from './UsageState';
+import RefreshButton from '../shared/RefreshButton';
 
 /** Overview ranges and their display buckets (the server accepts 5, 60 and 360 minutes only). */
 export const USAGE_RANGES = [
@@ -36,35 +37,37 @@ interface FilterField {
 }
 
 /** Provider/account/host (and optionally window) filters kept in the URL. Draft values are never reset by a failed request. */
-function UsageFilterForm({ fields, series = [], children }: { fields: FilterField[]; series?: UsageSeries[]; children?: ReactNode }) {
+function UsageFilterForm({ fields, series = [], children, onRefresh }: { fields: FilterField[]; series?: UsageSeries[]; children?: ReactNode; onRefresh?: () => Promise<void> }) {
   const { t } = useLocale();
   const [params, setParams] = useSearchParams();
   const revision = useUsageRevision();
   const [observations, setObservations] = useState<UsageSnapshotView[]>([]);
   const [optionsError, setOptionsError] = useState('');
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    async function loadOptions() {
+  const requestVersion = useRef(0);
+  const loadOptions = useCallback(async () => {
+    const version = ++requestVersion.current;
+    try {
       const rows: UsageSnapshotView[] = [];
       let pageNumber = 1;
       let totalPages = 1;
       do {
         const page = await getUsageLatest({ pageNumber, pageSize: 100 });
+        if (version !== requestVersion.current) return;
         rows.push(...page.objects);
         totalPages = page.totalPages;
         pageNumber++;
-      } while (!cancelled && pageNumber <= totalPages);
-      if (!cancelled) {
-        setObservations(rows);
-        setOptionsError('');
-      }
+      } while (pageNumber <= totalPages);
+      setObservations(rows);
+      setOptionsError('');
+    } catch (error: unknown) {
+      if (version === requestVersion.current) setOptionsError(error instanceof Error ? error.message : String(error));
+      throw error;
     }
-    loadOptions().catch((error: unknown) => {
-      if (!cancelled) setOptionsError(error instanceof Error ? error.message : String(error));
-    });
-    return () => { cancelled = true; };
-  }, [revision, attempt]);
+  }, []);
+  useEffect(() => {
+    void loadOptions().catch(() => {});
+    return () => { requestVersion.current++; };
+  }, [revision, loadOptions]);
 
   const choices: Record<string, Map<string, string>> = Object.fromEntries(fields.map((field) => [field.param, new Map<string, string>()]));
   const add = (param: string, value: string | null, label = value) => {
@@ -138,10 +141,11 @@ function UsageFilterForm({ fields, series = [], children }: { fields: FilterFiel
           </select>
         </label>
       ))}
-      {optionsError && <div role="alert"><span>{optionsError}</span> <button type="button" className="btn btn-sm" onClick={() => setAttempt((n) => n + 1)}>{t('Refresh')}</button></div>}
+      {optionsError && <div role="alert"><span>{optionsError}</span> <button type="button" className="btn btn-sm" onClick={() => { void loadOptions().catch(() => {}); }}>{t('Retry filter choices')}</button></div>}
       {children && <div className="usage-filter-actions">
         <button type="submit" className="btn btn-sm" title={t('Apply these filters.')}>{t('Apply')}</button>
         <button type="button" className="btn btn-sm" onClick={clear} title={t('Remove the provider, account and host filters.')}>{t('Clear filters')}</button>
+        {onRefresh && <RefreshButton onRefresh={async () => { await Promise.all([onRefresh(), loadOptions()]); }} title="Refresh usage overview" />}
       </div>}
     </form>
   );
@@ -174,7 +178,8 @@ export function UsageOverviewTab() {
   const { t } = useLocale();
   const [params, setParams] = useSearchParams();
   const revision = useUsageRevision();
-  const [attempt, setAttempt] = useState(0);
+  const requestVersion = useRef(0);
+  const [refreshRevision, setRefreshRevision] = useState(0);
   const range = rangeFor(params.get('range'));
   const metric = metricFor(params.get('metric'));
   const provider = params.get('provider') || '';
@@ -192,8 +197,8 @@ export function UsageOverviewTab() {
     ? { bucketStartUtc: selFrom, bucketEndUtc: selTo, provider: selProvider, accountKey: selAccount, hostId: selHost }
     : null;
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
+    const version = ++requestVersion.current;
     const bucketMs = range.bucketMinutes * 60000;
     const toMs = Math.ceil(Date.now() / bucketMs) * bucketMs;
     const fromMs = toMs - range.hours * 3600000;
@@ -208,29 +213,35 @@ export function UsageOverviewTab() {
     const limitsFilter: UsageSeriesFilter = { ...base, metric: 'limits', groupBy: 'account', window: windowName || undefined };
     const tokensFilter: UsageSeriesFilter = { ...base, metric: 'tokens', groupBy: 'provider' };
     setState((prev) => ({ ...prev, status: 'loading' }));
-    Promise.all([
-      metric === 'tokens' ? Promise.resolve(null) : getUsageSeries(limitsFilter),
-      metric === 'limits' ? Promise.resolve(null) : getUsageSeries(tokensFilter),
-    ])
-      .then(([limits, tokens]) => {
-        if (cancelled) return;
-        setState({
-          status: 'ready',
-          limits: limits?.series ?? [],
-          tokens: tokens?.series ?? [],
-          limitCoverage: limits?.coverage ?? null,
-          tokenCoverage: tokens?.coverage ?? null,
-          fromUtc: base.from,
-          toUtc: base.to,
-          error: '',
-        });
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setState((prev) => ({ ...prev, status: 'error', error: err instanceof Error ? err.message : String(err) }));
+    try {
+      const [limits, tokens] = await Promise.all([
+        metric === 'tokens' ? Promise.resolve(null) : getUsageSeries(limitsFilter),
+        metric === 'limits' ? Promise.resolve(null) : getUsageSeries(tokensFilter),
+      ]);
+      if (version !== requestVersion.current) return;
+      setState({
+        status: 'ready',
+        limits: limits?.series ?? [],
+        tokens: tokens?.series ?? [],
+        limitCoverage: limits?.coverage ?? null,
+        tokenCoverage: tokens?.coverage ?? null,
+        fromUtc: base.from,
+        toUtc: base.to,
+        error: '',
       });
-    return () => { cancelled = true; };
-  }, [range.bucketMinutes, range.hours, metric, provider, accountKey, hostId, windowName, revision, attempt]);
+    } catch (err: unknown) {
+      if (version === requestVersion.current) setState((prev) => ({ ...prev, status: 'error', error: err instanceof Error ? err.message : String(err) }));
+      throw err;
+    }
+  }, [range.bucketMinutes, range.hours, metric, provider, accountKey, hostId, windowName]);
+  useEffect(() => {
+    void load().catch(() => {});
+    return () => { requestVersion.current++; };
+  }, [load, revision]);
+  const refresh = async () => {
+    setRefreshRevision(value => value + 1);
+    await load();
+  };
 
   const setParam = (name: string, value: string | null) => {
     const next = new URLSearchParams(params);
@@ -259,7 +270,7 @@ export function UsageOverviewTab() {
 
   return (
     <div className="usage-overview">
-      <UsageFilterForm fields={OVERVIEW_FIELDS} series={[...state.limits, ...state.tokens]}>
+      <UsageFilterForm fields={OVERVIEW_FIELDS} series={[...state.limits, ...state.tokens]} onRefresh={refresh}>
         <label className="usage-filter-field" title={t('Time range of both panels. 24 hours uses 5-minute buckets, 7 days hourly and 30 days 6-hour buckets.')}>
           <span>{t('Range')}</span>
           <select className="filter-select" value={range.value} onChange={(e) => setParam('range', e.target.value === USAGE_RANGES[0].value ? null : e.target.value)}>
@@ -278,7 +289,7 @@ export function UsageOverviewTab() {
 
       {state.status === 'error' && (
         <div className="usage-overview-error">
-          <UsageState kind="error" onRetry={() => setAttempt((n) => n + 1)} />
+          <UsageState kind="error" onRetry={() => { void refresh().catch(() => {}); }} />
           {state.error && <p className="text-dim">{state.error}</p>}
         </div>
       )}
@@ -300,6 +311,7 @@ export function UsageOverviewTab() {
       )}
       {selected && (
         <UsageMissionDrilldown
+          refreshRevision={refreshRevision}
           selection={{ from: selected.bucketStartUtc, to: selected.bucketEndUtc, provider: selected.provider, accountKey: selected.accountKey, hostId: selected.hostId }}
           onClose={clearSelection}
         />

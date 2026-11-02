@@ -20,6 +20,7 @@ export interface UsageDrilldownSelection {
 interface UsageMissionDrilldownProps {
   selection: UsageDrilldownSelection;
   onClose?: () => void;
+  refreshRevision?: number;
 }
 
 const MAX_PAGE_SIZE = 100;
@@ -41,7 +42,7 @@ export function formatUsageCost(cost: number | null | undefined, currency: strin
 }
 
 /** Missions completed in exactly the selected bucket, provider, account and host, with coverage and nullable cost. */
-export default function UsageMissionDrilldown({ selection, onClose }: UsageMissionDrilldownProps) {
+export default function UsageMissionDrilldown({ selection, onClose, refreshRevision = 0 }: UsageMissionDrilldownProps) {
   const { t, formatDateTime } = useLocale();
   const revision = useUsageRevision();
   const [pageNumber, setPageNumber] = useState(1);
@@ -90,7 +91,7 @@ export default function UsageMissionDrilldown({ selection, onClose }: UsageMissi
     return () => { cancelled = true; };
     // selectionKey captures every selection field.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectionKey, sortField, sortDir, pageNumber, pageSize, revision, attempt]);
+  }, [selectionKey, sortField, sortDir, pageNumber, pageSize, revision, attempt, refreshRevision]);
 
   const rows = status === 'ready' ? result?.objects ?? [] : [];
   const coverage = result?.coverage ?? null;

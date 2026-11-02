@@ -1,0 +1,770 @@
+[
+  {
+    "name": "overview",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-overview&range=7d&provider=openai",
+    "breadcrumbs": [
+      "Dashboard>Activity>Usage Overview"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh usage overview",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "7d",
+        "left": 241,
+        "right": 398.75
+      },
+      {
+        "value": "both",
+        "left": 409.25,
+        "right": 567.015625
+      },
+      {
+        "value": "openai",
+        "left": 577.515625,
+        "right": 735.28125
+      },
+      {
+        "value": "",
+        "left": 745.78125,
+        "right": 903.546875
+      },
+      {
+        "value": "",
+        "left": 914.046875,
+        "right": 1071.8125
+      },
+      {
+        "value": "",
+        "left": 1082.3125,
+        "right": 1240.078125
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/series",
+      "/api/v1/usage/series",
+      "/api/v1/usage/latest"
+    ]
+  },
+  {
+    "name": "tokens",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=tokens&model=layout-model",
+    "breadcrumbs": [
+      "Dashboard>Activity>Token Usage"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh token usage",
+        "height": 24.40625,
+        "width": 31.859375
+      },
+      {
+        "label": "Refresh token activity",
+        "height": 24.40625,
+        "width": 31.125
+      }
+    ],
+    "controls": [
+      {
+        "value": "model:layout-model",
+        "left": 857.5,
+        "right": 1040.5
+      },
+      {
+        "value": "total",
+        "left": 1278.984375,
+        "right": 1367.984375
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/token-usage/summary",
+      "/api/v1/captains",
+      "/api/v1/token-usage/summary"
+    ]
+  },
+  {
+    "name": "limits",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-limits",
+    "breadcrumbs": [
+      "Dashboard>Activity>Account Limits"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "15",
+        "left": 1041.21875,
+        "right": 1102.40625
+      },
+      {
+        "value": "25",
+        "left": 1329.125,
+        "right": 1414.5
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/latest"
+    ]
+  },
+  {
+    "name": "overview",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-overview&range=7d&provider=openai",
+    "breadcrumbs": [
+      "Dashboard>Activity>Usage Overview"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh usage overview",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "7d",
+        "left": 21,
+        "right": 134.40625
+      },
+      {
+        "value": "both",
+        "left": 144.90625,
+        "right": 258.328125
+      },
+      {
+        "value": "openai",
+        "left": 268.828125,
+        "right": 382.234375
+      },
+      {
+        "value": "",
+        "left": 392.734375,
+        "right": 506.15625
+      },
+      {
+        "value": "",
+        "left": 516.65625,
+        "right": 630.078125
+      },
+      {
+        "value": "",
+        "left": 640.578125,
+        "right": 754
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/series",
+      "/api/v1/usage/series",
+      "/api/v1/usage/latest"
+    ]
+  },
+  {
+    "name": "tokens",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=tokens&model=layout-model",
+    "breadcrumbs": [
+      "Dashboard>Activity>Token Usage"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh token usage",
+        "height": 24.40625,
+        "width": 31.859375
+      },
+      {
+        "label": "Refresh token activity",
+        "height": 24.40625,
+        "width": 31.125
+      }
+    ],
+    "controls": [
+      {
+        "value": "model:layout-model",
+        "left": 119.09375,
+        "right": 302.09375
+      },
+      {
+        "value": "total",
+        "left": 606.984375,
+        "right": 695.984375
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/token-usage/summary",
+      "/api/v1/captains",
+      "/api/v1/token-usage/summary"
+    ]
+  },
+  {
+    "name": "limits",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-limits",
+    "breadcrumbs": [
+      "Dashboard>Activity>Account Limits"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "15",
+        "left": 183.59375,
+        "right": 244.78125
+      },
+      {
+        "value": "25",
+        "left": 471.5,
+        "right": 556.875
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/latest"
+    ]
+  },
+  {
+    "name": "overview",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-overview&range=7d&provider=openai",
+    "breadcrumbs": [
+      "Dashboard>Activity>Usage Overview"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh usage overview",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "7d",
+        "left": 21,
+        "right": 132.328125
+      },
+      {
+        "value": "both",
+        "left": 142.828125,
+        "right": 254.171875
+      },
+      {
+        "value": "openai",
+        "left": 264.671875,
+        "right": 376
+      },
+      {
+        "value": "",
+        "left": 21,
+        "right": 132.328125
+      },
+      {
+        "value": "",
+        "left": 142.828125,
+        "right": 254.171875
+      },
+      {
+        "value": "",
+        "left": 264.671875,
+        "right": 376
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/series",
+      "/api/v1/usage/series",
+      "/api/v1/usage/latest"
+    ]
+  },
+  {
+    "name": "tokens",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=tokens&model=layout-model",
+    "breadcrumbs": [
+      "Dashboard>Activity>Token Usage"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh token usage",
+        "height": 24.40625,
+        "width": 31.859375
+      },
+      {
+        "label": "Refresh token activity",
+        "height": 24.40625,
+        "width": 31.125
+      }
+    ],
+    "controls": [
+      {
+        "value": "model:layout-model",
+        "left": 119.09375,
+        "right": 302.09375
+      },
+      {
+        "value": "total",
+        "left": 228.984375,
+        "right": 317.984375
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/token-usage/summary",
+      "/api/v1/captains",
+      "/api/v1/token-usage/summary"
+    ]
+  },
+  {
+    "name": "limits",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-limits",
+    "breadcrumbs": [
+      "Dashboard>Activity>Account Limits"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "15",
+        "left": 265.859375,
+        "right": 327.046875
+      },
+      {
+        "value": "25",
+        "left": 279.125,
+        "right": 364.5
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/latest"
+    ]
+  },
+  {
+    "name": "overview",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-overview&range=7d&provider=openai",
+    "breadcrumbs": [
+      "Dashboard>Activity>Usage Overview"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh usage overview",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "7d",
+        "left": 241,
+        "right": 398.75
+      },
+      {
+        "value": "both",
+        "left": 409.25,
+        "right": 567.015625
+      },
+      {
+        "value": "openai",
+        "left": 577.515625,
+        "right": 735.28125
+      },
+      {
+        "value": "",
+        "left": 745.78125,
+        "right": 903.546875
+      },
+      {
+        "value": "",
+        "left": 914.046875,
+        "right": 1071.8125
+      },
+      {
+        "value": "",
+        "left": 1082.3125,
+        "right": 1240.078125
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/series",
+      "/api/v1/usage/series",
+      "/api/v1/usage/latest"
+    ]
+  },
+  {
+    "name": "tokens",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=tokens&model=layout-model",
+    "breadcrumbs": [
+      "Dashboard>Activity>Token Usage"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh token usage",
+        "height": 24.40625,
+        "width": 31.859375
+      },
+      {
+        "label": "Refresh token activity",
+        "height": 24.40625,
+        "width": 31.125
+      }
+    ],
+    "controls": [
+      {
+        "value": "model:layout-model",
+        "left": 857.5,
+        "right": 1040.5
+      },
+      {
+        "value": "total",
+        "left": 1278.984375,
+        "right": 1367.984375
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/token-usage/summary",
+      "/api/v1/captains",
+      "/api/v1/token-usage/summary"
+    ]
+  },
+  {
+    "name": "limits",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-limits",
+    "breadcrumbs": [
+      "Dashboard>Activity>Account Limits"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "15",
+        "left": 1041.21875,
+        "right": 1102.40625
+      },
+      {
+        "value": "25",
+        "left": 1329.125,
+        "right": 1414.5
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/latest"
+    ]
+  },
+  {
+    "name": "overview",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-overview&range=7d&provider=openai",
+    "breadcrumbs": [
+      "Dashboard>Activity>Usage Overview"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh usage overview",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "7d",
+        "left": 21,
+        "right": 134.40625
+      },
+      {
+        "value": "both",
+        "left": 144.90625,
+        "right": 258.328125
+      },
+      {
+        "value": "openai",
+        "left": 268.828125,
+        "right": 382.234375
+      },
+      {
+        "value": "",
+        "left": 392.734375,
+        "right": 506.15625
+      },
+      {
+        "value": "",
+        "left": 516.65625,
+        "right": 630.078125
+      },
+      {
+        "value": "",
+        "left": 640.578125,
+        "right": 754
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/series",
+      "/api/v1/usage/series",
+      "/api/v1/usage/latest"
+    ]
+  },
+  {
+    "name": "tokens",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=tokens&model=layout-model",
+    "breadcrumbs": [
+      "Dashboard>Activity>Token Usage"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh token usage",
+        "height": 24.40625,
+        "width": 31.859375
+      },
+      {
+        "label": "Refresh token activity",
+        "height": 24.40625,
+        "width": 31.125
+      }
+    ],
+    "controls": [
+      {
+        "value": "model:layout-model",
+        "left": 119.09375,
+        "right": 302.09375
+      },
+      {
+        "value": "total",
+        "left": 606.984375,
+        "right": 695.984375
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/token-usage/summary",
+      "/api/v1/captains",
+      "/api/v1/token-usage/summary"
+    ]
+  },
+  {
+    "name": "limits",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-limits",
+    "breadcrumbs": [
+      "Dashboard>Activity>Account Limits"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "15",
+        "left": 183.59375,
+        "right": 244.78125
+      },
+      {
+        "value": "25",
+        "left": 471.5,
+        "right": 556.875
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/latest"
+    ]
+  },
+  {
+    "name": "overview",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-overview&range=7d&provider=openai",
+    "breadcrumbs": [
+      "Dashboard>Activity>Usage Overview"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh usage overview",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "7d",
+        "left": 21,
+        "right": 132.328125
+      },
+      {
+        "value": "both",
+        "left": 142.828125,
+        "right": 254.171875
+      },
+      {
+        "value": "openai",
+        "left": 264.671875,
+        "right": 376
+      },
+      {
+        "value": "",
+        "left": 21,
+        "right": 132.328125
+      },
+      {
+        "value": "",
+        "left": 142.828125,
+        "right": 254.171875
+      },
+      {
+        "value": "",
+        "left": 264.671875,
+        "right": 376
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/series",
+      "/api/v1/usage/series",
+      "/api/v1/usage/latest"
+    ]
+  },
+  {
+    "name": "tokens",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=tokens&model=layout-model",
+    "breadcrumbs": [
+      "Dashboard>Activity>Token Usage"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh token usage",
+        "height": 24.40625,
+        "width": 31.859375
+      },
+      {
+        "label": "Refresh token activity",
+        "height": 24.40625,
+        "width": 31.125
+      }
+    ],
+    "controls": [
+      {
+        "value": "model:layout-model",
+        "left": 119.09375,
+        "right": 302.09375
+      },
+      {
+        "value": "total",
+        "left": 228.984375,
+        "right": 317.984375
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/token-usage/summary",
+      "/api/v1/captains",
+      "/api/v1/token-usage/summary"
+    ]
+  },
+  {
+    "name": "limits",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "url": "http://127.0.0.1:19830/dashboard/activity?source=usage-limits",
+    "breadcrumbs": [
+      "Dashboard>Activity>Account Limits"
+    ],
+    "buttons": [
+      {
+        "label": "Refresh",
+        "height": 24.40625,
+        "width": 31.859375
+      }
+    ],
+    "controls": [
+      {
+        "value": "15",
+        "left": 265.859375,
+        "right": 327.046875
+      },
+      {
+        "value": "25",
+        "left": 279.125,
+        "right": 364.5
+      }
+    ],
+    "success": true,
+    "requestPaths": [
+      "/api/v1/usage/latest"
+    ]
+  }
+]

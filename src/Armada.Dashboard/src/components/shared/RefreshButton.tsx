@@ -33,7 +33,7 @@ export default function RefreshButton({ onRefresh, title = 'Refresh' }: RefreshB
   ].filter(Boolean).join(' ');
 
   return (
-    <button className={className} onClick={handleClick} title={t(title)} aria-label={t(title)}>
+    <button type="button" className={className} onClick={handleClick} title={t(title)} aria-label={t(title)}>
       <span className="refresh-btn-icon" aria-hidden="true">
         {state === 'success' ? '\u2713' : '\u21BB'}
       </span>

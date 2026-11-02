@@ -31,6 +31,8 @@ const ARIA_DQ = /ariaLabel="([^"]*)"/g;
 
 /** Strings looked up through tables (invisible to the t('...') scan) plus ActionMenu labels translated by the menu. */
 const TABLE_KEYS = [
+  'Refresh usage overview',
+  'Refresh token usage',
   ...Object.values(USAGE_KIND_TEXT),
   ...Object.values(USAGE_KIND_HINT),
   ...Object.values(USAGE_LEVEL_TEXT),

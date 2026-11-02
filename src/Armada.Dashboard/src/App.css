@@ -9835,3 +9835,6 @@ a.btn:hover { text-decoration: none; }
 .assignment-blocker-next-steps li { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
 .assignment-blocker-next-steps li > span { flex: 1 1 15rem; min-width: 0; overflow-wrap: anywhere; }
 .assignment-blocker-next-steps .btn { flex: 0 0 auto; line-height: normal; }
+
+.token-usage-view-controls { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 0.75rem; min-width: 0; }
+.token-usage-view-controls > .refresh-btn { margin-left: auto; }

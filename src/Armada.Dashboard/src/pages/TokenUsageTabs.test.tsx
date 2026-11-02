@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Activity from './Activity';
@@ -64,6 +64,47 @@ describe('Token usage tabs', () => {
     vi.mocked(getUsageSeries).mockImplementation(async (filter) => series(filter.metric, filter.from));
     vi.mocked(getUsageMissions).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 25, totalPages: 1, totalRecords: 0, objects: [], totalMs: 1, coverage });
     vi.mocked(getUsageLatest).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 25, totalPages: 1, totalRecords: 0, objects: [], totalMs: 1 });
+  });
+
+  it('refreshes both charts, filter choices and the selected bucket without applying a draft or changing the URL', async () => {
+    renderAt('/activity?source=usage-overview&range=7d&provider=anthropic&from=2026-10-01T00:00:00Z&to=2026-10-01T01:00:00Z&bucketProvider=anthropic');
+    await screen.findByRole('button', { name: 'Show chart data table' });
+    await screen.findByText('No completed missions in this bucket');
+    const query = screen.getByTestId('where').textContent;
+    const optionsBefore = vi.mocked(getUsageLatest).mock.calls.length;
+    const missionsBefore = vi.mocked(getUsageMissions).mock.calls.length;
+    fireEvent.change(screen.getByRole('combobox', { name: 'Provider' }), { target: { value: '' } });
+    const releases: Array<() => void> = [];
+    vi.mocked(getUsageSeries).mockImplementation(filter => new Promise(resolve => { releases.push(() => resolve(series(filter.metric, filter.from))); }));
+    const refresh = screen.getByRole('button', { name: 'Refresh usage overview' });
+    expect(refresh).toHaveClass('refresh-btn');
+    expect(refresh).toHaveAttribute('type', 'button');
+    fireEvent.click(refresh);
+    expect(refresh).toHaveClass('refreshing');
+    await waitFor(() => expect(releases).toHaveLength(2));
+    await waitFor(() => expect(getUsageLatest).toHaveBeenCalledTimes(optionsBefore + 1));
+    await waitFor(() => expect(getUsageMissions).toHaveBeenCalledTimes(missionsBefore + 1));
+    await act(async () => { releases[0](); });
+    expect(refresh).toHaveClass('refreshing');
+    await act(async () => { releases[1](); });
+    await waitFor(() => expect(refresh).toHaveClass('refresh-success'));
+    expect(screen.getByTestId('where').textContent).toBe(query);
+    expect(screen.getByRole('combobox', { name: 'Provider' })).toHaveValue('');
+    expect(getUsageSeries).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'anthropic', bucketMinutes: 60 }));
+  });
+
+  it('keeps filters and makes refresh available after a failed overview request', async () => {
+    renderAt('/activity?source=usage-overview&provider=anthropic');
+    await screen.findByRole('button', { name: 'Show chart data table' });
+    vi.mocked(getUsageSeries).mockRejectedValueOnce(new Error('offline'));
+    const refresh = screen.getByRole('button', { name: 'Refresh usage overview' });
+    fireEvent.click(refresh);
+    await screen.findByText('offline');
+    await waitFor(() => expect(refresh).not.toHaveClass('refreshing'));
+    expect(refresh).not.toHaveClass('refresh-success');
+    expect(screen.getByTestId('where')).toHaveTextContent('provider=anthropic');
+    fireEvent.click(refresh);
+    await waitFor(() => expect(refresh).toHaveClass('refresh-success'));
   });
 
   it('uses one Activity tab row for all usage views', async () => {
