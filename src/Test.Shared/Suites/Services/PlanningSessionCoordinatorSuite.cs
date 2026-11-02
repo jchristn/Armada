@@ -645,6 +645,58 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("opencode_error_event_fails_turn", "An OpenCode error event fails a planning turn and keeps the session active", TestTags.Negative, async () =>
+            {
+                await RunPlanningTurnAsync(ChatShimCli.OpenCodeTextThenErrorLines(), async (database, session) =>
+                {
+                    PlanningSession stored = await RequirePlanningSessionAsync(database, session.Id).ConfigureAwait(false);
+                    PlanningSessionMessage assistant = await RequireAssistantMessageAsync(database, session.Id).ConfigureAwait(false);
+                    AssertFalse(String.IsNullOrWhiteSpace(stored.FailureReason), "the planning session records the provider failure");
+                    AssertEqual(PlanningSessionStatusEnum.Active, stored.Status, "the failed turn stays active so the operator can try again");
+                    ChatShimCli.AssertBoundedProviderFailure(stored.FailureReason, "planning failure");
+                    ChatShimCli.AssertBoundedProviderFailure(assistant.Content, "planning reply");
+                }).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("opencode_text_event_turn_stays_successful", "An OpenCode text event with no error still completes a planning turn", TestTags.Positive, async () =>
+            {
+                await RunPlanningTurnAsync(ChatShimCli.OpenCodeTextOnlyLines(), async (database, session) =>
+                {
+                    PlanningSession stored = await RequirePlanningSessionAsync(database, session.Id).ConfigureAwait(false);
+                    PlanningSessionMessage assistant = await RequireAssistantMessageAsync(database, session.Id).ConfigureAwait(false);
+                    AssertTrue(String.IsNullOrEmpty(stored.FailureReason), "a text turn has no failure");
+                    AssertEqual(PlanningSessionStatusEnum.Active, stored.Status);
+                    AssertContains(ChatShimCli.OpenCodeCompleteText, assistant.Content ?? String.Empty);
+                }).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("opencode_error_event_fails_summary", "An OpenCode error event fails a planning summary and keeps the session active", TestTags.Negative, async () =>
+            {
+                await RunPlanningSummaryAsync(ChatShimCli.OpenCodeTextThenErrorLines(), (summary, stored) =>
+                {
+                    AssertFalse(String.IsNullOrWhiteSpace(stored.FailureReason), "the planning summary records the provider failure");
+                    AssertEqual(PlanningSessionStatusEnum.Active, stored.Status, "the failed summary stays active");
+                    ChatShimCli.AssertBoundedProviderFailure(stored.FailureReason, "planning summary failure");
+                    AssertFalse((summary.Title + "\n" + summary.Description).Contains(ChatShimCli.OpenCodeBodyMarker), "the draft includes the response body");
+                    AssertFalse((summary.Title + "\n" + summary.Description).Contains(ChatShimCli.OpenCodeHeaderMarker), "the draft includes a response header");
+                    AssertFalse((summary.Title + "\n" + summary.Description).Contains(ChatShimCli.OpenCodeUrlMarker), "the draft includes the URL");
+                    AssertFalse((summary.Title + "\n" + summary.Description).Contains(ChatShimCli.OpenCodeSessionMarker), "the draft includes the session id");
+                    return Task.CompletedTask;
+                }).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("opencode_text_summary_stays_successful", "An OpenCode summary with no error event still returns the draft", TestTags.Positive, async () =>
+            {
+                await RunPlanningSummaryAsync(ChatShimCli.OpenCodePlanningSummaryLines(), (summary, stored) =>
+                {
+                    AssertTrue(String.IsNullOrEmpty(stored.FailureReason), "a text summary has no failure");
+                    AssertEqual("runtime-json", summary.Method);
+                    AssertEqual("Ship the fix", summary.Title);
+                    AssertEqual("Do the work", summary.Description);
+                    return Task.CompletedTask;
+                }).ConfigureAwait(false);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Planning Session Coordinator",
@@ -672,7 +724,7 @@ namespace Test.Shared.Suites.Services
             private readonly string _rootDirectory;
             private readonly LoggingModule _logging;
 
-            public CoordinatorFixture(DatabaseDriver database)
+            public CoordinatorFixture(DatabaseDriver database, AgentRuntimeFactory? runtimeFactory = null)
             {
                 Database = database;
                 _logging = CreateLogging();
@@ -691,7 +743,7 @@ namespace Test.Shared.Suites.Services
                 Git = new StubGitService();
                 DockService docks = new DockService(_logging, Database, Settings, Git);
                 AdmiralService admiral = CreateAdmiralService(_logging, Database, Settings, Git);
-                AgentRuntimeFactory runtimeFactory = new AgentRuntimeFactory(_logging);
+                AgentRuntimeFactory factory = runtimeFactory ?? new AgentRuntimeFactory(_logging);
 
                 Coordinator = new PlanningSessionCoordinator(
                     _logging,
@@ -699,7 +751,7 @@ namespace Test.Shared.Suites.Services
                     Settings,
                     docks,
                     admiral,
-                    runtimeFactory,
+                    factory,
                     (eventType, message, entityType, entityId, captainId, missionId, vesselId, voyageId) => Task.CompletedTask);
             }
 
@@ -816,6 +868,139 @@ namespace Test.Shared.Suites.Services
             }
 
             throw new Exception("Assertion failed: expected " + typeof(TException).Name + " but no exception was thrown");
+        }
+
+        private static async Task RunPlanningTurnAsync(List<string> lines, Func<DatabaseDriver, PlanningSession, Task> assert)
+        {
+            using (ChatShimCli.IsolateOpenCodeHostConfig())
+            {
+                string root = Path.Combine(Path.GetTempPath(), "armada-oc-plan-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    using (CoordinatorFixture fixture = CreateOpenCodeFixture(testDb.Driver, root, lines))
+                    {
+                        Vessel vessel = await fixture.CreateVesselAsync("opencode-planning").ConfigureAwait(false);
+                        Captain captain = await fixture.CreateCaptainAsync("opencode-planner", AgentRuntimeEnum.OpenCode).ConfigureAwait(false);
+                        PlanningSession session = await fixture.Coordinator.CreateAsync(
+                            null,
+                            null,
+                            captain,
+                            vessel,
+                            new PlanningSessionCreateRequest { Title = "OpenCode plan" }).ConfigureAwait(false);
+                        await EnsureDockDirectoryAsync(testDb.Driver, session).ConfigureAwait(false);
+                        await fixture.Coordinator.SendMessageAsync(session, "Continue the plan.").ConfigureAwait(false);
+                        await WaitForPlanningActiveAsync(testDb.Driver, session.Id).ConfigureAwait(false);
+                        await assert(testDb.Driver, session).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    TryDeleteDirectory(root);
+                }
+            }
+        }
+
+        private static async Task RunPlanningSummaryAsync(List<string> lines, Func<PlanningSessionSummaryResponse, PlanningSession, Task> assert)
+        {
+            using (ChatShimCli.IsolateOpenCodeHostConfig())
+            {
+                string root = Path.Combine(Path.GetTempPath(), "armada-oc-plan-sum-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    using (CoordinatorFixture fixture = CreateOpenCodeFixture(testDb.Driver, root, lines))
+                    {
+                        Vessel vessel = await fixture.CreateVesselAsync("opencode-planning-summary").ConfigureAwait(false);
+                        Captain captain = await fixture.CreateCaptainAsync("opencode-summary", AgentRuntimeEnum.OpenCode).ConfigureAwait(false);
+                        PlanningSession session = await fixture.Coordinator.CreateAsync(
+                            null,
+                            null,
+                            captain,
+                            vessel,
+                            new PlanningSessionCreateRequest { Title = "OpenCode summary" }).ConfigureAwait(false);
+                        await EnsureDockDirectoryAsync(testDb.Driver, session).ConfigureAwait(false);
+                        await testDb.Driver.PlanningSessionMessages.CreateAsync(new PlanningSessionMessage
+                        {
+                            PlanningSessionId = session.Id,
+                            Role = "Assistant",
+                            Sequence = 1,
+                            Content = "Prior plan"
+                        }).ConfigureAwait(false);
+                        PlanningSessionSummaryResponse summary = await fixture.Coordinator.SummarizeAsync(
+                            session,
+                            new PlanningSessionSummaryRequest()).ConfigureAwait(false);
+                        PlanningSession stored = await RequirePlanningSessionAsync(testDb.Driver, session.Id).ConfigureAwait(false);
+                        await assert(summary, stored).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    TryDeleteDirectory(root);
+                }
+            }
+        }
+
+        private static CoordinatorFixture CreateOpenCodeFixture(DatabaseDriver database, string root, List<string> lines)
+        {
+            string shim = ChatShimCli.WriteOpenCodeShim(root, lines);
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            AgentRuntimeFactory factory = new AgentRuntimeFactory(logging);
+            factory.Override(AgentRuntimeEnum.OpenCode, () => new OpenCodeRuntime(logging) { ExecutablePath = shim });
+            return new CoordinatorFixture(database, factory);
+        }
+
+        private static async Task EnsureDockDirectoryAsync(DatabaseDriver database, PlanningSession session)
+        {
+            Dock? dock = await database.Docks.ReadAsync(session.DockId!).ConfigureAwait(false);
+            AssertNotNull(dock);
+            AssertFalse(String.IsNullOrEmpty(dock!.WorktreePath), "the planning dock has a worktree path");
+            Directory.CreateDirectory(dock.WorktreePath!);
+        }
+
+        private static async Task WaitForPlanningActiveAsync(DatabaseDriver database, string sessionId)
+        {
+            MonotonicDeadline deadline = MonotonicDeadline.After(TimeSpan.FromSeconds(20));
+            while (!deadline.Passed)
+            {
+                PlanningSession? session = await database.PlanningSessions.ReadAsync(sessionId).ConfigureAwait(false);
+                if (session != null && session.Status == PlanningSessionStatusEnum.Active)
+                    return;
+                await Task.Delay(50).ConfigureAwait(false);
+            }
+
+            throw new TimeoutException("Timed out waiting for the planning turn to finish.");
+        }
+
+        private static async Task<PlanningSession> RequirePlanningSessionAsync(DatabaseDriver database, string sessionId)
+        {
+            PlanningSession? session = await database.PlanningSessions.ReadAsync(sessionId).ConfigureAwait(false);
+            return session ?? throw new Exception("Expected planning session " + sessionId);
+        }
+
+        private static async Task<PlanningSessionMessage> RequireAssistantMessageAsync(DatabaseDriver database, string sessionId)
+        {
+            List<PlanningSessionMessage> messages = await database.PlanningSessionMessages.EnumerateBySessionAsync(sessionId).ConfigureAwait(false);
+            PlanningSessionMessage? assistant = null;
+            foreach (PlanningSessionMessage message in messages)
+            {
+                if (String.Equals(message.Role, "Assistant", StringComparison.Ordinal))
+                    assistant = message;
+            }
+
+            return assistant ?? throw new Exception("Expected an assistant planning message");
+        }
+
+        private static void TryDeleteDirectory(string path)
+        {
+            try
+            {
+                if (Directory.Exists(path)) Directory.Delete(path, true);
+            }
+            catch
+            {
+            }
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

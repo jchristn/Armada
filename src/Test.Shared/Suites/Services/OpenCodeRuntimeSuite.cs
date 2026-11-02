@@ -2,11 +2,15 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
+    using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Runtimes;
+    using Armada.Server;
+    using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
     using static Test.Shared.Infrastructure.Asserts;
@@ -153,6 +157,25 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(CaptainTierEnum.Standard, CaptainTierSelector.ClassifyModel("kimi-k2"));
             }));
 
+            cases.Add(CaseAsync("error_event_fails_chat_after_text", "An OpenCode error event fails chat after earlier text", TestTags.Negative, () =>
+                RunChatAsync(ChatShimCli.OpenCodeTextThenErrorLines(), response =>
+                {
+                    AssertFalse(response.Success, "an OpenCode error event must fail the chat turn");
+                    ChatShimCli.AssertBoundedProviderFailure(response.Error, "chat error");
+                    AssertFalse((response.Reply ?? String.Empty).Contains(ChatShimCli.OpenCodeBodyMarker), "the chat reply includes the response body");
+                    AssertFalse((response.Reply ?? String.Empty).Contains(ChatShimCli.OpenCodeHeaderMarker), "the chat reply includes a response header");
+                    AssertFalse((response.Reply ?? String.Empty).Contains(ChatShimCli.OpenCodeUrlMarker), "the chat reply includes the URL");
+                    AssertFalse((response.Reply ?? String.Empty).Contains(ChatShimCli.OpenCodeSessionMarker), "the chat reply includes the session id");
+                })));
+
+            cases.Add(CaseAsync("text_event_chat_stays_successful", "An OpenCode text event with no error still succeeds", TestTags.Positive, () =>
+                RunChatAsync(ChatShimCli.OpenCodeTextOnlyLines(), response =>
+                {
+                    AssertTrue(response.Success, "a text event must stay a successful chat turn");
+                    AssertContains(ChatShimCli.OpenCodeCompleteText, response.Reply ?? String.Empty);
+                    AssertTrue(String.IsNullOrEmpty(response.Error), "a successful text turn has no error");
+                })));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.OpenCodeRuntime",
                 displayName: "OpenCode Runtime",
@@ -162,6 +185,53 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static async Task RunChatAsync(List<string> lines, Action<CaptainChatResponse> assert)
+        {
+            using (ChatShimCli.IsolateOpenCodeHostConfig())
+            {
+                string root = Path.Combine(Path.GetTempPath(), "armada-oc-chat-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    string shim = ChatShimCli.WriteOpenCodeShim(root, lines);
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    {
+                        Captain captain = await testDb.Driver.Captains.CreateAsync(new Captain("opencode-chat", AgentRuntimeEnum.OpenCode)).ConfigureAwait(false);
+                        LoggingModule logging = new LoggingModule();
+                        logging.Settings.EnableConsole = false;
+                        AgentRuntimeFactory factory = new AgentRuntimeFactory(logging);
+                        factory.Override(AgentRuntimeEnum.OpenCode, () => new OpenCodeRuntime(logging) { ExecutablePath = shim });
+                        CaptainChatService service = new CaptainChatService(testDb.Driver, factory, null, null, null, 0, logging);
+                        CaptainChatTurnResult turn = await service.RunTurnAsync(new CaptainChatTurnOptions
+                        {
+                            Captain = captain,
+                            Prompt = "Reply with the fixture"
+                        }).ConfigureAwait(false);
+                        assert(turn.Response);
+                    }
+                }
+                finally
+                {
+                    try
+                    {
+                        if (Directory.Exists(root)) Directory.Delete(root, true);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+        }
+
+        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
+        {
+            return new TestCaseDescriptor(
+                suiteId: "Services.OpenCodeRuntime",
+                caseId: caseId,
+                displayName: displayName,
+                executeAsync: (CancellationToken ct) => body(),
+                tags: new List<string> { tag });
+        }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Action body)
         {

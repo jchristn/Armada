@@ -260,6 +260,63 @@ namespace Test.Shared.Suites.Services
                 AssertNull(persistedCaptain.ProcessId);
             }));
 
+            cases.Add(CaseAsync("opencode_error_event_fails_turn", "An OpenCode error event fails a refinement turn and keeps the session active", TestTags.Negative, async () =>
+            {
+                await RunRefinementTurnAsync(ChatShimCli.OpenCodeTextThenErrorLines(), async (database, session) =>
+                {
+                    ObjectiveRefinementSession stored = await RequireSessionAsync(database, session.Id).ConfigureAwait(false);
+                    List<ObjectiveRefinementMessage> messages = await database.ObjectiveRefinementMessages.EnumerateBySessionAsync(session.Id).ConfigureAwait(false);
+                    ObjectiveRefinementMessage assistant = messages.Find(message => message.Role == "Assistant")
+                        ?? throw new Exception("Expected an assistant refinement message");
+                    AssertFalse(String.IsNullOrWhiteSpace(stored.FailureReason), "the refinement session records the provider failure");
+                    AssertEqual(ObjectiveRefinementSessionStatusEnum.Active, stored.Status, "the failed turn stays active so the operator can try again");
+                    ChatShimCli.AssertBoundedProviderFailure(stored.FailureReason, "refinement failure");
+                    ChatShimCli.AssertBoundedProviderFailure(assistant.Content, "refinement reply");
+                }).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("opencode_text_event_turn_stays_successful", "An OpenCode text event with no error still completes a refinement turn", TestTags.Positive, async () =>
+            {
+                await RunRefinementTurnAsync(ChatShimCli.OpenCodeTextOnlyLines(), async (database, session) =>
+                {
+                    ObjectiveRefinementSession stored = await RequireSessionAsync(database, session.Id).ConfigureAwait(false);
+                    List<ObjectiveRefinementMessage> messages = await database.ObjectiveRefinementMessages.EnumerateBySessionAsync(session.Id).ConfigureAwait(false);
+                    ObjectiveRefinementMessage assistant = messages.Find(message => message.Role == "Assistant")
+                        ?? throw new Exception("Expected an assistant refinement message");
+                    AssertTrue(String.IsNullOrEmpty(stored.FailureReason), "a text turn has no failure");
+                    AssertEqual(ObjectiveRefinementSessionStatusEnum.Active, stored.Status);
+                    AssertContains(ChatShimCli.OpenCodeCompleteText, assistant.Content ?? String.Empty);
+                }).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("opencode_error_event_fails_summary", "An OpenCode error event fails a refinement summary and keeps the session active", TestTags.Negative, async () =>
+            {
+                await RunRefinementSummaryAsync(ChatShimCli.OpenCodeTextThenErrorLines(), (summary, stored) =>
+                {
+                    AssertFalse(String.IsNullOrWhiteSpace(stored.FailureReason), "the refinement summary records the provider failure");
+                    AssertEqual(ObjectiveRefinementSessionStatusEnum.Active, stored.Status, "the failed summary stays active");
+                    ChatShimCli.AssertBoundedProviderFailure(stored.FailureReason, "refinement summary failure");
+                    AssertFalse((summary.Summary ?? String.Empty).Contains(ChatShimCli.OpenCodeBodyMarker), "the summary includes the response body");
+                    AssertFalse((summary.Summary ?? String.Empty).Contains(ChatShimCli.OpenCodeHeaderMarker), "the summary includes a response header");
+                    AssertFalse((summary.Summary ?? String.Empty).Contains(ChatShimCli.OpenCodeUrlMarker), "the summary includes the URL");
+                    AssertFalse((summary.Summary ?? String.Empty).Contains(ChatShimCli.OpenCodeSessionMarker), "the summary includes the session id");
+                    return Task.CompletedTask;
+                }).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("opencode_text_summary_stays_successful", "An OpenCode summary with no error event still returns the draft", TestTags.Positive, async () =>
+            {
+                await RunRefinementSummaryAsync(ChatShimCli.OpenCodeRefinementSummaryLines(), (summary, stored) =>
+                {
+                    AssertTrue(String.IsNullOrEmpty(stored.FailureReason), "a text summary has no failure");
+                    AssertEqual("runtime-json", summary.Method);
+                    AssertEqual("Keep the contract", summary.Summary);
+                    AssertEqual(1, summary.AcceptanceCriteria.Count);
+                    AssertEqual("The turn fails", summary.AcceptanceCriteria[0]);
+                    return Task.CompletedTask;
+                }).ConfigureAwait(false);
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Objective Refinement Coordinator",
@@ -287,7 +344,7 @@ namespace Test.Shared.Suites.Services
             private readonly string _rootDirectory;
             private readonly LoggingModule _logging;
 
-            public CoordinatorFixture(DatabaseDriver database)
+            public CoordinatorFixture(DatabaseDriver database, AgentRuntimeFactory? runtimeFactory = null)
             {
                 Database = database;
                 Objectives = new ObjectiveService(database);
@@ -304,11 +361,12 @@ namespace Test.Shared.Suites.Services
                 };
                 Settings.InitializeDirectories();
 
+                AgentRuntimeFactory factory = runtimeFactory ?? new AgentRuntimeFactory(_logging);
                 Coordinator = new ObjectiveRefinementCoordinator(
                     _logging,
                     Database,
                     Settings,
-                    new AgentRuntimeFactory(_logging),
+                    factory,
                     (eventType, message, entityType, entityId, captainId, missionId, vesselId, voyageId) => Task.CompletedTask);
             }
 
@@ -471,6 +529,88 @@ namespace Test.Shared.Suites.Services
         {
             Captain? captain = await database.Captains.ReadAsync(captainId).ConfigureAwait(false);
             return captain ?? throw new Exception("Expected captain " + captainId);
+        }
+
+        private static async Task RunRefinementTurnAsync(List<string> lines, Func<DatabaseDriver, ObjectiveRefinementSession, Task> assert)
+        {
+            using (ChatShimCli.IsolateOpenCodeHostConfig())
+            {
+                string root = Path.Combine(Path.GetTempPath(), "armada-oc-refine-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    using (CoordinatorFixture fixture = CreateOpenCodeFixture(testDb.Driver, root, lines))
+                    {
+                        CoordinatorFixture.TenantUserResult tenantUser = await fixture.CreateTenantUserAsync().ConfigureAwait(false);
+                        Objective objective = await fixture.CreateObjectiveAsync("OpenCode refinement", tenantUser.TenantId, tenantUser.UserId).ConfigureAwait(false);
+                        Captain captain = await fixture.CreateCaptainAsync("opencode-refine", AgentRuntimeEnum.OpenCode, tenantUser.TenantId, tenantUser.UserId, CaptainStateEnum.Refining).ConfigureAwait(false);
+                        ObjectiveRefinementSession session = await fixture.CreateSessionAsync(objective, captain).ConfigureAwait(false);
+                        await fixture.Coordinator.SendMessageAsync(session, "Clarify the contract.").ConfigureAwait(false);
+                        await WaitForAsync(async () =>
+                        {
+                            ObjectiveRefinementSession? refreshed = await testDb.Driver.ObjectiveRefinementSessions.ReadAsync(session.Id).ConfigureAwait(false);
+                            return refreshed != null && refreshed.Status == ObjectiveRefinementSessionStatusEnum.Active
+                                && !String.IsNullOrWhiteSpace((await testDb.Driver.ObjectiveRefinementMessages.EnumerateBySessionAsync(session.Id).ConfigureAwait(false))
+                                    .Find(message => message.Role == "Assistant")?.Content);
+                        }, 20000).ConfigureAwait(false);
+                        await assert(testDb.Driver, session).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    TryDeleteDirectory(root);
+                }
+            }
+        }
+
+        private static async Task RunRefinementSummaryAsync(List<string> lines, Func<ObjectiveRefinementSummaryResponse, ObjectiveRefinementSession, Task> assert)
+        {
+            using (ChatShimCli.IsolateOpenCodeHostConfig())
+            {
+                string root = Path.Combine(Path.GetTempPath(), "armada-oc-refine-sum-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                    using (CoordinatorFixture fixture = CreateOpenCodeFixture(testDb.Driver, root, lines))
+                    {
+                        CoordinatorFixture.TenantUserResult tenantUser = await fixture.CreateTenantUserAsync().ConfigureAwait(false);
+                        Objective objective = await fixture.CreateObjectiveAsync("OpenCode refinement summary", tenantUser.TenantId, tenantUser.UserId).ConfigureAwait(false);
+                        Captain captain = await fixture.CreateCaptainAsync("opencode-refine-summary", AgentRuntimeEnum.OpenCode, tenantUser.TenantId, tenantUser.UserId, CaptainStateEnum.Refining).ConfigureAwait(false);
+                        ObjectiveRefinementSession session = await fixture.CreateSessionAsync(objective, captain).ConfigureAwait(false);
+                        await fixture.CreateMessageAsync(session, "Assistant", 1, "Prior note").ConfigureAwait(false);
+                        ObjectiveRefinementSummaryResponse summary = await fixture.Coordinator.SummarizeAsync(
+                            session,
+                            new ObjectiveRefinementSummaryRequest()).ConfigureAwait(false);
+                        ObjectiveRefinementSession stored = await RequireSessionAsync(testDb.Driver, session.Id).ConfigureAwait(false);
+                        await assert(summary, stored).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    TryDeleteDirectory(root);
+                }
+            }
+        }
+
+        private static CoordinatorFixture CreateOpenCodeFixture(DatabaseDriver database, string root, List<string> lines)
+        {
+            string shim = ChatShimCli.WriteOpenCodeShim(root, lines);
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            AgentRuntimeFactory factory = new AgentRuntimeFactory(logging);
+            factory.Override(AgentRuntimeEnum.OpenCode, () => new OpenCodeRuntime(logging) { ExecutablePath = shim });
+            return new CoordinatorFixture(database, factory);
+        }
+
+        private static void TryDeleteDirectory(string path)
+        {
+            try
+            {
+                if (Directory.Exists(path)) Directory.Delete(path, true);
+            }
+            catch
+            {
+            }
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
