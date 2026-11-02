@@ -8,12 +8,16 @@ namespace Test.Shared.Suites.E2E
     using System.Net.WebSockets;
     using System.Text;
     using System.Text.Json;
+    using System.Text.Json.Serialization;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
     using Armada.Core.Enums;
+    using Armada.Core.Harbor;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Settings;
+    using Armada.Server.WebSocket;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
@@ -1387,6 +1391,36 @@ namespace Test.Shared.Suites.E2E
                 AssertEqual("get_mission_diff", action);
             }));
 
+            cases.Add(CaseAsync("get_mission_diff_harbor_worktree_returns_harbor_diff", "GetMissionDiff_HarborWorktree_ReturnsHarborDiff", TestTags.Positive, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.LiveHarbor).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("get_mission_diff_saved_file_precedes_harbor_worktree", "GetMissionDiff_SavedFile_PrecedesHarborWorktree", TestTags.Positive, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.SavedFile).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("get_mission_diff_snapshot_precedes_harbor_worktree", "GetMissionDiff_Snapshot_PrecedesHarborWorktree", TestTags.Positive, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.Snapshot).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("get_mission_diff_local_worktree_returns_local_diff", "GetMissionDiff_LocalWorktree_ReturnsLocalDiff", TestTags.Positive, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.LocalDock).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("get_mission_diff_missing_harbor_worktree_returns_unavailable", "GetMissionDiff_MissingHarborWorktree_ReturnsUnavailable", TestTags.Negative, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.MissingHarborWorktree).ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("get_mission_diff_disconnected_harbor_returns_unavailable", "GetMissionDiff_DisconnectedHarbor_ReturnsUnavailable", TestTags.Negative, async () =>
+            {
+                await AssertHarborMissionDiffAsync(HarborDiffProbe.DisconnectedHarbor).ConfigureAwait(false);
+            }));
+
             cases.Add(CaseAsync("get_mission_log_non_existent_returns_error", "GetMissionLog_NonExistent_ReturnsError", TestTags.Negative, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
@@ -1963,6 +1997,335 @@ namespace Test.Shared.Suites.E2E
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+        private enum HarborDiffProbe
+        {
+            LiveHarbor,
+            SavedFile,
+            Snapshot,
+            LocalDock,
+            MissingHarborWorktree,
+            DisconnectedHarbor
+        }
+
+        /// <summary>
+        /// A mission diff read through the WebSocket command handler.
+        /// </summary>
+        private sealed class MissionDiffReply
+        {
+            /// <summary>
+            /// Reply type.
+            /// </summary>
+            public string Type { get; set; } = "";
+
+            /// <summary>
+            /// Error text, or empty.
+            /// </summary>
+            public string Error { get; set; } = "";
+
+            /// <summary>
+            /// Error code, or empty.
+            /// </summary>
+            public string Code { get; set; } = "";
+
+            /// <summary>
+            /// Diff text, or empty.
+            /// </summary>
+            public string Diff { get; set; } = "";
+        }
+
+        /// <summary>
+        /// Presents one Harbor path that is absent on this machine and runs git in the real repository.
+        /// </summary>
+        private sealed class HarborPathLoopback
+        {
+            private readonly HarborConnectionManager _Manager;
+            private readonly string _HarborId;
+            private readonly string _HarborPath;
+            private readonly string _RealPath;
+            private readonly LocalHostCommandExecutor _Host = new LocalHostCommandExecutor();
+
+            /// <summary>
+            /// Instantiate.
+            /// </summary>
+            /// <param name="manager">Admiral-side connection manager.</param>
+            /// <param name="harborId">Harbor identifier.</param>
+            /// <param name="harborPath">Worktree path stored on the dock. This directory is not created here.</param>
+            /// <param name="realPath">Repository the Harbor git commands run in.</param>
+            public HarborPathLoopback(HarborConnectionManager manager, string harborId, string harborPath, string realPath)
+            {
+                _Manager = manager;
+                _HarborId = harborId;
+                _HarborPath = harborPath;
+                _RealPath = realPath;
+            }
+
+            /// <summary>
+            /// Send channel for the Harbor handshake.
+            /// </summary>
+            public HarborSendDelegate Send
+            {
+                get { return SendAsync; }
+            }
+
+            private Task SendAsync(HarborMessage message, CancellationToken token)
+            {
+                if (message is HarborGitRequest git)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        await ReplyGitAsync(git, token).ConfigureAwait(false);
+                    }, token);
+                }
+                else if (message is HarborFileRequest file)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        await ReplyFileAsync(file, token).ConfigureAwait(false);
+                    }, token);
+                }
+
+                return Task.CompletedTask;
+            }
+
+            private async Task ReplyGitAsync(HarborGitRequest git, CancellationToken token)
+            {
+                HarborGitResult reply = new HarborGitResult
+                {
+                    RequestId = git.RequestId,
+                    CorrelationId = git.CorrelationId
+                };
+                try
+                {
+                    List<string> arguments = new List<string>();
+                    foreach (string argument in git.Arguments)
+                        arguments.Add(Map(argument));
+
+                    HostCommandResult result = await _Host.RunAsync(new HostCommandRequest
+                    {
+                        Executable = git.Executable,
+                        WorkingDirectory = Map(git.WorkingDirectory),
+                        Arguments = arguments,
+                        TimeoutMs = git.TimeoutMs > 0 ? git.TimeoutMs : 120000,
+                        ExpectedExitCodes = git.ExpectedExitCodes != null ? new List<int>(git.ExpectedExitCodes) : new List<int>()
+                    }, token).ConfigureAwait(false);
+
+                    reply.ExitCode = result.ExitCode;
+                    reply.StandardOutput = result.StandardOutput;
+                    reply.StandardError = result.StandardError;
+                    reply.TimedOut = result.TimedOut;
+                }
+                catch (Exception ex)
+                {
+                    reply.ExitCode = 1;
+                    reply.StandardError = ex.Message;
+                }
+
+                await _Manager.OnMessageAsync(_HarborId, reply, token).ConfigureAwait(false);
+            }
+
+            private async Task ReplyFileAsync(HarborFileRequest file, CancellationToken token)
+            {
+                HarborFileResult reply = new HarborFileResult
+                {
+                    RequestId = file.RequestId,
+                    CorrelationId = file.CorrelationId,
+                    Success = true
+                };
+                try
+                {
+                    if (file.Operation == HarborFileOperationEnum.Stat)
+                    {
+                        string mapped = Map(file.Path);
+                        bool isDirectory = Directory.Exists(mapped);
+                        reply.IsDirectory = isDirectory;
+                        reply.Exists = isDirectory || File.Exists(mapped);
+                    }
+                    else
+                    {
+                        reply.Success = false;
+                        reply.Message = "unsupported file operation " + file.Operation;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    reply.Success = false;
+                    reply.Message = ex.Message;
+                }
+
+                await _Manager.OnMessageAsync(_HarborId, reply, token).ConfigureAwait(false);
+            }
+
+            private string Map(string path)
+            {
+                if (String.IsNullOrEmpty(path)) return path;
+                if (String.Equals(path, _HarborPath, StringComparison.OrdinalIgnoreCase)) return _RealPath;
+                string prefix = _HarborPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    return Path.Combine(_RealPath, path.Substring(prefix.Length));
+                return path;
+            }
+        }
+
+        private static async Task AssertHarborMissionDiffAsync(HarborDiffProbe probe)
+        {
+            const string HarborId = "hbr_ws_diff";
+            const string Marker = "harbor-diff-marker";
+            const string SavedText = "saved-diff-text\n";
+            const string SnapshotText = "snapshot-diff-text";
+            string root = TestTemp.NewDirectory("ws_harbor_diff");
+            string repo = Path.Combine(root, "harbor-repo");
+            string absent = Path.Combine(root, "not-on-admiral");
+            string missing = Path.Combine(root, "missing-on-harbor");
+            using (TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+            {
+                await CreateFeatureRepositoryAsync(repo, Marker).ConfigureAwait(false);
+                AssertFalse(Directory.Exists(absent), "the Harbor worktree path is absent on the Admiral machine");
+
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.LogDirectory = Path.Combine(root, "logs");
+                Directory.CreateDirectory(settings.LogDirectory);
+
+                GitService localGit = new GitService(logging);
+                HarborConnectionManager manager = new HarborConnectionManager(new HarborService(database.Driver, logging), logging, null);
+                DockHostResolver hosts = new DockHostResolver(localGit, logging, manager);
+                if (probe != HarborDiffProbe.DisconnectedHarbor)
+                {
+                    HarborPathLoopback loopback = new HarborPathLoopback(manager, HarborId, absent, repo);
+                    HarborHandshake handshake = new HarborHandshake
+                    {
+                        HarborId = HarborId,
+                        Name = "Rig",
+                        ProtocolVersion = HarborProtocol.Version,
+                        Capabilities = new List<HarborCapability>
+                        {
+                            new HarborCapability { Name = HarborProtocol.DockCapability, Available = true }
+                        }
+                    };
+                    await manager.OnHandshakeAsync(handshake, null, null, loopback.Send).ConfigureAwait(false);
+                }
+
+                DockService docks = new DockService(logging, database.Driver, settings, localGit);
+                CaptainService captains = new CaptainService(logging, database.Driver, settings, localGit, docks);
+                MissionService missions = new MissionService(logging, database.Driver, settings, docks, captains, git: localGit);
+                missions.DockHosts = hosts;
+
+                Vessel vessel = new Vessel("app", repo);
+                vessel.DefaultBranch = "main";
+                vessel = await database.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                bool local = probe == HarborDiffProbe.LocalDock;
+                string worktree = local ? repo : (probe == HarborDiffProbe.MissingHarborWorktree ? missing : absent);
+                Dock dock = new Dock(vessel.Id);
+                dock.WorktreePath = worktree;
+                dock.BranchName = "feature";
+                dock.Active = true;
+                if (!local)
+                {
+                    dock.HarborId = HarborId;
+                    dock.RepositoryPath = repo;
+                }
+                dock = await database.Driver.Docks.CreateAsync(dock).ConfigureAwait(false);
+
+                Mission mission = new Mission("Harbor diff", "Read the mission diff");
+                mission.VesselId = vessel.Id;
+                mission.DockId = dock.Id;
+                mission.BranchName = "feature";
+                if (probe == HarborDiffProbe.Snapshot) mission.DiffSnapshot = SnapshotText;
+                mission = await database.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
+
+                if (probe == HarborDiffProbe.SavedFile)
+                {
+                    string savedDirectory = Path.Combine(settings.LogDirectory, "diffs");
+                    Directory.CreateDirectory(savedDirectory);
+                    await File.WriteAllTextAsync(Path.Combine(savedDirectory, mission.Id + ".diff"), SavedText).ConfigureAwait(false);
+                }
+
+                WebSocketCommandHandler handler = new WebSocketCommandHandler(
+                    null!,
+                    database.Driver,
+                    null!,
+                    settings,
+                    localGit,
+                    null,
+                    new JsonSerializerOptions(),
+                    (_, _) => { },
+                    (_, _) => { });
+                handler.Missions = missions;
+
+                WebSocketCommand command = new WebSocketCommand();
+                command.Action = "get_mission_diff";
+                command.Id = mission.Id;
+                object result = await handler.HandleCommandAsync("get_mission_diff", command, "{}").ConfigureAwait(false);
+                MissionDiffReply reply = ReadMissionDiffReply(result);
+
+                if (probe == HarborDiffProbe.LiveHarbor || probe == HarborDiffProbe.LocalDock)
+                {
+                    AssertEqual("command.result", reply.Type, "diff result");
+                    AssertContains(Marker, reply.Diff, "diff text from git");
+                }
+                else if (probe == HarborDiffProbe.SavedFile)
+                {
+                    AssertEqual("command.result", reply.Type, "saved diff result");
+                    AssertEqual(SavedText, reply.Diff, "saved diff text");
+                }
+                else if (probe == HarborDiffProbe.Snapshot)
+                {
+                    AssertEqual("command.result", reply.Type, "snapshot result");
+                    AssertEqual(SnapshotText, reply.Diff, "snapshot text");
+                }
+                else if (probe == HarborDiffProbe.MissingHarborWorktree)
+                {
+                    AssertEqual("command.error", reply.Type, "missing Harbor worktree");
+                    AssertEqual("Unavailable", reply.Code, "missing Harbor worktree code");
+                    AssertEqual("No diff available: the worktree is not accessible on its owning host and no saved diff exists", reply.Error, "missing Harbor worktree message");
+                }
+                else
+                {
+                    AssertEqual("command.error", reply.Type, "disconnected Harbor");
+                    AssertEqual("Unavailable", reply.Code, "disconnected Harbor code");
+                    AssertEqual("The mission worktree is on Harbor " + HarborId + ". Connect that Harbor, ensure it supports mission docks, and try again; its diff is currently unavailable.", reply.Error, "disconnected Harbor message");
+                }
+            }
+
+            TestTemp.TryDelete(root);
+        }
+
+        private static async Task CreateFeatureRepositoryAsync(string repo, string marker)
+        {
+            Directory.CreateDirectory(repo);
+            await HarborDockGitFixture.GitAsync(repo, "init", "--initial-branch=main").ConfigureAwait(false);
+            await HarborDockGitFixture.GitAsync(repo, "config", "user.email", "armada@example.com").ConfigureAwait(false);
+            await HarborDockGitFixture.GitAsync(repo, "config", "user.name", "Armada Test").ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(repo, "README.md"), "# app\n").ConfigureAwait(false);
+            await HarborDockGitFixture.GitAsync(repo, "add", "README.md").ConfigureAwait(false);
+            await HarborDockGitFixture.GitAsync(repo, "commit", "-m", "Initial commit").ConfigureAwait(false);
+            await HarborDockGitFixture.GitAsync(repo, "checkout", "-b", "feature").ConfigureAwait(false);
+            await HarborDockGitFixture.CommitFileAsync(repo, "note.txt", marker + "\n", "Feature work").ConfigureAwait(false);
+        }
+
+        private static MissionDiffReply ReadMissionDiffReply(object result)
+        {
+            JsonSerializerOptions options = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                Converters = { new JsonStringEnumConverter() }
+            };
+            string json = JsonSerializer.Serialize(result, options);
+            using (JsonDocument document = JsonDocument.Parse(json))
+            {
+                JsonElement root = document.RootElement;
+                MissionDiffReply reply = new MissionDiffReply();
+                reply.Type = root.GetProperty("type").GetString() ?? "";
+                if (root.TryGetProperty("error", out JsonElement error)) reply.Error = error.GetString() ?? "";
+                if (root.TryGetProperty("code", out JsonElement code)) reply.Code = code.ValueKind == JsonValueKind.String ? (code.GetString() ?? "") : code.GetRawText();
+                if (root.TryGetProperty("data", out JsonElement data) && data.ValueKind == JsonValueKind.Object && data.TryGetProperty("diff", out JsonElement diff))
+                    reply.Diff = diff.GetString() ?? "";
+                return reply;
+            }
         }
 
         #endregion
