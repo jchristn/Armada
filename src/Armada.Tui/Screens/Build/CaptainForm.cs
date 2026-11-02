@@ -136,6 +136,10 @@ namespace Armada.Tui.Screens.Build
             usageMode.SetValue(editing?.UsageCaptureMode.ToString() ?? "Auto");
             InputField usageInterval = new InputField { Value = (editing?.UsageCaptureIntervalSeconds ?? 300).ToString(CultureInfo.InvariantCulture) };
             usageInterval.Validator = text => Int32.TryParse(text, out int seconds) && seconds >= 60 && seconds <= 86400 ? null : loc.T("Interval must be a whole number of seconds from 60 to 86400.");
+            SelectField<string> usageHarbor = screen.NewSelect("Credential Harbor", new List<SelectOption<string>> { new SelectOption<string>("", loc.T("Automatic (current dock or standalone Admiral)")) });
+            if (editing?.UsageCaptureHarborId != null)
+                usageHarbor.Options.Add(new SelectOption<string>(editing.UsageCaptureHarborId, editing.UsageCaptureHarborId));
+            usageHarbor.SetValue(editing?.UsageCaptureHarborId ?? "");
             InputField usageCommand = new InputField { Value = editing?.UsageCaptureCommand ?? "" };
 
             InputField model = new InputField();
@@ -234,6 +238,7 @@ namespace Armada.Tui.Screens.Build
             dialog.AddField("Capture account usage", usageEnabled);
             dialog.AddField("Capture mode", usageMode);
             dialog.AddField("Requested interval", usageInterval);
+            dialog.AddField("Credential Harbor", usageHarbor, "The machine where this runtime is signed in. Used for scheduled capture even while idle; does not change mission placement.");
             dialog.AddField("Custom command JSON", usageCommand);
             dialog.AddField("Mux Config Directory", muxConfig);
             dialog.AddField("Mux Endpoint", muxEndpoint);
@@ -342,6 +347,21 @@ namespace Armada.Tui.Screens.Build
                 if (runtime.Value == AgentRuntimeEnum.Mux && discovered.Count == 0) loadMux();
             };
 
+            screen.Call((c, t) => c.ListHarborsAsync(t), list =>
+            {
+                string selected = usageHarbor.Value ?? "";
+                usageHarbor.Options = new List<SelectOption<string>> { new SelectOption<string>("", loc.T("Automatic (current dock or standalone Admiral)")) };
+                foreach (Harbor host in list ?? new List<Harbor>())
+                    if (host.TenantId == (editing?.TenantId ?? screen.Context.Session.Identity?.Tenant?.Id))
+                        usageHarbor.Options.Add(new SelectOption<string>(host.Id, host.Name));
+                if (selected.Length > 0 && !(list ?? new List<Harbor>()).Any(host => host.Id == selected))
+                    usageHarbor.Options.Add(new SelectOption<string>(selected, selected));
+                usageHarbor.SetValue(selected);
+            }, null, ex =>
+            {
+                dialog.Form.Rows.First(row => ReferenceEquals(row.Field, usageHarbor)).Hint = loc.T("Credential Harbors could not be loaded.");
+            });
+
             screen.Call((c, t) => c.ListModelEndpointsAsync(t), list =>
             {
                 inference.Clear();
@@ -371,6 +391,7 @@ namespace Armada.Tui.Screens.Build
             {
                 AgentRuntimeEnum r = runtime.Value ?? AgentRuntimeEnum.ClaudeCode;
                 Captain body = editing != null ? CopyOf(editing) : new Captain(name.Value.Trim());
+                body.UsageCaptureHarborId = usageHarbor.Value;
                 body.UsageCaptureEnabled = usageEnabled.Value == "inherit" ? null : usageEnabled.Value == "true";
                 body.UsageCaptureIntervalSeconds = Int32.Parse(usageInterval.Value, CultureInfo.InvariantCulture);
                 body.UsageCaptureMode = Enum.Parse<UsageCaptureModeEnum>(usageMode.Value!);

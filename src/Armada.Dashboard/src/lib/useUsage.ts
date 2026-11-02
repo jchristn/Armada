@@ -197,7 +197,7 @@ export function useCaptainUsage(captainId: string | undefined): CaptainUsage {
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         const data = (err.data ?? {}) as { nextEligibleUtc?: string | null; data?: { nextEligibleUtc?: string | null } };
-        if (err.status === 409) { setFeedback({ kind: 'disabled', message: err.message }); return; }
+        if (err.status === 409 && /CaptureDisabled/i.test(err.message)) { setFeedback({ kind: 'disabled', message: err.message }); return; }
         if (err.status === 429) {
           const nextEligibleUtc = data.nextEligibleUtc ?? data.data?.nextEligibleUtc ?? null;
           const parsed = nextEligibleUtc ? Date.parse(nextEligibleUtc) : Number.NaN;

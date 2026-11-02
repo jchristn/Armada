@@ -39,6 +39,9 @@ namespace Armada.Core.Database.Interfaces
         /// <returns>True when a row was updated.</returns>
         Task<bool> UpdateCliPermissionPolicyAsync(string id, CliPermissionPolicyEnum? policy, CancellationToken token = default);
 
+        /// <summary>Set the credential Harbor without overwriting concurrent mission or dock state.</summary>
+        Task<bool> UpdateUsageCaptureHarborAsync(string tenantId, string id, string? harborId, CancellationToken token = default);
+
         /// <summary>
         /// Delete a captain by identifier.
         /// </summary>

@@ -8,8 +8,10 @@ namespace Armada.Server
         public int StatusCode { get; }
         /// <summary>NextEligibleUtc: account usage contract.</summary>
         public DateTime? NextEligibleUtc { get; }
+        /// <summary>Stable machine-readable rejection code, separate from operator guidance.</summary>
+        public string Code { get; }
         /// <summary>UsageRequestException: account usage contract.</summary>
         public UsageRequestException(int statusCode, string reason, DateTime? nextEligibleUtc = null) : base(reason)
-        { StatusCode = statusCode; NextEligibleUtc = nextEligibleUtc; }
+        { StatusCode = statusCode; NextEligibleUtc = nextEligibleUtc; Code = reason.Split(':', 2)[0]; }
     }
 }

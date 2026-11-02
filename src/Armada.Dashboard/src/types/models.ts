@@ -275,6 +275,8 @@ export interface Captain {
   usageCaptureMode?: UsageCaptureMode;
   /** Custom executable/argument-list JSON; null outside Custom mode. */
   usageCaptureCommand?: string | null;
+  /** Credential Harbor retained while idle; null follows the dock or standalone Admiral. */
+  usageCaptureHarborId?: string | null;
   /** True when capture is enabled and the mode is not Disabled. */
   usageCaptureActive?: boolean;
   state: string;

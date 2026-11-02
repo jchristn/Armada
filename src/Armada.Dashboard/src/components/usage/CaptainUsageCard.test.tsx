@@ -12,6 +12,7 @@ vi.mock('../../api/client', async (importOriginal) => ({
   getUsageSeries: vi.fn(() => Promise.reject(new Error('no series in this test'))),
   captureCaptainUsage: vi.fn(),
   updateCaptain: vi.fn(),
+  listHarbors: vi.fn(async () => [{ id: 'hbr_office', tenantId: 'default', name: 'Office', enabled: true, connectionStatus: 'Connected' }]),
 }));
 
 vi.mock('../../context/LocaleContext', async () => {
@@ -229,6 +230,19 @@ describe('CaptainUsageCard', () => {
     expect(screen.queryByRole('button', { name: 'Save capture settings' })).toBeNull();
   });
 
+  it('saves the credential Harbor independently of a dock and distinguishes unresolved capture from disabled capture', async () => {
+    vi.mocked(getUsageLatest).mockResolvedValue(page([]) as never);
+    vi.mocked(captureCaptainUsage).mockRejectedValueOnce(new ApiError('HostUnresolved: select a credential Harbor in capture settings.', 409, null));
+    vi.mocked(updateCaptain).mockResolvedValue({ ...baseCaptain, usageCaptureHarborId: 'hbr_office' });
+    renderCard(baseCaptain, true);
+    await userEvent.click(await screen.findByRole('button', { name: 'Capture now' }));
+    expect(await screen.findByText('Capture failed to start: HostUnresolved: select a credential Harbor in capture settings.')).toBeInTheDocument();
+    await screen.findByRole('option', { name: 'Office (Connected)' });
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Credential Harbor' }), 'hbr_office');
+    await userEvent.click(screen.getByRole('button', { name: 'Save capture settings' }));
+    await waitFor(() => expect(updateCaptain).toHaveBeenCalledWith(baseCaptain.id, expect.objectContaining({ usageCaptureHarborId: 'hbr_office' })));
+  });
+
   it('validates Custom input, saves only the usage fields, and keeps edits after a server rejection', async () => {
     vi.mocked(getUsageLatest).mockResolvedValue(page([]) as never);
     vi.mocked(updateCaptain).mockRejectedValueOnce(new ApiError('UsageCaptureCommandInvalid: shell syntax', 400, null));
@@ -252,7 +266,7 @@ describe('CaptainUsageCard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save capture settings' }));
     expect(await screen.findByText('UsageCaptureCommandInvalid: shell syntax')).toBeInTheDocument();
     expect(updateCaptain).toHaveBeenCalledWith('cpt_a', {
-      usageCaptureEnabled: true, usageCaptureIntervalSeconds: 900, usageCaptureMode: 'Custom',
+      usageCaptureEnabled: true, usageCaptureHarborId: null, usageCaptureIntervalSeconds: 900, usageCaptureMode: 'Custom',
       usageCaptureCommand: JSON.stringify({ executable: '/opt/usage/read-quota', arguments: ['--json', '--fast'] }),
     });
     expect((screen.getByLabelText('Executable path') as HTMLInputElement).value).toBe('/opt/usage/read-quota');

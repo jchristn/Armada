@@ -637,6 +637,7 @@ namespace Armada.Core.Database.SqlServer
             }
             catch { }
             try { captain.UsageCaptureCommand = NullableString(reader["usage_capture_command"]); } catch { }
+            captain.UsageCaptureHarborId = NullableString(reader["usage_capture_harbor_id"]);
             try { captain.Active = Convert.ToBoolean(reader["active"]); } catch { }
             return captain;
         }

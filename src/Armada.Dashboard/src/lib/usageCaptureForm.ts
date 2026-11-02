@@ -2,6 +2,7 @@ import type { Captain, UsageCaptureMode } from '../types/models';
 
 export interface UsageCaptureFormState {
   enabled: boolean | null;
+  harborId?: string;
   mode: UsageCaptureMode;
   interval: string;
   executable: string;
@@ -28,6 +29,7 @@ export function usageCaptureFormFromCaptain(captain: Partial<Captain>): UsageCap
   }
   return {
     enabled: captain.usageCaptureEnabled ?? null,
+    harborId: captain.usageCaptureHarborId ?? '',
     mode: captain.usageCaptureMode ?? 'Auto',
     interval: String(captain.usageCaptureIntervalSeconds ?? USAGE_INTERVAL_DEFAULT),
     executable,
@@ -58,6 +60,7 @@ export function buildUsageCapturePayload(form: UsageCaptureFormState): Partial<C
   const args = form.argumentsText.split('\n').map((a) => a.trim()).filter((a) => a.length > 0);
   return {
     usageCaptureEnabled: form.enabled,
+    ...(form.harborId !== undefined ? { usageCaptureHarborId: form.harborId || null } : {}),
     usageCaptureIntervalSeconds: Number(form.interval),
     usageCaptureMode: form.mode,
     usageCaptureCommand: form.mode === 'Custom' ? JSON.stringify({ executable: form.executable.trim(), arguments: args }) : null,

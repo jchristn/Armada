@@ -10236,6 +10236,21 @@ Foreign captain and Harbor identifiers return 404 before secondary input validat
 | GET | `/api/v1/usage/series` | `UsageSeriesResult` |
 | GET | `/api/v1/usage/missions` | Paged mission rows and coverage |
 
+`Captain.UsageCaptureHarborId` is a nullable credential-host selection, independent
+of mission placement. Dashboard, TUI and mobile captain editors expose it. Omitted
+PUT fields keep the choice; explicit null restores automatic current-dock or
+standalone-Admiral resolution. An idle captain in a split deployment needs a saved
+credential Harbor. Migration 114 adds the nullable column on all four providers.
+
+For manual capture, `{ "HarborId": "hbr_example" }` selects and saves a same-tenant
+Harbor for subsequent scheduled reads without overwriting mission or dock state.
+An empty body uses the saved choice. Unresolved selection returns 409 with
+`Data.Code: "HostUnresolved"` and recovery guidance. A disabled Harbor returns 409
+`HostDisabled`; a disconnected selected Harbor returns 503 `HostUnavailable`.
+A first manual read bypasses startup jitter; observed cooldowns, provider backoff
+and single-flight leases still apply. A connected Harbor must advertise
+`usage-probe` and have the runtime signed in locally.
+
 Identity filters are `captainId`, `harborId`, `hostId`, `runtime`, `provider` and
 `accountKey`. Paging defaults to page 1, size 25, with size bounded to 1..100.
 Latest additionally accepts `captainIds`, a comma-separated batch of 1..100

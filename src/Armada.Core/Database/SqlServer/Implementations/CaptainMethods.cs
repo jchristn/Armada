@@ -57,8 +57,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, reasoning_effort, tier, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc, usage_capture_enabled, usage_capture_interval_seconds, usage_capture_mode, usage_capture_command, active)
-                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @reasoning_effort, @tier, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc, @usage_capture_enabled, @usage_capture_interval_seconds, @usage_capture_mode, @usage_capture_command, @active);";
+                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, reasoning_effort, tier, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc, usage_capture_enabled, usage_capture_interval_seconds, usage_capture_mode, usage_capture_command, usage_capture_harbor_id, active)
+                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @reasoning_effort, @tier, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc, @usage_capture_enabled, @usage_capture_interval_seconds, @usage_capture_mode, @usage_capture_command, @usage_capture_harbor_id, @active);";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)captain.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)captain.UserId ?? DBNull.Value);
@@ -88,6 +88,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@usage_capture_harbor_id", (object?)captain.UsageCaptureHarborId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", captain.Active ? 1 : 0);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -179,6 +180,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         usage_capture_interval_seconds = @usage_capture_interval_seconds,
                         usage_capture_mode = @usage_capture_mode,
                         usage_capture_command = @usage_capture_command,
+                        usage_capture_harbor_id = @usage_capture_harbor_id,
                         active = CASE WHEN @update_active = 1 THEN @active ELSE active END,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
@@ -208,6 +210,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@usage_capture_interval_seconds", captain.UsageCaptureIntervalSeconds);
                     cmd.Parameters.AddWithValue("@usage_capture_mode", captain.UsageCaptureMode.ToString());
                     cmd.Parameters.AddWithValue("@usage_capture_command", (object?)captain.UsageCaptureCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@usage_capture_harbor_id", (object?)captain.UsageCaptureHarborId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@active", captain.Active ? 1 : 0);
                     cmd.Parameters.AddWithValue("@update_active", updateActive ? 1 : 0);
                     cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(captain.LastUpdateUtc));
@@ -232,6 +235,26 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@policy", (object?)policy?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@now", SqlServerDatabaseDriver.ToIso8601(DateTime.UtcNow));
                     cmd.Parameters.AddWithValue("@id", id);
+                    return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) > 0;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> UpdateUsageCaptureHarborAsync(string tenantId, string id, string? harborId, CancellationToken token = default)
+        {
+            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "UPDATE captains SET usage_capture_harbor_id = @policy, last_update_utc = @now WHERE id = @id AND tenant_id = @tenant;";
+                    cmd.Parameters.AddWithValue("@policy", (object?)harborId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@now", SqlServerDatabaseDriver.ToIso8601(DateTime.UtcNow));
+                    cmd.Parameters.AddWithValue("@id", id);
+                    cmd.Parameters.AddWithValue("@tenant", tenantId);
                     return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) > 0;
                 }
             }

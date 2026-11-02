@@ -9402,7 +9402,7 @@
           "required": false
         }
       ],
-      "description": "Capture usage for a tenant-owned captain. Requires tenant administrator. Returns an idempotent queued job receipt; disabled capture is Conflict, cooldown is rate limited and offline host is Unavailable.",
+      "description": "Capture usage for a tenant-owned captain. Requires tenant administrator. Optional harborId selects and saves the credential Harbor for idle and scheduled capture. Returns an idempotent queued job receipt; disabled capture is Conflict, cooldown is rate limited and offline host is Unavailable.",
       "experimental": false
     },
     {

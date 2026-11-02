@@ -124,8 +124,8 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <summary>
-        /// Resolve the credential host a captain's usage capture runs on, together with the probe
-        /// configuration derived from the captain: the Harbor hosting the captain's current dock, or, in a
+        /// Resolve the saved credential Harbor first, including while idle; otherwise use the
+        /// captain's current dock, or, in a
         /// deployment with no Harbor links at all, the Admiral's own host. A captain whose dock is on a
         /// Harbor is probed on that Harbor even while it is disconnected (HostUnavailable, never a
         /// fallback to the Admiral's credentials); a captain with no dock in a deployment that has any
@@ -138,7 +138,7 @@ namespace Armada.Core.Services
         /// <param name="settings">Server settings (capture bounds).</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The configured probe host context, or null when no credential host could be resolved
-        /// (Failed/HostUnavailable).</returns>
+        /// (HostUnresolved).</returns>
         public async Task<UsageProbeHost?> TryResolveHostAsync(
             DatabaseDriver database,
             HarborConnectionManager? harbors,
@@ -170,7 +170,14 @@ namespace Armada.Core.Services
             Dock? dock = String.IsNullOrWhiteSpace(captain.CurrentDockId)
                 ? null
                 : await database.Docks.ReadAsync(captain.CurrentDockId!, token).ConfigureAwait(false);
-            if (DockHostResolver.IsHarborDock(dock) && dock!.HarborId != null)
+            if (captain.UsageCaptureHarborId != null)
+            {
+                Harbor? selected = await database.Harbors.ReadAsync(captain.UsageCaptureHarborId, token).ConfigureAwait(false);
+                if (selected == null || !String.Equals(selected.TenantId, captain.TenantId, StringComparison.Ordinal)) return null;
+                harborId = selected.Id;
+                hostId = harborId;
+            }
+            else if (DockHostResolver.IsHarborDock(dock) && dock!.HarborId != null)
             {
                 // The credential host is the Harbor that hosts the captain's work, even when it is
                 // disconnected: capture reports HostUnavailable rather than borrowing the Admiral's host.

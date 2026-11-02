@@ -6,6 +6,12 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Idle captain usage capture
+
+- Save a credential Harbor on the captain, independently of mission placement. Capture requests with an explicit HarborId save that choice for subsequent scheduled reads; dashboard, TUI and mobile editors expose it. Null keeps automatic dock/standalone resolution.
+- Validate host ownership within the captain's tenant, retain the selected host while disconnected and reject disabled hosts. Unresolved host selection is now a distinct conflict with recovery guidance rather than a misleading offline error.
+- Manual first capture bypasses scheduler startup jitter, while observed cooldowns, provider backoff, single-flight and persisted leases remain enforced.
+
 ### Dashboard styling
 
 - Style captain evaluation navigation and downloads as shared action buttons. Align evaluation metadata, history, battery results, filters and pagination with dashboard spacing, status colors and responsive tables.

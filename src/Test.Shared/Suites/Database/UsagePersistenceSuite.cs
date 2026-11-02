@@ -623,6 +623,8 @@ namespace Test.Shared.Suites.Database
 
                     Captain configured = new Captain("usage-custom-captain");
                     configured.UsageCaptureEnabled = true;
+                    configured.TenantId = "default";
+                    configured.UsageCaptureHarborId = "hbr_usage_a";
                     configured.UsageCaptureIntervalSeconds = 900;
                     configured.UsageCaptureMode = UsageCaptureModeEnum.Custom;
                     configured.UsageCaptureCommand = "{\"executable\":\"/opt/usage/read-quota\",\"arguments\":[\"--json\"]}";
@@ -632,6 +634,14 @@ namespace Test.Shared.Suites.Database
                     AssertNotNull(readConfigured, "configured captain readable");
                     AssertTrue(readConfigured!.UsageCaptureEnabled == true, "enabled flag round-trips");
                     AssertEqual(900, readConfigured.UsageCaptureIntervalSeconds, "interval round-trips");
+                    AssertEqual("hbr_usage_a", readConfigured.UsageCaptureHarborId, "explicit host survives storage");
+                    AssertFalse(await driver.Captains.UpdateUsageCaptureHarborAsync("other", configured.Id, "hbr_wrong", ct).ConfigureAwait(false), "atomic binding is tenant scoped");
+                    AssertTrue(await driver.Captains.UpdateUsageCaptureHarborAsync("default", configured.Id, "hbr_usage_b", ct).ConfigureAwait(false));
+                    Captain bound = (await driver.Captains.ReadAsync(configured.Id, ct).ConfigureAwait(false))!;
+                    AssertEqual("hbr_usage_b", bound.UsageCaptureHarborId);
+                    AssertEqual(900, bound.UsageCaptureIntervalSeconds);
+                    AssertTrue(await driver.Captains.UpdateUsageCaptureHarborAsync("default", configured.Id, null, ct).ConfigureAwait(false));
+                    AssertNull((await driver.Captains.ReadAsync(configured.Id, ct).ConfigureAwait(false))!.UsageCaptureHarborId);
                     AssertEqual(UsageCaptureModeEnum.Custom, readConfigured.UsageCaptureMode, "Custom mode round-trips");
                     AssertEqual(configured.UsageCaptureCommand, readConfigured.UsageCaptureCommand, "command round-trips");
                     AssertTrue(readConfigured.UsageCaptureActive, "enabled Custom captain is effectively active");

@@ -58,7 +58,9 @@ namespace Armada.Server
         /// <summary>Usage capture mode (presence only).</summary>
         public object? UsageCaptureMode { get => null; set => Mark(nameof(UsageCaptureMode)); }
 
-        /// <summary>Custom usage capture command JSON (presence only).</summary>
+        /// <summary>Credential Harbor selection (presence only).</summary>
+        public object? UsageCaptureHarborId { get => null; set => Mark(nameof(UsageCaptureHarborId)); }
+        /// <summary>Whether the usage command was supplied.</summary>
         public object? UsageCaptureCommand { get => null; set => Mark(nameof(UsageCaptureCommand)); }
 
         #endregion

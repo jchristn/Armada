@@ -199,6 +199,16 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Explicit credential Harbor for account usage, including while idle. Null follows the current
+        /// dock, or the Admiral in a standalone deployment. Never changes mission placement.
+        /// </summary>
+        public string? UsageCaptureHarborId
+        {
+            get => _UsageCaptureHarborId;
+            set => _UsageCaptureHarborId = String.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        /// <summary>
         /// Whether usage capture is effectively active for this captain: enabled AND not opted out with
         /// Disabled mode. Derived; not stored.
         /// </summary>
@@ -280,6 +290,7 @@ namespace Armada.Core.Models
         private int _UsageCaptureIntervalSeconds = 300;
         private UsageCaptureModeEnum _UsageCaptureMode = UsageCaptureModeEnum.Auto;
         private string? _UsageCaptureCommand = null;
+        private string? _UsageCaptureHarborId = null;
 
         #endregion
 

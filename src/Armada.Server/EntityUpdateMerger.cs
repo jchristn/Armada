@@ -136,6 +136,7 @@ namespace Armada.Server
             if (!presence.Has(nameof(Captain.UsageCaptureEnabled))) incoming.UsageCaptureEnabled = existing.UsageCaptureEnabled;
             if (!presence.Has(nameof(Captain.UsageCaptureIntervalSeconds))) incoming.UsageCaptureIntervalSeconds = existing.UsageCaptureIntervalSeconds;
             if (!presence.Has(nameof(Captain.UsageCaptureMode))) incoming.UsageCaptureMode = existing.UsageCaptureMode;
+            if (!presence.Has(nameof(Captain.UsageCaptureHarborId))) incoming.UsageCaptureHarborId = existing.UsageCaptureHarborId;
             if (!presence.Has(nameof(Captain.UsageCaptureCommand)))
             {
                 string? storedCommand = existing.UsageCaptureCommand;

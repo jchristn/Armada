@@ -10,7 +10,13 @@ namespace Test.Shared.Suites.E2E
     using System.Text;
     using System.Text.Json;
     using System.Threading.Tasks;
+    using Armada.Core;
+    using Armada.Core.Database;
+    using Armada.Core.Models;
     using Armada.Core.Enums;
+    using Armada.Runtimes;
+    using SyslogLogging;
+    using System.Threading;
     using Armada.Core.Services;
     using Armada.Core.Settings;
     using Armada.Server;
@@ -28,6 +34,65 @@ namespace Test.Shared.Suites.E2E
         {
             return new TestSuiteDescriptor(Suite, "Usage capture settings API", new List<TestCaseDescriptor>
             {
+                new TestCaseDescriptor(Suite, "idle_credential_harbor", "Idle capture uses a saved Harbor across rebuilds, preserves mission state and rejects foreign hosts", async ct =>
+                {
+                    string dir = TestTemp.NewDirectory("idle_usage_harbor");
+                    using InProcessArmadaServer server = await InProcessArmadaServer.StartAsync(dir,
+                        new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(dir, "armada.db") }, settings => settings.UsageCapture.Enabled = true).ConfigureAwait(false);
+                    ArmadaServer runtime = (ArmadaServer)typeof(InProcessArmadaServer).GetField("_Server", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(server)!;
+                    DatabaseDriver database = (DatabaseDriver)typeof(ArmadaServer).GetField("_Database", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(runtime)!;
+                    HarborConnectionManager manager = (HarborConnectionManager)typeof(ArmadaServer).GetField("_HarborConnectionManager", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(runtime)!;
+                    UsageCaptureScheduler scheduler = (UsageCaptureScheduler)typeof(ArmadaServer).GetField("_UsageCaptureScheduler", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(runtime)!;
+                    LoggingModule logging = new LoggingModule(); logging.Settings.EnableConsole = false;
+                    IdleUsageProbe probe = new IdleUsageProbe();
+                    using InProcessHarbor harbor = await InProcessHarbor.ConnectAsync(manager, "hbr_idle_usage", Constants.SystemTenantId, Constants.SystemUserId, new AgentRuntimeFactory(logging), new string[] { "usage-probe", "ClaudeCode" }, logging, usageProbe: probe).ConfigureAwait(false);
+                    Captain captain = await database.Captains.CreateAsync(new Captain("idle-usage") { TenantId = Constants.SystemTenantId, UserId = Constants.SystemUserId, UsageCaptureEnabled = true }).ConfigureAwait(false);
+                    string path = "/api/v1/captains/" + captain.Id;
+                    using (HttpResponseMessage unresolved = await server.Client.PostAsync(path + "/usage/capture", JsonHelper.ToJsonContent(new { }), ct).ConfigureAwait(false))
+                    {
+                        AssertStatusCode(HttpStatusCode.Conflict, unresolved, "an unresolved host is not offline");
+                        AssertContains("HostUnresolved", await unresolved.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+                    }
+                    using (HttpResponseMessage capture = await server.Client.PostAsync(path + "/usage/capture", JsonHelper.ToJsonContent(new { HarborId = harbor.HarborId }), ct).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.Accepted, capture, "explicit connected Harbor starts idle capture");
+                    DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+                    EnumerationResult<UsageSnapshotView> latest;
+                    do
+                    {
+                        latest = await UsageTestData.GetAsync<EnumerationResult<UsageSnapshotView>>(server.Client, "/api/v1/usage/latest?captainId=" + captain.Id).ConfigureAwait(false);
+                        if (latest.Objects.Count > 0) break;
+                        await Task.Delay(50, ct).ConfigureAwait(false);
+                    } while (DateTime.UtcNow < deadline);
+                    AssertEqual(1, latest.Objects.Count, "the Harbor observation was stored for the idle captain");
+                    AssertEqual(harbor.HarborId, latest.Objects[0].HarborId);
+                    AssertEqual(42.0, latest.Objects[0].Windows[0].UsedPercent!.Value);
+                    using (HttpResponseMessage cooldown = await server.Client.PostAsync(path + "/usage/capture", JsonHelper.ToJsonContent(new { }), ct).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.TooManyRequests, cooldown, "manual reads still honor observed cooldowns");
+                    Captain stored = (await database.Captains.ReadAsync(captain.Id, ct).ConfigureAwait(false))!;
+                    AssertEqual(harbor.HarborId, stored.UsageCaptureHarborId);
+                    AssertNull(stored.CurrentDockId); AssertEqual(CaptainStateEnum.Idle, stored.State);
+                    await scheduler.RebuildAsync(ct).ConfigureAwait(false);
+                    AssertTrue(scheduler.Groups().Any(group => group.HarborId == harbor.HarborId && group.MemberCaptainIds.Contains(captain.Id)), "scheduled capture retains the idle host");
+                    await UsageTestData.PutAsync(server.Client, path, "{\"Name\":\"renamed-idle\"}", HttpStatusCode.OK).ConfigureAwait(false);
+                    AssertEqual(harbor.HarborId, (await database.Captains.ReadAsync(captain.Id, ct).ConfigureAwait(false))!.UsageCaptureHarborId, "omitted host survives edits");
+                    Harbor foreign = await database.Harbors.CreateAsync(new Harbor { TenantId = "foreign", Name = "foreign-host" }, ct).ConfigureAwait(false);
+                    await UsageTestData.PutAsync(server.Client, path, JsonSerializer.Serialize(new { UsageCaptureHarborId = foreign.Id }), HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    using (HttpResponseMessage rejected = await server.Client.PostAsync(path + "/usage/capture", JsonHelper.ToJsonContent(new { HarborId = foreign.Id }), ct).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.NotFound, rejected, "foreign hosts are not selectable");
+                    await harbor.DisconnectAsync().ConfigureAwait(false);
+                    using (HttpResponseMessage offline = await server.Client.PostAsync(path + "/usage/capture", JsonHelper.ToJsonContent(new { }), ct).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.ServiceUnavailable, offline, "a disconnected selected host stays offline, never local");
+                    Harbor selected = (await database.Harbors.ReadAsync(harbor.HarborId, ct).ConfigureAwait(false))!;
+                    selected.Enabled = false;
+                    await database.Harbors.UpdateAsync(selected, ct).ConfigureAwait(false);
+                    using (HttpResponseMessage disabled = await server.Client.PostAsync(path + "/usage/capture", JsonHelper.ToJsonContent(new { }), ct).ConfigureAwait(false))
+                    {
+                        AssertStatusCode(HttpStatusCode.Conflict, disabled, "disabled host is a separate conflict");
+                        AssertContains("HostDisabled", await disabled.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+                    }
+                    await UsageTestData.PutAsync(server.Client, path, "{\"UsageCaptureHarborId\":null}", HttpStatusCode.OK).ConfigureAwait(false);
+                    AssertNull((await database.Captains.ReadAsync(captain.Id, ct).ConfigureAwait(false))!.UsageCaptureHarborId);
+                }),
                 new TestCaseDescriptor(Suite, "get_defaults", "GET exposes inherited default-on capture settings", async ct =>
                 {
                     string dir = TestTemp.NewDirectory("usage_settings_defaults");
@@ -115,6 +180,19 @@ namespace Test.Shared.Suites.E2E
                     AssertFalse(persisted.UsageCapture.EffectiveEnabled);
                 })
             });
+        }
+
+        private sealed class IdleUsageProbe : IUsageProbe
+        {
+            public Task<UsageProbeResult> CaptureAsync(UsageProbeHost host, CancellationToken token = default)
+            {
+                return Task.FromResult(new UsageProbeResult
+                {
+                    Status = UsageSnapshotStatusEnum.Ok, Provider = "anthropic", AccountKey = "fixture-idle-account",
+                    CapturedUtc = DateTime.UtcNow, Source = UsageCaptureSourceEnum.OAuthEndpoint,
+                    Windows = new List<UsageWindow> { new UsageWindow { Name = "five_hour", UsedPercent = 42 } }
+                });
+            }
         }
 
         private static async Task<UsageCaptureSettings> ReadAsync(HttpResponseMessage response)

@@ -7327,7 +7327,12 @@
         "Probe timeout": "Tiempo límite de consulta",
         "Maximum concurrent probes": "Máximo de consultas simultáneas",
         "Maximum probes per host": "Máximo de consultas por host",
-        "Maximum backoff": "Espera máxima"
+        "Maximum backoff": "Espera máxima",
+        "Credential Harbor": "Harbor de credenciales",
+        "Automatic (current dock or standalone Admiral)": "Automático (dock actual o Admiral independiente)",
+        "Credential Harbors could not be loaded.": "No se pudieron cargar los Harbors de credenciales.",
+        "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "La alternativa de terminal interactiva sigue la configuración del servidor y se detiene en las pantallas de inicio de sesión, confianza o configuración.",
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Seleccione el equipo donde está autenticado este runtime. La elección se guarda para la captura programada mientras el capitán está inactivo y no cambia la ubicación de las misiones."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -13602,7 +13607,12 @@
         "Probe timeout": "探测超时",
         "Maximum concurrent probes": "最大并行探测数",
         "Maximum probes per host": "每主机最大探测数",
-        "Maximum backoff": "最大退避时间"
+        "Maximum backoff": "最大退避时间",
+        "Credential Harbor": "凭据 Harbor",
+        "Automatic (current dock or standalone Admiral)": "自动（当前 dock 或独立 Admiral）",
+        "Credential Harbors could not be loaded.": "无法加载凭据 Harbor。",
+        "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "交互终端回退遵循服务器设置，遇到登录、信任或设置页面时停止。",
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "选择已登录此运行时的机器。此选择会保存，供 captain 空闲时定期采集使用，不会更改任务运行位置。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -19840,7 +19850,12 @@
         "Probe timeout": "探測逾時",
         "Maximum concurrent probes": "最大並行探測數",
         "Maximum probes per host": "每主機最大探測數",
-        "Maximum backoff": "最大退避時間"
+        "Maximum backoff": "最大退避時間",
+        "Credential Harbor": "憑證 Harbor",
+        "Automatic (current dock or standalone Admiral)": "自動（目前 dock 或獨立 Admiral）",
+        "Credential Harbors could not be loaded.": "無法載入憑證 Harbor。",
+        "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "互動終端備援遵循伺服器設定，遇到登入、信任或設定畫面時停止。",
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "選擇已登入此執行階段的機器。此選擇會儲存，供 captain 閒置時排程擷取使用，不會變更任務執行位置。"
       },
       "sections": {}
     },
@@ -26038,7 +26053,12 @@
         "Probe timeout": "探測逾時",
         "Maximum concurrent probes": "最多同時探測數",
         "Maximum probes per host": "每部主機最多探測數",
-        "Maximum backoff": "最長等候時間"
+        "Maximum backoff": "最長等候時間",
+        "Credential Harbor": "憑證 Harbor",
+        "Automatic (current dock or standalone Admiral)": "自動（目前 dock 或獨立 Admiral）",
+        "Credential Harbors could not be loaded.": "載入唔到憑證 Harbor。",
+        "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "互動終端後備方式跟隨伺服器設定，遇到登入、信任或設定畫面就會停止。",
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "選擇已登入呢個執行階段嘅機器。呢個選擇會儲存，供 captain 閒置時排程擷取使用，唔會改變任務執行位置。"
       },
       "sections": {}
     },
@@ -32252,7 +32272,12 @@
         "Probe timeout": "プローブのタイムアウト",
         "Maximum concurrent probes": "最大同時プローブ数",
         "Maximum probes per host": "ホストごとの最大プローブ数",
-        "Maximum backoff": "最大再試行間隔"
+        "Maximum backoff": "最大再試行間隔",
+        "Credential Harbor": "認証情報の Harbor",
+        "Automatic (current dock or standalone Admiral)": "自動（現在の dock または単独の Admiral）",
+        "Credential Harbors could not be loaded.": "認証情報の Harbor を読み込めませんでした。",
+        "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "対話型端末へのフォールバックはサーバー設定に従い、ログイン、信頼、設定画面で停止します。",
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "このランタイムにログイン済みのマシンを選択します。選択は保存され、キャプテンの待機中も定期取得に使われます。ミッションの配置は変わりません。"
       },
       "sections": {}
     },
@@ -38457,7 +38482,12 @@
         "Probe timeout": "Zeitlimit der Abfrage",
         "Maximum concurrent probes": "Maximale gleichzeitige Abfragen",
         "Maximum probes per host": "Maximale Abfragen pro Host",
-        "Maximum backoff": "Maximale Wartezeit"
+        "Maximum backoff": "Maximale Wartezeit",
+        "Credential Harbor": "Harbor mit Zugangsdaten",
+        "Automatic (current dock or standalone Admiral)": "Automatisch (aktuelles Dock oder eigenständiger Admiral)",
+        "Credential Harbors could not be loaded.": "Die Harbors mit Zugangsdaten konnten nicht geladen werden.",
+        "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "Der interaktive Terminal-Fallback folgt der Servereinstellung und stoppt bei Anmeldung, Vertrauensabfrage oder Einrichtung.",
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Wählen Sie den Rechner, auf dem diese Laufzeit angemeldet ist. Die Auswahl wird für geplante Erfassungen im Leerlauf gespeichert und ändert die Missionszuordnung nicht."
       },
       "sections": {}
     },
@@ -44662,7 +44692,12 @@
         "Probe timeout": "Délai d’expiration de la sonde",
         "Maximum concurrent probes": "Sondes simultanées maximales",
         "Maximum probes per host": "Sondes maximales par hôte",
-        "Maximum backoff": "Attente maximale"
+        "Maximum backoff": "Attente maximale",
+        "Credential Harbor": "Harbor des identifiants",
+        "Automatic (current dock or standalone Admiral)": "Automatique (dock actuel ou Admiral autonome)",
+        "Credential Harbors could not be loaded.": "Impossible de charger les Harbors des identifiants.",
+        "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "Le repli vers le terminal interactif suit le réglage du serveur et s’arrête aux écrans de connexion, de confiance ou de configuration.",
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Sélectionnez la machine où ce runtime est connecté. Ce choix est enregistré pour les captures planifiées lorsque le capitaine est inactif, sans changer l’emplacement des missions."
       },
       "sections": {}
     },
@@ -50867,7 +50902,12 @@
         "Probe timeout": "Timeout della sonda",
         "Maximum concurrent probes": "Sonde simultanee massime",
         "Maximum probes per host": "Sonde massime per host",
-        "Maximum backoff": "Attesa massima"
+        "Maximum backoff": "Attesa massima",
+        "Credential Harbor": "Harbor delle credenziali",
+        "Automatic (current dock or standalone Admiral)": "Automatico (dock corrente o Admiral autonomo)",
+        "Credential Harbors could not be loaded.": "Impossibile caricare gli Harbor delle credenziali.",
+        "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "Il ripiego sul terminale interattivo segue le impostazioni del server e si ferma alle schermate di accesso, fiducia o configurazione.",
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Seleziona la macchina su cui questo runtime ha effettuato l’accesso. La scelta viene salvata per le acquisizioni pianificate mentre il capitano è inattivo e non modifica la collocazione delle missioni."
       },
       "sections": {}
     }

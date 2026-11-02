@@ -3,6 +3,7 @@ namespace Armada.Server
     using System;
     using System.Collections.Generic;
     using System.Text.Json;
+    using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
@@ -63,6 +64,17 @@ namespace Armada.Server
             return null;
         }
 
+        /// <summary>Validate the stored choice against the captain's tenant, including disconnected Harbors.</summary>
+        public static async Task<string?> ValidateAsync(DatabaseDriver database, Captain captain)
+        {
+            string? error = Validate(captain);
+            if (error != null || captain.UsageCaptureHarborId == null) return error;
+            Harbor? harbor = await database.Harbors.ReadAsync(captain.UsageCaptureHarborId).ConfigureAwait(false);
+            if (harbor == null || !String.Equals(harbor.TenantId, captain.TenantId, StringComparison.Ordinal))
+                return "UsageCaptureHarborInvalid: choose a Harbor in this captain's tenant.";
+            return null;
+        }
+
         /// <summary>
         /// Whether two captain records differ in any usage capture field that affects scheduling or probing.
         /// </summary>
@@ -77,6 +89,7 @@ namespace Armada.Server
             return before.UsageCaptureEnabled != after.UsageCaptureEnabled
                 || before.UsageCaptureIntervalSeconds != after.UsageCaptureIntervalSeconds
                 || before.UsageCaptureMode != after.UsageCaptureMode
+                || !String.Equals(before.UsageCaptureHarborId, after.UsageCaptureHarborId, StringComparison.Ordinal)
                 || !String.Equals(before.UsageCaptureCommand, after.UsageCaptureCommand, StringComparison.Ordinal);
         }
 

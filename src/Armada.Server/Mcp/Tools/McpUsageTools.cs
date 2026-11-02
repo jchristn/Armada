@@ -33,14 +33,14 @@ namespace Armada.Server.Mcp.Tools
                     UsageStatusArgs query = Read<UsageStatusArgs>(args, options);
                     return query.FromUtc.HasValue || query.ToUtc.HasValue ? (object)await service.SnapshotsAsync(McpToolHelpers.ResolveCallerContext(), query).ConfigureAwait(false) : await service.LatestAsync(McpToolHelpers.ResolveCallerContext(), query).ConfigureAwait(false);
                 });
-            register("capture_captain_usage", "Capture usage for a tenant-owned captain. Requires tenant administrator. Returns an idempotent queued job receipt; disabled capture is Conflict, cooldown is rate limited and offline host is Unavailable.",
+            register("capture_captain_usage", "Capture usage for a tenant-owned captain. Requires tenant administrator. Optional harborId selects and saves the credential Harbor for idle and scheduled capture. Returns an idempotent queued job receipt; disabled capture is Conflict, cooldown is rate limited and offline host is Unavailable.",
                 new { type = "object", properties = new { captainId = new { type = "string" }, harborId = new { type = "string" } }, required = _CaptureRequired },
                 async args => {
                     if (service == null) return (object)McpToolError.Unavailable("Usage service unavailable.");
                     UsageCaptureArgs request = Read<UsageCaptureArgs>(args, options);
                     if (String.IsNullOrWhiteSpace(request.CaptainId)) throw new ArgumentException("captainId is required.");
                     try { return await service.CaptureAsync(McpToolHelpers.ResolveCallerContext(), request.CaptainId, request.HarborId).ConfigureAwait(false); }
-                    catch (UsageRequestException ex) { return ex.StatusCode == 503 ? McpToolError.Unavailable(ex.Message) : McpToolError.Conflict(ex.Message); }
+                    catch (UsageRequestException ex) { return ex.StatusCode == 503 ? McpToolError.Unavailable(ex.Message, ex.Code) : McpToolError.Conflict(ex.Message, ex.Code); }
                 });
         }
         private static T Read<T>(JsonElement? args, JsonSerializerOptions options) where T : new()

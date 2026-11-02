@@ -7863,8 +7863,11 @@ Without dates it returns latest account groups; dates select bounded snapshots.
 The default page is 1 with 25 objects, bounded to 100. A global administrator
 can explicitly select one tenant; omission does not combine tenants.
 
-`capture_captain_usage` requires `captainId`; optional `harborId` must match the
-resolved host. It requires tenant administration and remains an Ask mutation.
+`capture_captain_usage` requires `captainId`; optional `harborId` selects and saves
+the credential Harbor for this captain, including idle and scheduled capture. The
+Harbor must belong to the captain's tenant. It requires tenant administration and
+remains an Ask mutation. Without a saved Harbor, automatic resolution uses the
+current dock or standalone Admiral; a dockless split captain returns HostUnresolved.
 A call that omits `captainId` (an empty or absent `arguments` object) is a
 JSON-RPC protocol error, not a tool result:
 `{"jsonrpc":"2.0","error":{"code":-32602,"message":"Tool 'capture_captain_usage' arguments is missing required property 'captainId'.","data":{"tool":"capture_captain_usage","argument":"captainId"}},"id":2}`.

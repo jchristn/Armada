@@ -55,7 +55,7 @@ namespace Armada.Server.Routes
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex)) { return Map(req, ex); }
             }, api => ErrorMetadata(api).WithTag("Usage").WithSummary("Capture captain account usage")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Captain identifier"))
-                .WithRequestBody(OpenApiJson.BodyFor<UsageCaptureArgs>("Optional HarborId", false))
+                .WithRequestBody(OpenApiJson.BodyFor<UsageCaptureArgs>("Optional HarborId selects and saves the credential Harbor for idle and scheduled capture", false))
                 .WithResponse(200, OpenApiJson.For<EnumerationResult<UsageSnapshotView>>("Original passive observation"))
                 .WithResponse(202, OpenApiJson.For<UsageCaptureReceipt>("Capture receipt")).WithSecurity("ApiKey"));
         }
@@ -107,8 +107,8 @@ namespace Armada.Server.Routes
                 if (usage.StatusCode == 429 && usage.NextEligibleUtc.HasValue)
                     req.Http.Response.Headers.Add("Retry-After", Math.Max(1, (int)Math.Ceiling((usage.NextEligibleUtc.Value - DateTime.UtcNow).TotalSeconds)).ToString(CultureInfo.InvariantCulture));
                 if (usage.StatusCode == 503)
-                    return new ApiStatusErrorResponse(Armada.Core.Enums.ApiStatusErrorCodeEnum.ServiceUnavailable, usage.Message) { Data = new { Code = usage.Message, usage.NextEligibleUtc } };
-                return new ApiErrorResponse { Error = usage.StatusCode == 429 ? ApiResultEnum.SlowDown : RouteErrorMapper.ResultFor(usage.StatusCode), Message = usage.Message, Data = new { Code = usage.Message, usage.NextEligibleUtc } };
+                    return new ApiStatusErrorResponse(Armada.Core.Enums.ApiStatusErrorCodeEnum.ServiceUnavailable, usage.Message) { Data = new { Code = usage.Code, usage.NextEligibleUtc } };
+                return new ApiErrorResponse { Error = usage.StatusCode == 429 ? ApiResultEnum.SlowDown : RouteErrorMapper.ResultFor(usage.StatusCode), Message = usage.Message, Data = new { Code = usage.Code, usage.NextEligibleUtc } };
             }
             return RouteErrorMapper.ToResponse(req, ex, 409);
         }

@@ -2754,7 +2754,10 @@ namespace Armada.Core.Database.Sqlite.Queries
                 new SchemaMigration(113, "Reset usage defaults to inherited enabled capture",
                     @"ALTER TABLE captains RENAME COLUMN usage_capture_enabled TO usage_capture_enabled_legacy;",
                     @"ALTER TABLE captains ADD COLUMN usage_capture_enabled INTEGER DEFAULT NULL;",
-                    @"ALTER TABLE captains DROP COLUMN usage_capture_enabled_legacy;")
+                    @"ALTER TABLE captains DROP COLUMN usage_capture_enabled_legacy;"),
+
+                new SchemaMigration(114, "Persist captain usage credential Harbor",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_harbor_id TEXT NULL;")
 
 
 

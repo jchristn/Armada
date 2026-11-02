@@ -47,7 +47,7 @@ export interface CaptainFormSheetProps {
  */
 export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFormSheetProps) {
   const { t } = useLocale();
-  const { isAdmin, isTenantAdmin } = useAuth();
+  const { isAdmin, isTenantAdmin, user } = useAuth();
   const { pushToast } = useNotifications();
   const canManageCliPolicy = isAdmin || isTenantAdmin;
   const [usage, setUsage] = useState(() => usageCaptureFormFromCaptain(captain ?? {}));
@@ -118,7 +118,7 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
         </FormActions>
       )}
     >
-      <UsageCaptureFields value={usage} onChange={setUsage} />
+      <UsageCaptureFields tenantId={captain?.tenantId ?? user?.tenant?.id} value={usage} onChange={setUsage} />
       {error ? <Banner tone="danger" title={error} testID="captain-form-error" /> : null}
       <TextField label={t('Name')} value={form.name} onChangeText={(v) => patch({ name: v })} autoCapitalize="none" testID="captain-form-name" />
       <SelectField label={t('Runtime')} value={form.runtime} options={runtimeOptions} onChange={(v) => patch({ runtime: v })} closeLabel={t('Close')} placeholder={t('Select runtime...')} testID="captain-form-runtime" />

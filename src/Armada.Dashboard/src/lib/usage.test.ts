@@ -51,12 +51,12 @@ describe('usage thresholds and window selection', () => {
 
 describe('captain capture form', () => {
   it('a minimally deserialized captain preserves the inherited enabled/Auto/300 defaults', () => {
-    expect(usageCaptureFormFromCaptain({})).toEqual({ enabled: null, mode: 'Auto', interval: '300', executable: '', argumentsText: '' });
+    expect(usageCaptureFormFromCaptain({})).toEqual({ enabled: null, harborId: '', mode: 'Auto', interval: '300', executable: '', argumentsText: '' });
   });
 
   it('round-trips a fully populated Custom captain', () => {
     const form = usageCaptureFormFromCaptain({ usageCaptureEnabled: true, usageCaptureMode: 'Custom', usageCaptureIntervalSeconds: 120, usageCaptureCommand: '{"executable":"/bin/q","arguments":["-a","b c"]}' });
-    expect(form).toEqual({ enabled: true, mode: 'Custom', interval: '120', executable: '/bin/q', argumentsText: '-a\nb c' });
+    expect(form).toEqual({ enabled: true, harborId: '', mode: 'Custom', interval: '120', executable: '/bin/q', argumentsText: '-a\nb c' });
     expect(buildUsageCapturePayload(form).usageCaptureCommand).toBe('{"executable":"/bin/q","arguments":["-a","b c"]}');
     expect(buildUsageCapturePayload({ ...form, mode: 'Auto' }).usageCaptureCommand).toBeNull();
   });

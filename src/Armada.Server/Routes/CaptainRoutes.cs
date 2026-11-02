@@ -185,7 +185,7 @@ namespace Armada.Server.Routes
                 captain.TenantId = ctx.TenantId;
                 captain.UserId = ctx.UserId;
                 EntityUpdateMerger.NormalizeCaptainRuntimeOptions(captain);
-                string? createUsageError = CaptainUsageCaptureValidator.Validate(captain);
+                string? createUsageError = await CaptainUsageCaptureValidator.ValidateAsync(_database, captain).ConfigureAwait(false);
                 if (createUsageError != null)
                 {
                     req.Http.Response.StatusCode = 400;
@@ -318,7 +318,7 @@ namespace Armada.Server.Routes
                 // that does not edit personas) keeps its stored value. An explicit null still clears it.
                 CaptainUpdateFieldPresence presence = CaptainUpdateFieldPresence.FromJson(req.Http.Request.DataAsString, _jsonOptions);
                 updated = EntityUpdateMerger.MergeCaptain(existing, updated, presence);
-                string? updateUsageError = CaptainUsageCaptureValidator.Validate(updated);
+                string? updateUsageError = await CaptainUsageCaptureValidator.ValidateAsync(_database, updated).ConfigureAwait(false);
                 if (updateUsageError != null)
                 {
                     req.Http.Response.StatusCode = 400;

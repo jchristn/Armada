@@ -243,7 +243,8 @@ namespace Armada.Core.Services
         /// lifetime token.</param>
         /// <returns>The capture receipt.</returns>
         /// <exception cref="ArgumentNullException">Thrown when the group is null.</exception>
-        public async Task<UsageCaptureAttempt> TryStartAsync(UsageCaptureGroup group, string? triggeringCaptainId, CancellationToken token = default)
+        /// <param name="manual">Allow a first manual read before startup jitter, never before an observed cooldown.</param>
+        public async Task<UsageCaptureAttempt> TryStartAsync(UsageCaptureGroup group, string? triggeringCaptainId, CancellationToken token = default, bool manual = false)
         {
             if (group == null) throw new ArgumentNullException(nameof(group));
 
@@ -257,7 +258,7 @@ namespace Armada.Core.Services
 
             // Cooldown is checked before the start lock too, so a manual capture that arrives while a
             // flight is being set up does not pay for the lock when it is simply not eligible.
-            DateTime? eligible = NextEligibleUtc(group.GroupKey);
+            DateTime? eligible = CaptureEligibleUtc(group.GroupKey, manual);
             if (eligible.HasValue && eligible.Value > now && !_InFlight.ContainsKey(group.GroupKey))
                 return Skipped(null, eligible, "Cooldown");
 
@@ -302,7 +303,7 @@ namespace Armada.Core.Services
                     _Logging.Info(_Header + "expired lease " + lease.Id + " for group " + group.GroupKey + " failed; a new attempt may start");
                 }
 
-                eligible = NextEligibleUtc(group.GroupKey);
+                eligible = CaptureEligibleUtc(group.GroupKey, manual);
                 if (eligible.HasValue && eligible.Value > now)
                     return Skipped(null, eligible, "Cooldown");
 
@@ -523,6 +524,13 @@ namespace Armada.Core.Services
 
         private async Task<UsageProbeResult> CaptureThroughHostAsync(Job job, UsageCaptureGroup group, CancellationToken token)
         {
+            if (group.HarborId != null)
+            {
+                Harbor? harbor = await _Database.Harbors.ReadAsync(group.HarborId, token).ConfigureAwait(false);
+                if (harbor == null || !String.Equals(harbor.TenantId, group.TenantId, StringComparison.Ordinal))
+                    return UsageProbeResult.Failed("HostUnresolved", "select a credential Harbor in capture settings");
+                if (!harbor.Enabled) return UsageProbeResult.Failed("HostDisabled", "the selected credential Harbor is disabled");
+            }
             IHostCommandExecutor? executor = ExecutorFor(group);
             if (executor == null)
                 return UsageProbeResult.Failed("HostUnavailable", "the credential host cannot be reached; the last good observation is kept");
@@ -968,6 +976,17 @@ namespace Armada.Core.Services
             lock (_JitterRandom)
             {
                 return _JitterRandom.NextDouble() * 0.2 + 0.9;
+            }
+        }
+
+        private DateTime? CaptureEligibleUtc(string groupKey, bool manual)
+        {
+            if (!_GroupStates.TryGetValue(groupKey, out GroupState? state)) return null;
+            lock (state)
+            {
+                // Startup jitter spreads unattended work; it is not a provider cooldown. A manual first
+                // read can start now, but every observed success, failure and Retry-After still gates it.
+                return manual && !state.Observed ? null : state.NextEligibleUtc;
             }
         }
 

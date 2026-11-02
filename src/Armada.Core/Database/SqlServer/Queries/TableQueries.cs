@@ -2425,7 +2425,10 @@ namespace Armada.Core.Database.SqlServer.Queries
                 new SchemaMigration(113, "Reset usage defaults to inherited enabled capture",
                     @"DECLARE @constraint sysname; SELECT @constraint = dc.name FROM sys.default_constraints dc JOIN sys.columns c ON c.default_object_id = dc.object_id WHERE dc.parent_object_id = OBJECT_ID('captains') AND c.name = 'usage_capture_enabled'; IF @constraint IS NOT NULL EXEC('ALTER TABLE captains DROP CONSTRAINT [' + @constraint + ']');",
                     @"ALTER TABLE captains ALTER COLUMN usage_capture_enabled BIT NULL;",
-                    @"UPDATE captains SET usage_capture_enabled = NULL;")
+                    @"UPDATE captains SET usage_capture_enabled = NULL;"),
+
+                new SchemaMigration(114, "Persist captain usage credential Harbor",
+                    @"ALTER TABLE captains ADD usage_capture_harbor_id NVARCHAR(64) NULL;")
 
 
             };

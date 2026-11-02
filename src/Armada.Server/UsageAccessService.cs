@@ -172,21 +172,35 @@ namespace Armada.Server
             await ScopeAsync(caller, query).ConfigureAwait(false);
             if (!caller.IsAdmin && !caller.IsTenantAdmin || caller.MissionId != null || caller.AskThreadId != null) throw new UnauthorizedAccessException("Only tenant administrators may capture usage.");
             Captain captain = (await _Database.Captains.ReadAsync(captainId).ConfigureAwait(false))!;
+            if (AgentRuntimeCapabilities.UsageCapture(captain.Runtime).Kind == UsageCaptureKindEnum.Passive)
+            {
+                query.HarborId = harborId;
+                return await LatestAsync(caller, query).ConfigureAwait(false);
+            }
+            if (!captain.UsageCaptureActive) throw new UsageRequestException(409, "CaptureDisabled");
             if (harborId != null)
             {
+                if (String.IsNullOrWhiteSpace(harborId)) throw new ArgumentException("harborId must be a nonempty Harbor identifier.");
+                harborId = harborId.Trim();
                 await ScopeAsync(caller, new UsageQuery { CaptainId = captainId, HarborId = harborId }).ConfigureAwait(false);
-                await _Scheduler.RebuildAsync().ConfigureAwait(false);
-                if (!_Scheduler.Groups().Any(g => g.TenantId == query.TenantId && g.MemberCaptainIds.Contains(captainId) && g.HarborId == harborId)) throw new KeyNotFoundException("Harbor not found.");
+                captain.UsageCaptureHarborId = harborId;
+                string? error = await CaptainUsageCaptureValidator.ValidateAsync(_Database, captain).ConfigureAwait(false);
+                if (error != null) throw new ArgumentException(error);
+                if (!await _Database.Captains.UpdateUsageCaptureHarborAsync(captain.TenantId!, captain.Id, harborId).ConfigureAwait(false))
+                    throw new KeyNotFoundException("Captain not found.");
             }
-            if (AgentRuntimeCapabilities.UsageCapture(captain.Runtime).Kind == UsageCaptureKindEnum.Passive)
-                return await LatestAsync(caller, query).ConfigureAwait(false);
-            if (!captain.UsageCaptureActive) throw new UsageRequestException(409, "CaptureDisabled");
             await _Scheduler.RebuildAsync().ConfigureAwait(false);
             UsageCaptureGroup? group = _Scheduler.Groups().FirstOrDefault(g => g.TenantId == query.TenantId && g.MemberCaptainIds.Contains(captainId));
-            if (group == null) throw new UsageRequestException(503, "HostUnavailable");
+            if (group == null) throw new UsageRequestException(409, "HostUnresolved: select a credential Harbor in capture settings.");
             if (harborId != null && harborId != group.HarborId) throw new KeyNotFoundException("Harbor not found.");
-            if (group.HarborId != null && !_Capture.IsInFlight(group.GroupKey) && (_Harbors == null || !_Harbors.IsConnected(group.HarborId))) throw new UsageRequestException(503, "HostUnavailable");
-            UsageCaptureAttempt attempt = await _Capture.TryStartAsync(group, captainId).ConfigureAwait(false);
+            if (group.HarborId != null && !_Capture.IsInFlight(group.GroupKey))
+            {
+                Harbor? selected = await _Database.Harbors.ReadAsync(group.HarborId).ConfigureAwait(false);
+                if (selected == null || selected.TenantId != captain.TenantId) throw new UsageRequestException(409, "HostUnresolved: select a credential Harbor in capture settings.");
+                if (!selected.Enabled) throw new UsageRequestException(409, "HostDisabled: enable the selected credential Harbor or select another.");
+                if (_Harbors == null || !_Harbors.IsConnected(group.HarborId)) throw new UsageRequestException(503, "HostUnavailable");
+            }
+            UsageCaptureAttempt attempt = await _Capture.TryStartAsync(group, captainId, manual: true).ConfigureAwait(false);
             if (attempt.SkippedReason != null && !attempt.JoinedExisting) throw new UsageRequestException(attempt.SkippedReason == "Cooldown" ? 429 : attempt.SkippedReason == "HostUnavailable" ? 503 : 409, attempt.SkippedReason, attempt.NextEligibleUtc);
             return new UsageCaptureReceipt { JobId = attempt.JobId, JoinedExisting = attempt.JoinedExisting, NextEligibleUtc = attempt.NextEligibleUtc };
         }

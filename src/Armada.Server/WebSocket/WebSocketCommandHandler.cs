@@ -880,7 +880,7 @@ namespace Armada.Server.WebSocket
                         // Only the fields the command carries change (parity with REST PUT /captains/{id}).
                         string? updCptData = JsonSerializer.Deserialize<WebSocketDataCommand<System.Text.Json.Nodes.JsonObject>>(rawBody, _JsonOptions)?.Data?.ToJsonString();
                         Captain updCpt = EntityUpdateMerger.MergeCaptain(existCpt, updCptBody, CaptainUpdateFieldPresence.FromJson(updCptData, _JsonOptions));
-                        string? updCptUsageError = CaptainUsageCaptureValidator.Validate(updCpt);
+                        string? updCptUsageError = await CaptainUsageCaptureValidator.ValidateAsync(_Database, updCpt).ConfigureAwait(false);
                         if (updCptUsageError != null)
                             return WebSocketCommandError.Create("update_captain", WebSocketCommandErrorCodeEnum.InvalidArgument, updCptUsageError);
                         await DuplicateEntityGuard.EnsureCaptainNameAvailableAsync(_Database, updCpt).ConfigureAwait(false);

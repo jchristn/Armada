@@ -2462,7 +2462,10 @@ namespace Armada.Core.Database.Postgresql.Queries
                 new SchemaMigration(113, "Reset usage defaults to inherited enabled capture",
                     @"ALTER TABLE captains ALTER COLUMN usage_capture_enabled DROP NOT NULL;",
                     @"ALTER TABLE captains ALTER COLUMN usage_capture_enabled DROP DEFAULT;",
-                    @"UPDATE captains SET usage_capture_enabled = NULL;")
+                    @"UPDATE captains SET usage_capture_enabled = NULL;"),
+
+                new SchemaMigration(114, "Persist captain usage credential Harbor",
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_harbor_id VARCHAR(64) NULL;")
 
 
             };
