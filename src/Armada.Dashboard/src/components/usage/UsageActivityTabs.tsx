@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getUsageSeries } from '../../api/client';
+import { getUsageLatest, getUsageSeries } from '../../api/client';
 import { useLocale } from '../../context/LocaleContext';
 import { useUsageRevision } from '../../context/WebSocketContext';
-import type { UsageCoverage, UsageSeries, UsageSeriesFilter } from '../../types/models';
+import { accountAlias } from '../../lib/usage';
+import { usageWindowLabel } from '../../lib/usageWindowLabel';
+import type { UsageCoverage, UsageSeries, UsageSeriesFilter, UsageSnapshotView } from '../../types/models';
 import AccountLimitsTable from './AccountLimitsTable';
 import UsageMissionDrilldown from './UsageMissionDrilldown';
 import UsageOverTimeChart, { type UsageBucketSelection } from './UsageOverTimeChart';
@@ -34,9 +36,53 @@ interface FilterField {
 }
 
 /** Provider/account/host (and optionally window) filters kept in the URL. Draft values are never reset by a failed request. */
-function UsageFilterForm({ fields }: { fields: FilterField[] }) {
+function UsageFilterForm({ fields, series = [] }: { fields: FilterField[]; series?: UsageSeries[] }) {
   const { t } = useLocale();
   const [params, setParams] = useSearchParams();
+  const revision = useUsageRevision();
+  const [observations, setObservations] = useState<UsageSnapshotView[]>([]);
+  const [optionsError, setOptionsError] = useState('');
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadOptions() {
+      const rows: UsageSnapshotView[] = [];
+      let pageNumber = 1;
+      let totalPages = 1;
+      do {
+        const page = await getUsageLatest({ pageNumber, pageSize: 100 });
+        rows.push(...page.objects);
+        totalPages = page.totalPages;
+        pageNumber++;
+      } while (!cancelled && pageNumber <= totalPages);
+      if (!cancelled) {
+        setObservations(rows);
+        setOptionsError('');
+      }
+    }
+    loadOptions().catch((error: unknown) => {
+      if (!cancelled) setOptionsError(error instanceof Error ? error.message : String(error));
+    });
+    return () => { cancelled = true; };
+  }, [revision, attempt]);
+
+  const choices: Record<string, Map<string, string>> = Object.fromEntries(fields.map((field) => [field.param, new Map<string, string>()]));
+  const add = (param: string, value: string | null, label = value) => {
+    if (value && choices[param]) choices[param].set(value, label || value);
+  };
+  for (const row of observations) {
+    add('provider', row.provider);
+    add('accountKey', row.accountKey, accountAlias(row.accountKey));
+    add('hostId', row.hostId);
+    for (const window of row.windows) add('window', window.name, usageWindowLabel(window, t));
+  }
+  for (const row of series) {
+    add('provider', row.provider);
+    add('accountKey', row.accountKey, accountAlias(row.accountKey));
+    add('hostId', row.hostId);
+    if (row.window && !choices.window?.has(row.window)) add('window', row.window, usageWindowLabel({ name: row.window, model: row.model }, t));
+  }
+
   const urlKey = fields.map((f) => params.get(f.param) ?? '').join('|');
   const [shownKey, setShownKey] = useState(urlKey);
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.param, params.get(f.param) ?? ''])));
@@ -58,6 +104,7 @@ function UsageFilterForm({ fields }: { fields: FilterField[] }) {
   const clear = () => {
     const next = new URLSearchParams(params);
     for (const field of fields) next.delete(field.param);
+    setDraft(Object.fromEntries(fields.map((field) => [field.param, ''])));
     setParams(next);
   };
 
@@ -66,14 +113,22 @@ function UsageFilterForm({ fields }: { fields: FilterField[] }) {
       {fields.map((field) => (
         <label key={field.param} className="usage-filter-field" title={t(field.title)}>
           <span>{t(field.label)}</span>
-          <input
-            type="text"
+          <select
             name={field.param}
             value={draft[field.param] ?? ''}
             onChange={(e) => setDraft((prev) => ({ ...prev, [field.param]: e.target.value }))}
-          />
+          >
+            <option value="">{t('All')}</option>
+            {draft[field.param] && !choices[field.param].has(draft[field.param]) && (
+              <option value={draft[field.param]}>{field.param === 'window' ? usageWindowLabel({ name: draft[field.param] }, t) : field.param === 'accountKey' ? accountAlias(draft[field.param]) : draft[field.param]}</option>
+            )}
+            {[...choices[field.param]].sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0])).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
         </label>
       ))}
+      {optionsError && <div role="alert"><span>{optionsError}</span> <button type="button" className="btn btn-sm" onClick={() => setAttempt((n) => n + 1)}>{t('Refresh')}</button></div>}
       <div className="usage-filter-actions">
         <button type="submit" className="btn btn-sm" title={t('Apply these filters.')}>{t('Apply')}</button>
         <button type="button" className="btn btn-sm" onClick={clear} title={t('Remove the provider, account and host filters.')}>{t('Clear filters')}</button>
@@ -210,7 +265,7 @@ export function UsageOverviewTab() {
           </select>
         </label>
       </div>
-      <UsageFilterForm fields={OVERVIEW_FIELDS} />
+      <UsageFilterForm fields={OVERVIEW_FIELDS} series={[...state.limits, ...state.tokens]} />
 
       {state.status === 'error' && (
         <div className="usage-overview-error">

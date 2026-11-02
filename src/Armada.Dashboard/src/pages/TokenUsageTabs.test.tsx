@@ -94,30 +94,48 @@ describe('Token usage tabs', () => {
     expect(await screen.findByText('No completed missions in this bucket')).toBeInTheDocument();
   });
 
+  it('offers captured identities and readable windows as dropdowns and applies and clears selections', async () => {
+    vi.mocked(getUsageLatest).mockImplementation(async (filter) => ({
+      success: true, pageNumber: filter?.pageNumber ?? 1, pageSize: 100, totalPages: 2, totalRecords: 2, totalMs: 1,
+      objects: [{ provider: filter?.pageNumber === 2 ? 'openai' : 'anthropic', accountKey: 'acct_choice', hostId: 'hbr_choice', windows: [{ name: 'seven_day', model: null, windowMinutes: 10080 }] }],
+    }) as never);
+    renderAt('/activity?tab=overview');
+    const provider = screen.getByRole('combobox', { name: 'Provider' });
+    await waitFor(() => expect(within(provider).getByRole('option', { name: 'openai' })).toBeInTheDocument());
+    expect(getUsageLatest).toHaveBeenCalledWith({ pageNumber: 2, pageSize: 100 });
+    const window = screen.getByRole('combobox', { name: 'Window' });
+    expect(within(window).getByRole('option', { name: 'Weekly' })).toHaveValue('seven_day');
+    for (const [name, value] of [['Provider', 'openai'], ['Account', 'acct_choice'], ['Host', 'hbr_choice'], ['Window', 'seven_day']]) {
+      fireEvent.change(screen.getByRole('combobox', { name }), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(getUsageSeries).toHaveBeenCalledWith(expect.objectContaining({ metric: 'limits', provider: 'openai', accountKey: 'acct_choice', hostId: 'hbr_choice', window: 'seven_day' })));
+    expect(within(provider).getByRole('option', { name: 'anthropic' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(provider).toHaveValue('');
+    expect(window).toHaveValue('');
+    expect(screen.getByTestId('where')).not.toHaveTextContent('accountKey=');
+  });
+
   it('retains filter values after a failed request and offers a retry', async () => {
     vi.mocked(getUsageLatest).mockRejectedValue(new Error('latest unavailable'));
-    renderAt('/activity?tab=limits');
-    await waitFor(() => expect(getUsageLatest).toHaveBeenCalledTimes(1));
-    const provider = screen.getByRole('textbox', { name: 'Provider' });
-    fireEvent.change(provider, { target: { value: 'anthropic' } });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Host' }), { target: { value: 'hbr_laptop' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    renderAt('/activity?tab=limits&provider=anthropic&hostId=hbr_laptop');
     await waitFor(() => expect(getUsageLatest).toHaveBeenCalledWith(expect.objectContaining({ provider: 'anthropic', hostId: 'hbr_laptop' })));
-    expect(await screen.findByText('latest unavailable')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Provider' })).toHaveValue('anthropic');
-    expect(screen.getByRole('textbox', { name: 'Host' })).toHaveValue('hbr_laptop');
+    expect((await screen.findAllByText('latest unavailable')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('combobox', { name: 'Provider' })).toHaveValue('anthropic');
+    expect(screen.getByRole('combobox', { name: 'Host' })).toHaveValue('hbr_laptop');
     expect(screen.getByTestId('where')).toHaveTextContent('provider=anthropic');
     const calls = vi.mocked(getUsageLatest).mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(vi.mocked(getUsageLatest).mock.calls.length).toBe(calls + 1));
     expect(vi.mocked(getUsageLatest).mock.calls[calls][0]).toMatchObject({ provider: 'anthropic', hostId: 'hbr_laptop' });
-    expect(screen.getByRole('textbox', { name: 'Provider' })).toHaveValue('anthropic');
+    expect(screen.getByRole('combobox', { name: 'Provider' })).toHaveValue('anthropic');
   });
 
   it('opens the Limits tab with the provider history filters from a captain usage link', async () => {
     vi.mocked(getUsageLatest).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 25, totalPages: 1, totalRecords: 0, objects: [], totalMs: 1 });
     renderAt('/activity?tab=limits&provider=anthropic&accountKey=acct_x&hostId=hbr_y');
     await waitFor(() => expect(getUsageLatest).toHaveBeenCalledWith({ provider: 'anthropic', accountKey: 'acct_x', hostId: 'hbr_y', pageNumber: 1, pageSize: 25 }));
-    expect(screen.getByRole('textbox', { name: 'Account' })).toHaveValue('acct_x');
+    expect(screen.getByRole('combobox', { name: 'Account' })).toHaveValue('acct_x');
   });
 });
