@@ -268,49 +268,8 @@ namespace Armada.Core.Services
                 return blocker;
             }
 
-            if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
-            {
-                Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId, token).ConfigureAwait(false);
-                blocker.DependsOnMissionId = mission.DependsOnMissionId;
-                if (dependency == null)
-                {
-                    blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyNotFinished;
-                    blocker.Summary = "Waiting for mission " + mission.DependsOnMissionId + ", which no longer exists.";
-                    return blocker;
-                }
-
-                if (dependency.Status != MissionStatusEnum.Complete && dependency.Status != MissionStatusEnum.WorkProduced)
-                {
-                    blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyNotFinished;
-                    blocker.Summary = "Waiting for mission '" + dependency.Title + "' (" + dependency.Status + ") to finish.";
-                    return blocker;
-                }
-
-                if (dependency.Status == MissionStatusEnum.WorkProduced && !IsPipelineHandoffPrepared(mission, dependency))
-                {
-                    blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyHandoffPending;
-                    blocker.Summary = "Mission '" + dependency.Title + "' finished; Armada is preparing the handoff to this stage.";
-                    return blocker;
-                }
-
-                blocker.DependsOnMissionId = null;
-            }
-
-            IntegrationBarrierState barrier = await EvaluateIntegrationBarrierAsync(mission, token).ConfigureAwait(false);
-            if (barrier.FailedMission != null)
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.WaitingForVoyageWorkers;
-                blocker.SetBlockingMissions(new List<string> { barrier.FailedMission.Id });
-                blocker.Summary = "Mission '" + barrier.FailedMission.Title + "' in another slice ended " + barrier.FailedMission.Status
-                    + "; this integration will not run without it and is cancelled on the next dispatch pass. Restart that mission to continue.";
-                return blocker;
-            }
-            if (barrier.Waiting)
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.WaitingForVoyageWorkers;
-                blocker.Summary = barrier.WaitingSummary ?? "Waiting for the voyage's other implementation pipelines, including reviews and checks, to settle.";
-                return blocker;
-            }
+            var readiness = await EvaluateReadinessAdmissionAsync(mission, token).ConfigureAwait(false);
+            if (readiness.Blocker != null) return readiness.Blocker;
 
             MissionAssignmentBlocker? admission = await EvaluateSafetyAdmissionAsync(mission, vessel, token).ConfigureAwait(false);
             if (admission != null) return admission;
@@ -520,47 +479,13 @@ namespace Armada.Core.Services
                     return false;
                 }
 
-            // Check pipeline dependency -- skip if the mission depends on another that hasn't completed
-            // or if the downstream handoff has not yet populated the mission's branch/context.
-            if (!String.IsNullOrEmpty(mission.DependsOnMissionId))
+            var readiness = await EvaluateReadinessAdmissionAsync(mission, token).ConfigureAwait(false);
+            if (readiness.Blocker != null)
             {
-                Mission? dependency = await _Database.Missions.ReadAsync(mission.DependsOnMissionId, token).ConfigureAwait(false);
-                if (dependency == null)
-                {
-                    _Logging.Warn(_Header + "mission " + mission.Id + " depends on " + mission.DependsOnMissionId + " which was not found -- skipping assignment");
-                    return false;
-                }
-
-                if (dependency.Status != MissionStatusEnum.Complete &&
-                    dependency.Status != MissionStatusEnum.WorkProduced)
-                {
-                    // Dependency not yet satisfied -- don't assign
-                    return false;
-                }
-
-                // A dependency in WorkProduced means the upstream agent finished, but the
-                // synchronous completion flow may still be preparing the downstream mission.
-                // Do not launch the next stage until it has been explicitly handed the same
-                // branch as the dependency. This prevents workers from starting with the
-                // original top-level dispatch prompt before architect/test/judge handoff runs.
-                if (dependency.Status == MissionStatusEnum.WorkProduced &&
-                    !IsPipelineHandoffPrepared(mission, dependency))
-                {
-                    _Logging.Debug(_Header + "mission " + mission.Id + " depends on " + dependency.Id +
-                        " which is WorkProduced, but handoff is not prepared yet -- deferring assignment");
-                    return false;
-                }
-            }
-
-            IntegrationBarrierState barrier = await EvaluateIntegrationBarrierAsync(mission, token).ConfigureAwait(false);
-            if (barrier.FailedMission != null)
-            {
-                await CancelIntegrationForFailedSliceAsync(mission, barrier.FailedMission, token).ConfigureAwait(false);
-                return false;
-            }
-            if (barrier.Waiting)
-            {
-                _Logging.Debug(_Header + "mission " + mission.Id + " is the voyage's final integration slice -- deferring assignment: " + barrier.WaitingSummary);
+                if (readiness.FailedSlice != null)
+                    await CancelIntegrationForFailedSliceAsync(mission, readiness.FailedSlice, token).ConfigureAwait(false);
+                else
+                    _Logging.Debug(_Header + "mission " + mission.Id + " waits: " + readiness.Blocker.Summary);
                 return false;
             }
 

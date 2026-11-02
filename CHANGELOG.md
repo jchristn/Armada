@@ -27,6 +27,7 @@ v1.3.0 focuses on **parallelization and concurrency**: more independent work in 
 
 ### Waiting diagnostics and remedies
 
+- Share dependency/handoff and integration readiness checks between dispatch and waiting diagnostics before any slot is claimed. Failed integration summaries now correctly name the configured Blocked or Cancelled transition. Add dependency-state, handoff and single-slot integration progress regressions.
 - Share running branch/broad-scope safety decisions between dispatch and waiting diagnostics, and reuse the exact runtime/endpoint admission filter. A free captain behind a saturated runtime or endpoint now reports `RuntimeMissionLimit` or `EndpointMissionLimit`; disabled, unhealthy and circuit-broken endpoints report `EndpointUnavailable`.
 - Add bounded `Advice` next steps to REST mission reads and MCP `mission_status`. Suggestions use occupied capacity, preserve running work after a limit reduction, never suggest unlimited or exceed hard ceilings, and suggest adding CLI captains instead of raising their parallelism. Readers without global-admin privileges receive explanation text without configuration actions.
 - Show compact next steps in the Dashboard's waiting card, with direct links into existing vessel/captain/endpoint edit forms. Mobile and TUI display the same explanations. Existing breadcrumbs and card spacing are retained. Advice links match the action buttons’ height, and the captain detail editor now uses the same modal sizing as the Captains list editor.

@@ -6,6 +6,30 @@ namespace Armada.Core.Services
     /// <summary>Shared safety and capacity explanations used by dispatch and waiting diagnostics.</summary>
     public static class MissionAdmissionEvaluator
     {
+        /// <summary>Evaluate a pipeline dependency before safety or capacity gates.</summary>
+        public static MissionAssignmentBlocker? Dependency(Mission candidate, Mission? dependency, bool handoffPrepared)
+        {
+            if (String.IsNullOrEmpty(candidate.DependsOnMissionId)) return null;
+            MissionAssignmentBlocker blocker = new MissionAssignmentBlocker { DependsOnMissionId = candidate.DependsOnMissionId };
+            if (dependency == null)
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyNotFinished;
+                blocker.Summary = "Waiting for mission " + candidate.DependsOnMissionId + ", which no longer exists.";
+            }
+            else if (dependency.Status != MissionStatusEnum.Complete && dependency.Status != MissionStatusEnum.WorkProduced)
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyNotFinished;
+                blocker.Summary = "Waiting for mission '" + dependency.Title + "' (" + dependency.Status + ") to finish.";
+            }
+            else if (dependency.Status == MissionStatusEnum.WorkProduced && !handoffPrepared)
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.DependencyHandoffPending;
+                blocker.Summary = "Mission '" + dependency.Title + "' finished; Armada is preparing the handoff to this stage.";
+            }
+            else return null;
+            return blocker;
+        }
+
         /// <summary>Evaluate running branch/broad-scope locks in their canonical order.</summary>
         public static MissionAssignmentBlocker? RunningLocks(Mission candidate, Vessel vessel,
             IReadOnlyList<Mission> running, IReadOnlyList<Mission> broad, bool candidateIsBroad)

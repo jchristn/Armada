@@ -38,6 +38,108 @@ namespace Test.Shared.Suites.Services
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            foreach (MissionStatusEnum status in Enum.GetValues<MissionStatusEnum>())
+            {
+                if (status == MissionStatusEnum.Complete || status == MissionStatusEnum.WorkProduced) continue;
+                cases.Add(CaseAsync("readiness_dependency_" + status, "Dependency " + status + " blocks diagnostics and dispatch before capacity", TestTags.Positive, async () =>
+                {
+                    using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                    var db = fixture.Driver;
+                    Harness h = await BuildHarnessAsync(db, launch: true);
+                    Mission dependency = await AddMissionAsync(db, h.Vessel, "upstream", status);
+                    Mission waiting = await AddMissionAsync(db, h.Vessel, "downstream", MissionStatusEnum.Pending);
+                    waiting.DependsOnMissionId = dependency.Id;
+                    await db.Missions.UpdateAsync(waiting);
+                    // No captains: structural readiness must still be reported first.
+                    MissionAssignmentBlocker blocker = (await h.Missions.GetAssignmentBlockerAsync(waiting))!;
+                    AssertEqual(MissionAssignmentBlockerReasonEnum.DependencyNotFinished, blocker.Reason);
+                    AssertEqual(dependency.Id, blocker.DependsOnMissionId);
+                    AssertFalse(await h.Missions.TryAssignAsync(waiting, h.Vessel));
+                    AssertEqual(MissionStatusEnum.Pending, (await db.Missions.ReadAsync(waiting.Id))!.Status);
+                }));
+            }
+            foreach (string handoff in new[] { "missing", "branch_pending", "branch_ready", "architect_pending", "architect_ready", "no_branch_ready", "complete" })
+            {
+                cases.Add(CaseAsync("readiness_handoff_" + handoff, "Dependency handoff is shared by dispatch and diagnostics: " + handoff, TestTags.Positive, async () =>
+                {
+                    using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                    var db = fixture.Driver;
+                    Harness h = await BuildHarnessAsync(db, launch: true);
+                    Mission dependency = await AddMissionAsync(db, h.Vessel, "upstream", handoff == "complete" ? MissionStatusEnum.Complete : MissionStatusEnum.WorkProduced);
+                    dependency.BranchName = handoff == "no_branch_ready" ? null : "armada/upstream";
+                    dependency.Persona = handoff.StartsWith("architect") ? "Architect" : "Worker";
+                    await db.Missions.UpdateAsync(dependency);
+                    Mission waiting = await AddMissionAsync(db, h.Vessel, "downstream", MissionStatusEnum.Pending);
+                    waiting.DependsOnMissionId = handoff == "missing" ? "msn_missing" : dependency.Id;
+                    if (handoff == "branch_ready" || handoff == "architect_pending") waiting.BranchName = dependency.BranchName;
+                    if (handoff == "architect_ready") waiting.Description = "<!-- ARMADA:ARCHITECT-HANDOFF -->";
+                    await db.Missions.UpdateAsync(waiting);
+                    bool ready = handoff.EndsWith("ready") || handoff == "complete";
+                    MissionAssignmentBlocker blocker = (await h.Missions.GetAssignmentBlockerAsync(waiting))!;
+                    AssertEqual(ready ? MissionAssignmentBlockerReasonEnum.NoCaptains : handoff == "missing"
+                        ? MissionAssignmentBlockerReasonEnum.DependencyNotFinished : MissionAssignmentBlockerReasonEnum.DependencyHandoffPending, blocker.Reason);
+                    if (ready)
+                    {
+                        await AddCaptainAsync(db, "Available", CaptainStateEnum.Idle);
+                        AssertEqual(MissionAssignmentBlockerReasonEnum.AwaitingDispatch, (await h.Missions.GetAssignmentBlockerAsync(waiting))!.Reason);
+                    }
+                    AssertEqual(ready, await h.Missions.TryAssignAsync(waiting, h.Vessel));
+                }));
+            }
+            foreach (MissionStatusEnum failure in new[] { MissionStatusEnum.Failed, MissionStatusEnum.LandingFailed })
+            foreach (bool block in new[] { false, true })
+            {
+                cases.Add(CaseAsync("readiness_failed_slice_" + failure + "_" + block, "Diagnostics predict the configured failed-slice transition without mutating the integration", TestTags.Positive, async () =>
+                {
+                    using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                    var db = fixture.Driver;
+                    Harness h = await BuildHarnessAsync(db, launch: true);
+                    h.Settings.BlockDependentsOfFailedStages = block;
+                    Voyage voyage = await db.Voyages.CreateAsync(new Voyage("Integration readiness"));
+                    Mission failed = await AddMissionAsync(db, h.Vessel, "failed worker", failure);
+                    failed.VoyageId = voyage.Id; failed.Persona = "Worker"; await db.Missions.UpdateAsync(failed);
+                    Mission integration = await AddMissionAsync(db, h.Vessel, "integrate", MissionStatusEnum.Pending);
+                    integration.VoyageId = voyage.Id; integration.Persona = "Worker"; integration.WaitForVoyageWorkers = true;
+                    await db.Missions.UpdateAsync(integration);
+                    MissionAssignmentBlocker blocker = (await h.Missions.GetAssignmentBlockerAsync(integration))!;
+                    AssertEqual(MissionAssignmentBlockerReasonEnum.WaitingForVoyageWorkers, blocker.Reason);
+                    AssertContains(block ? "is blocked" : "is cancelled", blocker.Summary);
+                    AssertEqual(failed.Id, blocker.BlockingMissionIds.Single());
+                    AssertEqual(MissionStatusEnum.Pending, (await db.Missions.ReadAsync(integration.Id))!.Status);
+                    AssertFalse(await h.Missions.TryAssignAsync(integration, h.Vessel));
+                    AssertEqual(block ? MissionStatusEnum.Blocked : MissionStatusEnum.Cancelled, (await db.Missions.ReadAsync(integration.Id))!.Status);
+                }));
+            }
+            cases.Add(CaseAsync("integration_first_does_not_hold_single_slot", "An integration barrier sorting first never holds the only voyage mission or captain slot", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                var db = fixture.Driver;
+                Harness h = await BuildHarnessAsync(db, launch: true);
+                h.Vessel.MaxParallelVoyages = 1; h.Vessel.MaxParallelMissionsPerVoyage = 1;
+                await db.Vessels.UpdateAsync(h.Vessel);
+                Captain captain = await AddCaptainAsync(db, "Single slot", CaptainStateEnum.Idle);
+                Voyage voyage = await db.Voyages.CreateAsync(new Voyage("Serialized integration"));
+                Mission integration = await AddMissionAsync(db, h.Vessel, "integrate first", MissionStatusEnum.Pending);
+                integration.Persona = "Worker"; integration.VoyageId = voyage.Id; integration.WaitForVoyageWorkers = true; integration.Priority = 0;
+                await db.Missions.UpdateAsync(integration);
+                Mission worker = await AddMissionAsync(db, h.Vessel, "worker later", MissionStatusEnum.Pending);
+                worker.Persona = "Worker"; worker.VoyageId = voyage.Id; worker.Priority = 100;
+                await db.Missions.UpdateAsync(worker);
+                AssertEqual(MissionAssignmentBlockerReasonEnum.WaitingForVoyageWorkers, (await h.Missions.GetAssignmentBlockerAsync(integration))!.Reason);
+                AssertFalse(await h.Missions.TryAssignAsync(integration, h.Vessel));
+                AssertEqual(0, (await db.Captains.ReadAsync(captain.Id))!.ActiveMissionCount);
+                AssertTrue(await h.Missions.TryAssignAsync(worker, h.Vessel));
+                AssertFalse(await h.Missions.TryAssignAsync(integration, h.Vessel));
+                AssertEqual(MissionAssignmentBlockerReasonEnum.WaitingForVoyageWorkers, (await h.Missions.GetAssignmentBlockerAsync(integration))!.Reason);
+                worker = (await db.Missions.ReadAsync(worker.Id))!;
+                worker.Status = MissionStatusEnum.Complete; worker.ProcessId = null;
+                await db.Missions.UpdateAsync(worker);
+                await db.Captains.TryReleaseFromMissionAsync(captain.Id, worker.Id);
+                AssertEqual(MissionAssignmentBlockerReasonEnum.AwaitingDispatch, (await h.Missions.GetAssignmentBlockerAsync(integration))!.Reason);
+                AssertTrue(await h.Missions.TryAssignAsync(integration, h.Vessel));
+                AssertEqual(1, (await db.Captains.ReadAsync(captain.Id))!.ActiveMissionCount);
+            }));
+
             cases.Add(CaseAsync("branch_safety_precedes_vessel_capacity", "Dispatch and diagnostics both give branch safety precedence when numeric gates are also full", TestTags.Positive, async () =>
             {
                 using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
@@ -419,7 +521,7 @@ namespace Test.Shared.Suites.Services
                 tags: new List<string> { tag });
         }
 
-        private static async Task<Harness> BuildHarnessAsync(DatabaseDriver db)
+        private static async Task<Harness> BuildHarnessAsync(DatabaseDriver db, bool launch = false)
         {
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
@@ -431,6 +533,7 @@ namespace Test.Shared.Suites.Services
             DirCreatingGitService git = new DirCreatingGitService();
             IDockService dockService = new DockService(logging, db, settings, git);
             CaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
+            if (launch) captainService.OnLaunchAgent = (_, _, _) => Task.FromResult(424242);
             MissionService missionService = new MissionService(logging, db, settings, dockService, captainService, git: git);
 
             Vessel vessel = new Vessel("blocker-vessel", "https://github.com/test/repo.git");
