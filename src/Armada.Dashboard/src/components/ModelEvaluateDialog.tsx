@@ -16,6 +16,8 @@ interface ModelEvaluateDialogProps {
   captainId: string;
   /** True while the start request is in flight. */
   submitting?: boolean;
+  /** Error from starting an evaluation; keep the selected options available for retry. */
+  error?: string;
   onClose: () => void;
   /** Start the Evaluate with the chosen depth and options (options are empty for Quick). */
   onSubmit: (depth: ModelProbeDepth, options: ModelEvaluationOptions) => void;
@@ -64,7 +66,7 @@ function SelectionRows({ label, values, options, placeholder, onChange }: {
  * idle captains only, with a note when one shares the evaluated captain's model family), the battery packs (empty means
  * the server default), the personas (empty means all the captain is allowed) and the run count.
  */
-export default function ModelEvaluateDialog({ open, captainId, submitting = false, onClose, onSubmit }: ModelEvaluateDialogProps) {
+export default function ModelEvaluateDialog({ open, captainId, submitting = false, error = '', onClose, onSubmit }: ModelEvaluateDialogProps) {
   const { t } = useLocale();
   const [depth, setDepth] = useState<ModelProbeDepth>('Full');
   const [evaluatorId, setEvaluatorId] = useState('');
@@ -157,6 +159,7 @@ export default function ModelEvaluateDialog({ open, captainId, submitting = fals
       footer={footer}
       className="model-evaluate-dialog"
     >
+      {error && <p role="alert" className="text-danger">{error}</p>}
       {loadError && <p role="alert" className="text-danger">{loadError}</p>}
       <fieldset className="model-evaluate-depth">
         <legend><strong>{t('Depth')}</strong></legend>

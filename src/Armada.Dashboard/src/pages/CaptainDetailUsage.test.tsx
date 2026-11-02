@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import CaptainDetail from './CaptainDetail';
 import { getCaptain, getUsageLatest, listMissionSummaries } from '../api/client';
@@ -60,6 +60,17 @@ describe('CaptainDetail usage section', () => {
     expect(getCaptain).toHaveBeenCalledWith('cpt_sel');
     expect(getUsageLatest).toHaveBeenCalledWith({ captainId: 'cpt_sel', pageSize: 25 });
     expect(await screen.findByText('Capture disabled')).toBeInTheDocument();
+  });
+
+  it('places Recent Missions actions at the right edge of the table', async () => {
+    vi.mocked(listMissionSummaries).mockResolvedValue({ objects: [{ id: 'msn_1', title: 'Example mission', status: 'Complete', createdUtc: '2026-10-01T00:00:00Z', branchName: 'armada/example' }], totalRecords: 1, totalPages: 1, pageNumber: 1, pageSize: 100, success: true, totalMs: 0 } as never);
+    renderAt('/captains/cpt_sel');
+    const table = await screen.findByRole('table');
+    const headers = within(table).getAllByRole('columnheader');
+    expect(headers.map(header => header.getAttribute('data-col'))).toEqual(['id', 'mission', 'status', 'branch', 'date', 'actions']);
+    const lastCell = within(table).getAllByRole('row')[1].lastElementChild!;
+    expect(lastCell).toHaveClass('text-right');
+    expect(within(lastCell as HTMLElement).getByRole('button', { name: 'Actions' })).toBeInTheDocument();
   });
 
   it('does not steal focus without the section parameter', async () => {

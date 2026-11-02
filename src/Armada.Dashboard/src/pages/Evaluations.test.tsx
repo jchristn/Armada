@@ -6,12 +6,15 @@ import listSource from './Evaluations.tsx?raw';
 import detailSource from './EvaluationDetail.tsx?raw';
 import Evaluations, { EVALUATIONS_PAGE_SIZE } from './Evaluations';
 import EvaluationDetail from './EvaluationDetail';
-import { getModelProbeRun, listCaptains, listModelProbeRuns } from '../api/client';
+import { evaluateCaptain, getCaptain, getModelProbeRun, listBatteryPacks, listCaptains, listModelProbeRuns } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import type { I18nCatalog } from '../i18n/runtime';
 import type { Captain, EnumerationResult, ModelProbeRun, ModelProbeRunWithBattery } from '../types/models';
 
 vi.mock('../api/client', () => ({
+  evaluateCaptain: vi.fn(),
+  getCaptain: vi.fn(),
+  listBatteryPacks: vi.fn(),
   listModelProbeRuns: vi.fn(),
   listCaptains: vi.fn(),
   getModelProbeRun: vi.fn(),
@@ -23,6 +26,9 @@ const localeValue = {
   formatDateTime: (v: string | null | undefined) => v ?? '',
   formatRelativeTime: (v: string | null | undefined) => v ?? '',
 };
+
+const auth = { isAdmin: false, isTenantAdmin: true };
+vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
 
 vi.mock('../context/LocaleContext', () => ({
   useLocale: () => localeValue,
@@ -71,6 +77,11 @@ function renderDetail(id = 'mpr_1') {
 
 describe('Evaluations list', () => {
   beforeEach(() => {
+    auth.isAdmin = false;
+    auth.isTenantAdmin = true;
+    vi.mocked(evaluateCaptain).mockReset().mockResolvedValue(run({ id: 'mpr_new', status: 'Queued' }));
+    vi.mocked(getCaptain).mockReset().mockImplementation(async id => ({ id, name: id === 'cpt_1' ? 'qwen-one' : 'claude-two', state: 'Idle', allowedPersonas: null }) as Captain);
+    vi.mocked(listBatteryPacks).mockReset().mockResolvedValue(page([]));
     vi.mocked(listModelProbeRuns).mockReset().mockResolvedValue(page([
       run(),
       run({ id: 'mpr_2', targetKind: 'ModelEndpoint', captainId: null, captainName: null, modelEndpointId: 'mep_1', model: 'llama', depth: 'Full', status: 'Running', passedCount: 2, failedCount: 0, couldNotRunCount: 3 }),
@@ -130,6 +141,59 @@ describe('Evaluations list', () => {
     renderList();
     expect(await screen.findByRole('alert')).toHaveTextContent('List unavailable');
     expect(screen.queryByText(/No evaluations yet/)).not.toBeInTheDocument();
+  });
+
+  it('starts a Full evaluation of the filtered captain and opens its results', async () => {
+    renderList('/evaluations?captainId=cpt_1');
+    await userEvent.click(screen.getByRole('button', { name: 'Evaluate' }));
+    expect(await screen.findByRole('heading', { name: 'Evaluate qwen-one' })).toBeInTheDocument();
+    const start = screen.getByRole('button', { name: 'Start evaluation' });
+    await waitFor(() => expect(start).toBeEnabled());
+    await userEvent.type(screen.getByLabelText('Run count'), '2');
+    await userEvent.click(start);
+    expect(evaluateCaptain).toHaveBeenCalledWith('cpt_1', 'Full', { evaluatorCaptainId: null, packs: [], personas: [], runCount: 2 });
+    expect(await screen.findByText('detail page')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/evaluations/mpr_new');
+  });
+
+  it('requires a captain selection and can start Quick for the newly selected captain', async () => {
+    renderList();
+    expect(screen.getByRole('button', { name: 'Evaluate' })).toBeDisabled();
+    await waitFor(() => expect(within(screen.getByLabelText('Captain')).getByRole('option', { name: 'claude-two' })).toBeInTheDocument());
+    await userEvent.selectOptions(screen.getByLabelText('Captain'), 'cpt_2');
+    await userEvent.click(screen.getByRole('button', { name: 'Evaluate' }));
+    await screen.findByRole('heading', { name: 'Evaluate claude-two' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start evaluation' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('radio', { name: 'Quick' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Start evaluation' }));
+    expect(evaluateCaptain).toHaveBeenCalledWith('cpt_2', 'Quick', {});
+    expect(await screen.findByText('detail page')).toBeInTheDocument();
+  });
+
+  it('shows start failures inside the modal and preserves the options for retry', async () => {
+    vi.mocked(evaluateCaptain).mockRejectedValue(new Error('Captain is already being evaluated.'));
+    renderList('/evaluations?captainId=cpt_1');
+    await userEvent.click(screen.getByRole('button', { name: 'Evaluate' }));
+    const dialog = await screen.findByRole('dialog');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start evaluation' })).toBeEnabled());
+    await userEvent.type(screen.getByLabelText('Run count'), '2');
+    await userEvent.click(screen.getByRole('button', { name: 'Start evaluation' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Captain is already being evaluated.');
+    expect(screen.getByLabelText('Run count')).toHaveValue(2);
+    expect(screen.getByRole('button', { name: 'Start evaluation' })).toBeEnabled();
+    expect(screen.queryByText('detail page')).not.toBeInTheDocument();
+  });
+
+  it('allows global admins to start evaluations and keeps history read-only for other viewers', async () => {
+    auth.isAdmin = true;
+    auth.isTenantAdmin = false;
+    const view = renderList('/evaluations?captainId=cpt_1');
+    expect(screen.getByRole('button', { name: 'Evaluate' })).toBeEnabled();
+    view.unmount();
+    auth.isAdmin = false;
+    renderList('/evaluations?captainId=cpt_1');
+    expect(screen.queryByRole('button', { name: 'Evaluate' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('table', { name: 'Evaluations' })).toBeInTheDocument();
   });
 
   it('pages through runs', async () => {

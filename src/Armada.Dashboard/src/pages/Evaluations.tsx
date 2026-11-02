@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { listCaptains, listModelProbeRuns } from '../api/client';
-import type { Captain, ModelProbeRun } from '../types/models';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { evaluateCaptain, listCaptains, listModelProbeRuns } from '../api/client';
+import type { Captain, ModelEvaluationOptions, ModelProbeDepth, ModelProbeRun } from '../types/models';
+import ModelEvaluateDialog from '../components/ModelEvaluateDialog';
+import { useAuth } from '../context/AuthContext';
+import { useOptionalNotifications } from '../context/NotificationContext';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import { useLocale } from '../context/LocaleContext';
@@ -25,6 +28,10 @@ function TargetCell({ run }: { run: ModelProbeRun }) {
  */
 export default function Evaluations() {
   const { t, formatDateTime } = useLocale();
+  const navigate = useNavigate();
+  const { isAdmin, isTenantAdmin } = useAuth();
+  const notifications = useOptionalNotifications();
+  const canEvaluate = !!isAdmin || !!isTenantAdmin;
   const [searchParams, setSearchParams] = useSearchParams();
   const captainId = searchParams.get('captainId') ?? '';
   const pageNumber = Math.max(1, Number.parseInt(searchParams.get('page') ?? '1', 10) || 1);
@@ -33,6 +40,9 @@ export default function Evaluations() {
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [evaluateTarget, setEvaluateTarget] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState('');
 
   useEffect(() => {
     let disposed = false;
@@ -64,6 +74,22 @@ export default function Evaluations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [captainId, pageNumber]);
 
+  async function startEvaluation(depth: ModelProbeDepth, options: ModelEvaluationOptions) {
+    if (!evaluateTarget || starting) return;
+    setStarting(true);
+    setStartError('');
+    try {
+      const run = await evaluateCaptain(evaluateTarget, depth, options);
+      setEvaluateTarget(null);
+      notifications?.pushToast('success', t('Evaluation started.'), { label: t('View results'), to: evaluationResultsPath(run.id) });
+      navigate(evaluationResultsPath(run.id));
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : t('Evaluate failed.'));
+    } finally {
+      setStarting(false);
+    }
+  }
+
   function update(next: { captainId?: string; page?: number }) {
     const params = new URLSearchParams(searchParams);
     if (next.captainId !== undefined) {
@@ -80,8 +106,13 @@ export default function Evaluations() {
 
   return (
     <div>
+      {evaluateTarget && <ModelEvaluateDialog open captainId={evaluateTarget} submitting={starting} error={startError}
+        onClose={() => { if (!starting) setEvaluateTarget(null); }} onSubmit={(depth, options) => void startEvaluation(depth, options)} />}
       <PageHeader
         title={t('Evaluations')}
+        actions={canEvaluate ? <button type="button" className="btn btn-primary" disabled={!captainId || starting}
+          title={t(captainId ? 'Start evaluation' : 'Select a captain')}
+          onClick={() => { setStartError(''); setEvaluateTarget(captainId); }}>{t('Evaluate')}</button> : undefined}
         subtitle={t('Quick and Full evaluations of captains and model endpoints, newest first. Open a run to see its probe results, the Full report and the battery results.')}
       />
       <div className="filter-bar">

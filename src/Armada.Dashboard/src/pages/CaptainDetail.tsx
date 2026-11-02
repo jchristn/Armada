@@ -684,10 +684,6 @@ export default function CaptainDetail() {
             recordCount={null}
             onRowClick={(m) => navigate(`/missions/${m.id}`)}
             columns={[
-              { key: 'actions', label: t('Actions'), fixed: true, interactive: true, render: m => <ActionMenu id={`captain-mission-${m.id}`} items={[
-                { label: 'Open', onClick: () => navigate(`/missions/${m.id}`) },
-                { label: 'Duplicate', onClick: () => navigate(`/missions?duplicate=${encodeURIComponent(m.id)}`) },
-              ]} /> },
               {
                 key: 'id', label: t('ID'), required: true, headerTitle: t('Unique mission ID (msn_ prefix). Use the copy button to copy it.'), cellClassName: 'mono text-dim table-id-cell',
                 render: (m) => (
@@ -711,6 +707,10 @@ export default function CaptainDetail() {
                 cellTitle: (m) => formatDateTime(m.completedUtc || m.createdUtc),
                 render: (m) => formatRelativeTime(m.completedUtc || m.createdUtc),
               },
+              { key: 'actions', label: t('Actions'), fixed: true, interactive: true, className: 'text-right', render: m => <ActionMenu id={`captain-mission-${m.id}`} items={[
+                { label: 'Open', onClick: () => navigate(`/missions/${m.id}`) },
+                { label: 'Duplicate', onClick: () => navigate(`/missions?duplicate=${encodeURIComponent(m.id)}`) },
+              ]} /> },
             ]}
           />
         ) : (
