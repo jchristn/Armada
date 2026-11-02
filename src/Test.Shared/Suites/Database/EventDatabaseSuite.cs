@@ -4,6 +4,7 @@ namespace Test.Shared.Suites.Database
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Database.Sqlite;
     using Armada.Core.Models;
@@ -15,7 +16,8 @@ namespace Test.Shared.Suites.Database
     /// Descriptors for the event database methods: create, recent enumeration with a limit, and
     /// filtered enumeration by type, entity, captain, mission, vessel, and voyage. Includes a
     /// negative case confirming that filtering by an unknown correlation id yields no rows.
-    /// Each case runs against its own fresh SQLite store.
+    /// Reads also return a stored user id and keep a null user id null. A user-scoped read
+    /// returns only that user's rows. Each case runs against its own fresh store.
     /// </summary>
     public sealed class EventDatabaseSuite : IArmadaTestSuite
     {
@@ -157,6 +159,71 @@ namespace Test.Shared.Suites.Database
 
                     List<ArmadaEvent> events = await db.Events.EnumerateByVoyageAsync("vyg_target");
                     AssertEqual(1, events.Count);
+                }
+            }));
+
+            cases.Add(CaseAsync("read_async_returns_stored_user_id", "ReadAsync returns stored user id", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    UserMaster owner = await db.Users.CreateAsync(new UserMaster(Constants.DefaultTenantId, "owner-a@example.com", "password"));
+                    UserMaster other = await db.Users.CreateAsync(new UserMaster(Constants.DefaultTenantId, "owner-b@example.com", "password"));
+
+                    ArmadaEvent owned = new ArmadaEvent("owner.recorded", "Owned event");
+                    owned.TenantId = Constants.DefaultTenantId;
+                    owned.UserId = owner.Id;
+                    await db.Events.CreateAsync(owned);
+
+                    ArmadaEvent otherOwned = new ArmadaEvent("owner.recorded", "Other event");
+                    otherOwned.TenantId = Constants.DefaultTenantId;
+                    otherOwned.UserId = other.Id;
+                    await db.Events.CreateAsync(otherOwned);
+
+                    ArmadaEvent? read = await db.Events.ReadAsync(owned.Id);
+                    AssertNotNull(read);
+                    AssertEqual(owner.Id, read!.UserId);
+
+                    ArmadaEvent? scoped = await db.Events.ReadAsync(Constants.DefaultTenantId, owner.Id, owned.Id);
+                    AssertNotNull(scoped);
+                    AssertEqual(owner.Id, scoped!.UserId);
+
+                    List<ArmadaEvent> ownerRows = await db.Events.EnumerateAsync(Constants.DefaultTenantId, owner.Id);
+                    AssertEqual(1, ownerRows.Count);
+                    AssertEqual(owned.Id, ownerRows[0].Id);
+                    AssertEqual(owner.Id, ownerRows[0].UserId);
+
+                    List<ArmadaEvent> otherRows = await db.Events.EnumerateAsync(Constants.DefaultTenantId, other.Id);
+                    AssertEqual(1, otherRows.Count);
+                    AssertEqual(otherOwned.Id, otherRows[0].Id);
+                    AssertEqual(other.Id, otherRows[0].UserId);
+
+                    ArmadaEvent? hidden = await db.Events.ReadAsync(Constants.DefaultTenantId, other.Id, owned.Id);
+                    AssertNull(hidden);
+                }
+            }));
+
+            cases.Add(CaseAsync("read_async_null_user_id_stays_null", "ReadAsync null user id stays null", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    ArmadaEvent evt = new ArmadaEvent("owner.absent", "Event without an owner");
+                    evt.TenantId = Constants.DefaultTenantId;
+                    evt.UserId = null;
+                    await db.Events.CreateAsync(evt);
+
+                    ArmadaEvent? read = await db.Events.ReadAsync(evt.Id);
+                    AssertNotNull(read);
+                    AssertNull(read!.UserId);
+
+                    List<ArmadaEvent> defaultUserRows = await db.Events.EnumerateAsync(Constants.DefaultTenantId, Constants.DefaultUserId);
+                    bool found = false;
+                    foreach (ArmadaEvent row in defaultUserRows)
+                    {
+                        if (row.Id == evt.Id) found = true;
+                    }
+                    AssertFalse(found);
                 }
             }));
 

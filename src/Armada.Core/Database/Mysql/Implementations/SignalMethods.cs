@@ -659,6 +659,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             Signal signal = new Signal();
             signal.Id = reader["id"].ToString()!;
             signal.TenantId = NullableString(reader["tenant_id"]);
+            signal.UserId = NullableString(reader["user_id"]);
             signal.FromCaptainId = NullableString(reader["from_captain_id"]);
             signal.ToCaptainId = NullableString(reader["to_captain_id"]);
             signal.Type = Enum.Parse<SignalTypeEnum>(reader["type"].ToString()!);
