@@ -7,6 +7,7 @@ import { accountAlias, captainUsagePath, viewKind } from '../../lib/usage';
 import type { EnumerationResult, UsageSnapshotView } from '../../types/models';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import UsageState from './UsageState';
+import CopyButton from '../shared/CopyButton';
 import UsageWindowBar from './UsageWindowBar';
 
 interface AccountLimitsTableProps {
@@ -61,9 +62,16 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
       key: 'account',
       label: t('Account'),
       headerTitle: t('Pseudonymous account alias. Armada never stores the account email.'),
-      render: (view) => <span className="mono">{accountAlias(view.accountKey)}</span>,
+      interactive: true,
+      render: (view) => <span className="id-display"><span className="mono" title={view.accountKey ?? undefined}>{accountAlias(view.accountKey)}</span>{view.accountKey && <CopyButton text={view.accountKey} />}</span>,
     },
-    { key: 'host', label: t('Host'), render: (view) => view.harborId ?? view.hostId ?? '-' },
+    {
+      key: 'host', label: t('Host'), interactive: true,
+      render: (view) => {
+        const host = view.harborId ?? view.hostId;
+        return host ? <span className="id-display"><span className="mono" title={host}>{host}</span><CopyButton text={host} /></span> : '-';
+      },
+    },
     { key: 'runtime', label: t('Runtime'), render: (view) => view.runtime },
     {
       key: 'status',
@@ -101,7 +109,8 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
       key: 'interval',
       label: t('Interval'),
       headerTitle: t('Requested and effective capture interval for this account. Captains that share the account share one schedule.'),
-      render: (view) => t('Every {{effective}}s (requested {{requested}}s)', { effective: view.effectiveIntervalSeconds, requested: view.requestedIntervalSeconds }),
+      cellTitle: (view) => t('Every {{effective}}s (requested {{requested}}s)', { effective: view.effectiveIntervalSeconds, requested: view.requestedIntervalSeconds }),
+      render: (view) => `${view.effectiveIntervalSeconds}s`,
     },
     {
       key: 'captains',

@@ -45,8 +45,23 @@ describe('AccountLimitsTable', () => {
     expect(getUsageLatest).toHaveBeenCalledWith({ provider: 'anthropic', accountKey: undefined, hostId: 'hbr_laptop', pageNumber: 1, pageSize: 25 });
     expect(screen.getByText('acct_123...')).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: '5-hour limit usage' })).toHaveAttribute('aria-valuenow', '82');
-    expect(screen.getByText('Every 600s (requested 300s)')).toBeInTheDocument();
+    expect(screen.getByText('600s')).toBeInTheDocument();
+    expect(screen.getByText('600s').closest('td')).toHaveAttribute('title', 'Every 600s (requested 300s)');
+    expect(screen.getByText('acct_123...')).toHaveAttribute('title', 'acct_1234567890abcdef');
     expect(screen.queryByText('acct_1234567890abcdef')).not.toBeInTheDocument();
+  });
+
+  it('copies the full account key and host ID from their cells', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    vi.mocked(getUsageLatest).mockResolvedValue(page([view()]));
+    renderTable();
+    const accountCell = (await screen.findByText('acct_123...')).closest('td')!;
+    fireEvent.click(within(accountCell).getByRole('button', { name: 'Copy to clipboard' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('acct_1234567890abcdef'));
+    const hostCell = screen.getByText('hbr_laptop').closest('td')!;
+    fireEvent.click(within(hostCell).getByRole('button', { name: 'Copy to clipboard' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('hbr_laptop'));
   });
 
   it('keeps unsupported and auth-missing accounts distinct from fresh ones', async () => {

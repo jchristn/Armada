@@ -9676,8 +9676,7 @@ a.usage-cell:hover { text-decoration: none; box-shadow: inset 0 0 0 1px currentC
 .usage-chart-empty { margin: 0; }
 .usage-chart-svg { display: block; width: 100%; min-width: 36rem; height: auto; overflow: visible; }
 .usage-chart-grid line { stroke: var(--border); stroke-width: 1; }
-.usage-chart-grid text, .usage-chart-axis text { fill: var(--text-dim); font-size: 11px; }
-.usage-chart-limits .usage-chart-grid text, .usage-chart-limits .usage-chart-axis text { font-size: 8px; }
+.usage-chart-grid text, .usage-chart-axis text { fill: var(--text-dim); font-size: 8px; }
 .usage-chart-threshold { stroke-dasharray: 4 4; }
 .usage-chart-grid .usage-chart-threshold-warning { stroke: var(--yellow); }
 .usage-chart-grid .usage-chart-threshold-danger { stroke: var(--red); }
