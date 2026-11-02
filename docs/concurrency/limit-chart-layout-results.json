@@ -1,0 +1,182 @@
+[
+  {
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "thresholds": 0,
+    "gridLines": 5,
+    "legend": [
+      {
+        "label": "anthropic #1 · 5-hour limit",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, 5-hour limit"
+      },
+      {
+        "label": "anthropic #1 · Weekly",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, Weekly"
+      },
+      {
+        "label": "anthropic #2 · 5-hour limit",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, 5-hour limit"
+      },
+      {
+        "label": "anthropic #2 · Weekly",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, Weekly"
+      },
+      {
+        "label": "openai · Primary limit",
+        "details": "openai account acct_ccc... on hbr_mvzt112233445566778899001122, Primary limit"
+      }
+    ],
+    "marks": 1440
+  },
+  {
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "thresholds": 0,
+    "gridLines": 5,
+    "legend": [
+      {
+        "label": "anthropic #1 · 5-hour limit",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, 5-hour limit"
+      },
+      {
+        "label": "anthropic #1 · Weekly",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, Weekly"
+      },
+      {
+        "label": "anthropic #2 · 5-hour limit",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, 5-hour limit"
+      },
+      {
+        "label": "anthropic #2 · Weekly",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, Weekly"
+      },
+      {
+        "label": "openai · Primary limit",
+        "details": "openai account acct_ccc... on hbr_mvzt112233445566778899001122, Primary limit"
+      }
+    ],
+    "marks": 1440
+  },
+  {
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "thresholds": 0,
+    "gridLines": 5,
+    "legend": [
+      {
+        "label": "anthropic #1 · 5-hour limit",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, 5-hour limit"
+      },
+      {
+        "label": "anthropic #1 · Weekly",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, Weekly"
+      },
+      {
+        "label": "anthropic #2 · 5-hour limit",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, 5-hour limit"
+      },
+      {
+        "label": "anthropic #2 · Weekly",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, Weekly"
+      },
+      {
+        "label": "openai · Primary limit",
+        "details": "openai account acct_ccc... on hbr_mvzt112233445566778899001122, Primary limit"
+      }
+    ],
+    "marks": 1440
+  },
+  {
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "thresholds": 0,
+    "gridLines": 5,
+    "legend": [
+      {
+        "label": "anthropic #1 · 5-hour limit",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, 5-hour limit"
+      },
+      {
+        "label": "anthropic #1 · Weekly",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, Weekly"
+      },
+      {
+        "label": "anthropic #2 · 5-hour limit",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, 5-hour limit"
+      },
+      {
+        "label": "anthropic #2 · Weekly",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, Weekly"
+      },
+      {
+        "label": "openai · Primary limit",
+        "details": "openai account acct_ccc... on hbr_mvzt112233445566778899001122, Primary limit"
+      }
+    ],
+    "marks": 1440
+  },
+  {
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "thresholds": 0,
+    "gridLines": 5,
+    "legend": [
+      {
+        "label": "anthropic #1 · 5-hour limit",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, 5-hour limit"
+      },
+      {
+        "label": "anthropic #1 · Weekly",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, Weekly"
+      },
+      {
+        "label": "anthropic #2 · 5-hour limit",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, 5-hour limit"
+      },
+      {
+        "label": "anthropic #2 · Weekly",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, Weekly"
+      },
+      {
+        "label": "openai · Primary limit",
+        "details": "openai account acct_ccc... on hbr_mvzt112233445566778899001122, Primary limit"
+      }
+    ],
+    "marks": 1440
+  },
+  {
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "thresholds": 0,
+    "gridLines": 5,
+    "legend": [
+      {
+        "label": "anthropic #1 · 5-hour limit",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, 5-hour limit"
+      },
+      {
+        "label": "anthropic #1 · Weekly",
+        "details": "anthropic account acct_aaa... on hbr_mvzt123456789012345678901234, Weekly"
+      },
+      {
+        "label": "anthropic #2 · 5-hour limit",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, 5-hour limit"
+      },
+      {
+        "label": "anthropic #2 · Weekly",
+        "details": "anthropic account acct_bbb... on hbr_mvzt987654321098765432109876, Weekly"
+      },
+      {
+        "label": "openai · Primary limit",
+        "details": "openai account acct_ccc... on hbr_mvzt112233445566778899001122, Primary limit"
+      }
+    ],
+    "marks": 1440
+  }
+]

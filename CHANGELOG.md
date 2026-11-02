@@ -31,6 +31,10 @@ v1.3.0 focuses on **parallelization and concurrency**: more independent work in 
 - Add bounded `Advice` next steps to REST mission reads and MCP `mission_status`. Suggestions use occupied capacity, preserve running work after a limit reduction, never suggest unlimited or exceed hard ceilings, and suggest adding CLI captains instead of raising their parallelism. Readers without global-admin privileges receive explanation text without configuration actions.
 - Show compact next steps in the Dashboard's waiting card, with direct links into existing vessel/captain/endpoint edit forms. Mobile and TUI display the same explanations. Existing breadcrumbs and card spacing are retained. Advice links match the action buttons’ height, and the captain detail editor now uses the same modal sizing as the Captains list editor.
 
+### Usage chart clarity
+
+- Remove the unlabeled 75% and 90% horizontal threshold guides from Limit utilization. Use compact provider/window legend names, with stable source numbers when accounts or hosts would otherwise be ambiguous. Account/host details remain available on hover, in point tooltips and in the data table.
+
 ### Activity refresh controls
 
 - Add the shared rotating-arrow/success-check refresh button to Activity > Usage Overview and Token Usage; standardize the token heatmap's local refresh control too. The remaining Activity tabs already expose the same control through their tables.

@@ -54,8 +54,34 @@ describe('UsageOverTimeChart', () => {
     expect(labels.filter((l) => l.includes('acct_bbbb') && l.includes('80%'))).toHaveLength(2);
     expect(labels.some((l) => l.includes('60%'))).toBe(false);
     const legend = container.querySelector('.usage-chart-legend') as HTMLElement;
-    expect(within(legend).getByText(/acct_aaaa on host_a/)).toBeInTheDocument();
-    expect(within(legend).getByText(/acct_bbbb on host_b/)).toBeInTheDocument();
+    expect(within(legend).getByText('anthropic #1 · 5-hour limit')).toBeInTheDocument();
+    expect(within(legend).getByText('anthropic #2 · 5-hour limit')).toBeInTheDocument();
+    expect(within(legend).getByTitle(/acct_aaaa on host_a/)).toHaveTextContent('anthropic #1');
+    expect(within(legend).getByTitle(/acct_bbbb on host_b/)).toHaveTextContent('anthropic #2');
+    expect(legend.textContent).not.toContain('acct_');
+    expect(legend.textContent).not.toContain('host_');
+    expect(container.querySelectorAll('.usage-chart-threshold')).toHaveLength(0);
+    expect(container.querySelectorAll('.usage-chart-limits .usage-chart-grid line')).toHaveLength(5);
+  });
+
+  it('uses provider and window without numbers for a single account/host across multiple windows', () => {
+    const { container } = render(<UsageOverTimeChart limits={[
+      limitSeries('acct_a', 'host_a', [point(0, 40)], '5h'),
+      limitSeries('acct_a', 'host_a', [point(0, 20)], 'seven_day'),
+    ]} tokens={[]} fromUtc={FROM} toUtc={TO} onSelectBucket={vi.fn()} />);
+    const legend = container.querySelector('.usage-chart-legend') as HTMLElement;
+    expect(within(legend).getByText('anthropic · 5-hour limit')).toBeInTheDocument();
+    expect(within(legend).getByText('anthropic · Weekly')).toBeInTheDocument();
+    expect(legend.textContent).not.toContain('#');
+  });
+
+  it('distinguishes the same account on different hosts and keeps source numbers stable when reordered', () => {
+    const sources = [limitSeries('acct_a', 'harbor_z', [point(0, 40)]), limitSeries('acct_a', 'harbor_a', [point(0, 20)])];
+    const { container, rerender } = render(<UsageOverTimeChart limits={sources} tokens={[]} fromUtc={FROM} toUtc={TO} onSelectBucket={vi.fn()} />);
+    expect(within(container.querySelector('.usage-chart-legend') as HTMLElement).getByTitle(/on harbor_z/)).toHaveTextContent('anthropic #2');
+    rerender(<UsageOverTimeChart limits={[...sources].reverse()} tokens={[]} fromUtc={FROM} toUtc={TO} onSelectBucket={vi.fn()} />);
+    expect(within(container.querySelector('.usage-chart-legend') as HTMLElement).getByTitle(/on harbor_z/)).toHaveTextContent('anthropic #2');
+    expect(within(container.querySelector('.usage-chart-legend') as HTMLElement).getByTitle(/on harbor_a/)).toHaveTextContent('anthropic #1');
   });
 
   it('breaks the line at a missing sample and starts a new segment with a marker at a reset', () => {

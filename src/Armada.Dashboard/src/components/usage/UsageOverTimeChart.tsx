@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useLocale } from '../../context/LocaleContext';
 import { usageWindowLabel } from '../../lib/usageWindowLabel';
 import type { UsageSeries, UsageSeriesPoint } from '../../types/models';
-import { USAGE_DANGER_PERCENT, USAGE_WARNING_PERCENT, accountAlias } from '../../lib/usage';
+import { accountAlias } from '../../lib/usage';
 
 /** One chart selection: exactly the bucket time range and the provider/account/host of the selected series. */
 export interface UsageBucketSelection {
@@ -150,6 +150,28 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
     });
   };
 
+  // Keep legend text compact. Number account/host pairs only when a provider has
+  // multiple sources; sort the identities so window and series ordering cannot renumber them.
+  const sourceNumbers = useMemo(() => {
+    const sources = new Map<string, Set<string>>();
+    for (const series of limits) {
+      const provider = series.provider ?? '';
+      if (!sources.has(provider)) sources.set(provider, new Set());
+      sources.get(provider)!.add(JSON.stringify([series.accountKey, series.hostId]));
+    }
+    return new Map([...sources].map(([provider, identities]) => [provider,
+      new Map([...identities].sort().map((identity, index) => [identity, identities.size > 1 ? index + 1 : null])),
+    ]));
+  }, [limits]);
+
+  const legendName = (series: UsageSeries): string => {
+    const provider = series.provider ?? t('Unknown provider');
+    const number = sourceNumbers.get(series.provider ?? '')?.get(JSON.stringify([series.accountKey, series.hostId]));
+    const source = number ? `${provider} #${number}` : provider;
+    const window = series.window ? usageWindowLabel({ name: series.window, model: series.model }, t) : t('all windows');
+    return `${source} · ${window}`;
+  };
+
   const valueText = (point: UsageSeriesPoint, kind: PanelKind): string => {
     if (kind === 'tokens') return t('{{count}} tokens', { count: tokenFormat.format(point.totalTokens) });
     return percentKnown(point) ? `${percentFormat.format(point.lastPercent as number)}%` : t('No sample');
@@ -280,8 +302,6 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
                   <text x={PAD_LEFT - 6} y={y(tick) + 4} textAnchor="end">{tick}%</text>
                 </g>
               ))}
-              <line className="usage-chart-threshold usage-chart-threshold-warning" x1={PAD_LEFT} x2={WIDTH - PAD_RIGHT} y1={y(USAGE_WARNING_PERCENT)} y2={y(USAGE_WARNING_PERCENT)} />
-              <line className="usage-chart-threshold usage-chart-threshold-danger" x1={PAD_LEFT} x2={WIDTH - PAD_RIGHT} y1={y(USAGE_DANGER_PERCENT)} y2={y(USAGE_DANGER_PERCENT)} />
             </g>
             {selectedBand(LIMITS_HEIGHT)}
             {limits.map((series, s) => {
@@ -361,9 +381,9 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
         {limits.length > 0 && (
           <ul className="usage-chart-legend">
             {limits.map((series, s) => (
-              <li key={`legend-${s}`}>
+              <li key={`legend-${s}`} title={seriesName(series, 'limits')}>
                 <span className={`usage-chart-swatch${seriesEstimated(series) ? ' usage-chart-swatch-estimated' : ''}`} style={{ borderColor: SERIES_COLORS[s % SERIES_COLORS.length] }} aria-hidden="true" />
-                {seriesName(series, 'limits')}
+                {legendName(series)}
                 {seriesEstimated(series) && <span className="usage-chart-flag">{t('Estimated')}</span>}
               </li>
             ))}
