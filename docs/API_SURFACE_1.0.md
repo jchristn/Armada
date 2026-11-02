@@ -30,7 +30,7 @@ administrator).
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 77 | 0 |
 | CLI commands | 97 | 0 |
-| Settings keys | 325 | 12 |
+| Settings keys | 335 | 12 |
 
 ## REST API
 
@@ -1144,6 +1144,16 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `captainCrashLoopThreshold` | int | `3` |  |
 | `captainCrashLoopWindowMinutes` | int | `15` |  |
 | `captainQuarantineMinutes` | int | `15` |  |
+| `concurrency` | object |  |  |
+| `concurrency.admissionLockTimeoutSeconds` | int | `30` |  |
+| `concurrency.defaultCliCaptainMaxConcurrency` | int | `1` |  |
+| `concurrency.defaultEndpointCaptainMaxConcurrency` | int | `4` |  |
+| `concurrency.defaultVesselMaxParallelMissionsPerVoyage` | int | `4` |  |
+| `concurrency.defaultVesselMaxParallelVoyages` | int | `1` |  |
+| `concurrency.maxCaptainConcurrency` | int | `256` |  |
+| `concurrency.maxHierarchyDepth` | int | `4` |  |
+| `concurrency.starvationWarningMinutes` | int | `60` |  |
+| `concurrency.waitIntervalRetentionDays` | int | `90` |  |
 | `dashboardPath` | string | `null` |  |
 | `dataDirectory` | string | `"~/.armada"` |  |
 | `dataRetentionDays` | int | `30` |  |

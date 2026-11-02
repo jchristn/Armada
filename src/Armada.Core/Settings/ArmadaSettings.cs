@@ -630,15 +630,16 @@ namespace Armada.Core.Settings
 
         /// <summary>
         /// Global ceiling on missions (working captains) that may run simultaneously, enforced at
-        /// dispatch admission as backpressure against unbounded concurrency. 0 = unlimited. Must be >= 0.
+        /// dispatch admission as backpressure against unbounded concurrency. 0 = unlimited; negatives clamp to 1, values above 10000 to 10000.
         /// </summary>
         public int MaxConcurrentMissions
         {
             get => _MaxConcurrentMissions;
             set
             {
-                if (value < 0) throw new ArgumentOutOfRangeException(nameof(MaxConcurrentMissions), "Must be >= 0");
-                _MaxConcurrentMissions = value;
+                int effective = ConcurrencyClamp.GlobalMissionLimit(value);
+                if (effective != value) _ConcurrencyWarnings.Add("MaxConcurrentMissions clamped from " + value + " to " + effective + ".");
+                _MaxConcurrentMissions = effective;
             }
         }
 
@@ -969,6 +970,16 @@ namespace Armada.Core.Settings
             set => _Push = value ?? new PushSettings();
         }
 
+        /// <summary>v1.3 concurrency configuration foundation. New admission gates are not yet active.</summary>
+        public ConcurrencySettings Concurrency
+        {
+            get => _Concurrency;
+            set => _Concurrency = value ?? new ConcurrencySettings();
+        }
+
+        private ConcurrencySettings _Concurrency = new ConcurrencySettings();
+        private readonly List<string> _ConcurrencyWarnings = new List<string>();
+
         /// <summary>
         /// Account usage capture settings (server switch, interval floor, probe concurrency and timeouts,
         /// excerpt cap, raw/rollup retention days). Never null; setting null restores the defaults.
@@ -1125,6 +1136,7 @@ namespace Armada.Core.Settings
         /// </summary>
         public void InitializeDirectories()
         {
+            NormalizeConcurrency();
             NormalizePaths();
             Directory.CreateDirectory(DataDirectory);
             string? dbDirectory = Path.GetDirectoryName(DatabasePath);
@@ -1142,6 +1154,7 @@ namespace Armada.Core.Settings
         /// loaded from, else ~/.armada/settings.json).</param>
         public async Task SaveAsync(string? path = null)
         {
+            NormalizeConcurrency();
             NormalizePaths();
             path ??= EffectiveSettingsFilePath;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -1161,6 +1174,7 @@ namespace Armada.Core.Settings
             {
                 ArmadaSettings defaults = new ArmadaSettings();
                 defaults.SettingsFilePath = path;
+                defaults.NormalizeConcurrency();
                 defaults.NormalizePaths();
                 defaults.ApplyDerivedDefaults();
                 return defaults;
@@ -1168,6 +1182,7 @@ namespace Armada.Core.Settings
             string json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
             ArmadaSettings settings = Parse(json);
             settings.SettingsFilePath = path;
+            settings.NormalizeConcurrency();
             settings.NormalizePaths();
             settings.ApplyDerivedDefaults();
             UsageDefaultsFile? previous = JsonSerializer.Deserialize<UsageDefaultsFile>(json, _SerializerOptions);
@@ -1192,10 +1207,21 @@ namespace Armada.Core.Settings
         /// <exception cref="IOException">The file could not be written.</exception>
         public bool WriteBack(string? path = null)
         {
+            NormalizeConcurrency();
             NormalizePaths();
             path ??= EffectiveSettingsFilePath;
             string json = JsonSerializer.Serialize(this, _SerializerOptions);
             return SettingsFileStore.SaveInPlace(path, json);
+        }
+
+        /// <summary>Normalize concurrency values after binding and log adjustments before persisting or using them.</summary>
+        /// <param name="warning">Warning sink; defaults to stderr during settings-file loading before the server logger exists.</param>
+        public void NormalizeConcurrency(Action<string>? warning = null)
+        {
+            warning ??= message => Console.Error.WriteLine("[Concurrency] Warning: " + message);
+            foreach (string message in _ConcurrencyWarnings) warning(message);
+            _ConcurrencyWarnings.Clear();
+            foreach (string message in Concurrency.Normalize()) warning(message);
         }
 
         /// <summary>
@@ -1213,7 +1239,7 @@ namespace Armada.Core.Settings
 
         /// <summary>
         /// Parse settings JSON exactly as <see cref="LoadAsync"/> does (including the legacy landing fields), so an
-        /// editor can validate text before writing it. Property setters validate values, so out-of-range values throw.
+        /// editor can validate text before writing it. Existing validation guards remain; concurrency values clamp to their documented bounds.
         /// </summary>
         /// <param name="json">Settings JSON.</param>
         /// <returns>Parsed settings. <see cref="SettingsFilePath"/> is not set.</returns>
@@ -1226,6 +1252,7 @@ namespace Armada.Core.Settings
             settings ??= new ArmadaSettings();
             LegacyLandingSettings? legacy = JsonSerializer.Deserialize<LegacyLandingSettings>(json, _SerializerOptions);
             if (legacy != null && !legacy.LandingMode.HasValue) settings.LandingMode = legacy.ResolveLandingMode();
+            settings.NormalizeConcurrency();
             settings.NormalizePaths();
             return settings;
         }

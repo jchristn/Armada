@@ -8,14 +8,13 @@ One rule sits above everything else: **version numbers change only on the mainta
 agent preparing a release does not bump `Version` in `src/Directory.Build.props`, `src/Armada.Helm/Armada.Helm.csproj`,
 `ProductVersion` in `src/Armada.Core/Constants.cs`, the dashboard's `package.json` and `package-lock.json`, the build
 scripts, the image tags in the `docker/` compose files, the Postman collection, or the CHANGELOG heading on its own. It may propose a bump and explain why, then wait
-for approval. The rules are in `VERSIONING.md` in the shared requirements. The tree is at `1.2.0`; release
-candidates (`1.2.0-rc.N`) and any other pre-release label are applied only on the maintainer's instruction.
+for approval. The rules are in `VERSIONING.md` in the shared requirements. The development tree is at `1.3.0`; release
+candidates (`1.3.0-rc.N`) and any other pre-release label are applied only on the maintainer's instruction.
 
 ## 1. Decide what is in the release
 
 Pick the commit you intend to tag and make sure `main` (or the release branch) is at it. Read the intended release
-section of [CHANGELOG.md](../CHANGELOG.md) against the commits since the last tag. All currently documented changes
-belong to v1.2.0; there is no separate Unreleased section. Every user-visible change, every new or changed setting,
+section of [CHANGELOG.md](../CHANGELOG.md) against the commits since the last tag. The v1.3.0 section tracks concurrency development; completed v1.2.0 changes remain under that release. Every user-visible change, every new or changed setting,
 every migration, and every breaking change belongs under its release heading. A release with an incomplete
 CHANGELOG is not ready, however green the tests are.
 

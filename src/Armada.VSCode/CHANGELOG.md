@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0 (in development)
+
+- Align extension packaging with the v1.3.0 concurrency development branch.
+
 ## 1.2.0
 
 - First release: the Armada Failures view (black box entries grouped by vessel, filtered to the open repository,

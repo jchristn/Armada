@@ -12,7 +12,7 @@ services:
   armada-server:
     # Published release image. To run a locally built image instead, build it with this tag first
     # (scripts/common/build-*.sh) or change the tag.
-    image: jchristn77/armada-server:v1.2.0
+    image: jchristn77/armada-server:v1.3.0
     ports:
       # 7890: Admiral REST + WebSocket (the Harbor link). 7891: MCP (captain call-home). 9464: metrics.
       - "7890:7890"

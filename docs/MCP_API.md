@@ -1,6 +1,6 @@
 # Armada MCP API Reference
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Default URL:** `http://localhost:7891/mcp`
 **Protocol:** [Model Context Protocol](https://modelcontextprotocol.io/) (MCP), Streamable HTTP transport
 **Server Library:** Voltaic (McpHttpServer)
@@ -601,7 +601,7 @@ No parameters required.
     "LatencyMs": null,
     "CapabilityManifest": {
       "ProtocolVersion": "2026-04-03",
-      "ArmadaVersion": "1.2.0",
+      "ArmadaVersion": "1.3.0",
       "Features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -2202,7 +2202,7 @@ to what the caller can see; `InvalidArgument` when `createdAfter` is after `crea
       "LatestMissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
       "LatestMissionTitle": "Retry landings deferred on a dirty checkout",
       "VesselName": "demo-api",
-      "ArmadaVersions": [ "1.2.0" ],
+      "ArmadaVersions": [ "1.3.0" ],
       "Severity": "High",
       "SelfHealable": "Yes",
       "Suspected": false,
@@ -2234,7 +2234,7 @@ to what the caller can see; `InvalidArgument` when `createdAfter` is after `crea
   "Total": 1,
   "Truncated": false,
   "Versions": [
-    { "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be", "Count": 1, "OpenCount": 1, "ArmadaFixedCount": 0, "FirstSeenUtc": "2026-10-29T21:11:05.382585Z", "LastSeenUtc": "2026-10-29T21:11:05.382585Z" }
+    { "ArmadaVersion": "1.3.0+5de469cff2709733b1ffb68fbc45d1303e9e41be", "Count": 1, "OpenCount": 1, "ArmadaFixedCount": 0, "FirstSeenUtc": "2026-10-29T21:11:05.382585Z", "LastSeenUtc": "2026-10-29T21:11:05.382585Z" }
   ]
 }
 ```

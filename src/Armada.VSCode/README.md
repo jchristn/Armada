@@ -55,7 +55,7 @@ Build the package (see [Development](#development)) or take `armada-vscode-<vers
 
 - In VS Code: open the Extensions view, choose **...** (Views and More Actions), **Install from VSIX...**, and pick the
   file.
-- From a terminal: `code --install-extension armada-vscode-1.2.0.vsix`
+- From a terminal: `code --install-extension armada-vscode-1.3.0.vsix`
 
 ## Configure
 

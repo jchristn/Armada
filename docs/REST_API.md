@@ -1,6 +1,6 @@
 # Armada REST API Reference
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Base URL:** `http://localhost:7890`
 **Content-Type:** `application/json`
 
@@ -1198,7 +1198,7 @@ voyages, and signals. The same scoping applies to the MCP `status` tool and the 
     "LatencyMs": null,
     "CapabilityManifest": {
       "ProtocolVersion": "2026-04-03",
-      "ArmadaVersion": "1.2.0",
+      "ArmadaVersion": "1.3.0",
       "Features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -1228,8 +1228,8 @@ Health check endpoint. **Does not require authentication.** `BuildVersion` and `
   "Timestamp": "2026-03-07T12:00:00Z",
   "StartUtc": "2026-03-07T08:00:00Z",
   "Uptime": "0.04:00:00",
-  "Version": "1.2.0",
-  "BuildVersion": "1.2.0+<source-revision>",
+  "Version": "1.3.0",
+  "BuildVersion": "1.3.0+<source-revision>",
   "CommitHash": "<source-revision>",
   "Ports": {
     "Admiral": 7890,
@@ -1277,6 +1277,8 @@ Each result has a `Status` of `Pass`, `Warn`, or `Fail`. Stalled-captain and fai
 #### GET /api/v1/settings
 
 Returns current server settings including ports, agent configuration, system paths, and remote-control tunnel configuration. `LandingMode` is the global (default) landing mode, `MergeAndPush` unless changed (see [MERGING.md](MERGING.md#landing-mode)). `RemoteControl.Password` is always returned as `********`, and `RemoteControl.EnrollmentToken` is returned as `********` when set.
+
+**v1.3.0 development:** the new `Concurrency` group is currently settings-file configuration only. It is not part of this response or the editable `PUT /api/v1/settings` body yet. Its normalized defaults prepare the later captain-slot and vessel/hierarchy admission milestones; they do not activate those gates. See [implementation progress](../CONCURRENCY_IMPROVEMENTS.md#implementation-progress-v130).
 
 **Permission:** AdminOnly
 
@@ -4803,7 +4805,7 @@ The mission's current black box entry with its versioned record.
   "ObjectCount": 5,
   "SchemaVersion": 1,
   "RulesVersion": 1,
-  "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+  "ArmadaVersion": "1.3.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
   "ArmadaCommit": "5de469cff2709733b1ffb68fbc45d1303e9e41be",
   "ReasonExcerpt": "Captain process exited with code 134 after 4m12s while running dotnet test (Test.Automated aborted: Fatal error. System.AccessViolationException in SQLitePCL.raw.sqlite3_step). Retry once the test host is stable.",
   "Summary": "Mission \"Retry landings deferred on a dirty checkout\" (msn_mvu1fjp0_9Wd6Uuyp262) failed during Execution at step ProcessCrash (kind Crash). The captain's process exited with code unknown before finishing. Triage: Transient (low confidence). Suggested next step: restart the mission (bbx-exec-006.restart).",
@@ -5181,7 +5183,7 @@ last seen). Body (`BlackBoxResilienceGapRequest`): `VesselId`, `Resolution`, `Ph
       "LatestMissionId": "msn_mvu1fjp0_9Wd6Uuyp262",
       "LatestMissionTitle": "Retry landings deferred on a dirty checkout",
       "VesselName": "demo-api",
-      "ArmadaVersions": [ "1.2.0" ],
+      "ArmadaVersions": [ "1.3.0" ],
       "Severity": "High",
       "SelfHealable": "Yes",
       "Suspected": false,
@@ -5269,7 +5271,7 @@ versions (`Truncated` true when cut).
   "Truncated": false,
   "Versions": [
     {
-      "ArmadaVersion": "1.2.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
+      "ArmadaVersion": "1.3.0+5de469cff2709733b1ffb68fbc45d1303e9e41be",
       "Count": 1,
       "OpenCount": 1,
       "ArmadaFixedCount": 0,
@@ -9131,7 +9133,7 @@ Create one scoped objective or backlog item.
   "BacklogState": "ReadyForPlanning",
   "Effort": "M",
   "Owner": "Delivery",
-  "TargetVersion": "1.2.0",
+  "TargetVersion": "1.3.0",
   "AcceptanceCriteria": ["Deployment verified in staging", "Incident rollback documented"],
   "NonGoals": ["Do not change release cadence"],
   "RolloutConstraints": ["Keep existing rollback path intact"],
@@ -11227,7 +11229,7 @@ Aggregate status summary returned by the status endpoint.
     "LatencyMs": null,
     "CapabilityManifest": {
       "ProtocolVersion": "2026-04-03",
-      "ArmadaVersion": "1.2.0",
+      "ArmadaVersion": "1.3.0",
       "Features": [
         "remoteControl.handshake",
         "remoteControl.heartbeat",
@@ -11569,7 +11571,7 @@ A mobile app installation registered for push notifications (see [Push Notificat
   "Platform": "Ios",
   "ExpoPushToken": "ExponentPushToken[****wxyz]",
   "DeviceName": "My iPhone",
-  "AppVersion": "1.2.0",
+  "AppVersion": "1.3.0",
   "Locale": "en-US",
   "Categories": ["AskProposal", "CliPermission"],
   "Active": true,

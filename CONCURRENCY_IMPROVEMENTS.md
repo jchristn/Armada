@@ -1,13 +1,27 @@
 # Concurrency improvements: captain slots, vessel voyage/mission limits, mission hierarchy
 
-Status: implementation plan for v1.2.0. It is based on repository commit `27042d923f921e6ce63059502af06d213345263b`, inspected 2026-10-27. Nothing in product behavior has changed yet. Line numbers are as of that commit; re-check them before you edit. The owner's answers to the open questions were folded in on 2026-10-27 (section 17), so every decision below is final unless marked otherwise.
+Status: implementation started for v1.3.0 on `feature/v1.3.0`. It is based on repository commit `27042d923f921e6ce63059502af06d213345263b`, inspected 2026-10-27. The original baseline below is historical; the progress section records what is implemented. Line numbers are as of that commit; re-check them before you edit. The owner's answers to the open questions were folded in on 2026-10-27 (section 17), so every decision below is final unless marked otherwise.
 
-v1.2.0 rests on three things: this plan, the mobile applications, and captain usage management ([CAPTAIN_USAGE_PLAN.md](archive/CAPTAIN_USAGE_PLAN.md)). **This plan lands before captain usage management**; section 12 lists where the two touch.
+The v1.3.0 implementation starts from `b21fc9ef40b85b89d6a9b2437373c13ac4d1de48` (2026-11-02).
+
+Captain usage management and the mobile applications shipped in v1.2.0. This plan now builds on that release, including its existing usage scheduling and schema migrations through 116. Do not renumber or rewrite shipped migrations; section 12 describes the integration with usage management.
+
+## Implementation progress (v1.3.0)
+
+- [x] Create `feature/v1.3.0` from the completed v1.2.0 baseline and align product/package versions.
+- [x] Start M1 with shared bounds, `ConcurrencySettings`, runtime-specific captain default helpers, settings-file normalization, and boundary/round-trip tests.
+- [ ] Finish M1: model/DTO changes, new migrations 117-121 and all four database providers' atomic slot operations and mapping.
+- [ ] M2-M3: multi-mission lifecycle and race-free admission. Scheduling still uses v1.2.0 single-mission captain semantics in this first increment.
+- [ ] M4-M5: hierarchy, branch ownership, wait telemetry and Grafana.
+- [ ] M6-M10: public operations and all interactive clients. The new `Concurrency` group is currently a settings-file foundation, not an editable REST/MCP settings group.
+- [ ] M11: final integration, release documentation, migration/upgrade validation, and the complete concurrency stress matrix.
+
+The new defaults do not backfill or alter existing captain or vessel behavior until their migrations and admission/lifecycle work land. The existing global `MaxConcurrentMissions` settings-file guard now clamps negative input to 1 (not unlimited) and values above 10000 to 10000.
 
 ## 1. Goals
 
 1. A **captain** can run up to `MaxConcurrency` missions at once. This is the innermost gate. Defaults:
-   - CLI harness captains: 1. That covers ClaudeCode, Codex, Gemini, Cursor, OpenCode and Custom.
+   - CLI harness captains: 1. That covers ClaudeCode, Codex, Gemini, Cursor, OpenCode, pi and Custom.
    - Endpoint-backed captains: 4. That covers ApiEndpoint and Mux.
 2. A **vessel** has two limits, replacing the bool `AllowConcurrentMissions`:
    - `MaxParallelVoyages`: how many voyages can be active on the vessel at once. Default 1.
@@ -53,7 +67,7 @@ Non-goals:
 | Mission timestamps | `CreatedUtc`, `StartedUtc` and `CompletedUtc` only. No assigned or queued time | `Mission.cs:305-323` |
 | Metrics | Static `Meter("Armada")` with counters and histograms. Nothing covers queueing | `src/Armada.Core/ArmadaMetrics.cs`; `src/Armada.Server/ArmadaTelemetryHost.cs:116` |
 | Grafana | `armada-reliability.json`, `armada-fleet-operations.json`, `armada-storage.json` | `docker/armada/observability/grafana/dashboards/` |
-| Migrations | The latest is **97** in every driver. MySQL keeps its migrations in `MysqlDatabaseDriver.cs`, not in `TableQueries.cs`. SQLite rebuilds the vessels table with an explicit column list | `Sqlite/Queries/TableQueries.cs:2269`, `:567` |
+| Migrations | The latest on the v1.2.0 starting point is **116** in every driver. MySQL keeps its migrations in `MysqlDatabaseDriver.cs`, not in `TableQueries.cs`. SQLite rebuilds the vessels table with an explicit column list | `Sqlite/Queries/TableQueries.cs:2269`, `:567` |
 
 The single-mission assumption on captains is the largest piece of work. Non-test code has 232 references to `CurrentMissionId` and 149 to `CurrentDockId`, in AdmiralService, CaptainService, AgentLifecycleHandler, MissionService, PlanningSessionCoordinator, ObjectiveRefinementCoordinator, CaptainRouting, AdmiralFleetActionMissionDispatcher, CaptainRuntimeToolCatalogService, the DB drivers, the TUI, Helm and the Dashboard.
 
@@ -63,11 +77,11 @@ The single-mission assumption on captains is the largest piece of work. Non-test
 |---|---|---|
 | D1 | Source of truth for what a captain is running | The **missions table**: missions where `captain_id = X AND status IN (Assigned, InProgress)`. Missions already carry `CaptainId`, `DockId` and `ProcessId`. The captain also gets a denormalized `ActiveMissionCount` so slots can be claimed atomically, and the health tick reconciles that count against the missions table (D8). |
 | D2 | Captain state | `Idle` when ActiveMissionCount is 0. `Working` when 1 or more. `Planning`, `Refining` and `Analyzing` stay **exclusive**: a captain in those states takes no missions, and a captain with active missions cannot enter them. `Stalled`, `Quarantined` and `Stopping` block new admissions, but missions already running on the captain continue. Stall detection moves to per-mission (section 6.4). |
-| D3 | `Captain.CurrentMissionId` and `CurrentDockId` | **Removed in v1.2.0**, with no compatibility shim. New `ActiveMissionIds` (a computed, read-only list) replaces them on the captain DTOs. Every internal reader moves to a mission id in M2; planning and refinement move to a new `Captain.CurrentSessionId` (section 6.4). The columns are dropped in migration 102. Listed as a breaking change in `CHANGELOG.md` and `UPGRADING.md`. |
-| D4 | Captain concurrency column | New column `max_concurrency`. The dormant `max_parallelism` is **not** reused: it defaults to 1 for every row, so it cannot carry the per-runtime defaults, and it is not reliably present in every driver. Leave it unused and note it in `DECISIONS.md`. |
+| D3 | `Captain.CurrentMissionId` and `CurrentDockId` | **Removed in v1.3.0**, with no compatibility shim. New `ActiveMissionIds` (a computed, read-only list) replaces them on the captain DTOs. Every internal reader moves to a mission id in M2; planning and refinement move to a new `Captain.CurrentSessionId` (section 6.4). The columns are dropped in migration 121. Listed as a breaking change in `CHANGELOG.md` and `UPGRADING.md`. |
+| D4 | Captain concurrency column | New column `max_concurrency`. The dormant `max_parallelism` is **not** reused: it defaults to 1 for every row, so it cannot carry the per-runtime defaults, and it is not reliably present in every driver. Leave it unused and note it in `archive/DECISIONS.md`. |
 | D5 | Captain defaults | Set by runtime **at creation**: ApiEndpoint and Mux get 4; ClaudeCode, Codex, Gemini, Cursor, OpenCode and Custom get 1. Allowed range 1..`Concurrency.MaxCaptainConcurrency` (default 256). Changing a captain's runtime does not change its value unless the client sends `MaxConcurrency`; the Dashboard, TUI and Mobile forms suggest the new runtime's default. **Upgrade backfill**: existing ApiEndpoint and Mux captains get 4, everything else gets 1, as requested. This is called out in `UPGRADING.md`, because existing Mux and ApiEndpoint captains will start running up to 4 missions at once. Their endpoint's `MaxConcurrentMissions` still caps them. |
 | D6 | Vessel limits | `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage` are ints; **0 means unlimited** (the same convention as the global `MaxConcurrentMissions`). New vessels default to 1 and 4. **Upgrade backfill preserves behavior**: `allow_concurrent_missions = 0` becomes 1/1 (serial, as today), and `= 1` becomes 0/0 (unlimited, as today). |
-| D7 | `AllowConcurrentMissions` | **Removed in v1.2.0**, with no shim. Migration 98 backfills the new limits from the column (D6) and migration 102 drops it. A REST or MCP request that still sends `AllowConcurrentMissions` gets a 400 validation error naming `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage`, so an old client fails loudly instead of silently getting different behavior. Helm `--allow-concurrent` fails the same way. Listed as a breaking change. |
+| D7 | `AllowConcurrentMissions` | **Removed in v1.3.0**, with no shim. Migration 98 backfills the new limits from the column (D6) and migration 121 drops it. A REST or MCP request that still sends `AllowConcurrentMissions` gets a 400 validation error naming `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage`, so an old client fails loudly instead of silently getting different behavior. Helm `--allow-concurrent` fails the same way. Listed as a breaking change. |
 | D8 | Race-free enforcement | (a) a per-vessel async admission lock around "evaluate gates -> claim captain slot -> mark mission Assigned"; (b) an atomic conditional captain slot claim in SQL; (c) an invariant monitor on every tick. Details in section 6. |
 | D9 | What "active voyage" means for `MaxParallelVoyages` | A voyage holds a voyage slot from the moment its first mission is assigned until the voyage reaches a terminal status (Complete, Failed or Cancelled), **or** until it has no missions left in a non-terminal status. The slot is sticky: it is kept between pipeline stages, while waiting for review, and while landing. Otherwise a second voyage could slip in whenever a stage hands off, and with a limit of 1 two voyages would interleave on the same vessel. |
 | D10 | Standalone missions (no voyage) | Each one counts as a voyage of one mission. It takes a voyage slot while it is Assigned, InProgress or in a post-run status (WorkProduced, Testing, Review, PullRequestOpen, Verifying), and gives it up when it reaches a terminal status. Rescue missions follow the same rule. |
@@ -178,15 +192,15 @@ Where clamping happens:
 
 ## 5. Database (all four drivers)
 
-Migrations 98-102, in this order. Each one goes into the Sqlite, Postgresql and SqlServer `TableQueries.GetMigrations()` and into the migration list in `MysqlDatabaseDriver.cs`.
+Migrations 117-121, in this order. Each one goes into the Sqlite, Postgresql and SqlServer `TableQueries.GetMigrations()` and into the migration list in `MysqlDatabaseDriver.cs`.
 
 | # | Change |
 |---|---|
-| 98 | `vessels`: add `max_parallel_voyages INTEGER NOT NULL DEFAULT 1` and `max_parallel_missions_per_voyage INTEGER NOT NULL DEFAULT 4`. Backfill: `UPDATE vessels SET max_parallel_voyages = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END, max_parallel_missions_per_voyage = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END`. |
-| 99 | `captains`: add `max_concurrency INTEGER NOT NULL DEFAULT 1`, `active_mission_count INTEGER NOT NULL DEFAULT 0` and `current_session_id` (nullable text). Backfill `max_concurrency = 4 WHERE runtime IN ('ApiEndpoint','Mux')`, matching the stored enum text of each driver. Backfill `active_mission_count` from the missions table: the count of missions with status Assigned or InProgress per `captain_id`. |
-| 100 | `missions`: add `rescue_of_mission_id`, `base_branch_name`, `ready_utc`, `assigned_utc`, `owned_paths_json`, `reads_paths_json`, `depth INTEGER NOT NULL DEFAULT 0` and `branch_strategy TEXT NOT NULL DEFAULT 'New'`. Data step: `UPDATE missions SET rescue_of_mission_id = parent_mission_id, parent_mission_id = NULL WHERE is_rescue = 1`. Backfill `assigned_utc = started_utc` where it is not null. Add an index on `(voyage_id, parent_mission_id)`. |
-| 101 | Create `mission_wait_intervals` and its indexes. |
-| 102 | Drop the removed columns (D3, D7): `vessels.allow_concurrent_missions`, `captains.current_mission_id` and `captains.current_dock_id`. Before dropping, copy `current_mission_id` into `captains.current_session_id` for captains in Planning, Refining or Analyzing. SQLite drops them through a table rebuild (the existing one at `:567` for vessels; add one for captains if none exists). It runs after 98-101 so their backfills can still read the old columns. |
+| 117 | `vessels`: add `max_parallel_voyages INTEGER NOT NULL DEFAULT 1` and `max_parallel_missions_per_voyage INTEGER NOT NULL DEFAULT 4`. Backfill: `UPDATE vessels SET max_parallel_voyages = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END, max_parallel_missions_per_voyage = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END`. |
+| 118 | `captains`: add `max_concurrency INTEGER NOT NULL DEFAULT 1`, `active_mission_count INTEGER NOT NULL DEFAULT 0` and `current_session_id` (nullable text). Backfill `max_concurrency = 4 WHERE runtime IN ('ApiEndpoint','Mux')`, matching the stored enum text of each driver. Backfill `active_mission_count` from the missions table: the count of missions with status Assigned or InProgress per `captain_id`. |
+| 119 | `missions`: add `rescue_of_mission_id`, `base_branch_name`, `ready_utc`, `assigned_utc`, `owned_paths_json`, `reads_paths_json`, `depth INTEGER NOT NULL DEFAULT 0` and `branch_strategy TEXT NOT NULL DEFAULT 'New'`. Data step: `UPDATE missions SET rescue_of_mission_id = parent_mission_id, parent_mission_id = NULL WHERE is_rescue = 1`. Backfill `assigned_utc = started_utc` where it is not null. Add an index on `(voyage_id, parent_mission_id)`. |
+| 120 | Create `mission_wait_intervals` and its indexes. |
+| 121 | Drop the removed columns (D3, D7): `vessels.allow_concurrent_missions`, `captains.current_mission_id` and `captains.current_dock_id`. Before dropping, copy `current_mission_id` into `captains.current_session_id` for captains in Planning, Refining or Analyzing. SQLite drops them through a table rebuild (the existing one at `:567` for vessels; add one for captains if none exists). It runs after 117-120 so their backfills can still read the old columns. |
 
 For each driver:
 - Update the base DDL: Postgres `TableQueries.cs:99`, SqlServer `:2077`, MySQL `:51`, and the SQLite create statement.
@@ -413,7 +427,7 @@ Per-vessel, per-captain and per-mission numbers are served by Armada:
 - The Dashboard VesselDetail gets a "Concurrency" card with slot usage and wait percentiles.
 - CaptainDetail shows its active missions and slot usage.
 - The existing `TokenUsage.tsx`-style charts page gets a "Concurrency" tab using `/metrics/concurrency`.
-- The TUI and Mobile get the per-mission wait line and the vessel and captain slot usage. Mobile does not need charts in v1.2.0.
+- The TUI and Mobile get the per-mission wait line and the vessel and captain slot usage. Mobile does not need charts in v1.3.0.
 
 ## 9. API, SDK, CLI and Postman
 
@@ -425,7 +439,7 @@ Per-vessel, per-captain and per-mission numbers are served by Armada:
 | .NET SDK (`src/Armada.Client`) | The models are shared from Armada.Core, so the fields come for free. Add methods: `GetVoyageTreeAsync`, `GetVesselConcurrencyAsync`, `GetMissionWaitsAsync`, `GetConcurrencyMetricsAsync`. Remove the deleted properties from any client-only DTOs. Also update `src/Armada.Core/Client/ArmadaApiClient.cs` if it duplicates these. |
 | Helm CLI (`src/Armada.Helm`) | `vessel add` and `vessel update` gain `--max-parallel-voyages` and `--max-parallel-missions`; `--allow-concurrent` is removed and prints an error naming the new flags. `captain add` and `captain update` gain `--max-concurrency`. `mission create` gains `--parent`. New commands `voyage tree <id>` and `vessel concurrency <id>`. The captain list shows `active/max`. |
 | Postman (`Armada.postman_collection.json`) | Update the Create and Update Vessel and Captain bodies with the new PascalCase fields. Add requests: Get Voyage Tree, Get Vessel Concurrency, Get Mission Waits, Get Concurrency Metrics, and a "Dispatch Hierarchical Voyage" example using `Key` and `ParentKey`. Add a walkthrough step "5. Inspect concurrency". |
-| API surface baseline | Run `scripts/common/generate-api-surface.sh` to regenerate `docs/api-surface-1.0.json` and `docs/API_SURFACE_1.0.md`. The `E2E.ApiContract` test fails until this is done. v1.2.0 makes three **intentional removals** (`Vessel.AllowConcurrentMissions`, `Captain.CurrentMissionId`, `Captain.CurrentDockId`). Record them in the baseline's breaking-changes list (or however `E2E.ApiContract` accepts approved removals; check the script) and in `docs/COMPATIBILITY.md`. Everything else is additive. |
+| API surface baseline | Run `scripts/common/generate-api-surface.sh` to regenerate `docs/api-surface-1.0.json` and `docs/API_SURFACE_1.0.md`. The `E2E.ApiContract` test fails until this is done. v1.3.0 makes three **intentional removals** (`Vessel.AllowConcurrentMissions`, `Captain.CurrentMissionId`, `Captain.CurrentDockId`). Record them in the baseline's breaking-changes list (or however `E2E.ApiContract` accepts approved removals; check the script) and in `docs/COMPATIBILITY.md`. Everything else is additive. |
 | TypeScript types | `src/Armada.Dashboard/src/types/models.ts` and `src/Armada.Mobile/src/types/models.ts`. |
 
 ## 10. Prompts: smaller, hierarchical, cleanly separated missions
@@ -470,10 +484,10 @@ Per-vessel, per-captain and per-mission numbers are served by Armada:
 
 `{MaxParallelMissionsPerVoyage}` is a new placeholder for the architect template, resolved from the vessel. Document it in `docs/MESSAGE_TEMPLATES.md`.
 
-### 10.4 Checking ownership after the fact (warning only in v1.2.0)
+### 10.4 Checking ownership after the fact (warning only in v1.3.0)
 - When a stage outcome is recorded, compare the mission's diff file list with its `ownedPaths` and with the paths owned by siblings that overlapped it in time.
-- Record `OwnershipViolation` as a suspected cause on the stage outcome (see the stage outcome and failure-cause rules work in CHANGELOG v1.2.0), and show it on the Judge's input.
-- It does not fail the mission in v1.2.0.
+- Record `OwnershipViolation` as a suspected cause on the stage outcome (see the stage outcome and failure-cause rules work in CHANGELOG v1.3.0), and show it on the Judge's input.
+- It does not fail the mission in v1.3.0.
 
 ## 11. UI
 
@@ -489,8 +503,8 @@ Per-vessel, per-captain and per-mission numbers are served by Armada:
 ## 12. Interaction with captain usage management (CAPTAIN_USAGE_PLAN.md)
 - A quota-owned quarantine (usage plan D6) blocks **new admissions** to a captain. Missions already running on it continue (D2 here).
 - Several missions on one subscription account use quota faster. The usage plan's per-account view should show the captain's `ActiveMissionCount` next to its utilization.
-- Captains that share an account each count their own `MaxConcurrency`. A per-account concurrency cap is **out of scope**. Record it as a follow-up idea in `DECISIONS.md`.
-- **Order: this plan lands first.** Both plans add captain columns and both touch captain admission. This plan takes migrations 98-102; the usage plan renumbers to start after them and builds its quota quarantine on top of `MissionAdmissionEvaluator` (as a gate before captain selection) instead of on the Idle-only claim that M2 deletes. Update `CAPTAIN_USAGE_PLAN.md` to say so when M11 lands.
+- Captains that share an account each count their own `MaxConcurrency`. A per-account concurrency cap is **out of scope**. Record it as a follow-up idea in `archive/DECISIONS.md`.
+- **Integration order:** usage management already shipped in v1.2.0. Preserve its migrations through 116, capture scheduling, host selection, and quota-owned quarantine. Reserve new migrations 117-121 for this plan. M2/M3 must integrate usage quarantine with slot admission instead of changing the archived usage plan or its shipped migrations.
 
 ## 13. Documentation
 
@@ -506,12 +520,12 @@ Per-vessel, per-captain and per-mission numbers are served by Armada:
 | `docs/MESSAGE_TEMPLATES.md` | The new placeholders (`{OwnedPaths}`, `{ConcurrentSiblingPaths}`, `{ParentSummary}`, `{MaxParallelMissionsPerVoyage}`). |
 | `docs/MODEL_GUIDANCE.md`, `docs/MODEL_HETEROGENEITY.md`, `docs/TESTING_PIPELINES.md` | Hierarchy and the `armada-plan` v4 references. |
 | `docs/INSTRUCTIONS_FOR_*.md` (6 files), `docs/*_AS_ORCHESTRATOR.md` (6 files) | Dispatch with `Key` and `ParentKey`, owned paths, and checking `vessel_concurrency`. |
-| `docs/UPGRADING.md` (`v110-to-v120`) | Migrations 98-102; how the vessel backfill preserves behavior; that ApiEndpoint and Mux captains go to concurrency 4; the **breaking removals** (`AllowConcurrentMissions`, `CurrentMissionId`, `CurrentDockId`, `--allow-concurrent`) with before/after examples for REST, MCP, SDK and Helm; that downgrade to v1.1 needs a pre-upgrade backup; that the endpoint, runtime and global caps now count missions; how ParentMissionId moves to RescueOfMissionId. |
-| `DEPRECATION.md` | Mark `AllowConcurrentMissions`, `Captain.CurrentMissionId` and `CurrentDockId` as **removed in v1.2.0**. Deprecate `VesselConcurrencyLimit` (read-only for stored events) and architect `dependsOn` (still read by the parser). |
-| `DECISIONS.md` | D4 (dormant `max_parallelism`), D7 and D3 (removed outright, no shim), D9 (sticky voyage slots), D12, D16 (branch reuse in a chain, fork for siblings), and the per-account cap as a rejected idea. |
+| `docs/UPGRADING.md` (`v120-to-v130`) | Migrations 117-121; how the vessel backfill preserves behavior; that ApiEndpoint and Mux captains go to concurrency 4; the **breaking removals** (`AllowConcurrentMissions`, `CurrentMissionId`, `CurrentDockId`, `--allow-concurrent`) with before/after examples for REST, MCP, SDK and Helm; that downgrade to v1.2 needs a pre-upgrade backup; that the endpoint, runtime and global caps now count missions; how ParentMissionId moves to RescueOfMissionId. |
+| `DEPRECATION.md` | Mark `AllowConcurrentMissions`, `Captain.CurrentMissionId` and `CurrentDockId` as **removed in v1.3.0**. Deprecate `VesselConcurrencyLimit` (read-only for stored events) and architect `dependsOn` (still read by the parser). |
+| `archive/DECISIONS.md` | D4 (dormant `max_parallelism`), D7 and D3 (removed outright, no shim), D9 (sticky voyage slots), D12, D16 (branch reuse in a chain, fork for siblings), and the per-account cap as a rejected idea. |
 | `README.md` (~420), `FAST_TRACK_SETUP.md` (~197), `GETTING_STARTED.md` | One paragraph each on slots and captains, linking to SCHEDULING.md#capacity. |
 | `docs/MOBILE.md`, `docs/TUI.md` | The new fields and screens. |
-| `CHANGELOG.md` v1.2.0 | A "Concurrency limits and mission hierarchy" section and a "Breaking changes" list (D3, D7). Update the release intro paragraph, which currently describes v1.2.0 as model evaluation plus usage plus mobile, to name concurrency as a cornerstone. |
+| `CHANGELOG.md` v1.3.0 | A "Concurrency limits and mission hierarchy" section and a "Breaking changes" list (D3, D7). Update the release intro paragraph, which currently describes v1.3.0 as model evaluation plus usage plus mobile, to name concurrency as a cornerstone. |
 | `.okf` term and architecture notes | Add: slot, voyage slot, logical mission, owned paths. |
 
 ## 14. Delivery plan (missions)
@@ -535,7 +549,7 @@ V: Concurrency improvements
 
 | Mission | Owned paths (main) | Depends on | Acceptance |
 |---|---|---|---|
-| M1 | `Models/{Vessel,Captain,Mission}.cs`, `Settings/ConcurrencySettings.cs`, `ArmadaSettings.cs`, `Constants.cs`, `Enums/{MissionAssignmentBlockerReasonEnum,MissionWaitGateEnum}.cs`, `Services/CaptainConcurrencyDefaults.cs`, `Services/ConcurrencyClamp.cs`, `Database/**` (migrations 98-102, new methods, readers, `IMissionWaitIntervalMethods`) | - | Migrations apply on a copy of a v1.1 DB for each driver. Backfills are correct, including `current_session_id`, before 102 drops the old columns. `AllowConcurrentMissions` is gone from the model. Every section 4.7 range is clamped in setters, `Normalize()` and DB readers, with tests. `ConcurrentAccessSuite` slot-claim test: exactly N of 50 succeed. |
+| M1 | `Models/{Vessel,Captain,Mission}.cs`, `Settings/ConcurrencySettings.cs`, `ArmadaSettings.cs`, `Constants.cs`, `Enums/{MissionAssignmentBlockerReasonEnum,MissionWaitGateEnum}.cs`, `Services/CaptainConcurrencyDefaults.cs`, `Services/ConcurrencyClamp.cs`, `Database/**` (migrations 117-121, new methods, readers, `IMissionWaitIntervalMethods`) | - | Migrations apply on a copy of a v1.2 DB for each driver. Backfills are correct, including `current_session_id`, before 121 drops the old columns. `AllowConcurrentMissions` is gone from the model. Every section 4.7 range is clamped in setters, `Normalize()` and DB readers, with tests. `ConcurrentAccessSuite` slot-claim test: exactly N of 50 succeed. |
 | M2 | `Services/CaptainService.cs`, `Services/AdmiralService.cs` (release, stall, recovery, orphan, dock sites), `Server/AgentLifecycleHandler.cs`, `MissionService.cs` `HandleCompletionAsync`, `PlanningSessionCoordinator.cs` and `ObjectiveRefinementCoordinator.cs` (claim only), `AdmiralFleetActionMissionDispatcher.cs`, `CaptainRuntimeToolCatalogService.cs`, Harbor protocol if needed | M1 | A captain with MaxConcurrency 3 runs 3 missions with 3 docks. Completing, failing, stalling or recalling one leaves the other two running and the count correct. Restart reattaches all 3. `Captain.CurrentMissionId` and `CurrentDockId` are deleted and the solution builds; planning and refinement use `CurrentSessionId`. |
 | M3 | `Services/MissionAdmissionEvaluator.cs`, `VesselAdmissionLockRegistry.cs`, `VoyageSlotPolicy.cs`, `ConcurrencyInvariantMonitor.cs`, `MissionService.cs` (`TryAssignAsync`, `GetAssignmentBlockerAsync`, `ApplyCapacityLimitsAsync`), `MissionService.CaptainRouting.cs`, `AdmiralService.HasAvailableCapacityAsync` | M2 | The scheduler test matrix in section 15 passes. The 200-mission stress test shows no limit violations and no stuck missions. |
 | M4 | `MissionService.Handoff.cs`, `MissionService.ArchitectPlan.cs` (dependency wiring only), `MissionRecoveryCoordinator.cs`, `MergeQueueService.cs` (landing order, pinned SHA), `DockService.cs` (base branch), `Enums/MissionBranchStrategyEnum.cs`, `AdmiralService.DispatchVoyageAsync`, `Models/MissionDescription.cs`, `Models/MissionTreeNode.cs`, `MissionService` create/update validation | M1 (and M3 for the gate hook and the `BranchLock` interplay: M4 adds `Parent` as an evaluator step, so start it after M3 lands or coordinate on that one method) | The hierarchy tests in section 15 pass. Rescue still works and now uses `RescueOfMissionId`. |
@@ -558,7 +572,7 @@ All suites go in `src/Test.Shared/Suites/` and run with `dotnet run --project sr
 | Vessel 1x1, voyage of 3 independent missions, 3 free captains | One at a time. Blocker `VoyageMissionLimit`. |
 | Vessel 1x4, 2 voyages of 3 missions each, 6 captains | V1 runs 3. V2 waits with `VesselVoyageLimit` until V1 is terminal, **including between V1's pipeline stages** (sticky slot). |
 | Vessel 2x2, 3 voyages | Two voyages at a time, at most 2 missions each. The third voyage admitted in FIFO order. |
-| Vessel 0x0 (unlimited) | Only captain and global caps apply. Matches the old `AllowConcurrentMissions=true` (the migration 98 backfill). |
+| Vessel 0x0 (unlimited) | Only captain and global caps apply. Matches the old `AllowConcurrentMissions=true` (the migration 117 backfill). |
 | Standalone mission next to a voyage under 1xN | They take turns for the voyage slot (D10). |
 | Captain MaxConcurrency 2, 1 captain, vessel 1x4, voyage of 4 | 2 running. Blocker `CaptainConcurrencyLimit`. |
 | Endpoint cap 3 shared by two captains at 4 each | At most 3 across both. |
@@ -622,9 +636,9 @@ All suites go in `src/Test.Shared/Suites/` and run with `dotnet run --project sr
 ## 16. Rollout and compatibility
 - The vessel backfill preserves scheduling behavior. The one scheduling change on upgrade is that ApiEndpoint and Mux captains go to concurrency 4. UPGRADING tells operators to set them back to 1 if they want the old behavior.
 - The endpoint, runtime and global caps change from counting captains to counting missions. With every captain at 1 the numbers are the same, so behavior changes only together with the captain change above.
-- **Breaking API changes in v1.2.0** (no deprecation period, by owner decision): `Vessel.AllowConcurrentMissions`, `Captain.CurrentMissionId`, `Captain.CurrentDockId` and Helm `--allow-concurrent` are removed. Old clients that send `AllowConcurrentMissions` get a 400 rather than having it ignored. SDK users must recompile. Call this out at the top of the v1.2.0 CHANGELOG entry.
-- **Downgrading to v1.1 is not supported in place**, because migration 102 drops columns v1.1 reads. UPGRADING says to take a backup (`backup` tool or `armada backup`) before upgrading and to restore it to downgrade.
-- Still deprecated rather than removed: the `VesselConcurrencyLimit` enum value (read-only, for stored events) and architect `dependsOn` (read by the parser). Revisit both in v1.3.0.
+- **Breaking API changes in v1.3.0** (no deprecation period, by owner decision): `Vessel.AllowConcurrentMissions`, `Captain.CurrentMissionId`, `Captain.CurrentDockId` and Helm `--allow-concurrent` are removed. Old clients that send `AllowConcurrentMissions` get a 400 rather than having it ignored. SDK users must recompile. Call this out at the top of the v1.3.0 CHANGELOG entry.
+- **Downgrading to v1.2 is not supported in place**, because migration 121 drops columns v1.2 reads. UPGRADING says to take a backup (`backup` tool or `armada backup`) before upgrading and to restore it to downgrade.
+- Still deprecated rather than removed: the `VesselConcurrencyLimit` enum value (read-only, for stored events) and architect `dependsOn` (read by the parser). Revisit both in v1.4.0.
 
 ## 17. Owner decisions (resolved 2026-10-27)
 
@@ -635,11 +649,11 @@ All open questions are answered. Build to these.
 | 1 | Sticky voyage slot while waiting for review (D9) | Yes, sticky. `LandingFailed` and `Blocked` release it. |
 | 2 | Standalone missions count against `MaxParallelVoyages` (D10) | Yes. |
 | 3 | Existing ApiEndpoint and Mux captains go to 4 on upgrade (D5) | Yes. Called out in UPGRADING. |
-| 4 | Ownership violation fails the Judge | No. Warning only in v1.2.0; revisit with stage-outcome data. |
-| 5 | Per-account concurrency cap | No. Recorded as a rejected idea in `DECISIONS.md`. |
+| 4 | Ownership violation fails the Judge | No. Warning only in v1.3.0; revisit with stage-outcome data. |
+| 5 | Per-account concurrency cap | No. Recorded as a rejected idea in `archive/DECISIONS.md`. |
 | 6 | Single CLI captain with default 1x4 vessel | Acceptable. The Pending mission's blocker must say why and how to change the limit (6.6). |
 | 7 | Numeric limits | `MaxCaptainConcurrency` 256 (default and ceiling), `MaxHierarchyDepth` 4, starvation warning 60 minutes. |
 | 8 | Restarting a parent | Always pulls its `ParentFailed` descendants back to Pending (D18, 7.3). |
 | 9 | Branches | A chain of missions may reuse one branch; parallel siblings fork (D16). |
-| 10 | Old fields | `AllowConcurrentMissions`, `CurrentMissionId` and `CurrentDockId` are removed in v1.2.0, not v1.3.0 (D3, D7, section 16). |
-| 11 | Order within v1.2.0 | Concurrency lands before captain usage management (section 12). |
+| 10 | Old fields | `AllowConcurrentMissions`, `CurrentMissionId` and `CurrentDockId` are removed in v1.3.0, not v1.4.0 (D3, D7, section 16). |
+| 11 | Order within v1.3.0 | Concurrency builds on usage management shipped in v1.2.0; preserve its migrations and scheduling (section 12). |

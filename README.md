@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Run a fleet of AI coding agents across all of your repositories: in parallel, isolated, reviewed, and on the record.</strong>
   <br />
-  <em>v1.2.0</em>
+  <em>v1.3.0 (in development)</em>
 </p>
 
 <p align="center">
@@ -147,6 +147,12 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 **When you do not need Armada:** a quick one-off edit in a single repository. Run the agent directly.
 
 ---
+
+## v1.3.0 development
+
+Work on [concurrency improvements](CONCURRENCY_IMPROVEMENTS.md) is underway on `feature/v1.3.0`. The first increment adds shared concurrency bounds, runtime-specific captain default helpers, and normalized settings-file configuration. The new captain slots, vessel voyage/mission gates, and mission hierarchy are not active yet; their implementation and migration checklist is tracked in the plan.
+
+This development branch identifies packages and images as v1.3.0. Those images have not been published by this change; use the v1.2.0 release for deployed environments until a v1.3.0 release is available.
 
 ## What's New in v1.2.0
 
@@ -871,7 +877,7 @@ Installing from source (above) is the path the project uses day to day. Release 
 | Windows | Harbor `.exe` (Inno Setup) and the Admiral server `.msi` (WiX) |
 | macOS | `Armada Harbor.app` in a `.dmg`, and the Admiral server `.pkg` |
 | Linux | `.deb` and `.rpm` packages for the CLI, Harbor, and the server |
-| Docker | Admiral, dashboard, and proxy images on Docker Hub (`jchristn77/armada-server`, `jchristn77/armada-dashboard`, `jchristn77/armada-proxy`; tags `v1.2.0` and `latest`). `docker/update.sh` or `docker/update.bat` pulls them and recreates the stack without touching its data |
+| Docker | Admiral, dashboard, and proxy images on Docker Hub (`jchristn77/armada-server`, `jchristn77/armada-dashboard`, `jchristn77/armada-proxy`; development tag `v1.3.0`; the published v1.2.0 release remains available). `docker/update.sh` or `docker/update.bat` pulls them and recreates the stack without touching its data |
 
 Each release carries a `SHA256SUMS` file. Installers are code-signed only when the release was built with signing credentials; an unsigned Windows installer shows a SmartScreen prompt ("More info", then "Run anyway"), and an unsigned macOS app or package must be allowed once in **System Settings > Privacy & Security** ("Open Anyway"). See [BUILDING_INSTALLERS.md](BUILDING_INSTALLERS.md).
 

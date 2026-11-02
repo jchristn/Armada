@@ -484,6 +484,16 @@ v1.0.0 is the first stable release: security hardening, a frozen and documented 
 
 **New settings worth reviewing:** `TransientOutageGraceMinutes` (default 10) and `BlockDependentsOfFailedStages` (default false; when true, the stages waiting on a failed stage show Blocked until it is restarted instead of being cancelled). Personas gain ordered captain priorities; an empty list keeps the 1.0 default-captain behavior. See [PIPELINES.md](PIPELINES.md) and [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md).
 
+### v1.2.0 to v1.3.0 (development)
+
+The `feature/v1.3.0` branch starts the [concurrency implementation](../CONCURRENCY_IMPROVEMENTS.md). This first increment adds no database migration and removes no fields. New captain slot limits, vessel voyage/mission limits and mission hierarchy are not enforced yet. Existing captain and vessel scheduling remains unchanged.
+
+The new `Concurrency` settings-file group carries defaults and bounds for later milestones. Setters clamp hard bounds; load/save normalizes captain defaults against `MaxCaptainConcurrency` independently of JSON property order. Negative vessel defaults clamp to 1; zero remains unlimited. The existing global `MaxConcurrentMissions` now clamps negative values to 1 and values over 10000 to 10000 instead of rejecting a negative settings file. Adjustment warnings name the supplied and effective values.
+
+The plan reserves migrations 117-121 after the v1.2.0 schema version 116. They have not been added in this increment. Before those migrations and breaking field removals land, this guide must document the verified backfills, usage-management integration and downgrade requirements. Do not apply the plan's unimplemented backfills manually.
+
+Packages and development compose files use version 1.3.0. These changes do not publish Docker images; continue deploying the v1.2.0 release until a v1.3.0 release is available.
+
 ### v1.1.0 to v1.2.0
 
 **Schema migrations run automatically; review usage capture settings after upgrading.** The new schema migrations (96 to 116, including 103 to 106 for the black box) run automatically at startup, with SQLite backed up first, and every new column has a default. Docker installs pull the `v1.2.0` images (`jchristn77/armada-server:v1.2.0`, `jchristn77/armada-dashboard:v1.2.0`, `jchristn77/armada-proxy:v1.2.0`): `git pull`, then `docker/update.sh` (or `docker\update.bat`). Update each Harbor along with the Admiral.

@@ -27612,6 +27612,66 @@
       "experimental": false
     },
     {
+      "key": "concurrency",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "concurrency.admissionLockTimeoutSeconds",
+      "type": "int",
+      "default": "30",
+      "experimental": false
+    },
+    {
+      "key": "concurrency.defaultCliCaptainMaxConcurrency",
+      "type": "int",
+      "default": "1",
+      "experimental": false
+    },
+    {
+      "key": "concurrency.defaultEndpointCaptainMaxConcurrency",
+      "type": "int",
+      "default": "4",
+      "experimental": false
+    },
+    {
+      "key": "concurrency.defaultVesselMaxParallelMissionsPerVoyage",
+      "type": "int",
+      "default": "4",
+      "experimental": false
+    },
+    {
+      "key": "concurrency.defaultVesselMaxParallelVoyages",
+      "type": "int",
+      "default": "1",
+      "experimental": false
+    },
+    {
+      "key": "concurrency.maxCaptainConcurrency",
+      "type": "int",
+      "default": "256",
+      "experimental": false
+    },
+    {
+      "key": "concurrency.maxHierarchyDepth",
+      "type": "int",
+      "default": "4",
+      "experimental": false
+    },
+    {
+      "key": "concurrency.starvationWarningMinutes",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "concurrency.waitIntervalRetentionDays",
+      "type": "int",
+      "default": "90",
+      "experimental": false
+    },
+    {
       "key": "dashboardPath",
       "type": "string",
       "default": "null",

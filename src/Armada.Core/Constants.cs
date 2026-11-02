@@ -20,7 +20,7 @@ namespace Armada.Core
         /// <summary>
         /// Product version.
         /// </summary>
-        public static readonly string ProductVersion = "1.2.0";
+        public static readonly string ProductVersion = "1.3.0";
 
         /// <summary>
         /// Environment variable that overrides the default data directory. When set to a non-empty path it is
@@ -133,6 +133,51 @@ namespace Armada.Core
         /// simultaneously. 0 means unlimited.
         /// </summary>
         public static readonly int DefaultMaxConcurrentMissions = 0;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int CaptainConcurrencyCeiling = 256;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int VesselConcurrencyCeiling = 1000;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int GlobalMissionConcurrencyCeiling = 10000;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int HierarchyDepthCeiling = 16;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int StarvationWarningMinutesCeiling = 10080;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int AdmissionLockTimeoutSecondsCeiling = 600;
+
+        /// <summary>Concurrency configuration hard ceiling.</summary>
+        public const int WaitIntervalRetentionDaysCeiling = 3650;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultVesselMaxParallelVoyages = 1;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultVesselMaxParallelMissionsPerVoyage = 4;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultCliCaptainMaxConcurrency = 1;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultEndpointCaptainMaxConcurrency = 4;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultMaxHierarchyDepth = 4;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultStarvationWarningMinutes = 60;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultAdmissionLockTimeoutSeconds = 30;
+
+        /// <summary>Concurrency configuration default.</summary>
+        public const int DefaultWaitIntervalRetentionDays = 90;
 
         /// <summary>
         /// Default maximum log file size in bytes (10 MB).

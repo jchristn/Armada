@@ -37,18 +37,27 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(Case("product_version_and_shared_build_props_match_v120", "ProductVersion and shared build props match v1.2.0", TestTags.Positive, () =>
+            cases.Add(Case("product_version_and_shared_build_props_match_v130", "ProductVersion and shared build props match v1.3.0", TestTags.Positive, () =>
             {
                 string repoRoot = FindRepositoryRoot();
                 string propsContents = File.ReadAllText(Path.Combine(repoRoot, "src", "Directory.Build.props"));
                 string helmProjectContents = File.ReadAllText(Path.Combine(repoRoot, "src", "Armada.Helm", "Armada.Helm.csproj"));
                 string dashboardPackageContents = File.ReadAllText(Path.Combine(repoRoot, "src", "Armada.Dashboard", "package.json"));
                 string dashboardLockContents = File.ReadAllText(Path.Combine(repoRoot, "src", "Armada.Dashboard", "package-lock.json"));
+                foreach (string project in new[] { "Armada.Mobile", "Armada.VSCode" })
+                {
+                    string manifest = ReadRepositoryFile("src", project, "package.json");
+                    string lockJson = ReadRepositoryFile("src", project, "package-lock.json");
+                    AssertEqual(Constants.ProductVersion, JsonHelper.Deserialize<NpmPackageVersionView>(manifest).Version, project + " package version");
+                    NpmPackageVersionView packageLock = JsonHelper.Deserialize<NpmPackageVersionView>(lockJson);
+                    AssertEqual(Constants.ProductVersion, packageLock.Version, project + " lock version");
+                    AssertEqual(Constants.ProductVersion, packageLock.Packages![""].Version, project + " lock root version");
+                }
                 MatchCollection versionMatches = Regex.Matches(propsContents, @"<Version>\s*([^<]+)\s*</Version>");
 
                 AssertTrue(versionMatches.Count == 1, "Directory.Build.props should contain exactly one Version element");
                 Match versionMatch = versionMatches[0];
-                AssertEqual("1.2.0", Constants.ProductVersion);
+                AssertEqual("1.3.0", Constants.ProductVersion);
                 AssertEqual(Constants.ProductVersion, versionMatch.Groups[1].Value.Trim());
                 AssertContains("<Version>" + Constants.ProductVersion + "</Version>", helmProjectContents, "Helm package version should align with the shared release version");
                 AssertEqual(Constants.ProductVersion, JsonHelper.Deserialize<NpmPackageVersionView>(dashboardPackageContents).Version, "Dashboard package.json should align with the shared release version");

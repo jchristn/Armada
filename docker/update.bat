@@ -28,7 +28,7 @@ echo ========================================
 
 echo.
 echo [1/4] Pulling the images named in the compose file...
-rem The compose files pin release tags (for example jchristn77/armada-server:v1.2.0); edit the tags to move
+rem The compose files pin release tags (for example jchristn77/armada-server:v1.3.0); edit the tags to move
 rem to another release before running this.
 docker compose -f "%COMPOSE_FILE%" pull
 if errorlevel 1 exit /b 1

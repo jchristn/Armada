@@ -1,3 +1,5 @@
+> The `feature/v1.3.0` branch is in development and pins compose images to `v1.3.0`. This documentation change does not publish those images. Use the v1.2.0 release checkout for the current published compose stack.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/jchristn/armada/main/assets/logo.png" alt="Armada Logo" width="200" />
 </p>
@@ -47,7 +49,7 @@ and a **dock** is the worktree a captain works in.
 | [`jchristn77/armada-dashboard`](https://hub.docker.com/r/jchristn77/armada-dashboard) | Standalone React dashboard served by nginx (unprivileged) | 8080 |
 | [`jchristn77/armada-proxy`](https://hub.docker.com/r/jchristn77/armada-proxy) | Armada.Proxy, a relay for reaching an Admiral that is not directly exposed | 7893 |
 
-Tags: `v1.2.0` and `latest`, multi-arch (`linux/amd64`, `linux/arm64/v8`). All three images run as non-root users
+Published release tags: `v1.2.0` and `latest`, multi-arch (`linux/amd64`, `linux/arm64/v8`). All three images run as non-root users
 (UID 1654 for the Admiral and proxy, 101 for the dashboard).
 
 Every image that serves HTTP includes `curl`, and the compose files define healthchecks that probe

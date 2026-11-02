@@ -4,6 +4,18 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## v1.3.0 (in development)
+
+### Concurrency foundation
+
+- Begin [captain slots, vessel voyage/mission limits, and mission hierarchy](CONCURRENCY_IMPROVEMENTS.md) on `feature/v1.3.0`.
+- Add shared numeric bounds and runtime-specific captain default helpers (CLI runtimes, including pi: 1; ApiEndpoint and Mux: 4). Add the `Concurrency` settings-file group, normalize cross-field defaults after JSON binding, and report adjusted values when loading or saving configuration.
+- Clamp the existing global `MaxConcurrentMissions` setting to 0..10000. Zero remains unlimited; negative values become 1 instead of preventing startup.
+- Align .NET projects, product version, Dashboard, Mobile, VS Code extension, and development compose tags to 1.3.0.
+- This is the first M1 increment. New database columns/backfills, multi-mission captain lifecycle, admission gates, hierarchy and their public client interfaces remain in progress. Existing captain/vessel behavior is preserved; no columns have been removed and no new database migration is added by this increment.
+
+---
+
 ## v1.2.0 (2026-10-29)
 
 ### Anchor features
