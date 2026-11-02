@@ -452,7 +452,7 @@ export default function Captains() {
       render: (c) => (
         <ActionMenu id={`captain-${c.id}`} items={[
           { label: 'View Detail', title: 'Open this captain\'s page with its state, settings, missions and log.', onClick: () => navigate(`/captains/${c.id}`) },
-          { label: 'View Usage', title: 'Open Activity > Token Usage > Overview to view usage over time.', onClick: () => navigate('/activity?source=tokens&tab=overview') },
+          { label: 'View Usage', title: 'Open Activity > Usage Overview to view usage over time.', onClick: () => navigate('/activity?source=usage-overview') },
           ...(canCaptainStartPlanning(c) ? [{ label: 'Start Planning', title: 'Open a planning session with this captain to break work into missions before dispatching. Reserves the captain while the session runs.', onClick: () => handleStartPlanning(c) }] : []),
           { label: 'Edit', title: 'Change this captain\'s name, runtime, model, tier, permissions and instructions.', onClick: () => openEdit(c) },
           { label: 'Duplicate', title: 'Create a new idle captain with a copy of this one\'s name, runtime, model, instructions, personas and runtime options, then open it.', onClick: () => void handleDuplicate(c) },

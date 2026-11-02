@@ -18,18 +18,11 @@ const PAGE_KEYS: Record<string, string[]> = {
     'Highest applicable account limit window for this captain, with its name and freshness. 75% and above is a warning, 90% and above is near the limit. A dash state never means zero usage.',
     'Usage shows the first account pages for these captains. Open a captain\'s usage section for every account.',
     'View Usage',
-    'Open Activity > Token Usage > Overview to view usage over time.',
+    'Open Activity > Usage Overview to view usage over time.',
   ],
-  'TokenUsage.tsx': [
-    'Overview',
-    'Limits',
-    'Token and account usage views',
-    'Armada-recorded tokens by time and model.',
-    'Account limit utilization and tokens recorded at completion on one time scale.',
-    'Current account limits grouped by account and host.',
-  ],
+  'Activity.tsx': ['Usage Overview', 'Account Limits'],
 };
-const pageSources = import.meta.glob(['../pages/Captains.tsx', '../pages/TokenUsage.tsx'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const pageSources = import.meta.glob(['../pages/Captains.tsx', '../pages/Activity.tsx'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 
 const S = "'((?:[^'\\\\]|\\\\.)*)'";
 const CALL = new RegExp(`\\bt\\(\\s*${S}`, 'g');

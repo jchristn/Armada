@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getUsageLatest, getUsageSeries } from '../../api/client';
 import { useLocale } from '../../context/LocaleContext';
@@ -36,7 +36,7 @@ interface FilterField {
 }
 
 /** Provider/account/host (and optionally window) filters kept in the URL. Draft values are never reset by a failed request. */
-function UsageFilterForm({ fields, series = [] }: { fields: FilterField[]; series?: UsageSeries[] }) {
+function UsageFilterForm({ fields, series = [], children }: { fields: FilterField[]; series?: UsageSeries[]; children?: ReactNode }) {
   const { t } = useLocale();
   const [params, setParams] = useSearchParams();
   const revision = useUsageRevision();
@@ -110,6 +110,7 @@ function UsageFilterForm({ fields, series = [] }: { fields: FilterField[]; serie
 
   return (
     <form className="usage-filter-form" onSubmit={apply} aria-label={t('Usage filters')}>
+      {children}
       {fields.map((field) => (
         <label key={field.param} className="usage-filter-field" title={t(field.title)}>
           <span>{t(field.label)}</span>
@@ -249,7 +250,7 @@ export function UsageOverviewTab() {
 
   return (
     <div className="usage-overview">
-      <div className="usage-toolbar">
+      <UsageFilterForm fields={OVERVIEW_FIELDS} series={[...state.limits, ...state.tokens]}>
         <label className="usage-filter-field" title={t('Time range of both panels. 24 hours uses 5-minute buckets, 7 days hourly and 30 days 6-hour buckets.')}>
           <span>{t('Range')}</span>
           <select value={range.value} onChange={(e) => setParam('range', e.target.value === USAGE_RANGES[0].value ? null : e.target.value)}>
@@ -264,8 +265,7 @@ export function UsageOverviewTab() {
             <option value="tokens">{t('Tokens only')}</option>
           </select>
         </label>
-      </div>
-      <UsageFilterForm fields={OVERVIEW_FIELDS} series={[...state.limits, ...state.tokens]} />
+      </UsageFilterForm>
 
       {state.status === 'error' && (
         <div className="usage-overview-error">

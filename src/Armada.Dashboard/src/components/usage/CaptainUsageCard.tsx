@@ -18,7 +18,7 @@ interface CaptainUsageCardProps {
 
 /** Provider history link for one account, with the account/host filters preserved in the URL. */
 export function usageHistoryPath(view: UsageSnapshotView): string {
-  const params = new URLSearchParams({ tab: 'limits' });
+  const params = new URLSearchParams({ source: 'usage-limits' });
   if (view.provider) params.set('provider', view.provider);
   if (view.accountKey) params.set('accountKey', view.accountKey);
   if (view.hostId) params.set('hostId', view.hostId);
@@ -95,7 +95,7 @@ const CaptainUsageCard = forwardRef<HTMLElement, CaptainUsageCardProps>(function
             )}
             <div className="usage-history-row">
               <UsageSparkline view={view} historyPath={usageHistoryPath(view)} />
-              <Link to={usageHistoryPath(view)} className="usage-history-link" title={t('Open the Limits tab filtered to this account and host.')}>{t('Provider history')}</Link>
+              <Link to={usageHistoryPath(view)} className="usage-history-link" title={t('Open Account Limits filtered to this account and host.')}>{t('Provider history')}</Link>
             </div>
           </div>
         );

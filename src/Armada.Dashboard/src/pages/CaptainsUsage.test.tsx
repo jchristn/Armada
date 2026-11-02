@@ -145,7 +145,7 @@ describe('Captains usage column and View Usage action', () => {
       await screen.findByText(name);
       await userEvent.click(within(row(name)).getByRole('button', { name: 'Actions' }));
       await userEvent.click(await screen.findByRole('menuitem', { name: 'View Usage' }));
-      expect(await screen.findByTestId('detail')).toHaveTextContent('/activity?source=tokens&tab=overview');
+      expect(await screen.findByTestId('detail')).toHaveTextContent('/activity?source=usage-overview');
     });
   }
 
@@ -161,7 +161,7 @@ describe('Captains usage column and View Usage action', () => {
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'View Usage' })).toHaveFocus();
     await user.keyboard('{Enter}');
-    expect(await screen.findByTestId('detail')).toHaveTextContent('/activity?source=tokens&tab=overview');
+    expect(await screen.findByTestId('detail')).toHaveTextContent('/activity?source=usage-overview');
   });
 
   it('labels the action exactly View Usage in English', async () => {

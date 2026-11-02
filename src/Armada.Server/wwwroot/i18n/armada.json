@@ -7343,7 +7343,11 @@
         "{{count}}-minute limit": "Límite de {{count}} minutos",
         "{{percent}} used": "{{percent}} usado",
         "Weekly": "Semanal",
-        "Open Activity > Token Usage > Overview to view usage over time.": "Abre Actividad > Uso de tokens > Resumen para ver el uso a lo largo del tiempo."
+        "Open Activity > Token Usage > Overview to view usage over time.": "Abre Actividad > Uso de tokens > Resumen para ver el uso a lo largo del tiempo.",
+        "Usage Overview": "Resumen de uso",
+        "Account Limits": "Límites de cuenta",
+        "Open Activity > Usage Overview to view usage over time.": "Abre Actividad > Resumen de uso para ver el uso a lo largo del tiempo.",
+        "Open Account Limits filtered to this account and host.": "Abre Límites de cuenta filtrados por esta cuenta y este host."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -13634,7 +13638,11 @@
         "{{count}}-minute limit": "{{count}} 分钟限额",
         "{{percent}} used": "已使用 {{percent}}",
         "Weekly": "每周",
-        "Open Activity > Token Usage > Overview to view usage over time.": "打开活动 > 令牌用量 > 概览，查看用量随时间的变化。"
+        "Open Activity > Token Usage > Overview to view usage over time.": "打开活动 > 令牌用量 > 概览，查看用量随时间的变化。",
+        "Usage Overview": "用量概览",
+        "Account Limits": "账户限额",
+        "Open Activity > Usage Overview to view usage over time.": "打开活动 > 用量概览，查看用量随时间的变化。",
+        "Open Account Limits filtered to this account and host.": "打开按此账户和主机筛选的账户限额。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -19888,7 +19896,11 @@
         "{{count}}-minute limit": "{{count}} 分鐘限額",
         "{{percent}} used": "已使用 {{percent}}",
         "Weekly": "每週",
-        "Open Activity > Token Usage > Overview to view usage over time.": "開啟活動 > 權杖用量 > 概覽，查看用量隨時間的變化。"
+        "Open Activity > Token Usage > Overview to view usage over time.": "開啟活動 > 權杖用量 > 概覽，查看用量隨時間的變化。",
+        "Usage Overview": "用量概覽",
+        "Account Limits": "帳戶限額",
+        "Open Activity > Usage Overview to view usage over time.": "開啟活動 > 用量概覽，查看用量隨時間的變化。",
+        "Open Account Limits filtered to this account and host.": "開啟依此帳戶和主機篩選的帳戶限額。"
       },
       "sections": {}
     },
@@ -26102,7 +26114,11 @@
         "{{count}}-minute limit": "{{count}} 分鐘限額",
         "{{percent}} used": "已用 {{percent}}",
         "Weekly": "每週",
-        "Open Activity > Token Usage > Overview to view usage over time.": "開啟活動 > Token 用量 > 概覽，查看用量隨時間嘅變化。"
+        "Open Activity > Token Usage > Overview to view usage over time.": "開啟活動 > Token 用量 > 概覽，查看用量隨時間嘅變化。",
+        "Usage Overview": "用量概覽",
+        "Account Limits": "帳戶限額",
+        "Open Activity > Usage Overview to view usage over time.": "開啟活動 > 用量概覽，查看用量隨時間嘅變化。",
+        "Open Account Limits filtered to this account and host.": "開啟按呢個帳戶同主機篩選嘅帳戶限額。"
       },
       "sections": {}
     },
@@ -32332,7 +32348,11 @@
         "{{count}}-minute limit": "{{count}}分間の上限",
         "{{percent}} used": "{{percent}} 使用済み",
         "Weekly": "週間",
-        "Open Activity > Token Usage > Overview to view usage over time.": "アクティビティ > トークン使用量 > 概要を開き、使用量の推移を表示します。"
+        "Open Activity > Token Usage > Overview to view usage over time.": "アクティビティ > トークン使用量 > 概要を開き、使用量の推移を表示します。",
+        "Usage Overview": "使用量の概要",
+        "Account Limits": "アカウントの上限",
+        "Open Activity > Usage Overview to view usage over time.": "アクティビティ > 使用量の概要を開き、使用量の推移を表示します。",
+        "Open Account Limits filtered to this account and host.": "このアカウントとホストで絞り込んだアカウントの上限を開きます。"
       },
       "sections": {}
     },
@@ -38553,7 +38573,11 @@
         "{{count}}-minute limit": "{{count}}-Minuten-Limit",
         "{{percent}} used": "{{percent}} genutzt",
         "Weekly": "Wöchentlich",
-        "Open Activity > Token Usage > Overview to view usage over time.": "Aktivität > Token-Nutzung > Übersicht öffnen, um die Nutzung im Zeitverlauf anzuzeigen."
+        "Open Activity > Token Usage > Overview to view usage over time.": "Aktivität > Token-Nutzung > Übersicht öffnen, um die Nutzung im Zeitverlauf anzuzeigen.",
+        "Usage Overview": "Nutzungsübersicht",
+        "Account Limits": "Kontolimits",
+        "Open Activity > Usage Overview to view usage over time.": "Aktivität > Nutzungsübersicht öffnen, um die Nutzung im Zeitverlauf anzuzeigen.",
+        "Open Account Limits filtered to this account and host.": "Kontolimits nach diesem Konto und Host gefiltert öffnen."
       },
       "sections": {}
     },
@@ -44774,7 +44798,11 @@
         "{{count}}-minute limit": "Limite sur {{count}} minutes",
         "{{percent}} used": "{{percent}} utilisé",
         "Weekly": "Hebdomadaire",
-        "Open Activity > Token Usage > Overview to view usage over time.": "Ouvrir Activité > Utilisation des jetons > Vue d’ensemble pour voir l’utilisation au fil du temps."
+        "Open Activity > Token Usage > Overview to view usage over time.": "Ouvrir Activité > Utilisation des jetons > Vue d’ensemble pour voir l’utilisation au fil du temps.",
+        "Usage Overview": "Vue d’ensemble de l’utilisation",
+        "Account Limits": "Limites du compte",
+        "Open Activity > Usage Overview to view usage over time.": "Ouvrir Activité > Vue d’ensemble de l’utilisation pour voir l’utilisation au fil du temps.",
+        "Open Account Limits filtered to this account and host.": "Ouvrir les limites filtrées pour ce compte et cet hôte."
       },
       "sections": {}
     },
@@ -50995,7 +51023,11 @@
         "{{count}}-minute limit": "Limite di {{count}} minuti",
         "{{percent}} used": "{{percent}} utilizzato",
         "Weekly": "Settimanale",
-        "Open Activity > Token Usage > Overview to view usage over time.": "Apri Attività > Utilizzo dei token > Panoramica per visualizzare l’utilizzo nel tempo."
+        "Open Activity > Token Usage > Overview to view usage over time.": "Apri Attività > Utilizzo dei token > Panoramica per visualizzare l’utilizzo nel tempo.",
+        "Usage Overview": "Panoramica utilizzo",
+        "Account Limits": "Limiti account",
+        "Open Activity > Usage Overview to view usage over time.": "Apri Attività > Panoramica utilizzo per visualizzare l’utilizzo nel tempo.",
+        "Open Account Limits filtered to this account and host.": "Apri i limiti filtrati per questo account e host."
       },
       "sections": {}
     }

@@ -1,7 +1,12 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import TokenUsage from './TokenUsage';
+import Activity from './Activity';
+vi.mock('./History', () => ({ default: () => <div>History</div> }));
+vi.mock('./RequestHistory', () => ({ default: () => null }));
+vi.mock('./Events', () => ({ default: () => null }));
+vi.mock('./Signals', () => ({ default: () => null }));
+vi.mock('./Jobs', () => ({ default: () => null }));
 import { getTokenUsage, getUsageLatest, getUsageMissions, getUsageSeries, listCaptains } from '../api/client';
 import type { UsageSeriesPoint, UsageSeriesResult } from '../types/models';
 
@@ -48,7 +53,7 @@ function Where() {
 }
 
 function renderAt(url: string) {
-  return render(<MemoryRouter initialEntries={[url]}><Routes><Route path="/activity" element={<><TokenUsage /><Where /></>} /></Routes></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={[url]}><Routes><Route path="/activity" element={<><Activity /><Where /></>} /></Routes></MemoryRouter>);
 }
 
 describe('Token usage tabs', () => {
@@ -61,16 +66,27 @@ describe('Token usage tabs', () => {
     vi.mocked(getUsageLatest).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 25, totalPages: 1, totalRecords: 0, objects: [], totalMs: 1 });
   });
 
-  it('defaults to the existing Tokens charts and keeps the tab in the URL', async () => {
-    renderAt('/activity');
-    expect(screen.getByRole('tab', { name: 'Tokens' })).toHaveAttribute('aria-selected', 'true');
-    await waitFor(() => expect(screen.getByText('Usage by model')).toBeInTheDocument());
+  it('uses one Activity tab row for all usage views', async () => {
+    renderAt('/activity?source=tokens');
+    await screen.findByText('Usage by model');
+    expect(screen.getAllByRole('tablist')).toHaveLength(1);
     expect(getUsageSeries).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
-    expect(screen.getByTestId('where')).toHaveTextContent('tab=overview');
-    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
-    fireEvent.keyDown(screen.getByRole('tab', { name: 'Overview' }), { key: 'ArrowRight' });
-    expect(screen.getByTestId('where')).toHaveTextContent('tab=limits');
+    fireEvent.click(screen.getByRole('tab', { name: 'Usage Overview' }));
+    await screen.findByRole('combobox', { name: 'Range' });
+    expect(screen.getByTestId('where')).toHaveTextContent('source=usage-overview');
+    expect(screen.getAllByRole('tablist')).toHaveLength(1);
+    expect(screen.getByRole('combobox', { name: 'Range' }).closest('form')).toBe(screen.getByRole('combobox', { name: 'Window' }).closest('form'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Account Limits' }));
+    await screen.findByRole('combobox', { name: 'Provider' });
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('source=usage-limits'));
+  });
+
+  it('preserves legacy nested-tab links and their filters', async () => {
+    renderAt('/activity?source=tokens&tab=overview&provider=anthropic');
+    await screen.findByRole('combobox', { name: 'Window' });
+    expect(screen.getByTestId('where')).toHaveTextContent('source=usage-overview');
+    expect(screen.getByTestId('where')).toHaveTextContent('provider=anthropic');
+    expect(screen.getByTestId('where')).not.toHaveTextContent('tab=');
   });
 
   it('keeps the range in the URL and drills into exactly the selected bucket', async () => {

@@ -1,4 +1,5 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Tabs, { type TabDef } from '../components/shared/Tabs';
 
 const History = lazy(() => import('./History'));
@@ -6,6 +7,8 @@ const RequestHistory = lazy(() => import('./RequestHistory'));
 const Events = lazy(() => import('./Events'));
 const Signals = lazy(() => import('./Signals'));
 const TokenUsage = lazy(() => import('./TokenUsage'));
+const UsageOverview = lazy(() => import('../components/usage/UsageActivityTabs').then((module) => ({ default: module.UsageOverviewTab })));
+const AccountLimits = lazy(() => import('../components/usage/UsageActivityTabs').then((module) => ({ default: module.UsageLimitsTab })));
 const Jobs = lazy(() => import('./Jobs'));
 
 function panel(node: ReactNode): ReactNode {
@@ -23,12 +26,26 @@ function panel(node: ReactNode): ReactNode {
  * redirects there).
  */
 export default function Activity() {
+  const [params, setParams] = useSearchParams();
+  // Preserve bookmarks from the former nested usage tabs.
+  const source = params.get('source');
+  const legacyTab = params.get('tab');
+  useEffect(() => {
+    if ((!source || source === 'tokens') && (legacyTab === 'overview' || legacyTab === 'limits')) {
+      const next = new URLSearchParams(params);
+      next.set('source', legacyTab === 'overview' ? 'usage-overview' : 'usage-limits');
+      next.delete('tab');
+      setParams(next, { replace: true });
+    }
+  }, [source, legacyTab, params, setParams]);
   const tabs: TabDef[] = [
     { key: 'history', label: 'All Activity', tooltip: 'One timeline of everything that happened: missions, voyages, merges, deployments, and more.', render: () => panel(<History />) },
     { key: 'requests', label: 'API Requests', tooltip: 'REST API requests the server received, with method, path, status, and timing.', render: () => panel(<RequestHistory />) },
     { key: 'events', label: 'Events', tooltip: 'The server\'s event log: state changes such as missions starting, finishing, or failing.', render: () => panel(<Events />) },
     { key: 'signals', label: 'Signals', tooltip: 'Messages sent between the Admiral and captains.', render: () => panel(<Signals />) },
     { key: 'tokens', label: 'Token Usage', tooltip: 'Model tokens and cost used by captains, by day, captain, vessel, and model.', render: () => panel(<TokenUsage />) },
+    { key: 'usage-overview', label: 'Usage Overview', render: () => panel(<UsageOverview />) },
+    { key: 'usage-limits', label: 'Account Limits', render: () => panel(<AccountLimits />) },
     { key: 'jobs', label: 'Jobs', tooltip: 'Background jobs such as vessel imports and health checks, with their status, progress, and Cancel.', render: () => panel(<Jobs />) },
   ];
 
