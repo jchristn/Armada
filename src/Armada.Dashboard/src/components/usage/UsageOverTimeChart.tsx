@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocale } from '../../context/LocaleContext';
 import { usageWindowLabel } from '../../lib/usageWindowLabel';
 import type { UsageSeries, UsageSeriesPoint } from '../../types/models';
@@ -100,6 +101,28 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
   const { t, formatDateTime } = useLocale();
   const [cursor, setCursor] = useState<Record<PanelKind, { s: number; b: number }>>({ limits: { s: 0, b: 0 }, tokens: { s: 0, b: 0 } });
   const [showTable, setShowTable] = useState(false);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; label: string } | null>(null);
+  const tooltipId = useId();
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0 });
+  useLayoutEffect(() => {
+    if (!tooltip || !tooltipRef.current) return;
+    const bounds = tooltipRef.current.getBoundingClientRect();
+    setTooltipPosition({
+      left: Math.max(8, Math.min(tooltip.x + 14, window.innerWidth - bounds.width - 8)),
+      top: Math.max(8, Math.min(tooltip.y + 14, window.innerHeight - bounds.height - 8)),
+    });
+  }, [tooltip]);
+  useEffect(() => { setTooltip(null); }, [limits, fromUtc, toUtc, show]);
+  useEffect(() => {
+    const dismiss = () => setTooltip(null);
+    window.addEventListener('scroll', dismiss, true);
+    window.addEventListener('resize', dismiss);
+    return () => {
+      window.removeEventListener('scroll', dismiss, true);
+      window.removeEventListener('resize', dismiss);
+    };
+  }, []);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const pendingFocus = useRef<string | null>(null);
 
@@ -167,6 +190,7 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
   };
 
   const onKeyDown = (kind: PanelKind, list: UsageSeries[]) => (event: KeyboardEvent<SVGGElement>) => {
+    if (event.key === 'Escape') { setTooltip(null); return; }
     if (list.length === 0) return;
     const current = cursor[kind];
     const series = list[Math.min(current.s, list.length - 1)];
@@ -229,6 +253,16 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
 
   const limitResets = useMemo(() => limits.map((series) => limitSegments(series.points)), [limits]);
 
+  const nearestPoint = (event: MouseEvent<SVGPolylineElement>, series: UsageSeries, segment: number[]): number => {
+    const bounds = event.currentTarget.ownerSVGElement!.getBoundingClientRect();
+    const chartX = ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * WIDTH;
+    return segment.reduce((nearest, index) => {
+      const center = (i: number) => (x(series.points[i].bucketStartUtc) + x(series.points[i].bucketEndUtc)) / 2;
+      return Math.abs(center(index) - chartX) < Math.abs(center(nearest) - chartX) ? index : nearest;
+    }, segment[0]);
+  };
+
+
   const limitsPanel = () => {
     const plotHeight = LIMITS_HEIGHT - PAD_TOP - PAD_BOTTOM;
     const y = (percent: number) => PAD_TOP + plotHeight - (Math.max(0, Math.min(100, percent)) / 100) * plotHeight;
@@ -268,10 +302,9 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
                       stroke={color}
                       fill="none"
                       strokeDasharray={estimated ? '5 4' : undefined}
-                      onClick={() => {
-                        const p = series.points[segment[segment.length - 1]];
-                        choose(series, p, 'limits');
-                      }}
+                      onMouseMove={(event) => setTooltip({ x: event.clientX, y: event.clientY, label: markLabel(series, nearestPoint(event, series, segment), 'limits', new Set(resets)) })}
+                      onMouseLeave={() => setTooltip(null)}
+                      onClick={(event) => choose(series, series.points[nearestPoint(event, series, segment)], 'limits')}
                     />
                   ))}
                   {resets.map((i) => {
@@ -296,24 +329,28 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
                   const cy = known ? y(point.lastPercent as number) : LIMITS_HEIGHT - PAD_BOTTOM;
                   const label = markLabel(series, b, 'limits', resets);
                   return (
-                    <circle
+                    <g
                       key={`${s}-${b}`}
                       data-mark={`limits-${s}-${b}`}
                       className={`usage-chart-hit${known ? '' : ' usage-chart-hit-gap'}${point.estimated ? ' usage-chart-hit-estimated' : ''}`}
-                      cx={cx}
-                      cy={cy}
-                      r={known ? 3.5 : 3}
-                      stroke={color}
-                      fill={known && !point.estimated ? color : 'transparent'}
                       role="button"
                       tabIndex={tabIndexFor('limits', s, b, limits)}
                       aria-label={label}
                       aria-pressed={sameSelection(selected, series, point, 'limits')}
-                      onFocus={() => setCursor((prev) => (prev.limits.s === s && prev.limits.b === b ? prev : { ...prev, limits: { s, b } }))}
+                      aria-describedby={tooltip?.label === label ? tooltipId : undefined}
+                      onMouseMove={(event) => setTooltip({ x: event.clientX, y: event.clientY, label })}
+                      onMouseLeave={() => setTooltip(null)}
+                      onBlur={() => setTooltip(null)}
+                      onFocus={(event) => {
+                        setCursor((prev) => (prev.limits.s === s && prev.limits.b === b ? prev : { ...prev, limits: { s, b } }));
+                        const bounds = event.currentTarget.getBoundingClientRect();
+                        setTooltip({ x: bounds.left + bounds.width / 2, y: bounds.bottom, label });
+                      }}
                       onClick={() => choose(series, point, 'limits')}
                     >
-                      <title>{label}</title>
-                    </circle>
+                      <circle className="usage-chart-point" cx={cx} cy={cy} r={known ? 1.25 : 1} stroke={color} fill={known && !point.estimated ? color : 'transparent'} />
+                      <circle className="usage-chart-point-target" cx={cx} cy={cy} r={7} fill="transparent" stroke="none" />
+                    </g>
                   );
                 });
               })}
@@ -420,6 +457,10 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
   return (
     <div className="usage-chart" ref={rootRef}>
       <p className="text-dim usage-chart-help">{t('Select a point, a bar or a row in the data table to list the missions completed in that bucket. Use the arrow keys to move between buckets and Enter to select.')}</p>
+      {tooltip && createPortal(
+        <div ref={tooltipRef} id={tooltipId} role="tooltip" className="usage-chart-tooltip" style={tooltipPosition}>{tooltip.label}</div>,
+        document.body,
+      )}
       {show !== 'tokens' && limitsPanel()}
       {show !== 'limits' && tokensPanel()}
       <button type="button" className="btn btn-sm usage-chart-table-toggle" aria-expanded={showTable} onClick={() => setShowTable((v) => !v)} title={t('Show every bucket of the chart as a table.')}>

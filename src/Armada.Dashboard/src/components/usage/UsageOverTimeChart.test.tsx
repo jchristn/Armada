@@ -128,4 +128,42 @@ describe('UsageOverTimeChart', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show chart data table' }));
     expect(within(screen.getByRole('table')).getByText('Estimated')).toBeInTheDocument();
   });
+  it('shows sample details on hover and keyboard focus and dismisses the tooltip', () => {
+    const { container, rerender } = render(<UsageOverTimeChart limits={[limitSeries('acct_hover', 'host_a', [point(0, 42)])]} tokens={[]} fromUtc={FROM} toUtc={TO} onSelectBucket={vi.fn()} />);
+    const mark = container.querySelector('[data-mark="limits-0-0"]')!;
+    fireEvent.mouseMove(mark, { clientX: 200, clientY: 120 });
+    expect(screen.getByRole('tooltip')).toHaveTextContent('acct_hover on host_a');
+    expect(screen.getByRole('tooltip')).toHaveTextContent('42%');
+    expect(screen.getByRole('tooltip')).toHaveTextContent(hour(0));
+    expect(mark).toHaveAttribute('aria-describedby', screen.getByRole('tooltip').id);
+    fireEvent.mouseLeave(mark);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    fireEvent.focus(mark);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('42%');
+    fireEvent.keyDown(mark, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    fireEvent.mouseMove(mark, { clientX: 200, clientY: 120 });
+    fireEvent.scroll(window);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    fireEvent.mouseMove(mark, { clientX: 200, clientY: 120 });
+    rerender(<UsageOverTimeChart limits={[]} tokens={[]} fromUtc={FROM} toUtc={TO} onSelectBucket={vi.fn()} />);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('uses the nearest bucket when hovering or clicking the line', () => {
+    const onSelect = vi.fn();
+    const { container } = render(<UsageOverTimeChart limits={[limitSeries('acct_line', 'host_a', [point(0, 10), point(1, 20), point(2, 30)])]} tokens={[]} fromUtc={FROM} toUtc={TO} onSelectBucket={onSelect} />);
+    const svg = container.querySelector('svg')!;
+    vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 800, height: 190, right: 800, bottom: 190, x: 0, y: 0, toJSON: () => ({}) });
+    const line = container.querySelector('polyline.usage-line-segment')!;
+    fireEvent.mouseMove(line, { clientX: 115, clientY: 100 });
+    expect(screen.getByRole('tooltip')).toHaveTextContent('10%');
+    fireEvent.click(line, { clientX: 115, clientY: 100 });
+    expect(onSelect).toHaveBeenLastCalledWith(expect.objectContaining({ bucketStartUtc: hour(0), bucketEndUtc: hour(1) }));
+    fireEvent.mouseMove(line, { clientX: 235, clientY: 100 });
+    expect(screen.getByRole('tooltip')).toHaveTextContent('20%');
+    fireEvent.mouseLeave(line);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
 });
