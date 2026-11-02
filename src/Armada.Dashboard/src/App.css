@@ -9741,6 +9741,7 @@ a.btn:hover { text-decoration: none; }
 .tag.admin { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
 
 .evaluation-detail { min-width: 0; }
+.evaluation-detail .page-header h2 { overflow-wrap: anywhere; }
 .evaluation-detail-fields {
     padding: 1rem 1.25rem;
     border: 1px solid var(--border);
@@ -9748,8 +9749,34 @@ a.btn:hover { text-decoration: none; }
     background: var(--bg-card);
     margin-bottom: 1.25rem;
     align-items: baseline;
+    display: grid;
+    grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr) minmax(7rem, 10rem) minmax(0, 1fr);
+    gap: 0.85rem 1.25rem;
 }
-.evaluation-detail > h3 { margin: 1.25rem 0 0.65rem; }
+.evaluation-detail-fields dt { font-size: 0.8rem; color: var(--text-dim); }
+.evaluation-detail-fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.evaluation-section { margin: 1.25rem 0; padding: 1.25rem; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.evaluation-section > h3 { margin: 0 0 1rem; font-size: 1rem; }
+.evaluation-section .model-evaluation-report { padding: 0; border: 0; gap: 0.85rem; }
+.evaluation-section .model-evaluation-report > strong { margin-top: 0.5rem; }
+.evaluation-section .model-evaluation-personas { padding: 0; margin: 0; }
+.evaluation-empty { margin: 0; font-size: 0.85rem; }
+.evaluation-battery-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+.evaluation-section .data-table td, .evaluation-section .data-table tbody th { vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
+.evaluation-section .data-table tbody th { text-align: left; font-size: 0.85rem; font-weight: 600; text-transform: none; letter-spacing: normal; }
+.evaluation-probes-table { table-layout: fixed; width: 100%; }
+.evaluation-probes-table th:first-child { width: 24%; }
+.evaluation-probes-table thead th:nth-child(2) { width: 18%; }
+.evaluation-probes-table td:last-child { white-space: pre-wrap; line-height: 1.6; }
+.evaluation-section details { margin-top: 0.5rem; }
+.evaluation-section summary { cursor: pointer; color: var(--accent); font-size: 0.82rem; }
+@media (max-width: 1000px) {
+    .evaluation-detail-fields { grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+    .evaluation-section { padding: 0.85rem; }
+    .evaluation-probes-table { min-width: 30rem; }
+}
 .evaluation-table-wrap { min-width: 0; max-width: 100%; }
 .evaluation-table-wrap pre {
     max-height: 24rem;

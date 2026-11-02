@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiErrorMessage, listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, enumerateModelEndpoints, evaluateCaptain, setCaptainCliPermissionPolicy } from '../api/client';
 import { listAll } from '../api/paging';
 import type { ModelEndpoint, ModelEvaluationOptions, ModelProbeDepth } from '../types/models';
@@ -20,7 +20,7 @@ import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
-import { evaluationResultsPath } from '../lib/evaluationLinks';
+import { evaluationResultsPath, evaluationsListPath } from '../lib/evaluationLinks';
 import { useAuth } from '../context/AuthContext';
 import CliPermissionPolicySelect from '../components/cliPermissions/CliPermissionPolicySelect';
 import { canCaptainStartPlanning } from '../lib/captains';
@@ -337,7 +337,7 @@ export default function Captains() {
       setEvaluateTarget(null);
       pushToast('success', t('Evaluation {{runId}} started for captain "{{name}}".', { runId: run.id, name: captain.name }),
         { label: t('View results'), to: evaluationResultsPath(run.id) });
-      navigate(`/captains/${encodeURIComponent(captain.id)}?evaluationRun=${encodeURIComponent(run.id)}`);
+      navigate(evaluationResultsPath(run.id));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('Evaluate failed.'));
     } finally {
@@ -439,6 +439,10 @@ export default function Captains() {
       render: (c) => <CaptainUsageCell captain={c} views={usage.byCaptain.get(c.id)} status={usage.status} />,
     },
     {
+      key: 'evaluations', label: t('Evaluations'), headerTitle: t('All evaluations of this captain'), interactive: true,
+      render: (c) => <Link to={evaluationsListPath(c.id)}>{t('Evaluations')}</Link>,
+    },
+    {
       key: 'heartbeat', label: t('Heartbeat'), headerTitle: t('When the captain last produced agent output. If it stops advancing while the captain is Working, the captain may be stalled. Hover a value for the exact time.'), cellClassName: 'text-dim cell-nowrap', cellTitle: (c) => formatDateTime(c.lastHeartbeatUtc),
       render: (c) => formatRelativeTime(c.lastHeartbeatUtc),
     },
@@ -453,11 +457,12 @@ export default function Captains() {
         <ActionMenu id={`captain-${c.id}`} items={[
           { label: 'View Detail', title: 'Open this captain\'s page with its state, settings, missions and log.', onClick: () => navigate(`/captains/${c.id}`) },
           { label: 'View Usage', title: 'Open Activity > Usage Overview to view usage over time.', onClick: () => navigate('/activity?source=usage-overview') },
+          { label: 'Evaluations', title: 'All evaluations of this captain', onClick: () => navigate(evaluationsListPath(c.id)) },
           ...(canCaptainStartPlanning(c) ? [{ label: 'Start Planning', title: 'Open a planning session with this captain to break work into missions before dispatching. Reserves the captain while the session runs.', onClick: () => handleStartPlanning(c) }] : []),
           { label: 'Edit', title: 'Change this captain\'s name, runtime, model, tier, permissions and instructions.', onClick: () => openEdit(c) },
           { label: 'Duplicate', title: 'Create a new idle captain with a copy of this one\'s name, runtime, model, instructions, personas and runtime options, then open it.', onClick: () => void handleDuplicate(c) },
           { label: 'View Tools', title: 'Show the MCP servers and tools this captain\'s runtime can reach, checked live where Armada can.', onClick: () => void handleViewTools(c) },
-          ...(canEvaluate ? [{ label: 'Evaluate', title: 'Evaluate this captain through its own runtime: Quick probes, or Full with the fixture battery and an evaluator captain\'s grading. Opens the captain\'s page to follow the run. Advisory only.', onClick: () => setEvaluateTarget(c) }] : []),
+          ...(canEvaluate ? [{ label: 'Evaluate', title: 'Start evaluation', onClick: () => setEvaluateTarget(c) }] : []),
           { label: 'View JSON', title: 'Show this captain\'s full record as JSON, as the API returns it.', onClick: () => setJsonData({ open: true, title: `${t('Captain')}: ${c.name}`, data: c }) },
           { label: 'View Notifications', title: 'Open the inbox of items waiting on a person, such as reviews, failures and stalled captains.', onClick: () => navigate('/inbox') },
           { label: 'Stop', title: 'Kill the captain\'s process and return it to Idle. A mission it is running is marked Failed and its dock is reclaimed. You confirm first.', onClick: () => handleStop(c.id, c.name) },

@@ -47,6 +47,8 @@ function renderCaptains() {
       <Routes>
         <Route path="/captains" element={<Captains />} />
         <Route path="/captains/:id" element={<DetailProbe />} />
+        <Route path="/evaluations" element={<DetailProbe />} />
+        <Route path="/evaluations/:id" element={<DetailProbe />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -64,7 +66,7 @@ describe('Captains Evaluate row action', () => {
     vi.mocked(evaluateCaptain).mockReset().mockResolvedValue({ id: 'mpr_42', status: 'Queued' } as unknown as ModelProbeRun);
   });
 
-  it('opens the Evaluate dialog, starts the run and opens the captain page with the run id', async () => {
+  it('opens the Evaluate dialog, starts the run and opens its results page', async () => {
     renderCaptains();
     await screen.findByText('claude-one');
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
@@ -79,7 +81,7 @@ describe('Captains Evaluate row action', () => {
     await waitFor(() => expect(start).not.toBeDisabled());
     fireEvent.click(start);
 
-    expect(await screen.findByText('detail at /captains/cpt_1?evaluationRun=mpr_42')).toBeInTheDocument();
+    expect(await screen.findByText('detail at /evaluations/mpr_42')).toBeInTheDocument();
     expect(evaluateCaptain).toHaveBeenCalledTimes(1);
     expect(evaluateCaptain).toHaveBeenCalledWith('cpt_1', 'Quick', {});
     expect(pushToast).toHaveBeenCalledWith('success', 'Evaluation mpr_42 started for captain "claude-one".', { label: 'View results', to: '/evaluations/mpr_42' });
@@ -97,7 +99,7 @@ describe('Captains Evaluate row action', () => {
     await waitFor(() => expect(start).not.toBeDisabled());
     fireEvent.click(start);
 
-    await screen.findByText('detail at /captains/cpt_1?evaluationRun=mpr_42');
+    await screen.findByText('detail at /evaluations/mpr_42');
     expect(evaluateCaptain).toHaveBeenCalledWith('cpt_1', 'Full', { evaluatorCaptainId: null, packs: [], personas: [], runCount: 2 });
   });
 
@@ -117,6 +119,24 @@ describe('Captains Evaluate row action', () => {
     expect(screen.getByText('Evaluate claude-one')).toBeInTheDocument();
     expect(screen.queryByText(/detail at/)).toBeNull();
     expect(pushToast).not.toHaveBeenCalledWith('success', expect.anything());
+  });
+
+  it('links to captain evaluation history from the table', async () => {
+    renderCaptains();
+    const link = await screen.findByRole('link', { name: 'Evaluations' });
+    expect(link).toHaveAttribute('href', '/evaluations?captainId=cpt_1');
+    fireEvent.click(link);
+    expect(await screen.findByText('detail at /evaluations?captainId=cpt_1')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('offers evaluation history in the row menu to users who cannot start an evaluation', async () => {
+    auth.isTenantAdmin = false;
+    renderCaptains();
+    await screen.findByText('claude-one');
+    fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Evaluations' }));
+    expect(await screen.findByText('detail at /evaluations?captainId=cpt_1')).toBeInTheDocument();
   });
 
   it('shows Evaluate to a global admin', async () => {

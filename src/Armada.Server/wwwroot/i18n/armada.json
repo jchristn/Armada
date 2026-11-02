@@ -278,6 +278,8 @@
         "Storage": "Almacenamiento"
       },
       "phrases": {
+        "Probe type": "Tipo de prueba",
+        "Pass/fail": "Aprobado/fallido",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "Esta carpeta tiene más subdirectorios de los que se pueden listar. Abre una carpeta más concreta para ver el resto.",
         "Showing the {{shown}} most severe of {{total}} issues.": "Se muestran los {{shown}} problemas más graves de {{total}}.",
         "Evaluation finished: {{evaluated}} evaluated, {{failed}} failed.": "Evaluación finalizada: {{evaluated}} evaluados, {{failed}} fallidos.",
@@ -7473,6 +7475,8 @@
         "Storage": "存储"
       },
       "phrases": {
+        "Probe type": "探测类型",
+        "Pass/fail": "通过/失败",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "此文件夹的子目录超出可列出的数量。请打开范围更小的文件夹查看其余内容。",
         "Showing the {{shown}} most severe of {{total}} issues.": "显示 {{total}} 个问题中最严重的 {{shown}} 个。",
         "Evaluation finished: {{evaluated}} evaluated, {{failed}} failed.": "评估完成：已评估 {{evaluated}} 个，失败 {{failed}} 个。",
@@ -13776,6 +13780,8 @@
         "Storage": "儲存空間"
       },
       "phrases": {
+        "Probe type": "探測類型",
+        "Pass/fail": "通過/失敗",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "此資料夾的子目錄超出可列出的數量。請開啟範圍更小的資料夾查看其餘內容。",
         "Showing the {{shown}} most severe of {{total}} issues.": "顯示 {{total}} 個問題中最嚴重的 {{shown}} 個。",
         "Evaluation finished: {{evaluated}} evaluated, {{failed}} failed.": "評估完成：已評估 {{evaluated}} 個，失敗 {{failed}} 個。",
@@ -20004,6 +20010,8 @@
         "Storage": "儲存空間"
       },
       "phrases": {
+        "Probe type": "探測類型",
+        "Pass/fail": "通過/失敗",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "呢個資料夾嘅子目錄多過可以列出嘅數量。請打開範圍細啲嘅資料夾睇其餘內容。",
         "Showing the {{shown}} most severe of {{total}} issues.": "顯示 {{total}} 個問題入面最嚴重嘅 {{shown}} 個。",
         "Evaluation finished: {{evaluated}} evaluated, {{failed}} failed.": "評估完成：評估咗 {{evaluated}} 個，失敗 {{failed}} 個。",
@@ -26252,6 +26260,8 @@
         "Storage": "ストレージ"
       },
       "phrases": {
+        "Probe type": "プローブの種類",
+        "Pass/fail": "合格/不合格",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "このフォルダーには一覧表示できる数を超えるサブディレクトリがあります。残りを表示するには、より絞り込んだフォルダーを開いてください。",
         "Showing the {{shown}} most severe of {{total}} issues.": "{{total}} 件の問題のうち、最も重大な {{shown}} 件を表示しています。",
         "Evaluation finished: {{evaluated}} evaluated, {{failed}} failed.": "評価が完了しました: {{evaluated}} 件評価、{{failed}} 件失敗。",
@@ -32486,6 +32496,8 @@
         "Storage": "Speicher"
       },
       "phrases": {
+        "Probe type": "Prüfungstyp",
+        "Pass/fail": "Bestanden/Fehlgeschlagen",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "Dieser Ordner hat mehr Unterverzeichnisse, als angezeigt werden können. Öffnen Sie einen engeren Ordner, um den Rest zu sehen.",
         "Showing the {{shown}} most severe of {{total}} issues.": "Die {{shown}} schwerwiegendsten von {{total}} Problemen werden angezeigt.",
         "Evaluation finished: {{evaluated}} evaluated, {{failed}} failed.": "Bewertung abgeschlossen: {{evaluated}} bewertet, {{failed}} fehlgeschlagen.",
@@ -38724,6 +38736,8 @@
         "Storage": "Stockage"
       },
       "phrases": {
+        "Probe type": "Type de test",
+        "Pass/fail": "Réussite/échec",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "Ce dossier contient plus de sous-dossiers qu'il n'est possible d'afficher. Ouvrez un dossier plus précis pour voir le reste.",
         "Showing the {{shown}} most severe of {{total}} issues.": "Affichage des {{shown}} problèmes les plus graves sur {{total}}.",
         "Evaluation finished: {{evaluated}} evaluated, {{failed}} failed.": "Évaluation terminée : {{evaluated}} évalués, {{failed}} en échec.",
@@ -44962,6 +44976,8 @@
         "Storage": "Archiviazione"
       },
       "phrases": {
+        "Probe type": "Tipo di test",
+        "Pass/fail": "Superato/fallito",
         "This folder has more subdirectories than can be listed. Open a narrower folder to see the rest.": "Questa cartella contiene più sottocartelle di quante se ne possano elencare. Apri una cartella più specifica per vedere il resto.",
         "Showing the {{shown}} most severe of {{total}} issues.": "Vengono mostrati i {{shown}} problemi più gravi su {{total}}.",
         "Evaluation finished: {{evaluated}} evaluated, {{failed}} failed.": "Valutazione completata: {{evaluated}} valutati, {{failed}} non riusciti.",

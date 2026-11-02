@@ -108,7 +108,7 @@ export default function Evaluations() {
         <table className="data-table" aria-label={t('Evaluations')}>
           <thead>
             <tr>
-              {['Started', 'Captain / endpoint', 'Model', 'Depth', 'Status', 'Passed', 'Failed', 'Could not run'].map((label) => <th key={label}>{t(label)}</th>)}
+              {['Started', 'Captain / endpoint', 'Model', 'Depth', 'Status', 'Passed', 'Failed', 'Could not run', 'View results'].map((label) => <th key={label}>{t(label)}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -122,6 +122,7 @@ export default function Evaluations() {
                 <td>{run.passedCount}</td>
                 <td>{run.failedCount}</td>
                 <td>{run.couldNotRunCount}</td>
+                <td><Link to={evaluationResultsPath(run.id)}>{t('View results')}</Link></td>
               </tr>
             ))}
           </tbody>
