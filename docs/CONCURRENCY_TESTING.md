@@ -54,3 +54,11 @@ To exercise this with your own runtime, build/run the branch, open a vessel and 
 ## Admission isolation and progress
 
 `Services.SequentialDispatch` includes per-vessel isolation, bounded wait/cancellation cleanup, load distribution with explicit captain overrides, and 200 missions across five vessels and ten captains. Nine concurrent requests per wave represent eight dispatchers plus a scheduler request. Each wave checks global, voyage and captain bounds, settles admitted work and requires pending work to make progress. This supplements the real-process smoke scenarios; it is not the remaining invariant-monitor or live database-server matrix.
+
+## Validate waiting diagnostics
+
+1. Set a vessel's per-voyage mission limit to 2 and dispatch three independent audit tasks in one voyage. Open the Pending mission. Its waiting card should show `VoyageMissionLimit`, the holding missions and **Next steps** with a suggestion of 3 and an **Edit vessel limits** button.
+2. Click the button. It opens the existing vessel edit modal under the global breadcrumb. Raise the limit, save and wait for the next scheduler cycle; the third task can start, subject to other gates.
+3. Saturate a configured runtime or shared inference endpoint while a compatible captain still has capacity. The Pending mission should report the runtime/endpoint gate instead of claiming it is ready. Disable an endpoint to see the distinct unavailability explanation without a capacity-increase recommendation.
+4. Lower a limit below current usage. Existing work continues, the explanation names the lower limit and the recommendation accounts for actual usage. A full CLI captain suggests adding a captain; endpoint-backed captains may offer **Edit captain capacity** within the server ceiling.
+5. Read the same mission with MCP `mission_status`; its blocker and advice should match REST. Ordinary readers should see the next-step text without configuration links. Runtime caps and server captain ceilings remain settings-file configuration in this increment.

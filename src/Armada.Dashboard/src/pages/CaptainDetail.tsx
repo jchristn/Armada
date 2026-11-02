@@ -71,7 +71,7 @@ export default function CaptainDetail() {
   const { isAdmin, isTenantAdmin } = useAuth();
   const canManageCliPolicy = !!isAdmin || !!isTenantAdmin;
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [captain, setCaptain] = useState<Captain | null>(null);
   const [currentMission, setCurrentMission] = useState<Mission | null>(null);
@@ -158,6 +158,12 @@ export default function CaptainDetail() {
       .then(result => setInferenceEndpoints((result?.objects ?? []).filter(e => e.kind === 'Inference')))
       .catch(() => setInferenceEndpoints([]));
   }
+
+  useEffect(() => {
+    if (!isAdmin || !captain || captain.id !== id || searchParams.get('edit') !== '1') return;
+    openEdit();
+    setSearchParams(current => { const next = new URLSearchParams(current); next.delete('edit'); return next; }, { replace: true });
+  }, [captain, id, isAdmin, searchParams, setSearchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -339,7 +345,7 @@ export default function CaptainDetail() {
       {/* Edit Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <form className="modal" onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
+          <form className={`modal modal-captain${isMuxRuntime(form.runtime) ? ' modal-mux' : ''}`} onClick={e => e.stopPropagation()} onSubmit={handleSubmit}>
             <h3>{t('Edit Captain')}</h3>
             <label title={t(CAPTAIN_NAME_TOOLTIP)}>{t('Name')}<input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} title={t(CAPTAIN_NAME_TOOLTIP)} required /></label>
             <label title={t(CAPTAIN_RUNTIME_TOOLTIP)}>{t('Runtime')}

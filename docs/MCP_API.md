@@ -7919,3 +7919,26 @@ structured error details and the next eligible time when supplied. Both tools
 retain tenant isolation even for a GlobalAdmin; explicit tenant selection never
 combines tenants. See REST_API.md, Account Usage, for settings, history resolution,
 retention and completion-time attribution. MCP adds no resources or prompts.
+
+## v1.3.0 waiting diagnostics
+
+Pending mission reads include `AssignmentBlocker` (`assignmentBlocker` after camel-case client normalization). REST `GET /api/v1/missions/{id}` and MCP `mission_status` compute the same explanation; non-Pending missions have no blocker. The existing safety, capacity, tenant and user restrictions still apply.
+
+New reasons: `RuntimeMissionLimit`, `EndpointMissionLimit` and `EndpointUnavailable`. A free captain does not imply dispatch readiness when its runtime or shared endpoint is full. Endpoint unavailability has no concurrency-increase recommendation.
+
+`Advice` is an optional/additive list of at most 25 items, each containing `Text`, nullable `Action`, `TargetType`, `TargetId`, `Setting`, nullable `CurrentValue` and nullable `SuggestedValue`. Actions are `EditVessel`, `EditCaptain`, `AddCaptain`, `EditSettings`, `EditEndpoint`, `OpenMission` or `OpenVoyage`. The client maps these known actions to local routes; the server never supplies an executable URL. Non-global-admin callers retain the text with `Action` omitted/null. Configuration writes retain their existing authorization checks.
+
+Suggestions are the smallest supported finite increase that admits another mission now (`running + 1` when full). When a limit is lowered below usage, existing work continues and new admissions wait; suggestions account for the actual running count. Advice never suggests increasing a CLI captain above its normal serial setting. File-only runtime/server-ceiling settings are explained as settings.json changes rather than linking to a nonexistent editor.
+
+Example (admin):
+
+```json
+{
+  "Reason": "VoyageMissionLimit",
+  "Advice": [{
+    "Text": "To admit one more mission now, raise maximum parallel missions per voyage from 2 to 3.",
+    "Action": "EditVessel", "TargetType": "vessel", "TargetId": "vsl_example",
+    "Setting": "MaxParallelMissionsPerVoyage", "CurrentValue": 2, "SuggestedValue": 3
+  }]
+}
+```

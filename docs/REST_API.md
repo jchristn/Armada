@@ -12785,3 +12785,26 @@ Retention values provide policy context rather than reclaimable-byte estimates. 
 ### Strict captain assignments
 
 Set `captainAssignments[].strictCaptain` to `true` alongside `captainId` to wait for that selected captain instead of falling back when busy/unavailable. The default is `false`; tier fallback remains unchanged. Exact persona overrides take precedence over `*`. Strict selection also prevents automatic rework escalation to a different captain: an exhausted or stagnant chain reports remediation and preserves its work. Without a selected captain this flag has no effect. C# clients share `CaptainAssignmentOverride.StrictCaptain`. See [PIPELINES.md](PIPELINES.md#validated-slice-contracts) for plan validation and full-pipeline rework.
+
+## v1.3.0 waiting diagnostics
+
+Pending mission reads include `AssignmentBlocker` (`assignmentBlocker` after camel-case client normalization). REST `GET /api/v1/missions/{id}` and MCP `mission_status` compute the same explanation; non-Pending missions have no blocker. The existing safety, capacity, tenant and user restrictions still apply.
+
+New reasons: `RuntimeMissionLimit`, `EndpointMissionLimit` and `EndpointUnavailable`. A free captain does not imply dispatch readiness when its runtime or shared endpoint is full. Endpoint unavailability has no concurrency-increase recommendation.
+
+`Advice` is an optional/additive list of at most 25 items, each containing `Text`, nullable `Action`, `TargetType`, `TargetId`, `Setting`, nullable `CurrentValue` and nullable `SuggestedValue`. Actions are `EditVessel`, `EditCaptain`, `AddCaptain`, `EditSettings`, `EditEndpoint`, `OpenMission` or `OpenVoyage`. The client maps these known actions to local routes; the server never supplies an executable URL. Non-global-admin callers retain the text with `Action` omitted/null. Configuration writes retain their existing authorization checks.
+
+Suggestions are the smallest supported finite increase that admits another mission now (`running + 1` when full). When a limit is lowered below usage, existing work continues and new admissions wait; suggestions account for the actual running count. Advice never suggests increasing a CLI captain above its normal serial setting. File-only runtime/server-ceiling settings are explained as settings.json changes rather than linking to a nonexistent editor.
+
+Example (admin):
+
+```json
+{
+  "Reason": "VoyageMissionLimit",
+  "Advice": [{
+    "Text": "To admit one more mission now, raise maximum parallel missions per voyage from 2 to 3.",
+    "Action": "EditVessel", "TargetType": "vessel", "TargetId": "vsl_example",
+    "Setting": "MaxParallelMissionsPerVoyage", "CurrentValue": 2, "SuggestedValue": 3
+  }]
+}
+```

@@ -433,6 +433,9 @@ export type MissionAssignmentBlockerReason =
   | 'VoyageMissionLimit'
   | 'GlobalMissionLimit'
   | 'CaptainConcurrencyLimit'
+  | 'RuntimeMissionLimit'
+  | 'EndpointMissionLimit'
+  | 'EndpointUnavailable'
   | 'NoCaptains'
   | 'NoIdleCaptain'
   | 'NoEligibleCaptain';
@@ -451,7 +454,18 @@ export interface MissionAssignmentCaptainStatus {
   eligibleForMission?: boolean | null;
 }
 
+export interface AssignmentBlockerAdvice {
+  text: string;
+  action?: 'EditVessel' | 'EditCaptain' | 'AddCaptain' | 'EditSettings' | 'EditEndpoint' | 'OpenMission' | 'OpenVoyage' | null;
+  targetType?: string | null;
+  targetId?: string | null;
+  setting?: string | null;
+  currentValue?: number | null;
+  suggestedValue?: number | null;
+}
+
 export interface MissionAssignmentBlocker {
+  advice?: AssignmentBlockerAdvice[];
   reason: MissionAssignmentBlockerReason;
   summary: string;
   untilUtc: string | null;

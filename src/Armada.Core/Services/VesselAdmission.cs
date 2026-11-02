@@ -50,6 +50,7 @@ namespace Armada.Core.Services
                     Summary = "Vessel " + vessel.Name + " has " + admitted.Count + " of " + vessel.MaxParallelVoyages
                         + " voyage slots occupied. Existing voyages retain their slot through review and landing."
                 };
+                AddLimitAdvice(result, vessel, admitted.Count, vessel.MaxParallelVoyages, "MaxParallelVoyages");
                 result.SetBlockingMissions(admitted.SelectMany(g => g).Where(m => HoldsVoyage(m.Status)).Select(m => m.Id));
                 return result;
             }
@@ -63,10 +64,19 @@ namespace Armada.Core.Services
                     Summary = "This voyage has " + running.Count + " of " + vessel.MaxParallelMissionsPerVoyage
                         + " running mission slots occupied. A slot opens when an agent finishes."
                 };
+                AddLimitAdvice(result, vessel, running.Count, vessel.MaxParallelMissionsPerVoyage, "MaxParallelMissionsPerVoyage");
                 result.SetBlockingMissions(running.Select(m => m.Id));
                 return result;
             }
             return null;
+        }
+
+        private static void AddLimitAdvice(MissionAssignmentBlocker result, Vessel vessel, int running, int limit, string setting)
+        {
+            MissionAssignmentBlocker capacity = MissionAdmissionEvaluator.Capacity(result.Reason, "Vessel " + vessel.Name, running, limit,
+                AssignmentBlockerActionEnum.EditVessel, "vessel", vessel.Id, setting, Constants.VesselConcurrencyCeiling);
+            if (running > limit) result.Summary += " The limit is below current usage; running work continues until enough capacity is released.";
+            result.Advice.AddRange(capacity.Advice);
         }
 
         private static bool HoldsVoyage(MissionStatusEnum status) => status == MissionStatusEnum.Pending

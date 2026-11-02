@@ -312,37 +312,7 @@ namespace Armada.Core.Services
                 return blocker;
             }
 
-            List<Mission> vesselMissions = await ActiveMissionsOnVesselAsync(vessel.Id, token).ConfigureAwait(false);
-            List<Mission> activeMissions = vesselMissions
-                .Where(m => m.Id != mission.Id && (m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress))
-                .ToList();
-            List<Mission> broadMissions = activeMissions.Where(m => IsBroadScope(m)).ToList();
-            if (broadMissions.Count > 0)
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.VesselBroadScopeMissionActive;
-                blocker.SetBlockingMissions(broadMissions.Select(m => m.Id));
-                blocker.Summary = "Broad-scope mission '" + broadMissions[0].Title + "' holds vessel " + vessel.Name + " until it finishes.";
-                return blocker;
-            }
-
-            if (activeMissions.Count > 0 && IsBroadScope(mission))
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.BroadScopeWaitingForVessel;
-                blocker.SetBlockingMissions(activeMissions.Select(m => m.Id));
-                blocker.Summary = "This is a broad-scope mission; it waits until vessel " + vessel.Name + " has no active missions (" + activeMissions.Count + " running).";
-                return blocker;
-            }
-
-            List<Mission> sameBranch = BranchHolders(mission, activeMissions);
-            if (sameBranch.Count > 0)
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.BranchInUse;
-                blocker.SetBlockingMissions(sameBranch.Select(m => m.Id));
-                blocker.Summary = "Branch " + mission.BranchName + " is in use by '" + sameBranch[0].Title + "'. This mission continues that branch and starts when it finishes.";
-                return blocker;
-            }
-
-            MissionAssignmentBlocker? admission = await EvaluateVesselAdmissionAsync(mission, vessel, token).ConfigureAwait(false);
+            MissionAssignmentBlocker? admission = await EvaluateSafetyAdmissionAsync(mission, vessel, token).ConfigureAwait(false);
             if (admission != null) return admission;
             MissionAssignmentBlocker? globalAdmission = await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
             if (globalAdmission != null) return globalAdmission;
@@ -355,6 +325,7 @@ namespace Armada.Core.Services
             {
                 blocker.Reason = MissionAssignmentBlockerReasonEnum.NoCaptains;
                 blocker.Summary = "Waiting for a captain: there are no captains. Create one to run missions.";
+                blocker.Advice.Add(new AssignmentBlockerAdvice { Text = "Add an eligible captain to run this mission.", Action = AssignmentBlockerActionEnum.AddCaptain, TargetType = "captain" });
                 return blocker;
             }
 
@@ -373,7 +344,21 @@ namespace Armada.Core.Services
             List<Captain> idleCaptains = allCaptains.Where(c => c.HasMissionCapacity).ToList();
             if (idleCaptains.Count > 0)
             {
-                bool eligible = await IsAnyCaptainEligibleAsync(idleCaptains, mission, token).ConfigureAwait(false);
+                CaptainEligibilityContext context = await BuildCaptainEligibilityContextAsync(mission, token).ConfigureAwait(false);
+                List<Captain> eligibleCaptains = idleCaptains.Where(c => CaptainIneligibilityReason(c, mission, context) == null).ToList();
+                bool eligible = eligibleCaptains.Count > 0;
+                if (eligible)
+                {
+                    Dictionary<string, MissionAssignmentBlocker> excluded = new Dictionary<string, MissionAssignmentBlocker>(StringComparer.Ordinal);
+                    List<Captain> admitted = await ApplyCapacityLimitsAsync(eligibleCaptains, mission, token, excluded).ConfigureAwait(false);
+                    if (admitted.Count == 0 && excluded.Count > 0)
+                    {
+                        MissionAssignmentBlocker capacity = excluded[eligibleCaptains[0].Id];
+                        foreach (AssignmentBlockerAdvice advice in excluded.Values.SelectMany(item => item.Advice).DistinctBy(item => new { item.Action, item.TargetId, item.Setting }).Take(MissionAssignmentBlocker.MaxListed).ToList())
+                            if (!capacity.Advice.Contains(advice)) capacity.Advice.Add(advice);
+                        return capacity;
+                    }
+                }
                 if (eligible && _PlacementWaitReasons.TryGetValue(mission.Id, out string? placementReason))
                 {
                     blocker.Reason = MissionAssignmentBlockerReasonEnum.PlacementWaiting;
@@ -403,10 +388,16 @@ namespace Armada.Core.Services
                 return blocker;
             }
 
-            blocker.Reason = allCaptains.Any(c => c.State == CaptainStateEnum.Working && c.ActiveMissionCount > 0)
+            CaptainEligibilityContext fullContext = await BuildCaptainEligibilityContextAsync(mission, token).ConfigureAwait(false);
+            List<Captain> full = allCaptains.Where(c => c.State == CaptainStateEnum.Working && c.ActiveMissionCount > 0
+                && c.CurrentSessionId == null && CaptainIneligibilityReason(c, mission, fullContext) == null).ToList();
+            blocker.Reason = full.Count > 0
                 ? MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit : MissionAssignmentBlockerReasonEnum.NoIdleCaptain;
             if (blocker.Reason == MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit)
-                blocker.SetBlockingMissions(allCaptains.SelectMany(c => c.ActiveMissionIds));
+            {
+                blocker.SetBlockingMissions(full.SelectMany(c => c.ActiveMissionIds));
+                AddCaptainCapacityAdvice(blocker, full);
+            }
             await DescribeCaptainsAsync(blocker, allCaptains, mission, token).ConfigureAwait(false);
             List<DateTime> quarantineEnds = allCaptains
                 .Where(c => c.State == CaptainStateEnum.Quarantined && c.QuarantineUntilUtc.HasValue)
@@ -426,6 +417,10 @@ namespace Armada.Core.Services
                 blocker.Summary = "Waiting for a captain: every captain is busy.";
             }
 
+            if (blocker.Reason == MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit)
+                blocker.Summary = "Eligible captains have no free mission slots: " + String.Join("; ", full.Take(MissionAssignmentBlocker.MaxListed)
+                    .Select(c => c.Name + " " + c.ActiveMissionCount + " running / limit " + c.MaxConcurrency
+                        + (c.ActiveMissionCount > c.MaxConcurrency ? " (limit below current usage; running work continues)" : ""))) + ".";
             return blocker;
         }
 
@@ -569,47 +564,12 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            // Check for vessel-level lock (broad-scope missions block new assignments)
-            List<Mission> activeMissions = await ActiveMissionsOnVesselAsync(vessel.Id, token).ConfigureAwait(false);
-            List<Mission> broadMissions = activeMissions.Where(m =>
-                (m.Status == MissionStatusEnum.InProgress || m.Status == MissionStatusEnum.Assigned) &&
-                IsBroadScope(m)).ToList();
-
-            if (broadMissions.Count > 0)
-            {
-                _Logging.Warn(_Header + "vessel " + vessel.Id + " has a broad-scope mission in progress — deferring assignment of " + mission.Id);
-                return false;
-            }
-
-            // Check if this mission is broad-scope and vessel already has active work
-            // Only count truly active missions (agent running or assigned).
-            // WorkProduced and PullRequestOpen are post-agent states where the agent
-            // has finished -- they should NOT block new mission dispatch.
-            int concurrentCount = activeMissions.Count(m =>
-                m.Status == MissionStatusEnum.Assigned ||
-                m.Status == MissionStatusEnum.InProgress);
-
-            if (IsBroadScope(mission) && concurrentCount > 0)
-            {
-                _Logging.Warn(_Header + "broad-scope mission " + mission.Id + " deferred — vessel " + vessel.Id + " has " + concurrentCount + " active mission(s)");
-                return false;
-            }
-
-            MissionAssignmentBlocker? admission = await EvaluateVesselAdmissionAsync(mission, vessel, token).ConfigureAwait(false);
+            MissionAssignmentBlocker? admission = await EvaluateSafetyAdmissionAsync(mission, vessel, token).ConfigureAwait(false);
             if (admission != null)
             {
                 _Logging.Debug(_Header + "mission " + mission.Id + " waits: " + admission.Summary);
                 return false;
             }
-            // Two missions continuing one branch (two slices that both build on an earlier slice) cannot share it: git
-            // refuses a second worktree for a checked-out branch. The later one waits and then stacks on the first.
-            List<Mission> branchHolders = BranchHolders(mission, activeMissions);
-            if (branchHolders.Count > 0)
-            {
-                _Logging.Info(_Header + "mission " + mission.Id + " waits: branch " + mission.BranchName + " is in use by " + branchHolders[0].Id);
-                return false;
-            }
-
 
             // Only shared capacity checks and the claim serialize across vessels. Vessel gates
             // above run independently, so a blocked voyage cannot stall unrelated vessels.
@@ -1109,7 +1069,8 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task<List<Captain>> ApplyCapacityLimitsAsync(List<Captain> idleCaptains, Mission mission, CancellationToken token)
+        private async Task<List<Captain>> ApplyCapacityLimitsAsync(List<Captain> idleCaptains, Mission mission, CancellationToken token,
+            Dictionary<string, MissionAssignmentBlocker>? excluded = null)
         {
             if (idleCaptains.Count == 0) return idleCaptains;
 
@@ -1156,6 +1117,14 @@ namespace Armada.Core.Services
             {
                 if (runtimeLimits.TryGetValue(candidate.Runtime, out int runtimeLimit) && working.Where(w => w.Runtime == candidate.Runtime).Sum(w => Math.Max(1, w.ActiveMissionCount)) >= runtimeLimit)
                 {
+                    if (excluded != null) excluded[candidate.Id] = MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.RuntimeMissionLimit,
+                        candidate.Runtime + " runtime", working.Where(w => w.Runtime == candidate.Runtime).Sum(w => Math.Max(1, w.ActiveMissionCount)), runtimeLimit,
+                        AssignmentBlockerActionEnum.EditSettings, "settings", null, "Agents." + candidate.Runtime + ".MaxConcurrent");
+                    if (excluded != null)
+                    {
+                        excluded[candidate.Id].Advice[0].Action = null;
+                        excluded[candidate.Id].Advice[0].Text += " Update this runtime cap in settings.json, or wait for running work to finish.";
+                    }
                     _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": " + candidate.Runtime + " is at its MaxConcurrent of " + runtimeLimit);
                     continue;
                 }
@@ -1165,6 +1134,7 @@ namespace Armada.Core.Services
                 {
                     if (!endpoint.Enabled)
                     {
+                        if (excluded != null) excluded[candidate.Id] = EndpointUnavailable(endpoint, "disabled");
                         _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": its model endpoint " + endpoint.Id + " is disabled");
                         continue;
                     }
@@ -1174,6 +1144,7 @@ namespace Armada.Core.Services
                     if (endpoint.HealthStatus == EndpointHealthStatusEnum.Unhealthy && endpoint.LastHealthCheckUtc.HasValue
                         && DateTime.UtcNow - endpoint.LastHealthCheckUtc.Value <= _UnhealthyEndpointWindow)
                     {
+                        if (excluded != null) excluded[candidate.Id] = EndpointUnavailable(endpoint, "unhealthy");
                         _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": endpoint " + endpoint.BaseUrl + " failed its health check at "
                             + endpoint.LastHealthCheckUtc.Value.ToString("o") + (String.IsNullOrEmpty(endpoint.LastHealthError) ? String.Empty : " (" + endpoint.LastHealthError + ")"));
                         continue;
@@ -1185,6 +1156,7 @@ namespace Armada.Core.Services
                         lock (breaker) open = breaker.OpenUntilUtc.HasValue && breaker.OpenUntilUtc.Value > DateTime.UtcNow;
                         if (open)
                         {
+                            if (excluded != null) excluded[candidate.Id] = EndpointUnavailable(endpoint, "temporarily unavailable after repeated failures");
                             _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": endpoint " + endpoint.BaseUrl + " circuit is open after repeated failures");
                             continue;
                         }
@@ -1193,6 +1165,9 @@ namespace Armada.Core.Services
                     int? endpointLimit = endpoint.InferenceOptions?.MaxConcurrentMissions;
                     if (endpointLimit.HasValue && (workingByEndpoint.TryGetValue(EndpointCapacityKey(endpoint), out int busyCount) ? busyCount : 0) >= endpointLimit.Value)
                     {
+                        if (excluded != null) excluded[candidate.Id] = MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.EndpointMissionLimit,
+                            "Endpoint " + endpoint.Name, workingByEndpoint.TryGetValue(EndpointCapacityKey(endpoint), out int count) ? count : 0, endpointLimit.Value,
+                            AssignmentBlockerActionEnum.EditEndpoint, "endpoint", endpoint.Id, "InferenceOptions.MaxConcurrentMissions", 64);
                         _Logging.Debug(_Header + "captain " + candidate.Id + " skipped for mission " + mission.Id + ": endpoint " + endpoint.BaseUrl + " is at its limit of " + endpointLimit.Value + " concurrent mission(s)");
                         continue;
                     }

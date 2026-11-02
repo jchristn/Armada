@@ -480,11 +480,8 @@ namespace Armada.Core.Services
                 + (await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress, token).ConfigureAwait(false)).Count;
             if (running < limit) return null;
             // Do not expose other tenants' mission IDs through a deployment-wide limit.
-            return new MissionAssignmentBlocker
-            {
-                Reason = MissionAssignmentBlockerReasonEnum.GlobalMissionLimit,
-                Summary = "Armada has " + running + " of " + limit + " running mission slots occupied. A slot opens when an agent finishes."
-            };
+            return MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.GlobalMissionLimit,
+                "Armada", running, limit, AssignmentBlockerActionEnum.EditSettings, "settings", null, "MaxConcurrentMissions", Constants.GlobalMissionConcurrencyCeiling);
         }
 
         private async Task<MissionAssignmentBlocker?> EvaluateVesselAdmissionAsync(Mission mission, Vessel vessel, CancellationToken token)

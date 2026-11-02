@@ -3,6 +3,7 @@ namespace Test.Shared.Suites.Services
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
@@ -37,6 +38,89 @@ namespace Test.Shared.Suites.Services
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(CaseAsync("branch_safety_precedes_vessel_capacity", "Dispatch and diagnostics both give branch safety precedence when numeric gates are also full", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                Harness h = await BuildHarnessAsync(fixture.Driver);
+                h.Vessel.MaxParallelMissionsPerVoyage = 1;
+                await fixture.Driver.Vessels.UpdateAsync(h.Vessel);
+                Mission holder = await AddMissionAsync(fixture.Driver, h.Vessel, "holder", MissionStatusEnum.InProgress);
+                holder.BranchName = "armada/shared"; await fixture.Driver.Missions.UpdateAsync(holder);
+                Mission waiting = await AddMissionAsync(fixture.Driver, h.Vessel, "waiting", MissionStatusEnum.Pending);
+                waiting.BranchName = holder.BranchName; await fixture.Driver.Missions.UpdateAsync(waiting);
+                MissionAssignmentBlocker blocker = (await h.Missions.GetAssignmentBlockerAsync(waiting))!;
+                AssertEqual(MissionAssignmentBlockerReasonEnum.BranchInUse, blocker.Reason);
+                AssertEqual(holder.Id, blocker.Advice[0].TargetId);
+                AssertFalse(await h.Missions.TryAssignAsync(waiting, h.Vessel));
+                AssertEqual(MissionStatusEnum.Pending, (await fixture.Driver.Missions.ReadAsync(waiting.Id))!.Status);
+            }));
+
+            cases.Add(CaseAsync("runtime_capacity_diagnostic", "A free captain behind a full runtime reports the actual capacity gate", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                Harness h = await BuildHarnessAsync(fixture.Driver);
+                h.Settings.Agents = new List<AgentSettings> { new AgentSettings { Runtime = AgentRuntimeEnum.ClaudeCode, MaxConcurrent = 1 } };
+                await AddCaptainAsync(fixture.Driver, "Busy", CaptainStateEnum.Working);
+                await AddCaptainAsync(fixture.Driver, "Free", CaptainStateEnum.Idle);
+                Mission mission = await AddMissionAsync(fixture.Driver, h.Vessel, "waiting", MissionStatusEnum.Pending);
+                MissionAssignmentBlocker blocker = (await h.Missions.GetAssignmentBlockerAsync(mission))!;
+                AssertEqual(MissionAssignmentBlockerReasonEnum.RuntimeMissionLimit, blocker.Reason);
+                AssertEqual(1, blocker.Advice[0].CurrentValue!.Value);
+                AssertEqual(2, blocker.Advice[0].SuggestedValue!.Value);
+                AssertFalse(await h.Missions.TryAssignAsync(mission, h.Vessel));
+            }));
+
+            cases.Add(CaseAsync("endpoint_capacity_and_health_diagnostic", "Endpoint saturation and unavailability have distinct diagnostics and bounded remedies", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                var db = fixture.Driver;
+                Harness h = await BuildHarnessAsync(db);
+                ModelEndpoint endpoint = await db.ModelEndpoints.CreateAsync(new ModelEndpoint { Name = "Shared model", BaseUrl = "http://127.0.0.1:19899/v1", Kind = ModelEndpointKindEnum.Inference,
+                    InferenceOptions = new InferenceOptions { MaxConcurrentMissions = 1 } });
+                Captain busy = await AddCaptainAsync(db, "Busy", CaptainStateEnum.Working);
+                Captain free = await AddCaptainAsync(db, "Free", CaptainStateEnum.Idle);
+                foreach (Captain captain in new[] { busy, free })
+                { captain.Runtime = AgentRuntimeEnum.ApiEndpoint; captain.ModelEndpointId = endpoint.Id; await db.Captains.UpdateAsync(captain); }
+                Mission mission = await AddMissionAsync(db, h.Vessel, "waiting", MissionStatusEnum.Pending);
+                MissionAssignmentBlocker blocker = (await h.Missions.GetAssignmentBlockerAsync(mission))!;
+                AssertEqual(MissionAssignmentBlockerReasonEnum.EndpointMissionLimit, blocker.Reason);
+                AssertEqual(endpoint.Id, blocker.Advice[0].TargetId);
+                AssertFalse(await h.Missions.TryAssignAsync(mission, h.Vessel));
+                endpoint.Enabled = false; await db.ModelEndpoints.UpdateAsync(endpoint);
+                blocker = (await h.Missions.GetAssignmentBlockerAsync(mission))!;
+                AssertEqual(MissionAssignmentBlockerReasonEnum.EndpointUnavailable, blocker.Reason);
+                AssertNull(blocker.Advice[0].SuggestedValue);
+            }));
+
+            cases.Add(CaseAsync("lowered_limits_remedy_and_ceiling", "Advice admits one more mission even after a limit reduction and never suggests unlimited or exceeding a ceiling", TestTags.Positive, () =>
+            {
+                MissionAssignmentBlocker lower = MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.VoyageMissionLimit, "voyage", 4, 2,
+                    AssignmentBlockerActionEnum.EditVessel, "vessel", "vsl_test", "MaxParallelMissionsPerVoyage", 1000);
+                AssertEqual(5, lower.Advice[0].SuggestedValue!.Value);
+                AssertContains("existing work continues", lower.Summary);
+                MissionAssignmentBlocker ceiling = MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.EndpointMissionLimit, "endpoint", 64, 64,
+                    AssignmentBlockerActionEnum.EditEndpoint, "endpoint", "mep_test", "MaxConcurrentMissions", 64);
+                AssertNull(ceiling.Advice[0].SuggestedValue);
+                AssertNull(ceiling.Advice[0].Action);
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(CaseAsync("full_cli_captain_advice", "A full CLI captain suggests another captain rather than increasing CLI parallelism", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                var db = fixture.Driver;
+                Harness h = await BuildHarnessAsync(db);
+                Captain captain = await AddCaptainAsync(db, "CLI", CaptainStateEnum.Idle);
+                Mission held = await AddMissionAsync(db, h.Vessel, "held", MissionStatusEnum.Pending);
+                AssertTrue(await db.Captains.TryClaimAsync(captain.Id, held.Id, null));
+                h.Vessel.MaxParallelVoyages = 0; h.Vessel.MaxParallelMissionsPerVoyage = 0; await db.Vessels.UpdateAsync(h.Vessel);
+                Mission waiting = await AddMissionAsync(db, h.Vessel, "waiting", MissionStatusEnum.Pending);
+                MissionAssignmentBlocker blocker = (await h.Missions.GetAssignmentBlockerAsync(waiting))!;
+                AssertEqual(MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit, blocker.Reason);
+                AssertTrue(blocker.Advice.Any(a => a.Action == AssignmentBlockerActionEnum.AddCaptain));
+                AssertFalse(blocker.Advice.Any(a => a.Action == AssignmentBlockerActionEnum.EditCaptain));
+            }));
+
             cases.Add(CaseAsync("inactive_explicit_and_auto_assignment_rejected", "Inactive captains are excluded even when explicitly requested; reactivation restores routing", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -355,7 +439,7 @@ namespace Test.Shared.Suites.Services
             vessel.DefaultBranch = "main";
             vessel = await db.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 
-            return new Harness { Missions = missionService, Vessel = vessel };
+            return new Harness { Missions = missionService, Vessel = vessel, Settings = settings };
         }
 
         private static async Task<Captain> AddCaptainAsync(DatabaseDriver db, string name, CaptainStateEnum state)
@@ -379,6 +463,7 @@ namespace Test.Shared.Suites.Services
 
         private sealed class Harness
         {
+            public ArmadaSettings Settings { get; set; } = null!;
             public MissionService Missions { get; set; } = null!;
             public Vessel Vessel { get; set; } = null!;
         }

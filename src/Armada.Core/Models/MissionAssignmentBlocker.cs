@@ -23,6 +23,10 @@ namespace Armada.Core.Models
         /// </summary>
         public string Summary { get; set; } = "";
 
+        /// <summary>Bounded next steps computed from the same limits as admission.</summary>
+        [CollectionBound(MaxListed, Reason = "At most MaxListed actionable next steps")]
+        public List<AssignmentBlockerAdvice> Advice { get; set; } = new List<AssignmentBlockerAdvice>();
+
         /// <summary>
         /// Earliest time the blocker is expected to clear on its own (for example when a quarantine ends), or null.
         /// </summary>

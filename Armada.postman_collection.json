@@ -3705,7 +3705,7 @@
                                 "{{missionId}}"
                             ]
                         },
-                        "description": "Returns a single mission by ID."
+                        "description": "Returns a single mission by ID. Pending missions include a computed AssignmentBlocker and at most 25 Advice items (Text, Action, TargetType, TargetId, Setting, CurrentValue, SuggestedValue). RuntimeMissionLimit and EndpointMissionLimit identify saturation; EndpointUnavailable identifies disabled/unhealthy/circuit-broken endpoints. Non-global-admin readers receive advice text without actions."
                     }
                 },
                 {

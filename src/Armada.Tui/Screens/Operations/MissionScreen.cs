@@ -525,6 +525,10 @@ namespace Armada.Tui.Screens.Operations
         {
             doc.Section("Why This Mission Is Waiting");
             doc.Text(blocker.Summary, blocker.Reason == MissionAssignmentBlockerReasonEnum.AwaitingDispatch ? doc.Theme.Text : doc.Theme.Warning);
+            if (blocker.Advice.Count > 0)
+            {
+                doc.Field("Next steps", String.Join(Environment.NewLine, blocker.Advice.Select(advice => advice.Text)));
+            }
             if (blocker.UntilUtc.HasValue) doc.Field("Expected to clear", Context.Loc.FormatDateTime(blocker.UntilUtc.Value));
             if (!String.IsNullOrEmpty(blocker.DependsOnMissionId)) doc.Field("Depends On", blocker.DependsOnMissionId);
             if (blocker.BlockingMissionIds.Count > 0) doc.Field("Held by", String.Join(", ", blocker.BlockingMissionIds));

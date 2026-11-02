@@ -220,6 +220,21 @@ describe('Missions list', () => {
 });
 
 describe('Mission detail', () => {
+  it('shows waiting remedies and opens an existing native review screen', async () => {
+    api.getMission.mockResolvedValue(mission({ status: 'Pending', assignmentBlocker: {
+      reason: 'CaptainConcurrencyLimit', summary: 'The captain has no free slots.', untilUtc: null, dependsOnMissionId: null,
+      blockingMissionIds: [], captains: [], computedUtc: '', advice: [
+        { text: 'Review this captain capacity.', action: 'EditCaptain', targetId: 'cpt_1' },
+        { text: 'Ask an admin to review the server ceiling.', action: null },
+      ],
+    } }));
+    await renderScreen(<MissionDetail id="msn_1" />);
+    expect(await screen.findByText('Review this captain capacity.')).toBeTruthy();
+    expect(await screen.findByText('Ask an admin to review the server ceiling.')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Review captain'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/captains/cpt_1');
+  });
+
   it('shows the mission, lands it, and follows live updates', async () => {
     api.getMission.mockResolvedValue(mission({ status: 'WorkProduced' }));
     api.getMissionLandingPreview.mockResolvedValue({ isReadyToLand: true, issues: [], targetBranch: 'main', branchCategory: 'Feature' } as never);

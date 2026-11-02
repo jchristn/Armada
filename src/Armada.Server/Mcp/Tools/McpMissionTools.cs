@@ -60,6 +60,12 @@ namespace Armada.Server.Mcp.Tools
                     Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                     if (mission == null) return (object)McpToolError.NotFound("Mission not found");
                     mission.DiffSnapshot = null;
+                    if (missionService != null)
+                    {
+                        mission.AssignmentBlocker = await missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                        if (!caller.IsAdmin && mission.AssignmentBlocker != null)
+                            foreach (AssignmentBlockerAdvice advice in mission.AssignmentBlocker.Advice) advice.Action = null;
+                    }
                     return (object)mission;
                 });
 

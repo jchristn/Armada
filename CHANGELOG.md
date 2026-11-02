@@ -25,6 +25,12 @@ v1.3.0 focuses on **parallelization and concurrency**: more independent work in 
 - Serialize vessel gates per vessel, then shared global/runtime/endpoint/captain claims with a fixed lock order. Both waits are bounded; timed-out requests retry on the next cycle and increment `armada.admission.lock_timeouts` by gate. Idle registry entries are removed, and neither lock is held while provisioning docks or launching processes.
 - Spread equivalent work across eligible captains with fewer occupied slots while preserving explicit captain selection, persona preferences, priority classes and tier routing. Add lock isolation/cleanup and 200-mission mixed-limit regression coverage.
 
+### Waiting diagnostics and remedies
+
+- Share running branch/broad-scope safety decisions between dispatch and waiting diagnostics, and reuse the exact runtime/endpoint admission filter. A free captain behind a saturated runtime or endpoint now reports `RuntimeMissionLimit` or `EndpointMissionLimit`; disabled, unhealthy and circuit-broken endpoints report `EndpointUnavailable`.
+- Add bounded `Advice` next steps to REST mission reads and MCP `mission_status`. Suggestions use occupied capacity, preserve running work after a limit reduction, never suggest unlimited or exceed hard ceilings, and suggest adding CLI captains instead of raising their parallelism. Readers without global-admin privileges receive explanation text without configuration actions.
+- Show compact next steps in the Dashboard's waiting card, with direct links into existing vessel/captain/endpoint edit forms. Mobile and TUI display the same explanations. Existing breadcrumbs and card spacing are retained. Advice links match the action buttons’ height, and the captain detail editor now uses the same modal sizing as the Captains list editor.
+
 ### Dashboard navigation
 
 - Move breadcrumb placement into the shared layout for every page, with one renderer, consistent Dashboard/hub ancestry, canonical collection links, loaded entity labels, and cleanup on navigation. Keep the trail visible during lazy loading and use the actual visible hub tab for role-gated views.
@@ -1735,6 +1741,12 @@ Focus: stickiness and reliability -- making Armada a daily driver through per-pr
 
 - Serialize vessel gates per vessel, then shared global/runtime/endpoint/captain claims with a fixed lock order. Both waits are bounded; timed-out requests retry on the next cycle and increment `armada.admission.lock_timeouts` by gate. Idle registry entries are removed, and neither lock is held while provisioning docks or launching processes.
 - Spread equivalent work across eligible captains with fewer occupied slots while preserving explicit captain selection, persona preferences, priority classes and tier routing. Add lock isolation/cleanup and 200-mission mixed-limit regression coverage.
+
+### Waiting diagnostics and remedies
+
+- Share running branch/broad-scope safety decisions between dispatch and waiting diagnostics, and reuse the exact runtime/endpoint admission filter. A free captain behind a saturated runtime or endpoint now reports `RuntimeMissionLimit` or `EndpointMissionLimit`; disabled, unhealthy and circuit-broken endpoints report `EndpointUnavailable`.
+- Add bounded `Advice` next steps to REST mission reads and MCP `mission_status`. Suggestions use occupied capacity, preserve running work after a limit reduction, never suggest unlimited or exceed hard ceilings, and suggest adding CLI captains instead of raising their parallelism. Readers without global-admin privileges receive explanation text without configuration actions.
+- Show compact next steps in the Dashboard's waiting card, with direct links into existing vessel/captain/endpoint edit forms. Mobile and TUI display the same explanations. Existing breadcrumbs and card spacing are retained. Advice links match the action buttons’ height, and the captain detail editor now uses the same modal sizing as the Captains list editor.
 
 ### Dashboard navigation consolidation
 - Regrouped the dashboard from ~35 nav destinations across 6 sections to ~13 workflow-grouped destinations, without removing any capability: every folded page is reachable as a tab, a filter, the notification bell, or the command palette, and every old route redirects.

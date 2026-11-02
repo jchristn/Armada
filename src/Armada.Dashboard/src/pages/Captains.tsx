@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage, listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, enumerateModelEndpoints, evaluateCaptain, setCaptainCliPermissionPolicy } from '../api/client';
 import { listAll } from '../api/paging';
 import type { ModelEndpoint, ModelEvaluationOptions, ModelProbeDepth } from '../types/models';
@@ -40,6 +40,7 @@ type SortField = 'name' | 'runtime' | 'state' | 'createdUtc';
 
 export default function Captains() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
   const deletion = useDeleteProgress();
@@ -166,6 +167,12 @@ export default function Captains() {
   }, []);
 
   // CRUD
+  useEffect(() => {
+    if (!isAdmin || searchParams.get('create') !== '1') return;
+    openCreate();
+    setSearchParams(current => { const next = new URLSearchParams(current); next.delete('create'); return next; }, { replace: true });
+  }, [isAdmin, searchParams, setSearchParams]);
+
   function openCreate() {
     setForm(emptyCaptainForm());
     setEditing(null);

@@ -62,6 +62,13 @@ namespace Test.Shared.Suites.E2E
                         waiting = await Get<Mission>(client, "/api/v1/missions/" + waiting.Id);
                         AssertEqual(MissionAssignmentBlockerReasonEnum.VoyageMissionLimit, waiting.AssignmentBlocker!.Reason);
                         AssertEqual(2, waiting.AssignmentBlocker.BlockingMissionCount);
+                        AssertEqual(AssignmentBlockerActionEnum.EditVessel, waiting.AssignmentBlocker.Advice.Single().Action!.Value);
+                        AssertEqual(vessel.Id, waiting.AssignmentBlocker.Advice.Single().TargetId);
+                        AssertEqual(3, waiting.AssignmentBlocker.Advice.Single().SuggestedValue!.Value);
+                        string diagnostic = await mcp.CallToolAsync("mission_status", JsonSerializer.Serialize(new { missionId = waiting.Id }));
+                        AssertContains("VoyageMissionLimit", diagnostic);
+                        AssertContains("SuggestedValue", diagnostic);
+                        AssertContains("MaxParallelMissionsPerVoyage", diagnostic);
                         Mission running = firstMissions.Objects.First(m => m.Status == MissionStatusEnum.InProgress);
                         using (HttpResponseMessage cancelled = await client.DeleteAsync("/api/v1/missions/" + running.Id, ct))
                             cancelled.EnsureSuccessStatusCode();

@@ -1,0 +1,972 @@
+{
+  "pages": [
+    {
+      "name": "captains",
+      "theme": "light",
+      "width": 1440,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Captains"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains"
+      ],
+      "headers": [
+        "",
+        "ID",
+        "Name\u25b2",
+        "Runtime\u21c5",
+        "State\u21c5",
+        "Current Mission",
+        "Usage",
+        "Missions",
+        "Evaluations",
+        "Heartbeat",
+        "Created\u21c5",
+        "Actions"
+      ],
+      "missionLinks": [],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Stop All",
+          "height": 28
+        },
+        {
+          "label": "+ Captain",
+          "height": 28
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        },
+        {
+          "label": "\u21bb",
+          "height": 24.40625
+        },
+        {
+          "label": "Prev",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "captain",
+      "theme": "light",
+      "width": 1440,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Endpoint worker",
+        "Usage",
+        "Evaluation",
+        "Active Missions",
+        "Recent Missions"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains>Endpoint worker"
+      ],
+      "headers": [
+        "ID",
+        "Mission",
+        "Status",
+        "Branch",
+        "Date",
+        "Actions"
+      ],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Capture now",
+          "height": 22
+        },
+        {
+          "label": "Save capture settings",
+          "height": 20
+        },
+        {
+          "label": "Evaluate",
+          "height": 23
+        },
+        {
+          "label": "Full Evaluate...",
+          "height": 23
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "waiting",
+      "theme": "light",
+      "width": 1440,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Waiting task ",
+        "Why This Mission Is Waiting",
+        "Landing Preview",
+        "Description"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Missions>Waiting task"
+      ],
+      "headers": [],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [
+        {
+          "label": "Edit vessel limits",
+          "path": "/dashboard/vessels/vsl_mvzv36gr_xaRam8Uej7d?edit=1",
+          "height": 22
+        }
+      ],
+      "actionButtons": [
+        {
+          "label": "Diff",
+          "height": 22
+        },
+        {
+          "label": "Log",
+          "height": 22
+        },
+        {
+          "label": "Instructions",
+          "height": 22
+        },
+        {
+          "label": "Run Check",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "captains",
+      "theme": "light",
+      "width": 768,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Captains"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains"
+      ],
+      "headers": [
+        "",
+        "ID",
+        "Name\u25b2",
+        "Runtime\u21c5",
+        "State\u21c5",
+        "Current Mission",
+        "Usage",
+        "Missions",
+        "Evaluations",
+        "Heartbeat",
+        "Created\u21c5",
+        "Actions"
+      ],
+      "missionLinks": [],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Stop All",
+          "height": 28
+        },
+        {
+          "label": "+ Captain",
+          "height": 28
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        },
+        {
+          "label": "\u21bb",
+          "height": 24.40625
+        },
+        {
+          "label": "Prev",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "captain",
+      "theme": "light",
+      "width": 768,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Endpoint worker",
+        "Usage",
+        "Evaluation",
+        "Active Missions",
+        "Recent Missions"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains>Endpoint worker"
+      ],
+      "headers": [
+        "ID",
+        "Mission",
+        "Status",
+        "Branch",
+        "Date",
+        "Actions"
+      ],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Capture now",
+          "height": 22
+        },
+        {
+          "label": "Save capture settings",
+          "height": 20
+        },
+        {
+          "label": "Evaluate",
+          "height": 23
+        },
+        {
+          "label": "Full Evaluate...",
+          "height": 23
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "waiting",
+      "theme": "light",
+      "width": 768,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Waiting task ",
+        "Why This Mission Is Waiting",
+        "Landing Preview",
+        "Description"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Missions>Waiting task"
+      ],
+      "headers": [],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [
+        {
+          "label": "Edit vessel limits",
+          "path": "/dashboard/vessels/vsl_mvzv36gr_xaRam8Uej7d?edit=1",
+          "height": 22
+        }
+      ],
+      "actionButtons": [
+        {
+          "label": "Diff",
+          "height": 22
+        },
+        {
+          "label": "Log",
+          "height": 22
+        },
+        {
+          "label": "Instructions",
+          "height": 22
+        },
+        {
+          "label": "Run Check",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "captains",
+      "theme": "light",
+      "width": 390,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Captains"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains"
+      ],
+      "headers": [
+        "",
+        "ID",
+        "Name\u25b2",
+        "Runtime\u21c5",
+        "State\u21c5",
+        "Current Mission",
+        "Usage",
+        "Missions",
+        "Evaluations",
+        "Heartbeat",
+        "Created\u21c5",
+        "Actions"
+      ],
+      "missionLinks": [],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Stop All",
+          "height": 28
+        },
+        {
+          "label": "+ Captain",
+          "height": 28
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        },
+        {
+          "label": "\u21bb",
+          "height": 24.40625
+        },
+        {
+          "label": "Prev",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "captain",
+      "theme": "light",
+      "width": 390,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Endpoint worker",
+        "Usage",
+        "Evaluation",
+        "Active Missions",
+        "Recent Missions"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains>Endpoint worker"
+      ],
+      "headers": [
+        "ID",
+        "Mission",
+        "Status",
+        "Branch",
+        "Date",
+        "Actions"
+      ],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Capture now",
+          "height": 22
+        },
+        {
+          "label": "Save capture settings",
+          "height": 20
+        },
+        {
+          "label": "Evaluate",
+          "height": 23
+        },
+        {
+          "label": "Full Evaluate...",
+          "height": 23
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "waiting",
+      "theme": "light",
+      "width": 390,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Waiting task ",
+        "Why This Mission Is Waiting",
+        "Landing Preview",
+        "Description"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Missions>Waiting task"
+      ],
+      "headers": [],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [
+        {
+          "label": "Edit vessel limits",
+          "path": "/dashboard/vessels/vsl_mvzv36gr_xaRam8Uej7d?edit=1",
+          "height": 22
+        }
+      ],
+      "actionButtons": [
+        {
+          "label": "Diff",
+          "height": 22
+        },
+        {
+          "label": "Log",
+          "height": 22
+        },
+        {
+          "label": "Instructions",
+          "height": 22
+        },
+        {
+          "label": "Run Check",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "captains",
+      "theme": "dark",
+      "width": 1440,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Captains"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains"
+      ],
+      "headers": [
+        "",
+        "ID",
+        "Name\u25b2",
+        "Runtime\u21c5",
+        "State\u21c5",
+        "Current Mission",
+        "Usage",
+        "Missions",
+        "Evaluations",
+        "Heartbeat",
+        "Created\u21c5",
+        "Actions"
+      ],
+      "missionLinks": [],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Stop All",
+          "height": 28
+        },
+        {
+          "label": "+ Captain",
+          "height": 28
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        },
+        {
+          "label": "\u21bb",
+          "height": 24.40625
+        },
+        {
+          "label": "Prev",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "captain",
+      "theme": "dark",
+      "width": 1440,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Endpoint worker",
+        "Usage",
+        "Evaluation",
+        "Active Missions",
+        "Recent Missions"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains>Endpoint worker"
+      ],
+      "headers": [
+        "ID",
+        "Mission",
+        "Status",
+        "Branch",
+        "Date",
+        "Actions"
+      ],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Capture now",
+          "height": 22
+        },
+        {
+          "label": "Save capture settings",
+          "height": 20
+        },
+        {
+          "label": "Evaluate",
+          "height": 23
+        },
+        {
+          "label": "Full Evaluate...",
+          "height": 23
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "waiting",
+      "theme": "dark",
+      "width": 1440,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Waiting task ",
+        "Why This Mission Is Waiting",
+        "Landing Preview",
+        "Description"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Missions>Waiting task"
+      ],
+      "headers": [],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [
+        {
+          "label": "Edit vessel limits",
+          "path": "/dashboard/vessels/vsl_mvzv36gr_xaRam8Uej7d?edit=1",
+          "height": 22
+        }
+      ],
+      "actionButtons": [
+        {
+          "label": "Diff",
+          "height": 22
+        },
+        {
+          "label": "Log",
+          "height": 22
+        },
+        {
+          "label": "Instructions",
+          "height": 22
+        },
+        {
+          "label": "Run Check",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "captains",
+      "theme": "dark",
+      "width": 768,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Captains"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains"
+      ],
+      "headers": [
+        "",
+        "ID",
+        "Name\u25b2",
+        "Runtime\u21c5",
+        "State\u21c5",
+        "Current Mission",
+        "Usage",
+        "Missions",
+        "Evaluations",
+        "Heartbeat",
+        "Created\u21c5",
+        "Actions"
+      ],
+      "missionLinks": [],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Stop All",
+          "height": 28
+        },
+        {
+          "label": "+ Captain",
+          "height": 28
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        },
+        {
+          "label": "\u21bb",
+          "height": 24.40625
+        },
+        {
+          "label": "Prev",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "captain",
+      "theme": "dark",
+      "width": 768,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Endpoint worker",
+        "Usage",
+        "Evaluation",
+        "Active Missions",
+        "Recent Missions"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains>Endpoint worker"
+      ],
+      "headers": [
+        "ID",
+        "Mission",
+        "Status",
+        "Branch",
+        "Date",
+        "Actions"
+      ],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Capture now",
+          "height": 22
+        },
+        {
+          "label": "Save capture settings",
+          "height": 20
+        },
+        {
+          "label": "Evaluate",
+          "height": 23
+        },
+        {
+          "label": "Full Evaluate...",
+          "height": 23
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "waiting",
+      "theme": "dark",
+      "width": 768,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Waiting task ",
+        "Why This Mission Is Waiting",
+        "Landing Preview",
+        "Description"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Missions>Waiting task"
+      ],
+      "headers": [],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [
+        {
+          "label": "Edit vessel limits",
+          "path": "/dashboard/vessels/vsl_mvzv36gr_xaRam8Uej7d?edit=1",
+          "height": 22
+        }
+      ],
+      "actionButtons": [
+        {
+          "label": "Diff",
+          "height": 22
+        },
+        {
+          "label": "Log",
+          "height": 22
+        },
+        {
+          "label": "Instructions",
+          "height": 22
+        },
+        {
+          "label": "Run Check",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "captains",
+      "theme": "dark",
+      "width": 390,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Captains"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains"
+      ],
+      "headers": [
+        "",
+        "ID",
+        "Name\u25b2",
+        "Runtime\u21c5",
+        "State\u21c5",
+        "Current Mission",
+        "Usage",
+        "Missions",
+        "Evaluations",
+        "Heartbeat",
+        "Created\u21c5",
+        "Actions"
+      ],
+      "missionLinks": [],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Stop All",
+          "height": 28
+        },
+        {
+          "label": "+ Captain",
+          "height": 28
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        },
+        {
+          "label": "\u21bb",
+          "height": 24.40625
+        },
+        {
+          "label": "Prev",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "captain",
+      "theme": "dark",
+      "width": 390,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Endpoint worker",
+        "Usage",
+        "Evaluation",
+        "Active Missions",
+        "Recent Missions"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Captains>Endpoint worker"
+      ],
+      "headers": [
+        "ID",
+        "Mission",
+        "Status",
+        "Branch",
+        "Date",
+        "Actions"
+      ],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [],
+      "actionButtons": [
+        {
+          "label": "Capture now",
+          "height": 22
+        },
+        {
+          "label": "Save capture settings",
+          "height": 20
+        },
+        {
+          "label": "Evaluate",
+          "height": 23
+        },
+        {
+          "label": "Full Evaluate...",
+          "height": 23
+        },
+        {
+          "label": "Columns\u25be",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "waiting",
+      "theme": "dark",
+      "width": 390,
+      "overflow": false,
+      "headings": [
+        "Armada",
+        "Waiting task ",
+        "Why This Mission Is Waiting",
+        "Landing Preview",
+        "Description"
+      ],
+      "breadcrumbs": [
+        "Dashboard>Missions>Waiting task"
+      ],
+      "headers": [],
+      "missionLinks": [
+        "/dashboard/missions/msn_mvzv36hz_xozHtYUeLUX",
+        "/dashboard/missions/msn_mvzv36ja_45IR8epkpsJ",
+        "/dashboard/missions/msn_mvzv36jd_XUD4Mi0nCT5"
+      ],
+      "nextSteps": [
+        {
+          "label": "Edit vessel limits",
+          "path": "/dashboard/vessels/vsl_mvzv36gr_xaRam8Uej7d?edit=1",
+          "height": 22
+        }
+      ],
+      "actionButtons": [
+        {
+          "label": "Diff",
+          "height": 22
+        },
+        {
+          "label": "Log",
+          "height": 22
+        },
+        {
+          "label": "Instructions",
+          "height": 22
+        },
+        {
+          "label": "Run Check",
+          "height": 22
+        }
+      ]
+    },
+    {
+      "name": "vessel-edit-deep-link",
+      "width": 390,
+      "theme": "dark",
+      "modalOpened": true
+    }
+  ],
+  "forms": [
+    {
+      "name": "captain-edit",
+      "width": 1440,
+      "modalOpened": true,
+      "overflow": false,
+      "modalWidth": 880,
+      "footerVisible": true
+    },
+    {
+      "name": "captain-create",
+      "width": 1440,
+      "modalOpened": true,
+      "overflow": false,
+      "modalWidth": 880,
+      "footerVisible": true
+    },
+    {
+      "name": "endpoint-edit",
+      "width": 1440,
+      "modalOpened": true,
+      "overflow": false,
+      "modalWidth": 730,
+      "footerVisible": true
+    },
+    {
+      "name": "captain-edit",
+      "width": 390,
+      "modalOpened": true,
+      "overflow": false,
+      "modalWidth": 390,
+      "footerVisible": true
+    },
+    {
+      "name": "captain-create",
+      "width": 390,
+      "modalOpened": true,
+      "overflow": false,
+      "modalWidth": 390,
+      "footerVisible": true
+    },
+    {
+      "name": "endpoint-edit",
+      "width": 390,
+      "modalOpened": true,
+      "overflow": false,
+      "modalWidth": 390,
+      "footerVisible": true
+    }
+  ]
+}

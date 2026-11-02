@@ -99,6 +99,12 @@ namespace Armada.Core.Enums
         GlobalMissionLimit,
 
         /// <summary>Eligible captains have no free mission slots.</summary>
-        CaptainConcurrencyLimit
+        CaptainConcurrencyLimit,
+        /// <summary>All eligible runtime capacity is occupied.</summary>
+        RuntimeMissionLimit,
+        /// <summary>All eligible inference endpoint capacity is occupied.</summary>
+        EndpointMissionLimit,
+        /// <summary>An eligible endpoint is disabled, unhealthy or temporarily circuit-broken.</summary>
+        EndpointUnavailable
     }
 }

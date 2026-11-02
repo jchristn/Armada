@@ -426,7 +426,7 @@ namespace Armada.Server.Routes
                 if (mission == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
                 mission.DiffSnapshot = null;
                 mission.PlaybookSnapshots = await _database.Playbooks.GetMissionSnapshotsAsync(id).ConfigureAwait(false);
-                mission.AssignmentBlocker = await ComputeAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                mission.AssignmentBlocker = await ComputeAssignmentBlockerAsync(mission, ctx.IsAdmin).ConfigureAwait(false);
                 mission.Activity = MissionActivityLookup?.Invoke(mission.Id);
                 return (object)mission;
             },
@@ -1459,11 +1459,14 @@ namespace Armada.Server.Routes
                 .WithSecurity("ApiKey"));
         }
 
-        private async Task<MissionAssignmentBlocker?> ComputeAssignmentBlockerAsync(Mission mission)
+        private async Task<MissionAssignmentBlocker?> ComputeAssignmentBlockerAsync(Mission mission, bool canConfigure)
         {
             try
             {
-                return await _missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                MissionAssignmentBlocker? blocker = await _missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                if (!canConfigure && blocker != null)
+                    foreach (AssignmentBlockerAdvice advice in blocker.Advice) advice.Action = null;
+                return blocker;
             }
             catch (Exception ex)
             {

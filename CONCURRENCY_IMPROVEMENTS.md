@@ -14,6 +14,7 @@ Captain usage management and the mobile applications shipped in v1.2.0. This pla
 - [ ] Finish M1: model/DTO changes, new migrations 117-121 and all four database providers' atomic slot operations and mapping.
 - [x] Captain vertical slice: migration 118 and atomic slots across all providers; per-mission lifecycle, heartbeat/recovery budgets, cancellation, recall and Harbor reconnection; REST/MCP/WebSocket fields and Dashboard/Mobile/TUI capacity editors. HTTP/git/process tests exercise three missions on one captain, vacancy refill, crash/restart and lowering limits without preemption.
 - [x] M3 admission locking/load distribution: bounded per-vessel locks followed by a shared capacity lock; remove unused lock entries; preserve routing preferences and spread equivalent work by occupied slots. Add timeout metrics and 200-mission/mixed-limit progress coverage.
+- [x] M3 waiting diagnostics: share broad/branch/vessel safety decisions and runtime/endpoint capacity filters with dispatch; distinguish saturation from endpoint unavailability; add bounded, role-filtered advice in REST and MCP mission status, compact Dashboard next steps and native Mobile/TUI explanations. Keep remaining dependency/eligibility unification and invariant monitoring open.
 - [ ] Finish M2-M3: remove legacy captain pointers in migration 121, unify admission evaluation and invariants, release captain reservations during verification, and complete the remaining stress/invariant-monitor matrix. Vessel/global gates and captain capacity admission are active.
 - [ ] M4-M5: hierarchy, branch ownership, wait telemetry and Grafana.
 - [ ] M6-M10: public operations and all interactive clients. The new `Concurrency` group is currently a settings-file foundation, not an editable REST/MCP settings group.
@@ -21,7 +22,9 @@ Captain usage management and the mobile applications shipped in v1.2.0. This pla
 
 Migration 117 preserves existing vessel admission behavior. Migration 118 changes existing ApiEndpoint/Mux captains to concurrency 4 and CLI captains to 1; set endpoint-backed captains to 1 to retain serial operation. The existing global `MaxConcurrentMissions` settings-file guard now clamps negative input to 1 (not unlimited) and values above 10000 to 10000.
 
-This admission segment has [UX/layout validation evidence](docs/concurrency/ADMISSION_VALIDATION.md) for the actual Dashboard at desktop, tablet and mobile widths.
+Waiting diagnostics have [UX/layout validation evidence](docs/concurrency/WAITING_DIAGNOSTICS_VALIDATION.md), including light/dark responsive checks and actual editor navigation.
+
+The admission segment has [UX/layout validation evidence](docs/concurrency/ADMISSION_VALIDATION.md) for the actual Dashboard at desktop, tablet and mobile widths.
 
 ### Segment completion requirements
 
