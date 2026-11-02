@@ -8,14 +8,15 @@ One rule sits above everything else: **version numbers change only on the mainta
 agent preparing a release does not bump `Version` in `src/Directory.Build.props`, `src/Armada.Helm/Armada.Helm.csproj`,
 `ProductVersion` in `src/Armada.Core/Constants.cs`, the dashboard's `package.json` and `package-lock.json`, the build
 scripts, the image tags in the `docker/` compose files, the Postman collection, or the CHANGELOG heading on its own. It may propose a bump and explain why, then wait
-for approval. The rules are in `VERSIONING.md` in the shared requirements. The tree is at `1.0.0`; release
-candidates (`1.0.0-rc.N`) and any other pre-release label are applied only on the maintainer's instruction.
+for approval. The rules are in `VERSIONING.md` in the shared requirements. The tree is at `1.2.0`; release
+candidates (`1.2.0-rc.N`) and any other pre-release label are applied only on the maintainer's instruction.
 
 ## 1. Decide what is in the release
 
-Pick the commit you intend to tag and make sure `main` (or the release branch) is at it. Read the `## Unreleased`
-section of [CHANGELOG.md](../CHANGELOG.md) against the commits since the last tag. Every user-visible change, every
-new or changed setting, every migration, and every breaking change belongs there. A release with an incomplete
+Pick the commit you intend to tag and make sure `main` (or the release branch) is at it. Read the intended release
+section of [CHANGELOG.md](../CHANGELOG.md) against the commits since the last tag. All currently documented changes
+belong to v1.2.0; there is no separate Unreleased section. Every user-visible change, every new or changed setting,
+every migration, and every breaking change belongs under its release heading. A release with an incomplete
 CHANGELOG is not ready, however green the tests are.
 
 If the release changes the database schema, confirm that the migration is registered for all four providers and that
@@ -231,7 +232,7 @@ If you built any installer by hand outside CI, regenerate the manifest before at
 
 Once the maintainer has approved the version number:
 
-1. Rename `## Unreleased` in CHANGELOG.md to the release heading and start a fresh `## Unreleased` above it.
+1. Consolidate all changes included in the release under its approved CHANGELOG heading. If an Unreleased section exists, move its included entries into that release. Keep an Unreleased section only for changes deferred to a future release.
 2. Commit, then tag the exact commit that passed steps 2 through 5:
 
    ```bash

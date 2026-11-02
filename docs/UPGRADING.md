@@ -486,7 +486,9 @@ v1.0.0 is the first stable release: security hardening, a frozen and documented 
 
 ### v1.1.0 to v1.2.0
 
-**Nothing to migrate by hand.** The new schema migrations (96 to 106, including 103 to 106 for the black box) run automatically at startup, with SQLite backed up first, and every new column has a default. Docker installs pull the `v1.2.0` images (`jchristn77/armada-server:v1.2.0`, `jchristn77/armada-dashboard:v1.2.0`, `jchristn77/armada-proxy:v1.2.0`): `git pull`, then `docker/update.sh` (or `docker\update.bat`). Update each Harbor along with the Admiral.
+**Schema migrations run automatically; review usage capture settings after upgrading.** The new schema migrations (96 to 116, including 103 to 106 for the black box) run automatically at startup, with SQLite backed up first, and every new column has a default. Docker installs pull the `v1.2.0` images (`jchristn77/armada-server:v1.2.0`, `jchristn77/armada-dashboard:v1.2.0`, `jchristn77/armada-proxy:v1.2.0`): `git pull`, then `docker/update.sh` (or `docker\update.bat`). Update each Harbor along with the Admiral.
+
+**Captain usage capture settings:** v1.2.0 includes on-demand usage checks and scheduled monitoring. Capture and the Claude/Gemini PTY fallback default on; review the `UsageCapture` settings and each captain's capture settings. Migration 113 resets existing captain capture flags to unset. Settings files without `UsageCapture.DefaultsRevision: 2` reset `Enabled` and `AllowPtyFallback` once, including opt-outs saved by earlier v1.2.0 builds. Turn capture or the PTY fallback off again after upgrading if you previously opted out. Migration 116 makes usage observations and captain/account links durable across restarts.
 
 **Behavior changes worth knowing:**
 - Every stage attempt is recorded as a stage outcome with its provenance and a suspected cause; failure-cause rules are data you can edit, and the built-in rules are restored at startup if deleted.
@@ -507,7 +509,7 @@ are no breaking changes: every new table, column, field and setting is additive.
 take a dump first ([Server providers: dump first](#server-providers-dump-first)); with
 `database.requireBackupConfirmationForMigrations` on, the Admiral refuses to migrate until
 `database.confirmedBackupForSchemaVersion` (or `ARMADA_CONFIRM_BACKUP_FOR_SCHEMA_VERSION`) is at least the target
-version it prints (106 when you come straight to this release).
+version it prints (116 for the complete v1.2.0 release).
 
 | Migration | Adds |
 |---|---|

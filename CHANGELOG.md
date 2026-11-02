@@ -4,7 +4,26 @@ All notable changes to Armada are documented in this file.
 
 ---
 
-## Unreleased
+## v1.2.0 (2026-10-29)
+
+### Anchor features
+
+- **Captain usage checks and monitoring.** Check a captain's account usage on demand, configure recurring capture, and monitor reported account limits, utilization, and reset windows over time. The captain detail page exposes **Capture now** and capture settings; the Account Limits view brings the reported usage together for monitoring.
+- **Model fit-for-purpose evaluation by persona.** Evaluate how well a captain's model suits given personas and workloads before assigning it work. Quick probes check runtime behavior; Full evaluations run selected battery packs for selected personas and produce per-persona outcomes and a report. Start runs from Captains or a captain's Evaluations page, then open in-progress or completed results to inspect the evidence.
+
+### Release overview
+
+v1.2.0 adds the mission and voyage black box: every failure writes an entry that says where, how and why it
+failed, which missions and files it collided with, and how to recover, with a FIX THIS brief for any coding agent (see
+the black box sections below). It also adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
+its section below). Model evaluation records how well each model does the work
+it is given. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
+digest, escalation record) and a suspected cause; Quick probes give a captain or model endpoint a probe-only
+**Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
+are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
+mobile interfaces for the new surfaces. Since v1.1.0 was cut it also includes the `ExcludeReviewAuthorsFromJudge`
+setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 to 116 apply automatically at
+startup; see [UPGRADING.md](docs/UPGRADING.md#v110-to-v120).
 
 ### Captain usage history and operations
 
@@ -50,15 +69,14 @@ All notable changes to Armada are documented in this file.
 
 - Account usage capture and the Claude/Gemini PTY fallback now default on. Missing/null values inherit on; explicit false and Disabled mode opt out. Native TUI/mobile views show account/host limits, capture state, settings and expiring cooldowns.
 - **Upgrade action:** migration 113 resets existing captain capture flags to unset. Settings files without `UsageCapture.DefaultsRevision: 2` reset `Enabled` and `AllowPtyFallback` once. This also resets opt-outs saved by earlier v1.2.0 builds; turn capture or PTY fallback off again after upgrading if required.
-- Add host-local Claude OAuth and Gemini Code Assist quota readers, bounded enumerate forms, collection declarations and seven-day raw snapshot pruning. Unsupported and missing-auth sources never fabricate utilization. Hourly rollups remain planned.
+- Add host-local Claude OAuth and Gemini Code Assist quota readers, bounded enumerate forms, collection declarations and seven-day raw snapshot pruning. Unsupported and missing-auth sources never fabricate utilization. Hourly rollups retain quota history before raw snapshots are pruned.
 
 
 ### Captain usage dashboard prerequisites
 
 - Add an authenticated latest-usage `captainIds` batch filter for 1..100 distinct
   tenant-visible captains. Filter before account paging, preserve shared accounts,
-  and reject invalid batches or foreign IDs. This delivers the batch prerequisite;
-  the Phase 5 dashboard remains incomplete.
+  and reject invalid batches or foreign IDs. This supports batched captain usage reads in the dashboard.
 
 ### Account usage query and public surfaces (Phase 4)
 
@@ -151,29 +169,6 @@ All notable changes to Armada are documented in this file.
 - **`measured` block.** `GET /api/v1/model-profiles/{id}` and MCP `get_model_profile` return `Measured`: the counts from the latest complete Full report (run, revision and battery run ids, report time, packs, one count per probe kind, and per persona one count per pack with passed, failed, could not run, pending evaluation and attempted). Counts only, no derived scores; null until a complete report exists.
 - **Dashboard Evaluate dialog.** The captain page's Full Evaluate control opens a dialog with depth (Full by default), the evaluator captain (idle captains, with a note when one shares the evaluated captain's model family), battery packs, personas and run count, and submits to `POST /api/v1/captains/{id}/evaluate`. The report view is unchanged. New client helper `listBatteryPacks`.
 - **TUI Evaluate view.** The TUI captain page has an Evaluate action (`v`) with the same options, then a viewer that polls the run, shows its probe results and report, and cancels it with `c`.
-
----
-
-## v1.2.0 (2026-10-29)
-
-### Anchor features
-
-- **Captain usage checks and monitoring.** Check a captain's account usage on demand, configure recurring capture, and monitor reported account limits, utilization, and reset windows over time. The captain detail page exposes **Capture now** and capture settings; the Account Limits view brings the reported usage together for monitoring.
-- **Model fit-for-purpose evaluation by persona.** Evaluate how well a captain's model suits given personas and workloads before assigning it work. Quick probes check runtime behavior; Full evaluations run selected battery packs for selected personas and produce per-persona outcomes and a report. Start runs from Captains or a captain's Evaluations page, then open in-progress or completed results to inspect the evidence.
-
-### Release overview
-
-v1.2.0 adds the mission and voyage black box: every failure writes an entry that says where, how and why it
-failed, which missions and files it collided with, and how to recover, with a FIX THIS brief for any coding agent (see
-the black box sections below). It also adds pi (pi.dev) as a first-class captain runtime, with Armada MCP, Approve in Armada and Refuse support (see
-its section below). Model evaluation records how well each model does the work
-it is given. Every stage attempt is recorded as a stage outcome with its provenance (runtime version, model
-digest, escalation record) and a suspected cause; Quick probes give a captain or model endpoint a probe-only
-**Evaluate**; the fixture battery runs data-defined task packs (starting with C#) through real dispatch; and handoffs
-are delivered with their reader in mind. The release also improves captain usage visibility and management, and adds
-mobile interfaces for the new surfaces. Since v1.1.0 was cut it also includes the `ExcludeReviewAuthorsFromJudge`
-setting, Quick probes, and the fixture battery with its C# pack. Schema migrations 96 to 106 apply automatically at
-startup; see [UPGRADING.md](docs/UPGRADING.md#v110-to-v120).
 
 ### Worker eligibility envelope (model heterogeneity Phase 6, item 1)
 
