@@ -109,6 +109,11 @@ export default function Evaluations() {
       {evaluateTarget && <ModelEvaluateDialog open captainId={evaluateTarget} submitting={starting} error={startError}
         onClose={() => { if (!starting) setEvaluateTarget(null); }} onSubmit={(depth, options) => void startEvaluation(depth, options)} />}
       <PageHeader
+        breadcrumb={captainId ? [
+          { label: t('Captains'), to: '/captains' },
+          { label: captains.find(c => c.id === captainId)?.name || captainId, to: `/captains/${encodeURIComponent(captainId)}` },
+          { label: t('Evaluations') },
+        ] : [{ label: t('Captains'), to: '/captains' }, { label: t('Evaluations') }]}
         title={t('Evaluations')}
         actions={canEvaluate ? <button type="button" className="btn btn-primary" disabled={!captainId || starting}
           title={t(captainId ? 'Start evaluation' : 'Select a captain')}

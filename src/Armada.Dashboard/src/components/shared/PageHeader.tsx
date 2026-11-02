@@ -5,14 +5,14 @@ interface PageHeaderProps {
   title: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
-  /** Optional breadcrumb rendered above the title (detail pages). */
+  /** Optional entity trail registered with the global layout (rendered locally outside that layout). */
   breadcrumb?: readonly BreadcrumbItem[];
 }
 
 /**
  * The single page/section header used across the dashboard. Replaces the three previous
  * variants (`view-header`, `page-header`, `detail-header`): title + optional subtitle on the
- * left, right-aligned actions, and an optional breadcrumb line above for detail pages.
+ * left, right-aligned actions, and an optional entity trail supplied to the shared breadcrumb component.
  */
 export default function PageHeader({ title, subtitle, actions, breadcrumb }: PageHeaderProps) {
   return (

@@ -1,5 +1,7 @@
 import { useCallback, useMemo, type KeyboardEvent, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import { useDashboardBreadcrumbs } from './BreadcrumbContext';
+import { dashboardHubs } from '../../lib/dashboardNavigation';
 import { useLocale } from '../../context/LocaleContext';
 
 export interface TabDef {
@@ -68,6 +70,12 @@ export default function Tabs({ tabs, param = 'tab', defaultTabKey, actions, aria
   }, [activeKey, selectTab, visibleTabs]);
 
   const activeTab = visibleTabs.find((tab) => tab.key === activeKey);
+  const location = useLocation();
+  const hub = dashboardHubs.find(h => h.path === (location.pathname.replace(/\/+$/, '') || '/') && h.param === param);
+  useDashboardBreadcrumbs(hub && activeTab ? [
+    { label: t(hub.label), to: hub.path },
+    ...(activeTab.label === hub.label ? [] : [{ label: t(activeTab.label) }]),
+  ] : undefined, 0);
 
   return (
     <div className="page-tabs">

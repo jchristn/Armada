@@ -25,6 +25,7 @@ import RetentionSettings from '../components/settings/RetentionSettings';
 import AskSettings from '../components/settings/AskSettings';
 import BlackBoxSettings from '../components/settings/BlackBoxSettings';
 import CliPermissionSettings from '../components/settings/CliPermissionSettings';
+import UsageCaptureSettingsPanel from '../components/usage/UsageCaptureSettingsPanel';
 import DefaultLandingModeField from '../components/settings/DefaultLandingModeField';
 import { DEFAULT_GLOBAL_LANDING_MODE } from '../lib/vesselForm';
 import {
@@ -611,6 +612,8 @@ export default function Server() {
           </div>
         ))}
       </div>
+
+      <UsageCaptureSettingsPanel canEdit={isAdmin} />
 
       {/* Server Configuration */}
       {settings && (

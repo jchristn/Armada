@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import LoadingIndicator from './shared/LoadingIndicator';
+import DashboardBreadcrumbs, { DashboardBreadcrumbProvider } from './shared/DashboardBreadcrumbs';
 import DefaultCredentialsBanner from './DefaultCredentialsBanner';
 import { useLocale } from '../context/LocaleContext';
 import { useTheme } from '../context/ThemeContext';
@@ -413,9 +415,14 @@ export default function Layout() {
 
           <main className="main" id="main-content" tabIndex={-1}>
             <DefaultCredentialsBanner />
-            <div className="view">
-              <Outlet />
-            </div>
+            <DashboardBreadcrumbProvider>
+              <div className="view">
+                <DashboardBreadcrumbs />
+                <Suspense fallback={<LoadingIndicator fullHeight label={t('Loading page...')} />}>
+                  <Outlet />
+                </Suspense>
+              </div>
+            </DashboardBreadcrumbProvider>
           </main>
         </div>
       </div>

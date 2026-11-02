@@ -42,3 +42,13 @@ export function BlackBoxRedirect() {
   params.forEach((value, key) => { if (!next.has(key)) next.set(key, value); });
   return <Navigate to={`/missions?${next.toString()}`} state={location.state} replace />;
 }
+
+/** Retired list URLs retain filters, hashes and navigation state while opening their canonical hub. */
+export function LegacyPageRedirect({ to }: { to: string }) {
+  const location = useLocation();
+  const target = new URL(to, 'https://dashboard.invalid');
+  const params = new URLSearchParams(location.search);
+  target.searchParams.forEach((value, key) => params.set(key, value));
+  const query = params.toString();
+  return <Navigate to={`${target.pathname}${query ? `?${query}` : ''}${target.hash || location.hash}`} state={location.state} replace />;
+}

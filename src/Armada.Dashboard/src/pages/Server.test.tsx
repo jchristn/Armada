@@ -9,6 +9,7 @@ import { onlyCallArgs } from '../test/mockCalls';
 vi.mock('../api/client', () => ({
   getHealth: vi.fn(),
   getSettings: vi.fn(),
+  getUsageLatest: vi.fn(() => Promise.resolve({ objects: [], totalRecords: 0 })),
   updateSettings: vi.fn(),
   stopServer: vi.fn(),
   restartServer: vi.fn(),

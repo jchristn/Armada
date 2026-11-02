@@ -1,3 +1,4 @@
+import { useDashboardBreadcrumbs } from './BreadcrumbContext';
 import { Link } from 'react-router-dom';
 import { useLocale } from '../../context/LocaleContext';
 
@@ -9,6 +10,12 @@ export interface BreadcrumbItem {
 
 /** One dashboard breadcrumb structure: linked ancestors, a > separator, and a plain current page. */
 export default function Breadcrumbs({ items }: { items: readonly BreadcrumbItem[] }) {
+  const global = useDashboardBreadcrumbs(items);
+  return global ? null : <BreadcrumbTrail items={items} />;
+}
+
+/** The only breadcrumb markup, shared by standalone consumers and the dashboard layout. */
+export function BreadcrumbTrail({ items }: { items: readonly BreadcrumbItem[] }) {
   const { t } = useLocale();
   if (!items.length) return null;
   return (

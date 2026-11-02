@@ -17,6 +17,12 @@ All notable changes to Armada are documented in this file.
 - Expose numeric limits in Dashboard, Mobile and TUI vessel forms, setup wizards and detail views, plus REST and MCP. Add a model-free HTTP/git/process end-to-end scenario and a 50-request dispatch race test.
 - Multi-mission captain lifecycle, hierarchy and wait telemetry remain in progress. Legacy fields remain stored until their planned removal migration; the old vessel flag no longer controls dispatch. See [testing instructions](docs/CONCURRENCY_TESTING.md).
 
+### Dashboard navigation
+
+- Move breadcrumb placement into the shared layout for every page, with one renderer, consistent Dashboard/hub ancestry, canonical collection links, loaded entity labels, and cleanup on navigation. Keep the trail visible during lazy loading and use the actual visible hub tab for role-gated views.
+- Audit every dashboard page and route. Remove unused router page loaders and the orphan legacy Settings page; expose its account usage-capture controls on the active Settings page. Retired list URLs retain filters and navigation state, and unknown URLs show a recovery page.
+- Add route/module/link inventory and rendered breadcrumb regression checks. See [dashboard navigation](docs/DASHBOARD_NAVIGATION.md).
+
 ---
 
 ## v1.2.0 (2026-10-29)

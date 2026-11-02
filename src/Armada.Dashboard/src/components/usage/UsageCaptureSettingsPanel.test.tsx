@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Settings from './Settings';
-import { ApiError, getHealth, getSettings, getUsageLatest, updateSettings } from '../api/client';
-import { translateTemplate } from '../i18n/runtime';
-import { onlyCallArgs } from '../test/mockCalls';
+import UsageCaptureSettingsPanel from './UsageCaptureSettingsPanel';
+import { ApiError, getHealth, getSettings, getUsageLatest, updateSettings } from '../../api/client';
+import { translateTemplate } from '../../i18n/runtime';
+import { onlyCallArgs } from '../../test/mockCalls';
 
-vi.mock('../api/client', () => ({
+vi.mock('../../api/client', () => ({
   getHealth: vi.fn(),
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
@@ -21,44 +21,14 @@ const localeValue = {
   formatDateTime: (v: string | null | undefined) => v ?? '',
   formatRelativeTime: (v: string | null | undefined) => v ?? '',
 };
-vi.mock('../context/LocaleContext', () => ({ useLocale: () => localeValue }));
+vi.mock('../../context/LocaleContext', () => ({ useLocale: () => localeValue }));
 const authValue = { isAdmin: true };
-vi.mock('../context/AuthContext', () => ({ useAuth: () => authValue }));
+vi.mock('../../context/AuthContext', () => ({ useAuth: () => authValue }));
 
 const baseSettings = {
   admiralPort: 7890, mcpPort: 7891, maxCaptains: 4, heartbeatIntervalSeconds: 30, stallThresholdMinutes: 10,
   idleCaptainTimeoutSeconds: 0, dataDirectory: '/d', databasePath: '/d/db', logDirectory: '/d/logs', docksDirectory: '/d/docks', reposDirectory: '/d/repos',
 };
-
-describe('Settings default landing mode', () => {
-  beforeEach(() => {
-    vi.mocked(getHealth).mockResolvedValue({ status: 'Healthy', uptime: '1m', version: '1.0.0' } as never);
-    vi.mocked(updateSettings).mockReset();
-  });
-
-  it('loads the landing mode, saves LandingMode, and sends no autoCreatePr', async () => {
-    vi.mocked(getSettings).mockResolvedValue({ ...baseSettings, landingMode: 'MergeQueue' } as never);
-    vi.mocked(updateSettings).mockImplementation((data) => Promise.resolve({ ...baseSettings, ...data } as never));
-    render(<Settings />);
-
-    const select = await screen.findByLabelText('Default Landing Mode') as HTMLSelectElement;
-    expect(select.value).toBe('MergeQueue');
-    expect(screen.queryByText('Auto-Create Pull Requests')).toBeNull();
-    fireEvent.change(select, { target: { value: 'None' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save All Settings' }));
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
-    const body = onlyCallArgs(vi.mocked(updateSettings))[0] as Record<string, unknown>;
-    expect(body.landingMode).toBe('None');
-    expect(body).not.toHaveProperty('autoCreatePr');
-  });
-
-  it('defaults to Merge and Push when the server sends no landing mode', async () => {
-    vi.mocked(getSettings).mockResolvedValue({ ...baseSettings } as never);
-    render(<Settings />);
-    const select = await screen.findByLabelText('Default Landing Mode') as HTMLSelectElement;
-    expect(select.value).toBe('MergeAndPush');
-  });
-});
 
 describe('Settings usage capture', () => {
   const storedGroup = {
@@ -76,7 +46,7 @@ describe('Settings usage capture', () => {
 
   it('shows inherited enabled values when the server sends no usage group', async () => {
     vi.mocked(getSettings).mockResolvedValue({ ...baseSettings } as never);
-    render(<Settings />);
+    render(<UsageCaptureSettingsPanel canEdit={authValue.isAdmin} />);
     const toggle = await screen.findByLabelText('Enable account usage capture on this server') as HTMLInputElement;
     expect(toggle.checked).toBe(true);
     expect((screen.getByLabelText('Minimum interval (seconds)') as HTMLInputElement).value).toBe('60');
@@ -88,7 +58,7 @@ describe('Settings usage capture', () => {
   it('saves the full group, carrying retention values the form does not edit, and confirms success', async () => {
     vi.mocked(getSettings).mockResolvedValue({ ...baseSettings, usageCapture: storedGroup } as never);
     vi.mocked(updateSettings).mockImplementation((data) => Promise.resolve({ ...baseSettings, ...data } as never));
-    render(<Settings />);
+    render(<UsageCaptureSettingsPanel canEdit={authValue.isAdmin} />);
     const interval = await screen.findByLabelText('Minimum interval (seconds)') as HTMLInputElement;
     expect(interval.value).toBe('120');
     fireEvent.change(interval, { target: { value: '600' } });
@@ -106,7 +76,7 @@ describe('Settings usage capture', () => {
 
   it('blocks out-of-range input before any request', async () => {
     vi.mocked(getSettings).mockResolvedValue({ ...baseSettings, usageCapture: storedGroup } as never);
-    render(<Settings />);
+    render(<UsageCaptureSettingsPanel canEdit={authValue.isAdmin} />);
     const timeout = await screen.findByLabelText('Probe timeout (seconds)') as HTMLInputElement;
     fireEvent.change(timeout, { target: { value: '301' } });
     expect(timeout.getAttribute('aria-invalid')).toBe('true');
@@ -120,7 +90,7 @@ describe('Settings usage capture', () => {
   it('names the scheduled work that stops when disabling, and keeps edits after a server rejection', async () => {
     vi.mocked(getSettings).mockResolvedValue({ ...baseSettings, usageCapture: storedGroup } as never);
     vi.mocked(updateSettings).mockRejectedValue(new ApiError('MinimumIntervalSeconds rejected', 400, null));
-    render(<Settings />);
+    render(<UsageCaptureSettingsPanel canEdit={authValue.isAdmin} />);
     const toggle = await screen.findByLabelText('Enable account usage capture on this server') as HTMLInputElement;
     fireEvent.click(toggle);
     expect(await screen.findByText('Saving stops scheduled capture for 3 observed accounts and cancels captures in progress. Stored history is kept.')).toBeTruthy();
@@ -134,7 +104,7 @@ describe('Settings usage capture', () => {
   it('shows ordinary users a read-only explanation without reading or writing the group', async () => {
     authValue.isAdmin = false;
     vi.mocked(getSettings).mockResolvedValue({ ...baseSettings } as never);
-    render(<Settings />);
+    render(<UsageCaptureSettingsPanel canEdit={authValue.isAdmin} />);
     expect(await screen.findByText(/Only a global administrator can change server-wide usage capture settings/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save usage capture settings' })).toBeNull();
     expect(getUsageLatest).not.toHaveBeenCalled();

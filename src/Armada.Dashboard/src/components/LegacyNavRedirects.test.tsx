@@ -1,20 +1,20 @@
 import { readFileSync } from 'node:fs';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { BlackBoxRedirect, CliPermissionsRedirect, PlanningRedirect } from './LegacyNavRedirects';
+import { BlackBoxRedirect, CliPermissionsRedirect, PlanningRedirect, LegacyPageRedirect } from './LegacyNavRedirects';
 import { blackBoxHref, cliPermissionsHref, planningHref } from '../lib/navTargets';
 
 function Probe() {
   const location = useLocation();
   return (
     <>
-      <div data-testid="location">{location.pathname + location.search}</div>
+      <div data-testid="location">{location.pathname + location.search + location.hash}</div>
       <div data-testid="state">{JSON.stringify(location.state ?? null)}</div>
     </>
   );
 }
 
-function renderAt(entry: string | { pathname: string; search?: string; state?: unknown }) {
+function renderAt(entry: string | { pathname: string; search?: string; hash?: string; state?: unknown }) {
   cleanup();
   render(
     <MemoryRouter initialEntries={[entry]}>
@@ -22,6 +22,8 @@ function renderAt(entry: string | { pathname: string; search?: string; state?: u
         <Route path="/cli-permissions" element={<CliPermissionsRedirect />} />
         <Route path="/planning" element={<PlanningRedirect />} />
         <Route path="/planning/:id" element={<PlanningRedirect />} />
+        <Route path="/events" element={<LegacyPageRedirect to="/activity?source=events" />} />
+        <Route path="/activity" element={<Probe />} />
         <Route path="/server" element={<Probe />} />
         <Route path="/dispatch" element={<Probe />} />
         <Route path="/blackbox" element={<BlackBoxRedirect />} />
@@ -58,6 +60,12 @@ describe('legacy nav redirects (v1.2.0 consolidation)', () => {
     expect(renderAt('/blackbox?vesselId=vsl_1&triage=ArmadaDefect')).toBe('/missions?tab=blackbox&vesselId=vsl_1&triage=ArmadaDefect');
   });
 
+  it('keeps list filters, hashes and router state when opening a retired collection URL', () => {
+    expect(renderAt({ pathname: '/events', search: '?source=signals&page=3&vesselId=vsl_1', hash: '#filters', state: { from: 'inbox' } }))
+      .toBe('/activity?source=events&page=3&vesselId=vsl_1#filters');
+    expect(screen.getByTestId('state').textContent).toBe('{"from":"inbox"}');
+  });
+
   it('link helpers build the new tab URLs', () => {
     expect(cliPermissionsHref()).toBe('/server?tab=cli-permissions');
     expect(cliPermissionsHref({ requestId: 'cpr_1', section: 'rules' })).toBe('/server?tab=cli-permissions&section=rules&request=cpr_1');
@@ -69,8 +77,8 @@ describe('legacy nav redirects (v1.2.0 consolidation)', () => {
 
   it('App.tsx redirects every folded route instead of rendering the old pages (no 404s)', () => {
     const app = readFileSync('./src/App.tsx', 'utf8');
-    expect(app).toContain('<Route path="jobs" element={<Navigate to="/activity?source=jobs" replace />} />');
-    expect(app).toContain('<Route path="storage" element={<Navigate to="/server?tab=storage" replace />} />');
+    expect(app).toContain('<Route path="jobs" element={<LegacyPageRedirect to="/activity?source=jobs" />} />');
+    expect(app).toContain('<Route path="storage" element={<LegacyPageRedirect to="/server?tab=storage" />} />');
     expect(app).toContain('<Route path="cli-permissions" element={<CliPermissionsRedirect />} />');
     expect(app).toContain('<Route path="planning" element={<PlanningRedirect />} />');
     expect(app).toContain('<Route path="planning/:id" element={<PlanningRedirect />} />');
