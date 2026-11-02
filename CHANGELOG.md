@@ -6,6 +6,11 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Dashboard styling
+
+- Style captain evaluation navigation and downloads as shared action buttons. Align evaluation metadata, history, battery results, filters and pagination with dashboard spacing, status colors and responsive tables.
+- Reuse shared badges, cards and responsive form layouts on pipeline, dock, event, inbox, skill and project-profile pages; style check output with aligned line numbers and bounded scrolling.
+
 ### Captain account usage (phase 6)
 
 - Account usage capture and the Claude/Gemini PTY fallback now default on. Missing/null values inherit on; explicit false and Disabled mode opt out. Native TUI/mobile views show account/host limits, capture state, settings and expiring cooldowns.

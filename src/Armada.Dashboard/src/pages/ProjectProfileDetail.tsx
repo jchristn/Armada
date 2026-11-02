@@ -235,16 +235,16 @@ export default function ProjectProfileDetail() {
       )}
 
       <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
-        <div className="form-grid">
-          <label title={t(NAME_TIP)}>
+        <div className="detail-form-grid">
+          <label className="form-field" title={t(NAME_TIP)}>
             <span>{t('Name')}</span>
             <input type="text" title={t(NAME_TIP)} value={name} onChange={(e) => setName(e.target.value)} disabled={!canManage} />
           </label>
-          <label title={t(DESCRIPTION_TIP)}>
+          <label className="form-field" title={t(DESCRIPTION_TIP)}>
             <span>{t('Description')}</span>
             <input type="text" title={t(DESCRIPTION_TIP)} value={description} onChange={(e) => setDescription(e.target.value)} disabled={!canManage} />
           </label>
-          <label title={t(SCOPE_TIP)}>
+          <label className="form-field" title={t(SCOPE_TIP)}>
             <span>{t('Scope')}</span>
             <select title={t(SCOPE_TIP)} value={scope} onChange={(e) => setScope(e.target.value as typeof scope)} disabled={!canManage}>
               <option value="Global">{t('Global')}</option>
@@ -253,7 +253,7 @@ export default function ProjectProfileDetail() {
             </select>
           </label>
           {scope === 'Fleet' && (
-            <label title={t(FLEET_TIP)}>
+            <label className="form-field" title={t(FLEET_TIP)}>
               <span>{t('Fleet')}</span>
               <select title={t(FLEET_TIP)} value={fleetId} onChange={(e) => setFleetId(e.target.value)} disabled={!canManage}>
                 <option value="">{t('Select a fleet...')}</option>
@@ -262,7 +262,7 @@ export default function ProjectProfileDetail() {
             </label>
           )}
           {scope === 'Vessel' && (
-            <label title={t(VESSEL_TIP)}>
+            <label className="form-field" title={t(VESSEL_TIP)}>
               <span>{t('Vessel')}</span>
               <select title={t(VESSEL_TIP)} value={vesselId} onChange={(e) => setVesselId(e.target.value)} disabled={!canManage}>
                 <option value="">{t('Select a vessel...')}</option>
@@ -270,11 +270,11 @@ export default function ProjectProfileDetail() {
               </select>
             </label>
           )}
-          <label title={t(PIPELINE_TIP)}>
+          <label className="form-field" title={t(PIPELINE_TIP)}>
             <span>{t('Default Pipeline ID')}</span>
             <input type="text" title={t(PIPELINE_TIP)} value={defaultPipelineId} onChange={(e) => setDefaultPipelineId(e.target.value)} placeholder="ppl_..." disabled={!canManage} />
           </label>
-          <label title={t(WORKFLOW_TIP)}>
+          <label className="form-field" title={t(WORKFLOW_TIP)}>
             <span>{t('Workflow Profile ID')}</span>
             <input type="text" title={t(WORKFLOW_TIP)} value={workflowProfileId} onChange={(e) => setWorkflowProfileId(e.target.value)} placeholder="wfp_..." disabled={!canManage} />
           </label>
@@ -304,12 +304,12 @@ export default function ProjectProfileDetail() {
         ) : (
           overrides.map((o, index) => (
             <div key={index} className="card" style={{ padding: '0.75rem', marginBottom: '0.5rem' }}>
-              <div className="form-grid">
-                <label title={t(OVERRIDE_PERSONA_TIP)}>
+              <div className="detail-form-grid">
+                <label className="form-field" title={t(OVERRIDE_PERSONA_TIP)}>
                   <span>{t('Persona')}</span>
                   <input title={t(OVERRIDE_PERSONA_TIP)} list="known-personas" type="text" value={o.personaName} onChange={(e) => updateOverride(index, { personaName: e.target.value })} disabled={!canManage} />
                 </label>
-                <label title={t(OVERRIDE_TEMPLATE_TIP)}>
+                <label className="form-field" title={t(OVERRIDE_TEMPLATE_TIP)}>
                   <span>{t('Prompt Template Name')}</span>
                   <input title={t(OVERRIDE_TEMPLATE_TIP)} type="text" value={o.promptTemplateName || ''} onChange={(e) => updateOverride(index, { promptTemplateName: e.target.value || null })} placeholder="persona.architect" disabled={!canManage} />
                 </label>
@@ -360,7 +360,7 @@ export default function ProjectProfileDetail() {
                   ? t('Overridden: {{base}} to {{eff}}', { base: preview.baseTemplateName, eff: preview.effectiveTemplateName })
                   : t('No override applied for {{persona}}.', { persona: preview.personaName })}
               </p>
-              <div className="diff-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="detail-form-grid">
                 <div>
                   <strong title={t('The persona\'s prompt without this profile\'s override.')}>{t('Base')}</strong>
                   <pre className="code-block" style={{ whiteSpace: 'pre-wrap', maxHeight: '360px', overflow: 'auto' }}>{preview.basePrompt}</pre>

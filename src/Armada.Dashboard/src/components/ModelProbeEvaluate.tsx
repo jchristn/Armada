@@ -248,7 +248,7 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
       </div>
       {run && (
         <p className="model-probe-results-link">
-          <Link to={evaluationResultsPath(run.id)} title={t('Open the Evaluations page for this run: per-probe results, the Full report, battery results and links to its missions. It stays available after you leave this page.')}>
+          <Link className="btn btn-sm" to={evaluationResultsPath(run.id)} title={t('Open the Evaluations page for this run: per-probe results, the Full report, battery results and links to its missions. It stays available after you leave this page.')}>
             {t('Open full results')}
           </Link>
         </p>
@@ -268,19 +268,19 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
       {run && <ModelProbeResultsList results={run.results ?? []} />}
       {finished && run?.report && <FullReport report={run.report} />}
       {run?.profileRevision && run.report?.profileRevisionId && <p>
-        <a download={`${run.report.profileRevisionId}.json`} href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(run.profileRevision, null, 2))}`}>
+        <a className="btn btn-sm mono" download={`${run.report.profileRevisionId}.json`} href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(run.profileRevision, null, 2))}`}>
           {run.report.profileRevisionId}
         </a>
       </p>}
-      {history.length > 0 && <table className="data-table">
+      {history.length > 0 && <div className="table-wrap evaluation-table-wrap" role="region" aria-label={t('History')} tabIndex={0}><table className="data-table">
         <caption>{t('History')}</caption>
         <thead><tr>{['Started', 'Depth', 'Status', 'Passed', 'Failed', 'Could not run', 'Report'].map(label => <th key={label}>{t(label)}</th>)}</tr></thead>
         <tbody>{history.map(item => <tr key={item.id} aria-selected={run?.id === item.id}>
           <td><button type="button" className="btn btn-sm" disabled={loading || starting} onClick={() => void selectRun(item.id)}>{item.startedUtc ?? item.createdUtc}</button></td>
-          <td>{item.depth}</td><td>{item.status}</td><td>{item.passedCount}</td><td>{item.failedCount}</td><td>{item.couldNotRunCount}</td>
+          <td>{item.depth}</td><td><StatusBadge status={item.status} /></td><td>{item.passedCount}</td><td>{item.failedCount}</td><td>{item.couldNotRunCount}</td>
           <td>{item.report ? (item.report.complete ? t('Report complete') : t('Incomplete')) : isFinished(item) ? (item.status === 'Completed' ? t('Completed') : t('Incomplete')) : t('Pending')}</td>
         </tr>)}</tbody>
-      </table>}
+      </table></div>}
       {target === 'captain' && (
         <ModelEvaluateDialog
           open={dialogOpen}

@@ -9694,3 +9694,71 @@ div.usage-state-failed strong, div.usage-state-stale strong, div.usage-state-aut
 .usage-sparkline-base { stroke: var(--border); stroke-width: 1; }
 .usage-sparkline-line { stroke: var(--accent); stroke-width: 1.5; }
 .usage-sparkline-empty, .usage-sparkline-unavailable { font-size: 0.8125rem; }
+
+/* Detail pages share the same actions, metadata and responsive containment. */
+.detail-section-header { flex-wrap: wrap; }
+.captain-evaluation-section { margin-top: 1rem; }
+.model-probe-results-link { align-self: flex-start; }
+a.btn:hover { text-decoration: none; }
+.tag.info { background: var(--tag-working-bg); color: var(--tag-working-fg); }
+.tag.warning, .tag.couldnotrun, .tag.pendingevaluation { background: var(--tag-review-bg); color: var(--tag-review-fg); }
+.tag.admin { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
+
+.evaluation-detail { min-width: 0; }
+.evaluation-detail-fields {
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    margin-bottom: 1.25rem;
+    align-items: baseline;
+}
+.evaluation-detail > h3 { margin: 1.25rem 0 0.65rem; }
+.evaluation-table-wrap { min-width: 0; max-width: 100%; }
+.evaluation-table-wrap pre {
+    max-height: 24rem;
+    max-width: 40rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.evaluation-pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.75rem 0;
+}
+.model-probe-evaluate { min-width: 0; }
+.model-probe-results li > span:not(.tag) { min-width: 0; overflow-wrap: anywhere; }
+.model-probe-evaluate-tokens { flex-wrap: wrap; }
+.model-evaluation-report { overflow-wrap: anywhere; }
+
+/* Check output keeps its gutter aligned with physical lines, with one shared scroll area. */
+.workspace-code-view {
+    display: flex;
+    min-width: 0;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    line-height: 1.55;
+}
+.workspace-code-line-numbers {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    padding: 0.75rem;
+    text-align: right;
+    color: var(--text-dim);
+    border-right: 1px solid var(--border);
+    background: var(--bg-hover);
+    user-select: none;
+}
+.workspace-code-block { flex: 1 0 auto; padding: 0.75rem; font: inherit; }
+@media (max-width: 640px) {
+    .evaluation-detail-fields { grid-template-columns: minmax(0, 1fr); gap: 0.2rem; padding: 0.85rem; }
+    .evaluation-detail-fields dd { margin-bottom: 0.6rem; }
+}

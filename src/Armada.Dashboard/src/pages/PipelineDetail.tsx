@@ -42,8 +42,8 @@ function PipelineFlow({ stages, label }: { stages: PipelineStage[]; label: (key:
             <div className="text-dim" style={{ fontSize: '0.7rem' }}>{label('Stage')} {i + 1}</div>
             <strong>{stage.personaName || label('(unset)')}</strong>
             <div style={{ marginTop: '0.3rem', display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-              {stage.isOptional && <span className="badge badge-info" title={label('Marked optional. This is reserved and has no effect today: the stage still runs.')}>{label('Optional')}</span>}
-              {stage.requiresReview && <span className="badge badge-warning" title={label('Review gate: the pipeline pauses after this stage until a person approves its work.')}>{label('Review')}</span>}
+              {stage.isOptional && <span className="tag info" title={label('Marked optional. This is reserved and has no effect today: the stage still runs.')}>{label('Optional')}</span>}
+              {stage.requiresReview && <span className="tag warning" title={label('Review gate: the pipeline pauses after this stage until a person approves its work.')}>{label('Review')}</span>}
             </div>
           </div>
           {i < ordered.length - 1 && <span style={{ padding: '0 0.4rem', color: 'var(--text-dim)' }}>{'→'}</span>}
@@ -370,8 +370,8 @@ export default function PipelineDetail() {
         </div>
         <div className="detail-field"><span className="detail-label">{t('Name')}</span><span>{pipeline.name}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Description')}</span><span>{pipeline.description || '-'}</span></div>
-        <div className="detail-field"><span className="detail-label" title={t('Built-in pipelines ship with Armada and cannot be deleted.')}>{t('Built-in')}</span><span>{pipeline.isBuiltIn ? <span className="badge badge-info" title={t('Built-in: ships with Armada and cannot be deleted.')}>{t('Yes')}</span> : <span className="badge" title={t('Custom: created by a user and can be deleted.')}>{t('No')}</span>}</span></div>
-        <div className="detail-field"><span className="detail-label" title={t('Marks the pipeline as in use or retired. It is a label only: dispatch does not skip inactive pipelines.')}>{t('Active')}</span><span>{pipeline.active !== false ? <span className="badge badge-success" title={t('Active (a label only; it does not change dispatch).')}>{t('Yes')}</span> : <span className="badge badge-dim" title={t('Inactive (a label only; dispatch can still use it).')}>{t('No')}</span>}</span></div>
+        <div className="detail-field"><span className="detail-label" title={t('Built-in pipelines ship with Armada and cannot be deleted.')}>{t('Built-in')}</span><span>{pipeline.isBuiltIn ? <span className="tag info" title={t('Built-in: ships with Armada and cannot be deleted.')}>{t('Yes')}</span> : <span className="tag" title={t('Custom: created by a user and can be deleted.')}>{t('No')}</span>}</span></div>
+        <div className="detail-field"><span className="detail-label" title={t('Marks the pipeline as in use or retired. It is a label only: dispatch does not skip inactive pipelines.')}>{t('Active')}</span><span>{pipeline.active !== false ? <span className="tag passed" title={t('Active (a label only; it does not change dispatch).')}>{t('Yes')}</span> : <span className="tag" title={t('Inactive (a label only; dispatch can still use it).')}>{t('No')}</span>}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Created')}</span><span title={pipeline.createdUtc}>{formatDateTime(pipeline.createdUtc)}</span></div>
         <div className="detail-field"><span className="detail-label">{t('Last Updated')}</span><span>{formatDateTime(pipeline.lastUpdateUtc)}</span></div>
       </div>
@@ -404,11 +404,11 @@ export default function PipelineDetail() {
               { key: 'persona', label: t('Persona Name'), required: true, headerTitle: t('The persona (role) this stage\'s mission is given, which decides its instructions and which captains can take it.'), cellClassName: 'cell-ident', render: (stage) => <strong>{stage.personaName}</strong> },
               {
                 key: 'optional', label: t('Optional'), headerTitle: t('Reserved: saved but has no effect today. Every stage runs whether or not it is marked optional.'), cellClassName: 'cell-nowrap',
-                render: (stage) => stage.isOptional ? <span className="badge badge-info" title={t('Marked optional. This is reserved and has no effect today: the stage still runs.')}>{t('Yes')}</span> : <span className="badge" title={t('Not marked optional.')}>{t('No')}</span>,
+                render: (stage) => stage.isOptional ? <span className="tag info" title={t('Marked optional. This is reserved and has no effect today: the stage still runs.')}>{t('Yes')}</span> : <span className="tag" title={t('Not marked optional.')}>{t('No')}</span>,
               },
               {
                 key: 'review', label: t('Review'), headerTitle: t('Required means the pipeline pauses after this stage until a person approves its work in Review.'), cellClassName: 'cell-nowrap',
-                render: (stage) => stage.requiresReview ? <span className="badge badge-warning" title={t('Review gate: the pipeline pauses after this stage until a person approves its work.')}>{t('Required')}</span> : <span className="text-dim">{t('None')}</span>,
+                render: (stage) => stage.requiresReview ? <span className="tag warning" title={t('Review gate: the pipeline pauses after this stage until a person approves its work.')}>{t('Required')}</span> : <span className="text-dim">{t('None')}</span>,
               },
               {
                 key: 'onDeny', label: t('On Deny'), headerTitle: t('What a denied review does: Retry stage reworks the same mission; Fail pipeline fails it and cancels the stages after it.'), cellClassName: 'cell-nowrap',

@@ -135,7 +135,7 @@ export default function Inbox() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span
-              className="badge"
+              className="tag"
               style={{ color: severityColor(item.severity), borderColor: severityColor(item.severity), whiteSpace: 'nowrap' }}
               title={t('How urgent this is. Critical items block work now; Warning items need attention soon.')}
             >

@@ -111,7 +111,7 @@ export default function EventDetail() {
           </div>
           <div>
             <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }} title={t('What happened, as a dotted name such as mission.completed or mission.failed.')}>{t('Event Type')}</div>
-            <span className="status" title={t('Event type name. The Event Type filter on the Events list matches on it.')}>{event.eventType}</span>
+            <span className="tag" title={t('Event type name. The Event Type filter on the Events list matches on it.')}>{event.eventType}</span>
           </div>
           <div>
             <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }} title={t('Plain-language description of the event.')}>{t('Message')}</div>

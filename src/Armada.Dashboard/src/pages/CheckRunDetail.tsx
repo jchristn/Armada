@@ -321,7 +321,7 @@ export default function CheckRunDetail() {
               <span key={index + 1}>{index + 1}</span>
             ))}
           </div>
-          <pre className="workspace-code-block" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{run.output || t('No output captured.')}</pre>
+          <pre className="workspace-code-block" style={{ margin: 0, whiteSpace: 'pre' }}>{run.output || t('No output captured.')}</pre>
         </div>
       </div>
     </div>

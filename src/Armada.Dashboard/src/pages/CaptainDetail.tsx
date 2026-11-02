@@ -588,15 +588,15 @@ export default function CaptainDetail() {
       </div>
 
       {/* Evaluation (Quick mechanical probes) */}
-      <div style={{ marginTop: '1rem' }}>
-        <h3 title={t('Probe this captain through its own runtime: served context, output contract, ASCII and format, tool calling, speed and determinism.')}>{t('Evaluation')}</h3>
-        <p>
-          <Link to={evaluationsListPath(captain.id)} title={t('Open the Evaluations page filtered to this captain: every past Quick and Full evaluation with its results.')}>
+      <section className="detail-section captain-evaluation-section">
+        <div className="detail-section-header">
+          <h3 title={t('Probe this captain through its own runtime: served context, output contract, ASCII and format, tool calling, speed and determinism.')}>{t('Evaluation')}</h3>
+          <Link className="btn btn-sm" to={evaluationsListPath(captain.id)} title={t('Open the Evaluations page filtered to this captain: every past Quick and Full evaluation with its results.')}>
             {t('Past evaluations')}
           </Link>
-        </p>
+        </div>
         <ModelProbeEvaluate target="captain" targetId={captain.id} evaluationRunId={searchParams.get('evaluationRun')} onError={setError} />
-      </div>
+      </section>
 
       {/* Current Mission Details */}
       {currentMission && (

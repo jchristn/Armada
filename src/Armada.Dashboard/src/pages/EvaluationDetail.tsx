@@ -77,7 +77,7 @@ export default function EvaluationDetail({ pollMs = MODEL_PROBE_POLL_MS }: Evalu
   const totalPages = Math.max(1, run?.batteryResultsPage?.totalPages ?? 1);
 
   return (
-    <div>
+    <div className="evaluation-detail">
       <PageHeader
         breadcrumb={breadcrumb}
         title={t('Evaluation {{runId}}', { runId: id })}
@@ -94,7 +94,7 @@ export default function EvaluationDetail({ pollMs = MODEL_PROBE_POLL_MS }: Evalu
       {loading && !run && <p className="text-dim">{t('Loading...')}</p>}
       {run && (
         <>
-          <dl className="evaluation-detail-fields">
+          <dl className="detail-kv evaluation-detail-fields">
             <dt>{run.targetKind === 'Captain' ? t('Captain') : t('Model endpoint')}</dt>
             <dd>
               {run.targetKind === 'Captain' && run.captainId
@@ -107,7 +107,7 @@ export default function EvaluationDetail({ pollMs = MODEL_PROBE_POLL_MS }: Evalu
             {run.completedUtc && <><dt>{t('Completed')}</dt><dd>{formatDateTime(run.completedUtc)}</dd></>}
             <dt>{t('Tokens')}</dt><dd>{run.tokensUsed} / {run.tokenBudget}</dd>
             {run.targetKind === 'Captain' && run.captainId && (
-              <><dt>{t('Past evaluations')}</dt><dd><Link to={evaluationsListPath(run.captainId)}>{t('All evaluations of this captain')}</Link></dd></>
+              <><dt>{t('Past evaluations')}</dt><dd><Link className="btn btn-sm" to={evaluationsListPath(run.captainId)}>{t('All evaluations of this captain')}</Link></dd></>
             )}
           </dl>
           {run.failureReason && <p className="text-danger">{run.failureReason}</p>}
@@ -140,13 +140,14 @@ export default function EvaluationDetail({ pollMs = MODEL_PROBE_POLL_MS }: Evalu
               )}
               {!run.batteryRunId && <p className="text-dim">{t('The battery has not started yet.')}</p>}
               {run.batteryResultsPage && (
-                <div>
-                  <button className="btn" disabled={loading || page <= 1} onClick={() => setPageSelection({ id, page: page - 1 })}>{t('Previous')}</button>{' '}
+                <div className="evaluation-pager">
+                  <button type="button" className="btn btn-sm" disabled={loading || page <= 1} onClick={() => setPageSelection({ id, page: page - 1 })}>{t('Previous')}</button>{' '}
                   <span>{t('Page {{page}} of {{total}}', { page, total: totalPages })}</span>{' '}
-                  <button className="btn" disabled={loading || page >= totalPages} onClick={() => setPageSelection({ id, page: page + 1 })}>{t('Next')}</button>
+                  <button type="button" className="btn btn-sm" disabled={loading || page >= totalPages} onClick={() => setPageSelection({ id, page: page + 1 })}>{t('Next')}</button>
                 </div>
               )}
               {batteryResults.length > 0 && (
+                <div className="table-wrap evaluation-table-wrap" role="region" aria-label={t('Battery results')} tabIndex={0}>
                 <table className="data-table" aria-label={t('Battery results')}>
                   <thead>
                     <tr>{['Pack', 'Task', 'Persona', 'Attempt', 'Outcome', 'Summary', 'Mission', 'Voyage'].map((label) => <th key={label}>{t(label)}</th>)}</tr>
@@ -170,6 +171,7 @@ export default function EvaluationDetail({ pollMs = MODEL_PROBE_POLL_MS }: Evalu
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </>
           )}

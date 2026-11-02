@@ -84,10 +84,11 @@ export default function Evaluations() {
         title={t('Evaluations')}
         subtitle={t('Quick and Full evaluations of captains and model endpoints, newest first. Open a run to see its probe results, the Full report and the battery results.')}
       />
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+      <div className="filter-bar">
         <label htmlFor="evaluations-captain-filter">{t('Captain')}</label>
         <select
           id="evaluations-captain-filter"
+          className="filter-select"
           value={captainId}
           onChange={(e) => update({ captainId: e.target.value })}
           title={t('Show only the evaluations of one captain.')}
@@ -103,6 +104,7 @@ export default function Evaluations() {
       ) : runs.length === 0 && !error ? (
         <p className="text-dim">{t('No evaluations yet. Start one with Evaluate on a captain or in the Endpoint Health dialog.')}</p>
       ) : runs.length > 0 && (
+        <div className="table-wrap evaluation-table-wrap" role="region" aria-label={t('Evaluations')} tabIndex={0}>
         <table className="data-table" aria-label={t('Evaluations')}>
           <thead>
             <tr>
@@ -124,9 +126,10 @@ export default function Evaluations() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
       {totalPages > 1 && (
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.75rem' }}>
+        <div className="evaluation-pager">
           <button type="button" className="btn btn-sm" disabled={pageNumber <= 1 || loading} onClick={() => update({ page: pageNumber - 1 })}>{t('Previous')}</button>
           <span className="text-dim">{t('Page {{page}} of {{total}}', { page: pageNumber, total: totalPages })}</span>
           <button type="button" className="btn btn-sm" disabled={pageNumber >= totalPages || loading} onClick={() => update({ page: pageNumber + 1 })}>{t('Next')}</button>

@@ -164,16 +164,16 @@ export default function SkillDetail() {
       )}
 
       <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
-        <div className="form-grid">
-          <label title={t(SKILL_NAME_TIP)}>
+        <div className="detail-form-grid">
+          <label className="form-field" title={t(SKILL_NAME_TIP)}>
             <span>{t('Name')}</span>
             <input type="text" title={t(SKILL_NAME_TIP)} value={name} onChange={(e) => setName(e.target.value)} disabled={!canManage} />
           </label>
-          <label title={t(SKILL_CATEGORY_TIP)}>
+          <label className="form-field" title={t(SKILL_CATEGORY_TIP)}>
             <span>{t('Category')}</span>
             <input type="text" title={t(SKILL_CATEGORY_TIP)} value={category} onChange={(e) => setCategory(e.target.value)} placeholder="engineering" disabled={!canManage} />
           </label>
-          <label title={t(SKILL_DESCRIPTION_TIP)}>
+          <label className="form-field" title={t(SKILL_DESCRIPTION_TIP)}>
             <span>{t('Description')}</span>
             <input type="text" title={t(SKILL_DESCRIPTION_TIP)} value={description} onChange={(e) => setDescription(e.target.value)} disabled={!canManage} />
           </label>

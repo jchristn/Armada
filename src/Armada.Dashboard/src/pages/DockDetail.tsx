@@ -149,7 +149,7 @@ export default function DockDetail() {
         const anchors = parseDockGitAnchors(dock.gitAnchorsJson);
         if (!anchors) return null;
         return (
-          <div className="detail-card" style={{ marginTop: 16 }}>
+          <div className="card" style={{ marginTop: 16 }}>
             <h3 title={t('Git facts recorded when the dock was created, so a captain resuming the mission knows where the work began.')}>{t('Starting Point')}</h3>
             <div className="detail-grid">
               <div>
