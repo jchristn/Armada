@@ -187,9 +187,13 @@ export default function VesselFormModal({ vessel, fleets, pipelines, onClose, on
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem 2rem', marginBottom: '0.5rem' }}>
-          <label style={checkboxLabelStyle} title={tip.concurrent}>
-            <input title={tip.concurrent} type="checkbox" checked={form.allowConcurrentMissions} onChange={e => setForm({ ...form, allowConcurrentMissions: e.target.checked })} style={checkboxStyle} />
-            <span style={{ verticalAlign: 'middle' }}>{t('Allow Concurrent Missions')}</span>
+          <label style={columnLabelStyle}>
+            {t('Parallel voyages')}
+            <input aria-label={t('Parallel voyages')} title={t('Maximum admitted voyages on this vessel. Each standalone mission counts as one voyage. 0 means unlimited.')} type="number" min="0" max="1000" step="1" value={form.maxParallelVoyages} onChange={e => setForm({ ...form, maxParallelVoyages: e.target.value })} />
+          </label>
+          <label style={columnLabelStyle}>
+            {t('Parallel missions per voyage')}
+            <input aria-label={t('Parallel missions per voyage')} title={t('Maximum agents running within each voyage. Review and landing do not consume a mission slot. 0 means unlimited.')} type="number" min="0" max="1000" step="1" value={form.maxParallelMissionsPerVoyage} onChange={e => setForm({ ...form, maxParallelMissionsPerVoyage: e.target.value })} />
           </label>
           <label style={checkboxLabelStyle} title={tip.serialize}>
             <input title={tip.serialize} type="checkbox" checked={form.serializeOverlappingMissions} onChange={e => setForm({ ...form, serializeOverlappingMissions: e.target.checked })} style={checkboxStyle} aria-label={t('Serialize Overlapping Missions')} />

@@ -43,9 +43,15 @@ namespace Armada.Server.Mcp
         public string? WorkingDirectory { get; set; }
 
         /// <summary>
-        /// Whether to allow multiple concurrent missions on this vessel. Default false.
+        /// Legacy stored flag; use the numeric voyage and mission admission limits.
         /// </summary>
         public bool? AllowConcurrentMissions { get; set; }
+
+        /// <summary>Maximum admitted voyage groups; zero is unlimited.</summary>
+        public int? MaxParallelVoyages { get; set; }
+
+        /// <summary>Maximum running missions per voyage; zero is unlimited.</summary>
+        public int? MaxParallelMissionsPerVoyage { get; set; }
 
         /// <summary>
         /// Whether to chain a dispatched mission after an overlapping active mission (DependsOnMissionId). Default false.

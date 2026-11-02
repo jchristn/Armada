@@ -130,7 +130,7 @@ Good: "Add JWT validation middleware in src/middleware/auth.ts. Import jsonwebto
 **Rule 2 -- Monolithic files require sequential missions.** Some codebases have large files that many features touch (e.g., a single-page app with one `index.html` and one `app.js`). You CANNOT parallelize work on these files. Instead:
 - Put all changes to the shared file in a **single mission**, OR
 - Split across **separate sequential voyages** (dispatch voyage 2 only after voyage 1 completes), OR
-- Use one mission per voyage and rely on the vessel's `allowConcurrentMissions: false` (the default) to serialize execution
+- Use one mission per voyage and rely on the vessel's `maxParallelVoyages: 1` and `maxParallelMissionsPerVoyage: 1` to serialize execution
 
 **Rule 3 -- Never dispatch overlapping voyages.** If Voyage A has a mission that touches `dashboard.js`, do NOT dispatch Voyage B with another mission that also touches `dashboard.js` while Voyage A is still running. The second voyage's missions will branch from stale code and fail to land even if execution is serialized.
 
@@ -280,7 +280,7 @@ Boolean include flags (all default to `false`): `includeDescription` (missions, 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_vessel` | `vesselId` (required) | Get vessel details |
-| `add_vessel` | `name` (required), `repoUrl` (required), `fleetId` (required), `defaultBranch` (default: "main"), `workingDirectory`, `projectContext`, `styleGuide`, `allowConcurrentMissions` (default false), `autoApprove`, `enableModelContext`, `defaultPipelineId`, `gitHubTokenOverride` | Register a new git repo |
+| `add_vessel` | `name` (required), `repoUrl` (required), `fleetId` (required), `defaultBranch` (default: "main"), `workingDirectory`, `projectContext`, `styleGuide`, `maxParallelVoyages` (default 1), `maxParallelMissionsPerVoyage` (default 4), `autoApprove`, `enableModelContext`, `defaultPipelineId`, `gitHubTokenOverride` | Register a new git repo |
 | `update_vessel` | `vesselId` (required), plus any `add_vessel` field, `clearAutoApprove`, `modelContext`, and the auto-land (`autoLand*`) and Definition-of-Done (`definitionOfDone*`) settings | Update vessel |
 | `update_vessel_context` | `vesselId` (required), `projectContext`, `styleGuide`, `modelContext` | Update only the vessel's context fields |
 | `delete_vessel` | `vesselId` (required) | Delete vessel |
@@ -381,7 +381,7 @@ Use `enumerate` for all collection queries. Use a small `pageSize` (10-25) to co
 **How to handle monolithic/shared files?** When multiple changes must go into the same file (e.g., a single `index.html` or `app.js`), you have three options:
 1. **Combine into one mission** -- put all the changes in a single mission description. This is the safest approach.
 2. **Chain voyages** -- dispatch voyage 1, wait for it to complete, then dispatch voyage 2. Each voyage builds on the prior one's landed code.
-3. **Single-mission voyages with serialization** -- create one mission per voyage and rely on the vessel's `allowConcurrentMissions: false` (the default). But be aware that if two voyages are active simultaneously, their branches may still conflict.
+3. **Single-mission voyages with serialization** -- create one mission per voyage and rely on the vessel's `maxParallelVoyages: 1` and `maxParallelMissionsPerVoyage: 1`. But be aware that if two voyages are active simultaneously, their branches may still conflict.
 
 **NEVER** dispatch two voyages that modify the same files concurrently. This is the most common cause of `LandingFailed` status.
 

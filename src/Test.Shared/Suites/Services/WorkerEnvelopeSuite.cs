@@ -634,7 +634,8 @@ namespace Test.Shared.Suites.Services
             vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_envelope_bare_" + Guid.NewGuid().ToString("N"));
             vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_envelope_work_" + Guid.NewGuid().ToString("N"));
             vessel.DefaultBranch = "main";
-            vessel.AllowConcurrentMissions = true;
+            vessel.MaxParallelVoyages = 0;
+                    vessel.MaxParallelMissionsPerVoyage = 0;
             vessel.WorkerEnvelope = vesselEnvelope;
             vessel = await db.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 

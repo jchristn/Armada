@@ -68,7 +68,8 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertEqual("main", vesselBody.DefaultBranch, "default branch");
                     AssertEqual("None", vesselBody.LandingMode, "landing mode");
                     AssertEqual(true, vesselBody.EnableModelContext, "model context toggle");
-                    AssertEqual(false, vesselBody.AllowConcurrentMissions, "concurrency toggle");
+                    AssertEqual(1, vesselBody.MaxParallelVoyages, "voyage limit");
+                    AssertEqual(4, vesselBody.MaxParallelMissionsPerVoyage, "mission limit");
 
                     TuiScreenDump.Write("setup-captain", host.Screen());
                     host.Press("ctrl+s");

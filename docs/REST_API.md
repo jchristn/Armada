@@ -3448,7 +3448,7 @@ Get a single mission by ID.
 A `Pending` mission also carries `AssignmentBlocker`, computed when it is read (not stored): why no captain has taken it
 yet. `Reason` is one of `AwaitingDispatch`, `VesselMissing`, `VesselMisconfigured`, `DependencyNotFinished`,
 `DependencyHandoffPending`, `WaitingForVoyageWorkers`, `VesselBroadScopeMissionActive`, `BroadScopeWaitingForVessel`,
-`VesselConcurrencyLimit`, `NoCaptains`, `NoIdleCaptain`, or `NoEligibleCaptain`; `Summary` is an English sentence;
+`VesselVoyageLimit`, `VoyageMissionLimit`, `GlobalMissionLimit`, `NoCaptains`, `NoIdleCaptain`, or `NoEligibleCaptain`; `Summary` is an English sentence;
 `UntilUtc` is when it clears on its own (for example when the only captain's quarantine ends); `DependsOnMissionId` and
 `BlockingMissionIds` name the missions it waits for (the first 25; `BlockingMissionCount` is the full count); and
 `Captains` lists what each captain in the tenant is doing (the first 25 by name; `CaptainCount` is the full count:
@@ -10791,7 +10791,9 @@ A git repository registered with Armada.
 | `PreferredHarborId` | string? | null | Preferred Harbor (host runner) for this vessel's missions; null lets the router choose |
 | `RequiredCapabilities` | string? | null | Comma-separated capabilities a Harbor must advertise to run this vessel's missions (for example `claude,gh`) |
 | `GitHubTokenOverrideInput` | string? | null | Write-only: supply a per-vessel GitHub token on create/update. Never returned; see `HasGitHubTokenOverride` |
-| `AllowConcurrentMissions` | bool | false | When false, only one mission may be active (`Assigned`, `InProgress`, `WorkProduced`, `PullRequestOpen`) at a time |
+| `MaxParallelVoyages` | int | 1 | Admitted voyage groups on this vessel, including review and landing; 0 is unlimited; clamped to 0..1000 (negative becomes 1) |
+| `MaxParallelMissionsPerVoyage` | int | 4 | Running missions per voyage (Assigned/InProgress); 0 is unlimited; same bounds |
+| `AllowConcurrentMissions` | bool | false | Legacy stored field; use the numeric admission limits |
 | `AutoApprove` | bool? | null | Per-vessel override of the captain auto-approve setting; null leaves the captain's own setting in effect |
 | `RequirePassingChecksToLand` | bool | false | Landing requires at least one passing structured check for the branch or mission |
 | `ProtectedBranchPatterns` | string[] | [] | Protected-branch glob or exact-match patterns |

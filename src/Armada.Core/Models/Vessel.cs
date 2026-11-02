@@ -173,11 +173,27 @@ namespace Armada.Core.Models
         public BranchCleanupPolicyEnum? BranchCleanupPolicy { get; set; } = null;
 
         /// <summary>
-        /// Whether this vessel allows multiple concurrent missions. Default false.
-        /// When false, only one mission may be in an active state
-        /// (Assigned, InProgress, WorkProduced, PullRequestOpen) at a time.
+        /// Legacy stored flag retained until the removal migration. Admission uses
+        /// MaxParallelVoyages and MaxParallelMissionsPerVoyage.
         /// </summary>
         public bool AllowConcurrentMissions { get; set; } = false;
+
+        /// <summary>Maximum admitted voyage groups on this vessel; zero means unlimited.</summary>
+        public int MaxParallelVoyages
+        {
+            get => _MaxParallelVoyages;
+            set => _MaxParallelVoyages = ConcurrencyClamp.VesselLimit(value);
+        }
+
+        /// <summary>Maximum running missions per voyage; zero means unlimited.</summary>
+        public int MaxParallelMissionsPerVoyage
+        {
+            get => _MaxParallelMissionsPerVoyage;
+            set => _MaxParallelMissionsPerVoyage = ConcurrencyClamp.VesselLimit(value);
+        }
+
+        private int _MaxParallelVoyages = Constants.DefaultVesselMaxParallelVoyages;
+        private int _MaxParallelMissionsPerVoyage = Constants.DefaultVesselMaxParallelMissionsPerVoyage;
 
         /// <summary>
         /// Per-vessel override of the captain auto-approve setting for missions on this vessel. Null (the default)

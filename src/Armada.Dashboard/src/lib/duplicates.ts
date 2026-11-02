@@ -109,6 +109,8 @@ export function buildVesselDuplicatePayload(vessel: Vessel): Partial<Vessel> {
     requirePullRequestForProtectedBranches: vessel.requirePullRequestForProtectedBranches,
     requireMergeQueueForReleaseBranches: vessel.requireMergeQueueForReleaseBranches,
     allowConcurrentMissions: vessel.allowConcurrentMissions,
+    maxParallelVoyages: vessel.maxParallelVoyages,
+    maxParallelMissionsPerVoyage: vessel.maxParallelMissionsPerVoyage,
     defaultPipelineId: vessel.defaultPipelineId ?? null,
   };
 }

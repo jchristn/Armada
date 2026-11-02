@@ -10,8 +10,9 @@ Captain usage management and the mobile applications shipped in v1.2.0. This pla
 
 - [x] Create `feature/v1.3.0` from the completed v1.2.0 baseline and align product/package versions.
 - [x] Start M1 with shared bounds, `ConcurrencySettings`, runtime-specific captain default helpers, settings-file normalization, and boundary/round-trip tests.
+- [x] Vessel vertical slice: migration 117 across all providers, model/storage mapping, numeric editors in Dashboard/Mobile/TUI, REST/MCP operations, shared admission explanations and serialized check/claim. Tested with 50 simultaneous dispatch requests and a live HTTP/git/process scenario; see [test guide](docs/CONCURRENCY_TESTING.md).
 - [ ] Finish M1: model/DTO changes, new migrations 117-121 and all four database providers' atomic slot operations and mapping.
-- [ ] M2-M3: multi-mission lifecycle and race-free admission. Scheduling still uses v1.2.0 single-mission captain semantics in this first increment.
+- [ ] M2-M3: multi-mission lifecycle and race-free admission. Vessel and global admission gates are active; captain lifecycle still uses one mission per captain.
 - [ ] M4-M5: hierarchy, branch ownership, wait telemetry and Grafana.
 - [ ] M6-M10: public operations and all interactive clients. The new `Concurrency` group is currently a settings-file foundation, not an editable REST/MCP settings group.
 - [ ] M11: final integration, release documentation, migration/upgrade validation, and the complete concurrency stress matrix.
@@ -274,7 +275,7 @@ Every place that reads or writes `CurrentMissionId`, `CurrentDockId` or `Process
 - **`TryRecoverAsync`** (`:174`) and **`FinalizeRecoveryFailureAsync`** (`:419-422`) work per mission, so recovering one mission does not reset the others.
 - **`MissionService.HandleCompletionAsync(Captain)`** (`:865`) becomes `HandleCompletionAsync(Captain, string missionId)`.
 - **`AdmiralService.HandleProcessExitAsync`** (`:920`) and **`HandleTerminalProcessExitFailureAsync`** (`:2534`) already receive the mission id. Make sure they use it, not `captain.CurrentMissionId`.
-- **Stall detection** (`AdmiralService.cs:1654-1730`) moves from the captain heartbeat to each mission's last output and heartbeat. A stalled mission is handled alone. The captain becomes `Stalled` only when **all** of its active missions are stalled, and `ReleaseRecoveredStalledCaptainsAsync` (`:1190`) follows the same rule. Add `Mission.LastHeartbeatUtc` if output timestamps are not enough; that would be migration 100b, so decide during Phase 2.
+- **Stall detection** (`AdmiralService.cs:1654-1730`) moves from the captain heartbeat to each mission's last output and heartbeat. A stalled mission is handled alone. The captain becomes `Stalled` only when **all** of its active missions are stalled, and `ReleaseRecoveredStalledCaptainsAsync` (`:1190`) follows the same rule. Add `Mission.LastHeartbeatUtc` if output timestamps are not enough; that would be a later migration after 121, so decide during Phase 2.
 - **`RecoverOrphanedMissionsAsync`** (`:1970`): a mission is orphaned when its captain is not running it, meaning its process is gone. The test is no longer "the captain's current mission is something else".
 - **`ReclaimDockAsync`** (`:2243`) and **`MaintainCaptainPoolAsync`** (`:2737`) must handle several docks per captain.
 - **`AgentLifecycleHandler`**:
@@ -461,7 +462,7 @@ Per-vessel, per-captain and per-mission numbers are served by Armada:
 
 `MissionService.ArchitectPlan.cs` changes:
 - `ApplyArchitectMissionDependenciesAsync` (`:85-160`) sets `ParentMissionId` to the parent slice's root and stops repointing `DependsOnMissionId`. Branches follow D16: an only child keeps continuing its parent's branch, as a `dependsOn` slice does today, and later siblings fork.
-- Store `ownedPaths` and `readsPaths` on the mission in a new `Mission.OwnedPathsJson` and `ReadsPathsJson`. This is migration 100, so add the columns there.
+- Store `ownedPaths` and `readsPaths` on the mission in a new `Mission.OwnedPathsJson` and `ReadsPathsJson`. This is migration 119, so add the columns there.
 - The legacy `[ARMADA:MISSION]` markers gain an optional `Parent: <n>` and `Owns: a, b`.
 
 ### 10.2 Prompt text changes

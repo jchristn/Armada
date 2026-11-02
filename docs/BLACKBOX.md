@@ -1765,7 +1765,7 @@ request)` run only what the entry recorded:
 `BlackBoxConfigurationResolver.Resolve` records, with sources: LandingMode (voyage, vessel, global, MergeAndPush),
 AutoPush, AutoCreatePullRequests, AutoMergePullRequests (voyage, global), BranchCleanupPolicy (vessel, global), the
 mission's RequiresReview, WaitForVoyageWorkers, DependsOnMissionId, Persona, MissionMode and Tier, the vessel's
-AllowConcurrentMissions, AutoApprove, RequirePassingChecksToLand, DefinitionOfDone settings, AutoLandEnabled,
+MaxParallelVoyages, MaxParallelMissionsPerVoyage, AutoApprove, RequirePassingChecksToLand, DefinitionOfDone settings, AutoLandEnabled,
 ProtectedPathPatterns and DefaultPipelineId, the workflow profile's name, BuildCommand and UnitTestCommand, TestCommand
 and LintCommand (vessel override, else profile), MergeQueueTestCommand, the captain's runtime, model, endpoint,
 reasoning effort and permission policy, the persona's CaptainPriorities, PriorityAvailability, PriorityExhaustion and

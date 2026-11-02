@@ -184,7 +184,8 @@ export function VesselDetailView({ id, embedded, openEdit, onEditOpened, onDelet
             <InfoRow label={t('Require Passing Checks To Land')} value={yesNo(vessel.requirePassingChecksToLand)} />
             <InfoRow label={t('Require PR For Protected Branches')} value={yesNo(vessel.requirePullRequestForProtectedBranches)} />
             <InfoRow label={t('Require Merge Queue For Release Branches')} value={yesNo(vessel.requireMergeQueueForReleaseBranches)} />
-            <InfoRow label={t('Allow Concurrent Missions')} value={yesNo(vessel.allowConcurrentMissions)} />
+            <InfoRow label={t('Parallel voyages')} value={vessel.maxParallelVoyages === 0 ? t('Unlimited') : String(vessel.maxParallelVoyages ?? 1)} />
+            <InfoRow label={t('Parallel missions per voyage')} value={vessel.maxParallelMissionsPerVoyage === 0 ? t('Unlimited') : String(vessel.maxParallelMissionsPerVoyage ?? 4)} />
             <InfoRow
               label={t('Agent Auto-Approve')}
               value={vessel.autoApprove === true ? t('On for this vessel') : vessel.autoApprove === false ? t('Off for this vessel') : t('Use captain setting')}

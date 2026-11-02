@@ -90,3 +90,18 @@ describe('workerEnvelope', () => {
     expect(buildVesselPayload(vesselToForm(stored), stored).workerEnvelope).toBeNull();
   });
 });
+
+
+describe('vessel admission limits', () => {
+  it('sends explicit defaults and keeps zero unlimited', () => {
+    expect(buildVesselPayload(emptyVesselForm, null)).toMatchObject({ maxParallelVoyages: 1, maxParallelMissionsPerVoyage: 4 });
+    expect(buildVesselPayload({ ...emptyVesselForm, maxParallelVoyages: '0', maxParallelMissionsPerVoyage: '0' }, null)).toMatchObject({ maxParallelVoyages: 0, maxParallelMissionsPerVoyage: 0 });
+  });
+  it('uses server fields on edit and clamps negative input safely', () => {
+    const vessel = { ...emptyVesselForm, id: 'vsl_1', maxParallelVoyages: 2, maxParallelMissionsPerVoyage: 7 } as unknown as Vessel;
+    const form = vesselToForm(vessel);
+    expect(form.maxParallelVoyages).toBe('2');
+    expect(form.maxParallelMissionsPerVoyage).toBe('7');
+    expect(buildVesselPayload({ ...form, maxParallelVoyages: '-1', maxParallelMissionsPerVoyage: '10000' }, vessel)).toMatchObject({ maxParallelVoyages: 1, maxParallelMissionsPerVoyage: 1000 });
+  });
+});

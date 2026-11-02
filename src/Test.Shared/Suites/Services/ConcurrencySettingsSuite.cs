@@ -7,6 +7,7 @@ namespace Test.Shared.Suites.Services
     using System.Threading.Tasks;
     using Armada.Core;
     using Armada.Core.Enums;
+    using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Core.Settings;
     using Test.Shared.Infrastructure;
@@ -22,6 +23,38 @@ namespace Test.Shared.Suites.Services
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
             void Add(string id, string name, Action test) => cases.Add(new TestCaseDescriptor("Services.ConcurrencySettings", id, name,
                 ct => { test(); return Task.CompletedTask; }, tags: new List<string> { TestTags.Positive }));
+
+            Add("vessel_limits_persist_bounds", "Vessel model uses the shared bounds", () =>
+            {
+                foreach (int value in new[] { int.MinValue, -1, 0, 1, 1000, int.MaxValue })
+                {
+                    Vessel vessel = new Vessel { MaxParallelVoyages = value, MaxParallelMissionsPerVoyage = value };
+                    AssertEqual(ConcurrencyClamp.VesselLimit(value), vessel.MaxParallelVoyages);
+                    AssertEqual(ConcurrencyClamp.VesselLimit(value), vessel.MaxParallelMissionsPerVoyage);
+                }
+            });
+
+            Add("voyage_capacity_status_matrix", "Review and landing keep admission; settled and blocked work release it", () =>
+            {
+                Vessel vessel = new Vessel { MaxParallelVoyages = 1, MaxParallelMissionsPerVoyage = 1 };
+                Mission candidate = new Mission { Id = "candidate", VoyageId = "new" };
+                foreach (MissionStatusEnum status in Enum.GetValues<MissionStatusEnum>())
+                {
+                    Mission existing = new Mission { Id = "existing", VoyageId = "old", Status = status };
+                    bool holds = status == MissionStatusEnum.Assigned || status == MissionStatusEnum.InProgress
+                        || status == MissionStatusEnum.WorkProduced || status == MissionStatusEnum.PullRequestOpen
+                        || status == MissionStatusEnum.Testing || status == MissionStatusEnum.Review || status == MissionStatusEnum.Verifying;
+                    MissionAssignmentBlocker? blocker = VesselAdmission.Evaluate(candidate, vessel, new[] { candidate, existing }, Array.Empty<Voyage>());
+                    AssertEqual(holds, blocker != null, status.ToString());
+                }
+                Mission completed = new Mission { Id = "completed", VoyageId = "old", Status = MissionStatusEnum.Complete };
+                Mission next = new Mission { Id = "next", VoyageId = "old" };
+                AssertNotNull(VesselAdmission.Evaluate(candidate, vessel, new[] { completed, next, candidate }, Array.Empty<Voyage>()), "Pending next stage retains an admitted voyage");
+                AssertEqual<MissionAssignmentBlocker?>(null, VesselAdmission.Evaluate(next, vessel, new[] { completed, next }, Array.Empty<Voyage>()), "Admitted voyage's last pending stage can run");
+                vessel.MaxParallelVoyages = 0;
+                vessel.MaxParallelMissionsPerVoyage = 0;
+                AssertEqual<MissionAssignmentBlocker?>(null, VesselAdmission.Evaluate(candidate, vessel, new[] { completed, next, candidate }, Array.Empty<Voyage>()));
+            });
 
             Add("unlimited_is_explicit", "Negative vessel/global limits become one; only zero means unlimited", () =>
             {

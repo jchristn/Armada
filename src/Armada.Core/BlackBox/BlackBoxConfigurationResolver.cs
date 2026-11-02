@@ -73,7 +73,8 @@ namespace Armada.Core.BlackBox
             // Vessel.
             if (vessel != null)
             {
-                Add(config, "AllowConcurrentMissions", Bool(vessel.AllowConcurrentMissions), BlackBoxConfigSourceEnum.Vessel);
+                Add(config, "MaxParallelVoyages", vessel.MaxParallelVoyages.ToString(), BlackBoxConfigSourceEnum.Vessel);
+                Add(config, "MaxParallelMissionsPerVoyage", vessel.MaxParallelMissionsPerVoyage.ToString(), BlackBoxConfigSourceEnum.Vessel);
                 if (vessel.AutoApprove.HasValue) Add(config, "AutoApprove", Bool(vessel.AutoApprove.Value), BlackBoxConfigSourceEnum.Vessel);
                 Add(config, "RequirePassingChecksToLand", Bool(vessel.RequirePassingChecksToLand), BlackBoxConfigSourceEnum.Vessel);
                 Add(config, "DefinitionOfDoneEnabled", Bool(vessel.DefinitionOfDoneEnabled), BlackBoxConfigSourceEnum.Vessel);

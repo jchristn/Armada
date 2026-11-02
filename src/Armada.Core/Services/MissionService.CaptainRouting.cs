@@ -465,6 +465,27 @@ namespace Armada.Core.Services
             return active;
         }
 
+        private async Task<MissionAssignmentBlocker?> EvaluateGlobalAdmissionAsync(CancellationToken token)
+        {
+            int limit = _Settings.MaxConcurrentMissions;
+            if (limit == 0) return null;
+            int running = (await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Assigned, token).ConfigureAwait(false)).Count
+                + (await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress, token).ConfigureAwait(false)).Count;
+            if (running < limit) return null;
+            // Do not expose other tenants' mission IDs through a deployment-wide limit.
+            return new MissionAssignmentBlocker
+            {
+                Reason = MissionAssignmentBlockerReasonEnum.GlobalMissionLimit,
+                Summary = "Armada has " + running + " of " + limit + " running mission slots occupied. A slot opens when an agent finishes."
+            };
+        }
+
+        private async Task<MissionAssignmentBlocker?> EvaluateVesselAdmissionAsync(Mission mission, Vessel vessel, CancellationToken token)
+        {
+            List<MissionAdmissionSnapshot> missions = await _Database.Missions.EnumerateAdmissionSnapshotsAsync(vessel.Id, token).ConfigureAwait(false);
+            return VesselAdmission.EvaluateSnapshots(mission, vessel, missions);
+        }
+
         private static List<Mission> BranchHolders(Mission mission, IEnumerable<Mission> vesselMissions)
         {
             if (String.IsNullOrEmpty(mission.BranchName)) return new List<Mission>();

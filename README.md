@@ -150,7 +150,7 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 
 ## v1.3.0 development
 
-Work on [concurrency improvements](CONCURRENCY_IMPROVEMENTS.md) is underway on `feature/v1.3.0`. The first increment adds shared concurrency bounds, runtime-specific captain default helpers, and normalized settings-file configuration. The new captain slots, vessel voyage/mission gates, and mission hierarchy are not active yet; their implementation and migration checklist is tracked in the plan.
+Work on [concurrency improvements](CONCURRENCY_IMPROVEMENTS.md) is underway on `feature/v1.3.0`. Vessel voyage and mission admission limits are now usable through the Dashboard, Mobile, TUI, REST and MCP. Assignment checks and claims are serialized; voyages retain admission through review and landing, while running mission slots refill after agent completion. See [the end-to-end test guide](docs/CONCURRENCY_TESTING.md). Multi-mission captain slots, hierarchy and wait telemetry remain in progress in the plan.
 
 This development branch identifies packages and images as v1.3.0. Those images have not been published by this change; use the v1.2.0 release for deployed environments until a v1.3.0 release is available.
 

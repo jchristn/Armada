@@ -1980,7 +1980,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Name\": \"MyRepo\",\n  \"RepoUrl\": \"https://github.com/org/repo.git\",\n  \"FleetId\": \"{{fleetId}}\",\n  \"DefaultBranch\": \"main\",\n  \"TestCommand\": null,\n  \"LintCommand\": null,\n  \"AuditCommand\": null\n}"
+                            "raw": "{\n  \"Name\": \"MyRepo\",\n  \"RepoUrl\": \"https://github.com/org/repo.git\",\n  \"FleetId\": \"{{fleetId}}\",\n  \"DefaultBranch\": \"main\",\n  \"TestCommand\": null,\n  \"LintCommand\": null,\n  \"AuditCommand\": null,\n  \"MaxParallelVoyages\": 1,\n  \"MaxParallelMissionsPerVoyage\": 4\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/vessels",
@@ -2036,7 +2036,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Name\": \"Renamed Repo\",\n  \"DefaultBranch\": \"main\",\n  \"TestCommand\": \"make test\",\n  \"LintCommand\": \"npm run lint\",\n  \"AuditCommand\": \"osv-scanner scan source -r .\"\n}"
+                            "raw": "{\n  \"Name\": \"Renamed Repo\",\n  \"DefaultBranch\": \"main\",\n  \"TestCommand\": \"make test\",\n  \"LintCommand\": \"npm run lint\",\n  \"AuditCommand\": \"osv-scanner scan source -r .\",\n  \"MaxParallelVoyages\": 1,\n  \"MaxParallelMissionsPerVoyage\": 4\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}",
@@ -2553,7 +2553,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"Name\": \"demo-repo\",\n  \"RepoUrl\": \"https://github.com/example/demo-repo.git\",\n  \"FleetId\": \"{{fleetId}}\"\n}"
+                            "raw": "{\n  \"Name\": \"demo-repo\",\n  \"RepoUrl\": \"https://github.com/example/demo-repo.git\",\n  \"FleetId\": \"{{fleetId}}\",\n  \"MaxParallelVoyages\": 1,\n  \"MaxParallelMissionsPerVoyage\": 4\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/api/v1/vessels",

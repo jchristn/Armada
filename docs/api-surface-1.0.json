@@ -9038,6 +9038,16 @@
           "required": false
         },
         {
+          "name": "maxParallelMissionsPerVoyage",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "maxParallelVoyages",
+          "type": "integer",
+          "required": false
+        },
+        {
           "name": "name",
           "type": "string",
           "required": true
@@ -17047,6 +17057,16 @@
         {
           "name": "lintCommand",
           "type": "string",
+          "required": false
+        },
+        {
+          "name": "maxParallelMissionsPerVoyage",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "maxParallelVoyages",
+          "type": "integer",
           "required": false
         },
         {

@@ -265,13 +265,24 @@ namespace Armada.Core.BlackBox
                 .Recommend(new BlackBoxRuleRecommendation
                 {
                     Key = "serialize-vessel",
-                    Setting = "AllowConcurrentMissions",
+                    Setting = "MaxParallelVoyages",
                     Scope = BlackBoxConfigSourceEnum.Vessel,
-                    SuggestedValue = "False",
+                    SuggestedValue = "1",
                     Rationale = "Missions on this vessel touch the same files; running them one at a time avoids the conflict.",
-                    HowToApply = "update_vessel {\"vesselId\": \"{vesselId}\", \"allowConcurrentMissions\": false}; or chain the missions with DependsOnMissionId, or set WaitForVoyageWorkers on the voyage.",
+                    HowToApply = "update_vessel {\"vesselId\": \"{vesselId}\", \"maxParallelVoyages\": 1, \"maxParallelMissionsPerVoyage\": 1}; or chain the missions with DependsOnMissionId, or set WaitForVoyageWorkers on the voyage.",
                     ApplyTool = "update_vessel",
-                    ApplyArguments = { ["vesselId"] = "{vesselId}", ["allowConcurrentMissions"] = "false" }
+                    ApplyArguments = { ["vesselId"] = "{vesselId}", ["maxParallelVoyages"] = "1", ["maxParallelMissionsPerVoyage"] = "1" }
+                })
+                .Recommend(new BlackBoxRuleRecommendation
+                {
+                    Key = "serialize-voyage",
+                    Setting = "MaxParallelMissionsPerVoyage",
+                    Scope = BlackBoxConfigSourceEnum.Vessel,
+                    SuggestedValue = "1",
+                    Rationale = "Missions in this voyage touch the same files; running them one at a time avoids the conflict.",
+                    HowToApply = "update_vessel {\"vesselId\": \"{vesselId}\", \"maxParallelVoyages\": 1, \"maxParallelMissionsPerVoyage\": 1}; or chain the missions with DependsOnMissionId.",
+                    ApplyTool = "update_vessel",
+                    ApplyArguments = { ["vesselId"] = "{vesselId}", ["maxParallelVoyages"] = "1", ["maxParallelMissionsPerVoyage"] = "1" }
                 })
                 .Recommend(new BlackBoxRuleRecommendation
                 {

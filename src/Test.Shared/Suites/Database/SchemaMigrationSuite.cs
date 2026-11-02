@@ -32,6 +32,28 @@ namespace Test.Shared.Suites.Database
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(CaseAsync("vessel_admission_backfill", "Migration 117 preserves serialized/unlimited vessel intent and sets new defaults", TestTags.Positive, async () =>
+            {
+                using SqliteConnection conn = new SqliteConnection("Data Source=:memory:");
+                await conn.OpenAsync();
+                using SqliteCommand cmd = conn.CreateCommand();
+                cmd.CommandText = "CREATE TABLE vessels (id TEXT PRIMARY KEY, allow_concurrent_missions INTEGER NOT NULL DEFAULT 0); INSERT INTO vessels VALUES ('serial',0),('parallel',1);";
+                await cmd.ExecuteNonQueryAsync();
+                foreach (SchemaMigration migration in Armada.Core.Database.Sqlite.Queries.TableQueries.GetMigrations())
+                {
+                    if (migration.Version != 117) continue;
+                    foreach (string sql in migration.Statements)
+                    {
+                        cmd.CommandText = sql;
+                        await cmd.ExecuteNonQueryAsync();
+                    }
+                }
+                cmd.CommandText = "SELECT COUNT(*) FROM vessels WHERE (id='serial' AND max_parallel_voyages=1 AND max_parallel_missions_per_voyage=1) OR (id='parallel' AND max_parallel_voyages=0 AND max_parallel_missions_per_voyage=0);";
+                AssertEqual(2L, (long)(await cmd.ExecuteScalarAsync())!);
+                cmd.CommandText = "INSERT INTO vessels(id) VALUES ('new'); SELECT max_parallel_missions_per_voyage FROM vessels WHERE id='new';";
+                AssertEqual(4L, (long)(await cmd.ExecuteScalarAsync())!);
+            }));
+
             cases.Add(CaseAsync("active_migration_preserves_existing_and_new_captains", "Migration 112 backfills existing captains and defaults future inserts to active", TestTags.Positive, async () =>
             {
                 using (SqliteConnection conn = new SqliteConnection("Data Source=:memory:"))

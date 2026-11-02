@@ -69,7 +69,8 @@ describe('VesselDetail Edit (F13)', () => {
     expect(screen.getByLabelText(/Landing Mode/)).toHaveValue('MergeQueue');
     expect(screen.getByLabelText(/Branch Cleanup/)).toHaveValue('LocalOnly');
     expect(screen.getByLabelText(/Agent Auto-Approve/)).toHaveValue('off');
-    expect(screen.getByLabelText('Allow Concurrent Missions')).toBeChecked();
+    expect(screen.getByLabelText('Parallel voyages')).toHaveValue(0);
+    expect(screen.getByLabelText('Parallel missions per voyage')).toHaveValue(0);
     expect(screen.getByLabelText('Auto-land small changes')).toBeChecked();
     expect(screen.getByLabelText(/Release Branch Prefix/)).toHaveValue('rel/');
 

@@ -119,7 +119,8 @@ namespace Test.Shared.Suites.Services
 
                     Vessel vessel = new Vessel("wildcard-vessel", "https://github.com/test/repo.git");
                     vessel.DefaultBranch = "main";
-                    vessel.AllowConcurrentMissions = true;
+                    vessel.MaxParallelVoyages = 0;
+                    vessel.MaxParallelMissionsPerVoyage = 0;
                     vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 
                     Captain target = new Captain("Target Captain");
@@ -432,7 +433,7 @@ namespace Test.Shared.Suites.Services
                     captainService.OnLaunchAgent = (Captain c, Mission m, Dock d) => Task.FromResult(12345);
 
                     // Create vessel
-                    Vessel vessel = new Vessel("handoff-vessel", "https://github.com/test/repo.git");
+                    Vessel vessel = new Vessel("handoff-vessel", "https://github.com/test/repo.git") { MaxParallelVoyages = 0 };
                     vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
                     vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
                     vessel.DefaultBranch = "main";
@@ -2107,7 +2108,8 @@ namespace Test.Shared.Suites.Services
                     vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
                     vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
                     vessel.DefaultBranch = "main";
-                    vessel.AllowConcurrentMissions = true;
+                    vessel.MaxParallelVoyages = 0;
+                    vessel.MaxParallelMissionsPerVoyage = 0;
                     vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 
                     Captain architectCaptain = new Captain("fanout-architect");
@@ -2206,7 +2208,8 @@ namespace Test.Shared.Suites.Services
                     vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
                     vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
                     vessel.DefaultBranch = "main";
-                    vessel.AllowConcurrentMissions = true;
+                    vessel.MaxParallelVoyages = 0;
+                    vessel.MaxParallelMissionsPerVoyage = 0;
                     vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("sequenced-worker");
@@ -2300,7 +2303,8 @@ namespace Test.Shared.Suites.Services
                     vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
                     vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
                     vessel.DefaultBranch = "main";
-                    vessel.AllowConcurrentMissions = true;
+                    vessel.MaxParallelVoyages = 0;
+                    vessel.MaxParallelMissionsPerVoyage = 0;
                     vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 
                     Captain workerCaptain = new Captain("sequenced-worker");

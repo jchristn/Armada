@@ -30,7 +30,7 @@ namespace Test.Shared.Suites.Services
             cases.Add(Case("precedence", "Landing mode comes from the voyage, else the vessel, else the global setting, else MergeAndPush; other values name their source", TestTags.Positive, () =>
             {
                 ArmadaSettings g = new ArmadaSettings { LandingMode = LandingModeEnum.LocalMerge, AutoMergePullRequests = true };
-                Vessel vessel = new Vessel("v", "https://example.invalid/v.git") { LandingMode = LandingModeEnum.PullRequest, AllowConcurrentMissions = true, TestCommand = "make test" };
+                Vessel vessel = new Vessel("v", "https://example.invalid/v.git") { LandingMode = LandingModeEnum.PullRequest, MaxParallelVoyages = 2, MaxParallelMissionsPerVoyage = 3, TestCommand = "make test" };
                 Voyage voyage = new Voyage("voy") { LandingMode = LandingModeEnum.MergeQueue, AutoMergePullRequests = false };
                 Mission mission = new Mission("m", "d") { RequiresReview = true, DependsOnMissionId = "msn_dep", Persona = "Worker" };
                 Captain captain = new Captain("c", AgentRuntimeEnum.Codex) { Model = "gpt-5" };
@@ -44,7 +44,8 @@ namespace Test.Shared.Suites.Services
                 AssertValue(Resolve(g, mission, null, vessel, captain), "AutoMergePullRequests", "True", BlackBoxConfigSourceEnum.Global);
                 AssertValue(all, "RequiresReview", "True", BlackBoxConfigSourceEnum.Mission);
                 AssertValue(all, "DependsOnMissionId", "msn_dep", BlackBoxConfigSourceEnum.Mission);
-                AssertValue(all, "AllowConcurrentMissions", "True", BlackBoxConfigSourceEnum.Vessel);
+                AssertValue(all, "MaxParallelVoyages", "2", BlackBoxConfigSourceEnum.Vessel);
+                AssertValue(all, "MaxParallelMissionsPerVoyage", "3", BlackBoxConfigSourceEnum.Vessel);
                 AssertValue(all, "TestCommand", "make test", BlackBoxConfigSourceEnum.Vessel);
                 AssertValue(all, "CaptainRuntime", "Codex", BlackBoxConfigSourceEnum.Captain);
                 AssertValue(all, "CaptainModel", "gpt-5", BlackBoxConfigSourceEnum.Captain);

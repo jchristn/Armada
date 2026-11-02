@@ -87,6 +87,15 @@ namespace Armada.Core.Enums
         /// build on one earlier slice). It waits so both do not check out one branch at once; the slices then stack on
         /// the branch in order.
         /// </summary>
-        BranchInUse
+        BranchInUse,
+
+        /// <summary>The vessel has no free voyage admission slot.</summary>
+        VesselVoyageLimit,
+
+        /// <summary>The voyage has no free running mission slot.</summary>
+        VoyageMissionLimit,
+
+        /// <summary>The deployment has no free running mission slot.</summary>
+        GlobalMissionLimit
     }
 }

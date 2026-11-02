@@ -118,6 +118,10 @@ namespace Armada.Core.Services
             "AGENTS.override.md"
         };
 
+        // Serialize the short read/check/claim boundary across all entry points. Release before
+        // provisioning or launching: completion callbacks may dispatch more work synchronously.
+        private readonly SemaphoreSlim _AdmissionLock = new SemaphoreSlim(1, 1);
+
         /// <summary>
         /// Tracks in-flight mission assignment operations by mission ID.
         /// Prevents duplicate provisioning/launch when multiple dispatch paths
@@ -337,13 +341,10 @@ namespace Armada.Core.Services
                 return blocker;
             }
 
-            if (activeMissions.Count > 0 && !vessel.AllowConcurrentMissions)
-            {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.VesselConcurrencyLimit;
-                blocker.SetBlockingMissions(activeMissions.Select(m => m.Id));
-                blocker.Summary = "Vessel " + vessel.Name + " runs one mission at a time and is busy with '" + activeMissions[0].Title + "'. Turn on Allow Concurrent Missions on the vessel to run more at once.";
-                return blocker;
-            }
+            MissionAssignmentBlocker? admission = await EvaluateVesselAdmissionAsync(mission, vessel, token).ConfigureAwait(false);
+            if (admission != null) return admission;
+            MissionAssignmentBlocker? globalAdmission = await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
+            if (globalAdmission != null) return globalAdmission;
 
             // Captain availability: the same pool FindAvailableCaptainAsync draws from (idle captains), checked
             // without resolving or persisting a preferred captain.
@@ -435,8 +436,15 @@ namespace Armada.Core.Services
                 return false;
             }
 
+            bool admissionHeld = false;
             try
             {
+                if (!await _AdmissionLock.WaitAsync(TimeSpan.FromSeconds(_Settings.Concurrency.AdmissionLockTimeoutSeconds), token).ConfigureAwait(false))
+                {
+                    _Logging.Warn(_Header + "admission lock timed out for mission " + mission.Id + "; retrying next dispatch cycle");
+                    return false;
+                }
+                admissionHeld = true;
                 Mission? latestMission = null;
                 if (!String.IsNullOrEmpty(mission.TenantId))
                 {
@@ -578,12 +586,13 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            // Enforce per-vessel serialization unless explicitly allowed
-            if (!vessel.AllowConcurrentMissions && concurrentCount > 0)
+            MissionAssignmentBlocker? admission = await EvaluateVesselAdmissionAsync(mission, vessel, token).ConfigureAwait(false);
+            if (admission != null)
             {
-                _Logging.Info(_Header + "vessel " + vessel.Id + " already has " + concurrentCount + " active mission(s); deferring " + mission.Id + " (AllowConcurrentMissions=false)");
+                _Logging.Debug(_Header + "mission " + mission.Id + " waits: " + admission.Summary);
                 return false;
             }
+            if (await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false) != null) return false;
 
             // Two missions continuing one branch (two slices that both build on an earlier slice) cannot share it: git
             // refuses a second worktree for a checked-out branch. The later one waits and then stacks on the first.
@@ -594,11 +603,6 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            // Warn about concurrent missions on same vessel when allowed
-            if (vessel.AllowConcurrentMissions && concurrentCount > 0)
-            {
-                _Logging.Warn(_Header + "vessel " + vessel.Id + " already has " + concurrentCount + " active mission(s) — potential for conflicts (AllowConcurrentMissions=true)");
-            }
 
             // Resolve the mission's preferred captain + fallback tier (per-persona default / voyage override)
             // before assignment, so per-step captain selection applies to every mission of a step, including
@@ -678,6 +682,9 @@ namespace Armada.Core.Services
                 await _Database.Captains.TryReleaseFromMissionAsync(captain.Id, mission.Id, CancellationToken.None).ConfigureAwait(false);
                 return false;
             }
+
+            _AdmissionLock.Release();
+            admissionHeld = false;
 
             captain.State = CaptainStateEnum.Working;
             captain.CurrentMissionId = mission.Id;
@@ -891,6 +898,7 @@ namespace Armada.Core.Services
             }
             finally
             {
+                if (admissionHeld) _AdmissionLock.Release();
                 _InFlightAssignments.TryRemove(mission.Id, out _);
             }
         }

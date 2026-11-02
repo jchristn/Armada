@@ -86,7 +86,10 @@ namespace Armada.Tui.Screens.Build
             autoApprove.SetValue(editing?.AutoApprove == true ? "on" : editing?.AutoApprove == false ? "off" : "inherit");
             SelectField<string> pipeline = screen.NewSelect("Default Pipeline", BuildText.PipelineOptions(pipelines, loc));
             pipeline.SetValue(editing?.DefaultPipelineId ?? "");
-            OpsCheckField concurrent = new OpsCheckField("Allow Concurrent Missions", editing?.AllowConcurrentMissions ?? false);
+            InputField parallelVoyages = Input((editing?.MaxParallelVoyages ?? 1).ToString(CultureInfo.InvariantCulture), "1");
+            parallelVoyages.Validator = v => RangeOrBlank(v, 0, 1000);
+            InputField parallelMissions = Input((editing?.MaxParallelMissionsPerVoyage ?? 4).ToString(CultureInfo.InvariantCulture), "4");
+            parallelMissions.Validator = v => RangeOrBlank(v, 0, 1000);
             OpsCheckField serialize = new OpsCheckField("Serialize Overlapping Missions", editing?.SerializeOverlappingMissions ?? false);
             OpsCheckField modelContextOn = new OpsCheckField("Enable Model Context", editing?.EnableModelContext ?? true);
 
@@ -147,7 +150,8 @@ namespace Armada.Tui.Screens.Build
             dialog.AddField("Branch Cleanup", cleanup, "When and how mission branches are deleted after successful landing.");
             dialog.AddField("Agent Auto-Approve", autoApprove, "Whether CLI captains run missions on this vessel with their auto-approve (permission bypass) flags. Overrides the captain setting when set.");
             dialog.AddField("Default Pipeline", pipeline);
-            dialog.AddField("", concurrent);
+            dialog.AddField("Parallel Voyages", parallelVoyages, "Admitted voyages, including review and landing. Each standalone mission counts as a voyage. 0 = unlimited.");
+            dialog.AddField("Parallel Missions Per Voyage", parallelMissions, "Running agents within each voyage. 0 = unlimited.");
             dialog.AddField("", serialize, "Black box prevention: a mission that overlaps an active one is dispatched to start after it lands.");
             dialog.AddField("", modelContextOn);
             dialog.Form.AddSection("Branch Policy");
@@ -199,7 +203,8 @@ namespace Armada.Tui.Screens.Build
                 body.BranchCleanupPolicy = Enum.TryParse<BranchCleanupPolicyEnum>(cleanup.Value ?? "", out BranchCleanupPolicyEnum bc) ? bc : (BranchCleanupPolicyEnum?)null;
                 body.AutoApprove = autoApprove.Value == "on" ? true : autoApprove.Value == "off" ? false : (bool?)null;
                 body.DefaultPipelineId = String.IsNullOrEmpty(pipeline.Value) ? null : pipeline.Value;
-                body.AllowConcurrentMissions = concurrent.Checked;
+                body.MaxParallelVoyages = ParseOptional(parallelVoyages.Value) ?? 1;
+                body.MaxParallelMissionsPerVoyage = ParseOptional(parallelMissions.Value) ?? 4;
                 body.SerializeOverlappingMissions = serialize.Checked;
                 body.EnableModelContext = modelContextOn.Checked;
                 body.ReleaseBranchPrefix = String.IsNullOrWhiteSpace(releasePrefix.Value) ? "release/" : releasePrefix.Value.Trim();
@@ -277,6 +282,8 @@ namespace Armada.Tui.Screens.Build
             copy.RequirePullRequestForProtectedBranches = vessel.RequirePullRequestForProtectedBranches;
             copy.RequireMergeQueueForReleaseBranches = vessel.RequireMergeQueueForReleaseBranches;
             copy.AllowConcurrentMissions = vessel.AllowConcurrentMissions;
+            copy.MaxParallelVoyages = vessel.MaxParallelVoyages;
+            copy.MaxParallelMissionsPerVoyage = vessel.MaxParallelMissionsPerVoyage;
             copy.SerializeOverlappingMissions = vessel.SerializeOverlappingMissions;
             copy.DefaultPipelineId = vessel.DefaultPipelineId;
             return copy;

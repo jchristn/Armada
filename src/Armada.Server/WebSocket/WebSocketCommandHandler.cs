@@ -270,6 +270,14 @@ namespace Armada.Server.WebSocket
 
                 case "create_vessel":
                     Vessel newVessel = JsonSerializer.Deserialize<WebSocketDataCommand<Vessel>>(rawBody, _JsonOptions)?.Data!;
+                    using (JsonDocument vesselInput = JsonDocument.Parse(rawBody))
+                    {
+                        JsonElement data = vesselInput.RootElement.EnumerateObject().First(p => String.Equals(p.Name, "data", StringComparison.OrdinalIgnoreCase)).Value;
+                        if (!data.EnumerateObject().Any(p => String.Equals(p.Name, "maxParallelVoyages", StringComparison.OrdinalIgnoreCase)))
+                            newVessel.MaxParallelVoyages = _Settings?.Concurrency.DefaultVesselMaxParallelVoyages ?? Armada.Core.Constants.DefaultVesselMaxParallelVoyages;
+                        if (!data.EnumerateObject().Any(p => String.Equals(p.Name, "maxParallelMissionsPerVoyage", StringComparison.OrdinalIgnoreCase)))
+                            newVessel.MaxParallelMissionsPerVoyage = _Settings?.Concurrency.DefaultVesselMaxParallelMissionsPerVoyage ?? Armada.Core.Constants.DefaultVesselMaxParallelMissionsPerVoyage;
+                    }
                     if (String.IsNullOrEmpty(newVessel.RepoUrl))
                         return WebSocketCommandError.Create("create_vessel", WebSocketCommandErrorCodeEnum.InvalidArgument, "repoUrl is required when creating a vessel");
                     newVessel.NormalizeGitHubTokenOverride();

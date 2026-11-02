@@ -107,6 +107,9 @@ namespace Armada.Core.Database.Interfaces
         /// </summary>
         Task<List<Mission>> EnumerateByVesselAsync(string vesselId, CancellationToken token = default);
 
+        /// <summary>Read only the indexed vessel's scheduling metadata, excluding outputs, diffs and evidence.</summary>
+        Task<List<MissionAdmissionSnapshot>> EnumerateAdmissionSnapshotsAsync(string vesselId, CancellationToken token = default);
+
         /// <summary>
         /// Enumerate lightweight mission summaries by vessel identifier.
         /// </summary>

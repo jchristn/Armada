@@ -3269,10 +3269,9 @@ Register a new vessel (git repository) in a fleet.
       "type": "string",
       "description": "Optional per-vessel GitHub token override. Leave unset to use the global configured token."
     },
-    "allowConcurrentMissions": {
-      "type": "boolean",
-      "description": "Allow multiple concurrent missions on this vessel (default false)"
-    },
+    "maxParallelVoyages": { "type": "integer", "description": "Admitted voyage groups; 0 is unlimited; default 1" },
+    "maxParallelMissionsPerVoyage": { "type": "integer", "description": "Running missions per voyage; 0 is unlimited; default 4" },
+    "allowConcurrentMissions": { "type": "boolean", "description": "Legacy stored flag; use numeric limits" },
     "autoApprove": {
       "type": "boolean",
       "description": "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting"
@@ -3300,7 +3299,9 @@ Register a new vessel (git repository) in a fleet.
 | `styleGuide` | string | No | Style guide describing naming conventions, patterns, and library preferences |
 | `workingDirectory` | string | No | Optional local directory where completed mission changes will be pulled after merge. When `repoUrl` is a local clone (a `file://` URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada). |
 | `gitHubTokenOverride` | string | No | Optional per-vessel GitHub token override. The raw token is accepted on create but never returned by MCP reads. |
-| `allowConcurrentMissions` | boolean | No | Allow multiple concurrent missions on this vessel (default false) |
+| `maxParallelVoyages` | integer | No | Admitted voyage groups, 0..1000; zero unlimited; negative becomes 1; configured default (1) on creation |
+| `maxParallelMissionsPerVoyage` | integer | No | Running missions per voyage, same bounds; configured default (4) on creation |
+| `allowConcurrentMissions` | boolean | No | Legacy stored field; use numeric limits |
 | `autoApprove` | boolean | No | Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting |
 | `enableModelContext` | boolean | No | Enable model context accumulation (default true) |
 | `defaultPipelineId` | string | No | Default pipeline ID for voyages dispatched to this vessel |
@@ -4085,7 +4086,8 @@ Update an existing vessel's properties.
     "styleGuide": { "type": "string", "description": "New style guide" },
     "workingDirectory": { "type": "string", "description": "New local directory where completed mission changes will be pulled after merge" },
     "gitHubTokenOverride": { "type": "string", "description": "Optional per-vessel GitHub token override. Empty string clears the existing override." },
-    "allowConcurrentMissions": { "type": "boolean", "description": "Allow multiple concurrent missions on this vessel" },
+    "maxParallelVoyages": { "type": "integer", "description": "Admitted voyage groups; 0 is unlimited" },
+    "maxParallelMissionsPerVoyage": { "type": "integer", "description": "Running missions per voyage; 0 is unlimited" },
     "autoApprove": { "type": "boolean", "description": "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting" },
     "clearAutoApprove": { "type": "boolean", "description": "Remove the per-vessel auto-approve override so the captain's own setting applies" },
     "enableModelContext": { "type": "boolean", "description": "Enable or disable model context accumulation" },

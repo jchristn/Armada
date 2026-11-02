@@ -2,6 +2,14 @@
 
 This document explains how Armada decides which mission to assign to which captain and in what order.
 
+## Vessel admission limits
+
+`MaxParallelVoyages` limits admitted voyage groups on a vessel (new vessel default 1). `MaxParallelMissionsPerVoyage` limits Assigned/InProgress missions within each group (default 4). Zero removes that cap; negative inputs become 1 and values above 1000 become 1000. Each independent standalone mission counts as a group; its dependent pipeline stages share the group.
+
+A voyage retains admission through verification, review and landing and between its stages, until terminal or all its missions settle. Failed landings and blocked work alone do not retain admission. Post-agent states do not consume a running mission slot. Lowering limits prevents new admissions and leaves existing work running. Global, runtime, endpoint, eligibility, broad-scope and branch-safety gates still apply. Existing vessels migrate to 1/1 or 0/0 according to the former flag; `AllowConcurrentMissions` is retained in storage during this staged migration but no longer controls dispatch.
+
+The check/claim boundary is serialized within the Admiral's mission service and releases before worktree provisioning or agent launch. Admission reads only scheduling metadata, not historical outputs or diffs. This increment retains one running mission per captain; captain slot expansion is tracked separately in the v1.3.0 plan. See [end-to-end testing](CONCURRENCY_TESTING.md).
+
 ## Ordered captain priorities
 
 Personas can define `captainPriorities`, an ordered list of runtime/model/endpoint/minimum-tier matchers. Every supplied field in an entry must match. `priorityAvailability` chooses `FallThrough` or `WaitForFirstPriority`; `priorityExhaustion` chooses `Wait` or `UseEligibleCaptain`. The first-priority wait policy never uses lower entries or general fallback. Empty lists retain legacy default-captain behavior.
@@ -66,7 +74,10 @@ Every `Pending` mission carries a server-computed **assignment blocker** (`Assig
 | `WaitingForVoyageWorkers` | The architect sequenced this mission after the voyage's other implementation missions, which are still running. |
 | `VesselBroadScopeMissionActive` | A broad-scope mission is running on the vessel and holds it exclusively. |
 | `BroadScopeWaitingForVessel` | This mission is broad scope and waits until the vessel has no active missions. |
-| `VesselConcurrencyLimit` | The vessel runs one mission at a time (`AllowConcurrentMissions` is off) and another mission is active. |
+| `VesselVoyageLimit` | All vessel voyage slots are occupied. An admitted voyage retains its slot through review and landing; each standalone mission counts as a voyage. |
+| `VoyageMissionLimit` | The voyage has reached its running mission limit. Assigned and InProgress consume slots; post-agent states do not. |
+| `GlobalMissionLimit` | The deployment-wide running mission cap has been reached. |
+| `VesselConcurrencyLimit` | Legacy stored reason from older releases. |
 | `NoCaptains` | No captains exist. |
 | `NoIdleCaptain` | Every captain is busy (working, planning, refining, quarantined, stalled, or stopping). |
 | `NoEligibleCaptain` | Idle captains exist, but none may take this mission's persona or required tier. |

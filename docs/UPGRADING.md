@@ -486,11 +486,11 @@ v1.0.0 is the first stable release: security hardening, a frozen and documented 
 
 ### v1.2.0 to v1.3.0 (development)
 
-The `feature/v1.3.0` branch starts the [concurrency implementation](../CONCURRENCY_IMPROVEMENTS.md). This first increment adds no database migration and removes no fields. New captain slot limits, vessel voyage/mission limits and mission hierarchy are not enforced yet. Existing captain and vessel scheduling remains unchanged.
+The `feature/v1.3.0` branch starts the [concurrency implementation](../CONCURRENCY_IMPROVEMENTS.md). Vessel voyage/mission limits are now enforced. Migration 117 adds two columns: `max_parallel_voyages` and `max_parallel_missions_per_voyage`. Existing vessels with `AllowConcurrentMissions=false` become 1/1; existing vessels with true become 0/0 (unlimited). New vessels default to 1/4. The old flag remains stored but no longer controls scheduling; update integrations to send the two numeric fields. Captains still run one mission each; multi-mission captain slots and hierarchy are subsequent milestones.
 
 The new `Concurrency` settings-file group carries defaults and bounds for later milestones. Setters clamp hard bounds; load/save normalizes captain defaults against `MaxCaptainConcurrency` independently of JSON property order. Negative vessel defaults clamp to 1; zero remains unlimited. The existing global `MaxConcurrentMissions` now clamps negative values to 1 and values over 10000 to 10000 instead of rejecting a negative settings file. Adjustment warnings name the supplied and effective values.
 
-The plan reserves migrations 117-121 after the v1.2.0 schema version 116. They have not been added in this increment. Before those migrations and breaking field removals land, this guide must document the verified backfills, usage-management integration and downgrade requirements. Do not apply the plan's unimplemented backfills manually.
+Migration 117 is implemented for SQLite, PostgreSQL, SQL Server and MySQL. The SQLite upgrade/backfill and fresh-database path are tested; external database servers require provider integration testing. Migrations 118-121 remain reserved. Take a backup before testing this branch. Restore the backup to return to v1.2.0; changing the old flag in v1.2.0 would not keep the new limits synchronized. [Test the complete vessel admission path](CONCURRENCY_TESTING.md).
 
 Packages and development compose files use version 1.3.0. These changes do not publish Docker images; continue deploying the v1.2.0 release until a v1.3.0 release is available.
 

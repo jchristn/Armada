@@ -130,7 +130,7 @@ namespace Test.Shared.Suites.Services
                     Mission mission = await AddMissionAsync(testDb.Driver, h.Vessel, "waiting", MissionStatusEnum.Pending);
                     MissionAssignmentBlocker? blocker = await h.Missions.GetAssignmentBlockerAsync(mission);
                     AssertNotNull(blocker, "blocker");
-                    AssertEqual(MissionAssignmentBlockerReasonEnum.VesselConcurrencyLimit, blocker!.Reason, "reason");
+                    AssertEqual(MissionAssignmentBlockerReasonEnum.VesselVoyageLimit, blocker!.Reason, "reason");
                     AssertTrue(blocker.BlockingMissionIds.Contains(running.Id), "the running mission is named");
                 }
             }));
@@ -140,7 +140,8 @@ namespace Test.Shared.Suites.Services
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     Harness h = await BuildHarnessAsync(testDb.Driver);
-                    h.Vessel.AllowConcurrentMissions = true;
+                    h.Vessel.MaxParallelVoyages = 0;
+                    h.Vessel.MaxParallelMissionsPerVoyage = 0;
                     await testDb.Driver.Vessels.UpdateAsync(h.Vessel);
                     await AddCaptainAsync(testDb.Driver, "Idle One", CaptainStateEnum.Idle);
                     Mission running = await AddMissionAsync(testDb.Driver, h.Vessel, "slice two", MissionStatusEnum.InProgress);

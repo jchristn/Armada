@@ -392,6 +392,35 @@ namespace Armada.Core.Database.Postgresql.Implementations
         /// <param name="vesselId">Vessel identifier.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>List of missions for the vessel.</returns>
+        public async Task<List<MissionAdmissionSnapshot>> EnumerateAdmissionSnapshotsAsync(string vesselId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));
+            List<MissionAdmissionSnapshot> results = new List<MissionAdmissionSnapshot>();
+            using (NpgsqlConnection conn = new NpgsqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (NpgsqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT m.id, m.voyage_id, m.depends_on_mission_id, m.status, v.status FROM missions m LEFT JOIN voyages v ON v.id = m.voyage_id WHERE m.vessel_id = @vessel_id;";
+                    cmd.Parameters.AddWithValue("@vessel_id", vesselId);
+                    using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
+                    {
+                        while (await reader.ReadAsync(token).ConfigureAwait(false))
+                            results.Add(new MissionAdmissionSnapshot
+                            {
+                                Id = reader.GetString(0),
+                                VoyageId = reader.IsDBNull(1) ? null : reader.GetString(1),
+                                DependsOnMissionId = reader.IsDBNull(2) ? null : reader.GetString(2),
+                                Status = Enum.Parse<MissionStatusEnum>(reader.GetString(3)),
+                                VoyageStatus = reader.IsDBNull(4) ? null : Enum.Parse<VoyageStatusEnum>(reader.GetString(4))
+                            });
+                    }
+                }
+            }
+            return results;
+        }
+
+        /// <inheritdoc />
         public async Task<List<Mission>> EnumerateByVesselAsync(string vesselId, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(vesselId)) throw new ArgumentNullException(nameof(vesselId));

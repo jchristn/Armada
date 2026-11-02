@@ -169,7 +169,10 @@ namespace Armada.Tui.Screens.Admin
         /// <summary>
         /// Allow concurrent missions.
         /// </summary>
-        public ToggleField AllowConcurrentMissions { get; } = new ToggleField(false, "Allow concurrent missions on this vessel");
+        public InputField MaxParallelVoyages { get; } = new InputField { Value = "1" };
+
+        /// <summary>Maximum running agents per voyage; zero is unlimited.</summary>
+        public InputField MaxParallelMissionsPerVoyage { get; } = new InputField { Value = "4" };
 
         /// <summary>
         /// Project context.
@@ -673,7 +676,8 @@ namespace Armada.Tui.Screens.Admin
             Vessel payload = new Vessel(VesselName.Value.Trim(), RepoUrl.Value.Trim());
             payload.DefaultBranch = DefaultBranch.Value.Trim().Length > 0 ? DefaultBranch.Value.Trim() : "main";
             payload.EnableModelContext = EnableModelContext.Value;
-            payload.AllowConcurrentMissions = AllowConcurrentMissions.Value;
+            payload.MaxParallelVoyages = Int32.TryParse(MaxParallelVoyages.Value, out int pv) ? pv : 1;
+            payload.MaxParallelMissionsPerVoyage = Int32.TryParse(MaxParallelMissionsPerVoyage.Value, out int pm) ? pm : 4;
             if (ActiveFleetId.Length > 0) payload.FleetId = ActiveFleetId;
             if (WorkingDirectory.Value.Trim().Length > 0) payload.WorkingDirectory = WorkingDirectory.Value.Trim();
             if (ProjectContext.Value.Trim().Length > 0) payload.ProjectContext = ProjectContext.Value.Trim();
@@ -1374,7 +1378,8 @@ namespace Armada.Tui.Screens.Admin
                 form.AddField("Working Directory", WorkingDirectory);
                 form.AddField("Landing Mode", LandingMode, LandingHint());
                 form.AddField("Model Context", EnableModelContext);
-                form.AddField("Concurrency", AllowConcurrentMissions);
+                form.AddField("Parallel Voyages", MaxParallelVoyages, "0 = unlimited; default 1.");
+                form.AddField("Parallel Missions Per Voyage", MaxParallelMissionsPerVoyage, "0 = unlimited; default 4.");
                 form.AddField("Project Context", ProjectContext, null, 4);
                 form.AddField("Style Guide", StyleGuide, null, 4);
             }

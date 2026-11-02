@@ -93,7 +93,7 @@ export function SetupWizard() {
   const [fleetForm, setFleetForm] = useState(() => ({ name: t('Armada Starter Fleet'), description: t('Created from the setup wizard.') }));
   const [vesselForm, setVesselForm] = useState({
     name: '', repoUrl: '', defaultBranch: 'main', workingDirectory: '', projectContext: '', styleGuide: '', landingMode: 'None',
-    enableModelContext: true, allowConcurrentMissions: false,
+    enableModelContext: true, maxParallelVoyages: '1', maxParallelMissionsPerVoyage: '4',
   });
   const [captainForm, setCaptainForm] = useState<{ name: string; runtime: string; model: string; tier: string; systemInstructions: string } & MuxCaptainFormFields>(() => ({
     name: t('Setup Captain'),
@@ -257,7 +257,8 @@ export function SetupWizard() {
         repoUrl: vesselForm.repoUrl.trim(),
         defaultBranch: vesselForm.defaultBranch.trim() || 'main',
         enableModelContext: vesselForm.enableModelContext,
-        allowConcurrentMissions: vesselForm.allowConcurrentMissions,
+        maxParallelVoyages: Number(vesselForm.maxParallelVoyages) < 0 ? 1 : Math.min(1000, Math.trunc(Number(vesselForm.maxParallelVoyages) || 0)),
+        maxParallelMissionsPerVoyage: Number(vesselForm.maxParallelMissionsPerVoyage) < 0 ? 1 : Math.min(1000, Math.trunc(Number(vesselForm.maxParallelMissionsPerVoyage) || 0)),
       };
       if (activeFleetId) payload.fleetId = activeFleetId;
       if (vesselForm.workingDirectory.trim()) payload.workingDirectory = vesselForm.workingDirectory.trim();
@@ -407,7 +408,8 @@ export function SetupWizard() {
             <TextField label={t('Working Directory')} hint={tip('workingDirectory')} value={vesselForm.workingDirectory} onChangeText={(workingDirectory) => setVesselForm({ ...vesselForm, workingDirectory })} placeholder={t('Optional local checkout path')} autoCapitalize="none" autoCorrect={false} />
             <SelectField label={t('Landing Mode')} hint={t(setupLandingModeHint(vesselForm.landingMode))} value={vesselForm.landingMode} options={SETUP_LANDING_MODES.map((m) => ({ value: m.value, label: t(m.label) }))} onChange={(landingMode) => setVesselForm({ ...vesselForm, landingMode })} closeLabel={t('Close')} testID="setup-vessel-landing" />
             <SwitchField label={t('Enable model context accumulation')} hint={tip('enableModelContext')} value={vesselForm.enableModelContext} onChange={(enableModelContext) => setVesselForm({ ...vesselForm, enableModelContext })} />
-            <SwitchField label={t('Allow concurrent missions on this vessel')} hint={tip('allowConcurrentMissions')} value={vesselForm.allowConcurrentMissions} onChange={(allowConcurrentMissions) => setVesselForm({ ...vesselForm, allowConcurrentMissions })} />
+            <TextField label={t('Parallel voyages')} value={vesselForm.maxParallelVoyages} onChangeText={maxParallelVoyages => setVesselForm({ ...vesselForm, maxParallelVoyages })} keyboardType="number-pad" hint={t('0 means unlimited. Default 1.')} />
+            <TextField label={t('Parallel missions per voyage')} value={vesselForm.maxParallelMissionsPerVoyage} onChangeText={maxParallelMissionsPerVoyage => setVesselForm({ ...vesselForm, maxParallelMissionsPerVoyage })} keyboardType="number-pad" hint={t('0 means unlimited. Default 4.')} />
             <TextField label={t('Project Context')} hint={tip('projectContext')} value={vesselForm.projectContext} onChangeText={(projectContext) => setVesselForm({ ...vesselForm, projectContext })} placeholder={t('Optional architecture, build, or repository notes for captains.')} multiline />
             <TextField label={t('Style Guide')} hint={tip('styleGuide')} value={vesselForm.styleGuide} onChangeText={(styleGuide) => setVesselForm({ ...vesselForm, styleGuide })} placeholder={t('Optional conventions captains should follow.')} multiline />
           </>

@@ -214,6 +214,8 @@ export interface Vessel {
   /** Default Worker eligibility envelope for missions on this vessel; null or absent means none (routing unchanged). */
   workerEnvelope?: WorkerEnvelope | null;
   allowConcurrentMissions: boolean;
+  maxParallelVoyages?: number;
+  maxParallelMissionsPerVoyage?: number;
   /** Chain a mission that overlaps an active one after it (DependsOnMissionId) at dispatch. */
   serializeOverlappingMissions?: boolean;
   /** Per-vessel auto-approve override for missions; null or absent uses the captain setting. */
@@ -423,6 +425,9 @@ export type MissionAssignmentBlockerReason =
   | 'VesselBroadScopeMissionActive'
   | 'BroadScopeWaitingForVessel'
   | 'VesselConcurrencyLimit'
+  | 'VesselVoyageLimit'
+  | 'VoyageMissionLimit'
+  | 'GlobalMissionLimit'
   | 'NoCaptains'
   | 'NoIdleCaptain'
   | 'NoEligibleCaptain';

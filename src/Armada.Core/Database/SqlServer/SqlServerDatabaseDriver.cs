@@ -495,6 +495,8 @@ namespace Armada.Core.Database.SqlServer
             catch { vessel.RequirePassingChecksToLand = false; }
             try { object autoApproveValue = reader["auto_approve"]; vessel.AutoApprove = autoApproveValue == null || autoApproveValue == DBNull.Value ? (bool?)null : Convert.ToBoolean(autoApproveValue); }
             catch { vessel.AutoApprove = null; }
+            vessel.MaxParallelVoyages = Convert.ToInt32(reader["max_parallel_voyages"]);
+            vessel.MaxParallelMissionsPerVoyage = Convert.ToInt32(reader["max_parallel_missions_per_voyage"]);
             try { vessel.AllowConcurrentMissions = Convert.ToBoolean(reader["allow_concurrent_missions"]); }
             catch { vessel.AllowConcurrentMissions = false; }
             try { vessel.DefaultPipelineId = NullableString(reader["default_pipeline_id"]); } catch { }

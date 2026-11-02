@@ -516,7 +516,8 @@ namespace Armada.Tui.Screens.Build
             doc.YesNo("Require Passing Checks To Land", v.RequirePassingChecksToLand);
             doc.YesNo("Require PR For Protected Branches", v.RequirePullRequestForProtectedBranches);
             doc.YesNo("Require Merge Queue For Release Branches", v.RequireMergeQueueForReleaseBranches);
-            doc.YesNo("Allow Concurrent Missions", v.AllowConcurrentMissions);
+            doc.Field("Parallel Voyages", v.MaxParallelVoyages == 0 ? "Unlimited" : v.MaxParallelVoyages.ToString());
+            doc.Field("Parallel Missions Per Voyage", v.MaxParallelMissionsPerVoyage == 0 ? "Unlimited" : v.MaxParallelMissionsPerVoyage.ToString());
             doc.Field("Serialize Overlapping Missions", Tr(v.SerializeOverlappingMissions ? "Yes" : "No") + "   (L)");
             doc.Field("Agent Auto-Approve", Tr(v.AutoApprove == true ? "On for this vessel" : v.AutoApprove == false ? "Off for this vessel" : "Use captain setting"));
             doc.Field("Auto-Land Gate", Tr(v.AutoLandEnabled ? "Enabled" : "Disabled"));

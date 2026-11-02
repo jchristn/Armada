@@ -76,7 +76,9 @@ namespace Armada.Server.Mcp.Tools
                         styleGuide = new { type = "string", description = "Style guide describing naming conventions, patterns, and library preferences" },
                         workingDirectory = new { type = "string", description = "Optional local directory where completed mission changes will be pulled after merge. When repoUrl is a local clone (a file:// URL or an existing local path) and this is omitted, it is set automatically to that local clone so the vessel is immediately usable (e.g. for Rebuild Armada)." },
                         gitHubTokenOverride = new { type = "string", description = "Optional per-vessel GitHub token override. Leave unset to use the global configured token." },
-                        allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel (default false)" },
+                        maxParallelVoyages = new { type = "integer", description = "Maximum admitted voyage groups, 0..1000; zero is unlimited. Defaults to the configured vessel default (1). Negative values become 1." },
+                        maxParallelMissionsPerVoyage = new { type = "integer", description = "Maximum running missions per voyage, 0..1000; zero is unlimited. Defaults to the configured vessel default (4). Negative values become 1." },
+                        allowConcurrentMissions = new { type = "boolean", description = "Legacy stored flag; set maxParallelVoyages and maxParallelMissionsPerVoyage to control admission" },
                         serializeOverlappingMissions = new { type = "boolean", description = "Chain a dispatched mission after an active mission whose files it overlaps (or whose reserved hotspot directory it touches) with dependsOnMissionId instead of running both in parallel (default false: overlaps are only reported as dispatch warnings)" },
                         autoApprove = new { type = "boolean", description = "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting" },
                         enableModelContext = new { type = "boolean", description = "Enable model context accumulation -- agents will update context with key information discovered during missions (default true)" },
@@ -106,6 +108,8 @@ namespace Armada.Server.Mcp.Tools
                     vessel.WorkingDirectory = request.WorkingDirectory;
                     vessel.GitHubTokenOverride = request.GitHubTokenOverride;
                     vessel.AllowConcurrentMissions = request.AllowConcurrentMissions ?? false;
+                    vessel.MaxParallelVoyages = request.MaxParallelVoyages ?? (settings?.Concurrency.DefaultVesselMaxParallelVoyages ?? Constants.DefaultVesselMaxParallelVoyages);
+                    vessel.MaxParallelMissionsPerVoyage = request.MaxParallelMissionsPerVoyage ?? (settings?.Concurrency.DefaultVesselMaxParallelMissionsPerVoyage ?? Constants.DefaultVesselMaxParallelMissionsPerVoyage);
                     vessel.SerializeOverlappingMissions = request.SerializeOverlappingMissions ?? false;
                     vessel.AutoApprove = request.AutoApprove;
                     vessel.EnableModelContext = request.EnableModelContext ?? true;
@@ -150,7 +154,9 @@ namespace Armada.Server.Mcp.Tools
                         styleGuide = new { type = "string", description = "New style guide" },
                         workingDirectory = new { type = "string", description = "New local directory where completed mission changes will be pulled after merge" },
                         gitHubTokenOverride = new { type = "string", description = "Optional per-vessel GitHub token override. Empty string clears the existing override." },
-                        allowConcurrentMissions = new { type = "boolean", description = "Allow multiple concurrent missions on this vessel" },
+                        maxParallelVoyages = new { type = "integer", description = "Maximum admitted voyage groups, 0..1000; zero is unlimited. Negative values become 1." },
+                        maxParallelMissionsPerVoyage = new { type = "integer", description = "Maximum running missions per voyage, 0..1000; zero is unlimited. Negative values become 1." },
+                        allowConcurrentMissions = new { type = "boolean", description = "Legacy stored flag; set the numeric admission limits instead" },
                         serializeOverlappingMissions = new { type = "boolean", description = "Chain a dispatched mission after an active mission whose files it overlaps (or whose reserved hotspot directory it touches) with dependsOnMissionId instead of running both in parallel; false only reports overlaps as dispatch warnings" },
                         autoApprove = new { type = "boolean", description = "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting" },
                         clearAutoApprove = new { type = "boolean", description = "Remove the per-vessel auto-approve override so the captain's own setting applies" },
@@ -198,6 +204,8 @@ namespace Armada.Server.Mcp.Tools
                         vessel.GitHubTokenOverride = request.GitHubTokenOverride;
                         vessel.NormalizeGitHubTokenOverride();
                     }
+                    if (request.MaxParallelVoyages.HasValue) vessel.MaxParallelVoyages = request.MaxParallelVoyages.Value;
+                    if (request.MaxParallelMissionsPerVoyage.HasValue) vessel.MaxParallelMissionsPerVoyage = request.MaxParallelMissionsPerVoyage.Value;
                     if (request.AllowConcurrentMissions.HasValue)
                         vessel.AllowConcurrentMissions = request.AllowConcurrentMissions.Value;
                     if (request.SerializeOverlappingMissions.HasValue)

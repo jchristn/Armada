@@ -337,6 +337,9 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(MissionAssignmentBlockerReasonEnum.NoEligibleCaptain, blocker!.Reason);
                 AssertContains("ExcludeReviewAuthorsFromJudge is on", blocker.Summary ?? "", "The blocker explains the author exclusion");
 
+                // This assertion isolates tier routing from the preceding standalone review group's admission.
+                harness.Vessel.MaxParallelVoyages = 0;
+                await testDb.Driver.Vessels.UpdateAsync(harness.Vessel);
                 Mission premiumWorker = await AddMissionAsync(testDb.Driver, harness.Vessel, "Worker", null, CaptainTierEnum.Premium).ConfigureAwait(false);
                 author.Tier = CaptainTierEnum.Standard;
                 await testDb.Driver.Captains.UpdateAsync(author).ConfigureAwait(false);

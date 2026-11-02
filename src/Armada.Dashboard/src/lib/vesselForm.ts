@@ -20,6 +20,8 @@ export interface VesselFormState {
   landingMode: string;
   branchCleanupPolicy: string;
   allowConcurrentMissions: boolean;
+  maxParallelVoyages: string;
+  maxParallelMissionsPerVoyage: string;
   serializeOverlappingMissions: boolean;
   autoApproveMode: string;
   defaultPipelineId: string;
@@ -64,7 +66,7 @@ export interface LandingModeOption {
 export const emptyVesselForm: VesselFormState = {
   name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '',
   projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '', gitHubTokenOverride: '', clearGitHubTokenOverride: false,
-  landingMode: 'LocalMerge', branchCleanupPolicy: 'LocalAndRemote', allowConcurrentMissions: false, serializeOverlappingMissions: false, autoApproveMode: 'inherit', defaultPipelineId: '',
+  landingMode: 'LocalMerge', branchCleanupPolicy: 'LocalAndRemote', allowConcurrentMissions: false, maxParallelVoyages: '1', maxParallelMissionsPerVoyage: '4', serializeOverlappingMissions: false, autoApproveMode: 'inherit', defaultPipelineId: '',
   requirePassingChecksToLand: false, protectedBranchPatterns: '', releaseBranchPrefix: 'release/', hotfixBranchPrefix: 'hotfix/',
   requirePullRequestForProtectedBranches: false, requireMergeQueueForReleaseBranches: false,
   secretScanEnabled: false, protectedPathPatterns: '', privateIdentifierDenylist: '',
@@ -126,6 +128,8 @@ export function vesselToForm(v: Vessel): VesselFormState {
     landingMode: v.landingMode ?? '',
     branchCleanupPolicy: v.branchCleanupPolicy ?? '',
     allowConcurrentMissions: v.allowConcurrentMissions,
+    maxParallelVoyages: String(v.maxParallelVoyages ?? (v.allowConcurrentMissions ? 0 : 1)),
+    maxParallelMissionsPerVoyage: String(v.maxParallelMissionsPerVoyage ?? (v.allowConcurrentMissions ? 0 : 1)),
     serializeOverlappingMissions: v.serializeOverlappingMissions ?? false,
     autoApproveMode: v.autoApprove === true ? 'on' : v.autoApprove === false ? 'off' : 'inherit',
     defaultPipelineId: v.defaultPipelineId ?? '',
@@ -210,6 +214,12 @@ export function buildVesselPayload(form: VesselFormState, existing: Vessel | nul
   payload.landingMode = form.landingMode || null;
   payload.branchCleanupPolicy = form.branchCleanupPolicy || null;
   payload.allowConcurrentMissions = form.allowConcurrentMissions;
+  const limit = (value: string, fallback: number) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && value.trim() ? (parsed < 0 ? 1 : Math.min(1000, Math.trunc(parsed))) : fallback;
+  };
+  payload.maxParallelVoyages = limit(form.maxParallelVoyages, 1);
+  payload.maxParallelMissionsPerVoyage = limit(form.maxParallelMissionsPerVoyage, 4);
   payload.serializeOverlappingMissions = form.serializeOverlappingMissions;
   payload.autoApprove = form.autoApproveMode === 'on' ? true : form.autoApproveMode === 'off' ? false : null;
   payload.defaultPipelineId = form.defaultPipelineId || null;

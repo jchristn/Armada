@@ -204,6 +204,13 @@ namespace Armada.Server.Routes
                 }
                 Vessel vessel = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
+                using (JsonDocument body = JsonDocument.Parse(req.Http.Request.DataAsString))
+                {
+                    if (!body.RootElement.EnumerateObject().Any(p => String.Equals(p.Name, "maxParallelVoyages", StringComparison.OrdinalIgnoreCase)))
+                        vessel.MaxParallelVoyages = _settings?.Concurrency.DefaultVesselMaxParallelVoyages ?? Constants.DefaultVesselMaxParallelVoyages;
+                    if (!body.RootElement.EnumerateObject().Any(p => String.Equals(p.Name, "maxParallelMissionsPerVoyage", StringComparison.OrdinalIgnoreCase)))
+                        vessel.MaxParallelMissionsPerVoyage = _settings?.Concurrency.DefaultVesselMaxParallelMissionsPerVoyage ?? Constants.DefaultVesselMaxParallelMissionsPerVoyage;
+                }
                 if (String.IsNullOrEmpty(vessel.RepoUrl))
                 {
                     req.Http.Response.StatusCode = 400;

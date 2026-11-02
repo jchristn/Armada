@@ -622,6 +622,8 @@ namespace Armada.Core.Database.Sqlite
             catch { vessel.RequirePassingChecksToLand = false; }
             try { object autoApproveValue = reader["auto_approve"]; vessel.AutoApprove = autoApproveValue == null || autoApproveValue == DBNull.Value ? (bool?)null : Convert.ToInt64(autoApproveValue) == 1; }
             catch { vessel.AutoApprove = null; }
+            vessel.MaxParallelVoyages = Convert.ToInt32(reader["max_parallel_voyages"]);
+            vessel.MaxParallelMissionsPerVoyage = Convert.ToInt32(reader["max_parallel_missions_per_voyage"]);
             try { vessel.AllowConcurrentMissions = Convert.ToInt64(reader["allow_concurrent_missions"]) == 1; }
             catch { vessel.AllowConcurrentMissions = false; }
             try { vessel.DefaultPipelineId = NullableString(reader["default_pipeline_id"]); } catch { }

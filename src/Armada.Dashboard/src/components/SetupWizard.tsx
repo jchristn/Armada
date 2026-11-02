@@ -83,7 +83,8 @@ interface VesselForm {
   styleGuide: string;
   landingMode: string;
   enableModelContext: boolean;
-  allowConcurrentMissions: boolean;
+  maxParallelVoyages: number;
+  maxParallelMissionsPerVoyage: number;
 }
 
 interface CaptainForm extends MuxCaptainFormFields {
@@ -163,7 +164,8 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
     styleGuide: '',
     landingMode: 'None',
     enableModelContext: true,
-    allowConcurrentMissions: false,
+    maxParallelVoyages: 1,
+    maxParallelMissionsPerVoyage: 4,
   }));
   const [captainForm, setCaptainForm] = useState<CaptainForm>(() => ({
     name: t('Setup Captain'),
@@ -445,7 +447,8 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
         repoUrl: vesselForm.repoUrl.trim(),
         defaultBranch: vesselForm.defaultBranch.trim() || 'main',
         enableModelContext: vesselForm.enableModelContext,
-        allowConcurrentMissions: vesselForm.allowConcurrentMissions,
+        maxParallelVoyages: vesselForm.maxParallelVoyages,
+        maxParallelMissionsPerVoyage: vesselForm.maxParallelMissionsPerVoyage,
       };
       if (activeFleetId) payload.fleetId = activeFleetId;
       if (vesselForm.workingDirectory.trim()) payload.workingDirectory = vesselForm.workingDirectory.trim();
@@ -783,14 +786,11 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
               />
               {t('Enable model context accumulation')}
             </label>
-            <label className="wizard-checkbox" title={t(tooltips.allowConcurrentMissions)}>
-              <input
-                title={t(tooltips.allowConcurrentMissions)}
-                type="checkbox"
-                checked={vesselForm.allowConcurrentMissions}
-                onChange={(event) => setVesselForm({ ...vesselForm, allowConcurrentMissions: event.target.checked })}
-              />
-              {t('Allow concurrent missions on this vessel')}
+            <label>{t('Parallel voyages')}
+              <input aria-label={t('Parallel voyages')} type="number" min="0" max="1000" value={vesselForm.maxParallelVoyages} onChange={event => setVesselForm({ ...vesselForm, maxParallelVoyages: Number(event.target.value) < 0 ? 1 : Math.min(1000, Math.trunc(Number(event.target.value) || 0)) })} />
+            </label>
+            <label>{t('Parallel missions per voyage')}
+              <input aria-label={t('Parallel missions per voyage')} type="number" min="0" max="1000" value={vesselForm.maxParallelMissionsPerVoyage} onChange={event => setVesselForm({ ...vesselForm, maxParallelMissionsPerVoyage: Number(event.target.value) < 0 ? 1 : Math.min(1000, Math.trunc(Number(event.target.value) || 0)) })} />
             </label>
           </div>
           <div className="wizard-form-grid">
