@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getUsageLatest } from '../../api/client';
 import { useLocale } from '../../context/LocaleContext';
 import { useUsageRevision } from '../../context/WebSocketContext';
-import { accountAlias, captainUsagePath, viewKind } from '../../lib/usage';
+import { captainUsagePath, viewKind } from '../../lib/usage';
 import type { EnumerationResult, UsageSnapshotView } from '../../types/models';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import UsageState from './UsageState';
@@ -57,16 +57,21 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
   const rows = result?.objects ?? [];
 
   const columns: DataTableColumn<UsageSnapshotView>[] = [
-    { key: 'provider', label: t('Provider'), required: true, render: (view) => <strong>{view.provider ?? t('Unknown provider')}</strong> },
     {
-      key: 'account',
-      label: t('Account'),
-      headerTitle: t('Pseudonymous account alias. Armada never stores the account email.'),
+      key: 'captains',
+      label: t('Captain ID'),
+      required: true,
       interactive: true,
-      render: (view) => <span className="id-display"><span className="mono" title={view.accountKey ?? undefined}>{accountAlias(view.accountKey)}</span>{view.accountKey && <CopyButton text={view.accountKey} />}</span>,
+      render: (view) => (
+        <ul className="usage-member-list">
+          {(view.captainIds ?? []).map((id) => (
+            <li key={id}><span className="id-display"><Link to={captainUsagePath(id)} className="mono" title={t('Open this captain\'s usage section.')}>{id}</Link><CopyButton text={id} /></span></li>
+          ))}
+        </ul>
+      ),
     },
     {
-      key: 'host', label: t('Host'), interactive: true,
+      key: 'host', label: t('Host ID'), interactive: true,
       render: (view) => {
         const host = view.harborId ?? view.hostId;
         return host ? <span className="id-display"><span className="mono" title={host}>{host}</span><CopyButton text={host} /></span> : '-';
@@ -74,21 +79,13 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
     },
     { key: 'runtime', label: t('Runtime'), render: (view) => view.runtime },
     {
-      key: 'status',
-      label: t('Status'),
-      render: (view) => {
-        const host = view.harborId ?? view.hostId;
-        return <UsageState kind={viewKind(view)} compact host={host} age={view.observedUtc ? formatRelativeTime(view.observedUtc) : null} />;
-      },
-    },
-    {
       key: 'limits',
       label: t('Limits'),
       className: 'usage-limits-cell',
       render: (view) => {
         const kind = viewKind(view);
         if (view.windows.length === 0) {
-          return <span className="text-dim">{kind === 'unsupported' ? (view.capabilityReason || t('Not available for this runtime')) : t('No limit windows reported')}</span>;
+          return <span className="text-dim">{kind === 'unsupported' ? (view.capabilityReason || t('Not available for this runtime')) : kind === 'authMissing' ? t('Sign-in needed') : t('No limit windows reported')}</span>;
         }
         return (
           <div className="usage-limits-bars">
@@ -101,7 +98,7 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
     },
     {
       key: 'observed',
-      label: t('Last observed'),
+      label: t('Updated'),
       cellTitle: (view) => (view.observedUtc ? formatDateTime(view.observedUtc) : undefined),
       render: (view) => (view.observedUtc ? formatRelativeTime(view.observedUtc) : <span className="text-dim">{t('Never')}</span>),
     },
@@ -111,18 +108,6 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
       headerTitle: t('Requested and effective capture interval for this account. Captains that share the account share one schedule.'),
       cellTitle: (view) => t('Every {{effective}}s (requested {{requested}}s)', { effective: view.effectiveIntervalSeconds, requested: view.requestedIntervalSeconds }),
       render: (view) => `${view.effectiveIntervalSeconds}s`,
-    },
-    {
-      key: 'captains',
-      label: t('Captains'),
-      interactive: true,
-      render: (view) => (
-        <ul className="usage-member-list">
-          {(view.captainIds ?? []).map((id) => (
-            <li key={id}><Link to={captainUsagePath(id)} className="mono" title={t('Open this captain\'s usage section.')}>{id}</Link></li>
-          ))}
-        </ul>
-      ),
     },
   ];
 

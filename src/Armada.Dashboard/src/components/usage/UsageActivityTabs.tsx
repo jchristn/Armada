@@ -109,18 +109,18 @@ function UsageFilterForm({ fields, series = [], children }: { fields: FilterFiel
   };
 
   return (
-    <form className="usage-filter-form" onSubmit={apply} aria-label={t('Usage filters')}>
+    <form className={`usage-filter-form${children ? '' : ' filter-bar usage-table-filters'}`} onSubmit={apply} aria-label={t('Usage filters')}>
       {children}
       {fields.map((field) => (
         <label key={field.param} className="usage-filter-field" title={t(field.title)}>
-          <span>{t(field.label)}</span>
+          <span className={children ? undefined : 'sr-only'}>{t(field.label)}</span>
           <select
             className="filter-select"
             name={field.param}
             value={draft[field.param] ?? ''}
             onChange={(e) => setDraft((prev) => ({ ...prev, [field.param]: e.target.value }))}
           >
-            <option value="">{t('All')}</option>
+            <option value="">{t(children ? 'All' : field.label)}</option>
             {draft[field.param] && !choices[field.param].has(draft[field.param]) && (
               <option value={draft[field.param]}>{field.param === 'window' ? usageWindowLabel({ name: draft[field.param] }, t) : field.param === 'accountKey' ? accountAlias(draft[field.param]) : draft[field.param]}</option>
             )}

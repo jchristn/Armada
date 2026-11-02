@@ -10341,9 +10341,11 @@ quota percentages. Coverage describes stored records only, not external account
 work or deleted consumption. Different hosts using the same provider subscription
 remain separate host-local identities.
 
-Find filter identities in **Activity > Account Limits**: Host shows the credential
-host, Account shows a short pseudonymous alias. Hover for the full account key or
-use either cell's copy button. These keys are not provider emails/account IDs.
+Find host identities in **Activity > Account Limits**, in the Host ID column,
+with its copy button. The Account filter shows captured pseudonymous account
+aliases; applying a selection preserves its full key in the URL. These keys are
+not provider emails/account IDs. The table shows Captain ID, Host ID, Runtime,
+Limits, Updated and Interval; shared accounts keep all member captain links.
 **Activity > Usage Overview** holds quota and completion-token charts; **Token
 Usage** retains the existing token charts. These are peer Activity tabs.
 

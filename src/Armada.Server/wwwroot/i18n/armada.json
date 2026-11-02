@@ -7352,7 +7352,8 @@
         "Operational metrics, traces and logs for the bundled observability stack. Sign in with your configured Grafana credentials.": "Métricas operativas, trazas y registros de la pila de observabilidad incluida. Inicia sesión con las credenciales configuradas de Grafana.",
         "Usage operations": "Operaciones de uso",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "Solo se muestran los registros de tokens conservados. El historial de cuotas no permite reconstruir el consumo eliminado.",
-        "Only a global administrator can change server-wide usage capture settings.": "Solo un administrador global puede cambiar la configuración de captura de uso del servidor."
+        "Only a global administrator can change server-wide usage capture settings.": "Solo un administrador global puede cambiar la configuración de captura de uso del servidor.",
+        "Host ID": "ID del host"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -13652,7 +13653,8 @@
         "Operational metrics, traces and logs for the bundled observability stack. Sign in with your configured Grafana credentials.": "内置可观测性服务的运行指标、跟踪和日志。请使用配置的 Grafana 凭据登录。",
         "Usage operations": "用量运行状况",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "仅显示保留的令牌记录。配额历史无法重建已删除的消耗记录。",
-        "Only a global administrator can change server-wide usage capture settings.": "只有全局管理员可以更改服务器级用量采集设置。"
+        "Only a global administrator can change server-wide usage capture settings.": "只有全局管理员可以更改服务器级用量采集设置。",
+        "Host ID": "主机 ID"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -19915,7 +19917,8 @@
         "Operational metrics, traces and logs for the bundled observability stack. Sign in with your configured Grafana credentials.": "內建可觀測性服務的運作指標、追蹤和日誌。請使用設定的 Grafana 憑證登入。",
         "Usage operations": "用量運作狀況",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "僅顯示保留的權杖紀錄。配額歷史無法重建已刪除的消耗紀錄。",
-        "Only a global administrator can change server-wide usage capture settings.": "只有全域管理員可以變更伺服器層級的用量擷取設定。"
+        "Only a global administrator can change server-wide usage capture settings.": "只有全域管理員可以變更伺服器層級的用量擷取設定。",
+        "Host ID": "主機 ID"
       },
       "sections": {}
     },
@@ -26138,7 +26141,8 @@
         "Operational metrics, traces and logs for the bundled observability stack. Sign in with your configured Grafana credentials.": "內置可觀測性服務嘅運作指標、追蹤同日誌。請用已設定嘅 Grafana 憑證登入。",
         "Usage operations": "用量運作狀況",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "只顯示保留嘅 Token 紀錄。配額歷史無法重建已刪除嘅消耗紀錄。",
-        "Only a global administrator can change server-wide usage capture settings.": "只有全域管理員可以更改伺服器層級嘅用量擷取設定。"
+        "Only a global administrator can change server-wide usage capture settings.": "只有全域管理員可以更改伺服器層級嘅用量擷取設定。",
+        "Host ID": "主機 ID"
       },
       "sections": {}
     },
@@ -32377,7 +32381,8 @@
         "Operational metrics, traces and logs for the bundled observability stack. Sign in with your configured Grafana credentials.": "付属の可観測性スタックの運用メトリクス、トレース、ログ。設定済みの Grafana 認証情報でサインインしてください。",
         "Usage operations": "使用量の運用状況",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "保持されているトークン記録のみを表示します。削除された消費量はクォータ履歴から復元できません。",
-        "Only a global administrator can change server-wide usage capture settings.": "サーバー全体の使用量取得設定を変更できるのはグローバル管理者のみです。"
+        "Only a global administrator can change server-wide usage capture settings.": "サーバー全体の使用量取得設定を変更できるのはグローバル管理者のみです。",
+        "Host ID": "ホスト ID"
       },
       "sections": {}
     },
@@ -38607,7 +38612,8 @@
         "Operational metrics, traces and logs for the bundled observability stack. Sign in with your configured Grafana credentials.": "Betriebsmetriken, Traces und Protokolle des enthaltenen Observability-Stacks. Mit den konfigurierten Grafana-Zugangsdaten anmelden.",
         "Usage operations": "Nutzungsbetrieb",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "Es werden nur aufbewahrte Token-Datensätze angezeigt. Gelöschter Verbrauch lässt sich nicht aus dem Kontingentverlauf rekonstruieren.",
-        "Only a global administrator can change server-wide usage capture settings.": "Nur ein globaler Administrator kann die serverweiten Einstellungen zur Nutzungserfassung ändern."
+        "Only a global administrator can change server-wide usage capture settings.": "Nur ein globaler Administrator kann die serverweiten Einstellungen zur Nutzungserfassung ändern.",
+        "Host ID": "Host-ID"
       },
       "sections": {}
     },
@@ -44837,7 +44843,8 @@
         "Operational metrics, traces and logs for the bundled observability stack. Sign in with your configured Grafana credentials.": "Métriques opérationnelles, traces et journaux de la pile d’observabilité incluse. Connectez-vous avec vos identifiants Grafana configurés.",
         "Usage operations": "Suivi de l’utilisation",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "Seuls les enregistrements de jetons conservés sont affichés. L’historique des quotas ne permet pas de reconstituer la consommation supprimée.",
-        "Only a global administrator can change server-wide usage capture settings.": "Seul un administrateur global peut modifier les paramètres de collecte d’utilisation du serveur."
+        "Only a global administrator can change server-wide usage capture settings.": "Seul un administrateur global peut modifier les paramètres de collecte d’utilisation du serveur.",
+        "Host ID": "ID de l’hôte"
       },
       "sections": {}
     },
@@ -51067,7 +51074,8 @@
         "Operational metrics, traces and logs for the bundled observability stack. Sign in with your configured Grafana credentials.": "Metriche operative, tracce e log dello stack di osservabilità incluso. Accedi con le credenziali Grafana configurate.",
         "Usage operations": "Operazioni di utilizzo",
         "Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.": "Sono mostrati solo i record di token conservati. Il consumo eliminato non può essere ricostruito dalla cronologia delle quote.",
-        "Only a global administrator can change server-wide usage capture settings.": "Solo un amministratore globale può modificare le impostazioni di acquisizione utilizzo del server."
+        "Only a global administrator can change server-wide usage capture settings.": "Solo un amministratore globale può modificare le impostazioni di acquisizione utilizzo del server.",
+        "Host ID": "ID host"
       },
       "sections": {}
     }

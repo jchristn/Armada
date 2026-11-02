@@ -43,22 +43,22 @@ describe('AccountLimitsTable', () => {
     await waitFor(() => expect(screen.getByRole('link', { name: 'cpt_a' })).toHaveAttribute('href', '/captains/cpt_a?section=usage'));
     expect(screen.getByRole('link', { name: 'cpt_b' })).toHaveAttribute('href', '/captains/cpt_b?section=usage');
     expect(getUsageLatest).toHaveBeenCalledWith({ provider: 'anthropic', accountKey: undefined, hostId: 'hbr_laptop', pageNumber: 1, pageSize: 25 });
-    expect(screen.getByText('acct_123...')).toBeInTheDocument();
+    const table = screen.getByRole('table', { name: 'Limits grouped by account and host' });
+    expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Captain ID', 'Host ID', 'Runtime', 'Limits', 'Updated', 'Interval']);
     expect(screen.getByRole('progressbar', { name: '5-hour limit usage' })).toHaveAttribute('aria-valuenow', '82');
     expect(screen.getByText('600s')).toBeInTheDocument();
     expect(screen.getByText('600s').closest('td')).toHaveAttribute('title', 'Every 600s (requested 300s)');
-    expect(screen.getByText('acct_123...')).toHaveAttribute('title', 'acct_1234567890abcdef');
     expect(screen.queryByText('acct_1234567890abcdef')).not.toBeInTheDocument();
   });
 
-  it('copies the full account key and host ID from their cells', async () => {
+  it('copies the captain and host IDs from their cells', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
     vi.mocked(getUsageLatest).mockResolvedValue(page([view()]));
     renderTable();
-    const accountCell = (await screen.findByText('acct_123...')).closest('td')!;
-    fireEvent.click(within(accountCell).getByRole('button', { name: 'Copy to clipboard' }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('acct_1234567890abcdef'));
+    const captainCell = (await screen.findByRole('link', { name: 'cpt_a' })).closest('li')!;
+    fireEvent.click(within(captainCell).getByRole('button', { name: 'Copy to clipboard' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('cpt_a'));
     const hostCell = screen.getByText('hbr_laptop').closest('td')!;
     fireEvent.click(within(hostCell).getByRole('button', { name: 'Copy to clipboard' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('hbr_laptop'));
@@ -70,7 +70,7 @@ describe('AccountLimitsTable', () => {
       view({ id: 'usn_m', status: 'AuthMissing', windows: [] }),
     ]));
     renderTable();
-    await waitFor(() => expect(screen.getByText('Unsupported')).toBeInTheDocument());
+    await screen.findByText('No verified interface for this runtime.');
     expect(screen.getByText('Sign-in needed')).toBeInTheDocument();
     expect(screen.getByText('No verified interface for this runtime.')).toBeInTheDocument();
     expect(screen.queryByText('Fresh')).not.toBeInTheDocument();
