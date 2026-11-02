@@ -171,24 +171,6 @@ The release also includes:
 
 Every change is in [CHANGELOG.md](CHANGELOG.md#v120-2026-10-29).
 
-## What's New in v1.1.0
-
-- **Frontier models plan and review, local models do the work.** Personas carry ordered captain priorities, so one pipeline can route an Architect and Judge to a cloud model and its Workers to local ones.
-- **Harbor (experimental split mode).** Captains, git, and docks run on your own machine while the Admiral runs elsewhere, with a macOS menu bar, metrics, and a Harbor-side merge queue.
-- **Mobile app** for iOS and Android at parity with the dashboard, plus Ask Armada over MCP, CLI permission cards, Workspace, token activity calendars, and an administrator storage inventory.
-- **Delivery and handoff hardening for mixed runtimes.** A fleet that mixes Claude Code, Codex, Mux, and API endpoints with local and cloud models now fails narrowly and recovers on its own:
-  - Dispatch is claim-first and compare-and-swap, so a mission never runs twice and a captain is never left Working with no process.
-  - Failures are classified (infrastructure, model, contract, mechanical) and each kind is retried, repaired, or escalated on its own terms; a cancelled mission stays cancelled.
-  - Every work stage is built and tested before it hands off, whatever runtime ran it, and the next stage receives the exact commit that was checked.
-  - API captains can stream (opt in per endpoint), report liveness, compact their context before it overflows, and ride through an endpoint outage for `TransientOutageGraceMinutes`.
-  - Judge, Architect, and verifier output that breaks its contract gets one repair turn; a verifier can report `BLOCKED` instead of a false pass.
-  - An integration slice merges its sibling slices, an Architect fan-out recovers from a lost child, and the optional `BlockDependentsOfFailedStages` setting shows dependents as Blocked until the failed stage is restarted.
-  - Admiral restarts and killed Harbor processes are recovered without orphaned agents or stuck captains.
-
-Every change is in [CHANGELOG.md](CHANGELOG.md#v110-2026-10-15).
-
----
-
 ## What You Get
 
 **Orchestration**
