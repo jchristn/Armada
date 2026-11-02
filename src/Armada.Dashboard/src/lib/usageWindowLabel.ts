@@ -5,7 +5,7 @@ type WindowLabel = Pick<UsageWindow, 'name'> & Partial<Pick<UsageWindow, 'window
 
 /** Catalog keys used by the provider-neutral usage-window presentation. */
 export const USAGE_WINDOW_LABELS = [
-  'Weekly limit', 'Daily limit', 'Primary limit', 'Secondary limit', 'Usage limit',
+  'Weekly', 'Daily limit', 'Primary limit', 'Secondary limit', 'Usage limit',
   '{{count}}-hour limit', '{{count}}-day limit', '{{count}}-minute limit',
 ];
 
@@ -14,13 +14,13 @@ export function usageWindowLabel(quotaWindow: WindowLabel, t: Translate): string
   const name = quotaWindow.name.trim();
   const normalized = name.toLowerCase();
   let label: string;
-  if (/^(seven_day|weekly|7d)(?:_(opus|sonnet))?$/.test(normalized)) label = t('Weekly limit');
+  if (/^(seven_day|weekly|7d)(?:_(opus|sonnet))?$/.test(normalized)) label = t('Weekly');
   else if (/^(five_hour|5h)$/.test(normalized)) label = t('{{count}}-hour limit', { count: 5 });
   else if (/^(daily|one_day|24h|1d)$/.test(normalized)) label = t('Daily limit');
   else if (/^(codex[:_])?(primary|secondary)$/.test(normalized)) {
     const minutes = quotaWindow.windowMinutes;
     if (minutes && Number.isFinite(minutes) && minutes > 0) {
-      if (minutes === 10080) label = t('Weekly limit');
+      if (minutes === 10080) label = t('Weekly');
       else if (minutes === 1440) label = t('Daily limit');
       else if (minutes % 1440 === 0) label = t('{{count}}-day limit', { count: minutes / 1440 });
       else if (minutes % 60 === 0) label = t('{{count}}-hour limit', { count: minutes / 60 });

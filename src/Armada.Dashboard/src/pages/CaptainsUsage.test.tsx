@@ -118,10 +118,10 @@ describe('Captains usage column and View Usage action', () => {
     primary.windows[0].name = 'codex:primary';
     vi.mocked(getUsageLatest).mockResolvedValue(page([weekly, primary]) as never);
     renderCaptains();
-    const week = await screen.findByRole('link', { name: '96% used · Weekly limit' });
+    const week = await screen.findByRole('link', { name: '96% used · Weekly' });
     expect(week).toHaveClass('usage-level-danger');
-    expect(week.textContent).toBe('96% used · Weekly limit');
-    expect(week.title).toContain('Weekly limit at 96%');
+    expect(week.textContent).toBe('96% used · Weekly');
+    expect(week.title).toContain('Weekly at 96%');
     const codex = screen.getByRole('link', { name: '6% used · 5-hour limit' });
     expect(codex.textContent).toBe('6% used · 5-hour limit');
     expect(codex.title).not.toContain('codex:primary');

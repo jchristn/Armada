@@ -415,15 +415,15 @@ export default function Captains() {
       clearFilter: () => setColFilter('state', ''),
       filter: <input type="text" className="col-filter" aria-label={t('State')} title={t('Show only captains whose state contains this text, for example idle or working.')} value={colFilters.state} onChange={e => setColFilter('state', e.target.value)} placeholder={t('Filter...')} />,
       render: (c) => (
-        <>
-          <StatusBadge status={c.state} />
-          <span>{t('Active')}: {t(c.active === false ? 'No' : 'Yes')}</span>
+        <span className="captain-state-cell">
+          <StatusBadge status={c.state} />{' '}
+          <span>{t(c.active === false ? 'Inactive' : 'Active')}</span>
           {c.state === 'Quarantined' && (
-            <span className="tag stalled" title={c.quarantineReason ? t('Quarantined: dispatch skips this captain until the time shown. Reason: {{reason}}', { reason: c.quarantineReason }) : t('Quarantined: dispatch skips this captain until the time shown, then it returns to Idle.')} style={{ marginLeft: '0.35rem' }}>
+            <span className="tag stalled" title={c.quarantineReason ? t('Quarantined: dispatch skips this captain until the time shown. Reason: {{reason}}', { reason: c.quarantineReason }) : t('Quarantined: dispatch skips this captain until the time shown, then it returns to Idle.')}>
               {c.quarantineUntilUtc ? t('until {{time}}', { time: formatRelativeTime(c.quarantineUntilUtc) }) : t('quarantined')}
             </span>
           )}
-        </>
+        </span>
       ),
     },
     {

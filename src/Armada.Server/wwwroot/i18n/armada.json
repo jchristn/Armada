@@ -7341,7 +7341,8 @@
         "{{count}}-hour limit": "Límite de {{count}} horas",
         "{{count}}-day limit": "Límite de {{count}} días",
         "{{count}}-minute limit": "Límite de {{count}} minutos",
-        "{{percent}} used": "{{percent}} usado"
+        "{{percent}} used": "{{percent}} usado",
+        "Weekly": "Semanal"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -13630,7 +13631,8 @@
         "{{count}}-hour limit": "{{count}} 小时限额",
         "{{count}}-day limit": "{{count}} 天限额",
         "{{count}}-minute limit": "{{count}} 分钟限额",
-        "{{percent}} used": "已使用 {{percent}}"
+        "{{percent}} used": "已使用 {{percent}}",
+        "Weekly": "每周"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -19882,7 +19884,8 @@
         "{{count}}-hour limit": "{{count}} 小時限額",
         "{{count}}-day limit": "{{count}} 天限額",
         "{{count}}-minute limit": "{{count}} 分鐘限額",
-        "{{percent}} used": "已使用 {{percent}}"
+        "{{percent}} used": "已使用 {{percent}}",
+        "Weekly": "每週"
       },
       "sections": {}
     },
@@ -26094,7 +26097,8 @@
         "{{count}}-hour limit": "{{count}} 小時限額",
         "{{count}}-day limit": "{{count}} 日限額",
         "{{count}}-minute limit": "{{count}} 分鐘限額",
-        "{{percent}} used": "已用 {{percent}}"
+        "{{percent}} used": "已用 {{percent}}",
+        "Weekly": "每週"
       },
       "sections": {}
     },
@@ -32322,7 +32326,8 @@
         "{{count}}-hour limit": "{{count}}時間の上限",
         "{{count}}-day limit": "{{count}}日間の上限",
         "{{count}}-minute limit": "{{count}}分間の上限",
-        "{{percent}} used": "{{percent}} 使用済み"
+        "{{percent}} used": "{{percent}} 使用済み",
+        "Weekly": "週間"
       },
       "sections": {}
     },
@@ -38541,7 +38546,8 @@
         "{{count}}-hour limit": "{{count}}-Stunden-Limit",
         "{{count}}-day limit": "{{count}}-Tage-Limit",
         "{{count}}-minute limit": "{{count}}-Minuten-Limit",
-        "{{percent}} used": "{{percent}} genutzt"
+        "{{percent}} used": "{{percent}} genutzt",
+        "Weekly": "Wöchentlich"
       },
       "sections": {}
     },
@@ -44760,7 +44766,8 @@
         "{{count}}-hour limit": "Limite sur {{count}} heures",
         "{{count}}-day limit": "Limite sur {{count}} jours",
         "{{count}}-minute limit": "Limite sur {{count}} minutes",
-        "{{percent}} used": "{{percent}} utilisé"
+        "{{percent}} used": "{{percent}} utilisé",
+        "Weekly": "Hebdomadaire"
       },
       "sections": {}
     },
@@ -50979,7 +50986,8 @@
         "{{count}}-hour limit": "Limite di {{count}} ore",
         "{{count}}-day limit": "Limite di {{count}} giorni",
         "{{count}}-minute limit": "Limite di {{count}} minuti",
-        "{{percent}} used": "{{percent}} utilizzato"
+        "{{percent}} used": "{{percent}} utilizzato",
+        "Weekly": "Settimanale"
       },
       "sections": {}
     }

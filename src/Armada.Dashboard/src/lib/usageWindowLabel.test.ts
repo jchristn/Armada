@@ -6,10 +6,10 @@ const t = (message: string, params?: Record<string, string | number | null | und
 
 describe('usage window labels', () => {
   it.each([
-    ['seven_day', null, 'Weekly limit'],
+    ['seven_day', null, 'Weekly'],
     ['five_hour', null, '5-hour limit'],
     ['codex:primary', 300, '5-hour limit'],
-    ['codex:secondary', 10080, 'Weekly limit'],
+    ['codex:secondary', 10080, 'Weekly'],
     ['codex:primary', 1440, 'Daily limit'],
     ['codex:primary', 120, '2-hour limit'],
     ['codex:secondary', 2880, '2-day limit'],
@@ -25,7 +25,7 @@ describe('usage window labels', () => {
   });
 
   it('retains model scope once so a family limit is not mistaken for the whole account', () => {
-    expect(usageWindowLabel({ name: 'seven_day_sonnet', model: 'sonnet' }, t)).toBe('Weekly limit (Sonnet)');
-    expect(usageWindowLabel({ name: 'seven_day_opus' }, t)).toBe('Weekly limit (Opus)');
+    expect(usageWindowLabel({ name: 'seven_day_sonnet', model: 'sonnet' }, t)).toBe('Weekly (Sonnet)');
+    expect(usageWindowLabel({ name: 'seven_day_opus' }, t)).toBe('Weekly (Opus)');
   });
 });

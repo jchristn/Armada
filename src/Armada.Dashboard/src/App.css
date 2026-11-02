@@ -9617,6 +9617,8 @@ span.usage-state { display: inline-block; padding: 0.1rem 0.45rem; border-radius
 .usage-state-unsupported, .usage-state-disabled, .usage-state-empty, .usage-state-loading { color: var(--text-dim); }
 div.usage-state-failed strong, div.usage-state-stale strong, div.usage-state-authMissing strong { color: inherit; }
 .usage-skeleton { display: block; height: 0.5rem; width: 60%; border-radius: 999px; background: linear-gradient(90deg, var(--bg-hover), var(--border), var(--bg-hover)); }
+.captain-state-cell { display: inline-flex; align-items: center; gap: 0.35rem; }
+
 /* More specific than the shared table-link rule: retain layout inside DataTable cells. */
 .table-wrap td > a.usage-cell,
 .data-table td > a.usage-cell,
