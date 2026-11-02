@@ -43,7 +43,52 @@ describe('Token usage page', () => {
     expect(screen.getByTestId('where')).not.toHaveTextContent('captainId');
 
     fireEvent.click(screen.getByRole('button', { name: 'Last Month' }));
-    await waitFor(() => expect(getTokenUsage).toHaveBeenCalledWith(expect.objectContaining({ bucketMinutes: 1440, model: 'opus' })));
+    await waitFor(() => {
+      const matched = vi.mocked(getTokenUsage).mock.calls.some((call) => call[0]?.bucketMinutes === 1440 && call[0]?.model === 'opus');
+      expect(matched).toBe(true);
+    });
+  });
+
+  it('shows a summary load failure instead of an empty range and retries that request', async () => {
+    vi.mocked(getTokenUsage).mockRejectedValue(new Error('offline'));
+    render(<MemoryRouter><TokenUsage /></MemoryRouter>);
+    await waitFor(() => {
+      expect(screen.queryByText('Loading token usage...')).not.toBeInTheDocument();
+      const emptyRanges = screen.queryAllByText('No token usage for this time range').filter((el) => el.classList.contains('mission-history-empty'));
+      expect(emptyRanges).toHaveLength(0);
+      expect(screen.getByText('Could not load token usage.')).toBeInTheDocument();
+    });
+    const beforeRetry = vi.mocked(getTokenUsage).mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(vi.mocked(getTokenUsage).mock.calls.length).toBeGreaterThan(beforeRetry));
+  });
+
+  it('shows the empty-range text for a successful summary with no usage', async () => {
+    const empty = { ...summary, recordCount: 0, estimatedCount: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, totalTokens: 0, buckets: [], byModel: [] };
+    vi.mocked(getTokenUsage).mockResolvedValue(empty as never);
+    render(<MemoryRouter><TokenUsage /></MemoryRouter>);
+    await waitFor(() => {
+      const emptyRanges = screen.getAllByText('No token usage for this time range').filter((el) => el.classList.contains('mission-history-empty'));
+      expect(emptyRanges).toHaveLength(2);
+    });
+    expect(screen.queryByText('Could not load token usage.')).not.toBeInTheDocument();
+  });
+
+  it('shows a load failure for a new filter and does not keep the previous figures', async () => {
+    render(<MemoryRouter><TokenUsage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getAllByText('1.2K').length).toBeGreaterThan(0));
+    const firstSignal = vi.mocked(getTokenUsage).mock.calls
+      .map((call) => (call[1] as { signal?: AbortSignal } | undefined)?.signal)
+      .find((signal) => signal);
+    vi.mocked(getTokenUsage).mockRejectedValue(new Error('offline'));
+    fireEvent.change(screen.getByRole('combobox', { name: /Captain or model/ }), { target: { value: 'captain:cpt_ada' } });
+    await waitFor(() => {
+      const emptyRanges = screen.queryAllByText('No token usage for this time range').filter((el) => el.classList.contains('mission-history-empty'));
+      expect(emptyRanges).toHaveLength(0);
+      expect(screen.getByText('Could not load token usage.')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('1.2K')).not.toBeInTheDocument();
+    expect(firstSignal?.aborted).toBe(true);
   });
 
   it('always splits usage by model into token types that add up to the total', async () => {
