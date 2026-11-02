@@ -236,6 +236,11 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
           <button type="button" className="btn btn-sm" onClick={handleCancel}>{t('Cancel')}</button>
         )}
         {run && (
+          <Link className="btn btn-sm" to={evaluationResultsPath(run.id)} title={t('Open the Evaluations page for this run: per-probe results, the Full report, battery results and links to its missions. It stays available after you leave this page.')}>
+            {t('Open full results')}
+          </Link>
+        )}
+        {run && (
           <span className="model-probe-evaluate-counts" data-testid="model-probe-counts">
             <StatusBadge status={run.status} />{' '}
             <span className="text-dim">
@@ -246,13 +251,7 @@ export default function ModelProbeEvaluate({ target, targetId, onError, pollMs =
           </span>
         )}
       </div>
-      {run && (
-        <p className="model-probe-results-link">
-          <Link className="btn btn-sm" to={evaluationResultsPath(run.id)} title={t('Open the Evaluations page for this run: per-probe results, the Full report, battery results and links to its missions. It stays available after you leave this page.')}>
-            {t('Open full results')}
-          </Link>
-        </p>
-      )}
+
       {run?.profileError && <p role="alert" className="text-danger">{run.profileError}</p>}
       {run?.batteryError && <p role="alert" className="text-danger">{run.batteryError}</p>}
       {inlineError && <p role="alert" className="text-danger">{inlineError}</p>}

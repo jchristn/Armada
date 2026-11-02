@@ -9486,6 +9486,11 @@ details.readiness-issue-collapsible { padding-top: 0.45rem; padding-bottom: 0.45
     align-items: center;
     gap: 0.5rem;
 }
+.model-probe-evaluate-actions > .btn {
+    box-sizing: border-box;
+    justify-content: center;
+    line-height: 1.25;
+}
 .model-probe-evaluate-counts {
     display: inline-flex;
     flex-wrap: wrap;
@@ -9724,7 +9729,6 @@ a.usage-cell:hover { text-decoration: none; box-shadow: inset 0 0 0 1px currentC
 /* Detail pages share the same actions, metadata and responsive containment. */
 .detail-section-header { flex-wrap: wrap; }
 .captain-evaluation-section { margin-top: 1rem; }
-.model-probe-results-link { align-self: flex-start; }
 a.btn:hover { text-decoration: none; }
 .tag.info { background: var(--tag-working-bg); color: var(--tag-working-fg); }
 .tag.warning, .tag.couldnotrun, .tag.pendingevaluation { background: var(--tag-review-bg); color: var(--tag-review-fg); }
@@ -9755,7 +9759,7 @@ a.btn:hover { text-decoration: none; }
 .evaluation-section .data-table td, .evaluation-section .data-table tbody th { vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
 .evaluation-section .data-table tbody th { text-align: left; font-size: 0.85rem; font-weight: 600; text-transform: none; letter-spacing: normal; }
 .evaluation-probes-table { table-layout: auto; width: 100%; }
-.data-table.evaluation-probes-table td, .data-table.evaluation-probes-table tbody th { vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
+.data-table.evaluation-probes-table td, .data-table.evaluation-probes-table tbody th { border-bottom: 0; vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
 .data-table.evaluation-probes-table tbody th { text-align: left; font-size: 0.85rem; font-weight: 600; text-transform: none; letter-spacing: normal; }
 /* Keep names and outcome badges at their intrinsic width; details own the remaining space. */
 .data-table.evaluation-probes-table thead th:nth-child(-n+2),

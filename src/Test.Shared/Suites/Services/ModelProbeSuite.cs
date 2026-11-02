@@ -291,17 +291,70 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(result.Metrics.MinSimilarity!.Value < 1.0, "variance recorded");
             }));
 
-            cases.Add(Case("determinism_variance", "Different answers fail; identical outputs have one distinct output", TestTags.Negative, () =>
+            cases.Add(Case("determinism_variance", "Different valid answers fail; identical outputs have one distinct output", TestTags.Negative, () =>
             {
-                ModelProbeResult differ = ModelProbeScorer.ScoreDeterminism(new List<string> { "ANSWER: 101,103", "ANSWER: 101,107", "no answer" });
+                ModelProbeResult differ = ModelProbeScorer.ScoreDeterminism(new List<string> { "ANSWER: 101,103,107,109,113", "ANSWER: 101,103,107,109,127", "ANSWER: 101,103,107,109,113" });
                 AssertEqual(ModelProbeOutcomeEnum.Failed, differ.Outcome);
                 AssertEqual((bool?)false, differ.Metrics.AnswerAgreement);
-                ModelProbeResult same = ModelProbeScorer.ScoreDeterminism(new List<string> { "ANSWER: 1", "ANSWER: 1", "ANSWER: 1" });
+                AssertContains("Answers differ", differ.Summary);
+                AssertTrue(differ.Reason == null, "valid disagreement is not a format error");
+                ModelProbeResult same = ModelProbeScorer.ScoreDeterminism(new List<string> { "ANSWER: 101,103,107,109,113", "ANSWER: 101,103,107,109,113", "ANSWER: 101,103,107,109,113" });
                 AssertEqual((int?)1, same.Metrics.DistinctOutputs);
                 AssertEqual((double?)1.0, same.Metrics.MinSimilarity);
                 ModelProbeResult few = ModelProbeScorer.ScoreDeterminism(new List<string> { "ANSWER: 1" }, "budget");
                 AssertEqual(ModelProbeOutcomeEnum.CouldNotRun, few.Outcome);
                 AssertEqual("budget", few.Reason);
+            }));
+
+            cases.Add(Case("determinism_same_line_explanations", "Identical answers pass despite different same-line explanations", TestTags.Positive, () =>
+            {
+                ModelProbeResult result = ModelProbeScorer.ScoreDeterminism(new List<string>
+                {
+                    "ANSWER: 101,103,107,109,113. I checked divisibility.",
+                    "ANSWER: 101,103,107,109,113. I used trial division.",
+                    "ANSWER: 101,103,107,109,113. I tested factors up to the square root."
+                });
+                AssertEqual(ModelProbeOutcomeEnum.Passed, result.Outcome, result.Summary);
+                AssertEqual((bool?)true, result.Metrics.AnswerAgreement);
+                AssertEqual((int?)3, result.Metrics.DistinctOutputs);
+                AssertTrue(result.Metrics.MinSimilarity < 1.0, "wording variance remains diagnostic only");
+            }));
+
+            cases.Add(Case("determinism_normalizes_values", "Whitespace, Markdown, case and leading zeros do not change the parsed answer", TestTags.Positive, () =>
+            {
+                ModelProbeResult result = ModelProbeScorer.ScoreDeterminism(new List<string>
+                {
+                    "ANSWER: 101,103,107,109,113",
+                    "```text\nanswer: 0101, 0103, 0107, 0109, 0113\n```",
+                    "**ANSWER: 101,103,107,109,113**"
+                });
+                AssertEqual(ModelProbeOutcomeEnum.Passed, result.Outcome, result.Summary);
+                AssertTrue(result.Reason == null, "valid normalized answers have no error");
+            }));
+
+            cases.Add(Case("determinism_malformed_answers", "Identical missing, empty or malformed answers fail with an accurate reason", TestTags.Negative, () =>
+            {
+                foreach (string output in new[]
+                {
+                    "", "ANSWER:", "101,103,107,109,113", "no answer", "ANSWER: 1",
+                    "ANSWER: 101,103,107,109", "ANSWER: 101,103,107,109,113,127",
+                    "ANSWER: 101,103,107,109,113 , 127", "ANSWER: 101,103,107,109,113.5",
+                    "ANSWER: 101,103,107,109,99999999999999999999", "ANSWER: 101,103,107,109,113oops"
+                })
+                {
+                    ModelProbeResult result = ModelProbeScorer.ScoreDeterminism(new List<string> { output, output, output });
+                    AssertEqual(ModelProbeOutcomeEnum.Failed, result.Outcome, output);
+                    AssertEqual((bool?)false, result.Metrics.AnswerAgreement);
+                    AssertContains("Malformed or missing answers", result.Summary);
+                    AssertContains("3 of 3 repeats", result.Reason!);
+                    AssertEqual((int?)1, result.Metrics.DistinctOutputs);
+                }
+                ModelProbeResult mixed = ModelProbeScorer.ScoreDeterminism(new List<string>
+                {
+                    "ANSWER: 101,103,107,109,113", "no answer", "ANSWER: 101,103,107,109,113"
+                });
+                AssertEqual(ModelProbeOutcomeEnum.Failed, mixed.Outcome);
+                AssertContains("1 of 3 repeats", mixed.Reason!);
             }));
 
             cases.Add(Case("settings_defaults_and_clamps", "Evaluation settings default, clamp and survive a minimal JSON body", TestTags.Positive, () =>
