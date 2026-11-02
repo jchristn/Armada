@@ -9789,3 +9789,5 @@ a.btn:hover { text-decoration: none; }
     .evaluation-detail-fields { grid-template-columns: minmax(0, 1fr); gap: 0.2rem; padding: 0.85rem; }
     .evaluation-detail-fields dd { margin-bottom: 0.6rem; }
 }
+
+.usage-observability-links { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; }

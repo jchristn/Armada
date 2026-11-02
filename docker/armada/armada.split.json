@@ -29,9 +29,9 @@
   "telemetry": {
     "enabled": true,
     "serviceName": "armada",
-    "otlpEndpoint": null,
-    "prometheusEnabled": true,
+    "otlpEndpoint": "http://otel-collector:4317",
+    "prometheusEnabled": false,
     "prometheusPort": 9464,
-    "lokiEndpoint": "http://loki:3100"
+    "lokiEndpoint": null
   }
 }

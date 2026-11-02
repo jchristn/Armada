@@ -85,6 +85,9 @@ namespace Armada.Core.Services
         /// </summary>
         public DateTime DispatchedUtc { get; set; } = DateTime.UtcNow;
 
+        /// <summary>W3C trace context only, without credentials or identity tags.</summary>
+        public string? TraceParent { get; set; }
+
         #endregion
 
         #region Private-Members

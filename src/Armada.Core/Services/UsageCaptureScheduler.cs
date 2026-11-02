@@ -290,6 +290,8 @@ namespace Armada.Core.Services
         /// <returns>The receipts of the attempts this tick started or joined.</returns>
         public async Task<List<UsageCaptureAttempt>> TickAsync(CancellationToken token = default)
         {
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("schedule");
+            telemetry.Complete();
             List<UsageCaptureAttempt> receipts = new List<UsageCaptureAttempt>();
             if (!_Settings.UsageCapture.EffectiveEnabled)
             {
@@ -317,8 +319,8 @@ namespace Armada.Core.Services
                 if (token.IsCancellationRequested) break;
 
                 DateTime? eligible = _Capture.NextEligibleUtc(group.GroupKey);
-                if (!eligible.HasValue) continue; // an Unsupported source waits for a configuration change
-                if (eligible.Value > now) continue;
+                if (!eligible.HasValue) { UsageTelemetry.Schedule("Unsupported"); continue; } // an Unsupported source waits for a configuration change
+                if (eligible.Value > now) { UsageTelemetry.Schedule("NotDue"); continue; }
 
                 try
                 {

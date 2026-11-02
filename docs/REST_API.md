@@ -10291,6 +10291,68 @@ insufficient role is 403. Errors use `ApiErrorResponse`; accepted probe failures
 are recorded asynchronously rather than changing a previously returned 202.
 Ordinary reads, series and events never contain raw excerpts or credentials.
 
+#### Enumerate requests, settings and retained history
+
+`POST /api/v1/usage/snapshots/enumerate`, `/latest/enumerate` and
+`/missions/enumerate` accept a `UsageQuery` JSON body and return exactly the same
+paged response as their GET equivalents. An empty body selects the same defaults;
+missions still requires dates and provider. Querystring filters are not merged into
+a POST body. A series request has no POST enumerate twin.
+
+```http
+POST /api/v1/usage/missions/enumerate
+X-Token: {{sessionToken}}
+Content-Type: application/json
+
+{"FromUtc":"2026-11-01T00:00:00Z","ToUtc":"2026-11-02T00:00:00Z","Provider":"anthropic","PageNumber":1,"PageSize":25}
+```
+
+Capture settings on captain create/update/read are `UsageCaptureEnabled`
+(nullable; omitted/null inherits enabled), `UsageCaptureActive` (effective read-only
+value), `UsageCaptureIntervalSeconds` (default 300, clamped 60..86400),
+`UsageCaptureMode` (`Auto`, `Disabled`, `Custom`), `UsageCaptureCommand` and
+`UsageCaptureHarborId`. Disabled mode always wins. Omitted update fields preserve
+stored choices; explicit null on the Harbor restores automatic resolution.
+Custom requires an administrator-supplied executable/argument JSON contract;
+leaving Custom clears the command. The global `UsageCapture` settings are
+GlobalAdmin-only: inherited Enabled and AllowPtyFallback default on,
+MinimumIntervalSeconds=60, ProbeTimeoutSeconds=20, MaximumConcurrentProbes=4,
+MaximumConcurrentProbesPerHost=1, MaximumBackoffSeconds=3600,
+MaximumExcerptBytes=2048, RawSnapshotRetentionDays=7 and RollupRetentionDays=90.
+The v1.2.0 defaults upgrade resets old false values once (DefaultsRevision=2);
+explicit opt-outs saved after that upgrade remain off.
+
+At most 576 points per series and 20 series are returned. More accounts set
+`Coverage.SeriesTruncated`; narrow filters rather than treating the visible subset
+as all usage. The 5-minute resolution is rejected outside raw retention. Older
+60/360-minute limit views use hourly rollups and set `Resolution: "hourly"`.
+Retention consumes closed UTC hours in bounded atomic batches: contributions and
+raw deletion commit together, including on retries and late arrivals. Numeric
+means are weighted by the number of numeric percentages, not status-only samples.
+Raw rows may be kept up to one extra hour to avoid splitting the raw cutoff hour.
+Rollups older than the configured 90-day cutoff expire separately. Latest-state
+observation timestamps are never refreshed by retention. No continuous coverage
+seconds are inferred from instantaneous samples; null coverage remains unknown.
+
+Mission rows and tokens are retained independently of quota history. Missing
+mission metadata can represent a deleted mission; a row's MissionUrl is then null.
+If token records were removed, the drill-down cannot reconstruct their totals from
+quota percentages. Coverage describes stored records only, not external account
+work or deleted consumption. Different hosts using the same provider subscription
+remain separate host-local identities.
+
+Find filter identities in **Activity > Account Limits**: Host shows the credential
+host, Account shows a short pseudonymous alias. Hover for the full account key or
+use either cell's copy button. These keys are not provider emails/account IDs.
+**Activity > Usage Overview** holds quota and completion-token charts; **Token
+Usage** retains the existing token charts. These are peer Activity tabs.
+
+The root Postman collection's Usage folder includes all read/enumerate forms,
+queued/passive capture, invalid/foreign/unauthenticated reads and administrator,
+disabled, cooldown and offline capture fixtures. Set its variables locally; negative
+capture requests require dedicated fixture captains and a read-only session token.
+The collection does not create these fixtures or contain real credentials.
+
 ### Token Usage
 
 Armada records per-model token usage for every mission run, Ask Armada turn, and planning turn. Counts are normalized across providers: `input` covers prompt tokens, `output` covers completion tokens, `cached` is the cache-read subset of input (informational), and `total` is input + output. Counts are measured where the runtime reports usage (for example Claude Code's `output_tokens`) and estimated from text length otherwise; estimated records set `estimated: true` and are counted in the summary's `estimatedCount`.

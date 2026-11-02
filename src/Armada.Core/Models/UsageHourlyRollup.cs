@@ -217,6 +217,15 @@ namespace Armada.Core.Models
 
         #endregion
 
+        /// <summary>Number of observations with a numeric percentage, used for exact weighted means.</summary>
+        public int PercentSampleCount { get; set; }
+
+        /// <summary>Status of the newest observation, independent of historical status counts.</summary>
+        public string? LastStatus { get; set; }
+
+        /// <summary>True when the contributing raw rows were deleted in the same transaction as this aggregate.</summary>
+        public bool RawPruned { get; set; }
+
         #region Private-Members
 
         private string _Id = Constants.IdGenerator.GenerateKSortable(Constants.UsageRollupIdPrefix, 24);

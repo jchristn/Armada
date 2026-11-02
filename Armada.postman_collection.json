@@ -424,12 +424,12 @@
         },
         {
             "key": "usageFrom",
-            "value": "2026-10-30T00:00:00Z",
+            "value": "",
             "type": "string"
         },
         {
             "key": "usageTo",
-            "value": "2026-10-31T00:00:00Z",
+            "value": "",
             "type": "string"
         },
         {
@@ -445,6 +445,26 @@
         {
             "key": "usageHostId",
             "value": "",
+            "type": "string"
+        },
+        {
+            "key": "usageReadOnlySessionToken",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "usageDisabledCaptainId",
+            "value": "cpt_disabled_fixture",
+            "type": "string"
+        },
+        {
+            "key": "usageOfflineCaptainId",
+            "value": "cpt_offline_fixture",
+            "type": "string"
+        },
+        {
+            "key": "usageCooldownCaptainId",
+            "value": "cpt_cooldown_fixture",
             "type": "string"
         }
     ],
@@ -17333,7 +17353,7 @@
         },
         {
             "name": "Usage",
-            "description": "Phase 4 account ownership and effective-dated attribution. Set usageFrom/usageTo to a current <=90-day UTC range and sessionToken to a test identity. Capture requires an opted-in test captain and tenant-admin identity. For a read-only identity capture must return 403; disabled captains return 409, unavailable hosts 503 and cooldown 429. No real credentials are stored here.",
+            "description": "Account limits are tenant + credential-host + runtime + pseudonymous account owned; captains subscribe to a shared account. Capture is on by default (null inherits on); Disabled wins. Set sessionToken locally; never commit credentials. usageFrom/usageTo must be a current half-open UTC range no longer than 90 days. Five-minute limit reads require raw retention (7 days); hourly/6-hour history uses retained rollups (90 days). Raw samples and rollups are not added twice. Token records use completion time; quota percentages are never mission token counts. The Account Limits table shows/copies host and account keys; account keys are host-local HMACs, never provider account IDs. Capture needs TenantAdmin and a resolved credential host. Use a dedicated fixture captain for negative capture requests.",
             "item": [
                 {
                     "name": "Usage snapshots",
@@ -17372,6 +17392,16 @@
                                 {
                                     "key": "pageSize",
                                     "value": "25"
+                                },
+                                {
+                                    "key": "accountKey",
+                                    "value": "{{usageAccountKey}}",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "hostId",
+                                    "value": "{{usageHostId}}",
+                                    "disabled": true
                                 }
                             ]
                         },
@@ -17392,12 +17422,77 @@
                                     "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
                                     "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
                                     "});",
-                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });"
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
                                 ]
                             }
                         }
                     ],
-                    "response": []
+                    "response": [
+                        {
+                            "name": "Empty history",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{sessionToken}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/usage/snapshots?from={{usageFrom}}&to={{usageTo}}&pageNumber=1&pageSize=25",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "usage",
+                                        "snapshots"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "from",
+                                            "value": "{{usageFrom}}"
+                                        },
+                                        {
+                                            "key": "to",
+                                            "value": "{{usageTo}}"
+                                        },
+                                        {
+                                            "key": "pageNumber",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "pageSize",
+                                            "value": "25"
+                                        },
+                                        {
+                                            "key": "accountKey",
+                                            "value": "{{usageAccountKey}}",
+                                            "disabled": true
+                                        },
+                                        {
+                                            "key": "hostId",
+                                            "value": "{{usageHostId}}",
+                                            "disabled": true
+                                        }
+                                    ]
+                                },
+                                "description": "Sanitized tenant-scoped account observations, half-open UTC range. No excerpt for ordinary users."
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"Success\": true,\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"TotalPages\": 0,\n  \"TotalRecords\": 0,\n  \"Objects\": [],\n  \"TotalMs\": 0\n}"
+                        }
+                    ]
                 },
                 {
                     "name": "Usage latest",
@@ -17428,6 +17523,16 @@
                                 {
                                     "key": "pageSize",
                                     "value": "25"
+                                },
+                                {
+                                    "key": "accountKey",
+                                    "value": "{{usageAccountKey}}",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "hostId",
+                                    "value": "{{usageHostId}}",
+                                    "disabled": true
                                 }
                             ]
                         },
@@ -17448,12 +17553,123 @@
                                     "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
                                     "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
                                     "});",
-                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });"
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
                                 ]
                             }
                         }
                     ],
-                    "response": []
+                    "response": [
+                        {
+                            "name": "Empty history",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{sessionToken}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/usage/latest?pageNumber=1&pageSize=25",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "usage",
+                                        "latest"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "pageNumber",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "pageSize",
+                                            "value": "25"
+                                        },
+                                        {
+                                            "key": "accountKey",
+                                            "value": "{{usageAccountKey}}",
+                                            "disabled": true
+                                        },
+                                        {
+                                            "key": "hostId",
+                                            "value": "{{usageHostId}}",
+                                            "disabled": true
+                                        }
+                                    ]
+                                },
+                                "description": "One row per account group. Last-good windows retain their original timestamp after failures. Empty Objects is valid. Optional captainIds is a comma-separated batch of 1..100 unique tenant-visible captain IDs, incompatible with captainId. Filtering precedes account paging; shared accounts appear once with full membership. Follow TotalPages for multiple account contexts. Empty/duplicate/oversized batches return 400; any missing or foreign captain returns 404. Example: /api/v1/usage/latest?captainIds={{captainId}}&pageSize=100."
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"Success\": true,\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"TotalPages\": 0,\n  \"TotalRecords\": 0,\n  \"Objects\": [],\n  \"TotalMs\": 0\n}"
+                        },
+                        {
+                            "name": "Authentication missing on credential host",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{sessionToken}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/usage/latest?pageNumber=1&pageSize=25",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "usage",
+                                        "latest"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "pageNumber",
+                                            "value": "1"
+                                        },
+                                        {
+                                            "key": "pageSize",
+                                            "value": "25"
+                                        },
+                                        {
+                                            "key": "accountKey",
+                                            "value": "{{usageAccountKey}}",
+                                            "disabled": true
+                                        },
+                                        {
+                                            "key": "hostId",
+                                            "value": "{{usageHostId}}",
+                                            "disabled": true
+                                        }
+                                    ]
+                                },
+                                "description": "One row per account group. Last-good windows retain their original timestamp after failures. Empty Objects is valid. Optional captainIds is a comma-separated batch of 1..100 unique tenant-visible captain IDs, incompatible with captainId. Filtering precedes account paging; shared accounts appear once with full membership. Follow TotalPages for multiple account contexts. Empty/duplicate/oversized batches return 400; any missing or foreign captain returns 404. Example: /api/v1/usage/latest?captainIds={{captainId}}&pageSize=100."
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"TotalRecords\": 1,\n  \"TotalPages\": 1,\n  \"Objects\": [\n    {\n      \"Id\": \"usg_example\",\n      \"TenantId\": \"ten_example\",\n      \"HostId\": \"hbr_example\",\n      \"HarborId\": \"hbr_example\",\n      \"Runtime\": \"ClaudeCode\",\n      \"Provider\": \"anthropic\",\n      \"AccountKey\": null,\n      \"CaptainIds\": [\n        \"cpt_example\"\n      ],\n      \"CapturedUtc\": \"2026-11-01T13:00:00Z\",\n      \"Status\": \"AuthMissing\",\n      \"ErrorCode\": \"CredentialUnavailable\",\n      \"Windows\": [],\n      \"Stale\": false,\n      \"ObservedUtc\": null,\n      \"RequestedIntervalSeconds\": 300,\n      \"EffectiveIntervalSeconds\": 300,\n      \"CapabilityReason\": \"Sign in on the credential host.\"\n    }\n  ]\n}"
+                        }
+                    ]
                 },
                 {
                     "name": "Usage limits series",
@@ -17496,6 +17712,16 @@
                                 {
                                     "key": "bucketMinutes",
                                     "value": "60"
+                                },
+                                {
+                                    "key": "accountKey",
+                                    "value": "{{usageAccountKey}}",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "hostId",
+                                    "value": "{{usageHostId}}",
+                                    "disabled": true
                                 }
                             ]
                         },
@@ -17516,7 +17742,10 @@
                                     "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
                                     "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
                                     "});",
-                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });"
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code === 200) pm.test(\"Series resolution and coverage\", function () { pm.expect(body.Resolution).to.be.oneOf([\"raw\", \"hourly\"]); pm.expect(body.Coverage).to.be.an(\"object\"); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
                                 ]
                             }
                         }
@@ -17584,7 +17813,10 @@
                                     "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
                                     "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
                                     "});",
-                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });"
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code === 200) pm.test(\"Series resolution and coverage\", function () { pm.expect(body.Resolution).to.be.oneOf([\"raw\", \"hourly\"]); pm.expect(body.Coverage).to.be.an(\"object\"); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
                                 ]
                             }
                         }
@@ -17632,6 +17864,16 @@
                                 {
                                     "key": "pageSize",
                                     "value": "25"
+                                },
+                                {
+                                    "key": "accountKey",
+                                    "value": "{{usageAccountKey}}",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "hostId",
+                                    "value": "{{usageHostId}}",
+                                    "disabled": true
                                 }
                             ]
                         },
@@ -17652,7 +17894,9 @@
                                     "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
                                     "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
                                     "});",
-                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });"
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
                                 ]
                             }
                         }
@@ -17710,12 +17954,203 @@
                                     "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
                                     "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
                                     "});",
-                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });"
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
                                 ]
                             }
                         }
                     ],
-                    "response": []
+                    "response": [
+                        {
+                            "name": "Queued capture",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{sessionToken}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/captains/{{captainId}}/usage/capture",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "captains",
+                                        "{{captainId}}",
+                                        "usage",
+                                        "capture"
+                                    ],
+                                    "query": []
+                                },
+                                "description": "Requires tenant admin. Empty body allowed. Shared active attempts join one JobId. 200 passive latest, 202 queued, 409 disabled, 429 cooldown with Retry-After, 503 offline. Probe failure after acceptance is a job outcome.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Accepted",
+                            "code": 202,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"JobId\": \"job_example\",\n  \"Status\": \"Queued\",\n  \"JoinedExisting\": false,\n  \"NextEligibleUtc\": \"2026-11-01T13:05:00Z\"\n}"
+                        },
+                        {
+                            "name": "Capture disabled",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{sessionToken}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/captains/{{captainId}}/usage/capture",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "captains",
+                                        "{{captainId}}",
+                                        "usage",
+                                        "capture"
+                                    ],
+                                    "query": []
+                                },
+                                "description": "Requires tenant admin. Empty body allowed. Shared active attempts join one JobId. 200 passive latest, 202 queued, 409 disabled, 429 cooldown with Retry-After, 503 offline. Probe failure after acceptance is a job outcome.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Conflict",
+                            "code": 409,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"Error\": \"Conflict\",\n  \"Message\": \"Usage capture is disabled.\",\n  \"Data\": {\n    \"Code\": \"CaptureDisabled\"\n  },\n  \"StatusCode\": 409\n}"
+                        },
+                        {
+                            "name": "Cooldown",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{sessionToken}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/captains/{{captainId}}/usage/capture",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "captains",
+                                        "{{captainId}}",
+                                        "usage",
+                                        "capture"
+                                    ],
+                                    "query": []
+                                },
+                                "description": "Requires tenant admin. Empty body allowed. Shared active attempts join one JobId. 200 passive latest, 202 queued, 409 disabled, 429 cooldown with Retry-After, 503 offline. Probe failure after acceptance is a job outcome.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Too Many Requests",
+                            "code": 429,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                },
+                                {
+                                    "key": "Retry-After",
+                                    "value": "300"
+                                }
+                            ],
+                            "body": "{\n  \"Error\": \"SlowDown\",\n  \"Message\": \"Capture is cooling down.\",\n  \"Data\": {\n    \"Code\": \"Cooldown\",\n    \"NextEligibleUtc\": \"2026-11-01T13:05:00Z\"\n  },\n  \"StatusCode\": 429\n}"
+                        },
+                        {
+                            "name": "Host offline",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{sessionToken}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/captains/{{captainId}}/usage/capture",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "captains",
+                                        "{{captainId}}",
+                                        "usage",
+                                        "capture"
+                                    ],
+                                    "query": []
+                                },
+                                "description": "Requires tenant admin. Empty body allowed. Shared active attempts join one JobId. 200 passive latest, 202 queued, 409 disabled, 429 cooldown with Retry-After, 503 offline. Probe failure after acceptance is a job outcome.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Service Unavailable",
+                            "code": 503,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"Error\": \"ServiceUnavailable\",\n  \"StatusCode\": 503,\n  \"Description\": \"Service Unavailable\",\n  \"Message\": \"The selected credential host is unavailable.\",\n  \"Data\": {\n    \"Code\": \"HostUnavailable\",\n    \"NextEligibleUtc\": null\n  }\n}"
+                        }
+                    ]
                 },
                 {
                     "name": "Usage invalid range",
@@ -17766,12 +18201,59 @@
                                     "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
                                     "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
                                     "});",
-                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });"
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
                                 ]
                             }
                         }
                     ],
-                    "response": []
+                    "response": [
+                        {
+                            "name": "BadRequest",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{sessionToken}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/usage/series?from=invalid&to={{usageTo}}",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "usage",
+                                        "series"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "from",
+                                            "value": "invalid"
+                                        },
+                                        {
+                                            "key": "to",
+                                            "value": "{{usageTo}}"
+                                        }
+                                    ]
+                                },
+                                "description": "Authenticated negative path: malformed UTC range uses ApiErrorResponse."
+                            },
+                            "status": "BadRequest",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"Error\": \"BadRequest\",\n  \"StatusCode\": 400,\n  \"Message\": \"Invalid usage range.\",\n  \"Data\": null\n}"
+                        }
+                    ]
                 },
                 {
                     "name": "Usage invisible captain",
@@ -17822,12 +18304,59 @@
                                     "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
                                     "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
                                     "});",
-                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });"
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
                                 ]
                             }
                         }
                     ],
-                    "response": []
+                    "response": [
+                        {
+                            "name": "NotFound",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{sessionToken}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/usage/snapshots?captainId=cpt_not_visible&from=invalid",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "usage",
+                                        "snapshots"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "captainId",
+                                            "value": "cpt_not_visible"
+                                        },
+                                        {
+                                            "key": "from",
+                                            "value": "invalid"
+                                        }
+                                    ]
+                                },
+                                "description": "Foreign or missing identifier is resolved before secondary validation."
+                            },
+                            "status": "NotFound",
+                            "code": 404,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"Error\": \"NotFound\",\n  \"StatusCode\": 404,\n  \"Message\": \"Captain not found.\",\n  \"Data\": null\n}"
+                        }
+                    ]
                 },
                 {
                     "name": "Usage missing authentication",
@@ -17867,12 +18396,632 @@
                                     "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
                                     "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
                                     "});",
-                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });"
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
+                                ]
+                            }
+                        }
+                    ],
+                    "response": [
+                        {
+                            "name": "NotAuthorized",
+                            "originalRequest": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/usage/latest",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "usage",
+                                        "latest"
+                                    ],
+                                    "query": []
+                                },
+                                "description": "Negative auth path, no credentials.",
+                                "auth": {
+                                    "type": "noauth"
+                                }
+                            },
+                            "status": "NotAuthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"Error\": \"NotAuthorized\",\n  \"StatusCode\": 401,\n  \"Message\": \"Usage access denied.\",\n  \"Data\": null\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Enumerate usage snapshots",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "X-Token",
+                                "value": "{{sessionToken}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/usage/snapshots/enumerate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "usage",
+                                "snapshots",
+                                "enumerate"
+                            ]
+                        },
+                        "description": "POST twin of the corresponding GET. Filters come from the JSON body; all auth, tenant, bounds and pagination rules are identical. Querystring filters are not merged into a POST body.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"FromUtc\": \"{{usageFrom}}\",\n  \"ToUtc\": \"{{usageTo}}\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected usage status\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+                                    "pm.test(\"JSON response\", function () { pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"Usage response schema\", function () {",
+                                    "  if (pm.response.code >= 400) { pm.expect(body).to.have.property(\"Error\"); }",
+                                    "  else if (body.Objects !== undefined) { pm.expect(body.Objects).to.be.an(\"array\"); pm.expect(body.PageSize).to.be.at.most(100); pm.expect(body.TotalRecords).to.be.at.least(0); }",
+                                    "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
+                                    "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
+                                    "});",
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
+                                ]
+                            }
+                        }
+                    ],
+                    "response": [
+                        {
+                            "name": "Empty history",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{sessionToken}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/usage/snapshots/enumerate",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "usage",
+                                        "snapshots",
+                                        "enumerate"
+                                    ]
+                                },
+                                "description": "POST twin of the corresponding GET. Filters come from the JSON body; all auth, tenant, bounds and pagination rules are identical. Querystring filters are not merged into a POST body.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"FromUtc\": \"{{usageFrom}}\",\n  \"ToUtc\": \"{{usageTo}}\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"Success\": true,\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"TotalPages\": 0,\n  \"TotalRecords\": 0,\n  \"Objects\": [],\n  \"TotalMs\": 0\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Enumerate usage latest",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "X-Token",
+                                "value": "{{sessionToken}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/usage/latest/enumerate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "usage",
+                                "latest",
+                                "enumerate"
+                            ]
+                        },
+                        "description": "POST twin of the corresponding GET. Filters come from the JSON body; all auth, tenant, bounds and pagination rules are identical. Querystring filters are not merged into a POST body.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected usage status\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+                                    "pm.test(\"JSON response\", function () { pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"Usage response schema\", function () {",
+                                    "  if (pm.response.code >= 400) { pm.expect(body).to.have.property(\"Error\"); }",
+                                    "  else if (body.Objects !== undefined) { pm.expect(body.Objects).to.be.an(\"array\"); pm.expect(body.PageSize).to.be.at.most(100); pm.expect(body.TotalRecords).to.be.at.least(0); }",
+                                    "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
+                                    "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
+                                    "});",
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
+                                ]
+                            }
+                        }
+                    ],
+                    "response": [
+                        {
+                            "name": "Empty history",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{sessionToken}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/usage/latest/enumerate",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "usage",
+                                        "latest",
+                                        "enumerate"
+                                    ]
+                                },
+                                "description": "POST twin of the corresponding GET. Filters come from the JSON body; all auth, tenant, bounds and pagination rules are identical. Querystring filters are not merged into a POST body.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"Success\": true,\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"TotalPages\": 0,\n  \"TotalRecords\": 0,\n  \"Objects\": [],\n  \"TotalMs\": 0\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Enumerate usage missions",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "X-Token",
+                                "value": "{{sessionToken}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/usage/missions/enumerate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "usage",
+                                "missions",
+                                "enumerate"
+                            ]
+                        },
+                        "description": "POST twin of the corresponding GET. Filters come from the JSON body; all auth, tenant, bounds and pagination rules are identical. Querystring filters are not merged into a POST body.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"FromUtc\": \"{{usageFrom}}\",\n  \"ToUtc\": \"{{usageTo}}\",\n  \"Provider\": \"{{usageProvider}}\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected usage status\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+                                    "pm.test(\"JSON response\", function () { pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"Usage response schema\", function () {",
+                                    "  if (pm.response.code >= 400) { pm.expect(body).to.have.property(\"Error\"); }",
+                                    "  else if (body.Objects !== undefined) { pm.expect(body.Objects).to.be.an(\"array\"); pm.expect(body.PageSize).to.be.at.most(100); pm.expect(body.TotalRecords).to.be.at.least(0); }",
+                                    "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
+                                    "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
+                                    "});",
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
                                 ]
                             }
                         }
                     ],
                     "response": []
+                },
+                {
+                    "name": "Capture denied to read-only identity",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "X-Token",
+                                "value": "{{usageReadOnlySessionToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/captains/{{captainId}}/usage/capture",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "captains",
+                                "{{captainId}}",
+                                "usage",
+                                "capture"
+                            ],
+                            "query": []
+                        },
+                        "description": "Requires a dedicated fixture: an authenticated read-only identity (no tenant administration).",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected usage status\", function () { pm.expect(pm.response.code).to.eql(403); });",
+                                    "pm.test(\"JSON response\", function () { pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"Usage response schema\", function () {",
+                                    "  if (pm.response.code >= 400) { pm.expect(body).to.have.property(\"Error\"); }",
+                                    "  else if (body.Objects !== undefined) { pm.expect(body.Objects).to.be.an(\"array\"); pm.expect(body.PageSize).to.be.at.most(100); pm.expect(body.TotalRecords).to.be.at.least(0); }",
+                                    "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
+                                    "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
+                                    "});",
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
+                                ]
+                            }
+                        }
+                    ],
+                    "response": [
+                        {
+                            "name": "Forbidden",
+                            "originalRequest": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-Token",
+                                        "value": "{{usageReadOnlySessionToken}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{baseUrl}}/api/v1/captains/{{captainId}}/usage/capture",
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "captains",
+                                        "{{captainId}}",
+                                        "usage",
+                                        "capture"
+                                    ],
+                                    "query": []
+                                },
+                                "description": "Requires a dedicated fixture: an authenticated read-only identity (no tenant administration).",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Forbidden",
+                            "code": 403,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"Error\": \"Forbidden\",\n  \"StatusCode\": 403,\n  \"Message\": \"Usage access denied.\",\n  \"Data\": null\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Capture disabled",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "X-Token",
+                                "value": "{{sessionToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/captains/{{usageDisabledCaptainId}}/usage/capture",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "captains",
+                                "{{usageDisabledCaptainId}}",
+                                "usage",
+                                "capture"
+                            ],
+                            "query": []
+                        },
+                        "description": "Requires a dedicated fixture: a same-tenant captain with capture explicitly false or mode Disabled.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected usage status\", function () { pm.expect(pm.response.code).to.eql(409); });",
+                                    "pm.test(\"JSON response\", function () { pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"Usage response schema\", function () {",
+                                    "  if (pm.response.code >= 400) { pm.expect(body).to.have.property(\"Error\"); }",
+                                    "  else if (body.Objects !== undefined) { pm.expect(body.Objects).to.be.an(\"array\"); pm.expect(body.PageSize).to.be.at.most(100); pm.expect(body.TotalRecords).to.be.at.least(0); }",
+                                    "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
+                                    "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
+                                    "});",
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
+                                ]
+                            }
+                        }
+                    ],
+                    "response": []
+                },
+                {
+                    "name": "Capture cooldown",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "X-Token",
+                                "value": "{{sessionToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/captains/{{usageCooldownCaptainId}}/usage/capture",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "captains",
+                                "{{usageCooldownCaptainId}}",
+                                "usage",
+                                "capture"
+                            ],
+                            "query": []
+                        },
+                        "description": "Requires a dedicated fixture: an observed captain inside its effective cooldown; retries while active join and may return 202 instead.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected usage status\", function () { pm.expect(pm.response.code).to.eql(429); });",
+                                    "pm.test(\"JSON response\", function () { pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"Usage response schema\", function () {",
+                                    "  if (pm.response.code >= 400) { pm.expect(body).to.have.property(\"Error\"); }",
+                                    "  else if (body.Objects !== undefined) { pm.expect(body.Objects).to.be.an(\"array\"); pm.expect(body.PageSize).to.be.at.most(100); pm.expect(body.TotalRecords).to.be.at.least(0); }",
+                                    "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
+                                    "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
+                                    "});",
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
+                                ]
+                            }
+                        }
+                    ],
+                    "response": []
+                },
+                {
+                    "name": "Capture offline host",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "X-Token",
+                                "value": "{{sessionToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/captains/{{usageOfflineCaptainId}}/usage/capture",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "captains",
+                                "{{usageOfflineCaptainId}}",
+                                "usage",
+                                "capture"
+                            ],
+                            "query": []
+                        },
+                        "description": "Requires a dedicated fixture: a same-tenant captain bound to a disconnected credential Harbor.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected usage status\", function () { pm.expect(pm.response.code).to.eql(503); });",
+                                    "pm.test(\"JSON response\", function () { pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"Usage response schema\", function () {",
+                                    "  if (pm.response.code >= 400) { pm.expect(body).to.have.property(\"Error\"); }",
+                                    "  else if (body.Objects !== undefined) { pm.expect(body.Objects).to.be.an(\"array\"); pm.expect(body.PageSize).to.be.at.most(100); pm.expect(body.TotalRecords).to.be.at.least(0); }",
+                                    "  else if (body.Series !== undefined) { pm.expect(body.Series).to.be.an(\"array\"); pm.expect(body.Series.length).to.be.at.most(20); body.Series.forEach(s => pm.expect(s.Points.length).to.be.at.most(576)); }",
+                                    "  else if (pm.response.code === 202) { pm.expect(body.JobId).to.be.a(\"string\"); pm.expect(body.Status).to.eql(\"Queued\"); pm.expect(body.JoinedExisting).to.be.a(\"boolean\"); }",
+                                    "});",
+                                    "if (pm.response.code === 429) pm.test(\"Cooldown retry\", function () { pm.expect(pm.response.headers.get(\"Retry-After\")).to.match(/^\\d+$/); });",
+                                    "pm.test(\"No diagnostic excerpts or credential payload\", function () { const text = JSON.stringify(body); pm.expect(text).not.to.match(/\"(?:RawExcerpt|access_token|refresh_token|Authorization)\"\\s*:/i); });",
+                                    "if (pm.response.code >= 400) pm.test(\"Error status and message\", function () { pm.expect(body.StatusCode).to.eql(pm.response.code); pm.expect(body.Message).to.be.a(\"string\"); });"
+                                ]
+                            }
+                        }
+                    ],
+                    "response": []
+                }
+            ],
+            "event": [
+                {
+                    "listen": "prerequest",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "const end = new Date();",
+                            "if (!pm.variables.get(\"usageTo\")) pm.variables.set(\"usageTo\", end.toISOString());",
+                            "if (!pm.variables.get(\"usageFrom\")) pm.variables.set(\"usageFrom\", new Date(end.getTime() - 86400000).toISOString());"
+                        ]
+                    }
                 }
             ]
         }

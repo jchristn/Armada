@@ -68,16 +68,19 @@ namespace Armada.Runtimes
         public async Task<UsageProbeResult> CaptureAsync(UsageProbeHost host, CancellationToken token = default)
         {
             if (host == null) throw new ArgumentNullException(nameof(host));
+            using System.Diagnostics.Activity? parent = UsageTelemetry.Receive(host.TraceParent);
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("provider", host.Runtime.ToString());
             if (String.IsNullOrWhiteSpace(host.TenantId) || String.IsNullOrWhiteSpace(host.HostId))
                 return UsageProbeResult.Failed("InvalidProbeContext", "the probe request has no tenant or host identity");
 
             if (host.Mode == UsageCaptureModeEnum.Disabled)
                 return UsageProbeResult.Failed("CaptureDisabled", "the captain is not capturing account usage");
 
-            if (host.Mode == UsageCaptureModeEnum.Custom)
-                return await RunCustomAsync(host, token).ConfigureAwait(false);
-
-            return await RunAutoAsync(host, token).ConfigureAwait(false);
+            UsageProbeResult result = host.Mode == UsageCaptureModeEnum.Custom
+                ? await RunCustomAsync(host, token).ConfigureAwait(false)
+                : await RunAutoAsync(host, token).ConfigureAwait(false);
+            telemetry.Complete(result.Status.ToString());
+            return result;
         }
 
         #endregion

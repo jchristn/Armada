@@ -595,7 +595,7 @@ namespace Test.Shared.Suites.Database
                     await driver.UsageRollups.UpsertAsync(newRollup, ct).ConfigureAwait(false);
 
                     int rollupsDeleted = await driver.UsageRollups.DeleteOlderThanAsync(new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc), ct).ConfigureAwait(false);
-                    AssertEqual(1, rollupsDeleted, "only the old rollup is deleted");
+                    AssertEqual(2, rollupsDeleted, "old explicit rollup and atomically pruned snapshot aggregate are deleted");
                     AssertNull(await driver.UsageRollups.ReadAsync(oldRollup.Id, "ten_usage_retention", ct).ConfigureAwait(false), "old rollup gone");
                     AssertNotNull(await driver.UsageRollups.ReadAsync(newRollup.Id, "ten_usage_retention", ct).ConfigureAwait(false), "fresh rollup retained");
                 }

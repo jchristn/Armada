@@ -197,7 +197,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             return String.IsNullOrEmpty(value) ? null : value;
         }
 
-        private static void BindRollup(NpgsqlCommand cmd, UsageHourlyRollup rollup)
+        internal static void BindRollup(NpgsqlCommand cmd, UsageHourlyRollup rollup)
         {
             PostgresqlCommandHelper.Add(cmd, "@id", rollup.Id);
             PostgresqlCommandHelper.Add(cmd, "@tenant_id", rollup.TenantId);
@@ -209,6 +209,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
             PostgresqlCommandHelper.Add(cmd, "@model", rollup.Model ?? String.Empty);
             PostgresqlCommandHelper.AddDate(cmd, "@hour_utc", rollup.HourUtc);
             PostgresqlCommandHelper.Add(cmd, "@sample_count", rollup.SampleCount);
+            PostgresqlCommandHelper.Add(cmd, "@percent_sample_count", rollup.PercentSampleCount);
+            PostgresqlCommandHelper.Add(cmd, "@last_status", rollup.LastStatus);
+            PostgresqlCommandHelper.Add(cmd, "@raw_pruned", rollup.RawPruned ? 1 : 0);
             PostgresqlCommandHelper.Add(cmd, "@last_percent", rollup.LastPercent);
             PostgresqlCommandHelper.Add(cmd, "@min_percent", rollup.MinPercent);
             PostgresqlCommandHelper.Add(cmd, "@max_percent", rollup.MaxPercent);
@@ -227,7 +230,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             PostgresqlCommandHelper.AddDate(cmd, "@last_update_utc", rollup.LastUpdateUtc);
         }
 
-        private static UsageHourlyRollup FromReader(NpgsqlDataReader reader)
+        internal static UsageHourlyRollup FromReader(NpgsqlDataReader reader)
         {
             UsageHourlyRollup rollup = new UsageHourlyRollup();
             rollup.Id = reader["id"].ToString()!;
@@ -256,6 +259,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
             rollup.EstimatedCount = PostgresqlCommandHelper.ReadInt(reader["estimated_count"], 0);
             rollup.CoverageSeconds = PostgresqlCommandHelper.ReadNullableDouble(reader["coverage_seconds"]);
             rollup.LastUpdateUtc = PostgresqlCommandHelper.ReadDate(reader["last_update_utc"]);
+            rollup.PercentSampleCount = PostgresqlCommandHelper.ReadInt(reader["percent_sample_count"], 0);
+            rollup.LastStatus = PostgresqlCommandHelper.ReadString(reader["last_status"]);
+            rollup.RawPruned = PostgresqlCommandHelper.ReadInt(reader["raw_pruned"], 0) != 0;
             return rollup;
         }
 

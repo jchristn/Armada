@@ -11,6 +11,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
+    using Armada.Core.Services;
     using SyslogLogging;
 
     /// <summary>
@@ -215,14 +216,40 @@ namespace Armada.Core.Database.SqlServer.Implementations
             int deleted = 0;
             await SqlServerCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqlConnection conn, SqlTransaction tx) =>
             {
-                await SqlServerCommandHelper.ExecuteAsync(conn, tx, UsageSnapshotQueries.SnapshotCaptainsDeleteOlderThan, cmd =>
+                List<UsageSnapshot> expired = await SqlServerCommandHelper.QueryAsync(conn, tx,
+                    "SELECT TOP (500) * FROM usage_snapshots WITH (UPDLOCK, HOLDLOCK) WHERE captured_utc < @captured_before ORDER BY captured_utc, id;",
+                    cmd => SqlServerCommandHelper.AddDate(cmd, "@captured_before", capturedBeforeUtc), FromReader, token).ConfigureAwait(false);
+                foreach (IGrouping<string, UsageSnapshot> group in expired.Where(row => !String.IsNullOrEmpty(row.AccountKey))
+                    .GroupBy(UsageRollupBuilder.GroupKey))
                 {
-                    SqlServerCommandHelper.AddDate(cmd, "@captured_before", capturedBeforeUtc);
-                }, token).ConfigureAwait(false);
+                    UsageSnapshot first = group.First();
+                    List<UsageHourlyRollup> existing = await SqlServerCommandHelper.QueryAsync(conn, tx,
+                        "SELECT * FROM usage_hourly_rollups WHERE tenant_id = @tenant_id AND host_id = @host_id AND runtime = @runtime AND provider = @provider AND account_key = @account_key AND hour_utc = @hour_utc;",
+                        cmd =>
+                        {
+                            SqlServerCommandHelper.Add(cmd, "@tenant_id", first.TenantId);
+                            SqlServerCommandHelper.Add(cmd, "@host_id", first.HostId);
+                            SqlServerCommandHelper.Add(cmd, "@runtime", first.Runtime.ToString());
+                            SqlServerCommandHelper.Add(cmd, "@provider", first.Provider ?? String.Empty);
+                            SqlServerCommandHelper.Add(cmd, "@account_key", first.AccountKey);
+                            SqlServerCommandHelper.AddDate(cmd, "@hour_utc", UsageRollupBuilder.Hour(first.CapturedUtc));
+                        }, UsageHourlyRollupMethods.FromReader, token).ConfigureAwait(false);
+                    foreach (UsageHourlyRollup rollup in UsageRollupBuilder.Merge(group.ToList(), existing))
+                    {
+                        await SqlServerCommandHelper.ExecuteAsync(conn, tx, UsageSnapshotQueries.RollupUpsert,
+                            cmd => UsageHourlyRollupMethods.BindRollup(cmd, rollup), token).ConfigureAwait(false);
+                    }
+                }
 
-                deleted = await SqlServerCommandHelper.ExecuteAsync(conn, tx, UsageSnapshotQueries.SnapshotDeleteOlderThan, cmd =>
+                if (expired.Count == 0) return;
+                string ids = String.Join(",", expired.Select((row, index) => "@snapshot_" + index));
+                await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM usage_snapshot_captains WHERE snapshot_id IN (" + ids + ");", cmd =>
                 {
-                    SqlServerCommandHelper.AddDate(cmd, "@captured_before", capturedBeforeUtc);
+                    for (int index = 0; index < expired.Count; index++) SqlServerCommandHelper.Add(cmd, "@snapshot_" + index, expired[index].Id);
+                }, token).ConfigureAwait(false);
+                deleted = await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM usage_snapshots WHERE id IN (" + ids + ");", cmd =>
+                {
+                    for (int index = 0; index < expired.Count; index++) SqlServerCommandHelper.Add(cmd, "@snapshot_" + index, expired[index].Id);
                 }, token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
             return deleted;
@@ -322,6 +349,20 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 result.Objects = rows;
                 return result;
             }
+        }
+
+        /// <inheritdoc />
+        public async Task<int> PruneInactiveStateAsync(DateTime closedBeforeUtc, CancellationToken token = default)
+        {
+            int deleted = 0;
+            await SqlServerCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqlConnection conn, SqlTransaction tx) =>
+            {
+                deleted += await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM usage_latest_state WHERE expired_utc < @cutoff;",
+                    cmd => SqlServerCommandHelper.AddDate(cmd, "@cutoff", closedBeforeUtc), token).ConfigureAwait(false);
+                deleted += await SqlServerCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM usage_account_memberships WHERE effective_to_utc < @cutoff;",
+                    cmd => SqlServerCommandHelper.AddDate(cmd, "@cutoff", closedBeforeUtc), token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return deleted;
         }
 
         /// <inheritdoc />

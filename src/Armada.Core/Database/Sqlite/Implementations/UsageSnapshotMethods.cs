@@ -11,6 +11,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
+    using Armada.Core.Services;
     using SyslogLogging;
 
     /// <summary>
@@ -215,14 +216,40 @@ namespace Armada.Core.Database.Sqlite.Implementations
             int deleted = 0;
             await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
-                await SqliteCommandHelper.ExecuteAsync(conn, tx, UsageSnapshotQueries.SnapshotCaptainsDeleteOlderThan, cmd =>
+                List<UsageSnapshot> expired = await SqliteCommandHelper.QueryAsync(conn, tx,
+                    "SELECT * FROM usage_snapshots WHERE captured_utc < @captured_before ORDER BY captured_utc, id LIMIT 500;",
+                    cmd => SqliteCommandHelper.AddDate(cmd, "@captured_before", capturedBeforeUtc), FromReader, token).ConfigureAwait(false);
+                foreach (IGrouping<string, UsageSnapshot> group in expired.Where(row => !String.IsNullOrEmpty(row.AccountKey))
+                    .GroupBy(UsageRollupBuilder.GroupKey))
                 {
-                    SqliteCommandHelper.AddDate(cmd, "@captured_before", capturedBeforeUtc);
-                }, token).ConfigureAwait(false);
+                    UsageSnapshot first = group.First();
+                    List<UsageHourlyRollup> existing = await SqliteCommandHelper.QueryAsync(conn, tx,
+                        "SELECT * FROM usage_hourly_rollups WHERE tenant_id = @tenant_id AND host_id = @host_id AND runtime = @runtime AND provider = @provider AND account_key = @account_key AND hour_utc = @hour_utc;",
+                        cmd =>
+                        {
+                            SqliteCommandHelper.Add(cmd, "@tenant_id", first.TenantId);
+                            SqliteCommandHelper.Add(cmd, "@host_id", first.HostId);
+                            SqliteCommandHelper.Add(cmd, "@runtime", first.Runtime.ToString());
+                            SqliteCommandHelper.Add(cmd, "@provider", first.Provider ?? String.Empty);
+                            SqliteCommandHelper.Add(cmd, "@account_key", first.AccountKey);
+                            SqliteCommandHelper.AddDate(cmd, "@hour_utc", UsageRollupBuilder.Hour(first.CapturedUtc));
+                        }, UsageHourlyRollupMethods.FromReader, token).ConfigureAwait(false);
+                    foreach (UsageHourlyRollup rollup in UsageRollupBuilder.Merge(group.ToList(), existing))
+                    {
+                        await SqliteCommandHelper.ExecuteAsync(conn, tx, UsageSnapshotQueries.RollupUpsert,
+                            cmd => UsageHourlyRollupMethods.BindRollup(cmd, rollup), token).ConfigureAwait(false);
+                    }
+                }
 
-                deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, UsageSnapshotQueries.SnapshotDeleteOlderThan, cmd =>
+                if (expired.Count == 0) return;
+                string ids = String.Join(",", expired.Select((row, index) => "@snapshot_" + index));
+                await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM usage_snapshot_captains WHERE snapshot_id IN (" + ids + ");", cmd =>
                 {
-                    SqliteCommandHelper.AddDate(cmd, "@captured_before", capturedBeforeUtc);
+                    for (int index = 0; index < expired.Count; index++) SqliteCommandHelper.Add(cmd, "@snapshot_" + index, expired[index].Id);
+                }, token).ConfigureAwait(false);
+                deleted = await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM usage_snapshots WHERE id IN (" + ids + ");", cmd =>
+                {
+                    for (int index = 0; index < expired.Count; index++) SqliteCommandHelper.Add(cmd, "@snapshot_" + index, expired[index].Id);
                 }, token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
             return deleted;
@@ -322,6 +349,20 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 result.Objects = rows;
                 return result;
             }
+        }
+
+        /// <inheritdoc />
+        public async Task<int> PruneInactiveStateAsync(DateTime closedBeforeUtc, CancellationToken token = default)
+        {
+            int deleted = 0;
+            await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
+            {
+                deleted += await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM usage_latest_state WHERE expired_utc < @cutoff;",
+                    cmd => SqliteCommandHelper.AddDate(cmd, "@cutoff", closedBeforeUtc), token).ConfigureAwait(false);
+                deleted += await SqliteCommandHelper.ExecuteAsync(conn, tx, "DELETE FROM usage_account_memberships WHERE effective_to_utc < @cutoff;",
+                    cmd => SqliteCommandHelper.AddDate(cmd, "@cutoff", closedBeforeUtc), token).ConfigureAwait(false);
+            }, token).ConfigureAwait(false);
+            return deleted;
         }
 
         /// <inheritdoc />

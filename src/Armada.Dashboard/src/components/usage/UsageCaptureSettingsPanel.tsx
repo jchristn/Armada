@@ -55,13 +55,13 @@ export default function UsageCaptureSettingsPanel({ canEdit }: UsageCaptureSetti
     return (
       <div className="settings-section usage-settings">
         <h3>{t('Usage capture')}</h3>
-        <p className="text-dim">{t('Only a global administrator can turn account usage capture on or off and set its limits. Capture is off unless an administrator enables it.')}</p>
+        <p className="text-dim">{t('Only a global administrator can change server-wide usage capture settings.')}</p>
       </div>
     );
   }
 
   const errors = usageSettingsErrors(form);
-  const disabling = loaded?.enabled === true && !form.enabled;
+  const disabling = (loaded?.enabled ?? true) && form.enabled === false;
   const setValue = (key: UsageSettingsNumericField, value: string) => { setForm((f) => ({ ...f, values: { ...f.values, [key]: value } })); setMessage(null); };
 
   async function save() {

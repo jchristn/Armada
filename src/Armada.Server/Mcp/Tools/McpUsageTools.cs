@@ -25,7 +25,7 @@ namespace Armada.Server.Mcp.Tools
         {
             JsonSerializerOptions options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             register("usage_status", "Read sanitized account usage. Without dates returns latest; dated reads use [from,to). Default page 1, size 25, maximum 100.",
-                new { type = "object", properties = new { captainId = new { type = "string" }, harborId = new { type = "string" }, runtime = new { type = "string" }, provider = new { type = "string" }, tenantId = new { type = "string" }, from = new { type = "string" }, to = new { type = "string" }, pageNumber = new { type = "integer", @default = 1 }, pageSize = new { type = "integer", @default = 25, minimum = 1, maximum = 100 } } },
+                new { type = "object", properties = new { captainId = new { type = "string" }, harborId = new { type = "string" }, hostId = new { type = "string" }, accountKey = new { type = "string" }, runtime = new { type = "string" }, provider = new { type = "string" }, tenantId = new { type = "string" }, from = new { type = "string" }, to = new { type = "string" }, pageNumber = new { type = "integer", @default = 1 }, pageSize = new { type = "integer", @default = 25, minimum = 1, maximum = 100 } } },
                 async args => {
                     if (service == null) return (object)McpToolError.Unavailable("Usage service unavailable.");
                     UsageIdentityArgs identity = Read<UsageIdentityArgs>(args, options);

@@ -74,16 +74,19 @@ namespace Armada.Core.Database.Postgresql.Queries
 
         internal const string RollupUpsert = @"INSERT INTO usage_hourly_rollups
             (id, tenant_id, host_id, runtime, provider, account_key, window_name, model, hour_utc,
-             sample_count, last_percent, min_percent, max_percent, mean_percent, last_used, last_limit, last_reset_utc,
+             sample_count, percent_sample_count, last_status, raw_pruned, last_percent, min_percent, max_percent, mean_percent, last_used, last_limit, last_reset_utc,
              first_observed_utc, last_observed_utc, ok_count, unsupported_count, auth_missing_count, failed_count,
              estimated_count, coverage_seconds, last_update_utc)
             VALUES
             (@id, @tenant_id, @host_id, @runtime, @provider, @account_key, @window_name, @model, @hour_utc,
-             @sample_count, @last_percent, @min_percent, @max_percent, @mean_percent, @last_used, @last_limit, @last_reset_utc,
+             @sample_count, @percent_sample_count, @last_status, @raw_pruned, @last_percent, @min_percent, @max_percent, @mean_percent, @last_used, @last_limit, @last_reset_utc,
              @first_observed_utc, @last_observed_utc, @ok_count, @unsupported_count, @auth_missing_count, @failed_count,
              @estimated_count, @coverage_seconds, @last_update_utc)
             ON CONFLICT(tenant_id, host_id, runtime, provider, account_key, window_name, model, hour_utc) DO UPDATE SET
                 sample_count = excluded.sample_count,
+                percent_sample_count = excluded.percent_sample_count,
+                last_status = excluded.last_status,
+                raw_pruned = excluded.raw_pruned,
                 last_percent = excluded.last_percent,
                 min_percent = excluded.min_percent,
                 max_percent = excluded.max_percent,

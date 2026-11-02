@@ -16,3 +16,11 @@ Phase 6 replaces the phase 5 client exceptions with implemented screens. All cli
 The shared clients retain the snapshots, series and mission query contracts for callers; phase 6 client screens present latest account limits rather than reproducing the dashboard's interactive historical charts.
 
 Regenerate manifests with `python3 scripts/tui/generate-parity-manifest.py` and `python3 scripts/mobile/generate-parity-manifest.py`.
+
+Phase 7 canonical navigation: Dashboard Activity uses peer Token Usage, Usage
+Overview and Account Limits tabs. TUI and mobile now use `source=usage-limits`
+for Account Limits and continue accepting `source=limits`. The dashboard-only
+interactive historical quota overview remains outside native presentation scope;
+`source=usage-overview` opens native Account Limits. These new manifest entries
+are implemented or explicitly not-applicable, never marked planned. The mobile
+manifest's 23 unrelated pre-existing planned API entries are unchanged.

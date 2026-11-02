@@ -841,6 +841,22 @@
     },
     {
       "kind": "tab",
+      "key": "Activity:usage-limits",
+      "status": "implemented",
+      "mobile": "src/screens/usage/UsageView.tsx",
+      "workstream": "AC7",
+      "notes": "Account/host limits with pagination and capture; canonical Activity source."
+    },
+    {
+      "kind": "tab",
+      "key": "Activity:usage-overview",
+      "status": "not-applicable",
+      "mobile": "",
+      "workstream": "AC7",
+      "notes": "Dashboard-only interactive historical quota chart. Native clients retain latest account limits and token history, as scoped in docs/captain-usage-plan/DASHBOARD_PARITY.md; overview links open native Account Limits."
+    },
+    {
+      "kind": "tab",
       "key": "CaptainsHub:battery",
       "status": "not-applicable",
       "mobile": "/captains?tab=battery",

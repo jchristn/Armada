@@ -276,7 +276,7 @@ namespace Armada.Core.Services
                     return new UsageCaptureAttempt
                     {
                         JobId = flight.JobId,
-                        JoinedExisting = true,
+                        JoinedExisting = RecordJoined(),
                         Started = false,
                         NextEligibleUtc = NextEligibleUtc(group.GroupKey),
                         Completion = flight.Completion
@@ -290,7 +290,7 @@ namespace Armada.Core.Services
                         return new UsageCaptureAttempt
                         {
                             JobId = lease.Id,
-                            JoinedExisting = true,
+                            JoinedExisting = RecordJoined(),
                             Started = false,
                             SkippedReason = "LeaseHeld",
                             NextEligibleUtc = expires,
@@ -364,6 +364,7 @@ namespace Armada.Core.Services
 
         private async Task RunAttemptAsync(Job job, UsageCaptureGroup group, string? triggeringCaptainId, long generation, InFlightAttempt flight, TaskCompletionSource<UsageCaptureAttemptResult> completion, CancellationTokenSource attemptCancellation)
         {
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("capture", group.Runtime.ToString());
             UsageCaptureAttemptResult result;
             try
             {
@@ -380,6 +381,7 @@ namespace Armada.Core.Services
                 RemoveFlight(group.GroupKey, flight);
             }
 
+            telemetry.Complete(result.DiscardedReason != null ? "Discarded" : result.Status?.ToString() ?? "Failed");
             completion.TrySetResult(result);
         }
 
@@ -399,12 +401,15 @@ namespace Armada.Core.Services
                 // Both gates take their capacity from the CURRENT settings before every wait: a changed
                 // overall or per-host limit governs this and every later attempt, while permits already
                 // held are still returned to the gate that granted them.
+                using UsageTelemetryOperation queued = UsageTelemetry.Start("queued", group.Runtime.ToString());
                 _OverallGate.SetCapacity(_Settings.UsageCapture.MaximumConcurrentProbes);
                 await _OverallGate.WaitAsync(attemptToken).ConfigureAwait(false);
                 try
                 {
                     UsageConcurrencyGate hostGate = HostGate(group.HostId);
                     await hostGate.WaitAsync(attemptToken).ConfigureAwait(false);
+                    queued.Complete();
+                    queued.Dispose();
                     try
                     {
                         // Before the credential host is touched at all: an attempt whose lease expired while it
@@ -524,6 +529,7 @@ namespace Armada.Core.Services
 
         private async Task<UsageProbeResult> CaptureThroughHostAsync(Job job, UsageCaptureGroup group, CancellationToken token)
         {
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("host", group.Runtime.ToString());
             if (group.HarborId != null)
             {
                 Harbor? harbor = await _Database.Harbors.ReadAsync(group.HarborId, token).ConfigureAwait(false);
@@ -546,6 +552,7 @@ namespace Armada.Core.Services
                 AllowPty = group.AllowPty,
                 TimeoutSeconds = _Settings.UsageCapture.ProbeTimeoutSeconds,
                 ConfigurationRevision = group.ConfigurationRevision,
+                TraceParent = System.Diagnostics.Activity.Current?.Id,
                 DispatchedUtc = Now()
             };
 
@@ -564,7 +571,9 @@ namespace Armada.Core.Services
             try
             {
                 HostCommandResult result = await executor.RunAsync(request, cancellable.Token).ConfigureAwait(false);
-                return Interpret(result);
+                UsageProbeResult interpreted = Interpret(result);
+                telemetry.Complete(interpreted.Status.ToString());
+                return interpreted;
             }
             finally
             {
@@ -608,15 +617,19 @@ namespace Armada.Core.Services
 
         private static UsageProbeResult Interpret(HostCommandResult result)
         {
-            if (result == null) return UsageProbeResult.Failed("CaptureAttemptFailed", "the host returned nothing");
-            if (result.TimedOut) return UsageProbeResult.Failed("ProbeTimeout", "the probe was stopped at its execution deadline");
-            if (String.IsNullOrWhiteSpace(result.StandardOutput))
-                return UsageProbeResult.Failed("MalformedOutput", "the host answered without a probe result payload");
-            return UsageProbeResult.Deserialize(result.StandardOutput, result.ExitCode == 0 ? "MalformedOutput" : "ProbeFailed");
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("parse");
+            UsageProbeResult parsed;
+            if (result == null) parsed = UsageProbeResult.Failed("CaptureAttemptFailed", "the host returned nothing");
+            else if (result.TimedOut) parsed = UsageProbeResult.Failed("ProbeTimeout", "the host probe timed out");
+            else if (String.IsNullOrWhiteSpace(result.StandardOutput)) parsed = UsageProbeResult.Failed("MalformedOutput", "the host answered without a probe result payload");
+            else parsed = UsageProbeResult.Deserialize(result.StandardOutput, result.ExitCode == 0 ? "MalformedOutput" : "ProbeFailed");
+            telemetry.Complete(parsed.Status.ToString());
+            return parsed;
         }
 
         private async Task<UsageSnapshot> CommitAsync(UsageCaptureGroup group, List<string> memberCaptainIds, UsageProbeResult probe, string? triggeringCaptainId, DateTime receivedUtc, CancellationToken token)
         {
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("storage", group.Runtime.ToString());
             UsageSnapshot snapshot = new UsageSnapshot
             {
                 TenantId = group.TenantId,
@@ -641,6 +654,8 @@ namespace Armada.Core.Services
             await UpsertLatestStateAsync(group, snapshot, token).ConfigureAwait(false);
             try { SnapshotCommitted?.Invoke(snapshot, memberCaptainIds); }
             catch (Exception ex) { _Logging.Warn(_Header + "usage event delivery failed: " + ex.Message); }
+            UsageTelemetry.ObservationAge(snapshot.CapturedUtc);
+            telemetry.Complete();
             return snapshot;
         }
 
@@ -942,8 +957,15 @@ namespace Armada.Core.Services
             return System.Text.Encoding.UTF8.GetString(bytes, 0, maximum);
         }
 
+        private static bool RecordJoined()
+        {
+            UsageTelemetry.Schedule("Joined");
+            return true;
+        }
+
         private UsageCaptureAttempt Skipped(string? jobId, DateTime? nextEligibleUtc, string reason)
         {
+            UsageTelemetry.Schedule("Skipped");
             return new UsageCaptureAttempt
             {
                 JobId = jobId,

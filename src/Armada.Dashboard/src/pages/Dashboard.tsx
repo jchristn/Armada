@@ -30,6 +30,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import DataTable from '../components/shared/DataTable';
 import FilterBar from '../components/shared/FilterBar';
 import MissionHistoryChart from '../components/MissionHistoryChart';
+import UsageObservabilityCard from '../components/usage/UsageObservabilityCard';
 import HealthKpiCards from '../components/vessels/health/HealthKpiCards';
 import { useLocale } from '../context/LocaleContext';
 import {
@@ -614,6 +615,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {isTenantAdmin && <UsageObservabilityCard />}
 
       {/* JSON Viewer Modal */}
       {jsonViewer.open && (

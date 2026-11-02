@@ -102,7 +102,6 @@ namespace Armada.Core.Database.SqlServer.Implementations
         {
             if (String.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
-
             int closed = 0;
             await SqlServerCommandHelper.WriteAsync(_ConnectionString, _WriteLock, async (SqlConnection conn, SqlTransaction tx) =>
             {
@@ -112,6 +111,12 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     SqlServerCommandHelper.Add(cmd, "@captain_id", captainId);
                     SqlServerCommandHelper.AddDate(cmd, "@effective_to_utc", effectiveToUtc);
                     SqlServerCommandHelper.AddDate(cmd, "@last_update_utc", DateTime.UtcNow);
+                }, token).ConfigureAwait(false);
+                await SqlServerCommandHelper.ExecuteAsync(conn, tx, "UPDATE usage_latest_state SET expired_utc = @effective_to_utc WHERE tenant_id = @tenant_id AND expired_utc IS NULL AND EXISTS (SELECT 1 FROM usage_account_memberships m WHERE m.tenant_id = usage_latest_state.tenant_id AND m.host_id = usage_latest_state.host_id AND m.runtime = usage_latest_state.runtime AND m.account_key = usage_latest_state.account_key AND m.captain_id = @captain_id) AND NOT EXISTS (SELECT 1 FROM usage_account_memberships m WHERE m.tenant_id = usage_latest_state.tenant_id AND m.host_id = usage_latest_state.host_id AND m.runtime = usage_latest_state.runtime AND m.account_key = usage_latest_state.account_key AND m.effective_to_utc IS NULL);", cmd =>
+                {
+                    SqlServerCommandHelper.Add(cmd, "@tenant_id", tenantId);
+                    SqlServerCommandHelper.Add(cmd, "@captain_id", captainId);
+                    SqlServerCommandHelper.AddDate(cmd, "@effective_to_utc", effectiveToUtc);
                 }, token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
             return closed;

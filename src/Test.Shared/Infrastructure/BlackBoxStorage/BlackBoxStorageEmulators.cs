@@ -112,7 +112,8 @@ namespace Test.Shared.Infrastructure.BlackBoxStorage
         {
             string image = PickImage(_MinioImages, "ARMADA_TEST_MINIO_IMAGE")!;
             int port = TestPorts.Reserve(1)[0];
-            RunContainer("-p 127.0.0.1:" + port + ":9000 -e MINIO_ROOT_USER=" + MinioUser + " -e MINIO_ROOT_PASSWORD=" + MinioPassword + " " + image + " server /data");
+            // Fixture objects are disposable and bounded; do not inherit the Docker backing disk free-space threshold.
+            RunContainer("--tmpfs /data:rw,size=256m,mode=1777 -p 127.0.0.1:" + port + ":9000 -e MINIO_ROOT_USER=" + MinioUser + " -e MINIO_ROOT_PASSWORD=" + MinioPassword + " " + image + " server /data");
             string endpoint = "http://127.0.0.1:" + port;
             await WaitHttpAsync(endpoint + "/minio/health/live", TimeSpan.FromSeconds(60)).ConfigureAwait(false);
             Amazon.S3.AmazonS3Config config = new Amazon.S3.AmazonS3Config { ServiceURL = endpoint, ForcePathStyle = true, UseHttp = true, AuthenticationRegion = "us-east-1" };

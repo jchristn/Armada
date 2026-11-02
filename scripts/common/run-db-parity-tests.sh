@@ -12,7 +12,7 @@
 #
 # Usage:
 #   run-db-parity-tests.sh [--providers sqlite,postgresql,mysql,sqlserver]
-#                          [--framework net10.0] [--no-build]
+#                          [--framework net10.0] [--no-build] [--suites Database]
 #
 # Requirements: docker, dotnet. Exits non-zero if any provider has a
 # failing test.
@@ -25,12 +25,14 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PROVIDERS="sqlite,postgresql,mysql,sqlserver"
 FRAMEWORK="net10.0"
 DO_BUILD=1
+SUITES="Database"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --providers) PROVIDERS="$2"; shift 2 ;;
     --framework) FRAMEWORK="$2"; shift 2 ;;
     --no-build) DO_BUILD=0; shift ;;
+    --suites) SUITES="$2"; shift 2 ;;
     -h|--help) grep '^#' "$0" | grep -v '^#!' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -61,7 +63,7 @@ run_suite() {
   local label="$1"; shift
   local out="${RESULT_DIR}/${label}.txt"
   ( cd "$REPO_ROOT" && dotnet run --project "$TEST_PROJECT" --framework "$FRAMEWORK" -p:TargetFramework="$FRAMEWORK" -p:TargetFrameworks="$FRAMEWORK" -c Debug ${DOTNET_NO_BUILD} -- \
-      --suites Database "$@" ) > "$out" 2>&1
+      --suites "$SUITES" "$@" ) > "$out" 2>&1
   local code=$?
   local total
   total="$(grep -E '^Total:' "$out" | tail -1)"

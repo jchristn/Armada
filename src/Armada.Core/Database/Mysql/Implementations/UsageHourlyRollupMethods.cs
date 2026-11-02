@@ -191,7 +191,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             return String.IsNullOrEmpty(value) ? null : value;
         }
 
-        private static void BindRollup(MySqlCommand cmd, UsageHourlyRollup rollup)
+        internal static void BindRollup(MySqlCommand cmd, UsageHourlyRollup rollup)
         {
             MysqlCommandHelper.Add(cmd, "@id", rollup.Id);
             MysqlCommandHelper.Add(cmd, "@tenant_id", rollup.TenantId);
@@ -203,6 +203,9 @@ namespace Armada.Core.Database.Mysql.Implementations
             MysqlCommandHelper.Add(cmd, "@model", rollup.Model ?? String.Empty);
             MysqlCommandHelper.AddDate(cmd, "@hour_utc", rollup.HourUtc);
             MysqlCommandHelper.Add(cmd, "@sample_count", rollup.SampleCount);
+            MysqlCommandHelper.Add(cmd, "@percent_sample_count", rollup.PercentSampleCount);
+            MysqlCommandHelper.Add(cmd, "@last_status", rollup.LastStatus);
+            MysqlCommandHelper.Add(cmd, "@raw_pruned", rollup.RawPruned ? 1 : 0);
             MysqlCommandHelper.Add(cmd, "@last_percent", rollup.LastPercent);
             MysqlCommandHelper.Add(cmd, "@min_percent", rollup.MinPercent);
             MysqlCommandHelper.Add(cmd, "@max_percent", rollup.MaxPercent);
@@ -221,7 +224,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             MysqlCommandHelper.AddDate(cmd, "@last_update_utc", rollup.LastUpdateUtc);
         }
 
-        private static UsageHourlyRollup FromReader(MySqlDataReader reader)
+        internal static UsageHourlyRollup FromReader(MySqlDataReader reader)
         {
             UsageHourlyRollup rollup = new UsageHourlyRollup();
             rollup.Id = reader["id"].ToString()!;
@@ -250,6 +253,9 @@ namespace Armada.Core.Database.Mysql.Implementations
             rollup.EstimatedCount = MysqlCommandHelper.ReadInt(reader["estimated_count"], 0);
             rollup.CoverageSeconds = MysqlCommandHelper.ReadNullableDouble(reader["coverage_seconds"]);
             rollup.LastUpdateUtc = MysqlCommandHelper.ReadDate(reader["last_update_utc"]);
+            rollup.PercentSampleCount = MysqlCommandHelper.ReadInt(reader["percent_sample_count"], 0);
+            rollup.LastStatus = MysqlCommandHelper.ReadString(reader["last_status"]);
+            rollup.RawPruned = MysqlCommandHelper.ReadInt(reader["raw_pruned"], 0) != 0;
             return rollup;
         }
 

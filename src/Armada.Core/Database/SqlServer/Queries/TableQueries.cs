@@ -2428,7 +2428,12 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"UPDATE captains SET usage_capture_enabled = NULL;"),
 
                 new SchemaMigration(114, "Persist captain usage credential Harbor",
-                    @"ALTER TABLE captains ADD usage_capture_harbor_id NVARCHAR(64) NULL;")
+                    @"IF COL_LENGTH('captains', 'usage_capture_harbor_id') IS NULL ALTER TABLE captains ADD usage_capture_harbor_id NVARCHAR(64) NULL;"),
+
+                new SchemaMigration(115, "Preserve weighted usage rollup provenance",
+                    @"IF COL_LENGTH('usage_hourly_rollups', 'percent_sample_count') IS NULL ALTER TABLE usage_hourly_rollups ADD percent_sample_count INT NOT NULL DEFAULT 0;",
+                    @"IF COL_LENGTH('usage_hourly_rollups', 'last_status') IS NULL ALTER TABLE usage_hourly_rollups ADD last_status NVARCHAR(32) NULL;",
+                    @"IF COL_LENGTH('usage_hourly_rollups', 'raw_pruned') IS NULL ALTER TABLE usage_hourly_rollups ADD raw_pruned INT NOT NULL DEFAULT 0;")
 
 
             };

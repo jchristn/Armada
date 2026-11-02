@@ -17287,6 +17287,11 @@
       "resource": "Usage:Read",
       "arguments": [
         {
+          "name": "accountKey",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "captainId",
           "type": "string",
           "required": false
@@ -17298,6 +17303,11 @@
         },
         {
           "name": "harborId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "hostId",
           "type": "string",
           "required": false
         },

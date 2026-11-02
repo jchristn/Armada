@@ -17,7 +17,6 @@ services:
       # 7890: Admiral REST + WebSocket (the Harbor link). 7891: MCP (captain call-home). 9464: metrics.
       - "7890:7890"
       - "7891:7891"
-      - "9464:9464"
     environment:
       # The Admiral listens on 0.0.0.0 in the container and refuses to start while the default admin
       # password is in use. Set this before the first start (for example in a .env file next to this file).
@@ -39,15 +38,41 @@ services:
       loki:
         condition: service_healthy
 
-  # --- Observability stack (Prometheus / Loki / Grafana) ---
+  # --- Observability stack (Collector / Prometheus / Tempo / Loki / Grafana) ---
   # The Prometheus and Loki images ship without curl (busybox only), so their healthchecks use the
   # busybox wget against the same 127.0.0.1 endpoint; Grafana's image includes curl.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      tempo:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    ports:
+      - "127.0.0.1:3200:3200"
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3200/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 30s
+
   prometheus:
     image: prom/prometheus:v3.1.0
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
-      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -64,9 +89,9 @@ services:
   loki:
     image: grafana/loki:3.3.2
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     volumes:
-      - ./observability/loki-config.yaml:/etc/loki/local-config.yaml
+      - ./observability/loki-config.yaml:/etc/loki/local-config.yaml:ro
       - loki-data:/loki
     command:
       - "-config.file=/etc/loki/local-config.yaml"
@@ -82,14 +107,14 @@ services:
   grafana:
     image: grafana/grafana:11.4.0
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${ARMADA_GRAFANA_ADMIN_PASSWORD:?Set ARMADA_GRAFANA_ADMIN_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
-      - ./observability/grafana/provisioning:/etc/grafana/provisioning
-      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/api/health"]
@@ -100,6 +125,8 @@ services:
     depends_on:
       prometheus:
         condition: service_healthy
+      tempo:
+        condition: service_healthy
       loki:
         condition: service_healthy
 
@@ -108,3 +135,4 @@ volumes:
   prometheus-data:
   loki-data:
   grafana-data:
+  tempo-data:

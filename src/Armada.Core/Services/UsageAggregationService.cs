@@ -38,6 +38,7 @@ namespace Armada.Core.Services
         /// <summary>Read bounded account limits or deduplicated recorded token consumption.</summary>
         public async Task<UsageSeriesResult> SeriesAsync(UsageQuery query, CancellationToken token = default)
         {
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("query");
             Validate(query);
             if (query.Metric != "limits" && query.Metric != "tokens") throw new ArgumentException("metric must be limits or tokens.");
             if (query.GroupBy != "account" && query.GroupBy != "provider") throw new ArgumentException("groupBy must be account or provider.");
@@ -66,12 +67,14 @@ namespace Armada.Core.Services
             result.Series = result.Series.OrderBy(s => Key(s.Provider, s.HostId, s.AccountKey, s.Runtime, s.Window, s.Model, s.CostCurrency), StringComparer.Ordinal).ToList();
             result.Coverage.SeriesTruncated = result.Series.Count > 20;
             result.Series = result.Series.Take(20).ToList();
+            telemetry.Complete();
             return result;
         }
 
         /// <summary>Read mission-source tokens grouped by completion attribution, with safe tenant-scoped metadata.</summary>
         public async Task<UsageMissionResult> MissionsAsync(UsageQuery query, CancellationToken token = default)
         {
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("query");
             Validate(query);
             if (String.IsNullOrWhiteSpace(query.Provider)) throw new ArgumentException("provider is required.");
             if (!new[] { "totalTokens", "inputTokens", "outputTokens", "cachedTokens", "name", "completion", "cost" }.Contains(query.SortBy)) throw new ArgumentException("Invalid sortBy.");
@@ -91,6 +94,7 @@ namespace Armada.Core.Services
             IOrderedEnumerable<UsageMissionRow> ordered = query.SortDirection == "ascending" ? rows.OrderBy(selector) : rows.OrderByDescending(selector);
             result.TotalRecords = rows.Count; result.TotalPages = (int)Math.Ceiling((double)rows.Count / query.PageSize);
             result.Objects = ordered.ThenBy(r => r.MissionId, StringComparer.Ordinal).ThenBy(r => r.CaptainId, StringComparer.Ordinal).ThenBy(r => r.MembershipId, StringComparer.Ordinal).Skip((query.PageNumber - 1) * query.PageSize).Take(query.PageSize).ToList();
+            telemetry.Complete();
             return result;
         }
 
@@ -136,6 +140,17 @@ namespace Armada.Core.Services
                     // A failed account observation breaks each previously observed window line.
                     windows = seriesByKey.Values.Where(s => s.Provider == snapshot.Provider && s.AccountKey == snapshot.AccountKey && s.HostId == snapshot.HostId && s.Runtime == snapshot.Runtime.ToString())
                         .Select(s => new UsageWindow { Name = s.Window ?? String.Empty, Model = s.Model }).ToList();
+                    if (windows.Count == 0 && query.BucketMinutes >= 60)
+                    {
+                        EnumerationResult<UsageHourlyRollup> known = await _Database.UsageRollups.EnumerateAsync(new UsageRollupQuery
+                        {
+                            TenantId = query.TenantId, HostId = snapshot.HostId, Runtime = snapshot.Runtime,
+                            Provider = snapshot.Provider, AccountKey = snapshot.AccountKey,
+                            FromHourUtc = UsageRollupBuilder.Hour(snapshot.CapturedUtc), ToHourUtc = UsageRollupBuilder.Hour(snapshot.CapturedUtc).AddHours(1), PageSize = 1000
+                        }, token).ConfigureAwait(false);
+                        windows = known.Objects.Where(row => row.Provider == snapshot.Provider && row.RawPruned)
+                            .Select(row => new UsageWindow { Name = row.WindowName, Model = row.Model.Length == 0 ? null : row.Model }).ToList();
+                    }
                 }
                 if (windows.Count == 0 && query.Window == null && query.Model == null) windows.Add(new UsageWindow());
                 foreach (UsageWindow window in windows)
@@ -148,14 +163,19 @@ namespace Armada.Core.Services
             }
             if (query.BucketMinutes >= 60)
             {
-                UsageRollupQuery rollups = new UsageRollupQuery { TenantId = query.TenantId, HostId = query.HostId, Runtime = query.Runtime, Provider = query.Provider, AccountKey = query.AccountKey, WindowName = query.Window, Model = query.Model, FromHourUtc = query.FromUtc, ToHourUtc = query.ToUtc, PageSize = 1000 };
+                UsageRollupQuery rollups = new UsageRollupQuery { TenantId = query.TenantId, HostId = query.HostId, Runtime = query.Runtime, Provider = query.Provider, AccountKey = query.AccountKey, WindowName = query.Window, Model = query.Model, FromHourUtc = UsageRollupBuilder.Hour(query.FromUtc!.Value), ToHourUtc = query.ToUtc, PageSize = 1000 };
                 while (true)
                 {
                     EnumerationResult<UsageHourlyRollup> page = await _Database.UsageRollups.EnumerateAsync(rollups, token).ConfigureAwait(false);
                     foreach (UsageHourlyRollup rollup in page.Objects)
                     {
                         // A rollup is usable only for a complete hour inside the requested interval.
-                        if (rollup.TenantId != query.TenantId || rollup.HourUtc < query.FromUtc || rollup.HourUtc.AddHours(1) > query.ToUtc) continue;
+                        if (rollup.TenantId != query.TenantId) continue;
+                        if (rollup.HourUtc < query.FromUtc || rollup.HourUtc.AddHours(1) > query.ToUtc)
+                        {
+                            result.Coverage.Warning = "Partial UTC hours are excluded from retained history; align bounds to UTC hours for complete coverage.";
+                            continue;
+                        }
                         if (rollup.HourUtc.AddHours(1) > Point(query, Bucket(query, rollup.HourUtc)).BucketEndUtc)
                         {
                             result.Coverage.Warning = "Hourly observations crossing a requested bucket boundary are excluded; align bounds to UTC hours for complete coverage.";
@@ -180,10 +200,10 @@ namespace Armada.Core.Services
                             if (!member) continue;
                         }
                         // Retention writes rollups before deleting raw observations. Never count both.
-                        if (raw.Any(s => s.HostId == rollup.HostId && s.Runtime == rollup.Runtime && s.AccountKey == rollup.AccountKey && s.Provider == rollup.Provider && s.CapturedUtc >= rollup.HourUtc && s.CapturedUtc < rollup.HourUtc.AddHours(1))) continue;
+                        if (!rollup.RawPruned && raw.Any(s => s.HostId == rollup.HostId && s.Runtime == rollup.Runtime && s.AccountKey == rollup.AccountKey && s.Provider == rollup.Provider && s.CapturedUtc >= rollup.HourUtc && s.CapturedUtc < rollup.HourUtc.AddHours(1))) continue;
                         UsageSeries series = GetSeries(seriesByKey, rollup.Provider, rollup.AccountKey, rollup.HostId, rollup.Runtime.ToString(), rollup.WindowName, rollup.Model.Length == 0 ? null : rollup.Model);
                         UsageSeriesPoint point = GetPoint(series, query, rollup.HourUtc);
-                        Merge(point, weights, rollup.LastPercent, rollup.MinPercent, rollup.MaxPercent, rollup.MeanPercent, rollup.SampleCount, rollup.LastObservedUtc ?? rollup.HourUtc, rollup.LastResetUtc, rollup.FailedCount > 0 ? "Failed" : rollup.AuthMissingCount > 0 ? "AuthMissing" : rollup.UnsupportedCount > 0 ? "Unsupported" : rollup.EstimatedCount > 0 ? "Estimated" : "Ok", rollup.EstimatedCount > 0);
+                        Merge(point, weights, rollup.LastPercent, rollup.MinPercent, rollup.MaxPercent, rollup.MeanPercent, rollup.SampleCount, rollup.LastObservedUtc ?? rollup.HourUtc, rollup.LastResetUtc, rollup.LastStatus ?? (rollup.FailedCount > 0 ? "Failed" : rollup.AuthMissingCount > 0 ? "AuthMissing" : rollup.UnsupportedCount > 0 ? "Unsupported" : rollup.EstimatedCount > 0 ? "Estimated" : "Ok"), rollup.EstimatedCount > 0, rollup.RawPruned ? rollup.PercentSampleCount : null);
                         result.Resolution = "hourly";
                     }
                     if (rollups.PageNumber >= page.TotalPages || page.Objects.Count == 0) break;
@@ -213,16 +233,17 @@ namespace Armada.Core.Services
             return point;
         }
 
-        private static void Merge(UsageSeriesPoint point, Dictionary<UsageSeriesPoint, double> weights, double? last, double? min, double? max, double? mean, int count, DateTime observed, DateTime? reset, string status, bool estimated)
+        private static void Merge(UsageSeriesPoint point, Dictionary<UsageSeriesPoint, double> weights, double? last, double? min, double? max, double? mean, int count, DateTime observed, DateTime? reset, string status, bool estimated, int? percentCount = null)
         {
             point.ObservationCount += count;
             if (min.HasValue) point.MinPercent = point.MinPercent.HasValue ? Math.Min(point.MinPercent.Value, min.Value) : min;
             if (max.HasValue) point.MaxPercent = point.MaxPercent.HasValue ? Math.Max(point.MaxPercent.Value, max.Value) : max;
-            if (mean.HasValue && count > 0)
+            int numericCount = percentCount ?? count;
+            if (mean.HasValue && numericCount > 0)
             {
                 double previousWeight = weights.TryGetValue(point, out double weight) ? weight : 0;
-                point.MeanPercent = ((point.MeanPercent ?? 0) * previousWeight + mean.Value * count) / (previousWeight + count);
-                weights[point] = previousWeight + count;
+                point.MeanPercent = ((point.MeanPercent ?? 0) * previousWeight + mean.Value * numericCount) / (previousWeight + numericCount);
+                weights[point] = previousWeight + numericCount;
             }
             if (!point.ObservedUtc.HasValue || observed >= point.ObservedUtc)
             {

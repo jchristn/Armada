@@ -6,6 +6,20 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Captain usage history and operations
+
+- Complete account usage contract documentation and variable-driven Postman read,
+  enumerate, capture and error examples; declare host/account filters in MCP.
+- Preserve hourly quota history before raw pruning in atomic provider transactions.
+  Retain numeric weights, failure gaps and original observation times; expire
+  ninety-day rollups and inactive metadata, and clean usage history on tenant deletion.
+- Add bounded usage metrics/spans and the Usage Grafana dashboard. Bundled compose
+  now exports through an OpenTelemetry collector to Prometheus, Tempo and Loki.
+  Set ARMADA_GRAFANA_ADMIN_PASSWORD before starting the bundled stack; observability
+  browser ports bind to loopback. Existing standalone telemetry settings remain valid.
+- Align native Account Limits links and provide dashboard-home observability links.
+
+
 ### Readable usage labels
 
 - Captain state cells separate the state badge from the eligibility label with explicit spacing and show Active or Inactive. Shorten the weekly usage label to Weekly.

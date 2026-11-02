@@ -1,4 +1,5 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { HubScreen, type HubTab } from '../../components/resource/Hub';
 import { useLocale } from '../../i18n/LocaleContext';
 import { param } from '../../resource/links';
@@ -24,6 +25,10 @@ const signalRoute = (id: string) => `/signals/${id}`;
 export function ActivityHub() {
   const { t } = useLocale();
   const params = useLocalSearchParams<Record<string, string>>();
+  const router = useRouter();
+  useEffect(() => {
+    if (params.source === 'limits' || params.source === 'usage-overview') router.setParams({ source: 'usage-limits' });
+  }, [params.source, router]);
   const initial = {
     objectiveId: param(params.objectiveId) || undefined,
     vesselId: param(params.vesselId) || undefined,
@@ -39,7 +44,7 @@ export function ActivityHub() {
     { key: 'requests', label: 'API Requests', render: () => <RequestsTab /> },
     { key: 'events', label: 'Events', render: () => <OperationsTab List={EventsList} Detail={EventDetail} route={eventRoute} /> },
     { key: 'signals', label: 'Signals', render: () => <OperationsTab List={SignalsList} Detail={SignalDetail} route={signalRoute} /> },
-    { key: 'limits', label: 'Limits', render: () => <UsageView /> },
+    { key: 'usage-limits', label: 'Account Limits', render: () => <UsageView /> },
     { key: 'tokens', label: 'Token Usage', render: () => <TokenUsageTab /> },
     { key: 'jobs', label: 'Jobs', render: () => <JobsScreen embedded /> },
   ];

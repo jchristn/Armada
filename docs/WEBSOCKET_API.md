@@ -3932,3 +3932,20 @@ Account credentials, raw excerpts and full provider responses are excluded.
 Clients should invalidate and refetch usage queries, coalesce bursts, and refetch
 after reconnect; events are notifications rather than an append-only data feed.
 Historical observations remain available from the paged REST queries.
+
+
+Usage snapshot events are invalidations, not quota deltas. A representative payload
+inside the existing event envelope is:
+
+```json
+{"tenantId":"ten_example","snapshotId":"usg_example","hostId":"hbr_example","runtime":"ClaudeCode","provider":"anthropic","captainIds":["cpt_example"],"capturedUtc":"2026-11-01T13:00:00Z","status":"Ok"}
+```
+
+No AccountKey, windows, RawExcerpt, credential material or provider body is sent.
+An event can represent Failed, AuthMissing or Unsupported; refetch the sanitized
+REST view to distinguish these from a fresh successful observation. Repeated or
+out-of-order notifications do not create duplicate chart points. On reconnect,
+refetch current filters because the event channel does not replay every missed
+observation. Tenant filtering happens on the server before delivery, including
+for administrator and captain-session connections. No usage WebSocket command is
+added; capture uses the authorized REST/MCP operation.

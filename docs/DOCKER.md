@@ -16,28 +16,30 @@ This guide covers running the Armada server and dashboard using Docker container
 ```bash
 cd docker/armada
 export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-strong-password'   # or put it in docker/armada/.env
+export ARMADA_GRAFANA_ADMIN_PASSWORD='choose-another-strong-password'
 docker compose up -d
 ```
 
 The Admiral listens on all interfaces inside the container, so it refuses to start while the default admin password
 is in use; `ARMADA_INITIAL_ADMIN_PASSWORD` (8+ characters) replaces it on first start and disables the `default`
-bearer token. Compose stops with an error if the variable is not set.
+bearer token. Compose requires that variable and ARMADA_GRAFANA_ADMIN_PASSWORD for the bundled Grafana administrator.
 
-This starts five containers:
+This starts seven containers:
 
 | Service | Port | Description |
 |---------|------|-------------|
 | `armada-server` | 7890 | REST API, built-in dashboard, and WebSocket at /ws |
 | `armada-server` | 7891 | MCP (agent communication) |
-| `armada-server` | 9464 | Prometheus scrape endpoint (`/metrics`) |
 | `armada-dashboard` | 3000 (container port 8080) | Standalone React dashboard |
-| `prometheus` | 9090 | Metrics store, scrapes the Admiral |
+| `otel-collector` | private 4317/4318 | Receives OTLP; metrics exporter on private 9465 |
+| `tempo` | loopback 3200 | Trace store |
+| `prometheus` | loopback 9090 | Metrics store, scrapes the collector |
 | `loki` | 3100 | Log store |
-| `grafana` | 3001 | Dashboards (login `admin` / `admin`) |
+| `grafana` | 3001 | Dashboards (login `admin` / configured password) |
 
 Open the dashboard at **http://localhost:3000** (the standalone container, which redirects to `/dashboard/`) or **http://localhost:7890/dashboard** (served by the Admiral). Both serve the same React build.
 
-The stack also brings up a Prometheus / Loki / Grafana observability stack (telemetry is enabled in the
+The stack also brings up a Collector / Prometheus / Tempo / Loki / Grafana observability stack (telemetry is enabled in the
 container config). Open Grafana at **http://localhost:3001** and see [TELEMETRY.md](TELEMETRY.md) for
 the full metric list and configuration reference.
 
@@ -271,6 +273,7 @@ instead of running in the container; the Harbor creates each mission's dock in i
 ```bash
 cd docker/armada
 export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-strong-password'
+export ARMADA_GRAFANA_ADMIN_PASSWORD='choose-another-strong-password'
 docker compose -f compose.split.yaml up -d
 ```
 

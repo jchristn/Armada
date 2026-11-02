@@ -80,22 +80,24 @@ meters, so whichever of those emit are exported alongside these.
 
 `docker/armada/compose.yaml` includes a ready-to-run observability stack:
 
-- **prometheus** (port `9090`) scrapes the Admiral's `/metrics` endpoint (`armada-server:9464`).
-- **loki** (port `3100`) receives logs pushed by the Admiral.
-- **grafana** (port `3001`, login `admin` / `admin`) is pre-provisioned with Prometheus and Loki
-  datasources and two dashboards: "Armada Reliability" and "Armada Fleet Operations" (fleet action
-  runs, vessel health evaluations, and vessel imports).
+- **otel-collector** receives OTLP from the Admiral and exports metrics, traces and logs.
+- **prometheus** (loopback port `9090`) scrapes `otel-collector:9465`.
+- **tempo** (loopback port `3200`) retains traces.
+- **loki** (loopback port `3100`) receives background logs through the collector.
+- **grafana** (loopback port `3001`, username `admin`, configured password) includes
+  Prometheus, Loki and Tempo datasources and the Reliability, Fleet Operations,
+  Storage and Usage dashboards.
 
-The container config (`docker/armada/armada.json`) enables telemetry with Prometheus scraping and Loki
-push already pointed at the stack. Bring everything up with:
+Bring everything up with:
 
 ```bash
 cd docker/armada
-export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-password'   # 8+ characters; compose refuses to start without it
+export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-password'
+export ARMADA_GRAFANA_ADMIN_PASSWORD='choose-another-password'
 docker compose up -d
 ```
 
-Then open Grafana at http://localhost:3001 -> Dashboards -> Armada -> "Armada Reliability".
+Open Grafana at http://127.0.0.1:3001 -> Dashboards -> Armada -> "Armada Usage".
 
 Config files live under `docker/armada/observability/`:
 
@@ -109,3 +111,46 @@ Config files live under `docker/armada/observability/`:
 
 Set `telemetry.enabled` to `true` in your `settings.json` and leave `prometheusEnabled` on. The Admiral
 serves metrics at `http://localhost:9464/metrics`; point any Prometheus at that target.
+
+## Usage operations
+
+The Usage dashboard (`/d/armada-usage`) distinguishes scheduling, queued work,
+host execution, provider reads, parsing, storage, queries and retention. Its
+`Armada` meter uses only operation, runtime, outcome and retention kind labels;
+account, captain, tenant and host IDs and arbitrary errors are excluded.
+
+| Instrument | Meaning |
+|---|---|
+| `armada.usage.operations` | Operation count by bounded outcome |
+| `armada.usage.duration` (seconds) | Stage duration, including queued work |
+| `armada.usage.active` | Active operation depth; queued/host operations distinguish waiting and execution |
+| `armada.usage.observation_age` (seconds) | Increasing age of the most recently committed observation in this process; absent until the first observation |
+| `armada.usage.observation_age_at_capture` (seconds) | Distribution of observation age when persisted |
+| `armada.usage.retention.deleted` | Raw, rollup and inactive metadata rows removed |
+
+The aggregate age gauge is a process health signal, not a per-account freshness
+claim. Per-account observation age remains in product history. Spans use the
+existing Armada ActivitySource and propagate only W3C trace context to the host
+request. A host needs its own configured exporter to deliver its provider spans.
+Telemetry listener/export failures cannot fail capture or dispatch. The server
+also subscribes to Watson's activity source; no duplicate HTTP counters are added.
+
+The bundled compose files now send OTLP to `otel-collector:4317`. The collector
+exports metrics on its private `9465` endpoint for Prometheus, traces to Tempo,
+and background logs through Loki's OTLP endpoint. Direct Admiral Prometheus/Loki
+exports are disabled in the bundled settings to avoid duplicate series and logs.
+Existing standalone installations can keep their direct exporters.
+
+Set both `ARMADA_INITIAL_ADMIN_PASSWORD` and `ARMADA_GRAFANA_ADMIN_PASSWORD`
+before starting compose. Grafana uses username `admin` and the configured password;
+there is no shipped shared Grafana password. Prometheus, Grafana, Loki and Tempo
+published ports bind to 127.0.0.1. Collector ingestion and scraping stay inside the
+compose network. Use a tunnel or authenticated reverse proxy for remote access.
+Configuration mounts are read-only and image versions are pinned. The collector's
+health extension is available on its private 13133 port; Tempo readiness is `/ready`.
+
+The dashboard home page's External services card links administrators to the Usage
+operations dashboard, Prometheus and Tempo. Browser URLs default to the browser's
+hostname on ports 3001, 9090 and 3200. Set `VITE_GRAFANA_URL`,
+`VITE_PROMETHEUS_URL` and `VITE_TEMPO_URL` at frontend build time for reverse-proxy
+or remote installations; these are public URLs, never credential fields.

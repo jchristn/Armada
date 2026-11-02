@@ -237,7 +237,7 @@ Every change is in [CHANGELOG.md](CHANGELOG.md#v110-2026-10-15).
 - Local install, Docker Compose, prebuilt installers for Windows, macOS, and Linux, and the CLI as a .NET tool.
 - SQLite (default), PostgreSQL, SQL Server, or MySQL, with automatic migrations and pre-migration backups.
 - Remote use: an Admiral on another machine ([docs/REMOTE_SERVER.md](docs/REMOTE_SERVER.md)), Armada.Proxy for remote browsers and phones, and Harbors for split mode (experimental).
-- OpenTelemetry export with a Prometheus, Loki, and Grafana stack ([docs/TELEMETRY.md](docs/TELEMETRY.md)).
+- OpenTelemetry export with a collector, Prometheus, Tempo, Loki, and Grafana stack ([docs/TELEMETRY.md](docs/TELEMETRY.md)).
 - [Internationalized](#internationalization) dashboard, TUI, and mobile app (English plus eight beta locales).
 - [Self-rebuild](#rebuilding-armada-from-the-dashboard) from the dashboard when Armada's own source is a vessel.
 
@@ -912,19 +912,19 @@ Docker Compose runs the server (and an optional standalone dashboard) in contain
 ```bash
 cd docker/armada
 export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-strong-password'   # required; 8+ characters
+export ARMADA_GRAFANA_ADMIN_PASSWORD='choose-another-strong-password'
 docker compose up -d       # start
 docker compose down        # stop (data is kept)
 ```
 
-Sign in as `admin@armada` with the password you set. The compose file refuses to start without `ARMADA_INITIAL_ADMIN_PASSWORD`.
+Sign in as `admin@armada` with the password you set. The compose file requires `ARMADA_INITIAL_ADMIN_PASSWORD` and `ARMADA_GRAFANA_ADMIN_PASSWORD`. Observability ports bind to loopback; use an authenticated proxy or tunnel for remote access.
 
 | Service | Port | URL | Description |
 |---------|------|-----|-------------|
 | `armada-server` | 7890 | `http://localhost:7890/dashboard` | REST API, WebSocket (`/ws`), dashboard |
 | `armada-server` | 7891 | `http://localhost:7891/mcp` | MCP server (send a credential; the container is not loopback-bound) |
-| `armada-server` | 9464 | `http://localhost:9464/metrics` | Prometheus scrape endpoint |
 | `armada-dashboard` | 3000 | `http://localhost:3000/dashboard/` | Standalone React dashboard (nginx, proxies the API to `armada-server`) |
-| `prometheus` / `loki` / `grafana` | 9090 / 3100 / 3001 | `http://localhost:3001` | Observability stack (Grafana login `admin` / `admin`) |
+| `prometheus` / `loki` / `grafana` / `tempo` | loopback 9090 / 3100 / 3001 / 3200 | `http://localhost:3001` | Observability stack (Grafana login `admin` / configured password) |
 
 Data persists under `docker/armada/` (`db/`, `logs/`), and configuration is `docker/armada/armada.json` (restart `armada-server` after editing). `docker/armada/factory/reset.sh` (or `reset.bat`) deletes the local database and logs while keeping configuration. The compose files run the published `v1.2.0` images; to build images from source (`src/Armada.Server/Dockerfile`, `src/Armada.Dashboard/Dockerfile`, `src/Armada.Proxy/Dockerfile`) and for the volume layout, split mode, and the proxy stack, see [docs/DOCKER.md](docs/DOCKER.md).
 
@@ -964,7 +964,7 @@ Split mode is **experimental** in 1.0 (decision D3 in [archive/V1_READINESS.md](
 
 ```bash
 cd docker/armada
-ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-password' docker compose -f compose.split.yaml up -d
+ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-password' ARMADA_GRAFANA_ADMIN_PASSWORD='choose-another-password' docker compose -f compose.split.yaml up -d
 ```
 
 Sign in, create a credential under Server > Credentials, put it in the Harbor's `AccessKey`, start Harbor on the host, and check that it shows Connected on `Configuration > Harbors`. The Harbor self-registers on its first handshake. Captains launched by the Harbor call Armada's MCP server at `harbor.advertisedMcpBaseUrl`, which must be reachable from the Harbor host.

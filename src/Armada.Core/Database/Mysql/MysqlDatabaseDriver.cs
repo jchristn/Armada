@@ -1467,7 +1467,12 @@ namespace Armada.Core.Database.Mysql
                     @"UPDATE captains SET usage_capture_enabled = NULL;"),
 
                 new SchemaMigration(114, "Persist captain usage credential Harbor",
-                    @"ALTER TABLE captains ADD COLUMN usage_capture_harbor_id VARCHAR(64) NULL;")
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_harbor_id VARCHAR(64) NULL;"),
+
+                new SchemaMigration(115, "Preserve weighted usage rollup provenance",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN percent_sample_count INT NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN last_status VARCHAR(32) NULL;",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN raw_pruned INT NOT NULL DEFAULT 0;")
 
 
             };

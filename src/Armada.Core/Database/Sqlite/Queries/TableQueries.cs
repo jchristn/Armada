@@ -2757,7 +2757,12 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"ALTER TABLE captains DROP COLUMN usage_capture_enabled_legacy;"),
 
                 new SchemaMigration(114, "Persist captain usage credential Harbor",
-                    @"ALTER TABLE captains ADD COLUMN usage_capture_harbor_id TEXT NULL;")
+                    @"ALTER TABLE captains ADD COLUMN usage_capture_harbor_id TEXT NULL;"),
+
+                new SchemaMigration(115, "Preserve weighted usage rollup provenance",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN percent_sample_count INTEGER NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN last_status TEXT NULL;",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN raw_pruned INTEGER NOT NULL DEFAULT 0;")
 
 
 

@@ -2,11 +2,11 @@
 
 Armada should show whether a captain can work before dispatching another mission. Token totals answer how much work Armada recorded. Account limits answer how much capacity the provider currently permits. Keep both, with their source and age visible.
 
-Status: implementation through phase 6, updated 2026-11-01. The original proposal was inspected at `b2bb919898b91dc12370b9f71f0d60cff2ca1595`. All proposal screenshots use invented sample data. Current provider evidence and limitations are recorded in `docs/captain-usage-plan/PROBE_INTERFACES.md`.
+Status: implementation through phase 8, updated 2026-11-01. The original proposal was inspected at `b2bb919898b91dc12370b9f71f0d60cff2ca1595`. All proposal screenshots use invented sample data. Current provider evidence and limitations are recorded in `docs/captain-usage-plan/PROBE_INTERFACES.md`.
 
 ## Implementation status (2026-11-01)
 
-Phases 0 through 6 are implemented. Phase 7 is next; phase 8 remains pending. Phase evidence lives in `docs/captain-usage-plan/`.
+Phases 0 through 8 are implemented. Contract and operational validation evidence is recorded in `PHASE7_CONTRACTS.md` and `PHASE8_OPERATIONS.md`. Phase evidence lives in `docs/captain-usage-plan/`.
 
 | Phase | State | Notes |
 |---|---|---|
@@ -17,8 +17,8 @@ Phases 0 through 6 are implemented. Phase 7 is next; phase 8 remains pending. Ph
 | 4. Queries and public surfaces | Done | Phase 6 closes the three surface gates: bounded series allowlist, POST enumerate twins and declared response collection bounds. |
 | 5. Dashboard | Done | Dashboard build and 1577 Vitest tests pass. Native TUI/mobile usage views landed in phase 6; see `DASHBOARD_PARITY.md`. |
 | 6. Claude Code and Gemini, capture on by default, TUI and mobile views | Done | `PHASE6_CAPTURE.md`: nullable default-on choices and one-time opt-out reset, host-local active probes and guarded PTY fallback, native views/settings, surface gates and bounded raw snapshot pruning. Live Claude OAuth read succeeded; authenticated Gemini and successful PTY quota capture remain unverified. |
-| 7. Docs and collection | Next | Complete `docs/REST_API.md`, `docs/MCP_API.md`, `docs/WEBSOCKET_API.md` and the Postman collection. Phase 6 already updates the generated API baseline and CHANGELOG with its default change and opt-out reset. |
-| 8. Rollups and operational readiness | Not started | Hourly rollups, rollup retention and usage telemetry. Raw 7-day pruning moves to phase 6. |
+| 7. Docs and collection | Done | `PHASE7_CONTRACTS.md`: REST/MCP/WebSocket references, 16-request variable-driven Usage collection with saved examples, additive MCP schema correction, regenerated API baseline, native route/parity alignment and SDK contract coverage. |
+| 8. Rollups and operational readiness | Done | `PHASE8_OPERATIONS.md`: transactional raw-to-hourly retention, weighted history, late arrivals, 90-day rollups, inactive metadata and tenant cleanup, bounded telemetry and validated collector/Tempo/Loki/Grafana wiring. |
 
 Still unverified: authenticated Gemini quota and successful PTY quota capture, a live Codex `account/rateLimits/read` against a real credential host, Claude passive capture from a real mission stream, and the full 1280/768/390 light/dark visual matrix of the shipped dashboard.
 
@@ -200,7 +200,7 @@ Update `docs/REST_API.md`, root `Armada.postman_collection.json`, `docs/MCP_API.
 
 ## Usage charts and mission correlation
 
-The existing Token usage route gains `Overview` and `Limits` tabs. Query state (range, provider, account, host, metric, window and selected bucket) lives in URL parameters. Overview shows two aligned panels: limit utilization (%) as account/window lines and token consumption as per-provider bars. Avoid dual axes. Ranges are 24h, 7d and 30d with 5-minute, 1-hour and 6-hour display buckets respectively. The API accepts only 5, 60, 360 minutes, enforces <=576 points per series and <=20 series, and returns continuation/filter guidance if more accounts exist. For ranges beyond raw retention, 5-minute requests return 400 with allowed resolution; 6-hour views merge hourly rollups.
+Activity exposes peer `Token Usage`, `Usage Overview` and `Account Limits` tabs, without nested tabs. Query state (range, provider, account, host, metric, window and selected bucket) lives in URL parameters. Overview shows two aligned panels: limit utilization (%) as account/window lines and token consumption as per-provider bars. Avoid dual axes. Ranges are 24h, 7d and 30d with 5-minute, 1-hour and 6-hour display buckets respectively. The API accepts only 5, 60, 360 minutes, enforces <=576 points per series and <=20 series, and returns continuation/filter guidance if more accounts exist. For ranges beyond raw retention, 5-minute requests return 400 with allowed resolution; 6-hour views merge hourly rollups.
 
 `UsageSeriesResult` contains FromUtc, ToUtc, BucketMinutes, Resolution, GroupBy, Series[], Coverage and DrilldownFilters. Each series identifies provider/account/host/runtime/window/model and has points with BucketStartUtc, BucketEndUtc, last/min/max/mean utilization, lastResetUtc, observation count/age/status, input/output/cache/total tokens, nullable cost/currency and Estimated flags. Limits keep an independent series for each account and window even under provider grouping. Do not aggregate percentages across accounts. Tokens can sum per provider after deduplicating each TokenUsageRecord ID. Cost totals partition by currency and show known coverage; do not sum different currencies. Use TotalTokens as recorded, never add CachedTokens again to a total whose provider definition already includes it.
 

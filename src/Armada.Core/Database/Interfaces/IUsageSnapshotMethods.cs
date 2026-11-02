@@ -55,7 +55,7 @@ namespace Armada.Core.Database.Interfaces
         Task<List<string>> ReadCaptainsAsync(string snapshotId, string tenantId, CancellationToken token = default);
 
         /// <summary>
-        /// Delete at most 500 snapshots observed before the cutoff, together with their member links, and return the
+        /// Atomically accumulate hourly rollups and delete at most 500 snapshots before the cutoff with their member links. Return the
         /// number of snapshots removed. Used by the retention pass; deletes both tables consistently.
         /// </summary>
         /// <param name="capturedBeforeUtc">Exclusive cutoff on the observation time.</param>
@@ -97,6 +97,12 @@ namespace Armada.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>The page.</returns>
         Task<EnumerationResult<UsageLatestState>> EnumerateLatestStatesAsync(UsageLatestStateQuery query, CancellationToken token = default);
+
+        /// <summary>Remove expired latest-state rows and closed memberships outside the retained history window. Active account metadata is preserved.</summary>
+        /// <param name="closedBeforeUtc">Exclusive close/expiry cutoff.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Metadata rows removed.</returns>
+        Task<int> PruneInactiveStateAsync(DateTime closedBeforeUtc, CancellationToken token = default);
 
         /// <summary>
         /// Delete every usage snapshot, member link and latest-state row of a tenant (tenant deletion

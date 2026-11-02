@@ -154,17 +154,23 @@ namespace Armada.Core.Database.Postgresql.Implementations
         /// <inheritdoc />
         public async Task DeleteAsync(string id, CancellationToken token = default)
         {
-            if (string.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
-
+            if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
             using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                using (NpgsqlTransaction transaction = (NpgsqlTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                 {
-                    cmd.Connection = conn;
-                    cmd.CommandText = "DELETE FROM tenants WHERE id = @id;";
-                    cmd.Parameters.AddWithValue("@id", id);
-                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    foreach (string table in new[] { "usage_snapshot_captains", "usage_snapshots", "usage_latest_state", "usage_account_memberships", "usage_hourly_rollups", "tenants" })
+                    {
+                        using (NpgsqlCommand cmd = conn.CreateCommand())
+                        {
+                            cmd.Transaction = transaction;
+                            cmd.CommandText = "DELETE FROM " + table + (table == "tenants" ? " WHERE id = @id;" : " WHERE tenant_id = @id;");
+                            cmd.Parameters.AddWithValue("@id", id);
+                            await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                        }
+                    }
+                    await transaction.CommitAsync(token).ConfigureAwait(false);
                 }
             }
         }

@@ -2465,7 +2465,12 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"UPDATE captains SET usage_capture_enabled = NULL;"),
 
                 new SchemaMigration(114, "Persist captain usage credential Harbor",
-                    @"ALTER TABLE captains ADD COLUMN usage_capture_harbor_id VARCHAR(64) NULL;")
+                    @"ALTER TABLE captains ADD COLUMN IF NOT EXISTS usage_capture_harbor_id VARCHAR(64) NULL;"),
+
+                new SchemaMigration(115, "Preserve weighted usage rollup provenance",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN IF NOT EXISTS percent_sample_count INTEGER NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN IF NOT EXISTS last_status TEXT NULL;",
+                    @"ALTER TABLE usage_hourly_rollups ADD COLUMN IF NOT EXISTS raw_pruned INTEGER NOT NULL DEFAULT 0;")
 
 
             };

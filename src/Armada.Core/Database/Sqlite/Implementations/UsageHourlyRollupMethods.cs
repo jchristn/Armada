@@ -197,7 +197,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             return String.IsNullOrEmpty(value) ? null : value;
         }
 
-        private static void BindRollup(SqliteCommand cmd, UsageHourlyRollup rollup)
+        internal static void BindRollup(SqliteCommand cmd, UsageHourlyRollup rollup)
         {
             SqliteCommandHelper.Add(cmd, "@id", rollup.Id);
             SqliteCommandHelper.Add(cmd, "@tenant_id", rollup.TenantId);
@@ -209,6 +209,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
             SqliteCommandHelper.Add(cmd, "@model", rollup.Model ?? String.Empty);
             SqliteCommandHelper.AddDate(cmd, "@hour_utc", rollup.HourUtc);
             SqliteCommandHelper.Add(cmd, "@sample_count", rollup.SampleCount);
+            SqliteCommandHelper.Add(cmd, "@percent_sample_count", rollup.PercentSampleCount);
+            SqliteCommandHelper.Add(cmd, "@last_status", rollup.LastStatus);
+            SqliteCommandHelper.Add(cmd, "@raw_pruned", rollup.RawPruned ? 1 : 0);
             SqliteCommandHelper.Add(cmd, "@last_percent", rollup.LastPercent);
             SqliteCommandHelper.Add(cmd, "@min_percent", rollup.MinPercent);
             SqliteCommandHelper.Add(cmd, "@max_percent", rollup.MaxPercent);
@@ -227,7 +230,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             SqliteCommandHelper.AddDate(cmd, "@last_update_utc", rollup.LastUpdateUtc);
         }
 
-        private static UsageHourlyRollup FromReader(SqliteDataReader reader)
+        internal static UsageHourlyRollup FromReader(SqliteDataReader reader)
         {
             UsageHourlyRollup rollup = new UsageHourlyRollup();
             rollup.Id = reader["id"].ToString()!;
@@ -256,6 +259,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
             rollup.EstimatedCount = SqliteCommandHelper.ReadInt(reader["estimated_count"], 0);
             rollup.CoverageSeconds = SqliteCommandHelper.ReadNullableDouble(reader["coverage_seconds"]);
             rollup.LastUpdateUtc = SqliteCommandHelper.ReadDate(reader["last_update_utc"]);
+            rollup.PercentSampleCount = SqliteCommandHelper.ReadInt(reader["percent_sample_count"], 0);
+            rollup.LastStatus = SqliteCommandHelper.ReadString(reader["last_status"]);
+            rollup.RawPruned = SqliteCommandHelper.ReadInt(reader["raw_pruned"], 0) != 0;
             return rollup;
         }
 

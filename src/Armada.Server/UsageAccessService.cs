@@ -72,6 +72,7 @@ namespace Armada.Server
         /// <summary>SnapshotsAsync: account usage contract.</summary>
         public async Task<EnumerationResult<UsageSnapshotView>> SnapshotsAsync(AuthContext caller, UsageQuery query)
         {
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("snapshots-query");
             await ScopeAsync(caller, query).ConfigureAwait(false);
             if (query.CaptainIds != null) throw new ArgumentException("captainIds is supported only by latest.");
             ValidateRange(query);
@@ -99,12 +100,14 @@ namespace Armada.Server
                     ObservedUtc = row.CapturedUtc, Status = row.Status, ErrorCode = row.ErrorCode, Windows = UsageWindowsJson.Deserialize(row.WindowsJson),
                     CaptainIds = await _Database.UsageSnapshots.ReadCaptainsAsync(row.Id, query.TenantId!).ConfigureAwait(false) });
             }
+            telemetry.Complete();
             return Page(page, rows);
         }
 
         /// <summary>LatestAsync: account usage contract.</summary>
         public async Task<EnumerationResult<UsageSnapshotView>> LatestAsync(AuthContext caller, UsageQuery query)
         {
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("latest-query");
             await ScopeAsync(caller, query).ConfigureAwait(false);
             ValidateRange(query);
             UsageLatestStateQuery storageQuery = new UsageLatestStateQuery {
@@ -145,6 +148,7 @@ namespace Armada.Server
                     Stale = failed || !state.LastGoodCapturedUtc.HasValue || state.LastGoodCapturedUtc.Value.AddSeconds(interval * 2) < DateTime.UtcNow,
                     RequestedIntervalSeconds = group?.RequestedIntervalSeconds ?? 300, EffectiveIntervalSeconds = interval, CapabilityReason = AgentRuntimeCapabilities.UsageCapture(state.Runtime).Reason });
             }
+            telemetry.Complete();
             int count = rows.Count;
             return new EnumerationResult<UsageSnapshotView> { Objects = rows.Skip((query.PageNumber - 1) * query.PageSize).Take(query.PageSize).ToList(), PageNumber = query.PageNumber, PageSize = query.PageSize, TotalRecords = count, TotalPages = (int)Math.Ceiling(count / (double)query.PageSize) };
         }

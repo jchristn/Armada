@@ -7882,3 +7882,34 @@ unavailable hosts are explicit errors; AuthMissing observations remain readable
 with empty windows and their original observation time. Neither tool exposes
 credentials or ordinary-user raw excerpts. Foreign identifiers are NotFound;
 invalid filters are InvalidArgument; insufficient role is Forbidden.
+
+
+### Usage examples and failures
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"usage_status","arguments":{"provider":"anthropic","hostId":"hbr_example","pageSize":25}}}
+```
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"capture_captain_usage","arguments":{"captainId":"cpt_example","harborId":"hbr_example"}}}
+```
+
+The IDs above are illustrative. A status page with no observations has Objects=[],
+TotalRecords=0 and TotalPages=0; it does not imply zero account usage. AuthMissing
+is an observation status with empty windows and a stable error code. It remains
+readable and tells the operator to authenticate on the named credential host.
+A capture receipt has JobId, Status, JoinedExisting and NextEligibleUtc. Passive
+capture returns original observations without refreshing their age or starting a
+model prompt. Capture is on by default; nullable settings inherit on and Disabled
+mode wins. Custom executable configuration remains administrator-only.
+
+Tool errors use the existing isError result envelope. Disabled or unresolved capture
+is Conflict, cooldown is Conflict carrying its stable code, and disconnected hosts
+are Unavailable. NotFound is used for invisible IDs before validating secondary
+filters; Forbidden covers an authenticated caller lacking tenant administration.
+Only the missing required capture argument uses the -32602 protocol error described
+above. REST Retry-After headers have no MCP header equivalent; use the returned
+structured error details and the next eligible time when supplied. Both tools
+retain tenant isolation even for a GlobalAdmin; explicit tenant selection never
+combines tenants. See REST_API.md, Account Usage, for settings, history resolution,
+retention and completion-time attribution. MCP adds no resources or prompts.

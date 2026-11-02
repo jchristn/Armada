@@ -287,15 +287,22 @@ namespace Armada.Core.Services
         /// <summary>Prune raw observations in retry-safe batches, preserving latest-state age and windows.</summary>
         public async Task<int> PruneUsageSnapshotsAsync(CancellationToken token = default)
         {
-            DateTime cutoff = _Clock().AddDays(-_Settings.UsageCapture.RawSnapshotRetentionDays);
+            using UsageTelemetryOperation telemetry = UsageTelemetry.Start("retention");
+            DateTime cutoff = UsageRollupBuilder.Hour(_Clock().AddDays(-_Settings.UsageCapture.RawSnapshotRetentionDays));
             int total = 0;
             for (int batch = 0; batch < _MaxBatchesPerPass; batch++)
             {
                 token.ThrowIfCancellationRequested();
                 int deleted = await _Database.UsageSnapshots.DeleteOlderThanAsync(cutoff, token).ConfigureAwait(false);
                 total += deleted;
+                UsageTelemetry.Deleted("raw", deleted);
                 if (deleted < _BatchSize) break;
             }
+            int rollupsDeleted = await _Database.UsageRollups.DeleteOlderThanAsync(UsageRollupBuilder.Hour(_Clock().AddDays(-_Settings.UsageCapture.RollupRetentionDays)), token).ConfigureAwait(false);
+            UsageTelemetry.Deleted("rollup", rollupsDeleted);
+            int metadataDeleted = await _Database.UsageSnapshots.PruneInactiveStateAsync(UsageRollupBuilder.Hour(_Clock().AddDays(-_Settings.UsageCapture.RollupRetentionDays)), token).ConfigureAwait(false);
+            UsageTelemetry.Deleted("metadata", metadataDeleted);
+            telemetry.Complete();
             return total;
         }
 

@@ -197,7 +197,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return String.IsNullOrEmpty(value) ? null : value;
         }
 
-        private static void BindRollup(SqlCommand cmd, UsageHourlyRollup rollup)
+        internal static void BindRollup(SqlCommand cmd, UsageHourlyRollup rollup)
         {
             SqlServerCommandHelper.Add(cmd, "@id", rollup.Id);
             SqlServerCommandHelper.Add(cmd, "@tenant_id", rollup.TenantId);
@@ -209,6 +209,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
             SqlServerCommandHelper.Add(cmd, "@model", rollup.Model ?? String.Empty);
             SqlServerCommandHelper.AddDate(cmd, "@hour_utc", rollup.HourUtc);
             SqlServerCommandHelper.Add(cmd, "@sample_count", rollup.SampleCount);
+            SqlServerCommandHelper.Add(cmd, "@percent_sample_count", rollup.PercentSampleCount);
+            SqlServerCommandHelper.Add(cmd, "@last_status", rollup.LastStatus);
+            SqlServerCommandHelper.Add(cmd, "@raw_pruned", rollup.RawPruned ? 1 : 0);
             SqlServerCommandHelper.Add(cmd, "@last_percent", rollup.LastPercent);
             SqlServerCommandHelper.Add(cmd, "@min_percent", rollup.MinPercent);
             SqlServerCommandHelper.Add(cmd, "@max_percent", rollup.MaxPercent);
@@ -227,7 +230,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             SqlServerCommandHelper.AddDate(cmd, "@last_update_utc", rollup.LastUpdateUtc);
         }
 
-        private static UsageHourlyRollup FromReader(SqlDataReader reader)
+        internal static UsageHourlyRollup FromReader(SqlDataReader reader)
         {
             UsageHourlyRollup rollup = new UsageHourlyRollup();
             rollup.Id = reader["id"].ToString()!;
@@ -256,6 +259,9 @@ namespace Armada.Core.Database.SqlServer.Implementations
             rollup.EstimatedCount = SqlServerCommandHelper.ReadInt(reader["estimated_count"], 0);
             rollup.CoverageSeconds = SqlServerCommandHelper.ReadNullableDouble(reader["coverage_seconds"]);
             rollup.LastUpdateUtc = SqlServerCommandHelper.ReadDate(reader["last_update_utc"]);
+            rollup.PercentSampleCount = SqlServerCommandHelper.ReadInt(reader["percent_sample_count"], 0);
+            rollup.LastStatus = SqlServerCommandHelper.ReadString(reader["last_status"]);
+            rollup.RawPruned = SqlServerCommandHelper.ReadInt(reader["raw_pruned"], 0) != 0;
             return rollup;
         }
 

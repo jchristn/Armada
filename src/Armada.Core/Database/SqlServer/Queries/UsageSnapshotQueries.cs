@@ -84,6 +84,9 @@ namespace Armada.Core.Database.SqlServer.Queries
                AND target.model = source.model AND target.hour_utc = source.hour_utc
             WHEN MATCHED THEN UPDATE SET
                 sample_count = @sample_count,
+                percent_sample_count = @percent_sample_count,
+                last_status = @last_status,
+                raw_pruned = @raw_pruned,
                 last_percent = @last_percent,
                 min_percent = @min_percent,
                 max_percent = @max_percent,
@@ -102,12 +105,12 @@ namespace Armada.Core.Database.SqlServer.Queries
                 last_update_utc = @last_update_utc
             WHEN NOT MATCHED THEN INSERT
                 (id, tenant_id, host_id, runtime, provider, account_key, window_name, model, hour_utc,
-                 sample_count, last_percent, min_percent, max_percent, mean_percent, last_used, last_limit, last_reset_utc,
+                 sample_count, percent_sample_count, last_status, raw_pruned, last_percent, min_percent, max_percent, mean_percent, last_used, last_limit, last_reset_utc,
                  first_observed_utc, last_observed_utc, ok_count, unsupported_count, auth_missing_count, failed_count,
                  estimated_count, coverage_seconds, last_update_utc)
             VALUES
                 (@id, @tenant_id, @host_id, @runtime, @provider, @account_key, @window_name, @model, @hour_utc,
-                 @sample_count, @last_percent, @min_percent, @max_percent, @mean_percent, @last_used, @last_limit, @last_reset_utc,
+                 @sample_count, @percent_sample_count, @last_status, @raw_pruned, @last_percent, @min_percent, @max_percent, @mean_percent, @last_used, @last_limit, @last_reset_utc,
                  @first_observed_utc, @last_observed_utc, @ok_count, @unsupported_count, @auth_missing_count, @failed_count,
                  @estimated_count, @coverage_seconds, @last_update_utc);";
 

@@ -116,6 +116,7 @@ namespace Armada.Server
                 radiant.Sources.AddMeter(ArmadaMetrics.MeterName);
                 radiant.Sources.AddActivitySource(ArmadaMetrics.MeterName);
                 radiant.Sources.AddMeter("Watson");
+                radiant.Sources.AddActivitySource("Watson");
                 radiant.Sources.AddMeter("Microsoft.AspNetCore.Hosting");
                 radiant.Sources.AddMeter("System.Net.Http");
                 foreach (string source in _AdditionalSources)

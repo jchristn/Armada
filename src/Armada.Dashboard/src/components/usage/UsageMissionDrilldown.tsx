@@ -167,7 +167,7 @@ export default function UsageMissionDrilldown({ selection, onClose }: UsageMissi
       </div>
 
       <p className="text-dim usage-coverage-note">
-        {t('Limit utilization can change without any Armada mission completing, so the listed missions need not explain the percentage line.')}
+        {t('Limit utilization can change without any Armada mission completing, so the listed missions need not explain the percentage line.')} {t('Only retained token records are shown. Deleted consumption cannot be reconstructed from quota history.')}
       </p>
       {coverage && status === 'ready' && (
         <ul className="usage-coverage-list" aria-label={t('Coverage')}>

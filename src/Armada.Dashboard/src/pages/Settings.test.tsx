@@ -81,6 +81,8 @@ describe('Settings usage capture', () => {
     expect(toggle.checked).toBe(true);
     expect((screen.getByLabelText('Minimum interval (seconds)') as HTMLInputElement).value).toBe('60');
     expect((screen.getByLabelText('Concurrent captures per host') as HTMLInputElement).value).toBe('1');
+    fireEvent.click(toggle);
+    expect(await screen.findByText('Saving stops scheduled capture for 3 observed accounts and cancels captures in progress. Stored history is kept.')).toBeInTheDocument();
   });
 
   it('saves the full group, carrying retention values the form does not edit, and confirms success', async () => {
@@ -133,7 +135,7 @@ describe('Settings usage capture', () => {
     authValue.isAdmin = false;
     vi.mocked(getSettings).mockResolvedValue({ ...baseSettings } as never);
     render(<Settings />);
-    expect(await screen.findByText(/Only a global administrator can turn account usage capture on or off/)).toBeTruthy();
+    expect(await screen.findByText(/Only a global administrator can change server-wide usage capture settings/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save usage capture settings' })).toBeNull();
     expect(getUsageLatest).not.toHaveBeenCalled();
   });
