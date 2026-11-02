@@ -4,6 +4,7 @@ import type { Captain, UsageSnapshotView } from '../../types/models';
 import { USAGE_LEVEL_TEXT, captainCaptureActive, captainHeadline, captainUsagePath, usageLevel, viewKind } from '../../lib/usage';
 import type { UsageLoadStatus } from '../../lib/useUsage';
 import UsageState from './UsageState';
+import { usageWindowLabel } from '../../lib/usageWindowLabel';
 
 interface CaptainUsageCellProps {
   captain: Captain;
@@ -27,11 +28,13 @@ export default function CaptainUsageCell({ captain, views, status }: CaptainUsag
   const percent = headline.window.usedPercent as number;
   const level = usageLevel(percent);
   const percentText = `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(percent)}%`;
+  const label = usageWindowLabel(headline.window, t);
   return (
     <Link to={captainUsagePath(captain.id)} className={`usage-cell usage-level-${level}`}
-      title={t('{{window}} at {{percent}} ({{level}}), observed {{age}}. Open the captain usage section.', { window: headline.window.name, percent: percentText, level: t(USAGE_LEVEL_TEXT[level]), age: age ?? '-' })}>
-      <span className="usage-cell-value">{percentText}</span>
-      <span className="usage-cell-window">{headline.window.name}</span>
+      title={t('{{window}} at {{percent}} ({{level}}), observed {{age}}. Open the captain usage section.', { window: label, percent: percentText, level: t(USAGE_LEVEL_TEXT[level]), age: age ?? '-' })}>
+      <span className="usage-cell-value">{t('{{percent}} used', { percent: percentText })}</span>
+      {' · '}
+      <span className="usage-cell-window">{label}</span>
       {kind !== 'ok' && <UsageState kind={kind} compact host={host} age={age} />}
     </Link>
   );

@@ -44,7 +44,7 @@ describe('AccountLimitsTable', () => {
     expect(screen.getByRole('link', { name: 'cpt_b' })).toHaveAttribute('href', '/captains/cpt_b?section=usage');
     expect(getUsageLatest).toHaveBeenCalledWith({ provider: 'anthropic', accountKey: undefined, hostId: 'hbr_laptop', pageNumber: 1, pageSize: 25 });
     expect(screen.getByText('acct_123...')).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: '5h usage' })).toHaveAttribute('aria-valuenow', '82');
+    expect(screen.getByRole('progressbar', { name: '5-hour limit usage' })).toHaveAttribute('aria-valuenow', '82');
     expect(screen.getByText('Every 600s (requested 300s)')).toBeInTheDocument();
     expect(screen.queryByText('acct_1234567890abcdef')).not.toBeInTheDocument();
   });

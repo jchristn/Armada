@@ -7332,7 +7332,16 @@
         "Automatic (current dock or standalone Admiral)": "Automático (dock actual o Admiral independiente)",
         "Credential Harbors could not be loaded.": "No se pudieron cargar los Harbors de credenciales.",
         "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "La alternativa de terminal interactiva sigue la configuración del servidor y se detiene en las pantallas de inicio de sesión, confianza o configuración.",
-        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Seleccione el equipo donde está autenticado este runtime. La elección se guarda para la captura programada mientras el capitán está inactivo y no cambia la ubicación de las misiones."
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Seleccione el equipo donde está autenticado este runtime. La elección se guarda para la captura programada mientras el capitán está inactivo y no cambia la ubicación de las misiones.",
+        "Weekly limit": "Límite semanal",
+        "Daily limit": "Límite diario",
+        "Primary limit": "Límite principal",
+        "Secondary limit": "Límite secundario",
+        "Usage limit": "Límite de uso",
+        "{{count}}-hour limit": "Límite de {{count}} horas",
+        "{{count}}-day limit": "Límite de {{count}} días",
+        "{{count}}-minute limit": "Límite de {{count}} minutos",
+        "{{percent}} used": "{{percent}} usado"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -13612,7 +13621,16 @@
         "Automatic (current dock or standalone Admiral)": "自动（当前 dock 或独立 Admiral）",
         "Credential Harbors could not be loaded.": "无法加载凭据 Harbor。",
         "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "交互终端回退遵循服务器设置，遇到登录、信任或设置页面时停止。",
-        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "选择已登录此运行时的机器。此选择会保存，供 captain 空闲时定期采集使用，不会更改任务运行位置。"
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "选择已登录此运行时的机器。此选择会保存，供 captain 空闲时定期采集使用，不会更改任务运行位置。",
+        "Weekly limit": "每周限额",
+        "Daily limit": "每日限额",
+        "Primary limit": "主要限额",
+        "Secondary limit": "次要限额",
+        "Usage limit": "用量限额",
+        "{{count}}-hour limit": "{{count}} 小时限额",
+        "{{count}}-day limit": "{{count}} 天限额",
+        "{{count}}-minute limit": "{{count}} 分钟限额",
+        "{{percent}} used": "已使用 {{percent}}"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -19855,7 +19873,16 @@
         "Automatic (current dock or standalone Admiral)": "自動（目前 dock 或獨立 Admiral）",
         "Credential Harbors could not be loaded.": "無法載入憑證 Harbor。",
         "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "互動終端備援遵循伺服器設定，遇到登入、信任或設定畫面時停止。",
-        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "選擇已登入此執行階段的機器。此選擇會儲存，供 captain 閒置時排程擷取使用，不會變更任務執行位置。"
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "選擇已登入此執行階段的機器。此選擇會儲存，供 captain 閒置時排程擷取使用，不會變更任務執行位置。",
+        "Weekly limit": "每週限額",
+        "Daily limit": "每日限額",
+        "Primary limit": "主要限額",
+        "Secondary limit": "次要限額",
+        "Usage limit": "用量限額",
+        "{{count}}-hour limit": "{{count}} 小時限額",
+        "{{count}}-day limit": "{{count}} 天限額",
+        "{{count}}-minute limit": "{{count}} 分鐘限額",
+        "{{percent}} used": "已使用 {{percent}}"
       },
       "sections": {}
     },
@@ -26058,7 +26085,16 @@
         "Automatic (current dock or standalone Admiral)": "自動（目前 dock 或獨立 Admiral）",
         "Credential Harbors could not be loaded.": "載入唔到憑證 Harbor。",
         "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "互動終端後備方式跟隨伺服器設定，遇到登入、信任或設定畫面就會停止。",
-        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "選擇已登入呢個執行階段嘅機器。呢個選擇會儲存，供 captain 閒置時排程擷取使用，唔會改變任務執行位置。"
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "選擇已登入呢個執行階段嘅機器。呢個選擇會儲存，供 captain 閒置時排程擷取使用，唔會改變任務執行位置。",
+        "Weekly limit": "每週限額",
+        "Daily limit": "每日限額",
+        "Primary limit": "主要限額",
+        "Secondary limit": "次要限額",
+        "Usage limit": "用量限額",
+        "{{count}}-hour limit": "{{count}} 小時限額",
+        "{{count}}-day limit": "{{count}} 日限額",
+        "{{count}}-minute limit": "{{count}} 分鐘限額",
+        "{{percent}} used": "已用 {{percent}}"
       },
       "sections": {}
     },
@@ -32277,7 +32313,16 @@
         "Automatic (current dock or standalone Admiral)": "自動（現在の dock または単独の Admiral）",
         "Credential Harbors could not be loaded.": "認証情報の Harbor を読み込めませんでした。",
         "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "対話型端末へのフォールバックはサーバー設定に従い、ログイン、信頼、設定画面で停止します。",
-        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "このランタイムにログイン済みのマシンを選択します。選択は保存され、キャプテンの待機中も定期取得に使われます。ミッションの配置は変わりません。"
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "このランタイムにログイン済みのマシンを選択します。選択は保存され、キャプテンの待機中も定期取得に使われます。ミッションの配置は変わりません。",
+        "Weekly limit": "週間上限",
+        "Daily limit": "1日の上限",
+        "Primary limit": "主要な上限",
+        "Secondary limit": "追加の上限",
+        "Usage limit": "使用量の上限",
+        "{{count}}-hour limit": "{{count}}時間の上限",
+        "{{count}}-day limit": "{{count}}日間の上限",
+        "{{count}}-minute limit": "{{count}}分間の上限",
+        "{{percent}} used": "{{percent}} 使用済み"
       },
       "sections": {}
     },
@@ -38487,7 +38532,16 @@
         "Automatic (current dock or standalone Admiral)": "Automatisch (aktuelles Dock oder eigenständiger Admiral)",
         "Credential Harbors could not be loaded.": "Die Harbors mit Zugangsdaten konnten nicht geladen werden.",
         "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "Der interaktive Terminal-Fallback folgt der Servereinstellung und stoppt bei Anmeldung, Vertrauensabfrage oder Einrichtung.",
-        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Wählen Sie den Rechner, auf dem diese Laufzeit angemeldet ist. Die Auswahl wird für geplante Erfassungen im Leerlauf gespeichert und ändert die Missionszuordnung nicht."
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Wählen Sie den Rechner, auf dem diese Laufzeit angemeldet ist. Die Auswahl wird für geplante Erfassungen im Leerlauf gespeichert und ändert die Missionszuordnung nicht.",
+        "Weekly limit": "Wochenlimit",
+        "Daily limit": "Tageslimit",
+        "Primary limit": "Primäres Limit",
+        "Secondary limit": "Sekundäres Limit",
+        "Usage limit": "Nutzungslimit",
+        "{{count}}-hour limit": "{{count}}-Stunden-Limit",
+        "{{count}}-day limit": "{{count}}-Tage-Limit",
+        "{{count}}-minute limit": "{{count}}-Minuten-Limit",
+        "{{percent}} used": "{{percent}} genutzt"
       },
       "sections": {}
     },
@@ -44697,7 +44751,16 @@
         "Automatic (current dock or standalone Admiral)": "Automatique (dock actuel ou Admiral autonome)",
         "Credential Harbors could not be loaded.": "Impossible de charger les Harbors des identifiants.",
         "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "Le repli vers le terminal interactif suit le réglage du serveur et s’arrête aux écrans de connexion, de confiance ou de configuration.",
-        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Sélectionnez la machine où ce runtime est connecté. Ce choix est enregistré pour les captures planifiées lorsque le capitaine est inactif, sans changer l’emplacement des missions."
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Sélectionnez la machine où ce runtime est connecté. Ce choix est enregistré pour les captures planifiées lorsque le capitaine est inactif, sans changer l’emplacement des missions.",
+        "Weekly limit": "Limite hebdomadaire",
+        "Daily limit": "Limite quotidienne",
+        "Primary limit": "Limite principale",
+        "Secondary limit": "Limite secondaire",
+        "Usage limit": "Limite d’utilisation",
+        "{{count}}-hour limit": "Limite sur {{count}} heures",
+        "{{count}}-day limit": "Limite sur {{count}} jours",
+        "{{count}}-minute limit": "Limite sur {{count}} minutes",
+        "{{percent}} used": "{{percent}} utilisé"
       },
       "sections": {}
     },
@@ -50907,7 +50970,16 @@
         "Automatic (current dock or standalone Admiral)": "Automatico (dock corrente o Admiral autonomo)",
         "Credential Harbors could not be loaded.": "Impossibile caricare gli Harbor delle credenziali.",
         "Interactive terminal fallback follows the server setting and stops at login, trust or setup screens.": "Il ripiego sul terminale interattivo segue le impostazioni del server e si ferma alle schermate di accesso, fiducia o configurazione.",
-        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Seleziona la macchina su cui questo runtime ha effettuato l’accesso. La scelta viene salvata per le acquisizioni pianificate mentre il capitano è inattivo e non modifica la collocazione delle missioni."
+        "Select the machine where this runtime is signed in. This choice is saved for scheduled capture while the captain is idle and does not change mission placement.": "Seleziona la macchina su cui questo runtime ha effettuato l’accesso. La scelta viene salvata per le acquisizioni pianificate mentre il capitano è inattivo e non modifica la collocazione delle missioni.",
+        "Weekly limit": "Limite settimanale",
+        "Daily limit": "Limite giornaliero",
+        "Primary limit": "Limite principale",
+        "Secondary limit": "Limite secondario",
+        "Usage limit": "Limite di utilizzo",
+        "{{count}}-hour limit": "Limite di {{count}} ore",
+        "{{count}}-day limit": "Limite di {{count}} giorni",
+        "{{count}}-minute limit": "Limite di {{count}} minuti",
+        "{{percent}} used": "{{percent}} utilizzato"
       },
       "sections": {}
     }

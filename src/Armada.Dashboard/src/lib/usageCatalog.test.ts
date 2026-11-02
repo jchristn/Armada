@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import catalogSource from '../../../Armada.Server/wwwroot/i18n/armada.json?raw';
 import type { I18nCatalog } from '../i18n/runtime';
 import { USAGE_KIND_HINT, USAGE_KIND_TEXT, USAGE_LEVEL_TEXT } from './usage';
+import { USAGE_WINDOW_LABELS } from './usageWindowLabel';
 import { USAGE_CAPTURE_FORM_ERROR_TEXT } from './usageCaptureForm';
 
 // Every usage surface file; a new usage file must be added here so its strings are gated.
@@ -40,6 +41,7 @@ const TABLE_KEYS = [
   ...Object.values(USAGE_KIND_TEXT),
   ...Object.values(USAGE_KIND_HINT),
   ...Object.values(USAGE_LEVEL_TEXT),
+  ...USAGE_WINDOW_LABELS,
   ...Object.values(USAGE_CAPTURE_FORM_ERROR_TEXT),
   'View Usage',
 ];

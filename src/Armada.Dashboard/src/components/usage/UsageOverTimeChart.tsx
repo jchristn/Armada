@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useLocale } from '../../context/LocaleContext';
+import { usageWindowLabel } from '../../lib/usageWindowLabel';
 import type { UsageSeries, UsageSeriesPoint } from '../../types/models';
 import { USAGE_DANGER_PERCENT, USAGE_WARNING_PERCENT, accountAlias } from '../../lib/usage';
 
@@ -122,7 +123,7 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
       provider: series.provider ?? t('Unknown provider'),
       account: accountAlias(series.accountKey),
       host: series.hostId ?? '-',
-      window: series.window ?? t('all windows'),
+      window: series.window ? usageWindowLabel({ name: series.window, model: series.model }, t) : t('all windows'),
     });
   };
 

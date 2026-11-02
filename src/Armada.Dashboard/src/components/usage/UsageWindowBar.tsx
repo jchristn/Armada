@@ -1,5 +1,6 @@
 import { useLocale } from '../../context/LocaleContext';
 import type { UsageWindow } from '../../types/models';
+import { usageWindowLabel } from '../../lib/usageWindowLabel';
 import { USAGE_LEVEL_TEXT, usageLevel } from '../../lib/usage';
 
 interface UsageWindowBarProps {
@@ -14,7 +15,7 @@ export default function UsageWindowBar({ window, stale = false }: UsageWindowBar
   const known = window.usedPercent !== null && window.usedPercent !== undefined && !Number.isNaN(window.usedPercent);
   const percent = known ? Math.max(0, Math.min(100, window.usedPercent as number)) : 0;
   const level = known ? usageLevel(window.usedPercent as number) : 'normal';
-  const label = window.model ? `${window.name} (${window.model})` : window.name;
+  const label = usageWindowLabel(window, t);
   const percentText = known ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(window.usedPercent as number)}%` : t('Unknown');
   return (
     <div className={`usage-window${stale ? ' usage-window-stale' : ''}`}>

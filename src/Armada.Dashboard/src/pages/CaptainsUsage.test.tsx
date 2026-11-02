@@ -99,8 +99,8 @@ describe('Captains usage column and View Usage action', () => {
   it('keeps each state distinct in the usage column and never shows zero for missing data', async () => {
     renderCaptains();
     await screen.findByText('ok-captain');
-    await waitFor(() => expect(within(row('ok-captain')).getByText('82%')).toBeInTheDocument());
-    expect(within(row('ok-captain')).getByText('82%').closest('a')?.getAttribute('title')).toContain('(Warning)');
+    await waitFor(() => expect(within(row('ok-captain')).getByText('82% used')).toBeInTheDocument());
+    expect(within(row('ok-captain')).getByText('82% used').closest('a')?.getAttribute('title')).toContain('(Warning)');
     expect(within(row('disabled-captain')).getByText('Capture disabled')).toBeInTheDocument();
     expect(within(row('unsupported-captain')).getByText('Unsupported')).toBeInTheDocument();
     expect(within(row('nodata-captain')).getByText('No usage observed yet')).toBeInTheDocument();
@@ -110,13 +110,31 @@ describe('Captains usage column and View Usage action', () => {
     }
   });
 
+  it('renders readable quota labels with explicit word spacing inside the real table', async () => {
+    const weekly = view(['cpt_ok'], 'Ok', 96);
+    weekly.windows[0].name = 'seven_day';
+    weekly.windows[0].windowMinutes = 10080;
+    const primary = view(['cpt_fail'], 'Ok', 6);
+    primary.windows[0].name = 'codex:primary';
+    vi.mocked(getUsageLatest).mockResolvedValue(page([weekly, primary]) as never);
+    renderCaptains();
+    const week = await screen.findByRole('link', { name: '96% used · Weekly limit' });
+    expect(week).toHaveClass('usage-level-danger');
+    expect(week.textContent).toBe('96% used · Weekly limit');
+    expect(week.title).toContain('Weekly limit at 96%');
+    const codex = screen.getByRole('link', { name: '6% used · 5-hour limit' });
+    expect(codex.textContent).toBe('6% used · 5-hour limit');
+    expect(codex.title).not.toContain('codex:primary');
+    expect(week.textContent).not.toContain('seven_day');
+  });
+
   it('shows a retryable error instead of zero usage when the batch read fails', async () => {
     vi.mocked(getUsageLatest).mockReset().mockRejectedValueOnce(new Error('boom')).mockResolvedValue(page([view(['cpt_ok'], 'Ok', 50)]) as never);
     renderCaptains();
     await screen.findByText('ok-captain');
     const retry = await screen.findByRole('button', { name: 'Retry' });
     await userEvent.click(retry);
-    await waitFor(() => expect(within(row('ok-captain')).getByText('50%')).toBeInTheDocument());
+    await waitFor(() => expect(within(row('ok-captain')).getByText('50% used')).toBeInTheDocument());
     expect(getUsageLatest).toHaveBeenCalledTimes(2);
   });
 

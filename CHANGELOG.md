@@ -6,6 +6,11 @@ All notable changes to Armada are documented in this file.
 
 ## Unreleased
 
+### Readable usage labels
+
+- Captain usage cells show clearly separated text such as "96% used · Weekly limit" with consistent severity colors in both themes. Fix shared table-link CSS overriding their layout.
+- Humanize provider window identifiers across the captain card, account limits, charts and mobile views. Codex windows use their reported duration; missing durations remain primary/secondary limits rather than assumed periods. Preserve model-specific scope and raw API filter values.
+
 ### Idle captain usage capture
 
 - Save a credential Harbor on the captain, independently of mission placement. Capture requests with an explicit HarborId save that choice for subsequent scheduled reads; dashboard, TUI and mobile editors expose it. Null keeps automatic dock/standalone resolution.

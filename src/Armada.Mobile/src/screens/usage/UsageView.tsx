@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import { usageWindowLabel } from '@dashboard/lib/usageWindowLabel';
 import { ApiError, captureCaptainUsage, getUsageLatest } from '@dashboard/api/client';
 import { accountAlias, captainCaptureActive, USAGE_KIND_HINT, USAGE_KIND_TEXT, USAGE_LEVEL_TEXT, usageLevel, viewKind } from '@dashboard/lib/usage';
 import type { Captain, UsageSnapshotView } from '@dashboard/types/models';
@@ -54,8 +55,8 @@ export function UsageView({ captain }: { captain?: Captain }) {
         <AppText>{t(USAGE_KIND_HINT[kind], { host: view.hostId ?? '-', age: formatRelativeTime(view.observedUtc ?? view.capturedUtc) })}</AppText>
         <AppText>{formatRelativeTime(view.observedUtc ?? view.capturedUtc)}</AppText>
         <AppText>{t('Requested interval')}: {formatNumber(view.requestedIntervalSeconds)} · {t('Effective interval')}: {formatNumber(view.effectiveIntervalSeconds)}</AppText>
-        {view.windows?.map((window, i) => <View key={i} accessible accessibilityLabel={`${window.name}: ${window.usedPercent ?? t('Unknown')}%`}>
-          <AppText>{window.name} {window.model ?? ''}: {window.usedPercent == null ? t('Unknown') : `${formatNumber(window.usedPercent)}% · ${t(USAGE_LEVEL_TEXT[usageLevel(window.usedPercent)])}`}</AppText>
+        {view.windows?.map((window, i) => <View key={i} accessible accessibilityLabel={`${usageWindowLabel(window, t)}: ${window.usedPercent ?? t('Unknown')}%`}>
+          <AppText>{usageWindowLabel(window, t)}: {window.usedPercent == null ? t('Unknown') : `${formatNumber(window.usedPercent)}% · ${t(USAGE_LEVEL_TEXT[usageLevel(window.usedPercent)])}`}</AppText>
           {window.usedPercent != null ? <StatusBadge label={t(USAGE_LEVEL_TEXT[usageLevel(window.usedPercent)])} tone={window.usedPercent >= 90 ? 'error' : window.usedPercent >= 75 ? 'warning' : 'success'} /> : null}
           {window.resetsUtc ? <AppText>{t('Resets')}: {formatDateTime(window.resetsUtc)}</AppText> : null}
           {window.coverageNote ? <AppText>{window.coverageNote}</AppText> : null}

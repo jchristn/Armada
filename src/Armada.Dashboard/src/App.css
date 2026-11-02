@@ -9617,9 +9617,32 @@ span.usage-state { display: inline-block; padding: 0.1rem 0.45rem; border-radius
 .usage-state-unsupported, .usage-state-disabled, .usage-state-empty, .usage-state-loading { color: var(--text-dim); }
 div.usage-state-failed strong, div.usage-state-stale strong, div.usage-state-authMissing strong { color: inherit; }
 .usage-skeleton { display: block; height: 0.5rem; width: 60%; border-radius: 999px; background: linear-gradient(90deg, var(--bg-hover), var(--border), var(--bg-hover)); }
-.usage-cell { display: inline-flex; align-items: baseline; gap: 0.35rem; text-decoration: none; }
-.usage-cell-value { font-variant-numeric: tabular-nums; font-weight: 600; }
-.usage-cell-window { color: var(--text-dim); font-size: 0.8125rem; }
+/* More specific than the shared table-link rule: retain layout inside DataTable cells. */
+.table-wrap td > a.usage-cell,
+.data-table td > a.usage-cell,
+a.usage-cell {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+    max-width: var(--cell-name-max, 20rem);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    text-decoration: none;
+    vertical-align: middle;
+    background: var(--tag-idle-bg);
+    color: var(--tag-idle-fg);
+}
+.table-wrap td > a.usage-cell.usage-level-warning,
+.data-table td > a.usage-cell.usage-level-warning,
+a.usage-cell.usage-level-warning { background: var(--tag-review-bg); color: var(--tag-review-fg); }
+.table-wrap td > a.usage-cell.usage-level-danger,
+.data-table td > a.usage-cell.usage-level-danger,
+a.usage-cell.usage-level-danger { background: var(--tag-failed-bg); color: var(--tag-failed-fg); }
+a.usage-cell:hover { text-decoration: none; box-shadow: inset 0 0 0 1px currentColor; }
+.usage-cell-value { font-variant-numeric: tabular-nums; font-weight: 600; flex-shrink: 0; }
+.usage-cell-window { font-weight: 400; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: inherit; font-size: inherit; }
 .usage-table-notice { margin-bottom: 0.5rem; }
 .usage-shared { font-size: 0.8125rem; overflow-wrap: anywhere; }
 .usage-history-link { align-self: flex-start; font-size: 0.8125rem; }
