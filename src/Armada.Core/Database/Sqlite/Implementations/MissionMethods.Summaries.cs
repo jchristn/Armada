@@ -554,6 +554,11 @@ LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
                 conditions.Add("captain_id = @captain_id");
                 cmd.Parameters.AddWithValue("@captain_id", query.CaptainId);
             }
+            if (!String.IsNullOrEmpty(query.MissionId))
+            {
+                conditions.Add("id = @mission_id");
+                cmd.Parameters.AddWithValue("@mission_id", query.MissionId);
+            }
         }
 
         private static void AddParameters(SqliteCommand cmd, IEnumerable<KeyValuePair<string, object?>> parameters)
