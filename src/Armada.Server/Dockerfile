@@ -1,12 +1,13 @@
 # --- Dashboard build stage ---
 # Base images are pinned to exact patch versions; bump them deliberately (see .github/workflows/security.yml).
 FROM node:22.23.3-alpine3.23 AS dashboard-build
-WORKDIR /dashboard
+WORKDIR /src/Armada.Dashboard
 
 COPY src/Armada.Dashboard/package.json src/Armada.Dashboard/package-lock.json* ./
 RUN npm ci
 
 COPY src/Armada.Dashboard/ ./
+COPY src/Armada.Core/Resources/ ../Armada.Core/Resources/
 RUN npm run build
 
 # --- Build stage ---
@@ -30,7 +31,7 @@ COPY src/Armada.Server/ src/Armada.Server/
 COPY battery/ battery/
 # The React dashboard built above; Armada.Server.csproj publishes it to /app/dashboard so the Admiral
 # serves it at /dashboard (without it the Admiral falls back to the legacy embedded pages).
-COPY --from=dashboard-build /dashboard/dist/ src/Armada.Dashboard/dist/
+COPY --from=dashboard-build /src/Armada.Dashboard/dist/ src/Armada.Dashboard/dist/
 RUN dotnet publish src/Armada.Server -c Release -f net10.0 -o /app --no-restore
 
 # --- Runtime stage ---
