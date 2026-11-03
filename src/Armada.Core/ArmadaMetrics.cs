@@ -24,6 +24,10 @@ namespace Armada.Core
         public static readonly Counter<long> AdmissionLockTimeouts =
             _Meter.CreateCounter<long>("armada.admission.lock_timeouts");
 
+        /// <summary>New or changed capacity overruns, tagged only by gate and observed cause.</summary>
+        public static readonly Counter<long> ConcurrencyLimitViolations =
+            _Meter.CreateCounter<long>("armada.concurrency.limit_violations");
+
         /// <summary>Missions that reached Failed.</summary>
         public static readonly Counter<long> MissionsFailed =
             _Meter.CreateCounter<long>("armada.missions.failed", null, "Missions failed");

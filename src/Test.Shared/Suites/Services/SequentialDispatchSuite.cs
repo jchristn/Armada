@@ -104,6 +104,7 @@ namespace Test.Shared.Suites.Services
                 { work.Captains[i].MaxConcurrency = 2 + i % 2; await db.Captains.UpdateAsync(work.Captains[i], updateConcurrency: true); }
                 for (int i = 0; i < work.Missions.Count; i++)
                 { work.Missions[i].VesselId = vessels[i % 5].Id; work.Missions[i].VoyageId = voyages[i % 10].Id; await db.Missions.UpdateAsync(work.Missions[i]); }
+                ConcurrencyInvariantMonitor monitor = new ConcurrencyInvariantMonitor(db, settings, CreateLogging());
                 int completed = 0;
                 // Eight concurrent dispatcher requests plus the scheduler's next request per wave.
                 for (int wave = 0; completed < 200 && wave < 200; wave++)
@@ -115,6 +116,8 @@ namespace Test.Shared.Suites.Services
                     AssertTrue(running.Count <= 7, "global cap");
                     foreach (IGrouping<string?, Mission> group in running.GroupBy(m => m.VoyageId)) AssertTrue(group.Count() <= 2, "voyage mission cap");
                     foreach (Captain captain in await db.Captains.EnumerateAsync()) AssertTrue(captain.ActiveMissionCount <= captain.MaxConcurrency, "captain cap");
+                    await monitor.CheckAsync();
+                    AssertEqual(0, (await db.Events.EnumerateByTypeAsync("concurrency.limit_exceeded")).Count, "healthy mixed-limit waves have no invariant violations");
                     foreach (Mission mission in running)
                     {
                         mission.Status = MissionStatusEnum.Complete;

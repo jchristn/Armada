@@ -22,25 +22,13 @@ namespace Armada.Core.Services
         /// <summary>Evaluate storage projections without loading mission artifacts or voyage descriptions.</summary>
         public static MissionAssignmentBlocker? EvaluateSnapshots(Mission candidate, Vessel vessel, IEnumerable<MissionAdmissionSnapshot> missions)
         {
-            List<MissionAdmissionSnapshot> all = missions.Where(m => m.VoyageStatus != VoyageStatusEnum.Complete
-                && m.VoyageStatus != VoyageStatusEnum.Failed && m.VoyageStatus != VoyageStatusEnum.Cancelled).ToList();
+            List<MissionAdmissionSnapshot> all = VoyageSlotPolicy.Runnable(missions);
             List<MissionAdmissionSnapshot> others = all.Where(m => m.Id != candidate.Id).ToList();
             Dictionary<string, MissionAdmissionSnapshot> byId = all.GroupBy(m => m.Id).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-            string Group(MissionAdmissionSnapshot mission)
-            {
-                if (!String.IsNullOrEmpty(mission.VoyageId)) return "voyage:" + mission.VoyageId;
-                // A standalone pipeline is one unit of work. Its review stages must be able to
-                // follow WorkProduced even when the vessel admits only one voyage group.
-                HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
-                while (!String.IsNullOrEmpty(mission.DependsOnMissionId) && seen.Add(mission.Id)
-                    && byId.TryGetValue(mission.DependsOnMissionId, out MissionAdmissionSnapshot? upstream)
-                    && String.IsNullOrEmpty(upstream.VoyageId)) mission = upstream;
-                return "mission:" + mission.Id;
-            }
+            string Group(MissionAdmissionSnapshot mission) => VoyageSlotPolicy.Group(mission, byId);
             string key = Group(MissionAdmissionSnapshot.FromMission(candidate));
             List<IGrouping<string, MissionAdmissionSnapshot>> admitted = all.GroupBy(Group)
-                .Where(g => g.Any(m => HoldsVoyage(m.Status))
-                    && g.Any(m => m.Status != MissionStatusEnum.Pending)).ToList();
+                .Where(g => VoyageSlotPolicy.Admitted(g)).ToList();
             bool alreadyAdmitted = admitted.Any(g => g.Key == key);
             if (!alreadyAdmitted && vessel.MaxParallelVoyages > 0 && admitted.Count >= vessel.MaxParallelVoyages)
             {
@@ -51,7 +39,7 @@ namespace Armada.Core.Services
                         + " voyage slots occupied. Existing voyages retain their slot through review and landing."
                 };
                 AddLimitAdvice(result, vessel, admitted.Count, vessel.MaxParallelVoyages, "MaxParallelVoyages");
-                result.SetBlockingMissions(admitted.SelectMany(g => g).Where(m => HoldsVoyage(m.Status)).Select(m => m.Id));
+                result.SetBlockingMissions(admitted.SelectMany(g => g).Where(m => VoyageSlotPolicy.HoldsVoyage(m.Status)).Select(m => m.Id));
                 return result;
             }
             List<MissionAdmissionSnapshot> running = others.Where(m => Group(m) == key &&
@@ -79,10 +67,5 @@ namespace Armada.Core.Services
             result.Advice.AddRange(capacity.Advice);
         }
 
-        private static bool HoldsVoyage(MissionStatusEnum status) => status == MissionStatusEnum.Pending
-            || status == MissionStatusEnum.Assigned || status == MissionStatusEnum.InProgress
-            || status == MissionStatusEnum.WorkProduced || status == MissionStatusEnum.PullRequestOpen
-            || status == MissionStatusEnum.Testing || status == MissionStatusEnum.Review
-            || status == MissionStatusEnum.Verifying;
     }
 }

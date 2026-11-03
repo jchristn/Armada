@@ -12786,6 +12786,10 @@ Retention values provide policy context rather than reclaimable-byte estimates. 
 
 Set `captainAssignments[].strictCaptain` to `true` alongside `captainId` to wait for that selected captain instead of falling back when busy/unavailable. The default is `false`; tier fallback remains unchanged. Exact persona overrides take precedence over `*`. Strict selection also prevents automatic rework escalation to a different captain: an exhausted or stagnant chain reports remediation and preserves its work. Without a selected captain this flag has no effect. C# clients share `CaptainAssignmentOverride.StrictCaptain`. See [PIPELINES.md](PIPELINES.md#validated-slice-contracts) for plan validation and full-pipeline rework.
 
+## v1.3.0 concurrency overrun events
+
+Existing event reads expose `concurrency.limit_exceeded` from the health-tick observer. Events refer to a captain or vessel and retain that entity's tenant/user scope. `Payload` is JSON containing `Gate` (`captain`, `vessel_voyages`, or `voyage_missions`), `Count`, `Limit`, and `Cause` (`limit_lowered`, `unexpected`, or `unknown`). Captain counts are durable reserved slots; vessel mission counts describe the busiest voyage/standalone pipeline group. Private mission/voyage IDs are omitted. Unchanged overrun observations are deduplicated within the Admiral process; a restart resets the baseline. An initial overrun or uncertain edit/claim order has unknown cause, rather than being classified as an admission bug. Observation never cancels or preempts running work. Event schemas and endpoints are unchanged.
+
 ## v1.3.0 waiting diagnostics
 
 Pending mission reads include `AssignmentBlocker` (`assignmentBlocker` after camel-case client normalization). REST `GET /api/v1/missions/{id}` and MCP `mission_status` compute the same explanation; non-Pending missions have no blocker. The existing safety, capacity, tenant and user restrictions still apply.

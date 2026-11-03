@@ -22,6 +22,7 @@ v1.3.0 focuses on **parallelization and concurrency**: more independent work in 
 
 ### Scheduling admission
 
+- Add health-tick captain/vessel capacity monitoring after durable slot reconciliation. Share sticky voyage grouping with admission; log and persist scoped `concurrency.limit_exceeded` events with bounded `gate`/`cause` metrics. Observed limit reductions drain without preemption; uncertain startup/edit ordering stays unknown. Unchanged observations are deduplicated and deleted entities lose their baselines. Runtime/endpoint/global monitoring and stuck-admission detection remain in progress.
 - Serialize vessel gates per vessel, then shared global/runtime/endpoint/captain claims with a fixed lock order. Both waits are bounded; timed-out requests retry on the next cycle and increment `armada.admission.lock_timeouts` by gate. Idle registry entries are removed, and neither lock is held while provisioning docks or launching processes.
 - Spread equivalent work across eligible captains with fewer occupied slots while preserving explicit captain selection, persona preferences, priority classes and tier routing. Add lock isolation/cleanup and 200-mission mixed-limit regression coverage.
 

@@ -54,6 +54,7 @@ as `armada_*_total` series:
 
 | Prometheus series                       | Meaning                                             |
 |-----------------------------------------|-----------------------------------------------------|
+| `armada_concurrency_limit_violations_total` | New or changed captain/vessel capacity overruns; bounded labels `gate` and `cause` |
 | `armada_captains_stalls_total`          | Captain stalls detected                             |
 | `armada_captains_recoveries_total`      | Captain auto-recovery attempts                      |
 | `armada_missions_failed_total`          | Missions that reached Failed                        |
@@ -66,6 +67,8 @@ as `armada_*_total` series:
 | `armada_fleet_action_targets_total`     | Fleet action targets finished; labels `kind` (Command, Mission) and `outcome` (Succeeded, Failed, TimedOut, Skipped, Cancelled) |
 | `armada_health_evaluations_total`       | Vessel health evaluations, one per vessel; label `outcome` (Succeeded, Failed, Cancelled) |
 | `armada_vessel_import_items_total`      | Vessel import items processed; label `outcome` (Created, SkippedExisting, SkippedNotSelected, Failed) |
+
+Concurrency overrun monitoring runs after slot reconciliation on each health tick. Gates are `captain` (reserved mission slots), `vessel_voyages` (sticky occupied groups), and `voyage_missions` (the busiest running group on a vessel). Causes are `limit_lowered` for an observed reduction draining without growth, `unexpected` for an overrun/growth unexplained by observed limit changes, and `unknown` for startup or ambiguous ordering between samples. Initial over-capacity observations are not proof of an admission bug. The counter increments only when an overrun's count, limit or cause changes, not on every tick; it is not a current-overrun gauge. Filter `cause="unexpected"` for unexplained observations and inspect Activity > Events for entity context. IDs and names never appear in metric labels. Events do not expose mission/voyage IDs from shared resources. Runtime, endpoint and global gates, stuck-admission monitoring, and wait-time metrics are still planned.
 
 Two histograms cover the slow paths: `armada_fleet_action_target_duration_seconds` (label `kind`) and
 `armada_health_criterion_duration_seconds` (label `criterion`). Labels stay low-cardinality on purpose:

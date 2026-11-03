@@ -142,6 +142,7 @@ namespace Armada.Core.Services
         private static readonly TimeSpan _AssignedOrphanRecoveryGracePeriod = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan _WorkProducedReleaseGracePeriod = TimeSpan.FromMinutes(2);
         private LoggingModule _Logging;
+        private readonly ConcurrencyInvariantMonitor _ConcurrencyInvariants;
         private DatabaseDriver _Database;
         private ArmadaSettings _Settings;
         private ISystemResourceProbe _ResourceProbe = new SystemResourceProbe();
@@ -198,6 +199,7 @@ namespace Armada.Core.Services
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _Database = database ?? throw new ArgumentNullException(nameof(database));
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _ConcurrencyInvariants = new ConcurrencyInvariantMonitor(_Database, _Settings, _Logging);
             _Captains = captains ?? throw new ArgumentNullException(nameof(captains));
             _Missions = missions ?? throw new ArgumentNullException(nameof(missions));
             _Voyages = voyages ?? throw new ArgumentNullException(nameof(voyages));
@@ -772,6 +774,7 @@ namespace Armada.Core.Services
             // record cannot stop merge reconciliation, recovery, or dispatch for everything else. Shutdown
             // cancellation still propagates.
             await RunHealthPhaseAsync("reconcile captain slots", () => _Database.Captains.ReconcileMissionSlotsAsync(token), token).ConfigureAwait(false);
+            await RunHealthPhaseAsync("concurrency invariants", () => _ConcurrencyInvariants.CheckAsync(token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("lift expired quarantines", () => LiftExpiredQuarantinesAsync(token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("release recovered stalled captains", () => ReleaseRecoveredStalledCaptainsAsync(token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("relaunch captains whose Harbor reconnected", async () =>

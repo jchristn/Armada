@@ -7920,6 +7920,10 @@ retain tenant isolation even for a GlobalAdmin; explicit tenant selection never
 combines tenants. See REST_API.md, Account Usage, for settings, history resolution,
 retention and completion-time attribution. MCP adds no resources or prompts.
 
+## v1.3.0 concurrency overrun events
+
+Existing event reads expose `concurrency.limit_exceeded` from the health-tick observer. Events refer to a captain or vessel and retain that entity's tenant/user scope. `Payload` is JSON containing `Gate` (`captain`, `vessel_voyages`, or `voyage_missions`), `Count`, `Limit`, and `Cause` (`limit_lowered`, `unexpected`, or `unknown`). Captain counts are durable reserved slots; vessel mission counts describe the busiest voyage/standalone pipeline group. Private mission/voyage IDs are omitted. Unchanged overrun observations are deduplicated within the Admiral process; a restart resets the baseline. An initial overrun or uncertain edit/claim order has unknown cause, rather than being classified as an admission bug. Observation never cancels or preempts running work. Event schemas and endpoints are unchanged.
+
 ## v1.3.0 waiting diagnostics
 
 Pending mission reads include `AssignmentBlocker` (`assignmentBlocker` after camel-case client normalization). REST `GET /api/v1/missions/{id}` and MCP `mission_status` compute the same explanation; non-Pending missions have no blocker. The existing safety, capacity, tenant and user restrictions still apply.
