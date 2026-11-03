@@ -19,6 +19,8 @@ v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-
 
 ### Concurrency (in progress)
 
+- Plan [usage-based captain selection and decision history](USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) for v1.3.0: shared-account headroom, deterministic routing, atomic reservations, durable decision evidence, operator diagnostics and all-client validation. Implementation remains pending.
+
 - Enable Serialize overlapping missions by default for new vessels across the model, REST/MCP, Dashboard and TUI creation paths. Explicit opt-outs and existing stored values are preserved.
 
 - Begin [captain slots, vessel voyage/mission limits, and mission hierarchy](CONCURRENCY_IMPROVEMENTS.md) on `feature/v1.3.0`.

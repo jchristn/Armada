@@ -39,6 +39,10 @@ Waiting diagnostics have [UX/layout validation evidence](docs/concurrency/WAITIN
 
 The admission segment has [UX/layout validation evidence](docs/concurrency/ADMISSION_VALIDATION.md) for the actual Dashboard at desktop, tablet and mobile widths.
 
+### Related v1.3.0 usage-selection work
+
+[Usage-based captain selection and decision history](USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) extends the shared admission path with account headroom, atomic reservations and durable captain/model selection evidence. Its U0–U6 milestones are planned, not implemented. Coordinate its transaction, verification/repair, waiting telemetry and client changes with M3–M11 here; it must preserve all existing concurrency gates and mission ownership invariants.
+
 ### Segment completion requirements
 
 Every implementation segment ends with a UX/layout/aesthetic validation of affected surfaces (including backend-driven state), a commit/push on `feature/v1.3.0`, and `./build-all.sh v1.3.0`. Keep README/CHANGELOG and affected REST/MCP contracts current. Docker builds update both `v1.3.0` and `latest` and include the VSIX. Record actual checks and build results; do not mark later milestones complete based on a partial slice.

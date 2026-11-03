@@ -150,6 +150,8 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 
 ## v1.3.0 development: concurrency and built-in fleet actions
 
+Planned v1.3.0 work also includes [usage-based captain selection and durable decision history](USAGE_BASED_CAPTAIN_SELECTION_PLAN.md): choose eligible captains using account headroom and explain why each captain/model was selected or why work must wait. This is an implementation plan, not a shipped capability.
+
 v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**.
 
 The [built-in fleet action catalog](docs/FLEET_ACTIONS.md#built-in-actions) ships 25 actions (20 new), available in every tenant without creating action templates. Run performance reviews and fixes, code cleanliness reviews and dead-code cleanup, vulnerability audits and security reviews, secrets scans, and license compliance checks across selected repositories. The catalog also covers builds, tests, linting, dependency updates, framework upgrades, and documentation upkeep. Report-only actions collect findings without changing repositories; follow-up runs can target only repositories with findings or failures. New built-ins are added at startup, while tenant edits and deleted built-ins are respected.
