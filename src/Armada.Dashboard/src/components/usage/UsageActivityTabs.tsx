@@ -288,7 +288,7 @@ export function CaptainUsageTab() {
   };
 
   const truncated = !!(state.limitCoverage?.seriesTruncated || state.tokenCoverage?.seriesTruncated);
-  const warnings = [...new Set([state.limitCoverage?.warning, state.tokenCoverage?.warning].filter((w): w is string => !!w))];
+  const warnings = [...new Set([state.limitCoverage?.warning, state.tokenCoverage?.warning].filter((w): w is string => !!w && w !== 'Legacy records without captured membership are correlation only; account-specific views exclude them.'))];
 
   return (
     <div className="usage-overview">

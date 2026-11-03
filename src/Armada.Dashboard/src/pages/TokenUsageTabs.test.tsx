@@ -65,16 +65,17 @@ describe('Token usage tabs', () => {
     vi.mocked(getUsageLatest).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 25, totalPages: 1, totalRecords: 0, objects: [], totalMs: 1 });
   });
 
-  it('keeps guidance collapsed in About usage and deduplicates coverage notes without applying filters', async () => {
+  it('keeps guidance collapsed and omits the legacy attribution notice without applying filters', async () => {
     const warning = 'Legacy records without captured membership are correlation only; account-specific views exclude them.';
     vi.mocked(getUsageSeries).mockImplementation(async filter => ({ ...series(filter.metric, filter.from), coverage: { ...coverage, warning } }));
     renderAt('/activity?source=usage-overview&provider=anthropic');
-    await screen.findByText('Coverage');
+    await screen.findByRole('button', { name: 'Show chart data table' });
+    expect(screen.queryByText('Coverage')).not.toBeInTheDocument();
     const summary = screen.getByText('About usage');
     const help = summary.closest('details')!;
     const note = within(help).getByText(/Account usage reported by captains/);
     expect(note).not.toBeVisible();
-    expect(within(help).getAllByText(warning)).toHaveLength(1);
+    expect(screen.queryByText(warning)).not.toBeInTheDocument();
     const query = screen.getByTestId('where').textContent;
     fireEvent.click(summary);
     expect(help).toHaveAttribute('open');

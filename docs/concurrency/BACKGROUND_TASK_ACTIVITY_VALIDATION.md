@@ -27,3 +27,9 @@ Events, Signals, Needs You and both legacy Jobs URLs were checked in light/dark 
 Manual checks: open Activity and confirm there is no Jobs tab; run a capture and inspect its outcome in Events. For a failed capture, check Signals and Needs You, then use Open to reach its host-filtered usage view. Retry and confirm the previous attempt is superseded. On Captain Usage, open About usage by keyboard or touch and confirm all three explanations remain available without occupying space when closed.
 
 Release command: `./build-all.sh v1.3.0`; execution log: `/tmp/armada-v130-background-task-activity-build-all.log`.
+
+## Follow-up: remove legacy attribution copy
+
+Captain Usage no longer displays “Legacy records without captured membership are correlation only; account-specific views exclude them.” The account-wide scope note, chart instructions and other coverage warnings are preserved. The targeted Activity/chart/localization run passes all 23 tests, and the production build succeeds. Twelve light/dark desktop/tablet/phone checks confirm the legacy sentence is absent, the remaining two help paragraphs expand/collapse correctly, the page stays within the viewport and chart accessibility descriptions remain intact. The phone layout was visually inspected. The disposable server was stopped afterward.
+
+Release command: `./build-all.sh v1.3.0`; execution log: `/tmp/armada-v130-remove-legacy-note-build-all.log`.
