@@ -21,6 +21,42 @@ namespace Test.Shared.Suites.Services
             const string suite = "Services.CaptainAdmissionParity";
             List<TestCaseDescriptor> cases = new();
             void Add(string id, Func<Task> test) => cases.Add(new TestCaseDescriptor(suite, id, id, _ => test()));
+            Add("usage_preview_mirrors_retry_backoff_and_untried_alternative", async () =>
+            {
+                using Harness h = await Harness.CreateAsync();
+                TenantMetadata tenant = await h.Db.Tenants.CreateAsync(new TenantMetadata("preview-retry"));
+                UserMaster owner = await h.Db.Users.CreateAsync(new UserMaster(tenant.Id, "retry@example.invalid", "fixture-password"));
+                h.Mission.TenantId = tenant.Id; h.Mission.UserId = owner.Id; await h.Db.Missions.UpdateAsync(h.Mission);
+                await h.Db.Captains.CreateAsync(new Captain("first") { TenantId = tenant.Id, UserId = owner.Id });
+                int attempts = 0; h.Captains.OnLaunchAgent = (_, _, _) => { attempts++; throw new InvalidOperationException("fixture launch failure"); };
+                AssertFalse(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
+                Mission current = (await h.Db.Missions.ReadAsync(h.Mission.Id))!;
+                AssertEqual("LaunchRetryPending", (await h.Service.PreviewCaptainSelectionAsync(current)).ReasonCode);
+                Captain fallback = await h.Db.Captains.CreateAsync(new Captain("untried alternative") { TenantId = tenant.Id, UserId = owner.Id });
+                long history = (await h.Db.CaptainSelections.EnumerateByMissionAsync(tenant.Id, current.Id)).TotalRecords;
+                int docks = (await h.Db.Docks.EnumerateAsync()).Count;
+                CaptainSelectionPreview preview = await h.Service.PreviewCaptainSelectionAsync(current);
+                AssertEqual(fallback.Id, preview.ActualCaptainId); AssertEqual(1, attempts);
+                AssertEqual(history, (await h.Db.CaptainSelections.EnumerateByMissionAsync(tenant.Id, current.Id)).TotalRecords);
+                AssertEqual(docks, (await h.Db.Docks.EnumerateAsync()).Count);
+            });
+            Add("usage_preview_honors_placement_without_writes", async () =>
+            {
+                using Harness h = await Harness.CreateAsync();
+                TenantMetadata tenant = await h.Db.Tenants.CreateAsync(new TenantMetadata("preview-placement"));
+                UserMaster owner = await h.Db.Users.CreateAsync(new UserMaster(tenant.Id, "preview@example.invalid", "fixture-password"));
+                h.Mission.TenantId = tenant.Id; h.Mission.UserId = owner.Id;
+                await h.Db.Missions.UpdateAsync(h.Mission);
+                await h.Db.Captains.CreateAsync(new Captain("preview candidate") { TenantId = tenant.Id, UserId = owner.Id });
+                h.Service.CanAssignMissionAsync = (_, _) => Task.FromResult(false);
+                DateTime version = (await h.Db.Missions.ReadAsync(h.Mission.Id))!.LastUpdateUtc;
+                CaptainSelectionPreview preview = await h.Service.PreviewCaptainSelectionAsync((await h.Db.Missions.ReadAsync(h.Mission.Id))!);
+                AssertEqual("PlacementWaiting", preview.ReasonCode); AssertNull(preview.ActualCaptainId);
+                AssertEqual(1L, preview.Candidates.TotalRecords);
+                AssertEqual(version, (await h.Db.Missions.ReadAsync(h.Mission.Id))!.LastUpdateUtc);
+                AssertEqual(0, h.Launches); AssertEqual(0, (await h.Db.Docks.EnumerateAsync()).Count);
+                AssertEqual(0L, (await h.Db.CaptainSelections.EnumerateByMissionAsync(tenant.Id, h.Mission.Id)).TotalRecords);
+            });
             foreach (bool strict in new[] { true, false })
                 Add("unresolved_override_busy_" + strict, async () =>
                 {

@@ -35,6 +35,14 @@ describe('mission captain selection', () => {
     vi.mocked(getCaptainSelectionHistory).mockReset().mockResolvedValue({ success: true, objects: [{ ...decision, id: 'csd_old', selectedCaptainName: 'Historical captain' }], pageNumber: 1, pageSize: 10, totalPages: 2, totalRecords: 11, totalMs: 1 });
     vi.mocked(previewCaptainSelection).mockReset().mockResolvedValue({ missionId: 'msn_one', mode: 'Observe', strategy: 'MostRemainingAllowance', reasonCode: 'SelectedForHeadroom', evaluatedUtc: '2026-11-03T13:00:00Z', candidates: structuredClone(details.candidates) });
   });
+  it('labels preview choices as proposed rather than admitted selections', async () => {
+    mount('Pending');
+    await screen.findByText('runtime-model');
+    fireEvent.click(screen.getByRole('button', { name: 'Preview current selection' }));
+    const table = await screen.findByRole('table', { name: 'Comparison' });
+    await waitFor(() => expect(within(table).getAllByText('Proposed')).toHaveLength(2));
+    expect(within(table).queryByText('Selected')).not.toBeInTheDocument();
+  });
   it('separates intended and reported models and only links currently visible captains', async () => {
     mount();
     await screen.findByText('runtime-model');

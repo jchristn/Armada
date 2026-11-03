@@ -57,7 +57,8 @@ namespace Armada.Core.Services
             string? readiness = null;
             if (mission.Status != MissionStatusEnum.Pending) readiness = "MissionNotPending";
             else if (String.IsNullOrEmpty(mission.TenantId)) readiness = "MissionScopeUnavailable";
-            else if (_LaunchFailures.ContainsKey(mission.Id) || _ProvisionFailureCaptures.ContainsKey(mission.Id)) readiness = "LaunchRetryPending";
+            else if (_LaunchFailures.TryGetValue(mission.Id, out MissionLaunchFailure? backoff) && DateTime.UtcNow < backoff.NextAttemptUtc
+                && !await HasUntriedIdleCaptainAsync(mission, backoff, token).ConfigureAwait(false)) readiness = "LaunchRetryPending";
             else if (!String.IsNullOrWhiteSpace(mission.VoyageId))
             {
                 Voyage? voyage = await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
@@ -86,8 +87,11 @@ namespace Armada.Core.Services
             CaptainAdmissionSelection selection = await SelectCaptainAdmissionAsync(mission, token).ConfigureAwait(false);
             UsageSelectionSnapshot snapshot = await BuildUsageSelectionAsync(selection, settings, token).ConfigureAwait(false);
             if (settings.Mode == UsageSelectionModeEnum.Enforce) snapshot.ActualCaptainId = snapshot.Evaluation.SelectedCaptainId;
+            bool placementWaiting = snapshot.ActualCaptainId != null && CanAssignMissionAsync != null
+                && !await CanAssignMissionAsync(selection.Mission, snapshot.Captains[snapshot.ActualCaptainId]).ConfigureAwait(false);
+            if (placementWaiting) snapshot.ActualCaptainId = null;
             preview.EvaluatedUtc = snapshot.EvaluatedUtc; preview.ActualCaptainId = snapshot.ActualCaptainId;
-            preview.HypotheticalCaptainId = snapshot.Evaluation.SelectedCaptainId; preview.ReasonCode = snapshot.Evaluation.ReasonCode;
+            preview.HypotheticalCaptainId = snapshot.Evaluation.SelectedCaptainId; preview.ReasonCode = placementWaiting ? "PlacementWaiting" : snapshot.Evaluation.ReasonCode;
             List<CaptainSelectionCandidateView> rows = snapshot.Evaluation.Candidates.Select((result, index) => new CaptainSelectionCandidateView
             {
                 CaptainId = result.Candidate.CaptainId, CaptainAvailable = true, CaptainName = UsageSelectionEvidenceSanitizer.Label(snapshot.Captains[result.Candidate.CaptainId].Name)!,

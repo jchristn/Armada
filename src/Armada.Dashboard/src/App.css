@@ -9894,6 +9894,7 @@ a.btn:hover { text-decoration: none; }
 .selection-actions-column { width: 4.5rem; text-align: right; }
 .captain-selection-card :is(button, a, select, input, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 600px) {
+  .selection-comparison-table .selection-captain-column { width: 11rem; }
   .selection-facts { grid-template-columns: minmax(0, 1fr); gap: 0.625rem; }
   .selection-heading { align-items: flex-start; }
   .selection-actions { width: 100%; }

@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.E2E
     using System.Net;
     using System.Net.Http;
     using System.Reflection;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Database;
@@ -28,6 +29,53 @@ namespace Test.Shared.Suites.E2E
         {
             return new TestSuiteDescriptor(_SuiteId, "Captain selection API", new List<TestCaseDescriptor>
             {
+                new TestCaseDescriptor(_SuiteId, "history_survives_raw_pruning_and_restart", "Retained selection evidence survives raw capture retention and a server restart", async token =>
+                {
+                    string directory = TestTemp.NewDirectory("selection-restart");
+                    DatabaseSettings settings = new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(directory, "armada.db") };
+                    E2ETenantUser owner;
+                    string decisionId, candidateId, snapshotId, missionId;
+                    using (InProcessArmadaServer server = await InProcessArmadaServer.StartAsync(directory, settings).ConfigureAwait(false))
+                    {
+                        owner = await E2ETenantUser.CreateAsync(server.Client, "retained-owner", false).ConfigureAwait(false);
+                        ArmadaServer runtime = (ArmadaServer)typeof(InProcessArmadaServer).GetField("_Server", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(server)!;
+                        DatabaseDriver database = (DatabaseDriver)typeof(ArmadaServer).GetField("_Database", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(runtime)!;
+                        Mission mission = await database.Missions.CreateAsync(new Mission("retained selection") { TenantId = owner.TenantId, UserId = owner.UserId }, token).ConfigureAwait(false);
+                        missionId = mission.Id;
+                        UsageSnapshot raw = new UsageSnapshot { TenantId = owner.TenantId, HostId = "host", AccountKey = "private-retention-account", CapturedUtc = DateTime.UtcNow.AddDays(-120),
+                            Runtime = AgentRuntimeEnum.ClaudeCode, Source = UsageCaptureSourceEnum.Pty, Status = UsageSnapshotStatusEnum.Ok, WindowsJson = "[{\"name\":\"weekly\",\"usedPercent\":44}]" };
+                        await database.UsageSnapshots.CreateAsync(raw, new List<string>(), token).ConfigureAwait(false); snapshotId = raw.Id;
+                        CaptainSelectionRecordSet records = new CaptainSelectionRecordSet { Policy = CaptainSelectionPolicyRevision.FromSettings(owner.TenantId, new UsageSelectionSettings()) };
+                        records.Decision.TenantId = owner.TenantId; records.Decision.UserId = owner.UserId; records.Decision.MissionId = mission.Id;
+                        records.Decision.ExecutionAttemptId = records.Decision.Id; records.Decision.PolicyRevisionId = records.Policy.Id;
+                        records.Decision.Mode = UsageSelectionModeEnum.Observe; records.Decision.Outcome = "Waiting"; records.Decision.Trigger = "Waiting";
+                        records.Decision.EvaluatedUtc = DateTime.UtcNow; records.Decision.AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion; records.Decision.PrimaryReasonCode = "UsageStale";
+                        records.Decision.CandidateCount = 1; decisionId = records.Decision.Id;
+                        CaptainSelectionCandidateRecord candidate = new CaptainSelectionCandidateRecord { TenantId = owner.TenantId, UserId = owner.UserId, DecisionId = decisionId,
+                            CaptainId = "cpt_retained", CaptainName = "Retained captain", ConfiguredModel = "configured-model", Rank = 1,
+                            Band = UsageSelectionBandEnum.Unknown, PrimaryReasonCode = "UsageStale", AvailablePercent = 56, EvidenceCapturedUtc = raw.CapturedUtc };
+                        candidateId = candidate.Id; records.Candidates.Add(candidate);
+                        records.Windows.Add(new CaptainSelectionWindowRecord { TenantId = owner.TenantId, UserId = owner.UserId, DecisionId = decisionId, CandidateId = candidateId,
+                            SnapshotId = raw.Id, CapturedUtc = raw.CapturedUtc, WindowKey = "weekly", WindowName = "Weekly allowance", UsedPercent = 44, Applicable = true });
+                        await database.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
+                        AssertEqual(1, await database.UsageSnapshots.DeleteOlderThanAsync(DateTime.UtcNow.AddDays(-90), token).ConfigureAwait(false));
+                        AssertNull(await database.UsageSnapshots.ReadAsync(snapshotId, owner.TenantId, token).ConfigureAwait(false));
+                    }
+                    using (InProcessArmadaServer restarted = await InProcessArmadaServer.StartAsync(directory, settings).ConfigureAwait(false))
+                    {
+                        using HttpClient caller = owner.CreateClient(restarted.BaseUrl);
+                        using HttpResponseMessage reply = await caller.GetAsync("/api/v1/captain-selection-decisions/" + decisionId, token).ConfigureAwait(false);
+                        reply.EnsureSuccessStatusCode();
+                        CaptainSelectionDecisionDetail detail = await JsonHelper.DeserializeAsync<CaptainSelectionDecisionDetail>(reply).ConfigureAwait(false);
+                        AssertEqual(missionId, detail.Decision.MissionId); AssertEqual("Retained captain", detail.Candidates.Objects.Single().CaptainName);
+                        AssertEqual(56d, detail.Candidates.Objects.Single().AvailablePercent); AssertFalse(detail.Candidates.Objects.Single().CaptainAvailable);
+                        ArmadaServer runtime = (ArmadaServer)typeof(InProcessArmadaServer).GetField("_Server", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(restarted)!;
+                        DatabaseDriver database = (DatabaseDriver)typeof(ArmadaServer).GetField("_Database", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(runtime)!;
+                        CaptainSelectionWindowRecord window = (await database.CaptainSelections.ReadWindowsAsync(owner.TenantId, decisionId, candidateId, owner.UserId, owner.UserId, token).ConfigureAwait(false)).Single();
+                        AssertEqual(snapshotId, window.SnapshotId); AssertEqual(44d, window.UsedPercent); AssertNull(window.Unit);
+                        AssertNull(await database.UsageSnapshots.ReadAsync(snapshotId, owner.TenantId, token).ConfigureAwait(false));
+                    }
+                }),
                 new TestCaseDescriptor(_SuiteId, "live_strategy_settings_revision_and_authorization", "Live configurable strategy survives reload and rejects stale and unauthorized updates", async token =>
                 {
                     string directory = TestTemp.NewDirectory("selection-settings-api");

@@ -127,7 +127,7 @@ function CaptainSelectionBody({ missionId, status, revision, onOpen }: Selection
           <KeyValueRow label={t('Captain')} value={row.captainName || row.captainId}
             onPress={row.captainAvailable ? () => onOpen(`/captains/${encodeURIComponent(row.captainId)}`) : undefined} />
           <AppText selectable variant="caption" muted>{row.model || t('Unknown')}</AppText>
-          <AppText variant="label">{t(selectionOutcomeKey(row))}</AppText>
+          <AppText variant="label">{t(selectionOutcomeKey(row, view === 'preview'))}</AppText>
           <AppText>{t(selectionReasonKey(row.reasonCode))}</AppText>
           <AppText variant="caption" muted>{t('usageSelection.headroomValue', { value: percent(row.availablePercent) })}</AppText>
           {row.capturedUtc ? <AppText variant="caption" muted>{t('usageSelection.observedAt', { time: formatDateTime(row.capturedUtc) })}</AppText> : null}

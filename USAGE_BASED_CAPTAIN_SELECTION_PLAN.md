@@ -15,8 +15,8 @@ The required v1.3.0 deliverable comprises U0 through U6 below: observation mode,
 - [ ] Finish configurable strategy integration across all clients and Enforce: FirstAvailable compatibility default plus MostRemainingAllowance and MostUsedAllowance now exist in typed settings, policy and stored revisions; Observe dispatch, live server configuration, Dashboard controls, MCP and SDK contracts are implemented. Enforce, the shared Dashboard mission card and Helm inspection are implemented; remaining native controls and recovery actions are pending.
 - [x] U1 storage foundation: migrations 123/124 on all providers, typed immutable history/evidence, policy/strategy revisions, scoped paging, reservation CAS/retention, capture-start timing and atomic Observe-mode claim/history primitives. See [validation](docs/usage-selection/U1_STORAGE_VALIDATION.md).
 - [x] U1 live policy coordinator and Dashboard settings controls, REST/MCP updates, environment metadata, optimistic revisions and recoverable persistence. See [segment notes](docs/usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md).
-- [ ] Finish U1: remaining client controls and milestone-wide validation. Enforcement is now connected and opt-in; default Observe behavior is preserved.
-- [ ] U2 completion: Observe dispatch/repair records, bounded evidence loading, server preview/history, MCP/SDK reads and conservative shadow reconciliation are implemented. Dashboard mission comparison and Helm reads are implemented and tested. Remaining exit checks include complete read-only placement preview parity and restart/raw-pruning operator validation.
+- [x] U1 complete: provider-neutral storage/migrations and scoped ledger guards, live Dashboard/REST/MCP settings with persistence/revision/override validation, and four-provider lifecycle tests. Remaining native settings/recovery workflows belong to U4.
+- [ ] U2 exit verified; final wave build pending: Observe dispatch/repair, bounded evidence loading, scoped history/preview/client inspection, restart/raw-capture pruning and responsive comparison pass. Preview mirrors retry/placement-policy readiness without provisioning a dock; a proposed choice is never labeled an admitted execution.
 - [ ] U3 completion: enforced strategy dispatch/repair, shared-account transaction locks, source/budget/version revalidation, credential-host checks and unreserved-execution cutover accounting are implemented. SQLite, PostgreSQL, MySQL and SQL Server admission/repair races pass; PostgreSQL/MySQL mission ownership mapping was repaired and regression-tested; classified cooldowns, authorized exceptions, recovery actions and full lifecycle/operator validation remain.
 - [ ] U4 complete client/operator surfaces.
 - [ ] U5 observability, provider/stress and simulated-user validation.
@@ -39,7 +39,8 @@ U0's design/UX review and implementation map are recorded in the linked review. 
 - [x] Mobile mission overview selection section uses existing native controls for recorded model provenance, comparisons, paged/filterable history, retained detail/JSON and blocked read-only previews. Deleted captains have no link; revoked access clears evidence. Polling pauses off-screen/background.
 - [x] Shared TUI/Mobile API parity inventories include all five reads. Native recovery/settings controls and the TUI mission inspection workflow remain U4 work.
 - [x] Native tests/type checking/lint and shared-module lint pass; terminal display/focus/parity/localization checks pass with an explicit headless default palette, independent of shell `NO_COLOR`.
-- [ ] Finish full-suite interaction diagnosis, commit/push and follow-up `build-all v1.3.0`.
+- [x] Native follow-up committed/pushed as `1f3b59b78`; `build-all v1.3.0` completed for all images and VSIX.
+- [ ] U5 verification follow-up: the omnibus run has an order-dependent plain-text MCP bulk-error reply; the complete E2E group (1,346 passed, one skipped) and combined Client/Database/ResponseShape group (796 passed) both pass. The diagnostic now preserves the unexpected reply for the next omnibus investigation.
 
 ## 1. Requirements and implementation rules
 
@@ -264,16 +265,16 @@ Every unchecked task is future work. Each milestone ends with recorded automated
 
 ### U1. Schema, settings and immutable history
 
-- [ ] Add typed entities/enums/DTOs, PrettyId prefixes, provider-neutral interfaces and migrations/mappers for all four providers. Add indexes, ownership, immutable decision writes, reservation transitions, retention and restart reconciliation primitives.
+- [x] Add typed entities/enums/DTOs, PrettyId prefixes, provider-neutral interfaces and migrations/mappers for all four providers. Add indexes, ownership, immutable decision writes, reservation transitions, retention and restart reconciliation primitives.
 - [x] Add live UsageSelection settings through REST/MCP/settings catalogs, validation, revision recording and environment override metadata. Observe preserves current scheduling behavior.
-- [ ] Test fresh/upgrade/replay, rollback-on-failure, all typed round trips, authorization/counts, retention and snapshot/captain deletion behavior on every provider.
-- [ ] Exit: settings usable through existing surfaces and empty/history states reviewed; no enforcement yet and no unscoped ledger API.
+- [x] Test fresh/upgrade/replay, rollback-on-failure, all typed round trips, authorization/counts, retention and snapshot/captain deletion behavior on every provider.
+- [x] Exit: settings usable through existing surfaces and empty/history states reviewed; no enforcement yet and no unscoped ledger API.
 
 ### U2. Observe mode vertical slice
 
 - [x] Implement the pure evaluator, batched evidence loader, deterministic preference bands and read-only preview using shared eligibility. Implement actual versus hypothetical records and material waiting-state deduplication. Full placement/backoff preview parity is tracked below.
-- [ ] Persist actual attempt decisions and shadow reservations without altering current routing, holds, slot counts or reset behavior. Capture intended/actual model and execution correlations.
-- [ ] Add mission summary/history APIs, MCP/SDK/Helm reads and minimal shared Dashboard mission section. Complete Observe-mode parity and candidate redaction tests.
+- [x] Persist actual attempt decisions and shadow reservations without altering current routing, holds, slot counts or reset behavior. Capture intended/actual model and execution correlations.
+- [x] Add mission summary/history APIs, MCP/SDK/Helm reads and minimal shared Dashboard mission section. Complete Observe-mode parity and candidate redaction tests.
 - [ ] Exit: dispatch a mission end to end and inspect why current versus hypothetical choices differ; evidence survives restart/raw snapshot pruning and the comparison works responsively.
 
 ### U3. Atomic enforcement and recovery

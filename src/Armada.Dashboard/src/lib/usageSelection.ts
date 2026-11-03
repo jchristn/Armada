@@ -22,7 +22,8 @@ export const selectionReasons: Record<string, string> = {
 export function selectionReasonKey(code?: string | null): string {
   return code ? selectionReasons[code] ?? 'usageSelection.reason.routing' : 'usageSelection.reason.eligible';
 }
-export function selectionOutcomeKey(row: CaptainSelectionCandidateView): string {
+export function selectionOutcomeKey(row: CaptainSelectionCandidateView, preview = false): string {
+  if (preview && (row.actualSelection || row.hypotheticalSelection)) return 'usageSelection.proposed';
   return row.actualSelection ? 'usageSelection.selected' : row.hypotheticalSelection ? 'usageSelection.proposed'
     : row.band === 'Blocked' ? 'usageSelection.blocked' : row.band === 'Unknown' ? 'usageSelection.unknownState' : 'usageSelection.eligible';
 }
