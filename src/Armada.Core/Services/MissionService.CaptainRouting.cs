@@ -162,18 +162,24 @@ namespace Armada.Core.Services
                         status.Detail = current != null ? "working on mission '" + current.Title + "'" : "working on another mission";
                         break;
                     case CaptainStateEnum.Planning:
-                        PlanningSession? planning = (await _Database.PlanningSessions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
+                        PlanningSession? planning = !String.IsNullOrEmpty(captain.CurrentSessionId)
+                            ? await _Database.PlanningSessions.ReadAsync(captain.CurrentSessionId, token).ConfigureAwait(false)
+                            : (await _Database.PlanningSessions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
                             .Where(p => p.Status == PlanningSessionStatusEnum.Created || p.Status == PlanningSessionStatusEnum.Active || p.Status == PlanningSessionStatusEnum.Responding || p.Status == PlanningSessionStatusEnum.Stopping)
                             .OrderByDescending(p => p.LastUpdateUtc)
                             .FirstOrDefault();
+                        if (planning != null && (planning.CaptainId != captain.Id || planning.TenantId != mission.TenantId || (planning.UserId != null && planning.UserId != mission.UserId))) planning = null;
                         status.PlanningSessionId = planning?.Id;
                         status.Detail = planning != null ? "in planning session '" + planning.Title + "'" : "reserved by a planning session";
                         break;
                     case CaptainStateEnum.Refining:
-                        ObjectiveRefinementSession? refinement = (await _Database.ObjectiveRefinementSessions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
+                        ObjectiveRefinementSession? refinement = !String.IsNullOrEmpty(captain.CurrentSessionId)
+                            ? await _Database.ObjectiveRefinementSessions.ReadAsync(captain.CurrentSessionId, token).ConfigureAwait(false)
+                            : (await _Database.ObjectiveRefinementSessions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
                             .Where(r => r.Status == ObjectiveRefinementSessionStatusEnum.Created || r.Status == ObjectiveRefinementSessionStatusEnum.Active || r.Status == ObjectiveRefinementSessionStatusEnum.Responding || r.Status == ObjectiveRefinementSessionStatusEnum.Stopping)
                             .OrderByDescending(r => r.LastUpdateUtc)
                             .FirstOrDefault();
+                        if (refinement != null && (refinement.CaptainId != captain.Id || refinement.TenantId != mission.TenantId || (refinement.UserId != null && refinement.UserId != mission.UserId))) refinement = null;
                         status.RefinementSessionId = refinement?.Id;
                         status.ObjectiveId = refinement?.ObjectiveId;
                         Objective? objective = refinement == null || String.IsNullOrEmpty(refinement.ObjectiveId) ? null : await _Database.Objectives.ReadAsync(refinement.ObjectiveId, token).ConfigureAwait(false);

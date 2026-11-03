@@ -7934,6 +7934,10 @@ Global occupancy counts Assigned/InProgress in a single SQL snapshot. Runtime an
 
 `mission.admission_stuck` is scoped to its mission and links to that mission. Its payload contains `ReadyObservations` (3) and `MissionVersionUtc`. The monitor samples at most 64 Pending missions per tick in rotating three-tick windows, requiring the same Pending version to pass readiness before and after dispatch. Memory/global deferrals, launch-policy or placement waits, in-flight assignments and known preparation/launch failures do not count. Readiness probes do not persist routing preferences or claim/launch work. This is a sampled investigation signal, not proof that capacity stayed continuously available or an automatic retry/cancel. Unchanged episodes are deduplicated; changes/blockers reset the count. Event endpoints and response fields remain unchanged.
 
+## v1.3.0 exclusive session ownership
+
+Planning and backlog refinement reserve a captain atomically before provisioning or activating the session. They require an active idle captain with no execution slots; spare mission capacity does not permit an exclusive session. Competing creation keeps the existing REST conflict response (409) or MCP tool error and cannot release the winner. Runtime updates and stop/failure cleanup are scoped to the session id. Recovery reclaims an available captain or its matching owner; if another session or mission owns it, the recovering session fails with an ownership explanation while that work is preserved. Pending waiting links use the recorded session owner. No request fields or response shapes change.
+
 ## v1.3.0 waiting diagnostics
 
 Pending mission reads include `AssignmentBlocker` (`assignmentBlocker` after camel-case client normalization). REST `GET /api/v1/missions/{id}` and MCP `mission_status` compute the same explanation; non-Pending missions have no blocker. The existing safety, capacity, tenant and user restrictions still apply.

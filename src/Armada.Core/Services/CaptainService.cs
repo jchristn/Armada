@@ -179,6 +179,13 @@ namespace Armada.Core.Services
                 }
             }
 
+            // Exclusive ownership is released by session id, never through a stale entity snapshot.
+            if (captain.CurrentSessionId != null)
+            {
+                await _Database.Captains.TryReleaseExclusiveAsync(captain.Id, captain.CurrentSessionId, token).ConfigureAwait(false);
+                return;
+            }
+
             // Clear captain assignment
             captain.State = CaptainStateEnum.Idle;
             if (!String.IsNullOrEmpty(captain.CurrentMissionId))

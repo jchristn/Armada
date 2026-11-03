@@ -177,13 +177,14 @@ namespace Test.Shared.Suites.Services
                 using Harness h = await Harness.CreateAsync();
                 Mission verify = await h.MarkVerifyingAsync();
                 Captain planning = (await h.Db.Captains.ReadAsync(h.Captain.Id))!;
-                planning.State = CaptainStateEnum.Planning; planning.CurrentSessionId = "planning-session";
-                planning.CurrentMissionId = "planning-session"; planning.ProcessId = 9020; planning.RecoveryAttempts = 2;
+                AssertTrue(await h.Db.Captains.TryClaimExclusiveAsync(planning.Id, "planning-session", CaptainStateEnum.Planning));
+                AssertTrue(await h.Db.Captains.TryUpdateExclusiveAsync(planning.Id, "planning-session", CaptainStateEnum.Planning, null, 9020));
+                planning = (await h.Db.Captains.ReadAsync(planning.Id))!; planning.RecoveryAttempts = 2;
                 await h.Db.Captains.UpdateAsync(planning);
                 AssertTrue(await h.Db.Captains.ReleaseVerificationCapacityAsync(h.Captain.Id, verify.Id, 4242, verify.LastUpdateUtc));
                 Captain stored = (await h.Db.Captains.ReadAsync(h.Captain.Id))!;
                 AssertEqual(CaptainStateEnum.Planning, stored.State); AssertEqual("planning-session", stored.CurrentSessionId);
-                AssertEqual("planning-session", stored.CurrentMissionId); AssertEqual(9020, stored.ProcessId); AssertEqual(2, stored.RecoveryAttempts);
+                AssertNull(stored.CurrentMissionId); AssertEqual(9020, stored.ProcessId); AssertEqual(2, stored.RecoveryAttempts);
                 AssertFalse(await h.Missions.TryAdmitVerificationResumeAsync(verify, h.Captain));
             });
             Add("public_cancel_releases_only_verification_ownership", async () =>
@@ -203,6 +204,27 @@ namespace Test.Shared.Suites.Services
                 await h.MarkVerifyingAsync(); await h.Admiral.RecallAllAsync();
                 AssertEqual(MissionStatusEnum.Cancelled, (await h.Db.Missions.ReadAsync(h.Mission.Id))!.Status);
                 AssertNull(await h.Db.Captains.ReadMissionProcessAsync(h.Captain.Id, h.Mission.Id));
+            });
+            Add("recall_releases_exclusive_owner_and_retained_verification", async () =>
+            {
+                using Harness h = await Harness.CreateAsync(); Mission verify = await h.MarkVerifyingAsync();
+                AssertTrue(await h.Db.Captains.TryClaimExclusiveAsync(h.Captain.Id, "session", CaptainStateEnum.Planning));
+                Captain owner = (await h.Db.Captains.ReadAsync(h.Captain.Id))!;
+                AssertNull(owner.ForMission(verify).CurrentSessionId);
+                await h.Captains.RecallAsync(h.Captain.Id);
+                AssertEqual(MissionStatusEnum.Cancelled, (await h.Db.Missions.ReadAsync(verify.Id))!.Status);
+                Captain stored = (await h.Db.Captains.ReadAsync(h.Captain.Id))!;
+                AssertNull(stored.CurrentSessionId); AssertEqual(CaptainStateEnum.Idle, stored.State);
+                AssertNull(await h.Db.Captains.ReadMissionProcessAsync(h.Captain.Id, verify.Id));
+            });
+            Add("recall_releases_exclusive_owner_without_a_mission", async () =>
+            {
+                using Harness h = await Harness.CreateAsync();
+                Captain captain = await h.Db.Captains.CreateAsync(new Captain("exclusive refiner"));
+                AssertTrue(await h.Db.Captains.TryClaimExclusiveAsync(captain.Id, "session", CaptainStateEnum.Refining));
+                await h.Captains.RecallAsync(captain.Id);
+                Captain stored = (await h.Db.Captains.ReadAsync(captain.Id))!;
+                AssertNull(stored.CurrentSessionId); AssertEqual(CaptainStateEnum.Idle, stored.State);
             });
             return new TestSuiteDescriptor(suite, "Verification capacity and recovery", cases);
         }

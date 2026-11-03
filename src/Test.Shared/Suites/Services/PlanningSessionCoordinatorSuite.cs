@@ -3,6 +3,7 @@ namespace Test.Shared.Suites.Services
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.Data.Sqlite;
@@ -643,6 +644,75 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(recoveredDock);
                     AssertFalse(recoveredDock!.Active);
                 }
+            }));
+
+            cases.Add(CaseAsync("create_race_preserves_exclusive_winner", "A losing creation cannot release a planner or admit a mission during provisioning", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                using CoordinatorFixture fixture = new CoordinatorFixture(testDb.Driver);
+                Vessel vessel = await fixture.CreateVesselAsync(); Captain captain = await fixture.CreateCaptainAsync("race");
+                Captain stale = (await testDb.Driver.Captains.ReadAsync(captain.Id))!;
+                TaskCompletionSource<bool> entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                TaskCompletionSource<bool> resume = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                fixture.Coordinator.PlaceDockAsync = async _ => { entered.TrySetResult(true); await resume.Task; return DockPlacement.OnAdmiral("fixture"); };
+                Task<PlanningSession> first = fixture.Coordinator.CreateAsync(null, null, captain, vessel, new PlanningSessionCreateRequest());
+                try
+                {
+                    AssertTrue(await Task.WhenAny(entered.Task, Task.Delay(5000)) == entered.Task);
+                    await CaptureExceptionAsync<CaptainNotIdleException>(() => fixture.Coordinator.CreateAsync(null, null, stale, vessel, new PlanningSessionCreateRequest()));
+                    Captain reserved = (await testDb.Driver.Captains.ReadAsync(captain.Id))!;
+                    AssertEqual(CaptainStateEnum.Planning, reserved.State); AssertNotNull(reserved.CurrentSessionId);
+                    Mission mission = await testDb.Driver.Missions.CreateAsync(new Mission("competing"));
+                    AssertFalse(await testDb.Driver.Captains.TryClaimAsync(captain.Id, mission.Id, null));
+                }
+                finally { resume.TrySetResult(true); }
+                PlanningSession winner = await first;
+                AssertEqual(winner.Id, (await testDb.Driver.Captains.ReadAsync(captain.Id))!.CurrentSessionId);
+                await fixture.Coordinator.StopAsync(winner);
+                AssertEqual(CaptainStateEnum.Idle, (await testDb.Driver.Captains.ReadAsync(captain.Id))!.State);
+            }));
+
+            cases.Add(CaseAsync("stop_preserves_new_owner", "Stopping an old session preserves a newer captain owner", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                using CoordinatorFixture fixture = new CoordinatorFixture(testDb.Driver);
+                Vessel vessel = await fixture.CreateVesselAsync(); Captain captain = await fixture.CreateCaptainAsync("owner");
+                PlanningSession session = await fixture.Coordinator.CreateAsync(null, null, captain, vessel, new PlanningSessionCreateRequest());
+                AssertTrue(await testDb.Driver.Captains.TryReleaseExclusiveAsync(captain.Id, session.Id));
+                AssertTrue(await testDb.Driver.Captains.TryClaimExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Planning));
+                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Planning, "new-dock", 999999));
+                await fixture.Coordinator.StopAsync(session);
+                Captain stored = (await testDb.Driver.Captains.ReadAsync(captain.Id))!;
+                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertEqual("new-dock", stored.CurrentDockId);
+                AssertEqual(PlanningSessionStatusEnum.Stopped, (await testDb.Driver.PlanningSessions.ReadAsync(session.Id))!.Status);
+            }));
+
+            cases.Add(CaseAsync("recovery_preserves_new_owner", "Recovery preserves a newer captain owner", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                using CoordinatorFixture fixture = new CoordinatorFixture(testDb.Driver);
+                Vessel vessel = await fixture.CreateVesselAsync(); Captain captain = await fixture.CreateCaptainAsync("owner");
+                PlanningSession session = await fixture.Coordinator.CreateAsync(null, null, captain, vessel, new PlanningSessionCreateRequest());
+                AssertTrue(await testDb.Driver.Captains.TryReleaseExclusiveAsync(captain.Id, session.Id));
+                AssertTrue(await testDb.Driver.Captains.TryClaimExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Planning));
+                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Planning, "new-dock", 999999));
+                await fixture.Coordinator.RecoverSessionsAsync();
+                Captain stored = (await testDb.Driver.Captains.ReadAsync(captain.Id))!;
+                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertEqual("new-dock", stored.CurrentDockId);
+                AssertEqual(PlanningSessionStatusEnum.Failed, (await testDb.Driver.PlanningSessions.ReadAsync(session.Id))!.Status);
+            }));
+
+            cases.Add(CaseAsync("cancelled_creation_releases_exclusive_claim", "Cancellation during provisioning releases only its own reservation", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                using CoordinatorFixture fixture = new CoordinatorFixture(testDb.Driver);
+                Vessel vessel = await fixture.CreateVesselAsync(); Captain captain = await fixture.CreateCaptainAsync("cancel");
+                using CancellationTokenSource cancellation = new();
+                fixture.Coordinator.PlaceDockAsync = _ => { cancellation.Cancel(); throw new OperationCanceledException(cancellation.Token); };
+                await CaptureExceptionAsync<OperationCanceledException>(() => fixture.Coordinator.CreateAsync(null, null, captain, vessel, new PlanningSessionCreateRequest(), cancellation.Token));
+                Captain stored = (await testDb.Driver.Captains.ReadAsync(captain.Id))!;
+                AssertEqual(CaptainStateEnum.Idle, stored.State); AssertNull(stored.CurrentSessionId);
+                AssertEqual(PlanningSessionStatusEnum.Failed, (await testDb.Driver.PlanningSessions.EnumerateByCaptainAsync(captain.Id)).Single().Status);
             }));
 
             return new TestSuiteDescriptor(

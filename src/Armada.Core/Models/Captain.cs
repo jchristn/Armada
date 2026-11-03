@@ -242,6 +242,7 @@ namespace Armada.Core.Models
         public Captain ForMission(Mission mission)
         {
             Captain scoped = (Captain)MemberwiseClone();
+            scoped.CurrentSessionId = null;
             scoped.CurrentMissionId = mission.Id;
             scoped.CurrentDockId = mission.DockId;
             scoped.ProcessId = mission.ProcessId;

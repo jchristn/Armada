@@ -14,6 +14,18 @@ namespace Armada.Core.Database.Postgresql.Implementations
         }
 
         /// <inheritdoc />
+        public Task<bool> TryClaimExclusiveAsync(string captainId, string sessionId, Armada.Core.Enums.CaptainStateEnum state, CancellationToken token = default, bool recover = false)
+            => WithSlotsAsync(store => store.ClaimExclusiveAsync(captainId, sessionId, state, recover, token), token);
+
+        /// <inheritdoc />
+        public Task<bool> TryUpdateExclusiveAsync(string captainId, string sessionId, Armada.Core.Enums.CaptainStateEnum state, string? dockId, int? processId, CancellationToken token = default)
+            => WithSlotsAsync(store => store.UpdateExclusiveAsync(captainId, sessionId, state, dockId, processId, token), token);
+
+        /// <inheritdoc />
+        public Task<bool> TryReleaseExclusiveAsync(string captainId, string sessionId, CancellationToken token = default)
+            => WithSlotsAsync(store => store.ReleaseExclusiveAsync(captainId, sessionId, token), token);
+
+        /// <inheritdoc />
         public Task<bool> ReleaseVerificationCapacityAsync(string captainId, string missionId, int processId, DateTime version, CancellationToken token = default)
             => WithSlotsAsync(store => store.ReleaseVerificationCapacityAsync(captainId, missionId, processId, version, token), token);
 

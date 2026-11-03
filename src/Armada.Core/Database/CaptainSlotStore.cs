@@ -31,6 +31,57 @@ namespace Armada.Core.Database
             return cmd;
         }
 
+        private static void ValidateExclusive(string captainId, string sessionId, CaptainStateEnum? state = null)
+        {
+            if (String.IsNullOrWhiteSpace(captainId)) throw new ArgumentNullException(nameof(captainId));
+            if (String.IsNullOrWhiteSpace(sessionId)) throw new ArgumentNullException(nameof(sessionId));
+            if (state.HasValue && state != CaptainStateEnum.Planning && state != CaptainStateEnum.Refining && state != CaptainStateEnum.Analyzing)
+                throw new ArgumentOutOfRangeException(nameof(state), "Exclusive ownership requires Planning, Refining or Analyzing.");
+        }
+
+        internal async Task<bool> ClaimExclusiveAsync(string captainId, string sessionId, CaptainStateEnum state, bool recover, CancellationToken token)
+        {
+            ValidateExclusive(captainId, sessionId, state);
+            using DbTransaction tx = await _Connection.BeginTransactionAsync(token).ConfigureAwait(false);
+            using DbCommand cmd = Command(tx, @"UPDATE captains SET current_mission_id=NULL,current_dock_id=CASE WHEN current_session_id=@mission THEN current_dock_id ELSE NULL END,
+                process_id=CASE WHEN current_session_id=@mission THEN process_id ELSE NULL END,
+                current_session_id=@mission,state=@value,last_heartbeat_utc=@now,last_update_utc=@now
+                WHERE id=@id AND active_mission_count=0 AND
+                ((state='Idle' AND current_session_id IS NULL AND active=" + (_Postgres ? "TRUE" : "1") + @"
+                  AND (quarantine_until_utc IS NULL OR quarantine_until_utc<=@now))
+                 OR (state=@value AND (current_session_id=@mission" + (recover ? " OR current_session_id IS NULL" : "") + ")));", captainId, sessionId, state.ToString());
+            bool changed = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) == 1;
+            await tx.CommitAsync(token).ConfigureAwait(false);
+            return changed;
+        }
+
+        internal async Task<bool> UpdateExclusiveAsync(string captainId, string sessionId, CaptainStateEnum state, string? dockId, int? processId, CancellationToken token)
+        {
+            ValidateExclusive(captainId, sessionId, state);
+            using DbTransaction tx = await _Connection.BeginTransactionAsync(token).ConfigureAwait(false);
+            using DbCommand cmd = Command(tx, @"UPDATE captains SET current_dock_id=@dock,process_id=@process,
+                last_heartbeat_utc=@now,last_update_utc=@now
+                WHERE id=@id AND current_session_id=@mission AND state=@value AND active_mission_count=0;", captainId, sessionId, state.ToString());
+            DbParameter dock = cmd.CreateParameter(); dock.ParameterName = "@dock"; dock.Value = (object?)dockId ?? DBNull.Value; cmd.Parameters.Add(dock);
+            DbParameter process = cmd.CreateParameter(); process.ParameterName = "@process"; process.Value = (object?)processId ?? DBNull.Value; cmd.Parameters.Add(process);
+            bool changed = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) == 1;
+            await tx.CommitAsync(token).ConfigureAwait(false);
+            return changed;
+        }
+
+        internal async Task<bool> ReleaseExclusiveAsync(string captainId, string sessionId, CancellationToken token)
+        {
+            ValidateExclusive(captainId, sessionId);
+            using DbTransaction tx = await _Connection.BeginTransactionAsync(token).ConfigureAwait(false);
+            using DbCommand cmd = Command(tx, @"UPDATE captains SET current_session_id=NULL,current_mission_id=NULL,
+                current_dock_id=NULL,process_id=NULL,state=CASE WHEN state IN ('Planning','Refining','Analyzing','Stopping') THEN 'Idle' ELSE state END,
+                last_heartbeat_utc=@now,last_update_utc=@now
+                WHERE id=@id AND current_session_id=@mission AND active_mission_count=0;", captainId, sessionId);
+            bool changed = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) == 1;
+            await tx.CommitAsync(token).ConfigureAwait(false);
+            return changed;
+        }
+
         internal async Task<bool> ClaimAsync(string captainId, string missionId, string? dockId, CancellationToken token, int ceiling = 256)
         {
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));

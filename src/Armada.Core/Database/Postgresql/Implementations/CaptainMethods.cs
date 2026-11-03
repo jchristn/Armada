@@ -194,11 +194,11 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         preferred_persona = @preferred_persona,
                         runtime_options_json = @runtime_options_json,
                             max_concurrency = CASE WHEN @update_concurrency THEN @max_concurrency ELSE max_concurrency END,
-                            current_session_id = @current_session_id,
-                        state = CASE WHEN active_mission_count > 0 AND state IN ('Quarantined','Stopping') AND @state = 'Working' THEN state WHEN active_mission_count > 0 AND @state = 'Idle' THEN CASE WHEN state='Quarantined' AND @quarantine_until_utc IS NULL AND @quarantine_reason IS NULL THEN 'Working' ELSE state END WHEN active_mission_count > 0 AND @state IN ('Planning','Refining','Analyzing') THEN state WHEN active_mission_count > 1 AND @state = 'Stalled' THEN 'Working' ELSE @state END,
-                        current_mission_id = CASE WHEN active_mission_count > 0 THEN current_mission_id ELSE @current_mission_id END,
-                        current_dock_id = CASE WHEN active_mission_count > 0 THEN current_dock_id ELSE @current_dock_id END,
-                        process_id = CASE WHEN active_mission_count > 0 THEN process_id ELSE @process_id END,
+                            current_session_id = current_session_id,
+                        state = CASE WHEN current_session_id IS NOT NULL THEN state WHEN active_mission_count > 0 AND state IN ('Quarantined','Stopping') AND @state = 'Working' THEN state WHEN active_mission_count > 0 AND @state = 'Idle' THEN CASE WHEN state='Quarantined' AND @quarantine_until_utc IS NULL AND @quarantine_reason IS NULL THEN 'Working' ELSE state END WHEN active_mission_count > 0 AND @state IN ('Planning','Refining','Analyzing') THEN state WHEN active_mission_count > 1 AND @state = 'Stalled' THEN 'Working' ELSE @state END,
+                        current_mission_id = CASE WHEN current_session_id IS NOT NULL OR active_mission_count > 0 THEN current_mission_id ELSE @current_mission_id END,
+                        current_dock_id = CASE WHEN current_session_id IS NOT NULL OR active_mission_count > 0 THEN current_dock_id ELSE @current_dock_id END,
+                        process_id = CASE WHEN current_session_id IS NOT NULL OR active_mission_count > 0 THEN process_id ELSE @process_id END,
                         recovery_attempts = @recovery_attempts,
                         last_heartbeat_utc = @last_heartbeat_utc,
                         last_process_alive_utc = @last_process_alive_utc,
@@ -213,7 +213,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         usage_capture_harbor_id = @usage_capture_harbor_id,
                         active = CASE WHEN @update_active = TRUE THEN @active ELSE active END,
                         last_update_utc = @last_update_utc
-                        WHERE id = @id;";
+                        WHERE id = @id AND ((current_session_id IS NULL AND @current_session_id IS NULL) OR current_session_id = @current_session_id);";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)captain.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)captain.UserId ?? DBNull.Value);
@@ -455,7 +455,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = @"UPDATE captains SET state = CASE WHEN @state='Idle' AND active_mission_count>0 THEN 'Working' ELSE @state END, last_update_utc = @last_update_utc WHERE id = @id;";
+                    cmd.CommandText = @"UPDATE captains SET state = CASE WHEN current_session_id IS NOT NULL AND @state IN ('Idle','Working','Stalled') THEN state WHEN @state='Idle' AND active_mission_count>0 THEN 'Working' ELSE @state END, last_update_utc = @last_update_utc WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
                     cmd.Parameters.AddWithValue("@last_update_utc", DateTime.UtcNow);
@@ -746,7 +746,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = @"UPDATE captains SET state = CASE WHEN @state='Idle' AND active_mission_count>0 THEN 'Working' ELSE @state END, last_update_utc = @last_update_utc WHERE tenant_id = @tenantId AND id = @id;";
+                    cmd.CommandText = @"UPDATE captains SET state = CASE WHEN current_session_id IS NOT NULL AND @state IN ('Idle','Working','Stalled') THEN state WHEN @state='Idle' AND active_mission_count>0 THEN 'Working' ELSE @state END, last_update_utc = @last_update_utc WHERE tenant_id = @tenantId AND id = @id;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
@@ -818,7 +818,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         current_dock_id = @current_dock_id,
                         last_heartbeat_utc = @last_heartbeat_utc,
                         last_update_utc = @last_update_utc
-                        WHERE tenant_id = @tenantId AND id = @id AND active_mission_count = 0 AND state = 'Idle' AND active = TRUE;";
+                        WHERE tenant_id = @tenantId AND id = @id AND active_mission_count = 0 AND current_session_id IS NULL AND state = 'Idle' AND active = TRUE;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", CaptainStateEnum.Working.ToString());
@@ -848,7 +848,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.CommandText = @"UPDATE captains SET
                         state = @state,
                         last_update_utc = @last_update_utc
-                        WHERE tenant_id = @tenantId AND id = @id AND active_mission_count = 0 AND state = 'Idle' AND active = TRUE;";
+                        WHERE tenant_id = @tenantId AND id = @id AND active_mission_count = 0 AND current_session_id IS NULL AND state = 'Idle' AND active = TRUE;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
@@ -875,7 +875,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         state = 'Idle',
                         process_id = NULL,
                         last_update_utc = @last_update_utc
-                        WHERE tenant_id = @tenantId AND id = @id AND state = @state;";
+                        WHERE tenant_id = @tenantId AND id = @id AND active_mission_count = 0 AND current_session_id IS NULL AND state = @state;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", captainId);
                     cmd.Parameters.AddWithValue("@state", state.ToString());

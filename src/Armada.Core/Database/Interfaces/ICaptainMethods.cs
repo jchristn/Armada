@@ -93,6 +93,15 @@ namespace Armada.Core.Database.Interfaces
         /// </summary>
         Task<bool> TryClaimAsync(string captainId, string missionId, string? dockId, CancellationToken token = default, int ceiling = 256);
 
+        /// <summary>Atomically reserve an idle captain with no mission slots for an exclusive session. Recovery may adopt an unowned legacy session state; an existing matching owner is idempotent.</summary>
+        Task<bool> TryClaimExclusiveAsync(string captainId, string sessionId, CaptainStateEnum state, CancellationToken token = default, bool recover = false);
+
+        /// <summary>Update runtime fields only while the caller still owns the exclusive session.</summary>
+        Task<bool> TryUpdateExclusiveAsync(string captainId, string sessionId, CaptainStateEnum state, string? dockId, int? processId, CancellationToken token = default);
+
+        /// <summary>Release only the matching exclusive session, never another session or a mission assignment.</summary>
+        Task<bool> TryReleaseExclusiveAsync(string captainId, string sessionId, CancellationToken token = default);
+
         /// <summary>Reconcile durable slot ownership/counters from Assigned and InProgress missions after interruption.</summary>
         Task ReconcileMissionSlotsAsync(CancellationToken token = default);
 

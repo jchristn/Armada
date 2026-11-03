@@ -504,6 +504,34 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            foreach (bool privateOwner in new[] { false, true })
+                cases.Add(CaseAsync("planning_owner_reference_" + privateOwner, "Waiting diagnostics follow actual planning ownership without exposing private sessions", TestTags.Positive, async () =>
+                {
+                    using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                    Harness h = await BuildHarnessAsync(testDb.Driver);
+                    TenantMetadata tenant = await testDb.Driver.Tenants.CreateAsync(new TenantMetadata("Ownership privacy"));
+                    UserMaster user = await testDb.Driver.Users.CreateAsync(new UserMaster(tenant.Id, "owner@example.invalid", "test-password"));
+                    h.Vessel.TenantId = tenant.Id; await testDb.Driver.Vessels.UpdateAsync(h.Vessel);
+                    Captain captain = await AddCaptainAsync(testDb.Driver, "Planner", CaptainStateEnum.Idle);
+                    captain.TenantId = tenant.Id; await testDb.Driver.Captains.UpdateAsync(captain);
+                    PlanningSession owner = await testDb.Driver.PlanningSessions.CreateAsync(new PlanningSession
+                    {
+                        TenantId = tenant.Id, CaptainId = captain.Id, VesselId = h.Vessel.Id, Title = "Actual owner", Status = PlanningSessionStatusEnum.Created,
+                        UserId = privateOwner ? user.Id : null, LastUpdateUtc = DateTime.UtcNow.AddMinutes(-1)
+                    });
+                    await testDb.Driver.PlanningSessions.CreateAsync(new PlanningSession
+                    {
+                        TenantId = tenant.Id, CaptainId = captain.Id, VesselId = h.Vessel.Id, Title = "Unclaimed stale session", Status = PlanningSessionStatusEnum.Active
+                    });
+                    AssertTrue(await testDb.Driver.Captains.TryClaimExclusiveAsync(captain.Id, owner.Id, CaptainStateEnum.Planning));
+                    Mission mission = await AddMissionAsync(testDb.Driver, h.Vessel, "waiting", MissionStatusEnum.Pending);
+                    mission.TenantId = tenant.Id; await testDb.Driver.Missions.UpdateAsync(mission);
+                    MissionAssignmentBlocker blocker = (await h.Missions.GetAssignmentBlockerAsync(mission))!;
+                    AssertEqual(privateOwner ? null : owner.Id, blocker.Captains.Single().PlanningSessionId);
+                    AssertFalse(blocker.Captains.Single().Detail!.Contains("Unclaimed stale session"));
+                    AssertEqual(!privateOwner, blocker.Captains.Single().Detail!.Contains("Actual owner"));
+                }));
+
             return new TestSuiteDescriptor(SuiteId, "Mission assignment blocker", cases);
         }
 
