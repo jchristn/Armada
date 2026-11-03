@@ -12,7 +12,7 @@ import UsageOverTimeChart, { type UsageBucketSelection } from './UsageOverTimeCh
 import UsageState from './UsageState';
 import RefreshButton from '../shared/RefreshButton';
 
-/** Keep account scope, coverage caveats and interaction help available without pushing charts down. */
+/** Keep account scope and coverage caveats available without pushing charts down. */
 function UsageHelp({ warnings }: { warnings: string[] }) {
   const { t } = useLocale();
   return (
@@ -21,7 +21,6 @@ function UsageHelp({ warnings }: { warnings: string[] }) {
       <div className="usage-help-content text-dim">
         <p>{t('Account usage reported by captains may include direct use of Claude Code, Codex or other harnesses outside Armada with the same provider account.')}</p>
         {warnings.map(warning => <p key={warning}>{warning}</p>)}
-        <p>{t('Select a point, a bar or a row in the data table to list the missions completed in that bucket. Use the arrow keys to move between buckets and Enter to select.')}</p>
       </div>
     </details>
   );

@@ -33,3 +33,9 @@ Release command: `./build-all.sh v1.3.0`; execution log: `/tmp/armada-v130-backg
 Captain Usage no longer displays “Legacy records without captured membership are correlation only; account-specific views exclude them.” The account-wide scope note, chart instructions and other coverage warnings are preserved. The targeted Activity/chart/localization run passes all 23 tests, and the production build succeeds. Twelve light/dark desktop/tablet/phone checks confirm the legacy sentence is absent, the remaining two help paragraphs expand/collapse correctly, the page stays within the viewport and chart accessibility descriptions remain intact. The phone layout was visually inspected. The disposable server was stopped afterward.
 
 Release command: `./build-all.sh v1.3.0`; execution log: `/tmp/armada-v130-remove-legacy-note-build-all.log`.
+
+## Follow-up: remove visible chart instructions
+
+The point/bar/table selection and arrow-key instructions are also removed from visible Captain Usage help. The account-wide scope note remains, along with the chart controls and screen-reader descriptions. The production build and all 23 targeted Activity/chart/localization tests pass. Twelve theme/viewport checks confirm only the account-scope paragraph remains in the help disclosure, with no overflow and intact chart accessibility descriptions; the phone layout was visually inspected. The disposable server was stopped afterward.
+
+Release command: `./build-all.sh v1.3.0`; execution log: `/tmp/armada-v130-remove-chart-help-build-all.log`.

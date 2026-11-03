@@ -80,7 +80,7 @@ describe('Token usage tabs', () => {
     fireEvent.click(summary);
     expect(help).toHaveAttribute('open');
     expect(note).toBeVisible();
-    expect(within(help).getByText(/Select a point, a bar/)).toBeVisible();
+    expect(within(help).queryByText(/Select a point, a bar/)).not.toBeInTheDocument();
     expect(screen.getByTestId('where').textContent).toBe(query);
     expect(getUsageSeries).toHaveBeenCalledTimes(2);
   });

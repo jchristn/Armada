@@ -50,7 +50,7 @@ v1.3.0 focuses on **parallelization and concurrency**: more independent work in 
 
 - Remove the Dashboard’s Jobs tab/page and command shortcut. Preserve old Jobs bookmarks by redirecting to Events; route ongoing imports and health work to their existing views, and keep routine usage probes out of the header indicator.
 - Record terminal job outcomes in Events and actual failures as Error signals. Add scoped, paged `background_job_failed` interventions to Needs You; retries supersede old failures, and routine captures, cancellations and expected configuration discards do not become action items. Keep job APIs for workflow polling/cancellation.
-- Collapse Captain Usage’s account-scope and interaction guidance into an accessible About usage control beside the filters, with a compact Coverage indicator when applicable. Remove the legacy membership/correlation notice from this page. Preserve other coverage messages and chart keyboard/screen-reader instructions.
+- Keep Captain Usage’s account-scope guidance in an accessible About usage control beside the filters, with a compact Coverage indicator when applicable. Remove the legacy membership/correlation notice and visible chart-interaction instructions from this page. Preserve other coverage messages and chart keyboard/screen-reader instructions.
 
 ### Usage chart clarity
 
