@@ -90,7 +90,7 @@ namespace Armada.Tui.Screens.Build
             parallelVoyages.Validator = v => RangeOrBlank(v, 0, 1000);
             InputField parallelMissions = Input((editing?.MaxParallelMissionsPerVoyage ?? 4).ToString(CultureInfo.InvariantCulture), "4");
             parallelMissions.Validator = v => RangeOrBlank(v, 0, 1000);
-            OpsCheckField serialize = new OpsCheckField("Serialize Overlapping Missions", editing?.SerializeOverlappingMissions ?? false);
+            OpsCheckField serialize = new OpsCheckField("Serialize Overlapping Missions", editing?.SerializeOverlappingMissions ?? true);
             OpsCheckField modelContextOn = new OpsCheckField("Enable Model Context", editing?.EnableModelContext ?? true);
 
             InputField releasePrefix = Input(editing != null && !String.IsNullOrEmpty(editing.ReleaseBranchPrefix) ? editing.ReleaseBranchPrefix : "release/", null);

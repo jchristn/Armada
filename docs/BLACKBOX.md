@@ -1957,7 +1957,7 @@ rules). An explicit dependency is never replaced. The Admiral copies the advice 
 `Voyage.OverlapWarnings` and `Voyage.BriefLintWarnings` (at most 50 each). Both are transient (`JsonIgnore` when null,
 never stored) and appear on REST `POST /api/v1/missions` and `POST /api/v1/voyages`, MCP `create_mission` and
 `dispatch`, and any other caller of the Admiral's dispatch methods. An advisor that throws is logged and the dispatch continues without
-advice. `SerializeOverlappingMissions` (migration 105, `vessels.serialize_overlapping_missions`, default false) is set
+advice. `SerializeOverlappingMissions` (migration 105, `vessels.serialize_overlapping_missions`, default true for new vessels since v1.3.0; existing values preserved) is set
 with `PUT /api/v1/vessels/{id}`, `add_vessel` and `update_vessel` (`serializeOverlappingMissions`).
 
 #### Soft directory reservations (13.1.2)

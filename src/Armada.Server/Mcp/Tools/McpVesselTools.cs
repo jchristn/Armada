@@ -79,7 +79,7 @@ namespace Armada.Server.Mcp.Tools
                         maxParallelVoyages = new { type = "integer", description = "Maximum admitted voyage groups, 0..1000; zero is unlimited. Defaults to the configured vessel default (1). Negative values become 1." },
                         maxParallelMissionsPerVoyage = new { type = "integer", description = "Maximum running missions per voyage, 0..1000; zero is unlimited. Defaults to the configured vessel default (4). Negative values become 1." },
                         allowConcurrentMissions = new { type = "boolean", description = "Legacy stored flag; set maxParallelVoyages and maxParallelMissionsPerVoyage to control admission" },
-                        serializeOverlappingMissions = new { type = "boolean", description = "Chain a dispatched mission after an active mission whose files it overlaps (or whose reserved hotspot directory it touches) with dependsOnMissionId instead of running both in parallel (default false: overlaps are only reported as dispatch warnings)" },
+                        serializeOverlappingMissions = new { type = "boolean", description = "Chain a dispatched mission after an active mission whose files it overlaps (or whose reserved hotspot directory it touches) with dependsOnMissionId instead of running both in parallel (default true; false reports overlaps only as dispatch warnings)" },
                         autoApprove = new { type = "boolean", description = "Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting; omit to use the captain's setting" },
                         enableModelContext = new { type = "boolean", description = "Enable model context accumulation -- agents will update context with key information discovered during missions (default true)" },
                         defaultPipelineId = new { type = "string", description = "Default pipeline ID for dispatches to this vessel (ppl_ prefix)" },
@@ -110,7 +110,7 @@ namespace Armada.Server.Mcp.Tools
                     vessel.GitHubTokenOverride = request.GitHubTokenOverride;
                     vessel.MaxParallelVoyages = request.MaxParallelVoyages ?? (settings?.Concurrency.DefaultVesselMaxParallelVoyages ?? Constants.DefaultVesselMaxParallelVoyages);
                     vessel.MaxParallelMissionsPerVoyage = request.MaxParallelMissionsPerVoyage ?? (settings?.Concurrency.DefaultVesselMaxParallelMissionsPerVoyage ?? Constants.DefaultVesselMaxParallelMissionsPerVoyage);
-                    vessel.SerializeOverlappingMissions = request.SerializeOverlappingMissions ?? false;
+                    vessel.SerializeOverlappingMissions = request.SerializeOverlappingMissions ?? true;
                     vessel.AutoApprove = request.AutoApprove;
                     vessel.EnableModelContext = request.EnableModelContext ?? true;
                     vessel.DefaultPipelineId = request.DefaultPipelineId;

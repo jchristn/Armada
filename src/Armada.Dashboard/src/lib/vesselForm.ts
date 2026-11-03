@@ -65,7 +65,7 @@ export interface LandingModeOption {
 export const emptyVesselForm: VesselFormState = {
   name: '', fleetId: '', repoUrl: '', defaultBranch: 'main', localPath: '', workingDirectory: '',
   projectContext: '', styleGuide: '', enableModelContext: true, modelContext: '', gitHubTokenOverride: '', clearGitHubTokenOverride: false,
-  landingMode: 'LocalMerge', branchCleanupPolicy: 'LocalAndRemote', maxParallelVoyages: '1', maxParallelMissionsPerVoyage: '4', serializeOverlappingMissions: false, autoApproveMode: 'inherit', defaultPipelineId: '',
+  landingMode: 'LocalMerge', branchCleanupPolicy: 'LocalAndRemote', maxParallelVoyages: '1', maxParallelMissionsPerVoyage: '4', serializeOverlappingMissions: true, autoApproveMode: 'inherit', defaultPipelineId: '',
   requirePassingChecksToLand: false, protectedBranchPatterns: '', releaseBranchPrefix: 'release/', hotfixBranchPrefix: 'hotfix/',
   requirePullRequestForProtectedBranches: false, requireMergeQueueForReleaseBranches: false,
   secretScanEnabled: false, protectedPathPatterns: '', privateIdentifierDenylist: '',

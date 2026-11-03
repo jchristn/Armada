@@ -101,7 +101,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(newer.Id, active[0].OverlappingMissionId, "the larger overlap first");
                 AssertEqual(2, active[0].FileCount);
                 AssertEqual(newer.Id, preview.SuggestedDependsOnMissionId, "suggests the strongest overlap");
-                AssertFalse(preview.SerializeOverlappingMissions);
+                AssertTrue(preview.SerializeOverlappingMissions);
                 AssertNotNull(preview.BriefLint, "lint included");
 
                 MissionOverlapPreview withDependency = await bb.Insights.Service.PreviewOverlapAsync(BlackBoxTestKit.Admin(), vessel.Id, new MissionOverlapPreviewRequest { Description = "Touch only src/core/a.cs", DependsOnMissionId = older.Id }).ConfigureAwait(false);
@@ -170,7 +170,7 @@ namespace Test.Shared.Suites.Services
                 bb.Insights.Analyzer.TrackedFilesOverride = v => new List<string> { "src/a.cs", "src/b.cs" };
                 AdmiralService admiral = CreateAdmiral(t.Driver);
                 admiral.DispatchAdvisor = bb.Insights.DispatchAdvisor;
-                Vessel vessel = await t.Driver.Vessels.CreateAsync(new Vessel("bb-disp-" + Suffix(), "https://example.invalid/disp.git")).ConfigureAwait(false);
+                Vessel vessel = await t.Driver.Vessels.CreateAsync(new Vessel("bb-disp-" + Suffix(), "https://example.invalid/disp.git") { SerializeOverlappingMissions = false }).ConfigureAwait(false);
 
                 Mission first = await admiral.DispatchMissionAsync(NewMission(vessel, "First", "Touch only src/a.cs")).ConfigureAwait(false);
                 AssertNull(first.OverlapWarnings, "nothing to overlap yet");

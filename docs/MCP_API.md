@@ -3247,6 +3247,8 @@ Returns `{ "Error": "Fleet not found", "ErrorCode": "NotFound" }` if the ID does
 
 Register a new vessel (git repository) in a fleet.
 
+`serializeOverlappingMissions` defaults to `true` when omitted. Set it to `false` for warnings without automatic dependency chaining. `update_vessel` preserves the stored value when omitted.
+
 **Input Schema:**
 
 ```json

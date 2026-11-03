@@ -10,6 +10,8 @@ v1.3.0 focuses on **parallelization and concurrency**: more independent work in 
 
 ### Concurrency (in progress)
 
+- Enable Serialize overlapping missions by default for new vessels across the model, REST/MCP, Dashboard and TUI creation paths. Explicit opt-outs and existing stored values are preserved.
+
 - Begin [captain slots, vessel voyage/mission limits, and mission hierarchy](CONCURRENCY_IMPROVEMENTS.md) on `feature/v1.3.0`.
 - Add shared numeric bounds and runtime-specific captain default helpers (CLI runtimes, including pi: 1; ApiEndpoint and Mux: 4). Add the `Concurrency` settings-file group, normalize cross-field defaults after JSON binding, and report adjusted values when loading or saving configuration.
 - Clamp the existing global `MaxConcurrentMissions` setting to 0..10000. Zero remains unlimited; negative values become 1 instead of preventing startup.

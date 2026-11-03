@@ -53,7 +53,8 @@ namespace Test.Shared.Suites.E2E
                 Mission second = await CreateMissionAsync(fx, vessel.Id, "Touch only src/insight/a.cs").ConfigureAwait(false);
                 AssertNotNull(second.OverlapWarnings, "warnings on the create response");
                 AssertEqual(first.Id, second.OverlapWarnings!.Single().OverlappingMissionId);
-                AssertNull(second.DependsOnMissionId, "not chained by default");
+                AssertEqual(first.Id, second.DependsOnMissionId, "new vessels chain overlaps by default");
+                AssertTrue(second.OverlapWarnings!.Single().Serialized, "default chaining marked in warnings");
 
                 vessel.SerializeOverlappingMissions = true;
                 HttpResponseMessage put = await fx.AuthClient.PutAsync("/api/v1/vessels/" + vessel.Id, JsonHelper.ToJsonContent(vessel)).ConfigureAwait(false);

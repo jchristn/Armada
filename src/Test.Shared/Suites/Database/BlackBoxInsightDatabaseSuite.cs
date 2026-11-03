@@ -26,15 +26,15 @@ namespace Test.Shared.Suites.Database
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
-            cases.Add(Case("vessel_serialize_overlapping_missions", "SerializeOverlappingMissions defaults to false and round-trips through create, update and reads", TestTags.Positive, async () =>
+            cases.Add(Case("vessel_serialize_overlapping_missions", "SerializeOverlappingMissions defaults to true and round-trips through create, update and reads", TestTags.Positive, async () =>
             {
                 using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
                 DatabaseDriver db = t.Driver;
                 Vessel v = await db.Vessels.CreateAsync(new Vessel("bbi-serialize-" + Guid.NewGuid().ToString("N").Substring(0, 8), "https://example.invalid/s.git")).ConfigureAwait(false);
-                AssertFalse((await db.Vessels.ReadAsync(v.Id).ConfigureAwait(false))!.SerializeOverlappingMissions, "default false");
-                v.SerializeOverlappingMissions = true;
+                AssertTrue((await db.Vessels.ReadAsync(v.Id).ConfigureAwait(false))!.SerializeOverlappingMissions, "default true");
+                v.SerializeOverlappingMissions = false;
                 await db.Vessels.UpdateAsync(v).ConfigureAwait(false);
-                AssertTrue((await db.Vessels.ReadAsync(v.Id).ConfigureAwait(false))!.SerializeOverlappingMissions, "updated");
+                AssertFalse((await db.Vessels.ReadAsync(v.Id).ConfigureAwait(false))!.SerializeOverlappingMissions, "explicit opt-out persisted");
                 Vessel created = new Vessel("bbi-serialize-on-" + Guid.NewGuid().ToString("N").Substring(0, 8), "https://example.invalid/s2.git") { SerializeOverlappingMissions = true };
                 created = await db.Vessels.CreateAsync(created).ConfigureAwait(false);
                 AssertTrue((await db.Vessels.ReadAsync(created.Id).ConfigureAwait(false))!.SerializeOverlappingMissions, "created true");

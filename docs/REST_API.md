@@ -1795,6 +1795,8 @@ Skipped entries include the entity ID and the reason (e.g., "Not found" or "Empt
 
 A vessel is a git repository registered with Armada.
 
+`SerializeOverlappingMissions` defaults to `true` for new vessels. Overlapping missions are chained through `DependsOnMissionId`; explicitly set `false` to receive overlap warnings without automatic chaining. Existing stored values remain unchanged.
+
 The configuration lists stored on a vessel (`ProtectedBranchPatterns`, `ProtectedPathPatterns`,
 `PrivateIdentifierDenylist`, `AutoLandPathAllowGlobs`, `AutoLandPathDenyGlobs`) hold at most 256 entries each
 (`CollectionLimits.MaxConfigItems`). Every write path (REST create, update, and context patch, MCP `add_vessel`,

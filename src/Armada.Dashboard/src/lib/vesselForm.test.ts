@@ -35,9 +35,9 @@ describe('getLandingModes', () => {
 });
 
 describe('serializeOverlappingMissions', () => {
-  it('is off for a new vessel and sent on create', () => {
-    expect(emptyVesselForm.serializeOverlappingMissions).toBe(false);
-    expect(buildVesselPayload({ ...emptyVesselForm, name: 'v' }, null).serializeOverlappingMissions).toBe(false);
+  it('is on for a new vessel and sent on create', () => {
+    expect(emptyVesselForm.serializeOverlappingMissions).toBe(true);
+    expect(buildVesselPayload({ ...emptyVesselForm, name: 'v' }, null).serializeOverlappingMissions).toBe(true);
   });
 
   it('round-trips through the form and the payload', () => {

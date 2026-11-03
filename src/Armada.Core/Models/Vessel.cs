@@ -323,9 +323,9 @@ namespace Armada.Core.Models
         /// When true, a mission dispatched to this vessel whose likely files overlap an active mission's files (or a
         /// directory an active mission reserves because the black box marks it a hotspot) is chained after that mission
         /// with <see cref="Mission.DependsOnMissionId"/> instead of running in parallel. An explicit DependsOnMissionId is
-        /// never replaced. Default false: overlaps are only reported as dispatch warnings.
+        /// never replaced. Default true; set false to report overlaps only as dispatch warnings.
         /// </summary>
-        public bool SerializeOverlappingMissions { get; set; } = false;
+        public bool SerializeOverlappingMissions { get; set; } = true;
 
         /// <summary>
         /// Per-phase timeout, in seconds, for each Definition-of-Done command. Exceeding it classifies as
