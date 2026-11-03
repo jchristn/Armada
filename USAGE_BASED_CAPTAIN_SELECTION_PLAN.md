@@ -8,6 +8,19 @@ Armada should select a qualified captain with sufficient account headroom and re
 
 The required v1.3.0 deliverable comprises U0 through U6 below: observation mode, deterministic enforcement, durable decisions, reservations, diagnostics, all supported client surfaces, and validation. Adaptive consumption prediction is a later extension, not a prerequisite or a feature to advertise as shipped. This plan adds to [CONCURRENCY_IMPROVEMENTS.md](CONCURRENCY_IMPROVEMENTS.md); its capacity, lifecycle and ownership rules remain authoritative.
 
+## Implementation progress
+
+- [x] U0 baseline/contract review and executable normalized evidence fixtures: [review](docs/usage-selection/BASELINE_AND_CONTRACT.md).
+- [x] Pure policy foundation: typed candidate/window/results, bounded settings defaults and deterministic headroom-band ranking. Not connected to dispatch; no selection behavior changes yet.
+- [ ] U1 relational history, transaction primitives and runtime settings integration.
+- [ ] U2 Observe-mode end-to-end decisions and preview/history surfaces.
+- [ ] U3 atomic enforcement, reservations and lifecycle recovery.
+- [ ] U4 complete client/operator surfaces.
+- [ ] U5 observability, provider/stress and simulated-user validation.
+- [ ] U6 final release integration and handoff.
+
+U0's design/UX review and implementation map are recorded in the linked review. The new policy suite covers 26 cases; existing quota/default regression suites are run alongside it. No history, API, UI or admission milestone is complete based on this foundation.
+
 ## 1. Requirements and implementation rules
 
 The normative requirements live in `~/Code/Agents/requirements`. The table maps those standards to deliverables so developers can review compliance. Read the named files before implementing the affected milestone; do not rely on this table as a replacement for them.
@@ -112,7 +125,7 @@ The ordering is deliberate: usage chooses among qualified alternatives, not betw
 5. For each applicable percentage window calculate `available = max(0, 100 - usedPercent - activeReservationPercent - unsettledPercent)`. The tightest applicable window is the bottleneck. A candidate is soft-gated when available is less than `ReservePercent + PerAttemptReservationPercent`; equality is allowed. At or above 100% observed usage is a hard quota gate regardless of reserve exception.
 6. Percentages from different providers/windows are not interchangeable money or tokens. Compare bands, not raw cross-provider percentages. Count/limit windows may derive a percentage only when unit, limit and applicability are explicit and valid. Unconvertible windows remain unknown; a proven exhausted count window still hard-gates.
 7. Within each existing allowed routing preference bucket, rank Comfortable, Constrained, then Unknown. Comfortable means sufficient launch headroom and at least ComfortableHeadroomPercent; Constrained means sufficient launch headroom below that band. Unknown participates only under AllowDeprioritized. Blocked candidates do not participate. Existing preference/fallback permissions determine whether moving to another bucket is allowed.
-8. Within the same bucket and usage band, prefer lower occupied-slot ratio, then greater bottleneck headroom for comparable provider/window semantics, then least-recent assignment, then captain ID ordinal. Unknown timestamps/reset times never win as zero. Cross-provider ties skip incomparable headroom and use the remaining tie-breakers.
+8. Within the same bucket and usage band, prefer lower occupied-slot ratio, then greater bottleneck headroom when the entire tied group shares comparable provider/window semantics, then least-recent assignment, then captain ID ordinal. Skip headroom comparison for the whole tied group when its signatures differ; pairwise conditional comparison can produce non-transitive ordering. Unknown timestamps/reset times never win as zero. Cross-provider ties skip incomparable headroom and use the remaining tie-breakers.
 9. Revalidate and atomically claim/reserve/persist as described below. If evidence or capacity changed, recompute rather than launching from an outdated preview.
 
 Reset time affects the next reconsideration and the explanation, not permission to spend an exhausted balance. For several blocking windows, report the latest applicable known fixed reset as an earliest possible recovery estimate. Missing/rolling resets mean no reliable ready time. Always recheck a fresh capture at reset; a timer alone never manufactures available quota. Retry earlier for capture completion, reservation release, settings changes or account changes, with deduplicated scheduler wakeups.
@@ -223,10 +236,10 @@ Every unchecked task is future work. Each milestone ends with recorded automated
 
 ### U0. Contract, baseline and fixtures
 
-- [ ] Inventory current routing preference/override semantics, quota hold application, cooldown behavior, provider transaction boundaries, settings APIs, permissions and client routes. Resolve the Watson discrepancy and record compatibility decisions.
-- [ ] Finalize DTOs/reason codes, policy defaults, identity/window-generation adapters and migration allocation. Define a source-to-normalized evidence fixture for ClaudeCode, Codex, API headers, missing/derived/invalid data and model-scoped windows.
-- [ ] Freeze expected rankings for explicit/preferred/automatic routes. Add public journey/contract inventory and mock examples without changing runtime dispatch.
-- [ ] Exit: reviewed implementation map, requirements traceability, reproducible fixtures and preview contract; UX review of proposed placement and state sketches recorded.
+- [x] Inventory current routing preference/override semantics, quota hold application, cooldown behavior, provider transaction boundaries, settings APIs, permissions and client routes. Resolve the Watson discrepancy and record compatibility decisions.
+- [x] Finalize DTOs/reason codes, policy defaults, identity/window-generation adapters and migration allocation. Define a source-to-normalized evidence fixture for ClaudeCode, Codex, API headers, missing/derived/invalid data and model-scoped windows.
+- [x] Freeze expected rankings for explicit/preferred/automatic routes. Add public journey/contract inventory and mock examples without changing runtime dispatch.
+- [x] Exit: reviewed implementation map, requirements traceability, reproducible fixtures and preview contract; UX review of proposed placement and state sketches recorded.
 
 ### U1. Schema, settings and immutable history
 
