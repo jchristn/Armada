@@ -48,6 +48,8 @@ v1.3.0 focuses on **parallelization and concurrency**: more independent work in 
 
 ### Usage chart clarity
 
+- Label Activity’s account usage views to explain that captain-reported usage may include direct Claude Code, Codex or other harness activity outside Armada on the same provider account. Keep the note on Usage Overview’s limit views and Account Limits, with translations for every supported locale.
+
 - Remove the unlabeled 75% and 90% horizontal threshold guides from Limit utilization. Use compact provider/window legend names, with stable source numbers when accounts or hosts would otherwise be ambiguous. Account/host details remain available on hover, in point tooltips and in the data table.
 
 ### Activity refresh controls

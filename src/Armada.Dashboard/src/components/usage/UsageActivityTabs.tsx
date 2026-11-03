@@ -12,6 +12,12 @@ import UsageOverTimeChart, { type UsageBucketSelection } from './UsageOverTimeCh
 import UsageState from './UsageState';
 import RefreshButton from '../shared/RefreshButton';
 
+/** Account quotas can include work performed directly in the same harness/provider account. */
+function AccountUsageNote() {
+  const { t } = useLocale();
+  return <p className="text-dim usage-chart-help">{t('Account usage reported by captains may include direct use of Claude Code, Codex or other harnesses outside Armada with the same provider account.')}</p>;
+}
+
 /** Overview ranges and their display buckets (the server accepts 5, 60 and 360 minutes only). */
 export const USAGE_RANGES = [
   { value: '24h', label: 'Last 24 hours', hours: 24, bucketMinutes: 5 },
@@ -287,6 +293,8 @@ export function UsageOverviewTab() {
         </label>
       </UsageFilterForm>
 
+      {metric !== 'tokens' && <AccountUsageNote />}
+
       {state.status === 'error' && (
         <div className="usage-overview-error">
           <UsageState kind="error" onRetry={() => { void refresh().catch(() => {}); }} />
@@ -328,6 +336,7 @@ export function UsageLimitsTab() {
   const active = IDENTITY_FIELDS.some((field) => params.has(field.param));
   return (
     <div className="usage-limits">
+      <AccountUsageNote />
       <div className="card request-history-filters-card">
         <div className="request-card-header">
           <button type="button" className="collapsible-header" aria-label={t('Filters')} aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
