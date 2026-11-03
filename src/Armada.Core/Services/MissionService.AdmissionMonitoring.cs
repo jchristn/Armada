@@ -11,16 +11,16 @@ namespace Armada.Core.Services
             if (_Captains.OnLaunchAgent == null || mission.Status != MissionStatusEnum.Pending || _InFlightAssignments.ContainsKey(mission.Id)
                 || _LaunchFailures.ContainsKey(mission.Id) || _ProvisionFailureCaptures.ContainsKey(mission.Id)) return false;
             Mission view = mission.AdmissionView();
-            await ResolvePreferredCaptainAsync(view, token, persist: false).ConfigureAwait(false);
-            MissionAssignmentBlocker? blocker = await GetAssignmentBlockerAsync(view, token).ConfigureAwait(false);
+            CaptainAdmissionSelection? selection = null;
+            MissionAssignmentBlocker? blocker = await GetAssignmentBlockerCoreAsync(view, token, value => selection = value).ConfigureAwait(false);
             if (blocker?.Reason != MissionAssignmentBlockerReasonEnum.AwaitingDispatch) return false;
             if (!String.IsNullOrEmpty(view.VoyageId))
             {
                 Voyage? voyage = await _Database.Voyages.ReadAsync(view.VoyageId, token).ConfigureAwait(false);
                 if (voyage?.Status == VoyageStatusEnum.Complete || voyage?.Status == VoyageStatusEnum.Cancelled || voyage?.Status == VoyageStatusEnum.Failed) return false;
             }
-            WorkerEnvelopeGate? envelope = await BuildWorkerEnvelopeGateAsync(view, token).ConfigureAwait(false);
-            Captain? captain = await FindRoutedCaptainAsync(view, envelope, token).ConfigureAwait(false) ?? envelope?.SelectEscalation(view);
+            Captain? captain = selection?.Selected;
+            if (selection != null) view = selection.Mission;
             if (captain == null || CanAssignMissionAsync != null && !await CanAssignMissionAsync(view, captain).ConfigureAwait(false)) return false;
             Vessel? vessel = String.IsNullOrEmpty(view.VesselId) ? null : await _Database.Vessels.ReadAsync(view.VesselId, token).ConfigureAwait(false);
             if (vessel == null) return false;

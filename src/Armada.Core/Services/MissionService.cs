@@ -235,7 +235,11 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task<MissionAssignmentBlocker?> GetAssignmentBlockerAsync(Mission mission, CancellationToken token = default)
+        public Task<MissionAssignmentBlocker?> GetAssignmentBlockerAsync(Mission mission, CancellationToken token = default)
+            => GetAssignmentBlockerCoreAsync(mission, token);
+
+        private async Task<MissionAssignmentBlocker?> GetAssignmentBlockerCoreAsync(Mission mission, CancellationToken token,
+            Action<CaptainAdmissionSelection>? observeSelection = null)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (mission.Status != MissionStatusEnum.Pending) return null;
@@ -276,10 +280,10 @@ namespace Armada.Core.Services
             MissionAssignmentBlocker? globalAdmission = await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
             if (globalAdmission != null) return globalAdmission;
 
-            // Captain availability: the same pool FindAvailableCaptainAsync draws from (idle captains), checked
-            // without resolving or persisting a preferred captain.
-            List<Captain> allCaptains = (await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false))
-                .Where(c => CaptainVisibleToMission(c, mission)).ToList();
+            CaptainAdmissionSelection selection = await SelectCaptainAdmissionAsync(mission, token).ConfigureAwait(false);
+            observeSelection?.Invoke(selection);
+            Mission routingView = selection.Mission;
+            List<Captain> allCaptains = selection.Visible;
             if (allCaptains.Count == 0)
             {
                 blocker.Reason = MissionAssignmentBlockerReasonEnum.NoCaptains;
@@ -287,77 +291,53 @@ namespace Armada.Core.Services
                 blocker.Advice.Add(new AssignmentBlockerAdvice { Text = "Add an eligible captain to run this mission.", Action = AssignmentBlockerActionEnum.AddCaptain, TargetType = "captain" });
                 return blocker;
             }
-
-            WorkerEnvelopeGate? envelopeGate = await BuildWorkerEnvelopeGateAsync(mission, token).ConfigureAwait(false);
-            if (envelopeGate != null && !envelopeGate.AnyCompatibleCaptain())
+            if (selection.Selected != null)
             {
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain;
-                blocker.Summary = "Waiting for a captain: no captain meets the Worker eligibility envelope or may run the Worker persona. "
-                    + WorkerEnvelopeRules.Describe(envelopeGate.Envelope)
-                    + " Give a captain a model profile that meets it, or change the vessel's envelope.";
-                await DescribeCaptainsAsync(blocker, allCaptains, mission, token).ConfigureAwait(false);
-                return blocker;
-            }
-
-            foreach (Captain candidate in allCaptains) candidate.MaxConcurrency = ConcurrencyClamp.CaptainLimit(candidate.MaxConcurrency, _Settings.Concurrency.MaxCaptainConcurrency);
-            List<Captain> idleCaptains = allCaptains.Where(c => c.HasMissionCapacity).ToList();
-            if (idleCaptains.Count > 0)
-            {
-                CaptainEligibilityContext context = await BuildCaptainEligibilityContextAsync(mission, token).ConfigureAwait(false);
-                List<Captain> eligibleCaptains = idleCaptains.Where(c => CaptainIneligibilityReason(c, mission, context) == null).ToList();
-                bool eligible = eligibleCaptains.Count > 0;
-                if (eligible)
-                {
-                    Dictionary<string, MissionAssignmentBlocker> excluded = new Dictionary<string, MissionAssignmentBlocker>(StringComparer.Ordinal);
-                    List<Captain> admitted = await ApplyCapacityLimitsAsync(eligibleCaptains, mission, token, excluded).ConfigureAwait(false);
-                    if (admitted.Count == 0 && excluded.Count > 0)
-                    {
-                        MissionAssignmentBlocker capacity = excluded[eligibleCaptains[0].Id];
-                        foreach (AssignmentBlockerAdvice advice in excluded.Values.SelectMany(item => item.Advice).DistinctBy(item => new { item.Action, item.TargetId, item.Setting }).Take(MissionAssignmentBlocker.MaxListed).ToList())
-                            if (!capacity.Advice.Contains(advice)) capacity.Advice.Add(advice);
-                        return capacity;
-                    }
-                }
-                if (eligible && _PlacementWaitReasons.TryGetValue(mission.Id, out string? placementReason))
+                if (_PlacementWaitReasons.TryGetValue(mission.Id, out string? placementReason))
                 {
                     blocker.Reason = MissionAssignmentBlockerReasonEnum.PlacementWaiting;
                     blocker.Summary = "A captain is free, but the mission's dock cannot be placed yet: " + placementReason;
-                    return blocker;
                 }
-
-                if (eligible)
+                else
                 {
                     blocker.Reason = MissionAssignmentBlockerReasonEnum.AwaitingDispatch;
                     blocker.Summary = "A captain is free; the mission is assigned on the next dispatch cycle.";
-                    return blocker;
                 }
-
-                // Authors of the reviewed work are named as a cause only when the exclusion is what removed them.
-                HashSet<string> excludedAuthors = _Settings.ExcludeReviewAuthorsFromJudge
-                    ? await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false)
-                    : new HashSet<string>(StringComparer.Ordinal);
-                bool authorsIdle = idleCaptains.Any(c => excludedAuthors.Contains(c.Id));
-                blocker.Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain;
-                blocker.Summary = "Waiting for a captain: no idle captain may take this mission"
-                    + (!String.IsNullOrEmpty(mission.Persona) ? " (persona " + mission.Persona + ")" : "")
-                    + (mission.Tier.HasValue ? " (tier " + mission.Tier.Value + " or higher)" : "")
-                    + ". Check the persona's captain priorities and the captains' allowed personas and tiers."
-                    + (authorsIdle ? " Idle captains that ran an earlier stage of the reviewed work are excluded because ExcludeReviewAuthorsFromJudge is on." : "");
-                await DescribeCaptainsAsync(blocker, allCaptains, mission, token).ConfigureAwait(false);
                 return blocker;
             }
-
-            CaptainEligibilityContext fullContext = await BuildCaptainEligibilityContextAsync(mission, token).ConfigureAwait(false);
+            if (selection.RoutingEligible.Count > 0 && selection.CapacityExclusions.Count == selection.RoutingEligible.Count)
+            {
+                MissionAssignmentBlocker capacity = selection.CapacityExclusions[selection.RoutingEligible[0].Id];
+                foreach (AssignmentBlockerAdvice advice in selection.CapacityExclusions.Values.SelectMany(item => item.Advice)
+                    .DistinctBy(item => new { item.Action, item.TargetId, item.Setting }).Take(MissionAssignmentBlocker.MaxListed).ToList())
+                    if (!capacity.Advice.Contains(advice)) capacity.Advice.Add(advice);
+                return capacity;
+            }
             List<Captain> full = allCaptains.Where(c => c.State == CaptainStateEnum.Working && c.ActiveMissionCount > 0
-                && c.CurrentSessionId == null && CaptainIneligibilityReason(c, mission, fullContext) == null).ToList();
-            blocker.Reason = full.Count > 0
-                ? MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit : MissionAssignmentBlockerReasonEnum.NoIdleCaptain;
-            if (blocker.Reason == MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit)
+                && c.CurrentSessionId == null && CaptainIneligibilityReason(c, routingView, selection.Eligibility) == null).ToList();
+            if (full.Count == 0 && selection.Available.Count > 0)
+            {
+                blocker.Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain;
+                blocker.Summary = "Waiting for a captain: no available captain may take this mission"
+                    + (!String.IsNullOrEmpty(routingView.Persona) ? " (persona " + routingView.Persona + ")" : "")
+                    + (routingView.Tier.HasValue ? " (tier " + routingView.Tier.Value + " or higher)" : "")
+                    + ". Check the persona's captain priorities and the captains' allowed personas and tiers."
+                    + (selection.Eligibility.ExcludedAuthors.Count > 0 && selection.Available.Any(c => selection.Eligibility.ExcludedAuthors.Contains(c.Id))
+                        ? " Available captains that ran an earlier stage of the reviewed work are excluded because ExcludeReviewAuthorsFromJudge is on." : "");
+                if (selection.Eligibility.EnvelopeGate != null && !selection.Eligibility.EnvelopeGate.AnyCompatibleCaptain())
+                    blocker.Summary = "Waiting for a captain: no captain meets the Worker eligibility envelope or may run the Worker persona. "
+                        + WorkerEnvelopeRules.Describe(selection.Eligibility.EnvelopeGate.Envelope)
+                        + " Give a captain a model profile that meets it, or change the vessel's envelope.";
+                await DescribeCaptainsAsync(blocker, allCaptains, routingView, token).ConfigureAwait(false);
+                return blocker;
+            }
+            blocker.Reason = full.Count > 0 ? MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit : MissionAssignmentBlockerReasonEnum.NoIdleCaptain;
+            if (full.Count > 0)
             {
                 blocker.SetBlockingMissions(full.SelectMany(c => c.ActiveMissionIds));
                 AddCaptainCapacityAdvice(blocker, full);
             }
-            await DescribeCaptainsAsync(blocker, allCaptains, mission, token).ConfigureAwait(false);
+            await DescribeCaptainsAsync(blocker, allCaptains, routingView, token).ConfigureAwait(false);
             List<DateTime> quarantineEnds = allCaptains
                 .Where(c => c.State == CaptainStateEnum.Quarantined && c.QuarantineUntilUtc.HasValue)
                 .Select(c => c.QuarantineUntilUtc!.Value)
@@ -953,9 +933,9 @@ namespace Armada.Core.Services
         {
             // Backoff protects against relaunching the same broken captain; it should not hold a mission back when a
             // captain that has not failed it is idle and could start it now.
-            List<Captain> idle = await _Database.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle, token).ConfigureAwait(false);
+            Captain? candidate = (await SelectCaptainAdmissionAsync(mission, token).ConfigureAwait(false)).Selected;
             lock (failure.FailedCaptainIds)
-                return idle.Any(c => CaptainVisibleToMission(c, mission) && !failure.FailedCaptainIds.Contains(c.Id));
+                return candidate != null && !failure.FailedCaptainIds.Contains(candidate.Id);
         }
 
         private async Task QuarantineMisconfiguredCaptainAsync(Captain captain, string reason)

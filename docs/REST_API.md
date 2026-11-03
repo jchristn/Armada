@@ -3452,7 +3452,9 @@ Get a single mission by ID.
 A `Pending` mission also carries `AssignmentBlocker`, computed when it is read (not stored): why no captain has taken it
 yet. `Reason` is one of `AwaitingDispatch`, `VesselMissing`, `VesselMisconfigured`, `DependencyNotFinished`,
 `DependencyHandoffPending`, `WaitingForVoyageWorkers`, `VesselBroadScopeMissionActive`, `BroadScopeWaitingForVessel`,
-`VesselVoyageLimit`, `VoyageMissionLimit`, `GlobalMissionLimit`, `NoCaptains`, `NoIdleCaptain`, or `NoEligibleCaptain`; `Summary` is an English sentence;
+`VesselVoyageLimit`, `VoyageMissionLimit`, `GlobalMissionLimit`, `CaptainConcurrencyLimit`, `RuntimeMissionLimit`,
+`EndpointMissionLimit`, `EndpointUnavailable`, `NoCaptains`, `NoIdleCaptain`, `NoEligibleCaptain`, `LaunchFailing`,
+`PlacementWaiting`, or `BranchInUse` (plus the legacy `VesselConcurrencyLimit` value); `Summary` is an English sentence;
 `UntilUtc` is when it clears on its own (for example when the only captain's quarantine ends); `DependsOnMissionId` and
 `BlockingMissionIds` name the missions it waits for (the first 25; `BlockingMissionCount` is the full count); and
 `Captains` lists what each captain in the tenant is doing (the first 25 by name; `CaptainCount` is the full count:
@@ -12803,6 +12805,8 @@ Global occupancy counts Assigned/InProgress in a single SQL snapshot. Runtime an
 ## v1.3.0 waiting diagnostics
 
 Pending mission reads include `AssignmentBlocker` (`assignmentBlocker` after camel-case client normalization). REST `GET /api/v1/missions/{id}` and MCP `mission_status` compute the same explanation; non-Pending missions have no blocker. The existing safety, capacity, tenant and user restrictions still apply.
+
+Captain eligibility uses the same selection path as dispatch, including unresolved voyage overrides, strict pins, persona defaults/priorities, tiers, author exclusions, Worker envelopes and runtime/endpoint capacity. Diagnostics resolve preferences on a temporary view without changing the mission version, claiming slots, launching work or recording envelope decision events. `CaptainConcurrencyLimit` identifies full eligible captains even when unrelated captains are free. A Working captain with spare slots includes `EligibleForMission` and a `Detail` explanation when its routing rules exclude this mission. Snapshot readiness does not reserve capacity or guarantee launch success.
 
 Dependency readiness is checked before capacity, using the same path as dispatch. Missing or unfinished dependencies report `DependencyNotFinished`; a `WorkProduced` dependency whose handoff is not prepared reports `DependencyHandoffPending`. Integration missions report `WaitingForVoyageWorkers` until sibling pipelines settle. A failed sibling summary predicts `Blocked` when `BlockDependentsOfFailedStages` is enabled, otherwise `Cancelled`; reading diagnostics does not apply that transition or claim slots. Dispatch applies it on the next pass. Existing reason values and response fields are unchanged.
 

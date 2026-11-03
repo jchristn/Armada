@@ -70,29 +70,7 @@ namespace Armada.Core.Services
 
         private async Task<Captain?> FindAvailableCaptainAsync(Mission mission, CancellationToken token)
         {
-            WorkerEnvelopeGate? gate = await BuildWorkerEnvelopeGateAsync(mission, token).ConfigureAwait(false);
-            Captain? routed = await FindRoutedCaptainAsync(mission, gate, token).ConfigureAwait(false);
-            if (gate == null) return routed;
-
-            WorkerEnvelopeOutcomeEnum outcome = WorkerEnvelopeOutcomeEnum.Assigned;
-            Captain? chosen = routed;
-            if (chosen == null)
-            {
-                chosen = gate.SelectEscalation(mission);
-                if (chosen != null)
-                {
-                    outcome = WorkerEnvelopeOutcomeEnum.Escalated;
-                    _Logging.Info(_Header + "mission " + mission.Id + " escalates to captain " + chosen.Id + " (" + CaptainTierSelector.EffectiveTier(chosen)
-                        + "): no idle captain routing would use meets the Worker envelope");
-                }
-                else
-                {
-                    outcome = gate.AnyCompatibleCaptain() ? WorkerEnvelopeOutcomeEnum.Waiting : WorkerEnvelopeOutcomeEnum.NoEligibleCaptain;
-                }
-            }
-
-            await RecordWorkerEnvelopeDecisionAsync(mission, gate, outcome, chosen, token).ConfigureAwait(false);
-            return chosen;
+            return (await SelectCaptainAdmissionAsync(mission, token, recordEnvelope: true).ConfigureAwait(false)).Selected;
         }
 
         /// <summary>

@@ -26,11 +26,13 @@ namespace Armada.Core.Services
                 Captain? current = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
                 if (current == null || !current.HasMissionCapacity || !CaptainVisibleToMission(current, mission)
                     || current.QuarantineUntilUtc > DateTime.UtcNow) return false;
-                CaptainEligibilityContext eligibility = await BuildCaptainEligibilityContextAsync(mission, token).ConfigureAwait(false);
-                if (CaptainIneligibilityReason(current, mission, eligibility) != null) return false;
-                List<Captain> admitted = await ApplyCapacityLimitsAsync(new List<Captain> { current }, mission, token).ConfigureAwait(false);
+                Mission routingView = mission.AdmissionView();
+                await ResolvePreferredCaptainAsync(routingView, token, persist: false).ConfigureAwait(false);
+                CaptainEligibilityContext eligibility = await BuildCaptainEligibilityContextAsync(routingView, token).ConfigureAwait(false);
+                if (CaptainIneligibilityReason(current, routingView, eligibility) != null) return false;
+                List<Captain> admitted = await ApplyCapacityLimitsAsync(new List<Captain> { current }, routingView, token).ConfigureAwait(false);
                 if (admitted.Count == 0) return false;
-                if (CanAssignMissionAsync != null && !await CanAssignMissionAsync(mission, current).ConfigureAwait(false)) return false;
+                if (CanAssignMissionAsync != null && !await CanAssignMissionAsync(routingView, current).ConfigureAwait(false)) return false;
                 return await _Database.Captains.TryResumeVerificationAsync(current.Id, mission.Id, mission.LastUpdateUtc,
                     _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
             }

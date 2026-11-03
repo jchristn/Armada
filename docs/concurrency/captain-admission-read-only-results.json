@@ -1,0 +1,37 @@
+{
+  "unchangedMissionPreferencesVersionsSlotsAndEventCount": true,
+  "results": [
+    {
+      "mission": "pin",
+      "reason": "CaptainConcurrencyLimit",
+      "captains": [
+        [
+          "Judge specialist",
+          false,
+          "1 / 2 mission slots in use (not assigned: persona not allowed)"
+        ],
+        [
+          "Pinned worker",
+          null,
+          "1 / 1 mission slots in use"
+        ]
+      ]
+    },
+    {
+      "mission": "spare",
+      "reason": "NoEligibleCaptain",
+      "captains": [
+        [
+          "Judge specialist",
+          false,
+          "1 / 2 mission slots in use (not assigned: persona not allowed)"
+        ],
+        [
+          "Pinned worker",
+          null,
+          "1 / 1 mission slots in use"
+        ]
+      ]
+    }
+  ]
+}

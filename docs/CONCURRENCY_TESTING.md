@@ -74,3 +74,9 @@ For a failed check, fill the captain or an outer capacity gate while verificatio
 Services.OuterGateInvariant and Services.AdmissionStuck are included in the concurrency script. Lower global/runtime/endpoint limits below active usage and inspect Activity > Events as a global administrator. Running work must continue; observations should reflect a known reduction or unknown ordering, without leaking aggregate usage to scoped readers. Endpoint events open the existing configuration editor. A shared URL with different alias limits remains ambiguous.
 
 A stuck-admission warning requires the same Pending version ready before and after three sampled dispatch opportunities. Known launch/provisioning failures, unavailable placement, memory/global deferrals and ordinary capacity/dependency blockers must not warn. Large queues are covered through bounded rotating windows. See [monitor validation](concurrency/OUTER_GATE_MONITOR_VALIDATION.md).
+
+### Captain selection parity
+
+`Services.CaptainAdmissionParity` is part of the concurrency script alongside persona-priority, tier and Worker-envelope regressions. It compares diagnostics, monitoring and actual dispatch for unresolved strict/non-strict voyage preferences, busy defaults, priority availability, runtime limits and effective captain ceilings, and verifies read-only diagnostics plus launch-failure backoff. See [UX and regression evidence](concurrency/CAPTAIN_ADMISSION_VALIDATION.md).
+
+To validate manually, fill an explicitly pinned captain while leaving an unrelated captain free. Open the Pending mission: its waiting card should identify captain slot saturation. Free the pinned slot and dispatch; it should use the pinned captain. Give a Working captain spare capacity but restrict it to another persona: the waiting card should explain the persona mismatch rather than imply it is available.
