@@ -767,14 +767,6 @@
     },
     {
       "kind": "tab",
-      "key": "Activity:jobs",
-      "status": "implemented",
-      "tui": "JobsScreen",
-      "workstream": "W3.11",
-      "notes": "Jobs"
-    },
-    {
-      "kind": "tab",
       "key": "Activity:requests",
       "status": "implemented",
       "tui": "RequestHistoryScreen",

@@ -7198,9 +7198,9 @@ Ask a connected Harbor to stop one job. The Admiral stops tracking it at once; t
 
 ### Jobs
 
-Jobs are background tasks tracked for status polling.
+Jobs are internal background tasks retained for workflow progress and status polling; the Dashboard has no dedicated Jobs page. Completed, failed and cancelled outcomes are recorded as scoped `job.succeeded`, `job.failed` and `job.cancelled` events. Only a winning terminal transition emits an outcome, with no heartbeat/progress noise. Failures also emit scoped `Error` signals, except expected usage-capture discards (`SettingsGenerationChanged`, `CaptureDisabled`, `NoMembers`). Event/signal payloads include job ID, name, kind, status, progress, error reason and the related workflow URL; opaque `ResultJson` is not copied. The existing list/read/cancel APIs remain available. `/jobs` and `Activity?source=jobs` bookmarks redirect to Events.
 
-`Kind` is one of `Generic`, `Cleanup`, `Sync`, `Report` (vessel health evaluation), `VesselDiscovery` (background import discovery), `VesselImport` (background vessel import), and `FleetCategorization` (a captain recommending fleets for an import). Import-related job names include the batch ID (`vib_...`). Cancelling a `VesselDiscovery` or `FleetCategorization` job stops the scan or the captain's process within a few seconds.
+`Kind` is one of `Generic`, `Cleanup`, `Sync`, `Report` (vessel health evaluation), `VesselDiscovery` (background import discovery), `VesselImport` (background vessel import), `FleetCategorization` (a captain recommending fleets for an import), and `UsageProbe` (captain account usage capture). Import-related job names include the batch ID (`vib_...`). Cancelling a `VesselDiscovery` or `FleetCategorization` job stops the scan or the captain's process within a few seconds.
 
 #### GET /api/v1/jobs
 
@@ -7503,6 +7503,7 @@ then `Warning`), then by `Title`. Every item is returned (no category is capped)
 | `review` | `Warning` (`Critical` once the review deadline has passed) | `mission` | Mission in `Review` |
 | `landing_failed` | `Critical` | `mission` | Mission in `LandingFailed` |
 | `failed` | `Warning` | `mission` | Mission in `Failed` |
+| `background_job_failed` | `Warning` | `job` | Latest actionable failed background task attempt within the same tenant, user, kind and name; a new attempt supersedes it |
 | `stalled_captain` | `Warning` | `captain` | Captain in `Stalled` |
 | `merge_failed` | `Critical` | `merge_entry` | Merge queue entry in `Failed` |
 | `deployment_approval` | `Warning` | `deployment` | Deployment pending approval |
@@ -7516,9 +7517,11 @@ thread owner can approve them), and proposals older than `Ask.ProposalExpiryMinu
 requests are visible to global admins, the tenant's tenant admins, and the owner of the thread or mission; the owner can
 decide only when `Permissions.AllowOwnerApproval` is on, otherwise `Detail` ends with "An admin must decide it."
 
+Background task items are interventions, not approval requests. Successful/cancelled tasks and expected usage-capture discards stay out of Needs You. A newer attempt of the same `(TenantId, UserId, Kind, Name)` supersedes a failure, including while the retry is queued/running. Counts and pages are filtered in the database, not capped or collected into an unbounded history list. `Href` opens the existing usage, vessel-health, import or Events view; capture failures retain the runtime in the title and the host filter in their destination. This is a server policy, not a new Jobs API query option.
+
 #### POST /api/v1/inbox/enumerate
 
-One page of the needs-you inbox items (`TotalRecords` is the exact count). Each kind is read from its own source one page at a time (missions, merge entries, and deployments are paged and counted in the database under the caller's scope), and kinds follow a fixed urgency order: `review`, `landing_failed`, `merge_failed`, `deployment_failed`, `deployment_approval`, `ask_proposal`, `cli_permission`, `failed`, `stalled_captain`, newest first within a kind. Paging comes from the JSON body (`EnumerationQuery`: `PageNumber`, `PageSize` 1 to 1000, default 10) or the matching querystring parameters.
+One page of the needs-you inbox items (`TotalRecords` is the exact count). Each kind is read from its own source one page at a time (missions, merge entries, and deployments are paged and counted in the database under the caller's scope), and kinds follow a fixed urgency order: `review`, `landing_failed`, `merge_failed`, `deployment_failed`, `deployment_approval`, `ask_proposal`, `cli_permission`, `failed`, `stalled_captain`, `background_job_failed`, `model_alert`, newest first within a kind. Paging comes from the JSON body (`EnumerationQuery`: `PageNumber`, `PageSize` 1 to 1000, default 10) or the matching querystring parameters.
 
 **Permission:** Authenticated (scoped as described above; this replaces the removed `GET /api/v1/inbox`)
 

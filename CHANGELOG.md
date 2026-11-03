@@ -46,6 +46,12 @@ v1.3.0 focuses on **parallelization and concurrency**: more independent work in 
 - Add bounded `Advice` next steps to REST mission reads and MCP `mission_status`. Suggestions use occupied capacity, preserve running work after a limit reduction, never suggest unlimited or exceed hard ceilings, and suggest adding CLI captains instead of raising their parallelism. Readers without global-admin privileges receive explanation text without configuration actions.
 - Show compact next steps in the Dashboard's waiting card, with direct links into existing vessel/captain/endpoint edit forms. Mobile and TUI display the same explanations. Existing breadcrumbs and card spacing are retained. Advice links match the action buttons’ height, and the captain detail editor now uses the same modal sizing as the Captains list editor.
 
+### Background task feedback
+
+- Remove the Dashboard’s Jobs tab/page and command shortcut. Preserve old Jobs bookmarks by redirecting to Events; route ongoing imports and health work to their existing views, and keep routine usage probes out of the header indicator.
+- Record terminal job outcomes in Events and actual failures as Error signals. Add scoped, paged `background_job_failed` interventions to Needs You; retries supersede old failures, and routine captures, cancellations and expected configuration discards do not become action items. Keep job APIs for workflow polling/cancellation.
+- Collapse Captain Usage’s account-scope, coverage and interaction guidance into an accessible About usage control beside the filters, with a compact Coverage indicator when applicable. Preserve chart keyboard/screen-reader instructions.
+
 ### Usage chart clarity
 
 - Consolidate Usage Overview and Account Limits into **Captain Usage**: charts first, current account limits at the bottom, shared identity filters and page refresh. Preserve old account-limit bookmarks and provider-history links, and update the shared breadcrumb/tab labels.

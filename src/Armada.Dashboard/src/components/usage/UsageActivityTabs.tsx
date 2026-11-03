@@ -12,10 +12,19 @@ import UsageOverTimeChart, { type UsageBucketSelection } from './UsageOverTimeCh
 import UsageState from './UsageState';
 import RefreshButton from '../shared/RefreshButton';
 
-/** Account quotas can include work performed directly in the same harness/provider account. */
-function AccountUsageNote() {
+/** Keep account scope, coverage caveats and interaction help available without pushing charts down. */
+function UsageHelp({ warnings }: { warnings: string[] }) {
   const { t } = useLocale();
-  return <p className="text-dim usage-chart-help">{t('Account usage reported by captains may include direct use of Claude Code, Codex or other harnesses outside Armada with the same provider account.')}</p>;
+  return (
+    <details className="usage-help">
+      <summary className="btn btn-sm">{t('About usage')}{warnings.length > 0 && <span className="tag">{t('Coverage')}</span>}</summary>
+      <div className="usage-help-content text-dim">
+        <p>{t('Account usage reported by captains may include direct use of Claude Code, Codex or other harnesses outside Armada with the same provider account.')}</p>
+        {warnings.map(warning => <p key={warning}>{warning}</p>)}
+        <p>{t('Select a point, a bar or a row in the data table to list the missions completed in that bucket. Use the arrow keys to move between buckets and Enter to select.')}</p>
+      </div>
+    </details>
+  );
 }
 
 /** Overview ranges and their display buckets (the server accepts 5, 60 and 360 minutes only). */
@@ -43,7 +52,7 @@ interface FilterField {
 }
 
 /** Provider/account/host (and optionally window) filters kept in the URL. Draft values are never reset by a failed request. */
-function UsageFilterForm({ fields, series = [], children, onRefresh }: { fields: FilterField[]; series?: UsageSeries[]; children?: ReactNode; onRefresh?: () => Promise<void> }) {
+function UsageFilterForm({ fields, series = [], children, onRefresh, help }: { fields: FilterField[]; series?: UsageSeries[]; children?: ReactNode; onRefresh?: () => Promise<void>; help?: ReactNode }) {
   const { t } = useLocale();
   const [params, setParams] = useSearchParams();
   const revision = useUsageRevision();
@@ -153,6 +162,7 @@ function UsageFilterForm({ fields, series = [], children, onRefresh }: { fields:
         <button type="button" className="btn btn-sm" onClick={clear} title={t('Remove the provider, account and host filters.')}>{t('Clear filters')}</button>
         {onRefresh && <RefreshButton onRefresh={async () => { await Promise.all([onRefresh(), loadOptions()]); }} title="Refresh captain usage" />}
       </div>}
+      {help}
     </form>
   );
 }
@@ -278,11 +288,11 @@ export function CaptainUsageTab() {
   };
 
   const truncated = !!(state.limitCoverage?.seriesTruncated || state.tokenCoverage?.seriesTruncated);
-  const warnings = [state.limitCoverage?.warning, state.tokenCoverage?.warning].filter((w): w is string => !!w);
+  const warnings = [...new Set([state.limitCoverage?.warning, state.tokenCoverage?.warning].filter((w): w is string => !!w))];
 
   return (
     <div className="usage-overview">
-      <UsageFilterForm fields={OVERVIEW_FIELDS} series={[...state.limits, ...state.tokens]} onRefresh={refresh}>
+      <UsageFilterForm fields={OVERVIEW_FIELDS} series={[...state.limits, ...state.tokens]} onRefresh={refresh} help={<UsageHelp warnings={warnings} />}>
         <label className="usage-filter-field" title={t('Time range of both panels. 24 hours uses 5-minute buckets, 7 days hourly and 30 days 6-hour buckets.')}>
           <span>{t('Range')}</span>
           <select className="filter-select" value={range.value} onChange={(e) => setParam('range', e.target.value === USAGE_RANGES[0].value ? null : e.target.value)}>
@@ -299,7 +309,6 @@ export function CaptainUsageTab() {
         </label>
       </UsageFilterForm>
 
-      <AccountUsageNote />
 
       {state.status === 'error' && (
         <div className="usage-overview-error">
@@ -311,7 +320,6 @@ export function CaptainUsageTab() {
       {state.fromUtc && state.status !== 'error' && (
         <>
           {truncated && <p className="usage-table-notice text-dim" role="status">{t('More series exist than the chart shows. Narrow the provider, account or host filter.')}</p>}
-          {warnings.map((warning) => <p key={warning} className="usage-table-notice text-dim">{warning}</p>)}
           <UsageOverTimeChart
             limits={state.limits}
             tokens={state.tokens}

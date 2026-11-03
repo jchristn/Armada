@@ -40,7 +40,7 @@ export const DASHBOARD_ROUTES: DashboardRoute[] = [
   { pattern: "/docks/:id", dashboard: "/docks/:id", tab: "work", title: "Dock", workstream: "W2.4", redirect: null, file: "(app)/(work)/docks/[id].tsx" },
   { pattern: "/merge-queue", dashboard: "/merge-queue", tab: "work", title: "Merge Queue", workstream: "W0.5", redirect: "/missions?tab=merge-queue", file: "(app)/(work)/merge-queue/index.tsx" },
   { pattern: "/merge-queue/:id", dashboard: "/merge-queue/:id", tab: "work", title: "Merge Queue Entry", workstream: "W2.4", redirect: null, file: "(app)/(work)/merge-queue/[id].tsx" },
-  { pattern: "/jobs", dashboard: "/jobs", tab: "work", title: "Jobs", workstream: "W0.5", redirect: "/activity?source=jobs", file: "(app)/(work)/jobs.tsx" },
+  { pattern: "/jobs", dashboard: "/jobs", tab: "work", title: "Jobs", workstream: "W0.5", redirect: "/activity?source=events", file: "(app)/(work)/jobs.tsx" },
   { pattern: "/configuration", dashboard: "/configuration", tab: "more", title: "Configuration", workstream: "W4.2", redirect: null, file: "(app)/(more)/configuration.tsx" },
   { pattern: "/personas", dashboard: "/personas", tab: "more", title: "Personas", workstream: "W0.5", redirect: "/configuration?tab=personas", file: "(app)/(more)/personas/index.tsx" },
   { pattern: "/personas/:name", dashboard: "/personas/:name", tab: "more", title: "Persona", workstream: "W4.2", redirect: null, file: "(app)/(more)/personas/[name].tsx" },

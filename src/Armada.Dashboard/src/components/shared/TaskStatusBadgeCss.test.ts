@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 
 const css = readFileSync('./src/App.css', 'utf8');
-const page = readFileSync('./src/pages/Jobs.tsx', 'utf8');
 const badge = readFileSync('./src/components/shared/StatusBadge.tsx', 'utf8');
 
 function rule(selector: string): string {
@@ -10,9 +9,8 @@ function rule(selector: string): string {
   return css.slice(start, css.indexOf('}', start));
 }
 
-describe('Jobs status badge styling', () => {
-  it('renders the job status through the shared StatusBadge, which carries the tag classes', () => {
-    expect(page).toContain('<StatusBadge status={job.status} />');
+describe('Background task status badge styling', () => {
+  it('keeps the shared StatusBadge tag classes for task status', () => {
     expect(badge).toContain('className={`tag ${normalized} ${className}`.trim()}');
   });
 

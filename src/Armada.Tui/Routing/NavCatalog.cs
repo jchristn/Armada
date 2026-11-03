@@ -105,7 +105,7 @@ namespace Armada.Tui.Routing
                     new NavItem("/dispatch", "Dispatch", "Send work to vessels, plan with a captain on the Planning tab, and capture and refine backlog on the Backlog tab", ">"),
                     new NavItem("/fleet-actions", "Fleet Actions", "Run a command or mission across many vessels and watch each run", "F", "f"),
                     new NavItem("/missions", "Missions", "Work units, plus Voyages, the full Merge Queue, and the Black Box of failures as tabs", "M", "m"),
-                    new NavItem("/activity", "Activity", "One log across requests, events, signals, and history, plus background jobs on the Jobs tab", "~", "y"),
+                    new NavItem("/activity", "Activity", "One log across requests, events, signals, history, token usage and captain usage.", "~", "y"),
                 }));
             sections.Add(new NavSection("fleet", "BUILD",
                 new[] { "/fleets", "/vessels", "/workspace", "/captains", "/docks", "/delivery", "/checks", "/environments", "/deployments", "/releases", "/incidents", "/runbooks" },
@@ -136,7 +136,6 @@ namespace Armada.Tui.Routing
             return new List<NavShortcut>
             {
                 new NavShortcut("planning", "OPERATIONS", new NavItem(TabLinks.PlanningPath, "Planning", "Plan with a captain, preserve the transcript, and dispatch directly from the session", "P")),
-                new NavShortcut("jobs", "OPERATIONS", new NavItem(TabLinks.JobsPath, "Jobs", "Background jobs and their status", "J", "j")),
                 new NavShortcut("blackbox", "OPERATIONS", new NavItem(TabLinks.BlackBoxPath, "Black Box", "Failure records for missions and voyages: where, how and why each failed, and how to recover", "B", "b")),
                 new NavShortcut("storage", "SYSTEM", new NavItem(TabLinks.StoragePath, "Storage", "Inspect managed files, database allocation, host capacity and record counts", "S")),
                 new NavShortcut("clipermissions", "SYSTEM", new NavItem(TabLinks.CliPermissionsPath, "CLI Tool Permissions", "Approve CLI tool requests from captains and manage allow and deny rules", "K", "k")),

@@ -105,6 +105,7 @@ namespace Armada.Core.Services
             InboxItemKinds.CliPermission,
             InboxItemKinds.Failed,
             InboxItemKinds.StalledCaptain,
+            InboxItemKinds.BackgroundJobFailed,
             InboxItemKinds.ModelAlert
         };
 
@@ -182,6 +183,9 @@ namespace Armada.Core.Services
                     case InboxItemKinds.CliPermission:
                         sections.Add(MemorySection(kind, async t => (await PendingCliPermissionsAsync(auth, t).ConfigureAwait(false)).Select(r => CliPermissionItem(auth, r)).ToList()));
                         break;
+                    case InboxItemKinds.BackgroundJobFailed:
+                        sections.Add(BackgroundJobSection(auth));
+                        break;
                     case InboxItemKinds.ModelAlert:
                         sections.Add(ModelAlertSection(auth));
                         break;
@@ -255,6 +259,31 @@ namespace Armada.Core.Services
 
                 EnumerationResult<Deployment> page = await _Database.Deployments.EnumerateAsync(query, token).ConfigureAwait(false);
                 List<InboxItem> items = page.Objects.Select(d => status == DeploymentStatusEnum.PendingApproval ? DeploymentApprovalItem(d) : DeploymentFailedItem(d)).ToList();
+                return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, items, page.TotalRecords);
+            });
+        }
+
+        private PagedSection<InboxItem> BackgroundJobSection(AuthContext auth)
+        {
+            return Guarded(InboxItemKinds.BackgroundJobFailed, async (pageNumber, pageSize, token) =>
+            {
+                JobQuery query = new JobQuery { PageNumber = pageNumber, PageSize = pageSize, NeedsAttentionOnly = true };
+                if (!auth.IsAdmin)
+                {
+                    query.TenantId = auth.TenantId;
+                    if (!auth.IsTenantAdmin) query.UserId = auth.UserId;
+                    if (String.IsNullOrEmpty(query.TenantId) || (!auth.IsTenantAdmin && String.IsNullOrEmpty(query.UserId)))
+                        return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, new List<InboxItem>(), 0);
+                }
+                EnumerationResult<Job> page = await _Database.Jobs.EnumeratePageAsync(query, token).ConfigureAwait(false);
+                List<InboxItem> items = page.Objects.Select(job => new InboxItem
+                {
+                    Kind = InboxItemKinds.BackgroundJobFailed, Severity = InboxSeverityEnum.Warning,
+                    Title = "Background task failed: " + JobActivity.DisplayName(job),
+                    EntityName = job.Name, EntityType = "job", EntityId = job.Id,
+                    Detail = (job.ErrorReason ?? "The task could not finish.") + " Open the related view to investigate and retry. A new attempt replaces this item.",
+                    Href = JobActivity.Href(job)
+                }).ToList();
                 return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, items, page.TotalRecords);
             });
         }

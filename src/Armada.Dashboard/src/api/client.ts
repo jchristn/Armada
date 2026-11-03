@@ -1273,7 +1273,7 @@ export const stopAllCaptains = () => post<void>('/api/v1/captains/stop-all');
 
 // Background jobs
 /**
- * Background jobs, newest first. With no arguments the server returns every job in scope (the Jobs page). Pass a
+ * Background task status polling, newest first. The server returns one scoped page. Pass a
  * status list, kind, or page size to get one filtered page instead; the header indicator polls only active jobs.
  */
 export const listJobs = (params?: { status?: Job['status'][]; kind?: Job['kind']; pageNumber?: number; pageSize?: number }) => {

@@ -167,11 +167,11 @@ namespace Test.Shared.Suites.Tui
                 AssertEqual("/missions", NavCatalog.ItemForPath("/blackbox/bbx_1")?.To, "missions owns black box entries");
             }));
 
-            cases.Add(TuiCase.Sync(Suite, "nav_shortcuts_keep_go_keys", "Planning, Jobs, Black Box, Storage, and CLI Tool Permissions keep Go commands that open their new tabs", () =>
+            cases.Add(TuiCase.Sync(Suite, "nav_shortcuts_keep_go_keys", "Planning, Black Box, Storage and CLI Tool Permissions keep Go commands; the removed Jobs shortcut stays absent", () =>
             {
                 Dictionary<string, string> expected = new Dictionary<string, string>
                 {
-                    ["go.planning"] = "/dispatch?tab=planning", ["go.jobs"] = "/activity?source=jobs",
+                    ["go.planning"] = "/dispatch?tab=planning",
                     ["go.storage"] = "/server?tab=storage", ["go.clipermissions"] = "/server?tab=cli-permissions",
                     ["go.blackbox"] = "/missions?tab=blackbox",
                 };
@@ -185,7 +185,7 @@ namespace Test.Shared.Suites.Tui
                         AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.FullPath == kvp.Value), kvp.Key + " opens " + kvp.Value + " (now " + host.Tui.Context.Router.Current!.FullPath + ")");
                     }
 
-                    AssertTrue(host.Tui.Context.Commands.All().First(c => c.Id == "go.jobs").Gestures.Count > 0, "jobs keeps its g-letter key");
+                    AssertFalse(host.Tui.Context.Commands.All().Any(c => c.Id == "go.jobs"), "removed Jobs shortcut must not remain in the palette");
                 }
             }));
 

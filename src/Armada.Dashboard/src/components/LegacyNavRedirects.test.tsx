@@ -77,7 +77,7 @@ describe('legacy nav redirects (v1.2.0 consolidation)', () => {
 
   it('App.tsx redirects every folded route instead of rendering the old pages (no 404s)', () => {
     const app = readFileSync('./src/App.tsx', 'utf8');
-    expect(app).toContain('<Route path="jobs" element={<LegacyPageRedirect to="/activity?source=jobs" />} />');
+    expect(app).toContain('<Route path="jobs" element={<LegacyPageRedirect to="/activity?source=events" />} />');
     expect(app).toContain('<Route path="storage" element={<LegacyPageRedirect to="/server?tab=storage" />} />');
     expect(app).toContain('<Route path="cli-permissions" element={<CliPermissionsRedirect />} />');
     expect(app).toContain('<Route path="planning" element={<PlanningRedirect />} />');

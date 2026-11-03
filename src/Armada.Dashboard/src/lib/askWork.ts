@@ -1,6 +1,6 @@
 import type { AskTrackedWork, AskWorkSnapshot } from '../types/models';
 import type { Translate } from './deploymentApprovalLabel';
-import { JOBS_PATH } from './navTargets';
+import { BACKGROUND_ACTIVITY_PATH } from './navTargets';
 
 /** Child statuses (missions and fleet action targets) that will not change again. */
 const TERMINAL_CHILD = new Set([
@@ -113,7 +113,7 @@ export function workRoute(entityType: string | null | undefined, entityId: strin
     case 'Mission': return `/missions/${id}`;
     case 'FleetActionRun': return `/fleet-actions/runs/${id}`;
     case 'VesselImportBatch': return `/vessels/import?batch=${id}`;
-    case 'Job': return JOBS_PATH;
+    case 'Job': return BACKGROUND_ACTIVITY_PATH;
     case 'BlackBox': return `/blackbox/${id}`;
     default: return '/activity';
   }

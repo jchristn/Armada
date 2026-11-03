@@ -912,7 +912,7 @@ work?"*. It replaces the removed `inbox` tool (D-012), which returned every item
 **What qualifies.** Two kinds of item appear:
 
 - **Awaiting your decision (human-in-the-loop):** a mission in `Review` (approve or reject), a deployment in `PendingApproval`, a pending Ask Armada action proposal in one of your own conversations, or a pending CLI permission request (a captain waiting to run one of its own tools, such as a shell command).
-- **Failed and needs intervention (human-out-of-the-loop):** a failed mission, a mission whose work could not be merged (landing failed), a failed merge, a failed or verification-failed deployment, or a stalled captain.
+- **Failed and needs intervention (human-out-of-the-loop):** a failed mission, a mission whose work could not be merged (landing failed), a failed merge, a failed or verification-failed deployment, a stalled captain, or the latest actionable background task failure.
 
 Purely informational events (completions, normal progress) are deliberately excluded -- the inbox answers *"what needs me?"*, not *"what happened?"* (use `enumerate` or the Activity log for history). An empty page (`TotalRecords` 0) means nothing currently needs the operator. Operational items are scoped like other reads (global admin: everything; tenant admin: the tenant; regular user: own items); Ask proposals are always limited to the caller's own threads, and proposals older than `Ask.ProposalExpiryMinutes` are left out (the same rule as `GET /api/v1/inbox`). Every item is returned (no category is capped), so `count` is the true number of items needing attention; only pending CLI permission requests stop at 1000, since they expire within minutes. Items are ordered by severity (`Critical` first), then title.
 
@@ -923,12 +923,15 @@ Purely informational events (completions, normal progress) are deliberately excl
 | `review` | Mission awaiting your review/approval | `Warning`, or `Critical` if the review deadline has passed |
 | `landing_failed` | Mission produced work that could not be merged | `Critical` |
 | `failed` | Mission failed | `Warning` |
+| `background_job_failed` | Latest actionable failed attempt of background work; follow `Href` to the related workflow and retry | `Warning` |
 | `merge_failed` | Queued merge failed testing or landing | `Critical` |
 | `deployment_approval` | Deployment waiting for your approval before it runs | `Warning` |
 | `deployment_failed` | Deployment failed or failed verification | `Critical` |
 | `stalled_captain` | Captain is stalled and may need recovery or a dock reclaim | `Warning` |
 | `ask_proposal` | Ask Armada action proposal waiting for your approval (`Href` is the conversation, `/ask/<threadId>`) | `Warning` |
 | `cli_permission` | CLI permission request waiting for an approver; visible to global admins, the tenant's tenant admins, and the owner of the thread or mission (`Href` is `/ask/<threadId>` for the caller's own conversation, otherwise `/server?tab=cli-permissions&request=<id>`; the pre-v1.2.0 `/cli-permissions?request=<id>` still redirects there) | `Warning` |
+
+Background failures are scoped to the same tenant/user rules as Jobs. Only the latest attempt per tenant, user, kind and name qualifies; a newer queued/running/successful/cancelled attempt supersedes the previous failure. Expected usage-capture discards (`SettingsGenerationChanged`, `CaptureDisabled`, `NoMembers`) and successful captures do not appear. No approve/reject decision is needed for these items. Terminal outcomes remain available through `enumerate` for `events` (`job.succeeded`, `job.failed`, `job.cancelled`); actual failures also emit `Error` signals. Existing job status and cancellation operations remain available for workflows and clients.
 
 Each object on the page is an `InboxItem` with `Kind`, `Severity`, `Title`, `Detail`, `EntityType`, `EntityName`
 (display name of the referenced entity; use it instead of parsing `Title`), `EntityId`, and a dashboard `Href`.

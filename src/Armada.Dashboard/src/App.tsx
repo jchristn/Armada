@@ -117,7 +117,7 @@ export default function App() {
                     <Route path="merge-queue" element={<LegacyPageRedirect to="/missions?tab=merge-queue" />} />
                     <Route path="merge-queue/:id" element={<MergeQueueDetail />} />
 
-                    <Route path="jobs" element={<LegacyPageRedirect to="/activity?source=jobs" />} />
+                    <Route path="jobs" element={<LegacyPageRedirect to="/activity?source=events" />} />
 
                     <Route path="configuration" element={<Configuration />} />
                     <Route path="personas" element={<LegacyPageRedirect to="/configuration?tab=personas" />} />

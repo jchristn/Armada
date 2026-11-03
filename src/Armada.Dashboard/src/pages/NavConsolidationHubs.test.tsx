@@ -24,7 +24,6 @@ vi.mock('./Missions', () => ({ default: () => <div>missions panel</div> }));
 vi.mock('./Voyages', () => ({ default: () => <div>voyages panel</div> }));
 vi.mock('./MergeQueue', () => ({ default: () => <div>merge queue panel</div> }));
 vi.mock('./BlackBox', () => ({ default: () => <div>black box panel</div> }));
-vi.mock('./Jobs', () => ({ default: () => <div>jobs panel</div> }));
 vi.mock('./Server', () => ({ default: () => <div>server panel</div> }));
 vi.mock('./Storage', () => ({ default: () => <div>storage panel</div> }));
 vi.mock('./CliPermissions', () => ({ default: () => <div>cli permissions panel</div> }));
@@ -61,10 +60,10 @@ describe('v1.2.0 hub tabs', () => {
     expect(screen.getByRole('tab', { name: 'Black Box' })).toHaveAttribute('title', 'Failure records for missions and voyages: where, how and why each failed, and how to recover');
   });
 
-  it('Activity hosts Jobs, deep-linked by ?source=jobs', async () => {
+  it('Activity redirects a legacy Jobs link to Events', async () => {
     renderAt('/activity?source=jobs', <Activity />);
-    expect(tabNames('Activity sources')).toContain('Jobs');
-    expect(await screen.findByText('jobs panel')).toBeInTheDocument();
+    expect(tabNames('Activity sources')).not.toContain('Jobs');
+    expect(await screen.findByText('events panel')).toBeInTheDocument();
   });
 
   it('Settings hosts Storage and CLI Tool Permissions as tabs', async () => {

@@ -9,8 +9,8 @@ export const CLI_PERMISSIONS_PATH = '/server?tab=cli-permissions';
 /** Dispatch tab that hosts Planning. */
 export const PLANNING_PATH = '/dispatch?tab=planning';
 
-/** Activity tab that lists background jobs. */
-export const JOBS_PATH = '/activity?source=jobs';
+/** Event log for background task outcomes; work is followed in its owning workflow. */
+export const BACKGROUND_ACTIVITY_PATH = '/activity?source=events';
 
 /** Settings tab that hosts Storage (global admins). */
 export const STORAGE_PATH = '/server?tab=storage';

@@ -9670,6 +9670,13 @@ a.usage-cell:hover { text-decoration: none; box-shadow: inset 0 0 0 1px currentC
 .usage-filter-field input, .usage-filter-field select { width: 100%; min-width: 0; max-width: 100%; }
 .usage-filter-form .usage-filter-actions { flex: 0 0 auto; }
 .usage-filter-actions { display: inline-flex; gap: 0.5rem; }
+.usage-help { min-width: 0; max-width: 100%; align-self: flex-end; }
+.usage-help > summary { cursor: pointer; list-style: none; gap: 0.4rem; }
+.usage-help > summary::-webkit-details-marker { display: none; }
+.usage-help[open] { flex: 1 1 100%; }
+.usage-help-content { margin-top: 0.5rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); font-size: 0.8125rem; }
+.usage-help-content p { margin: 0; }
+.usage-help-content p + p { margin-top: 0.5rem; }
 .usage-chart { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
 .usage-chart-help { margin: 0; font-size: 0.8125rem; }
 .usage-chart-panel { border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; min-width: 0; overflow-x: auto; }

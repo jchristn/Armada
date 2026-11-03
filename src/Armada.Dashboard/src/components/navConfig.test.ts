@@ -49,7 +49,7 @@ describe('navConfig', () => {
 
   it('mentions the new tabs in the Activity, Dispatch, Missions, and Settings tooltips', () => {
     const items = navSections.flatMap((s) => s.items);
-    expect(items.find((i) => i.to === '/activity')!.tooltip).toContain('Jobs tab');
+    expect(items.find((i) => i.to === '/activity')!.tooltip).toContain('events');
     expect(items.find((i) => i.to === '/dispatch')!.tooltip).toContain('Planning tab');
     expect(items.find((i) => i.to === '/missions')!.tooltip).toContain('Black Box');
     const settings = items.find((i) => i.to === '/server')!.tooltip!;
@@ -58,9 +58,8 @@ describe('navConfig', () => {
   });
 
   it('keeps the folded pages searchable in the command palette, pointing at their new tabs', () => {
-    expect(commands.slice(-6)).toEqual([
+    expect(commands.slice(-5)).toEqual([
       { to: '/dispatch?tab=planning', label: 'Planning', section: 'OPERATIONS' },
-      { to: '/activity?source=jobs', label: 'Jobs', section: 'OPERATIONS' },
       { to: '/missions?tab=blackbox', label: 'Black Box', section: 'OPERATIONS' },
       { to: '/server?tab=storage', label: 'Storage', section: 'SYSTEM' },
       { to: '/server?tab=cli-permissions', label: 'CLI Tool Permissions', section: 'SYSTEM' },

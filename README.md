@@ -659,7 +659,7 @@ armada tui --server http://127.0.0.1:7890  # a specific server (saved as a profi
 armada tui --profile work --route /missions
 ```
 
-Every dashboard screen opens a real TUI screen (Ask Armada, Home, Needs You, Dispatch with its Planning and Backlog tabs, Fleet Actions, Missions, Voyages, Merge Queue, Activity with its Jobs tab, Vessels, Captains and Docks, Delivery, Configuration, API Explorer, Settings with its Storage and CLI Tool Permissions tabs), plus an Approvals center. Profiles live in `~/.armada/tui.json` with tokens in the OS keychain, and are shared with `armada profile`.
+Every dashboard screen opens a real TUI screen (Ask Armada, Home, Needs You, Dispatch with its Planning and Backlog tabs, Fleet Actions, Missions, Voyages, Merge Queue, Activity, Vessels, Captains and Docks, Delivery, Configuration, API Explorer, Settings with its Storage and CLI Tool Permissions tabs), plus an Approvals center. Profiles live in `~/.armada/tui.json` with tokens in the OS keychain, and are shared with `armada profile`.
 
 | Key | Does |
 |-----|------|
@@ -736,7 +736,7 @@ The app is not yet in the App Store or Google Play; install a build from whoever
 
 ## Activity and Monitoring
 
-Mission history on the dashboard shows completed and failed work over time. Activity gathers the cross-entity timeline, API requests, events, signals, and model usage. Harbor Charts show jobs, concurrency, launch speed, link health, and tokens for one host.
+Mission history on the dashboard shows completed and failed work over time. Activity gathers the cross-entity timeline, API requests, events, signals, and model usage. Background task outcomes appear in Events; failures also emit error signals and the latest actionable failure appears in Needs You. Harbor Charts show jobs, concurrency, launch speed, link health, and tokens for one host.
 
 Token calendars supplement the existing monitoring charts in dashboard/mobile Activity → Token Usage and Harbor Charts. The TUI Token Usage tab shows daily activity; `u` opens the navigable calendar. See [token heatmaps and screenshot data](archive/TOKEN_USAGE_HEATMAP.md).
 

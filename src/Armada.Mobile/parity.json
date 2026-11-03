@@ -817,14 +817,6 @@
     },
     {
       "kind": "tab",
-      "key": "Activity:jobs",
-      "status": "implemented",
-      "mobile": "src/screens/activity/JobsScreen.tsx",
-      "workstream": "W4.3",
-      "notes": "JobsScreen embedded: name, kind, status, progress, error, Cancel, full record in a sheet; /jobs redirects here"
-    },
-    {
-      "kind": "tab",
       "key": "Activity:requests",
       "status": "implemented",
       "mobile": "/activity?source=requests",

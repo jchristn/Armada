@@ -68,6 +68,21 @@ describe('Needs You approvals (F15)', () => {
   });
 });
 
+describe('Needs You background failures', () => {
+  it('offers a focusable intervention link to the existing workflow, preserving its scope', async () => {
+    vi.mocked(getInbox).mockResolvedValue([
+      item('background_job_failed', 'Background task failed: Captain usage capture (ClaudeCode)', '/activity?source=usage-overview&hostId=hbr_fixture'),
+    ]);
+    render(<MemoryRouter initialEntries={['/inbox']}><Routes><Route path="*" element={<><Inbox /><Probe /></>} /></Routes></MemoryRouter>);
+    const interventions = await screen.findByRole('region', { name: 'Needs intervention' });
+    const open = within(interventions).getByRole('button', { name: 'Open' });
+    open.focus();
+    expect(open).toHaveFocus();
+    fireEvent.click(open);
+    expect(screen.getByTestId('location')).toHaveTextContent('/activity?source=usage-overview&hostId=hbr_fixture');
+  });
+});
+
 describe('Needs You CLI tool permission requests', () => {
   const request: CliPermissionRequest = {
     id: 'cpr_1', toolName: 'Bash', summaryText: 'rm -rf build', inputText: '{"command":"rm -rf build"}', suggestedRule: 'Bash(rm -rf build)',

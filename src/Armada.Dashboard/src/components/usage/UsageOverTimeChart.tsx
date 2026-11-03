@@ -103,6 +103,7 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
   const [showTable, setShowTable] = useState(false);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; label: string } | null>(null);
   const tooltipId = useId();
+  const helpId = useId();
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0 });
   useLayoutEffect(() => {
@@ -294,7 +295,7 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
         {limits.length === 0 ? (
           <p className="text-dim usage-chart-empty">{t('No limit samples in this range. This is not zero usage.')}</p>
         ) : (
-          <svg className="usage-chart-svg usage-chart-limits" viewBox={`0 0 ${WIDTH} ${LIMITS_HEIGHT}`} role="group" aria-label={t('Limit utilization by account and window')}>
+          <svg className="usage-chart-svg usage-chart-limits" viewBox={`0 0 ${WIDTH} ${LIMITS_HEIGHT}`} role="group" aria-label={t('Limit utilization by account and window')} aria-describedby={helpId}>
             <g className="usage-chart-grid" aria-hidden="true">
               {[0, 25, 50, 75, 100].map((tick) => (
                 <g key={tick}>
@@ -407,7 +408,7 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
         {tokens.length === 0 ? (
           <p className="text-dim usage-chart-empty">{t('No token records in this range.')}</p>
         ) : (
-          <svg className="usage-chart-svg" viewBox={`0 0 ${WIDTH} ${TOKENS_HEIGHT}`} role="group" aria-label={t('Tokens recorded at completion by provider')}>
+          <svg className="usage-chart-svg" viewBox={`0 0 ${WIDTH} ${TOKENS_HEIGHT}`} role="group" aria-label={t('Tokens recorded at completion by provider')} aria-describedby={helpId}>
             <g className="usage-chart-grid" aria-hidden="true">
               <line x1={PAD_LEFT} x2={WIDTH - PAD_RIGHT} y1={PAD_TOP + plotHeight} y2={PAD_TOP + plotHeight} />
               <text x={PAD_LEFT - 6} y={PAD_TOP + 8} textAnchor="end">{tokenFormat.format(max)}</text>
@@ -476,7 +477,7 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
 
   return (
     <div className="usage-chart" ref={rootRef}>
-      <p className="text-dim usage-chart-help">{t('Select a point, a bar or a row in the data table to list the missions completed in that bucket. Use the arrow keys to move between buckets and Enter to select.')}</p>
+      <p id={helpId} className="sr-only">{t('Select a point, a bar or a row in the data table to list the missions completed in that bucket. Use the arrow keys to move between buckets and Enter to select.')}</p>
       {tooltip && createPortal(
         <div ref={tooltipRef} id={tooltipId} role="tooltip" className="usage-chart-tooltip" style={tooltipPosition}>{tooltip.label}</div>,
         document.body,

@@ -185,6 +185,11 @@ export default function Inbox() {
                 </button>
               </>
             )}
+            {item.kind === INBOX_KINDS.backgroundJobFailed && (
+              <button type="button" className="btn btn-sm" onClick={(e) => { e.stopPropagation(); navigate(item.href); }} title={t('Click to open the page where you can act on this item.')}>
+                {t('Open')}
+              </button>
+            )}
             {APPROVAL_KINDS.has(item.kind) && !decidable && (
               <button
                 type="button"
