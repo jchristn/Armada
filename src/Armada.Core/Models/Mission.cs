@@ -10,6 +10,9 @@ namespace Armada.Core.Models
     /// </summary>
     public class Mission
     {
+        // Monitoring may resolve scalar routing preferences without persisting or changing the caller's mission.
+        internal Mission AdmissionView() => (Mission)MemberwiseClone();
+
         #region Public-Members
 
         /// <summary>

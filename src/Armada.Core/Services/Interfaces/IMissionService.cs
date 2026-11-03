@@ -29,6 +29,9 @@ namespace Armada.Core.Services.Interfaces
         /// </summary>
         Func<string, string?>? OnGetMissionOutput { get; set; }
 
+        /// <summary>Read-only full preflight for observing a dispatch opportunity; never claims or launches work.</summary>
+        Task<bool> IsAdmissionReadyForMonitoringAsync(Mission mission, CancellationToken token = default);
+
         /// <summary>Readmit a verified repair through current safety/capacity gates before relaunch.</summary>
         Task<bool> TryAdmitVerificationResumeAsync(Mission mission, Captain captain, CancellationToken token = default);
 

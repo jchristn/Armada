@@ -1000,14 +1000,9 @@ namespace Armada.Core.Services
             if (idleCaptains.Count == 0) return idleCaptains;
 
             // Per-runtime caps (AgentSettings.MaxConcurrent, 0 = unlimited) and per-endpoint caps
-            // (InferenceOptions.MaxConcurrentMissions) count every Working captain, so several captains pointed at one
+            // (InferenceOptions.MaxConcurrentMissions) count occupied execution slots, so several captains pointed at one
             // local model server share its budget instead of each starting a run against it.
-            Dictionary<AgentRuntimeEnum, int> runtimeLimits = new Dictionary<AgentRuntimeEnum, int>();
-            foreach (AgentSettings agent in _Settings.Agents ?? new List<AgentSettings>())
-            {
-                if (agent.MaxConcurrent > 0 && (!runtimeLimits.TryGetValue(agent.Runtime, out int existing) || agent.MaxConcurrent < existing))
-                    runtimeLimits[agent.Runtime] = agent.MaxConcurrent;
-            }
+            Dictionary<AgentRuntimeEnum, int> runtimeLimits = ConcurrencyCapacityPolicy.RuntimeLimits(_Settings.Agents);
 
             bool anyEndpoint = idleCaptains.Any(c => !String.IsNullOrEmpty(c.ModelEndpointId));
             if (runtimeLimits.Count == 0 && !anyEndpoint) return idleCaptains;
@@ -1033,17 +1028,17 @@ namespace Armada.Core.Services
                     ModelEndpoint? endpoint = await EndpointOf(busy).ConfigureAwait(false);
                     if (endpoint == null) continue;
                     string key = EndpointCapacityKey(endpoint);
-                    workingByEndpoint[key] = (workingByEndpoint.TryGetValue(key, out int count) ? count : 0) + Math.Max(1, busy.ActiveMissionCount);
+                    workingByEndpoint[key] = (workingByEndpoint.TryGetValue(key, out int count) ? count : 0) + ConcurrencyCapacityPolicy.Occupancy(busy);
                 }
             }
 
             List<Captain> admitted = new List<Captain>();
             foreach (Captain candidate in idleCaptains)
             {
-                if (runtimeLimits.TryGetValue(candidate.Runtime, out int runtimeLimit) && working.Where(w => w.Runtime == candidate.Runtime).Sum(w => Math.Max(1, w.ActiveMissionCount)) >= runtimeLimit)
+                if (runtimeLimits.TryGetValue(candidate.Runtime, out int runtimeLimit) && working.Where(w => w.Runtime == candidate.Runtime).Sum(w => ConcurrencyCapacityPolicy.Occupancy(w)) >= runtimeLimit)
                 {
                     if (excluded != null) excluded[candidate.Id] = MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.RuntimeMissionLimit,
-                        candidate.Runtime + " runtime", working.Where(w => w.Runtime == candidate.Runtime).Sum(w => Math.Max(1, w.ActiveMissionCount)), runtimeLimit,
+                        candidate.Runtime + " runtime", working.Where(w => w.Runtime == candidate.Runtime).Sum(w => ConcurrencyCapacityPolicy.Occupancy(w)), runtimeLimit,
                         AssignmentBlockerActionEnum.EditSettings, "settings", null, "Agents." + candidate.Runtime + ".MaxConcurrent");
                     if (excluded != null)
                     {
@@ -1104,11 +1099,7 @@ namespace Armada.Core.Services
             return admitted;
         }
 
-        private static string EndpointCapacityKey(ModelEndpoint endpoint)
-        {
-            string url = (endpoint.BaseUrl ?? String.Empty).Trim().TrimEnd('/');
-            return String.IsNullOrEmpty(url) ? "endpoint:" + endpoint.Id : url.ToLowerInvariant();
-        }
+        private static string EndpointCapacityKey(ModelEndpoint endpoint) => ConcurrencyCapacityPolicy.EndpointKey(endpoint);
 
         private async Task<string?> ReadDockHeadAsync(Dock dock, CancellationToken token)
         {

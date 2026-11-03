@@ -22,6 +22,6 @@ Run several missions, lower captain or vessel limits below current usage, and wa
 
 ## Remaining scope
 
-Runtime/endpoint/global observers, stuck-admission detection, wait-time metrics and full invariant integration remain open. At this validation stage captain reservations still included verification ownership. The subsequent [verification capacity wave](VERIFICATION_CAPACITY_VALIDATION.md) separates retained recovery records from counted execution, including restart replay and gated repair admission.
+The subsequent [outer-gate monitor wave](OUTER_GATE_MONITOR_VALIDATION.md) completes runtime/endpoint/global observations and sampled stuck-admission detection. Wait-time metrics and broader provider/load integration remain open. At this validation stage captain reservations still included verification ownership. The subsequent [verification capacity wave](VERIFICATION_CAPACITY_VALIDATION.md) separates retained recovery records from counted execution, including restart replay and gated repair admission.
 
 Release command: ./build-all.sh v1.3.0; log: /tmp/armada-v130-invariants-build-all.log.

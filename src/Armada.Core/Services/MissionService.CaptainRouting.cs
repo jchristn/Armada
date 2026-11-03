@@ -387,7 +387,7 @@ namespace Armada.Core.Services
         /// reference is left as-is and degrades to normal routing at assignment time. Best-effort: never throws for a
         /// missing persona/voyage.
         /// </summary>
-        private async Task ResolvePreferredCaptainAsync(Mission mission, CancellationToken token)
+        private async Task ResolvePreferredCaptainAsync(Mission mission, CancellationToken token, bool persist = true)
         {
             if (mission == null) return;
             if (!String.IsNullOrEmpty(mission.RequestedCaptainId)) return;
@@ -452,7 +452,7 @@ namespace Armada.Core.Services
                 }
             }
 
-            if (changed)
+            if (changed && persist)
             {
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
@@ -476,8 +476,7 @@ namespace Armada.Core.Services
         {
             int limit = _Settings.MaxConcurrentMissions;
             if (limit == 0) return null;
-            int running = (await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Assigned, token).ConfigureAwait(false)).Count
-                + (await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress, token).ConfigureAwait(false)).Count;
+            int running = await _Database.Missions.CountExecutionSlotsAsync(token).ConfigureAwait(false);
             if (running < limit) return null;
             // Do not expose other tenants' mission IDs through a deployment-wide limit.
             return MissionAdmissionEvaluator.Capacity(MissionAssignmentBlockerReasonEnum.GlobalMissionLimit,

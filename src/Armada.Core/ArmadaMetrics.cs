@@ -28,6 +28,9 @@ namespace Armada.Core
         public static readonly Counter<long> ConcurrencyLimitViolations =
             _Meter.CreateCounter<long>("armada.concurrency.limit_violations");
 
+        /// <summary>Pending missions observed ready before/after three consecutive dispatch opportunities.</summary>
+        public static readonly Counter<long> AdmissionStuck = _Meter.CreateCounter<long>("armada.admission.stuck");
+
         /// <summary>Missions that reached Failed.</summary>
         public static readonly Counter<long> MissionsFailed =
             _Meter.CreateCounter<long>("armada.missions.failed", null, "Missions failed");

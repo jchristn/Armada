@@ -8,6 +8,9 @@ namespace Armada.Core.Database.Interfaces
     /// </summary>
     public interface IMissionMethods
     {
+        /// <summary>Count execution slots in one snapshot without loading outputs or diffs.</summary>
+        Task<int> CountExecutionSlotsAsync(CancellationToken token = default);
+
         /// <summary>
         /// Create a mission.
         /// </summary>

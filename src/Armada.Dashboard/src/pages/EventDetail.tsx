@@ -171,7 +171,8 @@ export default function EventDetail() {
         <div className="card">
           <h3 title={t('Extra structured data recorded with the event, shown as formatted JSON.')}>{t('Payload')}</h3>
           <pre style={{
-            background: '#f5f5fa',
+            background: 'var(--bg-hover)',
+            color: 'var(--text)',
             padding: 16,
             borderRadius: 'var(--radius)',
             overflow: 'auto',

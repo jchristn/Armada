@@ -2,6 +2,7 @@ namespace Armada.Core.Services
 {
     using System.Text.Json;
     using Armada.Core.Database;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -25,10 +26,33 @@ namespace Armada.Core.Services
             try
             {
                 HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
-                foreach (Captain captain in await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false))
+                List<Captain> captains = await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false);
+                foreach (Captain captain in captains)
                     await ObserveAsync("captain", captain.Id, captain.Name, captain.ActiveMissionCount,
                         ConcurrencyClamp.CaptainLimit(captain.MaxConcurrency, _Settings.Concurrency.MaxCaptainConcurrency),
                         "captain", captain.TenantId, captain.UserId, seen, token).ConfigureAwait(false);
+                await ObserveAsync("global", "global", "Armada", await _Database.Missions.CountExecutionSlotsAsync(token).ConfigureAwait(false),
+                    _Settings.MaxConcurrentMissions, "settings", null, null, seen, token).ConfigureAwait(false);
+                var runtimeLimits = ConcurrencyCapacityPolicy.RuntimeLimits(_Settings.Agents);
+                foreach (AgentRuntimeEnum runtime in Enum.GetValues<AgentRuntimeEnum>().Concat(runtimeLimits.Keys).Distinct())
+                    await ObserveAsync("runtime", runtime.ToString(), runtime + " runtime",
+                        captains.Where(c => c.Runtime == runtime).Sum(ConcurrencyCapacityPolicy.Occupancy),
+                        runtimeLimits.TryGetValue(runtime, out int limit) ? limit : 0,
+                        "settings", null, null, seen, token).ConfigureAwait(false);
+                List<ModelEndpoint> endpoints = await _Database.ModelEndpoints.EnumerateAsync(token).ConfigureAwait(false);
+                Dictionary<string, ModelEndpoint> byEndpoint = endpoints.ToDictionary(e => e.Id, StringComparer.Ordinal);
+                Dictionary<string, int> endpointUsage = captains.Where(c => c.ModelEndpointId != null && byEndpoint.ContainsKey(c.ModelEndpointId))
+                    .GroupBy(c => ConcurrencyCapacityPolicy.EndpointKey(byEndpoint[c.ModelEndpointId!]), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.Sum(ConcurrencyCapacityPolicy.Occupancy), StringComparer.OrdinalIgnoreCase);
+                foreach (var group in endpoints.GroupBy(ConcurrencyCapacityPolicy.EndpointKey, StringComparer.OrdinalIgnoreCase))
+                {
+                    bool mixedLimits = group.Select(e => e.InferenceOptions?.MaxConcurrentMissions).Distinct().Count() > 1;
+                    int usage = endpointUsage.TryGetValue(group.Key, out int count) ? count : 0;
+                    foreach (ModelEndpoint endpoint in group)
+                        await ObserveAsync("endpoint", endpoint.Id, "Endpoint " + endpoint.Name, usage,
+                            endpoint.InferenceOptions?.MaxConcurrentMissions ?? 0, "model_endpoint", null, null, seen, token,
+                            mixedLimits ? "Endpoint aliases share usage but have different limits; the observation cannot establish an admission violation." : null).ConfigureAwait(false);
+                }
                 foreach (Vessel vessel in await _Database.Vessels.EnumerateAsync(token).ConfigureAwait(false))
                 {
                     List<MissionAdmissionSnapshot> missions = VoyageSlotPolicy.Runnable(
@@ -49,7 +73,7 @@ namespace Armada.Core.Services
         }
 
         private async Task ObserveAsync(string gate, string id, string name, int count, int limit, string entityType,
-            string? tenantId, string? userId, HashSet<string> seen, CancellationToken token)
+            string? tenantId, string? userId, HashSet<string> seen, CancellationToken token, string? ambiguity = null)
         {
             string key = gate + ":" + id;
             seen.Add(key);
@@ -63,21 +87,23 @@ namespace Armada.Core.Services
             // seen after restart is unknown, not proof of an admission bug or a configuration edit.
             bool limitDropped = previous != null && (previous.Limit == 0 || limit < previous.Limit);
             string cause;
-            if (previous == null) cause = "unknown";
+            if (ambiguity != null || previous == null) cause = "unknown";
             else if (count <= previous.Count && (previous.Cause == "limit_lowered" || previous.Cause == null && limitDropped)) cause = "limit_lowered";
             else if (limitDropped || previous.Cause == "unknown" && count <= previous.Count) cause = "unknown";
             else cause = "unexpected";
             Observation current = new Observation(count, limit, cause);
             if (current == previous) return;
-            string usage = gate == "captain" ? "reserved mission slots" : gate == "vessel_voyages" ? "occupied voyage slots" : "running missions in the busiest voyage group";
+            string usage = gate == "captain" ? "reserved mission slots" : gate == "vessel_voyages" ? "occupied voyage slots"
+                : gate == "voyage_missions" ? "running missions in the busiest voyage group" : "occupied execution slots";
             string detail = cause == "limit_lowered" ? "An observed limit reduction is draining; running work continues."
                 : cause == "unknown" ? previous == null
                     ? "The overrun was first observed without a prior capacity baseline; its cause is unknown."
                     : "The order of capacity and limit changes between observations is uncertain; its cause is unknown."
                 : "No observed limit reduction explains this overrun; inspect admission and slot ownership.";
+            if (ambiguity != null) detail = ambiguity;
             ArmadaEvent evt = new ArmadaEvent("concurrency.limit_exceeded", name + " has " + count + " " + usage + " / limit " + limit + ". " + detail)
             {
-                EntityType = entityType, EntityId = id, TenantId = tenantId, UserId = userId,
+                EntityType = entityType, EntityId = entityType == "settings" ? null : id, TenantId = tenantId, UserId = userId,
                 CaptainId = entityType == "captain" ? id : null, VesselId = entityType == "vessel" ? id : null,
                 Payload = JsonSerializer.Serialize(new { Gate = gate, Count = count, Limit = limit, Cause = cause })
             };
