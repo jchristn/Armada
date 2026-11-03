@@ -94,11 +94,13 @@ namespace Armada.Core.Services
                 : await _Database.Captains.ReadAsync(captainId, token).ConfigureAwait(false);
             if (captain == null) throw new KeyNotFoundException("Captain not found: " + captainId);
 
-            if (captain.ActiveMissionCount > 0)
+            List<Mission> held = (await _Database.Missions.EnumerateByCaptainAsync(captainId, token).ConfigureAwait(false))
+                .Where(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress || m.Status == MissionStatusEnum.Verifying).ToList();
+            if (held.Count > 0)
             {
+                if (captain.CurrentSessionId != null)
+                    await RecallAssignmentAsync(captain, tenantId, stopContext, token).ConfigureAwait(false);
                 await _Database.Captains.UpdateStateAsync(captainId, CaptainStateEnum.Stopping, token).ConfigureAwait(false);
-                List<Mission> held = (await _Database.Missions.EnumerateByCaptainAsync(captainId, token).ConfigureAwait(false))
-                    .Where(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress || m.Status == MissionStatusEnum.Verifying).ToList();
                 foreach (Mission mission in held)
                     await RecallAssignmentAsync(captain.ForMission(mission), tenantId, stopContext, token).ConfigureAwait(false);
                 return;
@@ -158,7 +160,7 @@ namespace Armada.Core.Services
                     : await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
                 if (currentMission != null &&
                     (currentMission.Status == MissionStatusEnum.InProgress ||
-                     currentMission.Status == MissionStatusEnum.Assigned))
+                     currentMission.Status == MissionStatusEnum.Assigned || currentMission.Status == MissionStatusEnum.Verifying))
                 {
                     await RecordOperatorStopAsync(captain, currentMission, stopContext, token).ConfigureAwait(false);
                 }

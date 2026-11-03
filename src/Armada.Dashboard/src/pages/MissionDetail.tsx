@@ -43,6 +43,7 @@ import Markdown from '../components/shared/Markdown';
 import Button from '../components/shared/Button';
 import CaptainRef from '../components/shared/CaptainRef';
 import AssignmentBlockerCard from '../components/missions/AssignmentBlockerCard';
+import VerificationStatusCard from '../components/missions/VerificationStatusCard';
 import BlackBoxPanel from '../components/blackbox/BlackBoxPanel';
 import BranchesModal from '../components/vessels/BranchesModal';
 import { useLocale } from '../context/LocaleContext';
@@ -498,6 +499,8 @@ export default function MissionDetail() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
       {deletion.dialog}
+
+      {mission.status === 'Verifying' && <VerificationStatusCard />}
 
       {mission.status === 'Pending' && mission.assignmentBlocker && (
         <AssignmentBlockerCard blocker={mission.assignmentBlocker} />

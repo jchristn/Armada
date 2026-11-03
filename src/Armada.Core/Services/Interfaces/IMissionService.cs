@@ -29,6 +29,9 @@ namespace Armada.Core.Services.Interfaces
         /// </summary>
         Func<string, string?>? OnGetMissionOutput { get; set; }
 
+        /// <summary>Readmit a verified repair through current safety/capacity gates before relaunch.</summary>
+        Task<bool> TryAdmitVerificationResumeAsync(Mission mission, Captain captain, CancellationToken token = default);
+
         /// <summary>
         /// Try to assign a mission to an available captain.
         /// </summary>

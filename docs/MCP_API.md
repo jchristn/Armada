@@ -7920,6 +7920,12 @@ retain tenant isolation even for a GlobalAdmin; explicit tenant selection never
 combines tenants. See REST_API.md, Account Usage, for settings, history resolution,
 retention and completion-time attribution. MCP adds no resources or prompts.
 
+## v1.3.0 verification capacity
+
+A mission in `Verifying` retains its captain/dock association and exited-process recovery record but occupies no execution slot. Captain `ActiveMissionCount` and `ActiveMissionIds` describe Assigned/InProgress execution, excluding verification; a captain with only verification work may be Idle and accept independent work. Checks keep their branch safety fence. Successful verification completes without reclaiming a captain slot. A failed check remains Verifying while a repair waits for current captain/global/runtime/endpoint/vessel admission. Health ticks replay this work after restart even when the captain is Idle. Disabling/quarantining the captain or filling its capacity prevents a repair launch.
+
+`mission.stage_check` event payloads add an optional `verificationVersion` UTC timestamp matching the mission version checked. Armada reuses persisted results only for that exact verification version; stale results cannot complete/relaunch newer work. No endpoint or mission/captain response fields were added. Existing verification associations remain available through mission reads and event history; recall includes verification even when the captain's active execution count is zero.
+
 ## v1.3.0 concurrency overrun events
 
 Existing event reads expose `concurrency.limit_exceeded` from the health-tick observer. Events refer to a captain or vessel and retain that entity's tenant/user scope. `Payload` is JSON containing `Gate` (`captain`, `vessel_voyages`, or `voyage_missions`), `Count`, `Limit`, and `Cause` (`limit_lowered`, `unexpected`, or `unknown`). Captain counts are durable reserved slots; vessel mission counts describe the busiest voyage/standalone pipeline group. Private mission/voyage IDs are omitted. Unchanged overrun observations are deduplicated within the Admiral process; a restart resets the baseline. An initial overrun or uncertain edit/claim order has unknown cause, rather than being classified as an admission bug. Observation never cancels or preempts running work. Event schemas and endpoints are unchanged.

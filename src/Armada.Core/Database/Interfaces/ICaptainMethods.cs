@@ -96,6 +96,12 @@ namespace Armada.Core.Database.Interfaces
         /// <summary>Reconcile durable slot ownership/counters from Assigned and InProgress missions after interruption.</summary>
         Task ReconcileMissionSlotsAsync(CancellationToken token = default);
 
+        /// <summary>Retain verification exit ownership while releasing its execution capacity.</summary>
+        Task<bool> ReleaseVerificationCapacityAsync(string captainId, string missionId, int processId, DateTime version, CancellationToken token = default);
+
+        /// <summary>Atomically readmit a verified repair only while the version and captain capacity still allow it.</summary>
+        Task<bool> TryResumeVerificationAsync(string captainId, string missionId, DateTime version, int ceiling, CancellationToken token = default);
+
         /// <summary>Read a slot's last process handle for durable exit replay after the mission PID was claimed.</summary>
         Task<int?> ReadMissionProcessAsync(string captainId, string missionId, CancellationToken token = default);
 

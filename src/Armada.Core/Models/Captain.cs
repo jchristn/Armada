@@ -225,9 +225,9 @@ namespace Armada.Core.Models
         /// <summary>Whether the caller supplied a concurrency limit.</summary>
         [JsonIgnore]
         public bool MaxConcurrencySpecified => _MaxConcurrency.HasValue;
-        /// <summary>Server-owned number of durable mission slots.</summary>
+        /// <summary>Server-owned number of execution slots; retained verification ownership is excluded.</summary>
         public int ActiveMissionCount { get; set; }
-        /// <summary>Server-owned mission identifiers occupying this captain.</summary>
+        /// <summary>Server-owned mission identifiers occupying execution slots; verification is excluded.</summary>
         [CollectionBound(Constants.CaptainConcurrencyCeiling, Reason = "Bounded by the captain concurrency ceiling; ActiveMissionCount carries the total")]
         public List<string> ActiveMissionIds { get; set; } = new List<string>();
         /// <summary>Exclusive planning, refinement or analysis session, when any.</summary>

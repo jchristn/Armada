@@ -1,0 +1,98 @@
+[
+  {
+    "page": "mission",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Verify report and wait for repair capacity",
+    "explanation": ""
+  },
+  {
+    "page": "captain",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Verification captain",
+    "explanation": ""
+  },
+  {
+    "page": "mission",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Verify report and wait for repair capacity",
+    "explanation": ""
+  },
+  {
+    "page": "captain",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Verification captain",
+    "explanation": ""
+  },
+  {
+    "page": "mission",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Verify report and wait for repair capacity",
+    "explanation": ""
+  },
+  {
+    "page": "captain",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Verification captain",
+    "explanation": ""
+  },
+  {
+    "page": "mission",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Verify report and wait for repair capacity",
+    "explanation": ""
+  },
+  {
+    "page": "captain",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Verification captain",
+    "explanation": ""
+  },
+  {
+    "page": "mission",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Verify report and wait for repair capacity",
+    "explanation": ""
+  },
+  {
+    "page": "captain",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Verification captain",
+    "explanation": ""
+  },
+  {
+    "page": "mission",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Verify report and wait for repair capacity",
+    "explanation": ""
+  },
+  {
+    "page": "captain",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Verification captain",
+    "explanation": ""
+  }
+]

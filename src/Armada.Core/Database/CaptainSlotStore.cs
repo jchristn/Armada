@@ -65,15 +65,15 @@ namespace Armada.Core.Database
             }
         }
 
-        private const string Count = "(SELECT COUNT(*) FROM captain_mission_slots s WHERE s.captain_id=captains.id)";
-        private const string First = "(SELECT MIN(s.mission_id) FROM captain_mission_slots s WHERE s.captain_id=captains.id)";
+        private const string Count = "(SELECT COUNT(*) FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id)))";
+        private const string First = "(SELECT MIN(s.mission_id) FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id)))";
         private static readonly string Refresh = @"UPDATE captains SET
             state=CASE WHEN " + Count + @"=0 AND state IN ('Working','Stalled','Stopping') THEN 'Idle'
                        WHEN " + Count + @">0 AND state IN ('Idle','Stalled') THEN 'Working' ELSE state END,
-            active_mission_count=" + Count + @",current_mission_id=" + First + @",
-            current_dock_id=(SELECT m.dock_id FROM missions m WHERE m.id=" + First + @"),
-            process_id=(SELECT m.process_id FROM missions m WHERE m.id=" + First + @"),
-            recovery_attempts=CASE WHEN " + Count + @"=0 THEN 0 ELSE recovery_attempts END,
+            active_mission_count=" + Count + @",current_mission_id=CASE WHEN current_session_id IS NULL THEN " + First + @" ELSE current_mission_id END,
+            current_dock_id=CASE WHEN current_session_id IS NULL THEN (SELECT m.dock_id FROM missions m WHERE m.id=" + First + @") ELSE current_dock_id END,
+            process_id=CASE WHEN current_session_id IS NULL THEN (SELECT m.process_id FROM missions m WHERE m.id=" + First + @") ELSE process_id END,
+            recovery_attempts=CASE WHEN " + Count + @"=0 AND current_session_id IS NULL THEN 0 ELSE recovery_attempts END,
             last_update_utc=@now";
 
         internal async Task<bool> ReleaseAsync(string captainId, string missionId, CancellationToken token, CaptainStateEnum? emptyState = null)
@@ -103,6 +103,48 @@ namespace Armada.Core.Database
             }
             await tx.CommitAsync(token).ConfigureAwait(false);
             return released;
+        }
+
+        internal async Task<bool> ReleaseVerificationCapacityAsync(string captainId, string missionId, int processId, DateTime version, CancellationToken token)
+        {
+            using DbTransaction tx = await _Connection.BeginTransactionAsync(token).ConfigureAwait(false);
+            using DbCommand row = Command(tx, "UPDATE captains SET active_mission_count=active_mission_count WHERE id=@id;", captainId);
+            await row.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            using DbCommand current = Command(tx, "SELECT COUNT(*) FROM missions WHERE id=@mission AND captain_id=@id AND status='Verifying' AND last_update_utc=@value;", captainId, missionId,
+                _Postgres || _Mysql ? version : version.ToString("o", CultureInfo.InvariantCulture));
+            if (Convert.ToInt32(await current.ExecuteScalarAsync(token).ConfigureAwait(false)) != 1) return false;
+            using DbCommand insert = Command(tx, @"INSERT INTO captain_mission_slots(mission_id,captain_id,process_id,dock_id)
+                SELECT m.id,m.captain_id,@value,m.dock_id FROM missions m WHERE m.id=@mission AND m.captain_id=@id AND m.status='Verifying'
+                AND NOT EXISTS (SELECT 1 FROM captain_mission_slots s WHERE s.mission_id=@mission);", captainId, missionId, processId);
+            await insert.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            using DbCommand retain = Command(tx, @"UPDATE captain_mission_slots SET process_id=@value WHERE captain_id=@id AND mission_id=@mission;", captainId, missionId, processId);
+            await retain.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            using DbCommand refresh = Command(tx, Refresh + " WHERE id=@id;", captainId);
+            await refresh.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            await tx.CommitAsync(token).ConfigureAwait(false);
+            return true;
+        }
+
+        internal async Task<bool> ResumeVerificationAsync(string captainId, string missionId, DateTime version, int ceiling, CancellationToken token)
+        {
+            using DbTransaction tx = await _Connection.BeginTransactionAsync(token).ConfigureAwait(false);
+            using DbCommand claim = Command(tx, @"UPDATE captains SET active_mission_count=active_mission_count+1,state='Working',last_update_utc=@now
+                WHERE id=@id AND active=" + (_Postgres ? "TRUE" : "1") + @" AND current_session_id IS NULL AND state IN ('Idle','Working')
+                AND active_mission_count < max_concurrency AND active_mission_count < @ceiling
+                AND EXISTS (SELECT 1 FROM captain_mission_slots s JOIN missions m ON m.id=s.mission_id
+                    WHERE s.captain_id=@id AND s.mission_id=@mission AND m.captain_id=@id AND m.status='Verifying'
+                    AND m.process_id IS NULL AND m.last_update_utc=@value);", captainId, missionId,
+                _Postgres || _Mysql ? version : version.ToString("o", CultureInfo.InvariantCulture));
+            DbParameter maximum = claim.CreateParameter(); maximum.ParameterName = "@ceiling"; maximum.Value = Math.Clamp(ceiling, 1, 256); claim.Parameters.Add(maximum);
+            if (await claim.ExecuteNonQueryAsync(token).ConfigureAwait(false) != 1) return false;
+            using DbCommand mission = Command(tx, @"UPDATE missions SET status='InProgress',last_update_utc=@now
+                WHERE id=@mission AND captain_id=@id AND status='Verifying' AND process_id IS NULL AND last_update_utc=@value;", captainId, missionId,
+                _Postgres || _Mysql ? version : version.ToString("o", CultureInfo.InvariantCulture));
+            if (await mission.ExecuteNonQueryAsync(token).ConfigureAwait(false) != 1) return false;
+            using DbCommand refresh = Command(tx, Refresh + " WHERE id=@id;", captainId);
+            await refresh.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            await tx.CommitAsync(token).ConfigureAwait(false);
+            return true;
         }
 
         internal async Task<bool> SetAssignmentAsync(string captainId, string missionId, string column, object value, CancellationToken token)
@@ -142,7 +184,7 @@ namespace Armada.Core.Database
                 (SELECT 1 FROM missions m WHERE m.id=captain_mission_slots.mission_id AND m.captain_id=captain_mission_slots.captain_id AND m.status IN ('Assigned','InProgress','Verifying'));");
             await delete.ExecuteNonQueryAsync(token).ConfigureAwait(false);
             using DbCommand insert = Command(tx, @"INSERT INTO captain_mission_slots(mission_id,captain_id,process_id,dock_id)
-                SELECT m.id,m.captain_id,m.process_id,m.dock_id FROM missions m JOIN captains c ON c.id=m.captain_id WHERE (m.status IN ('InProgress','Verifying') OR (m.status='Assigned' AND (c.current_mission_id=m.id OR c.active_mission_count>0)))
+                SELECT m.id,m.captain_id,COALESCE(m.process_id,CASE WHEN c.current_mission_id=m.id THEN c.process_id ELSE NULL END),m.dock_id FROM missions m JOIN captains c ON c.id=m.captain_id WHERE (m.status IN ('InProgress','Verifying') OR (m.status='Assigned' AND (c.current_mission_id=m.id OR c.active_mission_count>0)))
                 AND NOT EXISTS (SELECT 1 FROM captain_mission_slots s WHERE s.mission_id=m.id);");
             await insert.ExecuteNonQueryAsync(token).ConfigureAwait(false);
             using DbCommand refresh = Command(tx, Refresh + " WHERE active_mission_count>0 OR " + Count + ">0;");

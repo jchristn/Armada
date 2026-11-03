@@ -121,7 +121,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE id = @id;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -150,7 +150,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE name = @name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains WHERE name = @name;";
                     cmd.Parameters.AddWithValue("@name", name);
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -332,7 +332,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains ORDER BY name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains ORDER BY name;";
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
                         while (await reader.ReadAsync(token).ConfigureAwait(false))
@@ -395,7 +395,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains" + whereClause +
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains" + whereClause +
                         " ORDER BY created_utc " + orderDirection +
                         " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                     foreach (NpgsqlParameter p in parameters) cmd.Parameters.Add(new NpgsqlParameter(p.ParameterName, p.Value));
@@ -426,7 +426,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE state = @state ORDER BY name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains WHERE state = @state ORDER BY name;";
                     cmd.Parameters.AddWithValue("@state", state.ToString());
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -581,7 +581,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND id = @id;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND id = @id;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", id);
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
@@ -624,7 +624,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId ORDER BY name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId ORDER BY name;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -675,7 +675,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains" + whereClause + " ORDER BY created_utc " + orderDirection + " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains" + whereClause + " ORDER BY created_utc " + orderDirection + " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                     foreach (NpgsqlParameter p in parameters) cmd.Parameters.Add(new NpgsqlParameter(p.ParameterName, p.Value));
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {
@@ -698,7 +698,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND name = @name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND name = @name;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@name", name);
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
@@ -722,7 +722,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND state = @state ORDER BY name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND state = @state ORDER BY name;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@state", state.ToString());
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
@@ -898,7 +898,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@userId", userId);
                     cmd.Parameters.AddWithValue("@id", id);
@@ -945,7 +945,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND user_id = @userId ORDER BY name;";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains WHERE tenant_id = @tenantId AND user_id = @userId ORDER BY name;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@userId", userId);
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
@@ -998,7 +998,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id),'[]') AS active_mission_ids FROM captains" + whereClause + " ORDER BY created_utc " + orderDirection + " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
+                    cmd.CommandText = "SELECT captains.*, COALESCE((SELECT json_agg(s.mission_id)::text FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id))),'[]') AS active_mission_ids FROM captains" + whereClause + " ORDER BY created_utc " + orderDirection + " LIMIT " + query.PageSize + " OFFSET " + query.Offset + ";";
                     foreach (NpgsqlParameter p in parameters) cmd.Parameters.Add(new NpgsqlParameter(p.ParameterName, p.Value));
                     using (NpgsqlDataReader reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     {

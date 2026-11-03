@@ -397,7 +397,7 @@ namespace Armada.Core.Services
             if (mission == null) return;
             captain = captain.ForMission(mission);
             if (expectedVersion.HasValue && (mission.LastUpdateUtc != expectedVersion.Value
-                || mission.ProcessId.HasValue || (mission.Status != MissionStatusEnum.InProgress && mission.Status != MissionStatusEnum.Testing)))
+                || mission.ProcessId.HasValue || (mission.Status != MissionStatusEnum.InProgress && mission.Status != MissionStatusEnum.Testing && mission.Status != MissionStatusEnum.Verifying)))
             {
                 _Logging.Info(_Header + "ignoring stale claimed completion for " + missionId);
                 return;

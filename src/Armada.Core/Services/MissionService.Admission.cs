@@ -8,7 +8,7 @@ namespace Armada.Core.Services
         private async Task<MissionAssignmentBlocker?> EvaluateSafetyAdmissionAsync(Mission mission, Vessel vessel, CancellationToken token)
         {
             List<Mission> running = (await ActiveMissionsOnVesselAsync(vessel.Id, token).ConfigureAwait(false))
-                .Where(m => m.Id != mission.Id && (m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress)).ToList();
+                .Where(m => m.Id != mission.Id && (m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress || m.Status == MissionStatusEnum.Verifying)).ToList();
             MissionAssignmentBlocker? safety = MissionAdmissionEvaluator.RunningLocks(mission, vessel, running,
                 running.Where(IsBroadScope).ToList(), IsBroadScope(mission));
             return safety ?? await EvaluateVesselAdmissionAsync(mission, vessel, token).ConfigureAwait(false);

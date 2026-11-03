@@ -278,6 +278,7 @@
         "Storage": "Almacenamiento"
       },
       "phrases": {
+        "Checks may be queued or running. Verification does not reserve a captain execution slot; any repair waits for available capacity.": "Las comprobaciones pueden estar en cola o en ejecución. La verificación no reserva una plaza de ejecución del capitán; cualquier reparación espera a que haya capacidad disponible.",
         "Breadcrumbs": "Ruta de navegación",
         "Probe type": "Tipo de prueba",
         "Pass/fail": "Aprobado/fallido",
@@ -7479,6 +7480,7 @@
         "Storage": "存储"
       },
       "phrases": {
+        "Checks may be queued or running. Verification does not reserve a captain execution slot; any repair waits for available capacity.": "检查可能正在排队或运行。验证不占用队长的执行名额；修复会等待可用容量。",
         "Breadcrumbs": "面包屑导航",
         "Probe type": "探测类型",
         "Pass/fail": "通过/失败",
@@ -13788,6 +13790,7 @@
         "Storage": "儲存空間"
       },
       "phrases": {
+        "Checks may be queued or running. Verification does not reserve a captain execution slot; any repair waits for available capacity.": "檢查可能正在排隊或執行。驗證不佔用隊長的執行名額；修復會等待可用容量。",
         "Breadcrumbs": "麵包屑導覽",
         "Probe type": "探測類型",
         "Pass/fail": "通過/失敗",
@@ -20022,6 +20025,7 @@
         "Storage": "儲存空間"
       },
       "phrases": {
+        "Checks may be queued or running. Verification does not reserve a captain execution slot; any repair waits for available capacity.": "檢查可能排緊隊或者執行緊。驗證唔會佔用隊長嘅執行名額；修復會等有可用容量先開始。",
         "Breadcrumbs": "導覽路徑",
         "Probe type": "探測類型",
         "Pass/fail": "通過/失敗",
@@ -26276,6 +26280,7 @@
         "Storage": "ストレージ"
       },
       "phrases": {
+        "Checks may be queued or running. Verification does not reserve a captain execution slot; any repair waits for available capacity.": "チェックは待機中または実行中です。検証はキャプテンの実行枠を占有しません。修正は実行枠が空くまで待機します。",
         "Breadcrumbs": "パンくずリスト",
         "Probe type": "プローブの種類",
         "Pass/fail": "合格/不合格",
@@ -32516,6 +32521,7 @@
         "Storage": "Speicher"
       },
       "phrases": {
+        "Checks may be queued or running. Verification does not reserve a captain execution slot; any repair waits for available capacity.": "Prüfungen können warten oder laufen. Die Verifizierung belegt keinen Ausführungsplatz des Captains; Reparaturen warten auf freie Kapazität.",
         "Breadcrumbs": "Brotkrumennavigation",
         "Probe type": "Prüfungstyp",
         "Pass/fail": "Bestanden/Fehlgeschlagen",
@@ -38760,6 +38766,7 @@
         "Storage": "Stockage"
       },
       "phrases": {
+        "Checks may be queued or running. Verification does not reserve a captain execution slot; any repair waits for available capacity.": "Les vérifications peuvent être en attente ou en cours. Elles ne réservent aucun créneau d’exécution du capitaine ; toute correction attend une capacité disponible.",
         "Breadcrumbs": "Fil d’Ariane",
         "Probe type": "Type de test",
         "Pass/fail": "Réussite/échec",
@@ -45004,6 +45011,7 @@
         "Storage": "Archiviazione"
       },
       "phrases": {
+        "Checks may be queued or running. Verification does not reserve a captain execution slot; any repair waits for available capacity.": "I controlli possono essere in coda o in esecuzione. La verifica non riserva uno slot di esecuzione del capitano; eventuali correzioni attendono capacità disponibile.",
         "Breadcrumbs": "Percorso di navigazione",
         "Probe type": "Tipo di test",
         "Pass/fail": "Superato/fallito",

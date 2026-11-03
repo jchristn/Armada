@@ -7,7 +7,6 @@ namespace Armada.Core.Services
     {
         private async Task<List<Captain>> ExpandAssignmentsAsync(Captain captain, CancellationToken token)
         {
-            if (captain.ActiveMissionCount == 0) return new List<Captain> { captain };
             List<Mission> missions = await _Database.Missions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false);
             List<Captain> result = new List<Captain>();
             foreach (Mission mission in missions.Where(m => m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress || m.Status == MissionStatusEnum.Verifying))
@@ -17,7 +16,7 @@ namespace Armada.Core.Services
                     scoped.ProcessId = await _Database.Captains.ReadMissionProcessAsync(captain.Id, mission.Id, token).ConfigureAwait(false);
                 result.Add(scoped);
             }
-            return result;
+            return result.Count == 0 ? new List<Captain> { captain } : result;
         }
 
         private async Task HealthCheckAssignmentsAsync(Captain captain, CancellationToken token)

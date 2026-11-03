@@ -460,14 +460,14 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// The vessel's Assigned and InProgress missions, the only ones the vessel lock, broad-scope and branch checks look
+        /// The vessel's execution and verification missions, which the broad-scope and branch safety checks look
         /// at. Read by status rather than as the vessel's whole history (with its stored outputs and diffs), which every
         /// pending mission used to load on every dispatch tick (D17).
         /// </summary>
         private async Task<List<Mission>> ActiveMissionsOnVesselAsync(string vesselId, CancellationToken token)
         {
             List<Mission> active = new List<Mission>();
-            foreach (MissionStatusEnum status in new[] { MissionStatusEnum.Assigned, MissionStatusEnum.InProgress })
+            foreach (MissionStatusEnum status in new[] { MissionStatusEnum.Assigned, MissionStatusEnum.InProgress, MissionStatusEnum.Verifying })
                 active.AddRange((await _Database.Missions.EnumerateByStatusAsync(status, token).ConfigureAwait(false)).Where(m => m.VesselId == vesselId));
             return active;
         }
