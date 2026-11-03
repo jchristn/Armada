@@ -40,7 +40,7 @@ U0's design/UX review and implementation map are recorded in the linked review. 
 - [x] Shared TUI/Mobile API parity inventories include all five reads. Native recovery/settings controls and the TUI mission inspection workflow remain U4 work.
 - [x] Native tests/type checking/lint and shared-module lint pass; terminal display/focus/parity/localization checks pass with an explicit headless default palette, independent of shell `NO_COLOR`.
 - [x] Native follow-up committed/pushed as `1f3b59b78`; `build-all v1.3.0` completed for all images and VSIX.
-- [ ] U5 verification follow-up: the omnibus run has an order-dependent plain-text MCP bulk-error reply; the complete E2E group (1,346 passed, one skipped) and combined Client/Database/ResponseShape group (796 passed) both pass. The diagnostic now preserves the unexpected reply for the next omnibus investigation.
+- [ ] U5 verification follow-up: the omnibus run has an order-dependent plain-text MCP bulk-error reply; the complete E2E group (1,346 passed, one skipped) and combined Client/Database/ResponseShape group (796 passed) both pass. The improved diagnostic identified the real default 100 tool calls/second throttle. The exhaustive read-only contract crawl is now paced below that limit and asserts it never silently skips throttled replies. Production limits are unchanged; a final omnibus rerun is pending.
 
 ## 1. Requirements and implementation rules
 

@@ -268,6 +268,9 @@ namespace Test.Shared.Suites.E2E
                         string text;
                         try
                         {
+                            // This is a contract crawl, not a load test. Stay below the real default 100 calls/s
+                            // so later assertions exercise their handler instead of a transport throttle reply.
+                            await Task.Delay(20).ConfigureAwait(false);
                             string rpc = await McpTestCalls.CallToolAsync(mcp, tool.Name, arguments).ConfigureAwait(false);
                             E2eMcpToolEnvelope envelope = JsonHelper.Deserialize<E2eMcpToolEnvelope>(rpc);
                             text = envelope.Result?.Content.FirstOrDefault()?.Text ?? "";
@@ -278,6 +281,8 @@ namespace Test.Shared.Suites.E2E
                         }
 
                         string trimmed = text.TrimStart();
+                        AssertFalse(trimmed.StartsWith("Tool '" + tool.Name + "' was not run: the rate limit", StringComparison.Ordinal),
+                            "the contract crawl must not silently skip throttled tool responses");
                         if (!(trimmed.StartsWith("{", StringComparison.Ordinal) || trimmed.StartsWith("[", StringComparison.Ordinal))) continue;
                         if (trimmed.Contains("\"ErrorCode\"", StringComparison.Ordinal) && !trimmed.Contains("\"Objects\"", StringComparison.Ordinal)) continue;
                         exercised++;
