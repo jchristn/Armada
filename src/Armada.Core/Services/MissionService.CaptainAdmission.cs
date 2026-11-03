@@ -14,6 +14,7 @@ namespace Armada.Core.Services
             internal List<Captain> RoutingEligible = new();
             internal Dictionary<string, MissionAssignmentBlocker> CapacityExclusions = new(StringComparer.Ordinal);
             internal Captain? Selected;
+            internal List<CaptainRoutingBucket> RoutingBuckets = new List<CaptainRoutingBucket>();
         }
 
         private async Task<CaptainAdmissionSelection> SelectCaptainAdmissionAsync(Mission mission, CancellationToken token, bool recordEnvelope = false)
@@ -35,6 +36,7 @@ namespace Armada.Core.Services
             if (selection.Selected == null && envelope != null)
             {
                 selection.Selected = envelope.SelectEscalation(view);
+                if (selection.Selected != null) selection.RoutingBuckets.Add(new CaptainRoutingBucket { ReasonCode = "WorkerEnvelopeEscalation", Captains = new List<Captain> { selection.Selected } });
                 outcome = selection.Selected != null ? WorkerEnvelopeOutcomeEnum.Escalated
                     : envelope.AnyCompatibleCaptain() ? WorkerEnvelopeOutcomeEnum.Waiting : WorkerEnvelopeOutcomeEnum.NoEligibleCaptain;
             }

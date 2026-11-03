@@ -50,6 +50,9 @@ namespace Armada.Core.Models
         public double UnsettledPercent { get; set; }
         /// <summary>ReservePercent captured as reserve_percent in the selection ledger.</summary>
         public double ReservePercent { get; set; }
+        /// <summary>Semantic flag when bounded diagnostic labels or utilization were normalized.</summary>
+        public string? NormalizationCode { get; set; }
+
         /// <summary>Create an identified CaptainSelectionWindowRecord record.</summary>
         public CaptainSelectionWindowRecord() : base("csw_") { }
     }

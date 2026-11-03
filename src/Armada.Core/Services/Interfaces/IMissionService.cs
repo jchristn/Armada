@@ -43,6 +43,9 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="token">Cancellation token.</param>
         Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default);
 
+        /// <summary>Read-only authorized-mission preview of configurable captain selection; no claims, probes or history writes.</summary>
+        Task<CaptainSelectionPreview> PreviewCaptainSelectionAsync(Mission mission, int pageNumber = 1, int pageSize = 25, CancellationToken token = default);
+
         /// <summary>
         /// Explain why a Pending mission is still waiting for a captain, using the same gates as
         /// <see cref="TryAssignAsync"/> without changing anything. Returns null when the mission is not Pending.

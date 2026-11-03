@@ -45,6 +45,10 @@ namespace Armada.Server.Routes
         /// <summary>Cancel capture work and rebuild schedules after persisted usage settings change.</summary>
         public Func<Task>? OnUsageCaptureSettingsChanged { get; set; }
 
+        /// <summary>Shared live policy/settings coordinator, also used by MCP updates.</summary>
+        public UsageSelectionConfigurationService? UsageSelectionConfiguration { get; set; }
+
+
         /// <summary>
         /// Instantiate.
         /// </summary>
@@ -493,6 +497,8 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
+                using SettingsUpdateLease? settingsLease = UsageSelectionConfiguration == null ? null
+                    : await UsageSelectionConfiguration.AcquireUpdateAsync(req.CancellationToken).ConfigureAwait(false);
                 SettingsUpdateRequest body;
                 try
                 {
@@ -503,6 +509,31 @@ namespace Armada.Server.Routes
                 {
                     req.Http.Response.StatusCode = 400;
                     return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid settings JSON or field type." };
+                }
+                catch (ArgumentException invalid)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid usage selection numeric value.", Data = new { Code = "InvalidUsageSelection", Field = invalid.ParamName } };
+                }
+
+                if (body.UsageSelection != null)
+                {
+                    if (UsageSelectionConfiguration == null)
+                    {
+                        req.Http.Response.StatusCode = 503;
+                        return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Usage selection settings coordinator is unavailable.") { Data = new { Code = "UsageSelectionUnavailable" } };
+                    }
+                    try { UsageSelectionConfiguration.ValidateUpdate(body.UsageSelection, ctx, body.ExpectedUsageSelectionRevision); }
+                    catch (UsageSelectionConfigurationException conflict)
+                    {
+                        req.Http.Response.StatusCode = 409;
+                        return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = conflict.Message, Data = new { conflict.Code, Field = "UsageSelection" } };
+                    }
+                    catch (ArgumentException invalid)
+                    {
+                        req.Http.Response.StatusCode = 400;
+                        return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = invalid.Message, Data = new { Code = "InvalidUsageSelection", Field = "UsageSelection." + invalid.ParamName } };
+                    }
                 }
 
                 // Lists stored in settings are bounded (docs/ENUMERATION.md); checked before anything is applied.
@@ -647,7 +678,20 @@ namespace Armada.Server.Routes
                     _settings.RemoteControl = incoming;
                 }
 
-                await _settings.SaveAsync().ConfigureAwait(false);
+                if (body.UsageSelection != null)
+                {
+                    try
+                    {
+                        await UsageSelectionConfiguration!.ApplyUnderLeaseAsync(settingsLease!, body.UsageSelection, ctx,
+                            body.ExpectedUsageSelectionRevision, req.CancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception error) when (error is IOException || error is System.Data.Common.DbException)
+                    {
+                        req.Http.Response.StatusCode = 503;
+                        return new ApiStatusErrorResponse(ApiStatusErrorCodeEnum.ServiceUnavailable, "Captain selection settings could not be persisted. Reload settings before retrying.");
+                    }
+                }
+                else await _settings.SaveAsync().ConfigureAwait(false);
 
                 if (body.UsageCapture != null && OnUsageCaptureSettingsChanged != null)
                     await OnUsageCaptureSettingsChanged().ConfigureAwait(false);
@@ -665,7 +709,10 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Settings")
                 .WithSummary("Update server settings")
-                .WithDescription("Accepts partial update of editable settings. Validates values and persists to settings file. UsageCapture omission/null preserves the group; a supplied object replaces it using defaults for omitted members. Invalid field types return 400 before mutation. UsageCapture numeric bounds clamp: MinimumIntervalSeconds 60..86400, ProbeTimeoutSeconds 1..300, MaximumConcurrentProbes/MaximumConcurrentProbesPerHost 1..64, MaximumBackoffSeconds 60..86400, MaximumExcerptBytes 256..65536, RawSnapshotRetentionDays 1..365, RollupRetentionDays 7..1825. Lists are bounded: Import.AllowedRoots, Import.ExcludedDirectoryNames and FleetActions.OfflineHarborIds hold at most 256 entries each (400 with Data.Code CollectionLimitExceeded otherwise); RepositoryHealth.ScoredCriteria and Push.Categories keep one entry per defined value.")
+                .WithResponse(200, OpenApiResponseMetadata.Create("Server settings including effective usage-selection policy, revision and capabilities"))
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Usage selection revision/source/capability conflict"))
+                .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("Usage selection persistence unavailable"))
+                .WithDescription("Accepts partial update of editable settings. Validates values and persists to settings file. UsageSelection replaces its supplied group, defaults to Observe/FirstAvailable, supports FirstAvailable/MostRemainingAllowance/MostUsedAllowance, applies live, and optionally checks ExpectedUsageSelectionRevision (409 on stale revision). Environment overrides are read-only; Enforce is refused until capability metadata reports availability. Numeric bounds clamp; invalid enum/non-finite values and cross-field bounds return 400 before mutation. UsageCapture omission/null preserves the group; a supplied object replaces it using defaults for omitted members. Invalid field types return 400 before mutation. UsageCapture numeric bounds clamp: MinimumIntervalSeconds 60..86400, ProbeTimeoutSeconds 1..300, MaximumConcurrentProbes/MaximumConcurrentProbesPerHost 1..64, MaximumBackoffSeconds 60..86400, MaximumExcerptBytes 256..65536, RawSnapshotRetentionDays 1..365, RollupRetentionDays 7..1825. Lists are bounded: Import.AllowedRoots, Import.ExcludedDirectoryNames and FleetActions.OfflineHarborIds hold at most 256 entries each (400 with Data.Code CollectionLimitExceeded otherwise); RepositoryHealth.ScoredCriteria and Push.Categories keep one entry per defined value.")
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/server/reset", async (ApiRequest req) =>
@@ -792,11 +839,19 @@ namespace Armada.Server.Routes
 
         private object BuildSettingsResponse()
         {
+            UsageSelectionConfiguration usageSelection = UsageSelectionConfiguration?.Read() ?? new UsageSelectionConfiguration
+            {
+                Settings = _settings.EffectiveUsageSelection.Copy(), Revision = _settings.UsageSelectionRevision,
+                Capabilities = new UsageSelectionCapabilities { ObserveAvailable = false, AppliedLive = false }
+            };
             return new
             {
                 DataRetentionDays = _settings.DataRetentionDays,
                 RequestHistoryRetentionDays = _settings.RequestHistoryRetentionDays,
                 UsageCapture = _settings.UsageCapture,
+                UsageSelection = usageSelection.Settings,
+                UsageSelectionRevision = usageSelection.Revision,
+                UsageSelectionCapabilities = usageSelection.Capabilities,
                 AdmiralPort = _settings.AdmiralPort,
                 McpPort = _settings.McpPort,
                 MaxCaptains = _settings.MaxCaptains,

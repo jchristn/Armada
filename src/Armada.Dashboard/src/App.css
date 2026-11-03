@@ -9854,3 +9854,14 @@ a.btn:hover { text-decoration: none; }
 
 .token-usage-view-controls { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 0.75rem; min-width: 0; }
 .token-usage-view-controls > .refresh-btn { margin-left: auto; }
+
+/* Captain selection reuses the capture settings controls, including narrow-screen wrapping. */
+.usage-selection-settings { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+.usage-selection-settings .usage-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.usage-selection-settings .usage-panel-heading h3 { margin: 0; }
+.usage-selection-settings .usage-capture-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); }
+.usage-selection-settings .form-group { min-width: 0; }
+.usage-selection-settings select, .usage-selection-settings input { width: 100%; min-width: 0; }
+.usage-selection-settings > .btn { align-self: flex-start; }
+.usage-selection-settings summary { cursor: pointer; padding: 0.5rem 0; }
+.usage-selection-settings :is(input, select, button, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

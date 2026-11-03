@@ -112,7 +112,7 @@ namespace Armada.Core.Services
             TimeSpan horizon = UsageQuotaPolicy.FreshnessHorizon(candidate.EffectiveCaptureIntervalSeconds);
             if (horizon.TotalSeconds > settings.MaximumFreshnessSeconds) horizon = TimeSpan.FromSeconds(settings.MaximumFreshnessSeconds);
             if (nowUtc - candidate.CapturedUtc.Value > horizon) { Unknown("UsageStale"); return result; }
-            if (candidate.Status != UsageSnapshotStatusEnum.Ok || candidate.Source == UsageCaptureSourceEnum.Derived)
+            if (candidate.Status != UsageSnapshotStatusEnum.Ok || candidate.Source == UsageCaptureSourceEnum.Derived || !Enum.IsDefined(typeof(UsageCaptureSourceEnum), candidate.Source))
             { Unknown("UsageNotAuthoritative"); return result; }
 
             double? available = null;

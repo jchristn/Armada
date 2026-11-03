@@ -303,6 +303,16 @@ namespace Armada.Core.Services
                 + "|" + (String.IsNullOrWhiteSpace(commandFingerprint) ? "-" : commandFingerprint.Trim());
         }
 
+        /// <summary>Fingerprint the exact probe group/configuration whose last-good evidence may be selected.</summary>
+        /// <param name="groupKey">Existing probe discriminator.</param>
+        /// <param name="configurationRevision">Expected host/runtime/command revision; null preserves legacy capture fingerprinting.</param>
+        /// <returns>Stable uppercase SHA256 fingerprint matching capture persistence.</returns>
+        public static string CaptureContextKey(string groupKey, string? configurationRevision)
+        {
+            ArgumentNullException.ThrowIfNull(groupKey);
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new string?[] { groupKey, configurationRevision }))));
+        }
+
         /// <summary>
         /// The stable job name for one capture group's dedicated job, so jobs are visible per group and a
         /// restart can find the group's persisted lease.

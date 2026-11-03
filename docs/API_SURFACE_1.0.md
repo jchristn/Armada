@@ -24,13 +24,13 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 521 | 15 |
-| MCP tools | 264 | 8 |
+| REST routes | 526 | 15 |
+| MCP tools | 270 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 77 | 0 |
 | CLI commands | 97 | 0 |
-| Settings keys | 335 | 12 |
+| Settings keys | 350 | 12 |
 
 ## REST API
 
@@ -131,6 +131,8 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/blackbox/{id}/timeline` | Authenticated |  | 200 `BlackBoxTimelinePage`, 404 |  |
 | POST | `/api/v1/blackbox/{id}/timeline/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `BlackBoxTimelinePage`, 400, 404 |  |
 | POST | `/api/v1/blackbox/{id}/unpin` | Authenticated |  | 200 `BlackBoxEntry`, 404 `ApiErrorResponse` |  |
+| GET | `/api/v1/captain-selection-decisions/{id}` | Authenticated |  | 200 `CaptainSelectionDecisionDetail`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| GET | `/api/v1/captain-selection-decisions/{id}/candidates` | Authenticated |  | 200 `EnumerationResult<CaptainSelectionCandidateView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/captains` | Authenticated |  | 200 `EnumerationResult<Captain>` |  |
 | POST | `/api/v1/captains` | TenantAdmin | `Captain` | 201 `Captain`, 400, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/captains/delete/multiple` | TenantAdmin | `DeleteMultipleRequest` | 200 `DeleteMultipleResult`, 400 |  |
@@ -281,6 +283,9 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/missions/{id}/blackbox/brief` | Authenticated |  | 200 `string`, 400 `ApiErrorResponse`, 404 `ApiErrorResponse` |  |
 | GET | `/api/v1/missions/{id}/blackbox/entries` | Authenticated |  | 200 `EnumerationResult<BlackBoxEntrySummary>`, 400 |  |
 | POST | `/api/v1/missions/{id}/blackbox/entries/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<BlackBoxEntrySummary>`, 400 |  |
+| GET | `/api/v1/missions/{id}/captain-selection` | Authenticated |  | 200 `CaptainSelectionSummary`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| GET | `/api/v1/missions/{id}/captain-selection/history` | Authenticated |  | 200 `EnumerationResult<CaptainSelectionDecisionView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| POST | `/api/v1/missions/{id}/captain-selection/preview` | Authenticated |  | 200 `CaptainSelectionPreview`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/missions/{id}/diff` | Authenticated |  | 200, 404, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/missions/{id}/evaluate-autoland` | Authenticated |  | 200 `AutoLandDecision`, 400, 404 |  |
 | GET | `/api/v1/missions/{id}/github/pull-request` | Authenticated |  | 200 `GitHubPullRequestDetail`, 404 |  |
@@ -429,7 +434,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/server/rollback` | AdminOnly |  | 200, 400 | experimental |
 | POST | `/api/v1/server/stop` | AdminOnly |  |  |  |
 | GET | `/api/v1/settings` | AdminOnly |  |  |  |
-| PUT | `/api/v1/settings` | AdminOnly |  |  |  |
+| PUT | `/api/v1/settings` | AdminOnly |  | 200, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/signals` | Authenticated |  | 200 `EnumerationResult<Signal>` |  |
 | POST | `/api/v1/signals` | TenantAdmin | `Signal` | 201 `Signal` |  |
 | POST | `/api/v1/signals/delete/multiple` | TenantAdmin | `DeleteMultipleRequest` | 200 `DeleteMultipleResult`, 400 |  |
@@ -673,6 +678,9 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_blackbox_timeline` | Authenticated | `entryId*: string`, `order: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `get_captain` | Authenticated | `captainId*: string` |  |
 | `get_captain_log` | Authenticated | `captainId*: string`, `lines: integer`, `offset: integer` |  |
+| `get_captain_selection` | Authenticated | `missionId*: string`, `pageNumber: integer`, `pageSize: integer` |  |
+| `get_captain_selection_decision` | Authenticated | `decisionId*: string`, `pageNumber: integer`, `pageSize: integer`, `tenantId: string` |  |
+| `get_captain_selection_history` | Authenticated | `missionId*: string`, `query: object` |  |
 | `get_captain_tools` | Authenticated | `captainId*: string`, `pageNumber: integer`, `pageSize: integer`, `refresh: boolean`, `sourceKind: string` |  |
 | `get_check_run` | Authenticated | `checkRunId*: string` |  |
 | `get_cli_permission_request` | Authenticated | `requestId*: string` |  |
@@ -702,6 +710,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `get_runbook` | Authenticated | `runbookId*: string` |  |
 | `get_runbook_execution` | Authenticated | `runbookExecutionId*: string` |  |
 | `get_stage_outcome` | Authenticated | `outcomeId*: string` |  |
+| `get_usage_selection_settings` | AdminOnly |  |  |
 | `get_vessel` | Authenticated | `vesselId*: string` |  |
 | `get_vessel_blackbox_doctor` | Authenticated | `pageNumber: integer`, `pageSize: integer`, `vesselId*: string`, `windowDays: integer` |  |
 | `get_voyage_blackbox_cascade` | Authenticated | `voyageId*: string` |  |
@@ -747,6 +756,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `mission_status` | Authenticated | `missionId*: string` |  |
 | `papercut_summary` | Authenticated | `category: string`, `limit: integer`, `minSeverity: string`, `scanLimit: integer`, `sinceHours: integer`, `ungrouped: boolean`, `vesselId: string` |  |
 | `pin_blackbox` | Authenticated | `entryId: string`, `missionId: string`, `pinned: boolean`, `voyageId: string` |  |
+| `preview_captain_selection` | Authenticated | `missionId*: string`, `pageNumber: integer`, `pageSize: integer` |  |
 | `preview_mission_overlap` | Authenticated | `dependsOnMissionId: string`, `description: string`, `excludeMissionId: string`, `title: string`, `vesselId*: string` |  |
 | `preview_workflow_profile` | Authenticated | `vesselId*: string`, `workflowProfileId: string` |  |
 | `process_merge_entry` | TenantAdmin | `entryId*: string` |  |
@@ -820,6 +830,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `update_pipeline` | Authenticated | `description: string`, `name*: string`, `stages: array<object>` |  |
 | `update_playbook` | TenantAdmin | `active: boolean`, `content: string`, `description: string`, `fileName: string`, `id*: string` |  |
 | `update_prompt_template` | Authenticated | `content*: string`, `description: string`, `name*: string` |  |
+| `update_usage_selection_settings` | AdminOnly | `expectedRevision: integer`, `settings*: object` |  |
 | `update_vessel` | TenantAdmin | `allowConcurrentMissions: boolean`, `auditCommand: string`, `autoApprove: boolean`, `autoLandEnabled: boolean`, `autoLandMaxFiles: integer`, `autoLandMaxLines: integer`, `autoLandPathAllowGlobs: array<string>`, `autoLandPathDenyGlobs: array<string>`, `clearAutoApprove: boolean`, `defaultBranch: string`, `defaultPipelineId: string`, `definitionOfDoneBuildCommand: string`, `definitionOfDoneEnabled: boolean`, `definitionOfDoneTestCommand: string`, `definitionOfDoneTimeoutSeconds: integer`, `enableModelContext: boolean`, `gitHubTokenOverride: string`, `landingMode: string`, `lintCommand: string`, `maxParallelMissionsPerVoyage: integer`, `maxParallelVoyages: integer`, `modelContext: string`, `name: string`, `projectContext: string`, `repoUrl: string`, `serializeOverlappingMissions: boolean`, `styleGuide: string`, `testCommand: string`, `vesselId*: string`, `workerEnvelope: object`, `workingDirectory: string` |  |
 | `update_vessel_context` | TenantAdmin | `modelContext: string`, `projectContext: string`, `styleGuide: string`, `vesselId*: string` |  |
 | `update_workflow_profile` | TenantAdmin | `abbreviatedUnitTestCommand: string`, `active: boolean`, `buildCommand: string`, `changelogGenerationCommand: string`, `deploymentVerificationCommand: string`, `description: string`, `e2eTestCommand: string`, `environments: array<object>`, `expectedArtifacts: array<string>`, `fleetId: string`, `id*: string`, `integrationTestCommand: string`, `isDefault: boolean`, `languageHints: array<string>`, `lintCommand: string`, `migrationCommand: string`, `name: string`, `ownershipScope: string`, `packageCommand: string`, `performanceCommand: string`, `publishArtifactCommand: string`, `releaseVersioningCommand: string`, `requiredInputs: array<object>`, `rollbackVerificationCommand: string`, `scope: string`, `securityScanCommand: string`, `unitTestCommand: string`, `vesselId: string` |  |
@@ -1384,5 +1395,20 @@ install with the home directory written as `~`; defaults are not frozen (see COM
 | `usageCapture.probeTimeoutSeconds` | int | `20` |  |
 | `usageCapture.rawSnapshotRetentionDays` | int | `7` |  |
 | `usageCapture.rollupRetentionDays` | int | `90` |  |
+| `usageSelection` | object |  |  |
+| `usageSelection.comfortableHeadroomPercent` | double | `30` |  |
+| `usageSelection.decisionRetentionDays` | int | `90` |  |
+| `usageSelection.maximumCandidates` | int | `1000` |  |
+| `usageSelection.maximumFreshnessSeconds` | int | `900` |  |
+| `usageSelection.maximumUnsettledSeconds` | int | `3600` |  |
+| `usageSelection.mode` | enum UsageSelectionModeEnum (Disabled\|Observe\|Enforce) | `"Observe"` |  |
+| `usageSelection.perAttemptReservationPercent` | double | `2` |  |
+| `usageSelection.providerCooldownSeconds` | int | `60` |  |
+| `usageSelection.reservePercent` | double | `10` |  |
+| `usageSelection.settlementLagSeconds` | int | `60` |  |
+| `usageSelection.strategy` | enum CaptainSelectionStrategyEnum (FirstAvailable\|MostRemainingAllowance\|MostUsedAllowance) | `"FirstAvailable"` |  |
+| `usageSelection.unknownRetrySeconds` | int | `60` |  |
+| `usageSelection.unknownUsageBehavior` | enum UsageUnknownBehaviorEnum (AllowDeprioritized\|Wait) | `"AllowDeprioritized"` |  |
+| `usageSelectionRevision` | long | `0` |  |
 | `verifyAllStageRuntimes` | bool | `true` |  |
 | `webSocketEnabled` | bool | `true` |  |

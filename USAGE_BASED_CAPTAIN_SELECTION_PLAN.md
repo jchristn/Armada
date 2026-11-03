@@ -2,7 +2,7 @@
 
 ## Status and release scope
 
-Planned for **v1.3.0**, entirely on **`feature/v1.3.0`**. Baseline inspected: `7c1794486` (2026-11-03). No implementation is claimed by this document. Recheck the branch, migrations and API inventory before starting each milestone because other v1.3.0 work is in progress.
+Planned for **v1.3.0**, entirely on **`feature/v1.3.0`**. Baseline inspected: `7c1794486` (2026-11-03). Implementation progress is tracked below. Recheck the branch, migrations and API inventory before starting each milestone because other v1.3.0 work is in progress.
 
 Armada should select a qualified captain with sufficient account headroom and retain evidence explaining that choice. An operator must be able to answer both “Why this captain and model?” and “Why is this mission waiting?” without reconstructing scheduler logs. Usage-aware selection extends existing routing, quota holds and admission; it does not introduce a second scheduler.
 
@@ -11,17 +11,18 @@ The required v1.3.0 deliverable comprises U0 through U6 below: observation mode,
 ## Implementation progress
 
 - [x] U0 baseline/contract review and executable normalized evidence fixtures: [review](docs/usage-selection/BASELINE_AND_CONTRACT.md).
-- [x] Pure policy foundation: typed candidate/window/results, bounded settings defaults and deterministic headroom-band ranking. Not connected to dispatch; no selection behavior changes yet.
-- [ ] Finish configurable strategy integration: FirstAvailable compatibility default plus MostRemainingAllowance and MostUsedAllowance now exist in typed settings, policy and stored revisions; dispatch and client controls remain pending.
+- [x] Pure policy foundation: typed candidate/window/results, bounded settings defaults and deterministic headroom-band ranking. Connected to Observe dispatch and read-only comparisons; actual routing remains unchanged in Observe.
+- [ ] Finish configurable strategy integration across all clients and Enforce: FirstAvailable compatibility default plus MostRemainingAllowance and MostUsedAllowance now exist in typed settings, policy and stored revisions; Observe dispatch, live server configuration, Dashboard controls, MCP and SDK contracts are implemented. Enforce and remaining client controls are pending.
 - [x] U1 storage foundation: migrations 123/124 on all providers, typed immutable history/evidence, policy/strategy revisions, scoped paging, reservation CAS/retention, capture-start timing and atomic Observe-mode claim/history primitives. See [validation](docs/usage-selection/U1_STORAGE_VALIDATION.md).
-- [ ] Finish U1: live settings/API/client integration and remaining milestone validation. Enforcement is not connected.
-- [ ] U2 Observe-mode end-to-end decisions and preview/history surfaces.
+- [x] U1 live policy coordinator and Dashboard settings controls, REST/MCP updates, environment metadata, optimistic revisions and recoverable persistence. See [segment notes](docs/usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md).
+- [ ] Finish U1: remaining client controls and milestone-wide validation. Enforcement is not connected.
+- [ ] U2 completion: Observe dispatch/repair records, bounded evidence loading, server preview/history, MCP/SDK reads and conservative shadow reconciliation are implemented. Dashboard mission comparison, Helm, full preview parity and end-to-end routing/lifecycle validation remain.
 - [ ] U3 atomic enforcement, reservations and lifecycle recovery.
 - [ ] U4 complete client/operator surfaces.
 - [ ] U5 observability, provider/stress and simulated-user validation.
 - [ ] U6 final release integration and handoff.
 
-U0's design/UX review and implementation map are recorded in the linked review. The new policy suite covers 26 cases; existing quota/default regression suites are run alongside it. No history, API, UI or admission milestone is complete based on this foundation.
+U0's design/UX review and implementation map are recorded in the linked review. The policy suite covers 28 cases; existing quota/default regression suites are run alongside it. No history, API, UI or admission milestone is complete based on this foundation.
 
 ## 1. Requirements and implementation rules
 

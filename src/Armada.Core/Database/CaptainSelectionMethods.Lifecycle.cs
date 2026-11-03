@@ -13,6 +13,33 @@ namespace Armada.Core.Database
     internal sealed partial class CaptainSelectionMethods
     {
         /// <inheritdoc />
+        public Task<List<UsageBudgetReservation>> ReadReconciliationBatchAsync(int batchSize = 100, CancellationToken token = default)
+        {
+            if (batchSize < 1 || batchSize > 1000) throw new ArgumentOutOfRangeException(nameof(batchSize));
+            return RunAsync(async connection =>
+            {
+                using DbCommand command = Command(connection, null, "SELECT * FROM usage_budget_reservations WHERE state IN ('Active','Unsettled','Uncertain') ORDER BY last_update_utc,id" + PageSql(connection));
+                Add(command, "@skip", 0); Add(command, "@take", batchSize);
+                List<UsageBudgetReservation> rows = new List<UsageBudgetReservation>();
+                using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+                while (await reader.ReadAsync(token).ConfigureAwait(false)) rows.Add(MapUsageBudgetReservation(reader));
+                return rows;
+            }, token);
+        }
+
+        /// <inheritdoc />
+        public Task<bool> TouchReservationAsync(string tenantId, string reservationId, int revision, DateTime atUtc, CancellationToken token = default)
+        {
+            Required(tenantId, nameof(tenantId)); Required(reservationId, nameof(reservationId));
+            return RunAsync(async connection =>
+            {
+                using DbCommand command = Command(connection, null, "UPDATE usage_budget_reservations SET last_update_utc=@at,revision=revision+1 WHERE tenant_id=@tenant AND id=@id AND revision=@revision AND last_update_utc<@at AND state IN ('Active','Unsettled','Uncertain');");
+                Add(command, "@at", Utc(atUtc)); Add(command, "@tenant", tenantId); Add(command, "@id", reservationId); Add(command, "@revision", revision);
+                return await command.ExecuteNonQueryAsync(token).ConfigureAwait(false) == 1;
+            }, token, write: true);
+        }
+
+        /// <inheritdoc />
         public Task<List<UsageBudgetReservation>> ReadReservationsAsync(string tenantId, string hostId, string runtime, string accountKey, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(hostId, nameof(hostId)); Required(runtime, nameof(runtime)); Required(accountKey, nameof(accountKey));
@@ -69,6 +96,12 @@ namespace Armada.Core.Database
                 if (parent == null || parent.Id != entry.DecisionId || parent.UserId != entry.UserId)
                     throw new ArgumentException("Execution event must reference its tenant, owner and decision attempt.", nameof(entry));
                 await InsertCaptainSelectionExecutionEventAsync(connection, transaction, entry, token).ConfigureAwait(false);
+                if (entry.EventKind == "ExecutionStarted")
+                {
+                    using DbCommand started = Command(connection, transaction, "UPDATE usage_budget_reservations SET execution_started_utc=@at,last_update_utc=@at,revision=revision+1 WHERE tenant_id=@tenant AND decision_id=@decision AND state='Active' AND execution_started_utc IS NULL AND created_utc<=@at AND last_update_utc<=@at;");
+                    Add(started, "@at", Utc(entry.OccurredUtc)); Add(started, "@tenant", entry.TenantId); Add(started, "@decision", entry.DecisionId);
+                    await started.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
                 await transaction.CommitAsync(token).ConfigureAwait(false);
                 return true;
             }, token, write: true);

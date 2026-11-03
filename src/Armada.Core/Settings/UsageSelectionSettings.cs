@@ -58,6 +58,14 @@ namespace Armada.Core.Settings
             if (ComfortableHeadroomPercent <= ReservePercent) throw new ArgumentException("Comfortable headroom must exceed the protected reserve.", nameof(ComfortableHeadroomPercent));
         }
 
+        /// <summary>Take a detached value-only snapshot for one evaluation/admission operation.</summary>
+        public UsageSelectionSettings Copy()
+        {
+            UsageSelectionSettings copy = (UsageSelectionSettings)MemberwiseClone();
+            copy.Validate();
+            return copy;
+        }
+
         private static double Bound(double value, double minimum, double maximum, string name)
         {
             if (Double.IsNaN(value) || Double.IsInfinity(value)) throw new ArgumentOutOfRangeException(name, "Usage settings require finite numeric values.");

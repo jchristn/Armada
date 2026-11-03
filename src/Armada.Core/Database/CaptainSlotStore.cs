@@ -109,12 +109,13 @@ namespace Armada.Core.Database
                 if (await claim.ExecuteNonQueryAsync(token).ConfigureAwait(false) != 1) return false;
                 using DbCommand insert = Command(tx, "INSERT INTO captain_mission_slots(mission_id,captain_id,dock_id) VALUES(@mission,@id,@value);", captainId, missionId, dockId);
                 await insert.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                using DbCommand assign = Command(tx, "UPDATE missions SET captain_id=@id,status='Assigned',dock_id=COALESCE(@value,dock_id),assigned_utc=@now,last_update_utc=@now WHERE id=@mission AND status='Pending';", captainId, missionId, dockId);
+                using DbCommand assign = Command(tx, "UPDATE missions SET captain_id=@id,status='Assigned',dock_id=COALESCE(@value,dock_id),assigned_utc=@now,last_update_utc=@now,selection_decision_id=NULL WHERE id=@mission AND status='Pending';", captainId, missionId, dockId);
                 int assigned = await assign.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 if (selection != null)
                 {
                     if (assigned != 1) return false;
                     await CaptainSelectionMethods.WriteAggregateAsync(_Connection, tx, selection, token).ConfigureAwait(false);
+                    await SetSelectionDecisionAsync(tx, missionId, captainId, selection.Decision.Id, token).ConfigureAwait(false);
                 }
                 await tx.CommitAsync(token).ConfigureAwait(false);
                 return true;
@@ -124,6 +125,13 @@ namespace Armada.Core.Database
                 await tx.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
                 return false;
             }
+        }
+
+        private async Task SetSelectionDecisionAsync(DbTransaction transaction, string missionId, string captainId, string decisionId, CancellationToken token)
+        {
+            using DbCommand command = Command(transaction, "UPDATE missions SET selection_decision_id=@value WHERE id=@mission AND captain_id=@id;", captainId, missionId, decisionId);
+            if (await command.ExecuteNonQueryAsync(token).ConfigureAwait(false) != 1)
+                throw new InvalidOperationException("Mission ownership changed before its selection decision could be recorded.");
         }
 
         private const string Count = "(SELECT COUNT(*) FROM captain_mission_slots s WHERE s.captain_id=captains.id AND (EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id AND vm.status IN ('Assigned','InProgress')) OR NOT EXISTS (SELECT 1 FROM missions vm WHERE vm.id=s.mission_id)))";
@@ -176,9 +184,18 @@ namespace Armada.Core.Database
             return true;
         }
 
-        internal async Task<bool> ResumeVerificationAsync(string captainId, string missionId, DateTime version, int ceiling, CancellationToken token)
+        internal async Task<bool> ResumeVerificationAsync(string captainId, string missionId, DateTime version, int ceiling, CancellationToken token, Armada.Core.Models.CaptainSelectionRecordSet? selection = null)
         {
             using DbTransaction tx = await _Connection.BeginTransactionAsync(token).ConfigureAwait(false);
+            if (selection != null)
+            {
+                if (selection.Decision.Mode != UsageSelectionModeEnum.Observe || selection.Decision.SelectedCaptainId != captainId || selection.Decision.MissionId != missionId)
+                    throw new ArgumentException("Observed repair must match its selected captain, mission and mode.", nameof(selection));
+                using DbCommand scope = Command(tx, "SELECT COUNT(*) FROM captains c JOIN missions m ON m.id=@mission WHERE c.id=@id AND c.tenant_id=@tenant AND m.tenant_id=@tenant AND ((m.user_id=@owner) OR (m.user_id IS NULL AND @owner IS NULL));", captainId, missionId);
+                DbParameter tenant = scope.CreateParameter(); tenant.ParameterName = "@tenant"; tenant.Value = selection.Decision.TenantId; scope.Parameters.Add(tenant);
+                DbParameter owner = scope.CreateParameter(); owner.ParameterName = "@owner"; owner.Value = (object?)selection.Decision.UserId ?? DBNull.Value; scope.Parameters.Add(owner);
+                if (Convert.ToInt32(await scope.ExecuteScalarAsync(token).ConfigureAwait(false), CultureInfo.InvariantCulture) != 1) return false;
+            }
             using DbCommand claim = Command(tx, @"UPDATE captains SET active_mission_count=active_mission_count+1,state='Working',last_update_utc=@now
                 WHERE id=@id AND active=" + (_Postgres ? "TRUE" : "1") + @" AND current_session_id IS NULL AND state IN ('Idle','Working')
                 AND active_mission_count < max_concurrency AND active_mission_count < @ceiling
@@ -188,12 +205,17 @@ namespace Armada.Core.Database
                 _Postgres || _Mysql ? version : version.ToString("o", CultureInfo.InvariantCulture));
             DbParameter maximum = claim.CreateParameter(); maximum.ParameterName = "@ceiling"; maximum.Value = Math.Clamp(ceiling, 1, 256); claim.Parameters.Add(maximum);
             if (await claim.ExecuteNonQueryAsync(token).ConfigureAwait(false) != 1) return false;
-            using DbCommand mission = Command(tx, @"UPDATE missions SET status='InProgress',last_update_utc=@now
+            using DbCommand mission = Command(tx, @"UPDATE missions SET status='InProgress',last_update_utc=@now,selection_decision_id=NULL
                 WHERE id=@mission AND captain_id=@id AND status='Verifying' AND process_id IS NULL AND last_update_utc=@value;", captainId, missionId,
                 _Postgres || _Mysql ? version : version.ToString("o", CultureInfo.InvariantCulture));
             if (await mission.ExecuteNonQueryAsync(token).ConfigureAwait(false) != 1) return false;
             using DbCommand refresh = Command(tx, Refresh + " WHERE id=@id;", captainId);
             await refresh.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            if (selection != null)
+            {
+                await CaptainSelectionMethods.WriteAggregateAsync(_Connection, tx, selection, token).ConfigureAwait(false);
+                await SetSelectionDecisionAsync(tx, missionId, captainId, selection.Decision.Id, token).ConfigureAwait(false);
+            }
             await tx.CommitAsync(token).ConfigureAwait(false);
             return true;
         }

@@ -33,6 +33,18 @@ namespace Armada.Core.Services
                 List<Captain> admitted = await ApplyCapacityLimitsAsync(new List<Captain> { current }, routingView, token).ConfigureAwait(false);
                 if (admitted.Count == 0) return false;
                 if (CanAssignMissionAsync != null && !await CanAssignMissionAsync(routingView, current).ConfigureAwait(false)) return false;
+                if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled && !String.IsNullOrEmpty(mission.TenantId))
+                {
+                    if (_Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce) return false;
+                    CaptainAdmissionSelection repair = new CaptainAdmissionSelection { Mission = routingView, Eligibility = eligibility,
+                        Visible = new List<Captain> { current }, Available = new List<Captain> { current }, Selected = current,
+                        RoutingBuckets = new List<CaptainRoutingBucket> { new CaptainRoutingBucket { ReasonCode = "RepairCaptain", Captains = new List<Captain> { current } } } };
+                    UsageSelectionSnapshot snapshot = await BuildUsageSelectionAsync(repair, _Settings.EffectiveUsageSelection.Copy(), token).ConfigureAwait(false);
+                    CaptainSelectionRecordSet records = UsageSelectionRecordBuilder.Build(snapshot, mission, "Repair", admitted: true);
+                    CaptainSelectionAdmissionReceipt receipt = await _Database.CaptainSelections.TryAdmitObservedRepairAsync(records, mission.LastUpdateUtc,
+                        _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
+                    return receipt.Claimed;
+                }
                 return await _Database.Captains.TryResumeVerificationAsync(current.Id, mission.Id, mission.LastUpdateUtc,
                     _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
             }

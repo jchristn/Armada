@@ -780,8 +780,7 @@ namespace Armada.Core.Services
             }
         }
 
-        private static string CaptureContextKey(UsageCaptureGroup group) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
-            System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(new string?[] { group.GroupKey, group.ConfigurationRevision }))));
+        private static string CaptureContextKey(UsageCaptureGroup group) => UsageAccountResolver.CaptureContextKey(group.GroupKey, group.ConfigurationRevision);
 
         private async Task<UsageLatestState?> BuildLatestStateAsync(UsageCaptureGroup group, List<string> members, UsageSnapshot snapshot, CancellationToken token)
         {

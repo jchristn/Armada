@@ -14,7 +14,7 @@ Capture persistence, memberships and settings do not currently share the admissi
 
 ## Watson requirements discrepancy
 
-Armada.Server references Watson 7.3.1. Its installed XML documentation at `~/.nuget/packages/watson/7.3.1/lib/net8.0/Watson.xml` includes `WatsonWebserver.Core.ApiRequest` and typed routes. The requirements document's claim that those APIs do not exist describes a different version. There is no project-local replacement HTTP stack to remove.
+Armada.Server references Watson 7.3.1. Its installed XML documentation at `~/.nuget/packages/watson/7.3.1/lib/net8.0/WatsonWebserver.xml` includes `WatsonWebserver.Core.ApiRequest` and typed routes. The requirements document's claim that those APIs do not exist describes a different version. There is no project-local replacement HTTP stack to remove.
 
 For this feature, keep the installed Watson version and composition root; register new routes directly on Watson's authenticated route tables through a feature registrar, using typed DTO deserialization, server authorization, cancellation and explicit response status. Do not migrate unrelated existing registrars or downgrade Watson. U1 API work must compile-test the actual table overloads before relying on documentation examples. Existing session authentication, CORS, request history and OpenAPI registration remain required. The discrepancy is recorded, not silently treated as a reason to abandon the requirements.
 

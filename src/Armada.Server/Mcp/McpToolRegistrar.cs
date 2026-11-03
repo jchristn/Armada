@@ -89,6 +89,7 @@ namespace Armada.Server.Mcp
         /// them so retention cascades and expiry recomputes happen at once.</param>
         /// <param name="blackBoxInsights">Optional black box insight service; without it the black box prevention and forensics tools answer Unavailable.</param>
         /// <param name="usage">Caller-scoped account usage service.</param>
+        /// <param name="usageSelectionConfiguration">Shared live policy coordinator; null returns configuration Unavailable.</param>
         public static void RegisterAll(
             RegisterToolDelegate register,
             DatabaseDriver database,
@@ -134,7 +135,8 @@ namespace Armada.Server.Mcp
             Armada.Core.BlackBox.BlackBoxInsightService? blackBoxInsights = null,
             ModelProfileAccessService? modelProfiles = null,
             ModelAlertAccessService? modelAlerts = null,
-            UsageAccessService? usage = null)
+            UsageAccessService? usage = null,
+            UsageSelectionConfigurationService? usageSelectionConfiguration = null)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
             register = MapToolExceptions(MarkExperimental(register));
@@ -151,6 +153,7 @@ namespace Armada.Server.Mcp
             McpPapercutTools.Register(register, database);
             McpTokenUsageTools.Register(register, database);
             McpUsageTools.Register(register, usage);
+            McpCaptainSelectionTools.Register(register, missionService == null || settings == null ? null : new CaptainSelectionAccessService(database, missionService, settings), usageSelectionConfiguration);
             McpDockTools.Register(register, database, dockService);
             if (logging != null) McpPlaybookTools.Register(register, database, logging);
             if (mergeQueue != null) McpMergeQueueTools.Register(register, mergeQueue, database);
@@ -245,6 +248,7 @@ namespace Armada.Server.Mcp
             RegisterCatalogGroup("Armada MCP / Events", register => McpEventTools.Register(register, database));
             RegisterCatalogGroup("Armada MCP / Papercuts", register => McpPapercutTools.Register(register, database));
             RegisterCatalogGroup("Armada MCP / Usage", register => McpUsageTools.Register(register, null));
+            RegisterCatalogGroup("Armada MCP / Captain selection", register => McpCaptainSelectionTools.Register(register, null, null));
             RegisterCatalogGroup("Armada MCP / TokenUsage", register => McpTokenUsageTools.Register(register, database));
             RegisterCatalogGroup("Armada MCP / Docks", register => McpDockTools.Register(register, database, dockService));
 

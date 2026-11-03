@@ -155,6 +155,20 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(0, (await database.Driver.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false))!.ActiveMissionCount);
                 AssertNull(await database.Driver.CaptainSelections.ReadDecisionAsync(tenant.Id, records.Decision.Id, owner.Id, token).ConfigureAwait(false));
             });
+            Add("historical_names_and_legal_long_models_survive_storage", async token =>
+            {
+                using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                CaptainSelectionRecordSet records = Records();
+                records.Candidates[0].CaptainName = new string('界', 1000);
+                records.Candidates[0].ConfiguredModel = new string('m', 1000);
+                records.Decision.SelectedModel = records.Candidates[0].ConfiguredModel;
+                records.Windows[0].Model = records.Candidates[0].ConfiguredModel;
+                await database.Driver.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
+                CaptainSelectionCandidateRecord candidate = (await database.Driver.CaptainSelections.EnumerateCandidatesAsync("tenant-a", records.Decision.Id, token: token).ConfigureAwait(false)).Objects.Single();
+                AssertEqual(records.Candidates[0].CaptainName, candidate.CaptainName);
+                AssertEqual(records.Candidates[0].ConfiguredModel, candidate.ConfiguredModel);
+                AssertEqual(records.Decision.SelectedModel, (await database.Driver.CaptainSelections.ReadDecisionAsync("tenant-a", records.Decision.Id, token: token).ConfigureAwait(false))!.SelectedModel);
+            });
             Add("active_capture_start_timestamp_roundtrips_and_legacy_remains_null", async token =>
             {
                 using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -166,6 +180,96 @@ namespace Test.Shared.Suites.Database
                 snapshot = new UsageSnapshot { TenantId = "tenant-a", HostId = "host", CapturedUtc = DateTime.UtcNow, ReceivedUtc = DateTime.UtcNow };
                 await database.Driver.UsageSnapshots.CreateAsync(snapshot, null, token).ConfigureAwait(false);
                 AssertNull((await database.Driver.UsageSnapshots.ReadAsync(snapshot.Id, "tenant-a", token).ConfigureAwait(false))!.ProbeStartedUtc);
+            });
+            Add("reconciliation_preserves_running_attempt_then_keeps_unproven_debt_uncertain", async token =>
+            {
+                using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                TenantMetadata tenant = await database.Driver.Tenants.CreateAsync(new TenantMetadata("selection-reconciliation"), token).ConfigureAwait(false);
+                UserMaster owner = await database.Driver.Users.CreateAsync(new UserMaster(tenant.Id, "reconciliation@example.invalid", "fixture-password"), token).ConfigureAwait(false);
+                Captain captain = await database.Driver.Captains.CreateAsync(new Captain("selection-reconciliation") { TenantId = tenant.Id, UserId = owner.Id }, token).ConfigureAwait(false);
+                Mission mission = await database.Driver.Missions.CreateAsync(new Mission("selection-reconciliation") { TenantId = tenant.Id, UserId = owner.Id }, token).ConfigureAwait(false);
+                CaptainSelectionRecordSet records = Records(reserve: true, tenantId: tenant.Id, ownerId: owner.Id);
+                records.Decision.MissionId = mission.Id; records.Decision.SelectedCaptainId = captain.Id; records.Candidates[0].CaptainId = captain.Id;
+                records.Reservations[0].MissionId = mission.Id; records.Reservations[0].CaptainId = captain.Id;
+                AssertTrue((await database.Driver.CaptainSelections.TryAdmitObservedAsync(records, token: token).ConfigureAwait(false)).Claimed);
+                AssertEqual(records.Decision.Id, (await database.Driver.CaptainSelections.ReadCurrentDecisionAsync(tenant.Id, mission.Id, owner.Id, token).ConfigureAwait(false))!.Id);
+                AssertNull(await database.Driver.CaptainSelections.ReadCurrentDecisionAsync(tenant.Id, mission.Id, "other", token).ConfigureAwait(false));
+                UsageSelectionReservationReconciler reconciler = new UsageSelectionReservationReconciler(database.Driver);
+                DateTime now = DateTime.UtcNow.AddSeconds(1);
+                AssertEqual(0, await reconciler.ReconcileAsync(now, token: token).ConfigureAwait(false));
+                UsageBudgetReservation row = (await database.Driver.CaptainSelections.ReadReservationsAsync(tenant.Id, "host", "ClaudeCode", "account", token).ConfigureAwait(false)).Single();
+                AssertEqual(UsageReservationStateEnum.Active, row.State);
+                mission = (await database.Driver.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false))!;
+                mission.Status = MissionStatusEnum.Complete;
+                await database.Driver.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                AssertEqual(1, await reconciler.ReconcileAsync(now.AddSeconds(1), token: token).ConfigureAwait(false));
+                row = (await database.Driver.CaptainSelections.ReadReservationsAsync(tenant.Id, "host", "ClaudeCode", "account", token).ConfigureAwait(false)).Single();
+                AssertEqual(UsageReservationStateEnum.Unsettled, row.State);
+                AssertEqual(0, await reconciler.ReconcileAsync(now.AddSeconds(120), token: token).ConfigureAwait(false), "elapsed reset/settlement time alone does not release debt");
+                AssertEqual(1, await reconciler.ReconcileAsync(now.AddHours(2), token: token).ConfigureAwait(false));
+                row = (await database.Driver.CaptainSelections.ReadReservationsAsync(tenant.Id, "host", "ClaudeCode", "account", token).ConfigureAwait(false)).Single();
+                AssertEqual(UsageReservationStateEnum.Uncertain, row.State);
+                AssertNull(row.SettledBySnapshotId);
+            });
+            Add("filtered_history_totals_and_reconciliation_pages_are_bounded", async token =>
+            {
+                using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                CaptainSelectionRecordSet first = Records(reserve: true), second = Records(reserve: true);
+                second.Decision.Outcome = "Waiting"; second.Decision.Trigger = "Waiting";
+                await database.Driver.CaptainSelections.CreateDecisionAsync(first, token).ConfigureAwait(false);
+                await database.Driver.CaptainSelections.CreateDecisionAsync(second, token).ConfigureAwait(false);
+                EnumerationResult<CaptainSelectionDecision> page = await database.Driver.CaptainSelections.EnumerateHistoryAsync("tenant-a", "mission", "owner", new CaptainSelectionHistoryQuery { Outcome = "Waiting", PageSize = 1 }, token).ConfigureAwait(false);
+                AssertEqual(1L, page.TotalRecords); AssertEqual(second.Decision.Id, page.Objects.Single().Id);
+                List<UsageBudgetReservation> batch = await database.Driver.CaptainSelections.ReadReconciliationBatchAsync(1, token).ConfigureAwait(false);
+                AssertEqual(1, batch.Count);
+                AssertTrue(await database.Driver.CaptainSelections.TouchReservationAsync("tenant-a", batch[0].Id, batch[0].Revision, DateTime.UtcNow.AddMinutes(1), token).ConfigureAwait(false));
+                AssertFalse(await database.Driver.CaptainSelections.TouchReservationAsync("tenant-a", batch[0].Id, batch[0].Revision, DateTime.UtcNow.AddMinutes(2), token).ConfigureAwait(false));
+                AssertTrue(batch[0].Id != (await database.Driver.CaptainSelections.ReadReconciliationBatchAsync(1, token).ConfigureAwait(false)).Single().Id, "checked live rows do not starve the rest of the page");
+            });
+            Add("shared_account_batch_and_post_execution_capture_proof", async token =>
+            {
+                using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                TenantMetadata tenant = await database.Driver.Tenants.CreateAsync(new TenantMetadata("selection-settlement"), token).ConfigureAwait(false);
+                UserMaster owner = await database.Driver.Users.CreateAsync(new UserMaster(tenant.Id, "settlement@example.invalid", "fixture-password"), token).ConfigureAwait(false);
+                Captain captain = await database.Driver.Captains.CreateAsync(new Captain("selection-settlement") { TenantId = tenant.Id, UserId = owner.Id, Runtime = AgentRuntimeEnum.ClaudeCode }, token).ConfigureAwait(false);
+                string revision = UsageAccountResolver.ConfigurationRevision("host", captain.Runtime, null);
+                string context = UsageAccountResolver.CaptureContextKey(UsageAccountResolver.GroupKey(tenant.Id, "host", captain.Runtime, null), revision);
+                UsageAccountMembership member = await database.Driver.UsageMemberships.CreateAsync(new UsageAccountMembership { TenantId = tenant.Id, CaptainId = captain.Id,
+                    HostId = "host", Runtime = captain.Runtime, AccountKey = "account", ConfigurationRevision = revision }, token).ConfigureAwait(false);
+                UsageWindow window = new UsageWindow { Name = "five-hour", UsedPercent = 40 };
+                CaptainSelectionRecordSet records = Records(reserve: true, tenantId: tenant.Id, ownerId: owner.Id);
+                records.Candidates[0].CaptainId = captain.Id;
+                records.Reservations[0].CaptainId = captain.Id; records.Reservations[0].MembershipId = member.Id;
+                records.Reservations[0].WindowKey = UsageBudgetIdentity.WindowKey(window);
+                records.Reservations[0].Generation = UsageBudgetIdentity.ContinuousGeneration;
+                await database.Driver.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
+                DateTime now = DateTime.UtcNow.AddSeconds(1);
+                UsageSelectionReservationReconciler reconciler = new UsageSelectionReservationReconciler(database.Driver);
+                AssertEqual(1, await reconciler.ReconcileAsync(now, token: token).ConfigureAwait(false));
+                DateTime captureTime = now.AddSeconds(records.Policy.SettlementLagSeconds + 1);
+                async Task Capture(DateTime? started)
+                {
+                    UsageSnapshot snapshot = new UsageSnapshot { TenantId = tenant.Id, HostId = "host", Runtime = captain.Runtime, AccountKey = "account",
+                        Source = UsageCaptureSourceEnum.OAuthEndpoint, Status = UsageSnapshotStatusEnum.Ok, CapturedUtc = captureTime, ReceivedUtc = captureTime,
+                        ProbeStartedUtc = started, WindowsJson = UsageWindowsJson.Serialize(new List<UsageWindow> { window }) };
+                    await database.Driver.UsageSnapshots.CreateAsync(snapshot, new List<string> { captain.Id }, token).ConfigureAwait(false);
+                    await database.Driver.UsageSnapshots.UpsertLatestStateAsync(new UsageLatestState { TenantId = tenant.Id, HostId = "host", Runtime = captain.Runtime,
+                        AccountKey = "account", LastGoodSnapshotId = snapshot.Id, LastGoodCapturedUtc = captureTime, LastGoodReceivedUtc = captureTime,
+                        LastGoodStatus = UsageSnapshotStatusEnum.Ok, LastGoodWindowsJson = snapshot.WindowsJson, CaptureContextKey = context }, token).ConfigureAwait(false);
+                }
+                await Capture(null).ConfigureAwait(false);
+                List<UsageSelectionAccountEvidence> evidence = await database.Driver.CaptainSelections.ReadAccountEvidenceAsync(tenant.Id, new[] { captain.Id }, token).ConfigureAwait(false);
+                AssertEqual(1, evidence.Count); AssertEqual(member.Id, evidence[0].MembershipId); AssertEqual(context, evidence[0].CaptureContextKey);
+                AssertEqual(UsageCaptureSourceEnum.OAuthEndpoint, evidence[0].Source); AssertNull(evidence[0].ProbeStartedUtc);
+                AssertEqual(0, (await database.Driver.CaptainSelections.ReadAccountEvidenceAsync("tenant-other", new[] { captain.Id }, token).ConfigureAwait(false)).Count);
+                UsageSelectionBudgetTotals total = (await database.Driver.CaptainSelections.ReadBudgetTotalsAsync(tenant.Id, new[] { captain.Id }, token).ConfigureAwait(false)).Single();
+                AssertEqual(0.0, total.ActivePercent); AssertEqual(2.0, total.UnsettledPercent);
+                AssertEqual(0, await reconciler.ReconcileAsync(captureTime.AddSeconds(1), token: token).ConfigureAwait(false), "legacy/passive timestamps cannot prove post-execution capture");
+                captureTime = captureTime.AddSeconds(2);
+                await Capture(captureTime.AddMilliseconds(-100)).ConfigureAwait(false);
+                AssertEqual(1, await reconciler.ReconcileAsync(captureTime.AddSeconds(1), token: token).ConfigureAwait(false));
+                AssertEqual(0, (await database.Driver.CaptainSelections.ReadReservationsAsync(tenant.Id, "host", "ClaudeCode", "account", token).ConfigureAwait(false)).Count);
+                AssertEqual(0, (await database.Driver.CaptainSelections.ReadBudgetTotalsAsync(tenant.Id, new[] { captain.Id }, token).ConfigureAwait(false)).Count);
             });
             return new TestSuiteDescriptor(_SuiteId, "Captain selection ledger", cases);
         }

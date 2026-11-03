@@ -1618,6 +1618,50 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/captain-selection-decisions/{id}",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "CaptainSelectionDecisionDetail",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Captain selection"
+      ],
+      "summary": "Read captain selection detail",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/captain-selection-decisions/{id}/candidates",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<CaptainSelectionCandidateView>",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Captain selection"
+      ],
+      "summary": "Read captain selection candidates",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/captains",
       "auth": "Authenticated",
       "resource": "Captain:Read",
@@ -4155,6 +4199,72 @@
         "BlackBox"
       ],
       "summary": "Enumerate a mission's black box entries",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/missions/{id}/captain-selection",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "CaptainSelectionSummary",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Captain selection"
+      ],
+      "summary": "Read captain selection summary",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/missions/{id}/captain-selection/history",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<CaptainSelectionDecisionView>",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Captain selection"
+      ],
+      "summary": "Read captain selection history",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/missions/{id}/captain-selection/preview",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "CaptainSelectionPreview",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Captain selection"
+      ],
+      "summary": "Read captain selection preview",
       "experimental": false
     },
     {
@@ -6703,7 +6813,11 @@
       "resource": "Settings:Admin",
       "requestType": null,
       "requestRequired": false,
-      "responses": {},
+      "responses": {
+        "200": "",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
       "tags": [
         "Settings"
       ],
@@ -12334,6 +12448,78 @@
       "experimental": false
     },
     {
+      "name": "get_captain_selection",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "arguments": [
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "description": "Read the current admitted attempt and latest retained decision for a visible mission. No account keys are returned.",
+      "experimental": false
+    },
+    {
+      "name": "get_captain_selection_decision",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "arguments": [
+        {
+          "name": "decisionId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "tenantId",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "description": "Read an immutable decision, recorded policy, scoped candidate page and runtime model evidence. tenantId override requires a global administrator.",
+      "experimental": false
+    },
+    {
+      "name": "get_captain_selection_history",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "arguments": [
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "query",
+          "type": "object",
+          "required": false
+        }
+      ],
+      "description": "Page a visible mission's retained selection decisions. Optional query filters trigger, outcome and UTC time range before counts.",
+      "experimental": false
+    },
+    {
       "name": "get_captain_tools",
       "auth": "Authenticated",
       "resource": "Captain:Read",
@@ -12791,6 +12977,14 @@
         }
       ],
       "description": "Get one stage outcome visible to the caller.",
+      "experimental": false
+    },
+    {
+      "name": "get_usage_selection_settings",
+      "auth": "AdminOnly",
+      "resource": "Server:Admin",
+      "arguments": [],
+      "description": "Read the effective server-wide captain-selection policy, live revision, strategies and override metadata. Requires global administrator.",
       "experimental": false
     },
     {
@@ -14319,6 +14513,30 @@
         }
       ],
       "description": "Pin (pinned true, the default) or unpin (pinned false) a black box entry. Garbage collection never deletes a pinned entry. Name the entry with entryId (bbx_ prefix), or with missionId or voyageId for that mission's or voyage's current entry.",
+      "experimental": false
+    },
+    {
+      "name": "preview_captain_selection",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "arguments": [
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "pageNumber",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "description": "Read-only current-state comparison using the configured strategy and shared routing/eligibility. Does not capture, persist, claim or launch.",
       "experimental": false
     },
     {
@@ -17022,6 +17240,25 @@
         }
       ],
       "description": "Update a prompt template's content and description. Creates the template if it does not exist.",
+      "experimental": false
+    },
+    {
+      "name": "update_usage_selection_settings",
+      "auth": "AdminOnly",
+      "resource": "Server:Admin",
+      "arguments": [
+        {
+          "name": "expectedRevision",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "settings",
+          "type": "object",
+          "required": true
+        }
+      ],
+      "description": "Replace the complete server-wide captain-selection policy live. Requires global administrator. expectedRevision rejects stale editors; environment overrides are read-only.",
       "experimental": false
     },
     {
@@ -29208,6 +29445,113 @@
       "key": "usageCapture.rollupRetentionDays",
       "type": "int",
       "default": "90",
+      "experimental": false
+    },
+    {
+      "key": "usageSelection",
+      "type": "object",
+      "default": null,
+      "experimental": false
+    },
+    {
+      "key": "usageSelection.comfortableHeadroomPercent",
+      "type": "double",
+      "default": "30",
+      "experimental": false
+    },
+    {
+      "key": "usageSelection.decisionRetentionDays",
+      "type": "int",
+      "default": "90",
+      "experimental": false
+    },
+    {
+      "key": "usageSelection.maximumCandidates",
+      "type": "int",
+      "default": "1000",
+      "experimental": false
+    },
+    {
+      "key": "usageSelection.maximumFreshnessSeconds",
+      "type": "int",
+      "default": "900",
+      "experimental": false
+    },
+    {
+      "key": "usageSelection.maximumUnsettledSeconds",
+      "type": "int",
+      "default": "3600",
+      "experimental": false
+    },
+    {
+      "key": "usageSelection.mode",
+      "type": "enum UsageSelectionModeEnum (Disabled|Observe|Enforce)",
+      "default": "\"Observe\"",
+      "experimental": false,
+      "enumName": "UsageSelectionModeEnum",
+      "enumValues": [
+        "Disabled",
+        "Observe",
+        "Enforce"
+      ]
+    },
+    {
+      "key": "usageSelection.perAttemptReservationPercent",
+      "type": "double",
+      "default": "2",
+      "experimental": false
+    },
+    {
+      "key": "usageSelection.providerCooldownSeconds",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "usageSelection.reservePercent",
+      "type": "double",
+      "default": "10",
+      "experimental": false
+    },
+    {
+      "key": "usageSelection.settlementLagSeconds",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "usageSelection.strategy",
+      "type": "enum CaptainSelectionStrategyEnum (FirstAvailable|MostRemainingAllowance|MostUsedAllowance)",
+      "default": "\"FirstAvailable\"",
+      "experimental": false,
+      "enumName": "CaptainSelectionStrategyEnum",
+      "enumValues": [
+        "FirstAvailable",
+        "MostRemainingAllowance",
+        "MostUsedAllowance"
+      ]
+    },
+    {
+      "key": "usageSelection.unknownRetrySeconds",
+      "type": "int",
+      "default": "60",
+      "experimental": false
+    },
+    {
+      "key": "usageSelection.unknownUsageBehavior",
+      "type": "enum UsageUnknownBehaviorEnum (AllowDeprioritized|Wait)",
+      "default": "\"AllowDeprioritized\"",
+      "experimental": false,
+      "enumName": "UsageUnknownBehaviorEnum",
+      "enumValues": [
+        "AllowDeprioritized",
+        "Wait"
+      ]
+    },
+    {
+      "key": "usageSelectionRevision",
+      "type": "long",
+      "default": "0",
       "experimental": false
     },
     {

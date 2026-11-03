@@ -11,7 +11,7 @@ namespace Armada.Core.Database
     {
         private static async Task InsertCaptainSelectionCandidateRecordAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionCandidateRecord row, CancellationToken token)
         {
-            using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_candidates(id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,captain_id,provider,configured_model,routing_bucket,rank_number,band,primary_reason_code,eligible,occupied_slots,capacity,last_assigned_utc,membership_id,host_id,runtime,account_key,available_percent) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@captain_id,@provider,@configured_model,@routing_bucket,@rank_number,@band,@primary_reason_code,@eligible,@occupied_slots,@capacity,@last_assigned_utc,@membership_id,@host_id,@runtime,@account_key,@available_percent);");
+            using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_candidates(id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,captain_id,provider,configured_model,routing_bucket,rank_number,band,primary_reason_code,eligible,occupied_slots,capacity,last_assigned_utc,membership_id,host_id,runtime,account_key,available_percent,captain_name,evidence_captured_utc) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@captain_id,@provider,@configured_model,@routing_bucket,@rank_number,@band,@primary_reason_code,@eligible,@occupied_slots,@capacity,@last_assigned_utc,@membership_id,@host_id,@runtime,@account_key,@available_percent,@captain_name,@evidence_captured_utc);");
             Add(command, "@id", row.Id);
             Add(command, "@tenant_id", row.TenantId);
             Add(command, "@user_id", row.UserId);
@@ -35,6 +35,8 @@ namespace Armada.Core.Database
             Add(command, "@runtime", row.Runtime);
             Add(command, "@account_key", row.AccountKey);
             Add(command, "@available_percent", row.AvailablePercent);
+            Add(command, "@captain_name", row.CaptainName);
+            Add(command, "@evidence_captured_utc", row.EvidenceCapturedUtc.HasValue ? Utc(row.EvidenceCapturedUtc.Value) : null);
             await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         }
 
@@ -65,6 +67,8 @@ namespace Armada.Core.Database
                 Runtime = reader["runtime"] == DBNull.Value ? null : Convert.ToString(reader["runtime"], System.Globalization.CultureInfo.InvariantCulture)!,
                 AccountKey = reader["account_key"] == DBNull.Value ? null : Convert.ToString(reader["account_key"], System.Globalization.CultureInfo.InvariantCulture)!,
                 AvailablePercent = reader["available_percent"] == DBNull.Value ? null : Convert.ToDouble(reader["available_percent"], System.Globalization.CultureInfo.InvariantCulture),
+                CaptainName = reader["captain_name"] == DBNull.Value ? null : Convert.ToString(reader["captain_name"], System.Globalization.CultureInfo.InvariantCulture)!,
+                EvidenceCapturedUtc = reader["evidence_captured_utc"] == DBNull.Value ? null : ParseUtc(reader["evidence_captured_utc"]),
             };
         }
     }

@@ -280,6 +280,10 @@ namespace Armada.Core.Services
             MissionAssignmentBlocker? globalAdmission = await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
             if (globalAdmission != null) return globalAdmission;
 
+            if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled
+                && _UsageSelectionBlockers.TryGetValue(mission.Id, out UsageSelectionTransientBlocker? usageFailure)
+                && usageFailure.PolicyKey == UsagePolicyKey()) return usageFailure.Blocker;
+
             CaptainAdmissionSelection selection = await SelectCaptainAdmissionAsync(mission, token).ConfigureAwait(false);
             observeSelection?.Invoke(selection);
             Mission routingView = selection.Mission;
@@ -493,7 +497,50 @@ namespace Armada.Core.Services
             await ResolvePreferredCaptainAsync(mission, token).ConfigureAwait(false);
 
             // Find an idle captain: the preferred captain when idle, otherwise fall back by persona/tier.
-            Captain? captain = await FindAvailableCaptainAsync(mission, token).ConfigureAwait(false);
+            if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled && UsageRetryPending(mission)) return false;
+            CaptainAdmissionSelection captainSelection = await SelectCaptainAdmissionAsync(mission, token, recordEnvelope: true).ConfigureAwait(false);
+            Captain? captain = captainSelection.Selected;
+            UsageSelectionSnapshot? usageSelection = null;
+            if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled && !String.IsNullOrEmpty(mission.TenantId))
+            {
+                // One detached policy revision governs this attempt. Observe never changes legacy routing.
+                try { usageSelection = await BuildUsageSelectionAsync(captainSelection, _Settings.EffectiveUsageSelection.Copy(), token).ConfigureAwait(false); }
+                catch (System.Data.Common.DbException)
+                {
+                    UsageWait(mission, "SelectionPersistenceUnavailable", "Selection evidence is temporarily unavailable. Armada will retry without starting a process.");
+                    return false;
+                }
+                if (usageSelection.Settings.Mode == UsageSelectionModeEnum.Enforce)
+                {
+                    UsageWait(mission, "EnforcementUnavailable", "Usage enforcement is not available in this implementation stage. An administrator can select Observe or Disabled.");
+                    return false;
+                }
+                if (usageSelection.Evaluation.CandidateLimitExceeded)
+                {
+                    UsageWait(mission, "CandidateLimitExceeded", "The complete captain comparison exceeds the configured candidate bound. An administrator can increase MaximumCandidates.");
+                    return false;
+                }
+                _UsageSelectionBlockers.TryRemove(mission.Id, out _);
+                if (captain == null)
+                {
+                    try
+                    {
+                        CaptainSelectionRecordSet waiting = UsageSelectionRecordBuilder.Build(usageSelection, mission, "Waiting", admitted: false);
+                        EnumerationResult<CaptainSelectionDecision> history = await _Database.CaptainSelections.EnumerateByMissionAsync(mission.TenantId!, mission.Id, mission.UserId, pageSize: 1, token: token).ConfigureAwait(false);
+                        CaptainSelectionDecision? previous = history.Objects.FirstOrDefault();
+                        if (previous == null || previous.EvidenceFingerprint != waiting.Decision.EvidenceFingerprint || previous.Outcome != "Waiting")
+                        {
+                            waiting.Decision.PreviousDecisionId = previous?.Id;
+                            await _Database.CaptainSelections.CreateDecisionAsync(waiting, token).ConfigureAwait(false);
+                        }
+                    }
+                    catch (System.Data.Common.DbException)
+                    {
+                        UsageWait(mission, "SelectionPersistenceUnavailable", "Selection history could not be recorded. Armada will retry without starting a process.");
+                        return false;
+                    }
+                }
+            }
             if (captain == null)
             {
                 _Logging.Warn(_Header + "no idle captains available for mission " + mission.Id +
@@ -546,13 +593,30 @@ namespace Armada.Core.Services
             // Claim the captain before any slow work. The claim is atomic (only an Idle captain is taken), so a
             // concurrent dispatcher can never take it in the gap, and from here on the captain names this mission,
             // which keeps orphan recovery from reverting the assignment while its dock is being provisioned.
-            bool claimed = await _Database.Captains.TryClaimAsync(captain.Id, mission.Id, null, token, _Settings.Concurrency.MaxCaptainConcurrency).ConfigureAwait(false);
+            bool claimed;
+            if (usageSelection != null)
+            {
+                // Evidence and the actual compatibility choice commit with the slot, before any process/dock work.
+                CaptainSelectionRecordSet decision = UsageSelectionRecordBuilder.Build(usageSelection, mission, "Dispatch", admitted: true);
+                CaptainSelectionAdmissionReceipt receipt;
+                try { receipt = await _Database.CaptainSelections.TryAdmitObservedAsync(decision, ceiling: _Settings.Concurrency.MaxCaptainConcurrency, token: token).ConfigureAwait(false); }
+                catch (System.Data.Common.DbException)
+                {
+                    UsageWait(mission, "SelectionPersistenceUnavailable", "Selection admission could not be confirmed. Armada will reconcile the recorded attempt before starting any process.");
+                    return false;
+                }
+                claimed = receipt.Claimed;
+                // A replay is recovered by the normal mission-owned lifecycle, never launched a second time here.
+                if (receipt.AlreadyCommitted) return false;
+            }
+            else claimed = await _Database.Captains.TryClaimAsync(captain.Id, mission.Id, null, token, _Settings.Concurrency.MaxCaptainConcurrency).ConfigureAwait(false);
             if (!claimed)
             {
                 _Logging.Info(_Header + "captain " + captain.Id + " was claimed by another mission before " + mission.Id + " could take it; retrying next cycle");
                 return false;
             }
 
+            _UsageSelectionBlockers.TryRemove(mission.Id, out _);
             mission.BranchName = branchName;
             mission.CaptainId = captain.Id;
             mission.Status = MissionStatusEnum.Assigned;
@@ -679,6 +743,7 @@ namespace Armada.Core.Services
             try
             {
                 processId = await _Captains.OnLaunchAgent.Invoke(captain, mission, dock).ConfigureAwait(false);
+                await RecordSelectionExecutionStartedAsync(mission, CancellationToken.None).ConfigureAwait(false);
             }
             catch (MissionLaunchConfigurationException configuration)
             {

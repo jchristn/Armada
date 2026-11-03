@@ -69,6 +69,13 @@ namespace Armada.Core.Authorization
             Add("PUT", "/api/v1/cli-permissions/rules/{id}", "CliPermission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("DELETE", "/api/v1/cli-permissions/rules/{id}", "CliPermission", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
 
+            // Captain selection: shared service enforces tenant/owner and mission-token scope.
+            Add("GET", "/api/v1/missions/{id}/captain-selection", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/missions/{id}/captain-selection/history", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/captain-selection/preview", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/captain-selection-decisions/{id}", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/captain-selection-decisions/{id}/candidates", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+
             // StageOutcomeRoutes (tenant scoping, global-rule and built-in-rule writes are checked by StageOutcomeAccessService)
             Add("GET", "/api/v1/stage-outcomes", "StageOutcome", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/stage-outcomes/enumerate", "StageOutcome", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

@@ -11,7 +11,7 @@ namespace Armada.Core.Database
     {
         private static async Task InsertCaptainSelectionWindowRecordAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionWindowRecord row, CancellationToken token)
         {
-            using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_windows(id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,candidate_id,snapshot_id,captured_utc,probe_started_utc,source,status,configuration_revision,window_key,window_name,model,scope_name,generation_key,used_percent,used_amount,limit_amount,unit,resets_utc,applicable,active_reservation_percent,unsettled_percent,reserve_percent) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@candidate_id,@snapshot_id,@captured_utc,@probe_started_utc,@source,@status,@configuration_revision,@window_key,@window_name,@model,@scope_name,@generation_key,@used_percent,@used_amount,@limit_amount,@unit,@resets_utc,@applicable,@active_reservation_percent,@unsettled_percent,@reserve_percent);");
+            using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_windows(id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,candidate_id,snapshot_id,captured_utc,probe_started_utc,source,status,configuration_revision,window_key,window_name,model,scope_name,generation_key,used_percent,used_amount,limit_amount,unit,resets_utc,applicable,active_reservation_percent,unsettled_percent,reserve_percent,normalization_code) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@candidate_id,@snapshot_id,@captured_utc,@probe_started_utc,@source,@status,@configuration_revision,@window_key,@window_name,@model,@scope_name,@generation_key,@used_percent,@used_amount,@limit_amount,@unit,@resets_utc,@applicable,@active_reservation_percent,@unsettled_percent,@reserve_percent,@normalization_code);");
             Add(command, "@id", row.Id);
             Add(command, "@tenant_id", row.TenantId);
             Add(command, "@user_id", row.UserId);
@@ -40,6 +40,7 @@ namespace Armada.Core.Database
             Add(command, "@active_reservation_percent", row.ActiveReservationPercent);
             Add(command, "@unsettled_percent", row.UnsettledPercent);
             Add(command, "@reserve_percent", row.ReservePercent);
+            Add(command, "@normalization_code", row.NormalizationCode);
             await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         }
 
@@ -75,6 +76,7 @@ namespace Armada.Core.Database
                 ActiveReservationPercent = Convert.ToDouble(reader["active_reservation_percent"], System.Globalization.CultureInfo.InvariantCulture),
                 UnsettledPercent = Convert.ToDouble(reader["unsettled_percent"], System.Globalization.CultureInfo.InvariantCulture),
                 ReservePercent = Convert.ToDouble(reader["reserve_percent"], System.Globalization.CultureInfo.InvariantCulture),
+                NormalizationCode = reader["normalization_code"] == DBNull.Value ? null : Convert.ToString(reader["normalization_code"], System.Globalization.CultureInfo.InvariantCulture)!,
             };
         }
     }

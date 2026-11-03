@@ -11,6 +11,21 @@ namespace Armada.Core.Database
     internal sealed partial class CaptainSelectionMethods
     {
         /// <inheritdoc />
+        public Task<CaptainSelectionExecutionEvent?> ReadLastModelReportAsync(string tenantId, string decisionId, string? ownerUserId = null, CancellationToken token = default)
+        {
+            Required(tenantId, nameof(tenantId)); Required(decisionId, nameof(decisionId));
+            return RunAsync(async connection =>
+            {
+                using DbCommand command = Command(connection, null, "SELECT e.* FROM captain_selection_execution_events e JOIN captain_selection_decisions d ON d.id=e.decision_id AND d.tenant_id=e.tenant_id WHERE e.tenant_id=@tenant AND e.decision_id=@id AND e.event_kind='ActualModelReported' AND e.actual_model IS NOT NULL"
+                    + (ownerUserId == null ? "" : " AND d.user_id=@owner") + " ORDER BY e.occurred_utc DESC,e.id DESC" + PageSql(connection));
+                Add(command, "@tenant", tenantId); Add(command, "@id", decisionId); if (ownerUserId != null) Add(command, "@owner", ownerUserId);
+                Add(command, "@skip", 0); Add(command, "@take", 1);
+                using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+                return await reader.ReadAsync(token).ConfigureAwait(false) ? MapCaptainSelectionExecutionEvent(reader) : null;
+            }, token);
+        }
+
+        /// <inheritdoc />
         public Task<List<CaptainSelectionReason>> ReadReasonsAsync(string tenantId, string decisionId, string candidateId, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(decisionId, nameof(decisionId)); Required(candidateId, nameof(candidateId));

@@ -1,3 +1,4 @@
+import { usageSelectionMessages } from './usageSelectionMessages';
 import { storageMessages } from './storageMessages';
 
 /**
@@ -442,6 +443,7 @@ function applyDynamicPatterns(locale: string, text: string, catalog: I18nCatalog
 }
 
 export function translateText(locale: string, text: string, catalog: I18nCatalog | null | undefined): string {
+  if (text.startsWith('usageSelection.')) return translateExactPhrase(locale, text, catalog) ?? translateText(locale, usageSelectionMessages[text] ?? text, catalog);
   if (text.startsWith('storage.')) return translateExactPhrase(locale, text, catalog) ?? translateText(locale, storageMessages[text] ?? storageMessages['storage.unavailable'], catalog);
   if (!text || locale === 'en') return text;
   const trimmed = text.trim();

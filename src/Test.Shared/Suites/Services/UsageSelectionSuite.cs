@@ -169,6 +169,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("UsageNotAuthoritative", Evaluate(a).Candidates[0].ReasonCode);
                 a.Status = UsageSnapshotStatusEnum.Ok; a.Source = UsageCaptureSourceEnum.Derived;
                 AssertEqual("UsageNotAuthoritative", Evaluate(a).Candidates[0].ReasonCode);
+                a.Source = (UsageCaptureSourceEnum)999;
+                AssertEqual("UsageNotAuthoritative", Evaluate(a).Candidates[0].ReasonCode);
                 a.Source = UsageCaptureSourceEnum.Headers; a.CapturedUtc = _Now.AddMinutes(6);
                 AssertEqual("FutureObservation", Evaluate(a).Candidates[0].ReasonCode);
                 a.CapturedUtc = _Now; a.ConfigurationMatches = false;

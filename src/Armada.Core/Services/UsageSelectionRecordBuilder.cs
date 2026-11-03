@@ -1,0 +1,109 @@
+namespace Armada.Core.Services
+{
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Security.Cryptography;
+    using System.Text;
+    using System.Text.Json;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
+
+    /// <summary>Creates structured immutable decision evidence from one scoped selection snapshot.</summary>
+    internal static class UsageSelectionRecordBuilder
+    {
+        internal static CaptainSelectionRecordSet Build(UsageSelectionSnapshot snapshot, Mission mission, string trigger, bool admitted)
+        {
+            CaptainSelectionRecordSet records = new CaptainSelectionRecordSet
+            {
+                Policy = CaptainSelectionPolicyRevision.FromSettings(mission.TenantId!, snapshot.Settings)
+            };
+            CaptainSelectionDecision decision = records.Decision;
+            decision.TenantId = mission.TenantId!; decision.UserId = mission.UserId; decision.MissionId = mission.Id; decision.VoyageId = mission.VoyageId;
+            decision.ExecutionAttemptId = decision.Id; decision.Trigger = trigger; decision.Mode = snapshot.Settings.Mode;
+            decision.Outcome = admitted ? "Admitted" : "Waiting"; decision.SelectedCaptainId = admitted ? snapshot.ActualCaptainId : null;
+            if (decision.SelectedCaptainId != null && snapshot.Captains.TryGetValue(decision.SelectedCaptainId, out Captain? actual))
+            {
+                decision.SelectedModel = Label(actual.Model, 1024);
+                if (snapshot.Evidence.TryGetValue(actual.Id, out UsageSelectionAccountEvidence? source)) decision.SelectedProvider = Label(source.Provider, 512);
+            }
+            decision.HypotheticalCaptainId = snapshot.Evaluation.SelectedCaptainId;
+            decision.HypotheticalOutcome = snapshot.Evaluation.SelectedCaptainId == null ? "Waiting" : "Selected";
+            decision.AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion; decision.PolicyRevisionId = records.Policy.Id;
+            decision.EvaluatedUtc = snapshot.EvaluatedUtc; decision.PrimaryReasonCode = snapshot.Evaluation.ReasonCode;
+            decision.CandidateCount = snapshot.Evaluation.Candidates.Count;
+            decision.NextReconsiderUtc = snapshot.Evaluation.SelectedCaptainId == null ? snapshot.Evaluation.Candidates.FirstOrDefault()?.NextReconsiderUtc : null;
+            int rank = 0;
+            foreach (UsageSelectionCandidateResult result in snapshot.Evaluation.Candidates)
+            {
+                UsageSelectionCandidate input = result.Candidate;
+                Captain captain = snapshot.Captains[input.CaptainId];
+                snapshot.Evidence.TryGetValue(captain.Id, out UsageSelectionAccountEvidence? source);
+                CaptainSelectionCandidateRecord candidate = new CaptainSelectionCandidateRecord
+                {
+                    TenantId = mission.TenantId!, UserId = captain.UserId, DecisionId = decision.Id, CaptainId = captain.Id,
+                    Provider = Label(input.Provider, 512), ConfiguredModel = Label(input.Model, 1024), CaptainName = Label(captain.Name, 1024), RoutingBucket = input.RoutingBucket, Rank = ++rank,
+                    Band = result.Band, PrimaryReasonCode = result.ReasonCode, Eligible = input.IneligibilityReason == null,
+                    OccupiedSlots = input.OccupiedSlots, Capacity = input.Capacity, LastAssignedUtc = input.LastAssignedUtc,
+                    MembershipId = source?.MembershipId, HostId = source?.HostId, Runtime = source?.Runtime.ToString(), AccountKey = source?.AccountKey,
+                    AvailablePercent = Finite(result.AvailablePercent), EvidenceCapturedUtc = input.CapturedUtc
+                };
+                records.Candidates.Add(candidate);
+                records.Reasons.Add(new CaptainSelectionReason { TenantId = mission.TenantId!, UserId = captain.UserId,
+                    DecisionId = decision.Id, CandidateId = candidate.Id, ReasonCode = result.ReasonCode,
+                    RequiredPercent = snapshot.Settings.ReservePercent + snapshot.Settings.PerAttemptReservationPercent,
+                    AvailablePercent = Finite(result.AvailablePercent) });
+                foreach (UsageSelectionWindowEvidence item in input.Windows)
+                {
+                    UsageWindow window = item.Window;
+                    bool applicable = item.ScopeApplies && item.GenerationConfirmed
+                        && (String.IsNullOrWhiteSpace(window.Model) || String.Equals(window.Model.Trim(), input.Model?.Trim(), StringComparison.OrdinalIgnoreCase));
+                    string key = UsageBudgetIdentity.WindowKey(window, captain.UsageCaptureMode == UsageCaptureModeEnum.Custom ? source?.ConfigurationRevision : null);
+                    records.Windows.Add(new CaptainSelectionWindowRecord
+                    {
+                        TenantId = mission.TenantId!, UserId = captain.UserId, DecisionId = decision.Id, CandidateId = candidate.Id,
+                        SnapshotId = source?.SnapshotId, CapturedUtc = source?.CapturedUtc, ProbeStartedUtc = source?.ProbeStartedUtc,
+                        Source = source?.Source.ToString(), Status = source?.Status.ToString(), ConfigurationRevision = source?.ConfigurationRevision,
+                        WindowKey = key, WindowName = Label(window.Name, 1024), Model = Label(window.Model, 1024), Scope = Label(window.Scope, 1024),
+                        Generation = UsageBudgetIdentity.ContinuousGeneration, UsedPercent = Finite(window.UsedPercent).HasValue ? Math.Min(100, window.UsedPercent!.Value) : null, Used = window.Used, Limit = window.Limit,
+                        Unit = Label(window.Unit, 1024), ResetsUtc = window.ResetsUtc, Applicable = applicable,
+                        NormalizationCode = Label(window.Name, 1024) != window.Name || Label(window.Model, 1024) != window.Model || Label(window.Scope, 1024) != window.Scope || Label(window.Unit, 1024) != window.Unit || window.UsedPercent > 100 ? "SourceValuesNormalized" : null,
+                        ActiveReservationPercent = Finite(item.ActiveReservationPercent) ?? 0,
+                        UnsettledPercent = Finite(item.UnsettledPercent) ?? 0, ReservePercent = snapshot.Settings.ReservePercent
+                    });
+                    // Observe tracks actual execution, including launches its hypothetical policy would defer.
+                    // Unknown/invalid evidence is recorded without fabricating a budget reservation.
+                    bool knownWindow = window.UsedPercent.HasValue ? Finite(window.UsedPercent).HasValue
+                        : window.Used >= 0 && window.Limit > 0 && !String.IsNullOrWhiteSpace(window.Unit);
+                    bool fresh = input.CapturedUtc.HasValue && input.CapturedUtc <= snapshot.EvaluatedUtc + UsageQuotaPolicy.MaximumFutureSkew
+                        && (snapshot.EvaluatedUtc - input.CapturedUtc.Value).TotalSeconds <= Math.Min(snapshot.Settings.MaximumFreshnessSeconds,
+                            UsageQuotaPolicy.FreshnessHorizon(input.EffectiveCaptureIntervalSeconds).TotalSeconds);
+                    if (admitted && captain.Id == snapshot.ActualCaptainId && source != null && input.IdentityVerified && input.ConfigurationMatches
+                        && input.Status == UsageSnapshotStatusEnum.Ok && input.Source != UsageCaptureSourceEnum.Derived && applicable && knownWindow && fresh
+                        && (!window.ResetsUtc.HasValue || window.ResetsUtc > snapshot.EvaluatedUtc))
+                        records.Reservations.Add(new UsageBudgetReservation { TenantId = mission.TenantId!, UserId = mission.UserId,
+                            DecisionId = decision.Id, MissionId = mission.Id, ExecutionAttemptId = decision.ExecutionAttemptId, CaptainId = captain.Id,
+                            MembershipId = source.MembershipId, HostId = source.HostId, Runtime = source.Runtime.ToString(), AccountKey = source.AccountKey,
+                            WindowKey = key, Generation = UsageBudgetIdentity.ContinuousGeneration,
+                            ReservedPercent = snapshot.Settings.PerAttemptReservationPercent });
+                }
+            }
+            // Exclude capture IDs/times and raw percentages that did not change a decision band or ranking.
+            // Actual admissions still get an independent attempt/decision every time.
+            string fingerprint = JsonSerializer.Serialize(new object?[] { records.Policy.Fingerprint, snapshot.ActualCaptainId,
+                snapshot.Evaluation.SelectedCaptainId, snapshot.Evaluation.ReasonCode,
+                snapshot.Evaluation.Candidates.Select(r => new object?[] { r.Candidate.CaptainId, r.Candidate.RoutingBucket, r.Band, r.ReasonCode,
+                    r.Candidate.OccupiedSlots, r.Candidate.Capacity, r.Candidate.CooldownUntilUtc,
+                    r.ReasonCode == "BelowReserve" || r.ReasonCode == "AccountQuotaExhausted" || r.ReasonCode == "AccountCooldown" ? r.NextReconsiderUtc : null,
+                    snapshot.Evidence.TryGetValue(r.Candidate.CaptainId, out UsageSelectionAccountEvidence? source) ? source.MembershipId : null,
+                    r.Candidate.Windows.Select(w => new object?[] { UsageBudgetIdentity.WindowKey(w.Window), w.GenerationConfirmed, w.ScopeApplies,
+                        Finite(w.ActiveReservationPercent), Finite(w.UnsettledPercent) }).ToArray() }).ToArray() });
+            decision.EvidenceFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint))).ToLowerInvariant();
+            return records;
+        }
+
+        private static string? Label(string? value, int length) => UsageSelectionEvidenceSanitizer.Label(value, length);
+
+        private static double? Finite(double? number) => number.HasValue && Double.IsFinite(number.Value) && number.Value >= 0 ? number : null;
+    }
+}

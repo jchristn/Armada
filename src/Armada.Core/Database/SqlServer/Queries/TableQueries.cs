@@ -2497,7 +2497,8 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"IF COL_LENGTH('fleet_action_runs', 'applicability_command_windows') IS NULL ALTER TABLE fleet_action_runs ADD applicability_command_windows NVARCHAR(MAX) NULL;",
                     @"IF COL_LENGTH('fleet_action_runs', 'mission_mode') IS NULL ALTER TABLE fleet_action_runs ADD mission_mode NVARCHAR(64) NOT NULL DEFAULT 'Implementation';"),
                 Armada.Core.Database.UsageSelectionSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
-                Armada.Core.Database.UsageSelectionSchema.CaptureTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer)
+                Armada.Core.Database.UsageSelectionSchema.CaptureTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer),
+                Armada.Core.Database.UsageSelectionSchema.HistoryDisplayMigration(Armada.Core.Enums.DatabaseTypeEnum.SqlServer)
 
             };
         }

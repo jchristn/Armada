@@ -41,7 +41,7 @@ The admission segment has [UX/layout validation evidence](docs/concurrency/ADMIS
 
 ### Related v1.3.0 usage-selection work
 
-[Usage-based captain selection and decision history](USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) extends the shared admission path with account headroom, atomic reservations and durable captain/model selection evidence. Its U0–U6 milestones are planned, not implemented. Coordinate its transaction, verification/repair, waiting telemetry and client changes with M3–M11 here; it must preserve all existing concurrency gates and mission ownership invariants.
+[Usage-based captain selection and decision history](USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) extends the shared admission path with account headroom, atomic reservations and durable captain/model selection evidence. U0 and storage/configuration foundations are implemented; Observe dispatch and server history/preview are connected. Full U2 completion, enforcement and client/validation milestones remain in progress. Coordinate its transaction, verification/repair, waiting telemetry and client changes with M3–M11 here; it must preserve all existing concurrency gates and mission ownership invariants.
 
 ### Segment completion requirements
 

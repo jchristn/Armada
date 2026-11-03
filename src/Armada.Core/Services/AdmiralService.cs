@@ -780,6 +780,7 @@ namespace Armada.Core.Services
             // record cannot stop merge reconciliation, recovery, or dispatch for everything else. Shutdown
             // cancellation still propagates.
             await RunHealthPhaseAsync("reconcile captain slots", () => _Database.Captains.ReconcileMissionSlotsAsync(token), token).ConfigureAwait(false);
+            await RunHealthPhaseAsync("reconcile usage selection estimates", () => new UsageSelectionReservationReconciler(_Database).ReconcileAsync(DateTime.UtcNow, token: token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("concurrency invariants", () => _ConcurrencyInvariants.CheckAsync(token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("lift expired quarantines", () => LiftExpiredQuarantinesAsync(token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("release recovered stalled captains", () => ReleaseRecoveredStalledCaptainsAsync(token), token).ConfigureAwait(false);

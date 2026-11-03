@@ -992,7 +992,40 @@ namespace Armada.Core.Settings
             }
         }
 
+        /// <summary>Whether startup restored a policy settings write that did not finish committing.</summary>
+        [JsonIgnore]
+        public bool UsageSelectionRecoveryPerformed { get; private set; }
+
+        internal string SerializeForStorage()
+        {
+            UsageSelection.Validate();
+            NormalizeConcurrency();
+            NormalizePaths();
+            return JsonSerializer.Serialize(this, _SerializerOptions);
+        }
+
         private UsageSelectionSettings _UsageSelection = new UsageSelectionSettings();
+        private UsageSelectionSettings? _UsageSelectionOverride;
+        private long _UsageSelectionRevision;
+
+        /// <summary>Effective environment policy when present, otherwise file-backed policy. Never serialized into the settings file.</summary>
+        [JsonIgnore]
+        public UsageSelectionSettings EffectiveUsageSelection => _UsageSelectionOverride ?? UsageSelection;
+
+        /// <summary>Persisted optimistic-update revision. Zero means no API policy update has been recorded.</summary>
+        public long UsageSelectionRevision
+        {
+            get => System.Threading.Interlocked.Read(ref _UsageSelectionRevision);
+            set => System.Threading.Interlocked.Exchange(ref _UsageSelectionRevision, Math.Max(0, value));
+        }
+
+        /// <summary>Install a validated startup environment override without replacing its file-backed value.</summary>
+        public void SetUsageSelectionOverride(UsageSelectionSettings? policy)
+        {
+            policy?.Validate();
+            _UsageSelectionOverride = policy?.Copy();
+        }
+
 
         /// <summary>
         /// Account usage capture settings (server switch, interval floor, probe concurrency and timeouts,
@@ -1185,17 +1218,31 @@ namespace Armada.Core.Settings
         public static async Task<ArmadaSettings> LoadAsync(string? path = null)
         {
             path ??= DefaultSettingsPath;
+            bool selectionRecovered = await UsageSelectionSettingsFileStore.RecoverPendingAsync(path).ConfigureAwait(false);
             if (!File.Exists(path))
             {
                 ArmadaSettings defaults = new ArmadaSettings();
                 defaults.SettingsFilePath = path;
+                defaults.UsageSelectionRecoveryPerformed = selectionRecovered;
                 defaults.NormalizeConcurrency();
                 defaults.NormalizePaths();
                 defaults.ApplyDerivedDefaults();
                 return defaults;
             }
-            string json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+            string json;
+            try { json = await File.ReadAllTextAsync(path).ConfigureAwait(false); }
+            catch (IOException) when (UsageSelectionSettingsFileStore.HasPendingRecovery(path))
+            {
+                selectionRecovered |= await UsageSelectionSettingsFileStore.RecoverPendingAsync(path).ConfigureAwait(false);
+                json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+            }
+            if (UsageSelectionSettingsFileStore.HasPendingRecovery(path))
+            {
+                selectionRecovered |= await UsageSelectionSettingsFileStore.RecoverPendingAsync(path).ConfigureAwait(false);
+                json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+            }
             ArmadaSettings settings = Parse(json);
+            settings.UsageSelectionRecoveryPerformed = selectionRecovered;
             settings.SettingsFilePath = path;
             settings.NormalizeConcurrency();
             settings.NormalizePaths();

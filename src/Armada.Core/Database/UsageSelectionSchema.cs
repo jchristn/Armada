@@ -7,6 +7,37 @@ namespace Armada.Core.Database
     /// <summary>Structured selection-ledger migration shared by the supported SQL dialects.</summary>
     internal static class UsageSelectionSchema
     {
+        internal static SchemaMigration HistoryDisplayMigration(DatabaseTypeEnum provider)
+        {
+            string check = provider == DatabaseTypeEnum.Sqlite ? "SELECT COUNT(*) FROM pragma_table_info('captain_selection_windows') WHERE name='normalization_code'"
+                : provider == DatabaseTypeEnum.SqlServer ? "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID('captain_selection_windows') AND name='normalization_code'"
+                : "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='captain_selection_windows' AND column_name='normalization_code' AND "
+                    + (provider == DatabaseTypeEnum.Mysql ? "table_schema=DATABASE()" : "table_schema=current_schema()");
+            List<string> statements = new List<string>();
+            string type = provider == DatabaseTypeEnum.SqlServer ? "NVARCHAR" : "VARCHAR";
+            string AddColumn(string table, string column, int length) => (provider == DatabaseTypeEnum.SqlServer ? "IF COL_LENGTH('" + table + "','" + column + "') IS NULL " : "")
+                + "ALTER TABLE " + table + " ADD " + (provider == DatabaseTypeEnum.Sqlite || provider == DatabaseTypeEnum.Postgresql ? "COLUMN " : "")
+                + (provider == DatabaseTypeEnum.Postgresql ? "IF NOT EXISTS " : "") + column + " " + type + "(" + length + ") NULL;";
+            statements.Add(AddColumn("captain_selection_candidates", "captain_name", 1024));
+            foreach (string target in new[] { "captain_selection_decisions.selected_model", "captain_selection_candidates.configured_model",
+                "captain_selection_windows.model", "captain_selection_windows.window_name", "captain_selection_windows.scope_name",
+                "captain_selection_windows.unit", "captain_selection_windows.configuration_revision", "captain_selection_execution_events.actual_model" })
+            {
+                string[] parts = target.Split('.');
+                if (provider == DatabaseTypeEnum.Postgresql) statements.Add("ALTER TABLE " + parts[0] + " ALTER COLUMN " + parts[1] + " TYPE VARCHAR(1024);");
+                else if (provider == DatabaseTypeEnum.Mysql) statements.Add("ALTER TABLE " + parts[0] + " MODIFY COLUMN " + parts[1] + " VARCHAR(1024) NULL;");
+                else if (provider == DatabaseTypeEnum.SqlServer) statements.Add("ALTER TABLE " + parts[0] + " ALTER COLUMN " + parts[1] + " NVARCHAR(1024) NULL;");
+                // SQLite VARCHAR affinity already accepts these bounded values without a table rebuild.
+            }
+            statements.Add(AddColumn("captain_selection_candidates", "evidence_captured_utc", 40));
+            statements.Add(AddColumn("missions", "selection_decision_id", 64));
+            statements.Add((provider == DatabaseTypeEnum.SqlServer ? "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='ix_usage_reservation_reconcile' AND object_id=OBJECT_ID('usage_budget_reservations')) " : "")
+                + "CREATE INDEX " + (provider == DatabaseTypeEnum.Sqlite || provider == DatabaseTypeEnum.Postgresql ? "IF NOT EXISTS " : "")
+                + "ix_usage_reservation_reconcile ON usage_budget_reservations(state,last_update_utc,id);");
+            statements.Add(AddColumn("captain_selection_windows", "normalization_code", 64));
+            return new SchemaMigration(125, "Preserve historical captain names and bounded selection model evidence", statements.ToArray()) { AlreadyAppliedCheckSql = check };
+        }
+
         internal static SchemaMigration CaptureTimingMigration(DatabaseTypeEnum provider)
         {
             string check = provider == DatabaseTypeEnum.Sqlite ? "SELECT COUNT(*) FROM pragma_table_info('usage_snapshots') WHERE name='probe_started_utc'"

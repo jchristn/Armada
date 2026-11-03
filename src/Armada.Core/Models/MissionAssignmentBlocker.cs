@@ -13,6 +13,9 @@ namespace Armada.Core.Models
     {
         #region Public-Members
 
+        /// <summary>Optional stable usage-selection subreason for clients that support localized selection diagnostics.</summary>
+        public string? SelectionReasonCode { get; set; } = null;
+
         /// <summary>
         /// Typed reason.
         /// </summary>

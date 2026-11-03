@@ -40,6 +40,12 @@ namespace Armada.Core.Models
         public string? AccountKey { get; set; }
         /// <summary>AvailablePercent captured as available_percent in the selection ledger.</summary>
         public double? AvailablePercent { get; set; }
+        /// <summary>Historical authorized display name; null on older decision records.</summary>
+        public string? CaptainName { get; set; }
+
+        /// <summary>Capture time used by the original evaluation, even if its raw snapshot expires.</summary>
+        public DateTime? EvidenceCapturedUtc { get; set; }
+
         /// <summary>Create an identified CaptainSelectionCandidateRecord record.</summary>
         public CaptainSelectionCandidateRecord() : base("csc_") { }
     }

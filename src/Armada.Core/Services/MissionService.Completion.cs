@@ -514,9 +514,9 @@ namespace Armada.Core.Services
             }
 
             // Capture accumulated agent stdout output before pipeline handoff
-            if (OnGetMissionOutput != null)
+            if (OnGetMissionOutput != null || OnTakeMissionTelemetry != null)
             {
-                string? agentOutput = OnGetMissionOutput(mission.Id);
+                string? agentOutput = OnGetMissionOutput?.Invoke(mission.Id);
                 ChatTurnTelemetryRecorder? reported = OnTakeMissionTelemetry?.Invoke(mission.Id);
                 if (!String.IsNullOrEmpty(agentOutput))
                 {
@@ -550,6 +550,7 @@ namespace Armada.Core.Services
                         token: token,
                         harborId: mission.AssignedHarborId).ConfigureAwait(false);
                 }
+                await RecordSelectionModelReportAsync(mission, reported?.Model, token).ConfigureAwait(false);
             }
 
             // Reject a no-op false-complete (fast exit, empty diff, trivial output): re-dispatch to a

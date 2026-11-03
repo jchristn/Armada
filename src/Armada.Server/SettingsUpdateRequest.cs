@@ -32,6 +32,13 @@ namespace Armada.Server
         /// </summary>
         public UsageCaptureSettings? UsageCapture { get; set; }
 
+        /// <summary>Optional usage selection policy replacement; omitted fields use safe defaults.</summary>
+        public UsageSelectionSettings? UsageSelection { get; set; }
+
+        /// <summary>Optional optimistic revision required to replace UsageSelection; stale updates return conflict.</summary>
+        public long? ExpectedUsageSelectionRevision { get; set; }
+
+
         /// <summary>Optional completed mission/event/signal retention in days; zero disables expiry.</summary>
         public int? DataRetentionDays { get; set; }
 

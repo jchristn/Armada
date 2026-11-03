@@ -2786,7 +2786,35 @@ export interface SendSignalRequest {
   payload?: string;
 }
 
+export type CaptainSelectionStrategy = 'FirstAvailable' | 'MostRemainingAllowance' | 'MostUsedAllowance';
+export interface UsageSelectionSettings {
+  mode: 'Disabled' | 'Observe' | 'Enforce';
+  strategy: CaptainSelectionStrategy;
+  unknownUsageBehavior: 'AllowDeprioritized' | 'Wait';
+  reservePercent: number;
+  comfortableHeadroomPercent: number;
+  perAttemptReservationPercent: number;
+  maximumFreshnessSeconds: number;
+  unknownRetrySeconds: number;
+  providerCooldownSeconds: number;
+  settlementLagSeconds: number;
+  maximumUnsettledSeconds: number;
+  decisionRetentionDays: number;
+  maximumCandidates: number;
+}
+export interface UsageSelectionCapabilities {
+  strategies: CaptainSelectionStrategy[];
+  observeAvailable: boolean;
+  enforcementAvailable: boolean;
+  appliedLive: boolean;
+  environmentOverride: boolean;
+  source: string;
+}
 export interface SettingsData {
+  usageSelection?: UsageSelectionSettings;
+  usageSelectionRevision?: number;
+  expectedUsageSelectionRevision?: number;
+  usageSelectionCapabilities?: UsageSelectionCapabilities;
   storage?: import('./storage').StorageSettings;
   /** Server-wide account usage capture group (GlobalAdmin edits it; disabled by default). */
   usageCapture?: UsageCaptureSettings;

@@ -64,6 +64,13 @@ namespace Armada.Core.Database
 
         /// <inheritdoc />
         public Task<CaptainSelectionAdmissionReceipt> TryAdmitObservedAsync(CaptainSelectionRecordSet records, string? dockId = null, int ceiling = 256, CancellationToken token = default)
+            => AdmitObservedAsync(records, dockId, ceiling, null, token);
+
+        /// <inheritdoc />
+        public Task<CaptainSelectionAdmissionReceipt> TryAdmitObservedRepairAsync(CaptainSelectionRecordSet records, DateTime verificationVersion, int ceiling = 256, CancellationToken token = default)
+            => AdmitObservedAsync(records, null, ceiling, verificationVersion, token);
+
+        private Task<CaptainSelectionAdmissionReceipt> AdmitObservedAsync(CaptainSelectionRecordSet records, string? dockId, int ceiling, DateTime? verificationVersion, CancellationToken token)
         {
             Validate(records);
             if (records.Decision.Mode != UsageSelectionModeEnum.Observe || String.IsNullOrWhiteSpace(records.Decision.SelectedCaptainId))
@@ -72,7 +79,10 @@ namespace Armada.Core.Database
             {
                 CaptainSelectionDecision? existing = await ReadAttemptAsync(connection, null, records.Decision.TenantId, records.Decision.ExecutionAttemptId, token).ConfigureAwait(false);
                 if (existing != null) return Replay(existing, records.Decision);
-                bool claimed = await new CaptainSlotStore(connection).ClaimAsync(records.Decision.SelectedCaptainId!, records.Decision.MissionId, dockId, token, ceiling, records).ConfigureAwait(false);
+                CaptainSlotStore slots = new CaptainSlotStore(connection);
+                bool claimed = verificationVersion.HasValue
+                    ? await slots.ResumeVerificationAsync(records.Decision.SelectedCaptainId!, records.Decision.MissionId, verificationVersion.Value, ceiling, token, records).ConfigureAwait(false)
+                    : await slots.ClaimAsync(records.Decision.SelectedCaptainId!, records.Decision.MissionId, dockId, token, ceiling, records).ConfigureAwait(false);
                 if (claimed) return new CaptainSelectionAdmissionReceipt { Claimed = true, DecisionId = records.Decision.Id };
                 existing = await ReadAttemptAsync(connection, null, records.Decision.TenantId, records.Decision.ExecutionAttemptId, token).ConfigureAwait(false);
                 return existing == null ? new CaptainSelectionAdmissionReceipt() : Replay(existing, records.Decision);
@@ -187,6 +197,20 @@ namespace Armada.Core.Database
         }
 
         /// <inheritdoc />
+        public Task<CaptainSelectionDecision?> ReadCurrentDecisionAsync(string tenantId, string missionId, string? ownerUserId = null, CancellationToken token = default)
+        {
+            Required(tenantId, nameof(tenantId)); Required(missionId, nameof(missionId));
+            return RunAsync(async connection =>
+            {
+                using DbCommand command = Command(connection, null, "SELECT d.* FROM captain_selection_decisions d JOIN missions m ON m.selection_decision_id=d.id AND m.tenant_id=d.tenant_id WHERE d.tenant_id=@tenant AND m.id=@mission"
+                    + (ownerUserId == null ? "" : " AND d.user_id=@owner AND m.user_id=@owner") + ";");
+                Add(command, "@tenant", tenantId); Add(command, "@mission", missionId); if (ownerUserId != null) Add(command, "@owner", ownerUserId);
+                using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+                return await reader.ReadAsync(token).ConfigureAwait(false) ? MapCaptainSelectionDecision(reader) : null;
+            }, token);
+        }
+
+        /// <inheritdoc />
         public Task<CaptainSelectionDecision?> ReadDecisionAsync(string tenantId, string decisionId, string? ownerUserId = null, CancellationToken token = default)
         {
             Required(tenantId, nameof(tenantId)); Required(decisionId, nameof(decisionId));
@@ -214,13 +238,26 @@ namespace Armada.Core.Database
 
         /// <inheritdoc />
         public Task<EnumerationResult<CaptainSelectionDecision>> EnumerateByMissionAsync(string tenantId, string missionId, string? ownerUserId = null, int pageNumber = 1, int pageSize = 25, CancellationToken token = default)
+            => EnumerateHistoryAsync(tenantId, missionId, ownerUserId, new CaptainSelectionHistoryQuery { PageNumber = pageNumber, PageSize = pageSize }, token);
+
+        /// <inheritdoc />
+        public Task<EnumerationResult<CaptainSelectionDecision>> EnumerateHistoryAsync(string tenantId, string missionId, string? ownerUserId, CaptainSelectionHistoryQuery query, CancellationToken token = default)
         {
+            ArgumentNullException.ThrowIfNull(query);
+            int pageNumber = query.PageNumber; int pageSize = query.PageSize;
             Required(tenantId, nameof(tenantId)); Required(missionId, nameof(missionId)); Paging(pageNumber, pageSize);
+            if (query.FromUtc >= query.ToUtc) throw new ArgumentException("History start must precede its end.", nameof(query));
             return RunAsync(async connection =>
             {
-                string where = " FROM captain_selection_decisions WHERE tenant_id=@tenant AND mission_id=@mission" + (ownerUserId == null ? "" : " AND user_id=@owner");
+                string where = " FROM captain_selection_decisions WHERE tenant_id=@tenant AND mission_id=@mission" + (ownerUserId == null ? "" : " AND user_id=@owner")
+                    + (query.Trigger == null ? "" : " AND trigger_kind=@trigger") + (query.Outcome == null ? "" : " AND outcome=@outcome")
+                    + (query.FromUtc.HasValue ? " AND evaluated_utc>=@from" : "") + (query.ToUtc.HasValue ? " AND evaluated_utc<@to" : "");
                 using DbCommand command = Command(connection, null, "SELECT COUNT(*)" + where);
                 Add(command, "@tenant", tenantId); Add(command, "@mission", missionId); if (ownerUserId != null) Add(command, "@owner", ownerUserId);
+                if (query.Trigger != null) Add(command, "@trigger", query.Trigger);
+                if (query.Outcome != null) Add(command, "@outcome", query.Outcome);
+                if (query.FromUtc.HasValue) Add(command, "@from", Utc(query.FromUtc.Value));
+                if (query.ToUtc.HasValue) Add(command, "@to", Utc(query.ToUtc.Value));
                 long count = Convert.ToInt64(await command.ExecuteScalarAsync(token).ConfigureAwait(false), CultureInfo.InvariantCulture);
                 command.CommandText = "SELECT *" + where + " ORDER BY evaluated_utc DESC,id DESC" + PageSql(connection);
                 Add(command, "@skip", (pageNumber - 1) * pageSize); Add(command, "@take", pageSize);
@@ -233,7 +270,7 @@ namespace Armada.Core.Database
 
         private static string CandidateScope(string? owner, string? candidateOwner)
             => "c.tenant_id=@tenant AND c.decision_id=@decision AND d.tenant_id=c.tenant_id AND d.id=c.decision_id"
-                + (owner == null ? "" : " AND d.user_id=@owner") + (candidateOwner == null ? "" : " AND c.user_id=@candidateOwner");
+                + (owner == null ? "" : " AND d.user_id=@owner") + (candidateOwner == null ? "" : " AND (c.user_id=@candidateOwner OR c.user_id IS NULL)");
         private static void CandidateParameters(DbCommand command, string tenant, string decision, string? owner, string? candidateOwner)
         {
             Add(command, "@tenant", tenant); Add(command, "@decision", decision);

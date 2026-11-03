@@ -1,5 +1,10 @@
 # Armada REST API Reference
 
+### v1.3.0 configurable captain selection
+
+The live `UsageSelection` settings group supports `FirstAvailable`, `MostRemainingAllowance` and `MostUsedAllowance` strategies. GET settings reports the current revision/capabilities; PUT accepts `ExpectedUsageSelectionRevision` and returns 409 for stale revisions or unavailable Enforce. New authenticated mission selection summary/history/preview and retained decision/candidate routes are documented in [live configuration and Observe history](usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md). Observe preserves actual legacy routing and records the configured strategy’s hypothetical choice. Preview is read-only; internal account keys are excluded from selection DTOs.
+
+
 ### v1.3.0 concurrency schema boundary
 
 Migrations 119–121 complete the storage transition. Captain responses contain `MaxConcurrency`, `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; `CurrentMissionId` and `CurrentDockId` are removed. Read each mission for its `DockId`, `ProcessId`, heartbeat and recovery attempts. Captain `ProcessId` is reserved for exclusive sessions. Vessel requests use `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage`; `AllowConcurrentMissions` is removed and supplying it returns an explicit migration error. Helm rejects `--allow-concurrent` with replacement options.

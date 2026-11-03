@@ -1,3 +1,4 @@
+import { usageSelectionMessages } from '../i18n/usageSelectionMessages';
 import { describe, expect, it } from 'vitest';
 import catalogSource from '../../../Armada.Server/wwwroot/i18n/armada.json?raw';
 import type { I18nCatalog } from '../i18n/runtime';
@@ -31,6 +32,7 @@ const ARIA_DQ = /ariaLabel="([^"]*)"/g;
 
 /** Strings looked up through tables (invisible to the t('...') scan) plus ActionMenu labels translated by the menu. */
 const TABLE_KEYS = [
+  ...Object.keys(usageSelectionMessages),
   'Refresh captain usage',
   'Refresh token usage',
   ...Object.values(USAGE_KIND_TEXT),

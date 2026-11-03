@@ -223,6 +223,7 @@ namespace Armada.Server
         private LoginRateLimiter _LoginRateLimiter = null!;
         private IAuthorizationService _AuthorizationService = null!;
         private IMissionService _MissionService = null!;
+        private UsageSelectionConfigurationService _UsageSelectionConfiguration = null!;
         private CaptainToolService _CaptainTools = null!;
 
         private Armada.Core.Services.Ask.AskThreadService _AskThreads = null!;
@@ -306,6 +307,8 @@ namespace Armada.Server
             await EnforceDefaultCredentialPolicyAsync().ConfigureAwait(false);
 
             // Initialize services
+            _UsageSelectionConfiguration = new UsageSelectionConfigurationService(_Settings, _Database, _Logging);
+            await _UsageSelectionConfiguration.RecordRecoveryAsync().ConfigureAwait(false);
             _Git = new GitService(_Logging);
             IDockService dockService = new DockService(_Logging, _Database, _Settings, _Git);
             _Docks = dockService;
@@ -1100,6 +1103,7 @@ namespace Armada.Server
             _RemoteDashboardRelay?.DisposeAsync().GetAwaiter().GetResult();
             _McpServer?.Stop();
             _StorageInventory?.Dispose();
+            _UsageSelectionConfiguration?.Dispose();
             _Database?.Dispose();
             _TelemetryHost?.Dispose();
             OnStopping?.Invoke();
@@ -1558,6 +1562,7 @@ namespace Armada.Server
             new StatusRoutes(_Database, _Settings, _Admiral, () => Stop(), _StartUtc, _JsonOptions, _Logging, slotManager, rebuildService, _RemoteTunnel.GetStatus, _RemoteTunnel.ReloadAsync, () => RestartOverride?.Invoke())
             {
                 BlackBox = _BlackBox,
+                UsageSelectionConfiguration = _UsageSelectionConfiguration,
                 OnUsageCaptureSettingsChanged = async () =>
                 {
                     _UsageCapture.Invalidate();
@@ -1688,6 +1693,7 @@ namespace Armada.Server
 
             // Token usage
             new UsageRoutes(_UsageAccess, _JsonOptions).Register(_App, authenticate, _AuthorizationService);
+            new CaptainSelectionRoutes(new CaptainSelectionAccessService(_Database, _MissionService, _Settings), _JsonOptions).Register(_App, authenticate, _AuthorizationService);
             new TokenUsageRoutes(_Database, _JsonOptions)
                 .Register(_App, authenticate, _AuthorizationService);
 
@@ -2227,7 +2233,8 @@ namespace Armada.Server
                 _BlackBox?.Insights.Service,
                 _ModelProfileAccess,
                 _ModelAlertAccess,
-                _UsageAccess);
+                _UsageAccess,
+                _UsageSelectionConfiguration);
         }
 
         /// <summary>

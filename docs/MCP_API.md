@@ -1,5 +1,10 @@
 # Armada MCP API Reference
 
+### v1.3.0 configurable captain selection
+
+`get_usage_selection_settings` and `update_usage_selection_settings` expose the same live policy coordinator as REST and require global administrator access. Update arguments are `settings` (complete group) and optional `expectedRevision`. `get_captain_selection`, `get_captain_selection_history`, `get_captain_selection_decision` and `preview_captain_selection` use shared tenant/owner/mission-token scope. The default is Observe/FirstAvailable; the other strategies are MostRemainingAllowance and MostUsedAllowance. Enforce remains unavailable. See [contracts, scope and examples](usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md).
+
+
 ### v1.3.0 concurrency schema boundary
 
 Migrations 119–121 complete the storage transition. Captain responses contain `MaxConcurrency`, `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; `CurrentMissionId` and `CurrentDockId` are removed. Read each mission for its `DockId`, `ProcessId`, heartbeat and recovery attempts. Captain `ProcessId` is reserved for exclusive sessions. Vessel requests use `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage`; `AllowConcurrentMissions` is removed and supplying it returns an explicit migration error. Helm rejects `--allow-concurrent` with replacement options.
