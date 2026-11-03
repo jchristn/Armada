@@ -148,9 +148,13 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 
 ---
 
-## v1.3.0 development: parallelization and concurrency
+## v1.3.0 development: concurrency and built-in fleet actions
 
-v1.3.0 focuses on **parallelization and concurrency**: running independent work safely across vessels and within each captain. Work on [concurrency improvements](CONCURRENCY_IMPROVEMENTS.md) is underway on `feature/v1.3.0`. Vessel voyage and mission admission limits are now usable through the Dashboard, Mobile, TUI, REST and MCP. Assignment checks and claims are serialized; voyages retain admission through review and landing, while running mission slots refill after agent completion. See [the end-to-end test guide](docs/CONCURRENCY_TESTING.md). One captain can now run multiple missions with independent docks, processes and recovery. Configure Maximum concurrent missions on a captain; CLI defaults to 1 and ApiEndpoint/Mux to 4.
+v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**.
+
+The [built-in fleet action catalog](docs/FLEET_ACTIONS.md#built-in-actions) ships 25 actions (20 new), available in every tenant without creating action templates. Run performance reviews and fixes, code cleanliness reviews and dead-code cleanup, vulnerability audits and security reviews, secrets scans, and license compliance checks across selected repositories. The catalog also covers builds, tests, linting, dependency updates, framework upgrades, and documentation upkeep. Report-only actions collect findings without changing repositories; follow-up runs can target only repositories with findings or failures. New built-ins are added at startup, while tenant edits and deleted built-ins are respected.
+
+**Parallelization and concurrency** let independent work run safely across vessels and within each captain. Work on [concurrency improvements](CONCURRENCY_IMPROVEMENTS.md) is underway on `feature/v1.3.0`. Vessel voyage and mission admission limits are now usable through the Dashboard, Mobile, TUI, REST and MCP. Assignment checks and claims are serialized; voyages retain admission through review and landing, while running mission slots refill after agent completion. See [the end-to-end test guide](docs/CONCURRENCY_TESTING.md). One captain can now run multiple missions with independent docks, processes and recovery. Configure Maximum concurrent missions on a captain; CLI defaults to 1 and ApiEndpoint/Mux to 4.
 
 Planning and backlog refinement reserve captains exclusively with atomic session ownership, including creation/recovery races and late cleanup. Stage verification releases execution slots for independent work while preserving restart recovery; repairs wait for admission capacity.
 
@@ -835,7 +839,7 @@ Browse the dashboard, Harbor desktop app, and terminal UI. Expand a section to v
 
 - **Import.** **Import repositories** on the Vessels page (or `armada vessel import --root ~/Code --dry-run`) scans directories on the Admiral host, shows every git repository it found with a status (new, already onboarded, worktree, and so on), and creates vessels only for the ones you keep. Imported vessels point at your existing checkout and never set `LocalPath`, so removing a vessel never touches your clone. Scanning is limited to `Import.AllowedRoots`. A captain can also recommend fleet groupings.
 - **Vessel Health** (the Health tab, or `armada health`) grades each vessel: commits ahead of or behind the default branch, uncommitted changes, stale `armada/*` branches, outdated and vulnerable NuGet and npm packages, tests and the latest check run, CI configuration, and recent mission failures. Evaluations run every 6 hours (`RepositoryHealth.IntervalMinutes`) or on demand; a check that cannot run shows as Unknown, not healthy.
-- **Fleet Actions** apply one action across many vessels: a Command action runs a shell command in each working directory and records the output; a Mission action dispatches one voyage per vessel, paced.
+- **Fleet Actions** apply one action across many vessels: a Command action runs a shell command in each working directory and records the output; a Mission action dispatches one voyage per vessel, paced. v1.3.0 ships [25 built-in actions](docs/FLEET_ACTIONS.md#built-in-actions) for common repository tasks, including performance, cleanliness, security, and license compliance.
 - **View History** (`H` in the TUI, or `armada vessel history <vessel>`) shows a commit heatmap and the commits behind it, with authors, line counts, and files changed.
 
 See [docs/FLEET_ACTIONS.md](docs/FLEET_ACTIONS.md), [docs/VESSEL_HEALTH.md](docs/VESSEL_HEALTH.md), and the Vessel Import section of [docs/REST_API.md](docs/REST_API.md).

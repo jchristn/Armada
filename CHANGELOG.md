@@ -6,7 +6,7 @@ All notable changes to Armada are documented in this file.
 
 ## v1.3.0 (in development)
 
-v1.3.0 focuses on **parallelization and concurrency**: more independent work in flight, bounded capacity, clear waiting reasons, and isolated recovery.
+v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**. Concurrency improvements keep more independent work in flight with bounded capacity, clear waiting reasons, and isolated recovery. The default fleet action catalog provides ready-to-run performance reviews and fixes, code cleanliness and cleanup, security and vulnerability checks, and license compliance checks, alongside build, test, lint, dependency, and documentation tasks.
 
 ### Fleet actions: built-in catalog, follow-up runs, and report-only actions
 
