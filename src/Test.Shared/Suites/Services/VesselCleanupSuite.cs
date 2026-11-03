@@ -45,11 +45,11 @@ namespace Test.Shared.Suites.Services
             cases.Add(CaseAsync("active_dock_in_use", "An active dock held by a captain on an InProgress mission, and its checked-out branch, are in use", TestTags.Positive, async () =>
             {
                 using Harness h = await Harness.CreateAsync().ConfigureAwait(false);
-                Captain captain = await h.Db.Driver.Captains.CreateAsync(new Captain("c1") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(h.Db.Driver, new Captain("c1") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 Dock dock = await h.AddDockAsync("armada/c1/active", active: true, captainId: captain.Id).ConfigureAwait(false);
                 await h.AddMissionAsync(MissionStatusEnum.InProgress, "armada/c1/active", dock.Id).ConfigureAwait(false);
-                captain.CurrentDockId = dock.Id;
-                await h.Db.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+                await CaptainAssignmentFixture.UpdateAsync(h.Db.Driver, captain).ConfigureAwait(false);
 
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);
 
@@ -378,7 +378,7 @@ namespace Test.Shared.Suites.Services
             {
                 using Harness h = await Harness.CreateAsync().ConfigureAwait(false);
                 for (int i = 0; i < 5; i++) await h.AddDockAsync("armada/p" + i + "/work").ConfigureAwait(false);
-                Captain captain = await h.Db.Driver.Captains.CreateAsync(new Captain("cp") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(h.Db.Driver, new Captain("cp") { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 await h.AddDockAsync("armada/p9/active", active: true, captainId: captain.Id).ConfigureAwait(false);
 
                 VesselCleanupInventory inv = await h.Service.ScanAsync(h.Vessel).ConfigureAwait(false);

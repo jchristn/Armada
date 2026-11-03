@@ -16,8 +16,7 @@ import {
 function captain(over: Partial<Captain> = {}): Captain {
   return {
     id: 'cpt_1', tenantId: null, name: 'Ada', runtime: 'ClaudeCode', supportsPlanningSessions: true, planningSessionSupportReason: null,
-    systemInstructions: null, model: null, allowedPersonas: null, preferredPersona: null, state: 'Idle', currentMissionId: null,
-    currentDockId: null, processId: null, recoveryAttempts: 0, lastHeartbeatUtc: null, createdUtc: '2026-01-01T00:00:00Z', lastUpdateUtc: '2026-01-01T00:00:00Z',
+    systemInstructions: null, model: null, allowedPersonas: null, preferredPersona: null, state: 'Idle', processId: null, recoveryAttempts: 0, lastHeartbeatUtc: null, createdUtc: '2026-01-01T00:00:00Z', lastUpdateUtc: '2026-01-01T00:00:00Z',
     ...over,
   };
 }

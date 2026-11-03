@@ -173,6 +173,25 @@ namespace Armada.Core.Models
         /// </summary>
         public string? ParentMissionId { get; set; } = null;
 
+        /// <summary>Original failed mission this rescue addresses; distinct from hierarchy ancestry.</summary>
+        public string? RescueOfMissionId { get; set; }
+        /// <summary>Branch strategy for hierarchy dispatch.</summary>
+        public MissionBranchStrategyEnum BranchStrategy { get; set; } = MissionBranchStrategyEnum.New;
+        /// <summary>Recorded base branch for a forked mission.</summary>
+        public string? BaseBranchName { get; set; }
+        /// <summary>First capacity-ready observation.</summary>
+        public DateTime? ReadyUtc { get; set; }
+        /// <summary>Time execution capacity was last assigned.</summary>
+        public DateTime? AssignedUtc { get; set; }
+        /// <summary>Stored hierarchy depth, zero for roots.</summary>
+        public int Depth { get; set; }
+        /// <summary>Declared writable paths, serialized as JSON.</summary>
+        public string? OwnedPathsJson { get; set; }
+        /// <summary>Declared read-only paths, serialized as JSON.</summary>
+        public string? ReadsPathsJson { get; set; }
+
+
+
         /// <summary>
         /// Git branch name for this mission's work.
         /// </summary>

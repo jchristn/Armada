@@ -158,6 +158,7 @@ namespace Armada.Tui.Screens.Operations
             Action("voyage", "Open Voyage", () => Context.Navigate("/voyages/" + Uri.EscapeDataString(Mission!.VoyageId!)), "V", () => Mission != null && !String.IsNullOrEmpty(Mission.VoyageId));
             Action("vessel", "Open Vessel", () => Context.Navigate("/vessels/" + Uri.EscapeDataString(Mission!.VesselId!)), "v", () => Mission != null && !String.IsNullOrEmpty(Mission.VesselId));
             Action("captain", "Open Captain", () => Context.Navigate("/captains/" + Uri.EscapeDataString(Mission!.CaptainId!)), "C", () => Mission != null && !String.IsNullOrEmpty(Mission.CaptainId));
+            Action("rescue-origin", "Rescue of", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Mission!.RescueOfMissionId!)), null, () => !String.IsNullOrEmpty(Mission?.RescueOfMissionId));
             Action("parent", "Open Parent Mission", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Mission!.ParentMissionId!)), null, () => Mission != null && !String.IsNullOrEmpty(Mission.ParentMissionId));
             Action("depends-on", "Open Depends On", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Mission!.DependsOnMissionId!)), null, () => Mission != null && !String.IsNullOrEmpty(Mission.DependsOnMissionId));
             Action("dock", "Open Dock", () => Context.Navigate("/docks/" + Uri.EscapeDataString(Mission!.DockId!)), null, () => Mission != null && !String.IsNullOrEmpty(Mission.DockId));
@@ -482,6 +483,7 @@ namespace Armada.Tui.Screens.Operations
             if (!String.IsNullOrEmpty(m.RequestedCaptainId) && !String.IsNullOrEmpty(m.CaptainId) && m.CaptainId != m.RequestedCaptainId) preferred += "  " + Tr("(fell back to tier)");
             doc.Field("Preferred Captain", preferred);
             doc.Field("Actual Captain", CaptainRef(m.CaptainId));
+            if (m.RescueOfMissionId != null) doc.Field("Rescue of", m.RescueOfMissionId);
             doc.Field("Parent Mission", m.ParentMissionId);
             doc.Field("Persona", String.IsNullOrEmpty(m.Persona) ? Tr("Worker") : m.Persona);
             if (!String.IsNullOrEmpty(m.DependsOnMissionId)) doc.Field("Depends On", m.DependsOnMissionId);

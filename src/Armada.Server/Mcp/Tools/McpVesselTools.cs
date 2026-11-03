@@ -92,6 +92,7 @@ namespace Armada.Server.Mcp.Tools
                 },
                 async (args) =>
                 {
+                    if (RemovedConcurrencyFields.Contains(args!.Value)) return (object)McpToolError.InvalidArgument(RemovedConcurrencyFields.Message);
                     VesselAddArgs request = JsonSerializer.Deserialize<VesselAddArgs>(args!.Value, _JsonOptions)!;
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
                     if (!String.IsNullOrEmpty(request.FleetId) && await McpCallerScope.ReadFleetAsync(database, caller, request.FleetId).ConfigureAwait(false) == null)
@@ -107,7 +108,6 @@ namespace Armada.Server.Mcp.Tools
                     vessel.StyleGuide = request.StyleGuide;
                     vessel.WorkingDirectory = request.WorkingDirectory;
                     vessel.GitHubTokenOverride = request.GitHubTokenOverride;
-                    vessel.AllowConcurrentMissions = request.AllowConcurrentMissions ?? false;
                     vessel.MaxParallelVoyages = request.MaxParallelVoyages ?? (settings?.Concurrency.DefaultVesselMaxParallelVoyages ?? Constants.DefaultVesselMaxParallelVoyages);
                     vessel.MaxParallelMissionsPerVoyage = request.MaxParallelMissionsPerVoyage ?? (settings?.Concurrency.DefaultVesselMaxParallelMissionsPerVoyage ?? Constants.DefaultVesselMaxParallelMissionsPerVoyage);
                     vessel.SerializeOverlappingMissions = request.SerializeOverlappingMissions ?? false;
@@ -183,6 +183,7 @@ namespace Armada.Server.Mcp.Tools
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
+                    if (RemovedConcurrencyFields.Contains(args!.Value)) return (object)McpToolError.InvalidArgument(RemovedConcurrencyFields.Message);
                     VesselUpdateArgs request = JsonSerializer.Deserialize<VesselUpdateArgs>(args!.Value, _JsonOptions)!;
                     string vesselId = request.VesselId;
                     Vessel? vessel = await McpCallerScope.ReadVesselAsync(database, caller, vesselId).ConfigureAwait(false);
@@ -206,8 +207,6 @@ namespace Armada.Server.Mcp.Tools
                     }
                     if (request.MaxParallelVoyages.HasValue) vessel.MaxParallelVoyages = request.MaxParallelVoyages.Value;
                     if (request.MaxParallelMissionsPerVoyage.HasValue) vessel.MaxParallelMissionsPerVoyage = request.MaxParallelMissionsPerVoyage.Value;
-                    if (request.AllowConcurrentMissions.HasValue)
-                        vessel.AllowConcurrentMissions = request.AllowConcurrentMissions.Value;
                     if (request.SerializeOverlappingMissions.HasValue)
                         vessel.SerializeOverlappingMissions = request.SerializeOverlappingMissions.Value;
                     if (request.ClearAutoApprove == true)

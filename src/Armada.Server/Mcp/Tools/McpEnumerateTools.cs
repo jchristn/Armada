@@ -196,7 +196,7 @@ namespace Armada.Server.Mcp.Tools
                                     {
                                         v.Id, v.FleetId, v.Name, v.RepoUrl, v.LocalPath, v.WorkingDirectory,
                                         v.DefaultBranch, v.LandingMode, v.BranchCleanupPolicy,
-                                        v.MaxParallelVoyages, v.MaxParallelMissionsPerVoyage, v.AllowConcurrentMissions, v.AutoApprove, v.Active, v.CreatedUtc, v.LastUpdateUtc,
+                                        v.MaxParallelVoyages, v.MaxParallelMissionsPerVoyage, v.AutoApprove, v.Active, v.CreatedUtc, v.LastUpdateUtc,
                                         v.HasGitHubTokenOverride,
                                         ProjectContextLength = v.ProjectContext?.Length ?? 0,
                                         StyleGuideLength = v.StyleGuide?.Length ?? 0,
@@ -221,7 +221,7 @@ namespace Armada.Server.Mcp.Tools
                                 Objects = captains.Objects.Select(c => new
                                 {
                                     c.Id, c.TenantId, c.UserId, c.Name, c.Runtime, c.State,
-                                    c.MaxConcurrency, c.ActiveMissionCount, c.ActiveMissionIds, c.CurrentSessionId, c.CurrentMissionId, c.CurrentDockId, c.ProcessId,
+                                    c.MaxConcurrency, c.ActiveMissionCount, c.ActiveMissionIds, c.CurrentSessionId, c.ProcessId,
                                     c.RecoveryAttempts, c.LastHeartbeatUtc, c.CreatedUtc, c.LastUpdateUtc,
                                     SystemInstructionsLength = c.SystemInstructions?.Length ?? 0
                                 }).ToList(),

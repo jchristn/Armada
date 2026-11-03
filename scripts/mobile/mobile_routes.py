@@ -146,6 +146,15 @@ def title_for(pattern, labels=None):
     return words
 
 
+# These browser administration/recovery pages are explicitly documented as not applicable in mobile/parity.json.
+DASHBOARD_ONLY_ROUTES = {
+    "/*": ("W0.5", "Browser catch-all renders the shared NotFound recovery page; native routers already handle unmatched routes."),
+    "/battery": ("W3.2", "Server filesystem pack editing is dashboard-only; native has no pack editor."),
+    "/evaluations": ("W3.2", "Model evaluation lists remain dashboard-only; native has no evaluation screen."),
+    "/evaluations/:id": ("W3.2", "Model evaluation results remain dashboard-only; native has no evaluation screen."),
+}
+
+
 def build():
     """Every mobile route derived from the dashboard: dicts with dashboard, pattern, tab, file, workstream, redirect."""
     route_list, redirects = routes()
@@ -154,6 +163,9 @@ def build():
     out = []
     seen = set()
     for dashboard in route_list:
+        # Dashboard-only surfaces have explicit parity exceptions and are not native screen paths.
+        if dashboard in DASHBOARD_ONLY_ROUTES:
+            continue
         for pattern in app_patterns(dashboard):
             if pattern in seen:
                 continue

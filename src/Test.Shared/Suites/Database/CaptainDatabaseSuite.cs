@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites.Database
 {
+    using System.Linq;
     using System;
     using System.Collections.Generic;
     using System.Threading;
@@ -42,7 +43,7 @@ namespace Test.Shared.Suites.Database
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("claude-1", AgentRuntimeEnum.ClaudeCode);
                     captain.Model = "gpt-5.4";
-                    Captain result = await db.Captains.CreateAsync(captain);
+                    Captain result = await CaptainAssignmentFixture.CreateAsync(db, captain);
                     Captain? read = await db.Captains.ReadAsync(captain.Id);
 
                     AssertNotNull(result);
@@ -61,7 +62,7 @@ namespace Test.Shared.Suites.Database
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("pi-1", AgentRuntimeEnum.Pi);
                     captain.Model = "anthropic/claude-opus-4-8";
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
                     Captain? read = await db.Captains.ReadAsync(captain.Id);
 
                     AssertNotNull(read);
@@ -76,7 +77,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("read-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
                     AssertNotNull(result);
@@ -91,7 +92,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("name-lookup");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     Captain? result = await db.Captains.ReadByNameAsync("name-lookup");
                     AssertNotNull(result);
@@ -105,19 +106,20 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("update-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = "msn_test";
+                    captain.Assignment = new Mission { Id = "msn_test" };
                     captain.ProcessId = 12345;
                     captain.RecoveryAttempts = 2;
                     captain.Model = "gpt-5.4-mini";
-                    await db.Captains.UpdateAsync(captain);
+                    await CaptainAssignmentFixture.UpdateAsync(db, captain);
 
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Working, result!.State);
-                    AssertEqual("msn_test", result.CurrentMissionId);
-                    AssertEqual(12345, result.ProcessId);
+                    AssertEqual("msn_test", result.ActiveMissionIds.SingleOrDefault());
+                    AssertNull(result.ProcessId);
+                    AssertEqual(12345, await db.Captains.ReadMissionProcessAsync(captain.Id, "msn_test"));
                     AssertEqual(2, result.RecoveryAttempts);
                     AssertEqual("gpt-5.4-mini", result.Model);
                 }
@@ -130,10 +132,10 @@ namespace Test.Shared.Suites.Database
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("clear-model-test");
                     captain.Model = "gpt-5.4";
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     captain.Model = "";
-                    await db.Captains.UpdateAsync(captain);
+                    await CaptainAssignmentFixture.UpdateAsync(db, captain);
 
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
                     AssertNull(result!.Model);
@@ -146,7 +148,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("to-delete");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     await db.Captains.DeleteAsync(captain.Id);
                     AssertNull(await db.Captains.ReadAsync(captain.Id));
@@ -163,9 +165,9 @@ namespace Test.Shared.Suites.Database
                     c2.State = CaptainStateEnum.Working;
                     Captain c3 = new Captain("idle-2");
 
-                    await db.Captains.CreateAsync(c1);
-                    await db.Captains.CreateAsync(c2);
-                    await db.Captains.CreateAsync(c3);
+                    await CaptainAssignmentFixture.CreateAsync(db, c1);
+                    await CaptainAssignmentFixture.CreateAsync(db, c2);
+                    await CaptainAssignmentFixture.CreateAsync(db, c3);
 
                     List<Captain> idle = await db.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle);
                     AssertEqual(2, idle.Count);
@@ -181,7 +183,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("state-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     await db.Captains.UpdateStateAsync(captain.Id, CaptainStateEnum.Stalled);
 
@@ -196,7 +198,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("heartbeat-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
                     AssertNull(captain.LastHeartbeatUtc);
 
                     await db.Captains.UpdateHeartbeatAsync(captain.Id);
@@ -212,7 +214,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("exists-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     AssertTrue(await db.Captains.ExistsAsync(captain.Id));
                     AssertFalse(await db.Captains.ExistsAsync("cpt_nonexistent"));

@@ -73,7 +73,7 @@ namespace Test.Shared.Suites.Services
                 TestFixture work = await SetupFixtureAsync(db, captainCount: 2, missionCount: 3);
                 work.Vessel.MaxParallelMissionsPerVoyage = 4;
                 foreach (Captain captain in work.Captains)
-                { captain.MaxConcurrency = 3; await db.Captains.UpdateAsync(captain, updateConcurrency: true); }
+                { captain.MaxConcurrency = 3; await CaptainAssignmentFixture.UpdateAsync(db, captain, updateConcurrency: true); }
                 AssertTrue(await services.Missions.TryAssignAsync(work.Missions[0], work.Vessel));
                 AssertTrue(await services.Missions.TryAssignAsync(work.Missions[1], work.Vessel));
                 List<Captain> busy = await db.Captains.EnumerateAsync();
@@ -101,7 +101,7 @@ namespace Test.Shared.Suites.Services
                 List<Voyage> voyages = new List<Voyage>();
                 for (int i = 0; i < 10; i++) voyages.Add(await db.Voyages.CreateAsync(new Voyage("voyage-" + i) { Status = VoyageStatusEnum.InProgress }));
                 for (int i = 0; i < work.Captains.Count; i++)
-                { work.Captains[i].MaxConcurrency = 2 + i % 2; await db.Captains.UpdateAsync(work.Captains[i], updateConcurrency: true); }
+                { work.Captains[i].MaxConcurrency = 2 + i % 2; await CaptainAssignmentFixture.UpdateAsync(db, work.Captains[i], updateConcurrency: true); }
                 for (int i = 0; i < work.Missions.Count; i++)
                 { work.Missions[i].VesselId = vessels[i % 5].Id; work.Missions[i].VoyageId = voyages[i % 10].Id; await db.Missions.UpdateAsync(work.Missions[i]); }
                 ConcurrencyInvariantMonitor monitor = new ConcurrencyInvariantMonitor(db, settings, CreateLogging());
@@ -141,7 +141,7 @@ namespace Test.Shared.Suites.Services
                 TestFixture fixture = await SetupFixtureAsync(db, captainCount: 1, missionCount: 3);
                 Captain captain = fixture.Captains[0];
                 captain.MaxConcurrency = 3;
-                await db.Captains.UpdateAsync(captain, updateConcurrency: true);
+                await CaptainAssignmentFixture.UpdateAsync(db, captain, updateConcurrency: true);
                 foreach (Mission mission in fixture.Missions) AssertTrue(await services.Missions.TryAssignAsync(mission, fixture.Vessel));
                 List<Mission> running = await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress);
                 AssertEqual(3, running.Count);
@@ -295,7 +295,7 @@ namespace Test.Shared.Suites.Services
 
                     Captain? captainAfterM1 = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Working, captainAfterM1!.State, "Captain should be Working");
-                    AssertEqual(m1.Id, captainAfterM1.CurrentMissionId, "Captain should track mission 1");
+                    AssertEqual(m1.Id, captainAfterM1.ActiveMissionIds.SingleOrDefault(), "Captain should track mission 1");
 
                     // Step 2: Try to assign mission 2 — captain is working, should NOT be assigned
                     await missionService.TryAssignAsync(missions[1], vessel);
@@ -311,7 +311,7 @@ namespace Test.Shared.Suites.Services
 
                     // Step 4: Complete mission 1 — should release captain and pick up mission 2
                     Captain? captainForCompletion = await db.Captains.ReadAsync(captain.Id);
-                    await missionService.HandleCompletionAsync(captainForCompletion!, captainForCompletion!.CurrentMissionId!);
+                    await missionService.HandleCompletionAsync(captainForCompletion!, captainForCompletion!.ActiveMissionIds.SingleOrDefault()!);
 
                     m1 = await db.Missions.ReadAsync(missions[0].Id);
                     AssertEqual(MissionStatusEnum.WorkProduced, m1!.Status, "Mission 1 should be WorkProduced (landing happens in ArmadaServer)");
@@ -343,8 +343,8 @@ namespace Test.Shared.Suites.Services
 
                     Captain? captainFinal = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Idle, captainFinal!.State, "Captain should be Idle after all missions complete");
-                    AssertNull(captainFinal.CurrentMissionId, "Captain CurrentMissionId should be null");
-                    AssertNull(captainFinal.CurrentDockId, "Captain CurrentDockId should be null");
+                    AssertNull(captainFinal.ActiveMissionIds.SingleOrDefault(), "Captain CurrentMissionId should be null");
+                    AssertNull(captainFinal.Assignment?.DockId, "Captain CurrentDockId should be null");
 
                     // Verify all 3 missions reached WorkProduced (landing to Complete happens in ArmadaServer)
                     List<Mission> allMissions = await db.Missions.EnumerateByVoyageAsync(fixture.Voyage.Id);
@@ -603,21 +603,22 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.InProgress, oldMission!.Status, "Mission 1 should be InProgress");
 
                     // Simulate the captain having already moved on to mission 2 before orphan recovery finalizes mission 1.
-                    await missionService.TryAssignAsync(fixture.Missions[1], vessel);
+                    AssertTrue(await db.Captains.TryReleaseFromMissionAsync(captain.Id, oldMission.Id));
+                    AssertTrue(await missionService.TryAssignAsync(fixture.Missions[1], vessel));
                     Mission? newMission = await db.Missions.ReadAsync(fixture.Missions[1].Id);
 
                     Captain? movedCaptain = await db.Captains.ReadAsync(captain.Id);
-                    movedCaptain!.CurrentMissionId = fixture.Missions[1].Id;
-                    movedCaptain.CurrentDockId = newMission!.DockId;
+                    movedCaptain!.Assignment = newMission;
+                    movedCaptain.Assignment ??= new Mission("fixture assignment"); movedCaptain.Assignment.DockId = newMission!.DockId;
                     movedCaptain.ProcessId = newMission.ProcessId;
                     movedCaptain.State = CaptainStateEnum.Working;
-                    await db.Captains.UpdateAsync(movedCaptain);
+                    await CaptainAssignmentFixture.UpdateAsync(db, movedCaptain);
 
                     await missionService.HandleCompletionAsync(movedCaptain, fixture.Missions[0].Id);
 
                     Captain? finalCaptain = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Working, finalCaptain!.State, "Captain should remain Working on the newer mission");
-                    AssertEqual(fixture.Missions[1].Id, finalCaptain.CurrentMissionId, "Captain should still track the newer mission");
+                    AssertEqual(fixture.Missions[1].Id, finalCaptain.ActiveMissionIds.SingleOrDefault(), "Captain should still track the newer mission");
                 }
             }));
 
@@ -645,8 +646,8 @@ namespace Test.Shared.Suites.Services
 
                     Captain? finalCaptain = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Idle, finalCaptain!.State, "Captain should be Idle when no pending missions remain");
-                    AssertNull(finalCaptain.CurrentMissionId, "CurrentMissionId should be null");
-                    AssertNull(finalCaptain.CurrentDockId, "CurrentDockId should be null");
+                    AssertNull(finalCaptain.ActiveMissionIds.SingleOrDefault(), "CurrentMissionId should be null");
+                    AssertNull(finalCaptain.Assignment?.DockId, "CurrentDockId should be null");
                     AssertNull(finalCaptain.ProcessId, "ProcessId should be null");
                 }
             }));
@@ -681,7 +682,7 @@ namespace Test.Shared.Suites.Services
                     // Captain should still be working on mission 1 only
                     Captain? captainAfter = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Working, captainAfter!.State, "Captain should still be Working");
-                    AssertEqual(m1.Id, captainAfter.CurrentMissionId, "Captain should still track mission 1");
+                    AssertEqual(m1.Id, captainAfter.ActiveMissionIds.SingleOrDefault(), "Captain should still track mission 1");
                 }
             }));
 
@@ -753,7 +754,7 @@ namespace Test.Shared.Suites.Services
             {
                 Captain captain = new Captain("captain-" + (i + 1));
                 captain.State = CaptainStateEnum.Idle;
-                await db.Captains.CreateAsync(captain);
+                await CaptainAssignmentFixture.CreateAsync(db, captain);
                 captains.Add(captain);
             }
 

@@ -66,7 +66,7 @@ export function UsageView({ captain }: { captain?: Captain }) {
         {(isAdmin || isTenantAdmin) && view.errorCode ? <AppText>{view.errorCode}</AppText> : null}
       </View>;
     })}
-    {captain && (isAdmin || isTenantAdmin) ? <Button label={t(cooldown > Date.now() ? 'Capture cooldown' : 'Capture now')} disabled={busy || !!disabled || cooldown > Date.now()} onPress={() => void capture()} /> : null}
+    {captain && (isAdmin || isTenantAdmin) ? <Button label={t(cooldown > 0 ? 'Capture cooldown' : 'Capture now')} disabled={busy || !!disabled || cooldown > 0} onPress={() => void capture()} /> : null}
     {message ? <AppText accessibilityLiveRegion="polite">{message}</AppText> : null}
     <Button label={t('Refresh')} onPress={() => void resource.reload()} />
     {!captain ? <View><Button label={t('Previous')} disabled={page <= 1} onPress={() => setPage(page - 1)} /><AppText>{formatNumber(page)}</AppText><Button label={t('Next')} disabled={page >= (resource.data?.totalPages ?? 1)} onPress={() => setPage(page + 1)} /></View> : null}

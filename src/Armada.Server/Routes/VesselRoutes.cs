@@ -202,6 +202,9 @@ namespace Armada.Server.Routes
                     req.Http.Response.StatusCode = ctx.IsAuthenticated ? 403 : 401;
                     return new ApiErrorResponse { Error = ctx.IsAuthenticated ? ApiResultEnum.Forbidden : ApiResultEnum.NotAuthorized, Message = ctx.IsAuthenticated ? "You do not have permission to perform this action" : "Authentication required" };
                 }
+                using (JsonDocument legacyCheck = JsonDocument.Parse(req.Http.Request.DataAsString))
+                    if (RemovedConcurrencyFields.Contains(legacyCheck.RootElement))
+                    { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = RemovedConcurrencyFields.Message }; }
                 Vessel vessel = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
                 using (JsonDocument body = JsonDocument.Parse(req.Http.Request.DataAsString))
@@ -282,6 +285,9 @@ namespace Armada.Server.Routes
                         ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
+                using (JsonDocument legacyCheck = JsonDocument.Parse(req.Http.Request.DataAsString))
+                    if (RemovedConcurrencyFields.Contains(legacyCheck.RootElement))
+                    { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = RemovedConcurrencyFields.Message }; }
                 Vessel updated = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
                 updated = EntityUpdateMerger.MergeVessel(existing, updated);
@@ -326,6 +332,9 @@ namespace Armada.Server.Routes
                         ? await _database.Vessels.ReadAsync(ctx.TenantId!, id).ConfigureAwait(false)
                         : await _database.Vessels.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (existing == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Vessel not found" }; }
+                using (JsonDocument legacyCheck = JsonDocument.Parse(req.Http.Request.DataAsString))
+                    if (RemovedConcurrencyFields.Contains(legacyCheck.RootElement))
+                    { req.Http.Response.StatusCode = 400; return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = RemovedConcurrencyFields.Message }; }
                 Vessel patch = JsonSerializer.Deserialize<Vessel>(req.Http.Request.DataAsString, _jsonOptions)
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Vessel.");
                 if (patch.ProjectContext != null)

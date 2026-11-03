@@ -216,7 +216,7 @@ namespace Test.Shared.Suites.E2E
                 AssertNotEqual(captain1.Id, captain3.Id);
             }));
 
-            cases.Add(CaseAsync("create_captain_current_mission_id_is_null", "Create Captain CurrentMissionId Is Null", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("create_captain_active_missions_are_empty", "Create Captain Active Missions Are Empty", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
                 HttpClient authClient = fx.AuthClient;
@@ -225,11 +225,11 @@ namespace Test.Shared.Suites.E2E
                 Captain captain = await CreateCaptainAsync(authClient, createdCaptainIds, "null-mission-check");
 
                 Assert(
-                    string.IsNullOrEmpty(captain.CurrentMissionId),
-                    "CurrentMissionId should be null or empty");
+                    captain.ActiveMissionIds.Count == 0,
+                    "New captains have no active missions");
             }));
 
-            cases.Add(CaseAsync("create_captain_current_dock_id_is_null", "Create Captain CurrentDockId Is Null", TestTags.Positive, async () =>
+            cases.Add(CaseAsync("create_captain_active_mission_count_is_zero", "Create Captain Active Mission Count Is Zero", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this);
                 HttpClient authClient = fx.AuthClient;
@@ -238,8 +238,8 @@ namespace Test.Shared.Suites.E2E
                 Captain captain = await CreateCaptainAsync(authClient, createdCaptainIds, "null-dock-check");
 
                 Assert(
-                    string.IsNullOrEmpty(captain.CurrentDockId),
-                    "CurrentDockId should be null or empty");
+                    captain.ActiveMissionCount == 0,
+                    "New captains have no occupied execution slots");
             }));
 
             cases.Add(CaseAsync("create_captain_process_id_is_null", "Create Captain ProcessId Is Null", TestTags.Positive, async () =>

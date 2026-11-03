@@ -10,7 +10,7 @@ export const DASHBOARD_ROUTES: DashboardRoute[] = [
   { pattern: "/dispatch", dashboard: "/dispatch", tab: "work", title: "Dispatch", workstream: "W2.4", redirect: null, file: "(app)/(work)/dispatch.tsx" },
   { pattern: "/backlog", dashboard: "/backlog", tab: "work", title: "Backlog", workstream: "W0.5", redirect: "/dispatch?tab=backlog", file: "(app)/(work)/backlog/index.tsx" },
   { pattern: "/backlog/:id", dashboard: "/backlog/:id", tab: "work", title: "Backlog Item", workstream: "W3.3", redirect: null, file: "(app)/(work)/backlog/[id].tsx" },
-  { pattern: "/objectives", dashboard: "/objectives", tab: "work", title: "Objectives", workstream: "W3.3", redirect: null, file: "(app)/(work)/objectives/index.tsx" },
+  { pattern: "/objectives", dashboard: "/objectives", tab: "work", title: "Objectives", workstream: "W0.5", redirect: "/dispatch?tab=backlog", file: "(app)/(work)/objectives/index.tsx" },
   { pattern: "/objectives/:id", dashboard: "/objectives/:id", tab: "work", title: "Objective", workstream: "W3.3", redirect: null, file: "(app)/(work)/objectives/[id].tsx" },
   { pattern: "/fleets", dashboard: "/fleets", tab: "work", title: "Fleets", workstream: "W0.5", redirect: "/vessels?tab=fleets", file: "(app)/(work)/fleets/index.tsx" },
   { pattern: "/fleets/:id", dashboard: "/fleets/:id", tab: "work", title: "Fleet", workstream: "W3.2", redirect: null, file: "(app)/(work)/fleets/[id].tsx" },

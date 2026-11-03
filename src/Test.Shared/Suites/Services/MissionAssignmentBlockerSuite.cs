@@ -182,7 +182,7 @@ namespace Test.Shared.Suites.Services
                 Captain busy = await AddCaptainAsync(db, "Busy", CaptainStateEnum.Working);
                 Captain free = await AddCaptainAsync(db, "Free", CaptainStateEnum.Idle);
                 foreach (Captain captain in new[] { busy, free })
-                { captain.Runtime = AgentRuntimeEnum.ApiEndpoint; captain.ModelEndpointId = endpoint.Id; await db.Captains.UpdateAsync(captain); }
+                { captain.Runtime = AgentRuntimeEnum.ApiEndpoint; captain.ModelEndpointId = endpoint.Id; await CaptainAssignmentFixture.UpdateAsync(db, captain); }
                 Mission mission = await AddMissionAsync(db, h.Vessel, "waiting", MissionStatusEnum.Pending);
                 MissionAssignmentBlocker blocker = (await h.Missions.GetAssignmentBlockerAsync(mission))!;
                 AssertEqual(MissionAssignmentBlockerReasonEnum.EndpointMissionLimit, blocker.Reason);
@@ -230,7 +230,7 @@ namespace Test.Shared.Suites.Services
                     Harness h = await BuildHarnessAsync(testDb.Driver);
                     Captain captain = await AddCaptainAsync(testDb.Driver, "Disabled", CaptainStateEnum.Idle);
                     captain.Active = false;
-                    await testDb.Driver.Captains.UpdateAsync(captain, updateActive: true);
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain, updateActive: true);
                     Mission mission = await AddMissionAsync(testDb.Driver, h.Vessel, "inactive", MissionStatusEnum.Pending);
                     AssertNotNull(await h.Missions.GetAssignmentBlockerAsync(mission));
                     AssertFalse(await h.Missions.TryAssignAsync(mission, h.Vessel));
@@ -238,9 +238,9 @@ namespace Test.Shared.Suites.Services
                     mission.RequestedCaptainId = captain.Id;
                     await testDb.Driver.Missions.UpdateAsync(mission);
                     AssertFalse(await h.Missions.TryAssignAsync(mission, h.Vessel));
-                    AssertNull((await testDb.Driver.Captains.ReadAsync(captain.Id))!.CurrentMissionId);
+                    AssertNull((await testDb.Driver.Captains.ReadAsync(captain.Id))!.ActiveMissionIds.SingleOrDefault());
                     captain.Active = true;
-                    await testDb.Driver.Captains.UpdateAsync(captain, updateActive: true);
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain, updateActive: true);
                     AssertEqual(MissionAssignmentBlockerReasonEnum.AwaitingDispatch, (await h.Missions.GetAssignmentBlockerAsync(mission))!.Reason);
                 }
             }));
@@ -293,7 +293,7 @@ namespace Test.Shared.Suites.Services
                     captain.State = CaptainStateEnum.Quarantined;
                     captain.QuarantineUntilUtc = until;
                     captain.QuarantineReason = "crash loop";
-                    captain = await testDb.Driver.Captains.CreateAsync(captain);
+                    captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain);
 
                     Mission mission = await AddMissionAsync(testDb.Driver, h.Vessel, "waiting", MissionStatusEnum.Pending);
                     MissionAssignmentBlocker? blocker = await h.Missions.GetAssignmentBlockerAsync(mission);
@@ -387,7 +387,7 @@ namespace Test.Shared.Suites.Services
                     Captain judgeOnly = new Captain("Judge Only");
                     judgeOnly.State = CaptainStateEnum.Idle;
                     judgeOnly.AllowedPersonas = "[\"Judge\"]";
-                    await testDb.Driver.Captains.CreateAsync(judgeOnly);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, judgeOnly);
                     Mission mission = await AddMissionAsync(testDb.Driver, h.Vessel, "worker", MissionStatusEnum.Pending);
                     mission.Persona = "Worker";
                     await testDb.Driver.Missions.UpdateAsync(mission);
@@ -407,7 +407,7 @@ namespace Test.Shared.Suites.Services
                     Captain standard = new Captain("Standard One");
                     standard.State = CaptainStateEnum.Idle;
                     standard.Tier = CaptainTierEnum.Standard;
-                    await testDb.Driver.Captains.CreateAsync(standard);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, standard);
                     Mission mission = await AddMissionAsync(testDb.Driver, h.Vessel, "premium work", MissionStatusEnum.Pending);
                     mission.Tier = CaptainTierEnum.Premium;
                     await testDb.Driver.Missions.UpdateAsync(mission);
@@ -427,7 +427,7 @@ namespace Test.Shared.Suites.Services
                     Captain claude = new Captain("Claude One");
                     claude.State = CaptainStateEnum.Idle;
                     claude.Runtime = AgentRuntimeEnum.ClaudeCode;
-                    await testDb.Driver.Captains.CreateAsync(claude);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, claude);
                     Persona persona = new Persona("PriorityRole", "persona.worker");
                     persona.CaptainPriorities.Add(new PersonaCaptainPriority { Runtime = AgentRuntimeEnum.Codex });
                     await testDb.Driver.Personas.CreateAsync(persona);
@@ -513,7 +513,7 @@ namespace Test.Shared.Suites.Services
                     UserMaster user = await testDb.Driver.Users.CreateAsync(new UserMaster(tenant.Id, "owner@example.invalid", "test-password"));
                     h.Vessel.TenantId = tenant.Id; await testDb.Driver.Vessels.UpdateAsync(h.Vessel);
                     Captain captain = await AddCaptainAsync(testDb.Driver, "Planner", CaptainStateEnum.Idle);
-                    captain.TenantId = tenant.Id; await testDb.Driver.Captains.UpdateAsync(captain);
+                    captain.TenantId = tenant.Id; await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain);
                     PlanningSession owner = await testDb.Driver.PlanningSessions.CreateAsync(new PlanningSession
                     {
                         TenantId = tenant.Id, CaptainId = captain.Id, VesselId = h.Vessel.Id, Title = "Actual owner", Status = PlanningSessionStatusEnum.Created,
@@ -577,7 +577,7 @@ namespace Test.Shared.Suites.Services
         {
             Captain captain = new Captain(name);
             captain.State = state;
-            return await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+            return await CaptainAssignmentFixture.CreateAsync(db, captain).ConfigureAwait(false);
         }
 
         private static async Task<Mission> AddMissionAsync(DatabaseDriver db, Vessel vessel, string title, MissionStatusEnum status)

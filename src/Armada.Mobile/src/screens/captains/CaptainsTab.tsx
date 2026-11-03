@@ -90,6 +90,7 @@ export function CaptainsTab() {
   );
   const captains = useMemo(() => resource.data ?? [], [resource.data]);
   const rows = useMemo(() => filterCaptains(captains, filters), [captains, filters]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- externally changed filters reset the paged usage lookup
   useEffect(() => setUsagePage(0), [filters.search, filters.runtime, filters.state, userScope]);
   const visibleRows = rows.slice(usagePage * 25, (usagePage + 1) * 25);
   const visibleIds = visibleRows.map((c) => c.id).join(",");
@@ -136,8 +137,8 @@ export function CaptainsTab() {
       item.runtime,
       `${t('Active')}: ${t(item.active === false ? 'No' : 'Yes')}`,
       item.state === 'Quarantined' && item.quarantineUntilUtc ? t('until {{time}}', { time: formatRelativeTime(item.quarantineUntilUtc) }) : null,
-      `${t('Running missions')}: ${item.activeMissionCount ?? (item.currentMissionId ? 1 : 0)} / ${item.maxConcurrency ?? 1}`,
-      item.currentMissionId ? `${t('Current Mission')}: ${item.currentMissionId.substring(0, 8)}...` : null,
+      `${t('Running missions')}: ${item.activeMissionCount ?? 0} / ${item.maxConcurrency ?? 1}`,
+      (item.activeMissionIds?.length ?? 0) > 0 ? `${t('Active Missions')}: ${(item.activeMissionIds ?? []).join(', ')}` : null,
       item.lastHeartbeatUtc ? `${t('Heartbeat')}: ${formatRelativeTime(item.lastHeartbeatUtc)}` : null,
     ].filter(Boolean).join(' \u00b7 ');
     const isSelected = selected.includes(item.id);

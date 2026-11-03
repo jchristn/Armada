@@ -74,7 +74,8 @@ namespace Test.Shared.Suites.Services
                     Captain? updatedCaptain = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                     AssertNotNull(updatedCaptain);
                     AssertEqual(CaptainStateEnum.Planning, updatedCaptain!.State);
-                    AssertEqual(session.DockId, updatedCaptain.CurrentDockId);
+                    AssertEqual(session.Id, updatedCaptain.CurrentSessionId);
+                    AssertEqual(session.DockId, (await testDb.Driver.PlanningSessions.ReadAsync(session.Id))!.DockId);
 
                     Dock? dock = await testDb.Driver.Docks.ReadAsync(session.DockId!).ConfigureAwait(false);
                     AssertNotNull(dock);
@@ -128,7 +129,7 @@ namespace Test.Shared.Suites.Services
                     Captain? updatedCaptain = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                     AssertNotNull(updatedCaptain);
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State);
-                    AssertNull(updatedCaptain.CurrentDockId);
+                    AssertNull(updatedCaptain.Assignment?.DockId);
 
                     List<PlanningSession> sessions = await testDb.Driver.PlanningSessions.EnumerateByCaptainAsync(captain.Id).ConfigureAwait(false);
                     AssertEqual(1, sessions.Count);
@@ -330,7 +331,7 @@ namespace Test.Shared.Suites.Services
                     Captain? updatedCaptain = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                     AssertNotNull(updatedCaptain);
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State);
-                    AssertNull(updatedCaptain.CurrentDockId);
+                    AssertNull(updatedCaptain.Assignment?.DockId);
                     AssertNull(updatedCaptain.ProcessId);
 
                     Dock? dock = await testDb.Driver.Docks.ReadAsync(session.DockId!).ConfigureAwait(false);
@@ -374,7 +375,7 @@ namespace Test.Shared.Suites.Services
                     Captain? updatedCaptain = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                     AssertNotNull(updatedCaptain);
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State);
-                    AssertNull(updatedCaptain.CurrentDockId);
+                    AssertNull(updatedCaptain.Assignment?.DockId);
 
                     Dock? dock = await testDb.Driver.Docks.ReadAsync(session.DockId!).ConfigureAwait(false);
                     AssertNotNull(dock);
@@ -532,9 +533,9 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.PlanningSessions.UpdateAsync(session).ConfigureAwait(false);
 
                     captain.State = CaptainStateEnum.Idle;
-                    captain.CurrentDockId = null;
+
                     captain.ProcessId = null;
-                    await testDb.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     await fixture.Coordinator.RecoverSessionsAsync().ConfigureAwait(false);
 
@@ -546,7 +547,8 @@ namespace Test.Shared.Suites.Services
                     Captain? recoveredCaptain = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                     AssertNotNull(recoveredCaptain);
                     AssertEqual(CaptainStateEnum.Planning, recoveredCaptain!.State);
-                    AssertEqual(session.DockId, recoveredCaptain.CurrentDockId);
+                    AssertEqual(session.Id, recoveredCaptain.CurrentSessionId);
+                    AssertEqual(session.DockId, (await testDb.Driver.PlanningSessions.ReadAsync(session.Id))!.DockId);
 
                     List<PlanningSessionMessage> messages = await testDb.Driver.PlanningSessionMessages.EnumerateBySessionAsync(session.Id).ConfigureAwait(false);
                     AssertEqual(1, messages.Count);
@@ -597,7 +599,7 @@ namespace Test.Shared.Suites.Services
                     Captain? recoveredCaptain = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                     AssertNotNull(recoveredCaptain);
                     AssertEqual(CaptainStateEnum.Idle, recoveredCaptain!.State);
-                    AssertNull(recoveredCaptain.CurrentDockId);
+                    AssertNull(recoveredCaptain.Assignment?.DockId);
                 }
             }));
 
@@ -624,9 +626,9 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.PlanningSessions.UpdateAsync(session).ConfigureAwait(false);
 
                     captain.State = CaptainStateEnum.Planning;
-                    captain.CurrentDockId = session.DockId;
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = session.DockId;
                     captain.ProcessId = null;
-                    await testDb.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     await fixture.Coordinator.RecoverSessionsAsync().ConfigureAwait(false);
 
@@ -638,7 +640,7 @@ namespace Test.Shared.Suites.Services
                     Captain? recoveredCaptain = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                     AssertNotNull(recoveredCaptain);
                     AssertEqual(CaptainStateEnum.Idle, recoveredCaptain!.State);
-                    AssertNull(recoveredCaptain.CurrentDockId);
+                    AssertNull(recoveredCaptain.Assignment?.DockId);
 
                     Dock? recoveredDock = await testDb.Driver.Docks.ReadAsync(session.DockId!).ConfigureAwait(false);
                     AssertNotNull(recoveredDock);
@@ -680,10 +682,10 @@ namespace Test.Shared.Suites.Services
                 PlanningSession session = await fixture.Coordinator.CreateAsync(null, null, captain, vessel, new PlanningSessionCreateRequest());
                 AssertTrue(await testDb.Driver.Captains.TryReleaseExclusiveAsync(captain.Id, session.Id));
                 AssertTrue(await testDb.Driver.Captains.TryClaimExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Planning));
-                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Planning, "new-dock", 999999));
+                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Planning, 999999));
                 await fixture.Coordinator.StopAsync(session);
                 Captain stored = (await testDb.Driver.Captains.ReadAsync(captain.Id))!;
-                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertEqual("new-dock", stored.CurrentDockId);
+                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertNull(stored.Assignment);
                 AssertEqual(PlanningSessionStatusEnum.Stopped, (await testDb.Driver.PlanningSessions.ReadAsync(session.Id))!.Status);
             }));
 
@@ -695,10 +697,10 @@ namespace Test.Shared.Suites.Services
                 PlanningSession session = await fixture.Coordinator.CreateAsync(null, null, captain, vessel, new PlanningSessionCreateRequest());
                 AssertTrue(await testDb.Driver.Captains.TryReleaseExclusiveAsync(captain.Id, session.Id));
                 AssertTrue(await testDb.Driver.Captains.TryClaimExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Planning));
-                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Planning, "new-dock", 999999));
+                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Planning, 999999));
                 await fixture.Coordinator.RecoverSessionsAsync();
                 Captain stored = (await testDb.Driver.Captains.ReadAsync(captain.Id))!;
-                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertEqual("new-dock", stored.CurrentDockId);
+                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertNull(stored.Assignment);
                 AssertEqual(PlanningSessionStatusEnum.Failed, (await testDb.Driver.PlanningSessions.ReadAsync(session.Id))!.Status);
             }));
 
@@ -816,7 +818,7 @@ namespace Test.Shared.Suites.Services
                     TenantId = tenantId,
                     UserId = userId
                 };
-                return await Database.Captains.CreateAsync(captain).ConfigureAwait(false);
+                return await CaptainAssignmentFixture.CreateAsync(Database, captain).ConfigureAwait(false);
             }
 
             public async Task<Playbook> CreatePlaybookAsync(string tenantId, string userId, string fileName)

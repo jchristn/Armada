@@ -157,8 +157,8 @@ namespace Armada.Core.Services
                         status.Detail = ineligibleReason == null ? "idle (assigned)" : "idle (not assigned: " + ineligibleReason + ")";
                         break;
                     case CaptainStateEnum.Working:
-                        status.MissionId = captain.CurrentMissionId;
-                        Mission? current = String.IsNullOrEmpty(captain.CurrentMissionId) ? null : await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
+                        status.MissionId = captain.ActiveMissionIds.Count == 1 ? captain.ActiveMissionIds[0] : null;
+                        Mission? current = status.MissionId == null ? null : await _Database.Missions.ReadAsync(status.MissionId, token).ConfigureAwait(false);
                         status.Detail = current != null ? "working on mission '" + current.Title + "'" : "working on another mission";
                         break;
                     case CaptainStateEnum.Planning:

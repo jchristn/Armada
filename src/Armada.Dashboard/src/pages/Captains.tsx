@@ -433,12 +433,13 @@ export default function Captains() {
       ),
     },
     {
-      key: 'currentMission', label: t('Current Mission'), headerTitle: t('The mission this captain is running now. Click the ID to open it; a dash means it has no mission.'), cellClassName: 'mono text-dim cell-nowrap', interactive: true,
-      cellTitle: (c) => c.currentMissionId ?? undefined,
-      render: (c) => c.currentMissionId ? (
-        <a href="#" onClick={e => { e.preventDefault(); navigate(`/missions/${c.currentMissionId}`); }}>
-          {c.currentMissionId.substring(0, 8)}...
-        </a>
+      key: 'activeMissions', label: t('Active Missions'), headerTitle: t('Missions currently holding this captain’s capacity. Open a mission to see its dock, process and progress.'), cellClassName: 'mono text-dim', interactive: true,
+      cellTitle: c => c.activeMissionIds?.join(', '),
+      render: c => (c.activeMissionIds?.length ?? 0) > 0 ? (
+        <span style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          {(c.activeMissionIds ?? []).slice(0, 3).map(id => <Link key={id} to={`/missions/${encodeURIComponent(id)}`}>{id.substring(0, 12)}…</Link>)}
+          {(c.activeMissionIds?.length ?? 0) > 3 && <Link to={`/captains/${encodeURIComponent(c.id)}`}>+{(c.activeMissionIds?.length ?? 0) - 3}</Link>}
+        </span>
       ) : '-',
     },
     {
@@ -447,7 +448,7 @@ export default function Captains() {
     },
     {
       key: 'slots', label: t('Missions'), headerTitle: t('Running missions / captain limit'), cellClassName: 'cell-nowrap',
-      render: c => `${c.activeMissionCount ?? (c.currentMissionId ? 1 : 0)} / ${c.maxConcurrency ?? 1}`,
+      render: c => `${c.activeMissionCount ?? 0} / ${c.maxConcurrency ?? 1}`,
     },
     {
       key: 'evaluations', label: t('Evaluations'), headerTitle: t('All evaluations of this captain'), interactive: true,

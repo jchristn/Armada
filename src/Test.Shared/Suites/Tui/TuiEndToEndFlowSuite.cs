@@ -197,7 +197,8 @@ namespace Test.Shared.Suites.Tui
                         AssertEqual(missionEntryId, center.SelectedEntryId, "mission entry selected");
                         host.Press("enter");
                         AssertTrue(host.PumpUntil(() => host.Tui.Context.Router.Current!.Path == "/missions/" + pending.Id, 5000), "Enter opens the selected entry (the mission): " + host.Tui.Context.Router.Current!.Path);
-                        AssertTrue(host.Tui.Context.Notifications.UnreadCount < unread, "opened entry marked read");
+                        // Other live events can arrive while navigation is pending; inspect the selected entry, not the global count.
+                        AssertTrue(host.Tui.Context.Notifications.History.Single(n => n.Id == missionEntryId).Read, "opened entry marked read");
                         StopLive(host);
                     }
                 }

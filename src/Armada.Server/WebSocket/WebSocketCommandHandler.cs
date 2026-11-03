@@ -548,6 +548,7 @@ namespace Armada.Server.WebSocket
                 case "create_mission":
                 {
                     Mission newMission = JsonSerializer.Deserialize<WebSocketDataCommand<Mission>>(rawBody, _JsonOptions)?.Data!;
+                    EntityUpdateMerger.ResetMissionConcurrencyMetadata(newMission);
                     newMission = await _Admiral.DispatchMissionAsync(newMission).ConfigureAwait(false);
                     if (newMission.Status == MissionStatusEnum.Pending)
                     {
@@ -760,22 +761,7 @@ namespace Armada.Server.WebSocket
                         }
                         else
                         {
-                            Dock? mdDock = null;
-                            if (!String.IsNullOrEmpty(mdMission.DockId))
-                            {
-                                mdDock = await _Database.Docks.ReadAsync(mdMission.DockId).ConfigureAwait(false);
-                            }
-                            if (mdDock == null && !String.IsNullOrEmpty(mdMission.CaptainId))
-                            {
-                                Captain? mdCaptain = await _Database.Captains.ReadAsync(mdMission.CaptainId).ConfigureAwait(false);
-                                if (mdCaptain != null && !String.IsNullOrEmpty(mdCaptain.CurrentDockId))
-                                    mdDock = await _Database.Docks.ReadAsync(mdCaptain.CurrentDockId).ConfigureAwait(false);
-                            }
-                            if (mdDock == null && !String.IsNullOrEmpty(mdMission.BranchName) && !String.IsNullOrEmpty(mdMission.VesselId))
-                            {
-                                List<Dock> mdDocks = await _Database.Docks.EnumerateByVesselAsync(mdMission.VesselId).ConfigureAwait(false);
-                                mdDock = mdDocks.FirstOrDefault(d => d.BranchName == mdMission.BranchName && d.Active);
-                            }
+                            Dock? mdDock = await MissionDockResolver.ReadAsync(_Database, mdMission).ConfigureAwait(false);
                             if (mdDock == null || String.IsNullOrEmpty(mdDock.WorktreePath) || !System.IO.Directory.Exists(mdDock.WorktreePath))
                                 return WebSocketCommandError.Create("get_mission_diff", WebSocketCommandErrorCodeEnum.Unavailable, "No diff available - worktree was already reclaimed and no saved diff exists");
                             else if (_Git == null)
@@ -1308,7 +1294,7 @@ namespace Armada.Server.WebSocket
         {
             return MissionStateMachine.IsValidTransition(current, target);
         }
-    
+
         private static WebSocketCommandError PersonaError(string action, PersonaWriteResult result)
         {
             WebSocketCommandErrorCodeEnum code = result.Status == PersonaWriteStatusEnum.NotFound ? WebSocketCommandErrorCodeEnum.NotFound

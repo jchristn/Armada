@@ -13,7 +13,7 @@ namespace Armada.Core.BlackBox.Enrichment
     /// <summary>
     /// Attempts: the mission's earlier black box entries, its stage outcomes and handoff artifacts (bounded, oldest
     /// first, without duplicates), its redispatch, output-repair and no-op counters (Subject), the rescue chain up
-    /// ParentMissionId (Subject.RescueChain and a RescueOf link to the parent) and the rescues incidents launched for it
+    /// RescueOfMissionId (Subject.RescueChain and a RescueOf link to the parent) and the rescues incidents launched for it
     /// (Incident.RescueMissionIds, ParentOfRescue links).
     /// </summary>
     public class BlackBoxAttemptsEnricher : BlackBoxEnricherBase
@@ -134,6 +134,7 @@ namespace Armada.Core.BlackBox.Enrichment
                 record.Subject.NoOpRedispatchAttempts = mission.NoOpRedispatchAttempts;
                 record.Subject.IsRescue = record.Subject.IsRescue || mission.IsRescue;
                 record.Subject.ParentMissionId ??= mission.ParentMissionId;
+                record.Subject.RescueOfMissionId ??= mission.RescueOfMissionId;
             }
 
             await AddRescueChainAsync(context, mission, token).ConfigureAwait(false);
@@ -142,19 +143,19 @@ namespace Armada.Core.BlackBox.Enrichment
 
         private async Task AddRescueChainAsync(BlackBoxEnrichmentContext context, Mission mission, CancellationToken token)
         {
-            if (String.IsNullOrEmpty(mission.ParentMissionId)) return;
+            if (String.IsNullOrEmpty(mission.RescueOfMissionId)) return;
             List<string> chain = new List<string>();
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal) { mission.Id };
-            string? parentId = mission.ParentMissionId;
+            string? parentId = mission.RescueOfMissionId;
             while (!String.IsNullOrEmpty(parentId) && chain.Count < BlackBoxLimits.MaxAttempts && seen.Add(parentId!))
             {
                 chain.Add(parentId!);
                 Mission? parent = await _Database.Missions.ReadAsync(parentId!, token).ConfigureAwait(false);
                 if (parent == null || (context.Entry.TenantId != null && parent.TenantId != context.Entry.TenantId)) break;
-                parentId = parent.ParentMissionId;
+                parentId = parent.RescueOfMissionId;
             }
             if (context.Record.Subject != null) context.Record.Subject.RescueChain = chain;
-            context.Links.Add(BlackBoxForensics.LinkRow(context.Entry, mission.ParentMissionId!, BlackBoxLinkRelationEnum.RescueOf));
+            context.Links.Add(BlackBoxForensics.LinkRow(context.Entry, mission.RescueOfMissionId!, BlackBoxLinkRelationEnum.RescueOf));
         }
 
         private async Task AddRescuesAsync(BlackBoxEnrichmentContext context, Mission mission, CancellationToken token)

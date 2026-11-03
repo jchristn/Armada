@@ -269,10 +269,10 @@ namespace Test.Shared.Suites.Services
                 ObjectiveRefinementSession session = await fixture.CreateSessionAsync(objective, captain);
                 AssertTrue(await testDb.Driver.Captains.TryReleaseExclusiveAsync(captain.Id, session.Id));
                 AssertTrue(await testDb.Driver.Captains.TryClaimExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Refining));
-                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Refining, "new-dock", 999999));
+                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Refining, 999999));
                 await fixture.Coordinator.StopAsync(session);
                 Captain stored = (await testDb.Driver.Captains.ReadAsync(captain.Id))!;
-                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertEqual("new-dock", stored.CurrentDockId);
+                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertNull(stored.Assignment);
                 AssertEqual(ObjectiveRefinementSessionStatusEnum.Stopped, (await testDb.Driver.ObjectiveRefinementSessions.ReadAsync(session.Id))!.Status);
             }));
 
@@ -285,10 +285,10 @@ namespace Test.Shared.Suites.Services
                 ObjectiveRefinementSession session = await fixture.CreateSessionAsync(objective, captain);
                 AssertTrue(await testDb.Driver.Captains.TryReleaseExclusiveAsync(captain.Id, session.Id));
                 AssertTrue(await testDb.Driver.Captains.TryClaimExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Refining));
-                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Refining, "new-dock", 999999));
+                AssertTrue(await testDb.Driver.Captains.TryUpdateExclusiveAsync(captain.Id, "new-owner", CaptainStateEnum.Refining, 999999));
                 await fixture.Coordinator.RecoverSessionsAsync();
                 Captain stored = (await testDb.Driver.Captains.ReadAsync(captain.Id))!;
-                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertEqual("new-dock", stored.CurrentDockId);
+                AssertEqual("new-owner", stored.CurrentSessionId); AssertEqual(999999, stored.ProcessId); AssertNull(stored.Assignment);
                 AssertEqual(ObjectiveRefinementSessionStatusEnum.Failed, (await testDb.Driver.ObjectiveRefinementSessions.ReadAsync(session.Id))!.Status);
             }));
 
@@ -406,7 +406,7 @@ namespace Test.Shared.Suites.Services
                     UserId = userId,
                     State = state
                 };
-                return await Database.Captains.CreateAsync(captain).ConfigureAwait(false);
+                return await CaptainAssignmentFixture.CreateAsync(Database, captain).ConfigureAwait(false);
             }
 
             public async Task<ObjectiveRefinementSession> CreateSessionAsync(
@@ -432,7 +432,7 @@ namespace Test.Shared.Suites.Services
                 };
                 session = await Database.ObjectiveRefinementSessions.CreateAsync(session).ConfigureAwait(false);
                 AssertTrue(await Database.Captains.TryClaimExclusiveAsync(captain.Id, session.Id, CaptainStateEnum.Refining, recover: true));
-                AssertTrue(await Database.Captains.TryUpdateExclusiveAsync(captain.Id, session.Id, CaptainStateEnum.Refining, null, processId));
+                AssertTrue(await Database.Captains.TryUpdateExclusiveAsync(captain.Id, session.Id, CaptainStateEnum.Refining, processId));
                 return session;
             }
 

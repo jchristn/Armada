@@ -124,9 +124,9 @@ namespace Armada.Core.Services
                 {
                     _Logging.Warn(_Header + "error stopping agent for captain " + captainId + ": " + ex.ToString());
                     const string reason = "Recall deferred: the previous job has not confirmed its exit. Captain, mission and dock ownership were retained. Remediation: reconnect the owning Harbor and confirm the job has stopped before retrying.";
-                    if (!String.IsNullOrEmpty(captain.CurrentMissionId))
+                    if (!String.IsNullOrEmpty(captain.Assignment?.Id))
                     {
-                        Mission? held = await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
+                        Mission? held = await _Database.Missions.ReadAsync(captain.Assignment!.Id!, token).ConfigureAwait(false);
                         if (held != null)
                         {
                             bool alreadyRecorded = String.Equals(held.FailureReason, reason, StringComparison.Ordinal);
@@ -153,11 +153,11 @@ namespace Armada.Core.Services
 
             // An operator stop cancels the current mission (it is not a failure of the work), records who stopped it and
             // how, and preserves uncommitted work on the mission branch before the dock is reclaimed.
-            if (!String.IsNullOrEmpty(captain.CurrentMissionId))
+            if (!String.IsNullOrEmpty(captain.Assignment?.Id))
             {
                 Mission? currentMission = !String.IsNullOrEmpty(tenantId)
-                    ? await _Database.Missions.ReadAsync(tenantId, captain.CurrentMissionId, token).ConfigureAwait(false)
-                    : await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false);
+                    ? await _Database.Missions.ReadAsync(tenantId, captain.Assignment!.Id!, token).ConfigureAwait(false)
+                    : await _Database.Missions.ReadAsync(captain.Assignment!.Id!, token).ConfigureAwait(false);
                 if (currentMission != null &&
                     (currentMission.Status == MissionStatusEnum.InProgress ||
                      currentMission.Status == MissionStatusEnum.Assigned || currentMission.Status == MissionStatusEnum.Verifying))
@@ -166,16 +166,17 @@ namespace Armada.Core.Services
                 }
             }
 
-            // Reclaim the dock worktree
-            if (!String.IsNullOrEmpty(captain.CurrentDockId))
+            // Reclaim only this explicit mission or exclusive session dock.
+            Dock? heldDock = await CaptainContextResolver.ReadDockAsync(_Database, captain, token).ConfigureAwait(false);
+            if (heldDock != null)
             {
                 try
                 {
-                    await _Docks.ReclaimAsync(captain.CurrentDockId, tenantId, token).ConfigureAwait(false);
+                    await _Docks.ReclaimAsync(heldDock.Id, tenantId, token).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error reclaiming dock " + captain.CurrentDockId + " for captain " + captainId + ": " + ex.ToString());
+                    _Logging.Warn(_Header + "error reclaiming dock " + captain.Assignment?.DockId + " for captain " + captainId + ": " + ex.ToString());
                 }
             }
 
@@ -188,10 +189,9 @@ namespace Armada.Core.Services
 
             // Clear captain assignment
             captain.State = CaptainStateEnum.Idle;
-            if (!String.IsNullOrEmpty(captain.CurrentMissionId))
-                await _Database.Captains.TryReleaseFromMissionAsync(captain.Id, captain.CurrentMissionId, token).ConfigureAwait(false);
-            captain.CurrentMissionId = null;
-            captain.CurrentDockId = null;
+            if (!String.IsNullOrEmpty(captain.Assignment?.Id))
+                await _Database.Captains.TryReleaseFromMissionAsync(captain.Id, captain.Assignment!.Id!, token).ConfigureAwait(false);
+            captain.Assignment = null;
             captain.ProcessId = null;
             captain.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
@@ -210,7 +210,8 @@ namespace Armada.Core.Services
                 Captain? owner = waitingMission?.CaptainId == null ? null : await _Database.Captains.ReadAsync(waitingMission.CaptainId, token).ConfigureAwait(false);
                 Captain? captain = owner == null || waitingMission == null ? null : owner.ForMission(waitingMission);
                 // Only a captain still holding its mission with no process is waiting; anything else has moved on.
-                if (captain == null || captain.State != CaptainStateEnum.Working || captain.ProcessId.HasValue || String.IsNullOrEmpty(captain.CurrentMissionId)) continue;
+                if (captain == null || owner == null || !owner.ActiveMissionIds.Contains(waiting.Key) || (waitingMission!.Status != MissionStatusEnum.Assigned && waitingMission.Status != MissionStatusEnum.InProgress)) continue;
+                if (captain.ProcessId.HasValue) continue;
                 if (captain.RecoveryAttempts >= _Settings.MaxRecoveryAttempts) continue;
                 _Logging.Info(_Header + "Harbor " + waiting.Value + " is back; relaunching captain " + captain.Id + " now rather than at the next stall check");
                 await TryRecoverAsync(captain, token).ConfigureAwait(false);
@@ -223,20 +224,33 @@ namespace Armada.Core.Services
         public async Task TryRecoverAsync(Captain captain, CancellationToken token = default)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
+            if (captain.Assignment == null)
+            {
+                Captain? owner = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
+                if (owner == null || owner.CurrentSessionId != null) return;
+                // Recover each authoritative assignment separately; no representative mission or dock.
+                foreach (string missionId in owner.ActiveMissionIds)
+                {
+                    Mission? held = await _Database.Missions.ReadAsync(missionId, token).ConfigureAwait(false);
+                    if (held?.CaptainId == owner.Id)
+                        await TryRecoverAsync(owner.ForMission(held), token).ConfigureAwait(false);
+                }
+                return;
+            }
+            string assignmentId = captain.Assignment.Id;
             // Recovery starts another process; disabling a captain must not launch it or change its held work.
             Captain currentEligibility = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false) ?? captain;
-            if (!currentEligibility.Active || currentEligibility.State == CaptainStateEnum.Stopping) return;
-            _AwaitingHarbor.TryRemove(captain.CurrentMissionId ?? captain.Id, out _);
+            if (!currentEligibility.Active || currentEligibility.State == CaptainStateEnum.Stopping
+                || !currentEligibility.ActiveMissionIds.Contains(assignmentId)) return;
+            _AwaitingHarbor.TryRemove(assignmentId, out _);
 
             try
             {
+                Mission? mission = await _Database.Missions.ReadAsync(assignmentId, token).ConfigureAwait(false);
+                if (mission != null && (mission.CaptainId != captain.Id || mission.Status == MissionStatusEnum.Verifying)) return;
+                if (mission != null) captain.Assignment = mission;
                 captain.RecoveryAttempts++;
                 _Logging.Info(_Header + "auto-recovery attempt " + captain.RecoveryAttempts + "/" + _Settings.MaxRecoveryAttempts + " for captain " + captain.Id);
-
-                // Reload mission and dock info
-                Mission? mission = !String.IsNullOrEmpty(captain.CurrentMissionId)
-                    ? await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false)
-                    : null;
 
                 if (mission != null)
                 {
@@ -244,8 +258,8 @@ namespace Armada.Core.Services
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                 }
 
-                Dock? dock = !String.IsNullOrEmpty(captain.CurrentDockId)
-                    ? await _Database.Docks.ReadAsync(captain.CurrentDockId, token).ConfigureAwait(false)
+                Dock? dock = !String.IsNullOrEmpty(captain.Assignment?.DockId)
+                    ? await _Database.Docks.ReadAsync(captain.Assignment!.DockId!, token).ConfigureAwait(false)
                     : null;
 
                 if (mission == null || dock == null)
@@ -388,6 +402,8 @@ namespace Armada.Core.Services
                         if (!await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { relaunchedFrom, MissionStatusEnum.Assigned, MissionStatusEnum.InProgress }, token).ConfigureAwait(false))
                             _Logging.Info(_Header + "mission " + mission.Id + " moved on before relaunch process " + processId + " was recorded; keeping its newer state");
 
+                        await _Database.Missions.TryUpdateRuntimeContextAsync(mission.Id, captain.Id, processId,
+                            captain.LastHeartbeatUtc, captain.RecoveryAttempts, token).ConfigureAwait(false);
                         Signal signal = new Signal(SignalTypeEnum.Assignment, "Auto-recovery attempt " + captain.RecoveryAttempts + " for mission: " + mission.Title);
                         signal.ToCaptainId = captain.Id;
                         await _Database.Signals.CreateAsync(signal, token).ConfigureAwait(false);
@@ -426,8 +442,8 @@ namespace Armada.Core.Services
                 _Logging.Warn(_Header + "unhandled error in TryRecoverAsync for captain " + captain.Id + ": " + ex.ToString());
                 try
                 {
-                    Mission? mission = !String.IsNullOrEmpty(captain.CurrentMissionId)
-                        ? await _Database.Missions.ReadAsync(captain.CurrentMissionId, token).ConfigureAwait(false)
+                    Mission? mission = !String.IsNullOrEmpty(captain.Assignment?.Id)
+                        ? await _Database.Missions.ReadAsync(captain.Assignment!.Id!, token).ConfigureAwait(false)
                         : null;
                     string unexpectedReason = "Auto-recovery failed unexpectedly: " + ex.Message;
                     await FinalizeRecoveryFailureAsync(captain, mission, unexpectedReason, MissionFailureKindEnum.StallRecoveryExhausted, token, ex).ConfigureAwait(false);
@@ -441,17 +457,20 @@ namespace Armada.Core.Services
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
 
-            if (!String.IsNullOrEmpty(captain.CurrentMissionId))
+            if (!String.IsNullOrEmpty(captain.Assignment?.Id))
             {
-                await _Database.Captains.TryReleaseFromMissionAsync(captain.Id, captain.CurrentMissionId, token).ConfigureAwait(false);
+                await _Database.Captains.TryReleaseFromMissionAsync(captain.Id, captain.Assignment!.Id!, token).ConfigureAwait(false);
                 Captain? current = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
                 if (current != null) { captain.State = current.State; captain.ActiveMissionCount = current.ActiveMissionCount; captain.ActiveMissionIds = current.ActiveMissionIds; }
                 return;
             }
+            Captain? owner = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
+            if (owner == null) return;
+            if (owner.CurrentSessionId != null || owner.ActiveMissionCount > 0)
+                throw new InvalidOperationException("Release requires an explicit mission or exclusive-session owner.");
             captain.CurrentSessionId = null;
             captain.State = CaptainStateEnum.Idle;
-            captain.CurrentMissionId = null;
-            captain.CurrentDockId = null;
+            captain.Assignment = null;
             captain.ProcessId = null;
             captain.RecoveryAttempts = 0;
             captain.LastUpdateUtc = DateTime.UtcNow;
@@ -522,7 +541,7 @@ namespace Armada.Core.Services
                 return UsageQuotaOutcomeEnum.Held;
             }
 
-            if (captain.State != CaptainStateEnum.Idle || !String.IsNullOrEmpty(captain.CurrentMissionId))
+            if (captain.State != CaptainStateEnum.Idle || captain.ActiveMissionCount > 0 || captain.ActiveMissionIds.Count > 0 || captain.CurrentSessionId != null)
                 return UsageQuotaOutcomeEnum.SkippedBusy;
 
             if (!String.IsNullOrEmpty(captain.TenantId))
@@ -563,7 +582,7 @@ namespace Armada.Core.Services
                 PreviousStatus = mission.Status.ToString()
             };
 
-            string? dockId = !String.IsNullOrEmpty(captain.CurrentDockId) ? captain.CurrentDockId : mission.DockId;
+            string? dockId = !String.IsNullOrEmpty(captain.Assignment?.DockId) ? captain.Assignment?.DockId : mission.DockId;
             Dock? dock = null;
             if (!String.IsNullOrEmpty(dockId))
             {
@@ -712,20 +731,21 @@ namespace Armada.Core.Services
             }
 
             // Failed stall recovery must retain edits, including when the replacement launch throws.
-            if (failureKind != MissionFailureKindEnum.StallRecoveryExhausted && !String.IsNullOrEmpty(captain.CurrentDockId))
+            if (failureKind != MissionFailureKindEnum.StallRecoveryExhausted && !String.IsNullOrEmpty(captain.Assignment?.DockId))
             {
                 try
                 {
-                    await _Docks.ReclaimAsync(captain.CurrentDockId, captain.TenantId, token).ConfigureAwait(false);
+                    await _Docks.ReclaimAsync(captain.Assignment!.DockId!, captain.TenantId, token).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    _Logging.Warn(_Header + "error reclaiming dock " + captain.CurrentDockId + " during recovery failure cleanup: " + ex.ToString());
+                    _Logging.Warn(_Header + "error reclaiming dock " + captain.Assignment?.DockId + " during recovery failure cleanup: " + ex.ToString());
                 }
             }
 
-            captain.CurrentMissionId = null;
-            captain.CurrentDockId = null;
+            if (captain.Assignment != null)
+                await _Database.Captains.TryReleaseFromMissionAsync(captain.Id, captain.Assignment.Id, token).ConfigureAwait(false);
+            captain.Assignment = null;
             captain.ProcessId = null;
             captain.State = CaptainStateEnum.Idle;
             captain.LastUpdateUtc = DateTime.UtcNow;

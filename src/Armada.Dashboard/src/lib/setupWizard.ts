@@ -31,7 +31,6 @@ export const SETUP_TOOLTIPS = {
   workingDirectory: 'Optional path to your own checkout on the Admiral host, for example /home/me/code/repo. Local Merge lands work here, and readiness checks and the workspace read it. Armada never deletes it.',
   landingMode: 'What happens to finished work. Default follows the server setting; None leaves it on a branch for review; Local Merge merges into the working directory; Merge and Push also pushes; Pull Request opens a PR; Merge Queue queues it.',
   enableModelContext: 'When on, captains save what they learn about the repository (build quirks, layout, test patterns) onto the vessel, and later missions receive it in their prompt.',
-  allowConcurrentMissions: 'When off (the default), only one mission at a time can be active on this vessel. Turn on to let several captains work on it in parallel, which can cause merge conflicts.',
   projectContext: 'Optional notes added to every captain prompt for this vessel: what the project is, its architecture, key files, and how to build and test it.',
   styleGuide: 'Optional coding rules added to every captain prompt for this vessel: naming, patterns to use or avoid, and preferred libraries.',
   captainSelect: 'An idle captain to take the first mission. Only captains that are not working right now are listed; runtime and state are shown in parentheses.',

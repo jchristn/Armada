@@ -17,6 +17,14 @@
     },
     {
       "kind": "route",
+      "key": "/*",
+      "status": "not-applicable",
+      "notes": "Browser catch-all renders the shared NotFound recovery page; native routers already handle unmatched routes.",
+      "mobile": "Expo Router +not-found",
+      "workstream": "W0.5"
+    },
+    {
+      "kind": "route",
       "key": "/activity",
       "status": "implemented",
       "mobile": "src/app/(app)/(work)/activity.tsx",
@@ -1266,10 +1274,10 @@
     {
       "kind": "api",
       "key": "browseAllVesselImport",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/vessels/import/BrowseTree.tsx",
       "workstream": "W3.1",
-      "notes": "Vessel Import"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -2154,10 +2162,10 @@
     {
       "kind": "api",
       "key": "enumerateAskProposals",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/components/approvals/ApprovalCard.tsx",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -2170,42 +2178,42 @@
     {
       "kind": "api",
       "key": "enumerateAskToolCalls",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/askPaging.ts",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
       "key": "enumerateAskTurnToolCalls",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/askPaging.ts",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
       "key": "enumerateAskWork",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/askPaging.ts",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
       "key": "enumerateAskWorkMissions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/askPaging.ts",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
       "key": "enumerateAskWorkTargets",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/askPaging.ts",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -2354,26 +2362,26 @@
     {
       "kind": "api",
       "key": "enumerateMissionPullRequestChecks",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/pullRequestEvidence.ts",
       "workstream": "W2.2",
-      "notes": "Missions"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
       "key": "enumerateMissionPullRequestComments",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W2.2",
-      "notes": "Missions"
+      "notes": "Native pull-request evidence displays checks and reviews; discussion comments are read on the linked provider page. No separate discussion screen is offered."
     },
     {
       "kind": "api",
       "key": "enumerateMissionPullRequestReviews",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/pullRequestEvidence.ts",
       "workstream": "W2.2",
-      "notes": "Missions"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -2442,10 +2450,10 @@
     {
       "kind": "api",
       "key": "enumerateVoyageProgress",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/operations/HomeScreen.tsx",
       "workstream": "W2.3",
-      "notes": "Voyages"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -2762,10 +2770,10 @@
     {
       "kind": "api",
       "key": "getFleetDetail",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/screens/fleets/FleetDetailView.tsx",
       "workstream": "W3.2",
-      "notes": "Fleets"
+      "notes": "Fleet detail reads the same fleet from the paged fleet list and loads its vessels separately; the typed detail helper adds no new native operation."
     },
     {
       "kind": "api",
@@ -3402,26 +3410,26 @@
     {
       "kind": "api",
       "key": "listAllStorageHosts",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/system/StorageTab.tsx",
       "workstream": "W3.2",
-      "notes": "Fleet Actions"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
       "key": "listAllWorkspaceActiveMissions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/workspace/WorkspaceScreen.tsx",
       "workstream": "W3.1",
-      "notes": "Workspace"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
       "key": "listAllWorkspaceChanges",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/workspace/WorkspacePanels.tsx",
       "workstream": "W3.1",
-      "notes": "Workspace"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -3674,10 +3682,10 @@
     {
       "kind": "api",
       "key": "listObjectiveRefinementMessages",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/sessionViews.ts",
       "workstream": "W3.3",
-      "notes": "Objectives"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -3714,10 +3722,10 @@
     {
       "kind": "api",
       "key": "listPlanningSessionMessages",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Dashboard/src/lib/sessionViews.ts",
       "workstream": "W3.3",
-      "notes": "Planning Sessions"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -3810,10 +3818,10 @@
     {
       "kind": "api",
       "key": "listStorageHosts",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/system/StorageTab.tsx via listAllStorageHosts",
       "workstream": "W3.2",
-      "notes": "Fleet Actions"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -3834,18 +3842,18 @@
     {
       "kind": "api",
       "key": "listVesselCleanupResources",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W3.1",
-      "notes": "Vessels"
+      "notes": "Resources belong to the dashboard-only destructive vessel cleanup workflow, like getVesselCleanupInventory; native does not offer repository garbage collection."
     },
     {
       "kind": "api",
       "key": "listVesselDependencies",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/vessels/health/HealthDetailSheet.tsx",
       "workstream": "W3.1",
-      "notes": "Vessel Health"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -3882,18 +3890,18 @@
     {
       "kind": "api",
       "key": "listWorkspaceActiveMissions",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/workspace/WorkspaceScreen.tsx via listAllWorkspaceActiveMissions",
       "workstream": "W3.1",
-      "notes": "Workspace"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
       "key": "listWorkspaceDirectory",
-      "status": "planned",
-      "mobile": "",
+      "status": "implemented",
+      "mobile": "src/Armada.Mobile/src/screens/workspace/WorkspaceScreen.tsx",
       "workstream": "W3.1",
-      "notes": "Workspace"
+      "notes": "Used by the existing native workflow, directly or through its shared paged data loader."
     },
     {
       "kind": "api",
@@ -3922,10 +3930,10 @@
     {
       "kind": "api",
       "key": "markAskThreadUnread",
-      "status": "planned",
+      "status": "not-applicable",
       "mobile": "",
       "workstream": "W1.1",
-      "notes": "Ask Armada threads (docs/ASK_ARMADA_HOME_BASE.md)"
+      "notes": "Native automatically marks an opened thread read; the manual mark-unread action belongs to the dashboard conversation menu."
     },
     {
       "kind": "api",

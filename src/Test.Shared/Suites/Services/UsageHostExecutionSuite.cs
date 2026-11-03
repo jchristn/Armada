@@ -517,7 +517,7 @@ namespace Test.Shared.Suites.Services
                     UsageCaptureMode = UsageCaptureModeEnum.Auto,
                     State = CaptainStateEnum.Idle
                 };
-                captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                 ArmadaSettings settings = new ArmadaSettings();
                 settings.UsageCapture = new UsageCaptureSettings { Enabled = true };
@@ -555,7 +555,7 @@ namespace Test.Shared.Suites.Services
                 Captain? after = await testDb.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false);
                 AssertNotNull(after, "the captain is readable");
                 AssertEqual(CaptainStateEnum.Idle, after!.State, "a capture never changes a captain's state");
-                AssertNull(after.CurrentMissionId, "a capture never borrows a mission");
+                AssertNull(after.ActiveMissionIds.SingleOrDefault(), "a capture never borrows a mission");
                 AssertNull(after.ProcessId, "a capture never launches a captain process");
                 AssertEqual(0, after.RecoveryAttempts, "a capture never touches recovery");
             }));

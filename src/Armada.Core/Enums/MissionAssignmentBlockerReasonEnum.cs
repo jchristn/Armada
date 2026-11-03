@@ -51,7 +51,7 @@ namespace Armada.Core.Enums
         BroadScopeWaitingForVessel,
 
         /// <summary>
-        /// The vessel runs one mission at a time (AllowConcurrentMissions is off) and another mission is active.
+        /// Historical pre-v1.3 boolean vessel limit. New decisions use numeric voyage and mission limits.
         /// </summary>
         VesselConcurrencyLimit,
 

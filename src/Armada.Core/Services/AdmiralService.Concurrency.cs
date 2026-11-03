@@ -26,7 +26,7 @@ namespace Armada.Core.Services
             {
                 try { await HealthCheckCaptainAsync(assignment, token).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                catch (Exception ex) { _Logging.Warn(_Header + "mission health check " + assignment.CurrentMissionId + " failed: " + ex.Message); }
+                catch (Exception ex) { _Logging.Warn(_Header + "mission health check " + assignment.Assignment?.Id + " failed: " + ex.Message); }
             }
             if (assignments.Count > 1 && assignments.All(c => c.State == CaptainStateEnum.Stalled))
                 await _Database.Captains.UpdateStateAsync(captain.Id, CaptainStateEnum.Stalled, token).ConfigureAwait(false);

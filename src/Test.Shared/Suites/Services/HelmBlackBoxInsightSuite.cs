@@ -31,7 +31,7 @@ namespace Test.Shared.Suites.Services
 
         private const string SuiteId = "Services.HelmBlackBoxInsight";
         private const string Token = "bbi-token";
-        private const string VesselJson = "{\"Id\":\"vsl_1\",\"Name\":\"my-repo\",\"RepoUrl\":\"https://example.com/r.git\",\"DefaultBranch\":\"main\",\"AllowConcurrentMissions\":true,\"SerializeOverlappingMissions\":false}";
+        private const string VesselJson = "{\"Id\":\"vsl_1\",\"Name\":\"my-repo\",\"RepoUrl\":\"https://example.com/r.git\",\"DefaultBranch\":\"main\",\"MaxParallelVoyages\":0,\"MaxParallelMissionsPerVoyage\":0,\"SerializeOverlappingMissions\":false}";
         private const string NotFound = "{\"Error\":\"NotFound\",\"Message\":\"Not found.\"}";
 
         #endregion
@@ -284,7 +284,7 @@ namespace Test.Shared.Suites.Services
                     Ok(run);
                     VesselUpsertRequest put = Body<VesselUpsertRequest>(stub, "PUT", "/api/v1/vessels/vsl_1");
                     AssertTrue(put.SerializeOverlappingMissions, "turned on");
-                    AssertTrue(put.AllowConcurrentMissions, "other settings kept");
+                    AssertTrue((put.MaxParallelVoyages == 0 && put.MaxParallelMissionsPerVoyage == 0), "other settings kept");
                     AssertEqual("my-repo", put.Name, "name kept");
                     AssertContains("Serialize overlapping missions: on", run.Output, "result");
                     HelmCliRun off = await Run(stub, "vessel", "update", "vsl_1", "--serialize-overlapping-missions", "false").ConfigureAwait(false);

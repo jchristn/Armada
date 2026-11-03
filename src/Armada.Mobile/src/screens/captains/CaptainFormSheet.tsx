@@ -58,8 +58,8 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
 
   useEffect(() => {
     if (!open) return;
-    setUsage(usageCaptureFormFromCaptain(captain ?? {}));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- opening the sheet resets the form to the captain
+    setUsage(usageCaptureFormFromCaptain(captain ?? {}));
     setForm(captain ? captainFormFromCaptain(captain, { withEndpoint: true, withPersonas: true }) : { ...emptyCaptainForm(), allowedPersonas: '', preferredPersona: '' });
     setError(null);
     // A picker needs every endpoint: read the pages explicitly (bounded by listAll's safety stop).

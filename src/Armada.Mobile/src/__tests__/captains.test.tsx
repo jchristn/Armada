@@ -41,8 +41,7 @@ const NOW = '2026-10-07T12:00:00Z';
 function captain(over: Partial<Captain> = {}): Captain {
   return {
     id: 'cpt_1', tenantId: 'ten_1', name: 'Ada', runtime: 'ClaudeCode', supportsPlanningSessions: true, planningSessionSupportReason: null,
-    systemInstructions: null, model: null, allowedPersonas: null, preferredPersona: null, state: 'Idle', currentMissionId: null,
-    currentDockId: null, processId: null, recoveryAttempts: 0, lastHeartbeatUtc: NOW, createdUtc: NOW, lastUpdateUtc: NOW,
+    systemInstructions: null, model: null, allowedPersonas: null, preferredPersona: null, state: 'Idle', processId: null, recoveryAttempts: 0, lastHeartbeatUtc: NOW, createdUtc: NOW, lastUpdateUtc: NOW,
     ...over,
   };
 }
@@ -52,7 +51,7 @@ function dock(over: Partial<Dock> = {}): Dock {
 }
 
 const ADA = captain();
-const BOB = captain({ id: 'cpt_2', name: 'Bob', runtime: 'Codex', state: 'Working', currentMissionId: 'msn_123456789', tier: 'Premium' });
+const BOB = captain({ id: 'cpt_2', name: 'Bob', runtime: 'Codex', state: 'Working', activeMissionIds: ['msn_123456789'], activeMissionCount: 1, tier: 'Premium' });
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -154,8 +153,8 @@ describe('Captains tab', () => {
 });
 
 describe('Captain detail', () => {
-  it('shows the captain, current mission and dock, and changes the CLI policy in place', async () => {
-    api.getCaptain.mockResolvedValue(captain({ state: 'Working', currentMissionId: 'msn_1', currentDockId: 'dck_1' }));
+  it('shows active mission links and changes the CLI policy in place', async () => {
+    api.getCaptain.mockResolvedValue(captain({ state: 'Working', activeMissionIds: ['msn_1'], activeMissionCount: 1, }));
     api.getMission.mockResolvedValue({ id: 'msn_1', title: 'Fix login', status: 'InProgress', priority: 1, branchName: 'armada/fix' } as never);
     api.setCaptainCliPermissionPolicy.mockResolvedValue(captain({ cliPermissionPolicy: 'Refuse' }));
     await render(<BuildProviders><CaptainDetailScreen id="cpt_1" /></BuildProviders>);
@@ -163,8 +162,8 @@ describe('Captain detail', () => {
     expect(screen.getByText('Fix login')).toBeTruthy();
     expect(screen.getByTestId('captain-recall')).toBeTruthy();
     expect(screen.getByTestId('captain-stop')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('captain-current-dock'));
-    expect(mockRouter.push).toHaveBeenCalledWith('/docks/dck_1');
+    await fireEvent.press(screen.getByText('msn_1'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/missions/msn_1');
     await fireEvent.press(screen.getByTestId('captain-cli-policy'));
     await fireEvent.press(screen.getByTestId('captain-cli-policy-option-Refuse'));
     await waitFor(() => expect(api.setCaptainCliPermissionPolicy).toHaveBeenCalledWith('cpt_1', 'Refuse'));

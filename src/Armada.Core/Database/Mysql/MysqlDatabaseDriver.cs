@@ -55,6 +55,7 @@ namespace Armada.Core.Database.Mysql
             Fleets = new FleetMethods(_ConnectionString);
             Vessels = new VesselMethods(_ConnectionString);
             Captains = new CaptainMethods(_ConnectionString);
+            MissionWaitIntervals = new Armada.Core.Database.MissionWaitIntervalMethods(() => new MySqlConnector.MySqlConnection(_ConnectionString));
             Missions = new MissionMethods(_ConnectionString);
             Voyages = new VoyageMethods(_ConnectionString);
             PlanningSessions = new PlanningSessionMethods(_ConnectionString);
@@ -392,10 +393,13 @@ namespace Armada.Core.Database.Mysql
         /// <inheritdoc />
         internal override async Task ReplayMigrationsAsync(CancellationToken token = default)
         {
+            int version = await GetSchemaVersionAsync(token).ConfigureAwait(false);
             using (MySqlConnection conn = await GetConnectionAsync(token).ConfigureAwait(false))
             {
                 foreach (SchemaMigration migration in GetMigrations())
                 {
+                    // v121 is a destructive boundary: verify historical migrations on an upgrade fixture, never recreate removed columns.
+                    if (version >= 121 && migration.Version < 119) continue;
                     using (MySqlTransaction tx = await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                     {
                         await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
@@ -1486,7 +1490,7 @@ namespace Armada.Core.Database.Mysql
                 new SchemaMigration(117, "Add vessel voyage and mission admission limits",
                     @"ALTER TABLE vessels ADD COLUMN max_parallel_voyages INT NOT NULL DEFAULT 1;",
                     @"ALTER TABLE vessels ADD COLUMN max_parallel_missions_per_voyage INT NOT NULL DEFAULT 4;",
-                    @"UPDATE vessels SET max_parallel_voyages = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END, max_parallel_missions_per_voyage = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END;"),
+                    @"UPDATE vessels SET max_parallel_voyages = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END, max_parallel_missions_per_voyage = CASE WHEN allow_concurrent_missions = 1 THEN 0 ELSE 1 END;") { AlreadyAppliedCheckSql = "SELECT CASE WHEN EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='vessels' AND column_name='allow_concurrent_missions') THEN 0 ELSE 1 END" },
 
                 new SchemaMigration(118, "Add durable captain mission slots and per-mission heartbeat",
                     @"ALTER TABLE missions ADD COLUMN stall_recovery_attempts INT NOT NULL DEFAULT 0;",
@@ -1498,8 +1502,35 @@ namespace Armada.Core.Database.Mysql
                     @"CREATE INDEX idx_captain_mission_slots_captain ON captain_mission_slots(captain_id);",
                     @"UPDATE captains SET max_concurrency = CASE WHEN runtime IN ('ApiEndpoint','Mux') THEN 4 ELSE 1 END, current_session_id = CASE WHEN state IN ('Planning','Refining','Analyzing') THEN current_mission_id ELSE NULL END;",
                     @"INSERT INTO captain_mission_slots(mission_id,captain_id,process_id,dock_id) SELECT m.id,m.captain_id,m.process_id,m.dock_id FROM missions m JOIN captains c ON c.id=m.captain_id WHERE m.status IN ('Assigned','InProgress') AND NOT EXISTS (SELECT 1 FROM captain_mission_slots s WHERE s.mission_id=m.id);",
-                    @"UPDATE captains SET current_session_id=COALESCE((SELECT MIN(p.id) FROM planning_sessions p WHERE p.captain_id=captains.id AND p.status='Active'),(SELECT MIN(r.id) FROM objective_refinement_sessions r WHERE r.captain_id=captains.id AND r.status='Active'),current_session_id) WHERE state IN ('Planning','Refining');",
-                    @"UPDATE captains SET active_mission_count=(SELECT COUNT(*) FROM captain_mission_slots s WHERE s.captain_id=captains.id);")
+                    @"UPDATE captains SET active_mission_count=(SELECT COUNT(*) FROM captain_mission_slots s WHERE s.captain_id=captains.id);") { AlreadyAppliedCheckSql = "SELECT CASE WHEN EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='captains' AND column_name='current_mission_id') THEN 0 ELSE 1 END" },
+                new SchemaMigration(119, "Add mission hierarchy and assignment metadata",
+                    @"ALTER TABLE missions ADD COLUMN rescue_of_mission_id VARCHAR(256) NULL;",
+                    @"ALTER TABLE missions ADD COLUMN base_branch_name VARCHAR(256) NULL;",
+                    @"ALTER TABLE missions ADD COLUMN ready_utc DATETIME(6) NULL;",
+                    @"ALTER TABLE missions ADD COLUMN assigned_utc DATETIME(6) NULL;",
+                    @"ALTER TABLE missions ADD COLUMN owned_paths_json TEXT NULL;",
+                    @"ALTER TABLE missions ADD COLUMN reads_paths_json TEXT NULL;",
+                    @"ALTER TABLE missions ADD COLUMN depth INT NOT NULL DEFAULT 0;",
+                    @"ALTER TABLE missions ADD COLUMN branch_strategy VARCHAR(256) NOT NULL DEFAULT 'New';",
+                    @"UPDATE missions SET rescue_of_mission_id=parent_mission_id,parent_mission_id=NULL WHERE is_rescue=1 AND parent_mission_id IS NOT NULL AND rescue_of_mission_id IS NULL;",
+                    @"UPDATE missions SET assigned_utc=started_utc WHERE started_utc IS NOT NULL;",
+                    @"CREATE INDEX idx_missions_voyage_parent ON missions(voyage_id(191),parent_mission_id(191));") { AlreadyAppliedCheckSql = "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='missions' AND index_name='idx_missions_voyage_parent'" },
+                new SchemaMigration(120, "Persist mission wait intervals",
+                    @"CREATE TABLE IF NOT EXISTS mission_wait_intervals (id VARCHAR(256) NOT NULL PRIMARY KEY,tenant_id VARCHAR(256) NULL,mission_id VARCHAR(256) NOT NULL,vessel_id VARCHAR(256) NULL,voyage_id VARCHAR(256) NULL,captain_id VARCHAR(256) NULL,gate VARCHAR(256) NOT NULL,started_utc DATETIME(6) NOT NULL,ended_utc DATETIME(6) NULL,detail TEXT NULL,FOREIGN KEY(mission_id) REFERENCES missions(id) ON DELETE CASCADE);",
+                    @"CREATE INDEX idx_mission_wait_mission ON mission_wait_intervals(mission_id);",
+                    @"CREATE INDEX idx_mission_wait_vessel_started ON mission_wait_intervals(vessel_id,started_utc);",
+                    @"CREATE INDEX idx_mission_wait_ended ON mission_wait_intervals(ended_utc);") { AlreadyAppliedCheckSql = "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='mission_wait_intervals' AND index_name='idx_mission_wait_ended'" },
+                new SchemaMigration(121, "Remove singular captain and vessel concurrency columns",
+                    @"UPDATE captains SET current_session_id=COALESCE(current_session_id,current_mission_id) WHERE state IN ('Planning','Refining','Analyzing');",
+                    @"UPDATE missions SET status='InProgress' WHERE status='Testing' AND captain_id IS NOT NULL AND (process_id IS NOT NULL OR EXISTS (SELECT 1 FROM captains c WHERE c.id=missions.captain_id AND c.current_mission_id=missions.id AND c.process_id IS NOT NULL));",
+                    @"UPDATE missions SET process_id=(SELECT c.process_id FROM captains c WHERE c.id=missions.captain_id AND c.current_mission_id=missions.id) WHERE process_id IS NULL AND status IN ('Assigned','InProgress');",
+                    @"UPDATE captain_mission_slots SET process_id=(SELECT m.process_id FROM missions m WHERE m.id=captain_mission_slots.mission_id) WHERE process_id IS NULL;",
+                    @"INSERT INTO captain_mission_slots(mission_id,captain_id,process_id,dock_id) SELECT m.id,m.captain_id,m.process_id,m.dock_id FROM missions m JOIN captains c ON c.id=m.captain_id WHERE m.status IN ('Assigned','InProgress') AND NOT EXISTS (SELECT 1 FROM captain_mission_slots s WHERE s.mission_id=m.id);",
+                    @"UPDATE captains SET active_mission_count=(SELECT COUNT(*) FROM captain_mission_slots s WHERE s.captain_id=captains.id);",
+                    @"UPDATE captains SET process_id=NULL WHERE current_session_id IS NULL;",
+                    @"ALTER TABLE vessels DROP COLUMN allow_concurrent_missions;",
+                    @"ALTER TABLE captains DROP COLUMN current_mission_id;",
+                    @"ALTER TABLE captains DROP COLUMN current_dock_id;") { AlreadyAppliedCheckSql = "SELECT CASE WHEN COUNT(*)=0 THEN 1 ELSE 0 END FROM information_schema.columns WHERE table_schema=DATABASE() AND ((table_name='captains' AND column_name IN ('current_mission_id','current_dock_id')) OR (table_name='vessels' AND column_name='allow_concurrent_missions'))" }
 
 
             };
@@ -1624,8 +1655,6 @@ namespace Armada.Core.Database.Mysql
             catch { vessel.AutoApprove = null; }
             vessel.MaxParallelVoyages = Convert.ToInt32(reader["max_parallel_voyages"]);
             vessel.MaxParallelMissionsPerVoyage = Convert.ToInt32(reader["max_parallel_missions_per_voyage"]);
-            try { vessel.AllowConcurrentMissions = Convert.ToInt64(reader["allow_concurrent_missions"]) == 1; }
-            catch { vessel.AllowConcurrentMissions = false; }
             try
             {
                 string? protectedPatternsJson = NullableString(reader["protected_branch_patterns_json"]);
@@ -1689,8 +1718,6 @@ namespace Armada.Core.Database.Mysql
             }
             catch { captain.CliPermissionPolicy = null; }
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
-            captain.CurrentMissionId = NullableString(reader["current_mission_id"]);
-            captain.CurrentDockId = NullableString(reader["current_dock_id"]);
             captain.ProcessId = NullableInt(reader["process_id"]);
             captain.RecoveryAttempts = Convert.ToInt32(reader["recovery_attempts"]);
             captain.LastHeartbeatUtc = FromIso8601Nullable(reader["last_heartbeat_utc"]);
@@ -1776,6 +1803,26 @@ namespace Armada.Core.Database.Mysql
 
             foreach (string sql in migration.Statements)
             {
+                // MySQL commits DDL independently of the migration ledger. Resume a partially completed v121
+                // without reading a dropped source column or dropping the same column twice.
+                if (migration.Version == 121)
+                {
+                    string? table = null, column = null;
+                    if (sql.StartsWith("ALTER TABLE ", StringComparison.Ordinal))
+                    {
+                        string[] words = sql.TrimEnd(';').Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        table = words[2]; column = words[5];
+                    }
+                    else if (sql.Contains("current_mission_id", StringComparison.Ordinal))
+                    { table = "captains"; column = "current_mission_id"; }
+                    if (table != null)
+                    {
+                        using MySqlCommand exists = conn.CreateCommand(); exists.Transaction = tx;
+                        exists.CommandText = "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=@table AND column_name=@column;";
+                        exists.Parameters.AddWithValue("@table", table); exists.Parameters.AddWithValue("@column", column);
+                        if (Convert.ToInt64(await exists.ExecuteScalarAsync(token).ConfigureAwait(false)) == 0) continue;
+                    }
+                }
                 await ExecuteMigrationStatementAsync(conn, tx, sql, token).ConfigureAwait(false);
             }
         }

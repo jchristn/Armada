@@ -611,20 +611,14 @@ namespace Armada.Core.Services
                 : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
             if (dock == null) throw new KeyNotFoundException("Dock not found: " + dockId);
 
-            // Free any captain still holding this dock so it stops counting as "in use".
+            List<Mission> missions = await _Database.Missions.EnumerateByVesselAsync(dock.VesselId, token).ConfigureAwait(false);
+            if (missions.Any(m => m.DockId == dock.Id && (m.Status == MissionStatusEnum.Assigned || m.Status == MissionStatusEnum.InProgress || m.Status == MissionStatusEnum.Verifying)))
+                throw new InvalidOperationException("Dock is owned by an active mission. Stop or cancel that mission before unsticking its dock.");
             if (!String.IsNullOrEmpty(dock.CaptainId))
             {
                 Captain? captain = await _Database.Captains.ReadAsync(dock.CaptainId, token).ConfigureAwait(false);
-                if (captain != null && captain.CurrentDockId == dock.Id)
-                {
-                    _Logging.Warn(_Header + "unstick: releasing captain " + captain.Id + " holding dock " + dockId);
-                    captain.State = CaptainStateEnum.Idle;
-                    captain.CurrentMissionId = null;
-                    captain.CurrentDockId = null;
-                    captain.ProcessId = null;
-                    captain.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
-                }
+                if (captain?.CurrentSessionId != null && (await CaptainContextResolver.ReadDockAsync(_Database, captain, token).ConfigureAwait(false))?.Id == dock.Id)
+                    throw new InvalidOperationException("Dock is owned by an active planning session. Stop that session before unsticking its dock.");
             }
 
             await ReclaimAsync(dockId, tenantId, token, "operator unstick").ConfigureAwait(false);

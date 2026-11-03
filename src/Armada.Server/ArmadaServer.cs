@@ -2501,6 +2501,10 @@ namespace Armada.Server
                             catch (Exception expiryEx) when (!(expiryEx is OperationCanceledException)) { _Logging.Warn(_Header + "data expiry error: " + expiryEx.Message); }
                         }
 
+                        // Wait storage uses its independent concurrency retention policy on every provider.
+                        try { await _Database.MissionWaitIntervals.DeleteExpiredAsync(DateTime.UtcNow.AddDays(-_Settings.Concurrency.WaitIntervalRetentionDays), token).ConfigureAwait(false); }
+                        catch (Exception waitExpiryEx) when (!(waitExpiryEx is OperationCanceledException)) { _Logging.Warn(_Header + "mission wait expiry error: " + waitExpiryEx.Message); }
+
                         await PurgeExpiredRequestHistoryAsync(token).ConfigureAwait(false);
 
                         // Retention: Ask threads (archive/delete), finished jobs, finished import batches.

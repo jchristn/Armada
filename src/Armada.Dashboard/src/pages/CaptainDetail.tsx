@@ -112,9 +112,9 @@ export default function CaptainDetail() {
       const cap = await getCaptain(id);
       setCaptain(cap);
       // Load current mission if set
-      if (cap.currentMissionId) {
+      if (cap.activeMissionIds?.length === 1) {
         try {
-          const m = await getMission(cap.currentMissionId);
+          const m = await getMission(cap.activeMissionIds[0]);
           setCurrentMission(m);
         } catch { setCurrentMission(null); }
       } else {
@@ -539,7 +539,7 @@ export default function CaptainDetail() {
           <span className="detail-label" title={t('Idle is free for work, Working is on a mission, Planning, Refining and Analyzing are reserved, Stalled has gone silent, Quarantined is skipped by dispatch for a while.')}>{t('State')}</span>
           <StatusBadge status={captain.state} />
           <span>{t('Active')}: {t(captain.active === false ? 'No' : 'Yes')}</span>
-          <span>{t('Running missions')}: {captain.activeMissionCount ?? (captain.currentMissionId ? 1 : 0)} / {captain.maxConcurrency ?? 1}</span>
+          <span>{t('Running missions')}: {captain.activeMissionCount ?? 0} / {captain.maxConcurrency ?? 1}</span>
         </div>
         {captain.state === 'Quarantined' && (
           <div className="detail-field">
@@ -555,9 +555,9 @@ export default function CaptainDetail() {
         )}
         <div className="detail-field">
           <span className="detail-label" title={t('Missions currently holding this captain’s capacity. Open a mission to see its dock, process and progress.')}>{t('Active Missions')}</span>
-          {(captain.activeMissionIds?.length || captain.currentMissionId) ? (
+          {captain.activeMissionIds?.length ? (
             <span style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-              {(captain.activeMissionIds?.length ? captain.activeMissionIds : [captain.currentMissionId!]).map(missionId => (
+              {(captain.activeMissionIds ?? []).map(missionId => (
                 <span key={missionId} className="id-display">
                   <Link className="mono" to={`/missions/${encodeURIComponent(missionId)}`}>{missionId}</Link>
                   <CopyButton text={missionId} />
@@ -566,17 +566,12 @@ export default function CaptainDetail() {
             </span>
           ) : <span>-</span>}
         </div>
-        <div className="detail-field">
-          <span className="detail-label" title={t('The dock (git worktree) the captain works in for its current mission. A dash means none.')}>{t('Current Dock')}</span>
-          {captain.currentDockId ? (
-            <span className="id-display">
-              <Link className="mono" to={`/docks/${captain.currentDockId}`}>{captain.currentDockId}</Link>
-              <CopyButton text={captain.currentDockId!} />
-            </span>
-          ) : <span>-</span>}
-        </div>
+        {captain.currentSessionId && (
         <div className="detail-field"><span className="detail-label" title={t('Operating system process ID of the running agent, on the Admiral host or Harbor. A dash means no process is running.')}>{t('Process ID')}</span><span>{captain.processId || '-'}</span></div>
+        )}
+        {captain.currentSessionId && (
         <div className="detail-field"><span className="detail-label" title={t('How many times Armada has automatically tried to recover the agent on its current mission, for example after a crash.')}>{t('Recovery Attempts')}</span><span>{captain.recoveryAttempts ?? 0}</span></div>
+        )}
         <div className="detail-field">
           <span className="detail-label" title={t('When the captain last produced agent output. If it stops advancing while the captain is Working, the captain may be stalled.')}>{t('Last Heartbeat')}</span>
           <span title={formatDateTime(captain.lastHeartbeatUtc)}>

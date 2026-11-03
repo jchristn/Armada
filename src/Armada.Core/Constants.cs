@@ -5,6 +5,8 @@ namespace Armada.Core
     /// </summary>
     public static class Constants
     {
+        /// <summary>Prefix for mission wait interval identifiers.</summary>
+        public const string MissionWaitIntervalIdPrefix = "mwi_";
         #region Public-Members
 
         /// <summary>

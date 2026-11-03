@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites.Services
 {
+    using System.Linq;
     using System;
     using System.Collections.Generic;
     using System.IO;
@@ -38,6 +39,28 @@ namespace Test.Shared.Suites.Services
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+            cases.Add(CaseAsync("recovery_refuses_retired_assignment", "A late recovery cannot relaunch an assignment now owned by another captain", TestTags.Positive, async () =>
+            {
+                using TestDatabase db = await TestDatabaseHelper.CreateDatabaseAsync();
+                CaptainService service = new CaptainService(CreateLogging(), db.Driver, CreateSettings(), new StubGitService(), new StubDockService());
+                int launches = 0; service.OnLaunchAgent = (_, _, _) => { launches++; return Task.FromResult(123); };
+                Captain oldOwner = await db.Driver.Captains.CreateAsync(new Captain("old owner"));
+                Captain newOwner = await db.Driver.Captains.CreateAsync(new Captain("new owner"));
+                Mission mission = await db.Driver.Missions.CreateAsync(new Mission("reassigned"));
+                AssertTrue(await db.Driver.Captains.TryClaimAsync(oldOwner.Id, mission.Id, null));
+                Captain stale = (await db.Driver.Captains.ReadAsync(oldOwner.Id))!.ForMission((await db.Driver.Missions.ReadAsync(mission.Id))!);
+                AssertTrue(await db.Driver.Captains.TryReleaseFromMissionAsync(oldOwner.Id, mission.Id));
+                mission.Status=MissionStatusEnum.Pending; mission.CaptainId=null;
+                await db.Driver.Missions.UpdateAsync(mission);
+                AssertTrue(await db.Driver.Captains.TryClaimAsync(newOwner.Id, mission.Id, null));
+                AssertTrue(await db.Driver.Captains.TrySetProcessAsync(newOwner.Id, mission.Id, 7654));
+                await service.TryRecoverAsync(stale);
+                AssertEqual(0, launches);
+                Mission retained = (await db.Driver.Missions.ReadAsync(mission.Id))!;
+                AssertEqual(newOwner.Id, retained.CaptainId); AssertEqual(7654, retained.ProcessId);
+                AssertEqual(0, retained.StallRecoveryAttempts);
+            }));
+
             cases.Add(CaseAsync("inactive_recovery_preserves_held_work", "Recovery rechecks Active and preserves held work without launching or spending attempts", TestTags.Positive, async () =>
             {
                 using TestDatabase db = await TestDatabaseHelper.CreateDatabaseAsync();
@@ -45,17 +68,17 @@ namespace Test.Shared.Suites.Services
                 int launches = 0;
                 service.OnLaunchAgent = (c, m, d) => { launches++; return Task.FromResult(123); };
                 Mission mission = await db.Driver.Missions.CreateAsync(new Mission("held inactive") { Status = MissionStatusEnum.InProgress });
-                Captain stale = await db.Driver.Captains.CreateAsync(new Captain("held inactive") { State = CaptainStateEnum.Working, CurrentMissionId = mission.Id });
+                Captain stale = await CaptainAssignmentFixture.CreateAsync(db.Driver, new Captain("held inactive") { State = CaptainStateEnum.Working, Assignment = new Mission { Id = mission.Id }});
                 Captain disabled = (await db.Driver.Captains.ReadAsync(stale.Id))!;
                 disabled.Active = false;
-                await db.Driver.Captains.UpdateAsync(disabled, updateActive: true);
+                await CaptainAssignmentFixture.UpdateAsync(db.Driver, disabled, updateActive: true);
                 await service.TryRecoverAsync(stale);
                 AssertEqual(0, launches);
                 Captain stored = (await db.Driver.Captains.ReadAsync(stale.Id))!;
                 AssertFalse(stored.Active);
                 AssertEqual(0, stored.RecoveryAttempts);
                 AssertEqual(CaptainStateEnum.Working, stored.State);
-                AssertEqual(mission.Id, stored.CurrentMissionId);
+                AssertEqual(mission.Id, stored.ActiveMissionIds.SingleOrDefault());
                 AssertEqual(MissionStatusEnum.InProgress, (await db.Driver.Missions.ReadAsync(mission.Id))!.Status);
             }));
 
@@ -66,19 +89,19 @@ namespace Test.Shared.Suites.Services
                 StubDockService docks = new StubDockService();
                 CaptainService service = new CaptainService(CreateLogging(), db.Driver, CreateSettings(), new StubGitService(), docks);
                 Mission mission = await db.Driver.Missions.CreateAsync(new Mission("held recall") { Status = MissionStatusEnum.InProgress, ProcessId = 9191 }).ConfigureAwait(false);
-                Captain captain = await db.Driver.Captains.CreateAsync(new Captain("held recall")
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db.Driver, new Captain("held recall")
                 {
-                    State = CaptainStateEnum.Working, ProcessId = 9191, CurrentMissionId = mission.Id, CurrentDockId = "dck_still_owned"
-                }).ConfigureAwait(false);
+                    State = CaptainStateEnum.Working, ProcessId = 9191, Assignment = new Mission { Id = mission.Id, DockId = "dck_still_owned" }}).ConfigureAwait(false);
                 service.OnStopAgent = _ => throw new TimeoutException("No owner exit confirmation");
                 bool refused = false;
                 try { await service.RecallAsync(captain.Id).ConfigureAwait(false); } catch (InvalidOperationException) { refused = true; }
                 AssertTrue(refused);
                 Captain current = (await db.Driver.Captains.ReadAsync(captain.Id).ConfigureAwait(false))!;
                 Mission active = (await db.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;
-                AssertEqual(CaptainStateEnum.Working, current.State);
-                AssertEqual(mission.Id, current.CurrentMissionId);
-                AssertEqual((int?)9191, current.ProcessId);
+                AssertEqual(CaptainStateEnum.Stopping, current.State);
+                AssertEqual(mission.Id, current.ActiveMissionIds.SingleOrDefault());
+                AssertNull(current.ProcessId);
+                AssertEqual((int?)9191, active.ProcessId);
                 AssertEqual(MissionStatusEnum.InProgress, active.Status);
                 AssertEqual((int?)9191, active.ProcessId);
                 AssertEqual(0, docks.ReclaimCalls);
@@ -103,10 +126,10 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("recover-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = "msn_recover_test";
-                    captain.CurrentDockId = "dck_recover_test";
+                    captain.Assignment = new Mission { Id = "msn_recover_test" };
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = "dck_recover_test";
                     captain.RecoveryAttempts = 0;
-                    captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     Mission mission = new Mission("Recover Mission");
                     mission.Id = "msn_recover_test";
@@ -135,7 +158,7 @@ namespace Test.Shared.Suites.Services
                     AssertContains("synthetic relaunch failure", updatedMission.FailureReason ?? String.Empty);
                     AssertEqual(MissionFailureKindEnum.StallRecoveryExhausted, updatedMission.FailureKind, "failure kind is recorded where the failure happens");
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Captain should return to Idle after failed recovery");
-                    AssertNull(updatedCaptain.CurrentMissionId, "Captain current mission should be cleared");
+                    AssertNull(updatedCaptain.ActiveMissionIds.SingleOrDefault(), "Captain current mission should be cleared");
                     AssertEqual(0, docks.ReclaimCalls, "Failed stall recovery must retain uncommitted work");
                     AssertEqual(dock.Id, updatedMission.DockId, "Mission keeps the recovery location");
                 }
@@ -153,9 +176,9 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("missing-dock-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = "msn_missing_dock";
-                    captain.CurrentDockId = "dck_missing_dock";
-                    captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    captain.Assignment = new Mission { Id = "msn_missing_dock" };
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = "dck_missing_dock";
+                    captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     Mission mission = new Mission("Missing Dock Mission");
                     mission.Id = "msn_missing_dock";
@@ -176,7 +199,7 @@ namespace Test.Shared.Suites.Services
                     AssertContains("mission or dock could not be reloaded", updatedMission.FailureReason ?? String.Empty);
                     AssertEqual(MissionFailureKindEnum.Infra, updatedMission.FailureKind, "failure kind is recorded where the failure happens");
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Captain should return to Idle when recovery prerequisites are missing");
-                    AssertNull(updatedCaptain.CurrentMissionId, "Captain current mission should be cleared");
+                    AssertNull(updatedCaptain.ActiveMissionIds.SingleOrDefault(), "Captain current mission should be cleared");
                 }
             }));
 
@@ -206,9 +229,9 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("recover-cancelled-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = "msn_recover_cancelled";
-                    captain.CurrentDockId = "dck_recover_cancelled";
-                    captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    captain.Assignment = new Mission { Id = "msn_recover_cancelled" };
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = "dck_recover_cancelled";
+                    captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     Mission mission = new Mission("Cancelled Voyage Mission");
                     mission.Id = "msn_recover_cancelled";
@@ -237,7 +260,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(0, launchAttempts, "Cancelled-voyage mission should not be relaunched");
                     AssertEqual(MissionStatusEnum.Cancelled, updatedMission!.Status, "Mission should be cancelled when its voyage is cancelled");
                     AssertEqual(CaptainStateEnum.Idle, updatedCaptain!.State, "Captain should return to Idle when recovery is skipped");
-                    AssertNull(updatedCaptain.CurrentMissionId, "Captain current mission should be cleared");
+                    AssertNull(updatedCaptain.ActiveMissionIds.SingleOrDefault(), "Captain current mission should be cleared");
                     AssertEqual(1, docks.ReclaimCalls, "Dock should be reclaimed when recovery is skipped");
                 }
             }));
@@ -262,9 +285,9 @@ namespace Test.Shared.Suites.Services
 
                     Captain captain = new Captain("recover-healthy-captain");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = "msn_recover_healthy";
-                    captain.CurrentDockId = "dck_recover_healthy";
-                    captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    captain.Assignment = new Mission { Id = "msn_recover_healthy" };
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = "dck_recover_healthy";
+                    captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     Mission mission = new Mission("Healthy Recovery Mission");
                     mission.Id = "msn_recover_healthy";
@@ -292,7 +315,8 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(MissionStatusEnum.InProgress, updatedMission!.Status, "Mission should remain in progress after successful recovery");
                     AssertEqual(12345, updatedMission.ProcessId, "Mission should capture the relaunched process id");
                     AssertEqual(CaptainStateEnum.Working, updatedCaptain!.State, "Captain should remain working after successful recovery");
-                    AssertEqual(12345, updatedCaptain.ProcessId, "Captain should capture the relaunched process id");
+                    AssertNull(updatedCaptain.ProcessId, "mission process is not stored on the captain");
+                    AssertEqual(12345, updatedMission.ProcessId, "Mission owns the relaunched process");
                     AssertEqual(1, git.IsRepositoryCalls, "Recovery should check whether the dock worktree is usable");
                     AssertEqual(0, git.RepairWorktreeCalls, "Recovery should not destructively repair a healthy worktree");
                 }
@@ -429,7 +453,7 @@ namespace Test.Shared.Suites.Services
                 StubDockService docks = new StubDockService();
                 CaptainService service = new CaptainService(CreateLogging(), db.Driver, CreateSettings(), git, docks);
                 Mission mission = await db.Driver.Missions.CreateAsync(new Mission("halted") { Status = MissionStatusEnum.Cancelled, FailureReason = "Voyage halted", FailureKind = MissionFailureKindEnum.DependencyFailed }).ConfigureAwait(false);
-                Captain captain = await db.Driver.Captains.CreateAsync(new Captain("halted") { State = CaptainStateEnum.Working, CurrentMissionId = mission.Id }).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(db.Driver, new Captain("halted") { State = CaptainStateEnum.Working, Assignment = new Mission { Id = mission.Id }}).ConfigureAwait(false);
 
                 await service.RecallAsync(captain.Id).ConfigureAwait(false);
 
@@ -475,10 +499,9 @@ namespace Test.Shared.Suites.Services
             dock.BranchName = "armada/stop/wip";
             dock.Active = true;
             dock = await db.Driver.Docks.CreateAsync(dock).ConfigureAwait(false);
-            Captain captain = await db.Driver.Captains.CreateAsync(new Captain("stopper")
+            Captain captain = await CaptainAssignmentFixture.CreateAsync(db.Driver, new Captain("stopper")
             {
-                State = CaptainStateEnum.Working, CurrentMissionId = mission.Id, CurrentDockId = dock.Id
-            }).ConfigureAwait(false);
+                State = CaptainStateEnum.Working, Assignment = new Mission { Id = mission.Id, DockId = dock.Id }}).ConfigureAwait(false);
             mission.DockId = dock.Id;
             mission.CaptainId = captain.Id;
             await db.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);

@@ -44,8 +44,8 @@ namespace Test.Shared.Suites.E2E
                         Vessel otherVessel = await db.Vessels.CreateAsync(new Vessel("different-" + suffix, "https://example.invalid/other") { Active = false });
                         Dock own = await db.Docks.CreateAsync(new Dock(vessel.Id) { WorktreePath = ownPath, BranchName = "mission" });
                         Dock other = await db.Docks.CreateAsync(new Dock(mode == "wrong-vessel" ? otherVessel.Id : vessel.Id) { WorktreePath = otherPath, BranchName = "mission" });
-                        Captain captain = await db.Captains.CreateAsync(new Captain("multi-mission-" + suffix) { Active = false, State = CaptainStateEnum.Planning,
-                            CurrentSessionId = "layout-reservation", CurrentDockId = other.Id, MaxConcurrency = 3 });
+                        Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("multi-mission-" + suffix) { Active = false, State = CaptainStateEnum.Planning,
+                            CurrentSessionId = "layout-reservation", MaxConcurrency = 3 , Assignment = new Mission("fixture assignment") { DockId = other.Id }});
                         Mission mission = await db.Missions.CreateAsync(new Mission("target") { VesselId = vessel.Id, CaptainId = captain.Id,
                             Status = MissionStatusEnum.Complete, BranchName = "mission", DockId = mode == "own" ? own.Id : mode == "deleted" ? "dck_deleted" : mode == "wrong-vessel" ? other.Id : null,
                             DiffSnapshot = mode == "saved-diff" ? "SAVED_OWN" : null });

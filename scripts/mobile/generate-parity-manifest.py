@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tui"))
 from client_exports import server_exports  # noqa: E402
 from dashboard_surfaces import HUB_PAGES, events, read, settings_fields, tabs  # noqa: E402
-from mobile_routes import EXTENSION_ROUTES, MOBILE, WORKSTREAMS, build, extension_file, first_segment  # noqa: E402
+from mobile_routes import DASHBOARD_ONLY_ROUTES, EXTENSION_ROUTES, MOBILE, WORKSTREAMS, build, extension_file, first_segment  # noqa: E402
 
 MANIFEST = os.path.join(MOBILE, "parity.json")
 STATUSES = ["implemented", "planned", "not-applicable", "extension"]
@@ -90,6 +90,8 @@ def generate(old):
             return
         entries.append({"kind": kind, "key": key, "status": status, "mobile": mobile, "workstream": workstream, "notes": notes})
 
+    for pattern, (workstream, note) in sorted(DASHBOARD_ONLY_ROUTES.items()):
+        add("route", pattern, "not-applicable", "", workstream, note)
     seen_dashboard = set()
     for r in build():
         if r["dashboard"] in seen_dashboard:

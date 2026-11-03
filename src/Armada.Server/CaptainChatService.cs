@@ -784,7 +784,7 @@ namespace Armada.Server
                     userId: options.UserId,
                     vesselId: null,
                     captainId: captain.Id,
-                    sourceId: captain.CurrentMissionId,
+                    sourceId: captain.Assignment?.Id,
                     inputTokens: telemetry.InputTokens,
                     outputTokens: realOutputTokens,
                     cachedTokens: telemetry.CachedTokens,

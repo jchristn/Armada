@@ -136,8 +136,6 @@ namespace Armada.Server
 
                 captain.State = CaptainStateEnum.Refining;
                 captain.CurrentSessionId = session.Id;
-                captain.CurrentMissionId = null;
-                captain.CurrentDockId = null;
                 captain.ProcessId = null;
                 captain.LastHeartbeatUtc = DateTime.UtcNow;
                 captain.LastUpdateUtc = DateTime.UtcNow;
@@ -596,8 +594,6 @@ namespace Armada.Server
 
                     captain.State = CaptainStateEnum.Refining;
                     captain.CurrentSessionId = session.Id;
-                    captain.CurrentMissionId = null;
-                    captain.CurrentDockId = null;
                     captain.ProcessId = null;
                     captain.LastHeartbeatUtc = DateTime.UtcNow;
                     captain.LastUpdateUtc = DateTime.UtcNow;
@@ -1216,8 +1212,7 @@ namespace Armada.Server
 
         private async Task UpdateSessionCaptainAsync(Captain captain, string sessionId, CancellationToken token = default)
         {
-            if (!await _Database.Captains.TryUpdateExclusiveAsync(captain.Id, sessionId, CaptainStateEnum.Refining,
-                captain.CurrentDockId, captain.ProcessId, token).ConfigureAwait(false))
+            if (!await _Database.Captains.TryUpdateExclusiveAsync(captain.Id, sessionId, CaptainStateEnum.Refining, captain.ProcessId, token).ConfigureAwait(false))
             {
                 // A stop can release ownership while StartAsync is still returning its PID.
                 // Stop only the process this turn just started; never mutate the new owner's fields.

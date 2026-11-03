@@ -52,7 +52,7 @@ beforeEach(() => {
   vi.mocked(listVessels).mockResolvedValue(page([]));
   vi.mocked(listPipelines).mockResolvedValue(page([{ id: 'ppl_1', name: 'Reviewed', description: LONG, stages: [], scope: 'Tenant', isBuiltIn: false, active: true, createdUtc: CREATED }]));
   vi.mocked(listDocks).mockResolvedValue(page([{ id: 'dck_1', vesselId: null, captainId: null, branchName: 'armada/feature-x', worktreePath: '/tmp/w', active: true, createdUtc: CREATED }]));
-  vi.mocked(listCaptains).mockResolvedValue(page([{ id: 'cpt_1', name: 'alpha', runtime: 'ClaudeCode', state: 'Idle', currentMissionId: null, lastHeartbeatUtc: CREATED, createdUtc: CREATED }]));
+  vi.mocked(listCaptains).mockResolvedValue(page([{ id: 'cpt_1', name: 'alpha', runtime: 'ClaudeCode', state: 'Idle', lastHeartbeatUtc: CREATED, createdUtc: CREATED }]));
   vi.mocked(listPersonas).mockResolvedValue(page([{ id: 'prs_1', name: 'Worker', description: LONG, promptTemplateName: 'persona.worker', scope: 'Tenant', isBuiltIn: true, active: true, createdUtc: CREATED }]));
   vi.mocked(listPromptTemplates).mockResolvedValue(page([]));
   vi.mocked(listVoyages).mockResolvedValue(page([

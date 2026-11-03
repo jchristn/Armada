@@ -58,8 +58,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqliteCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, reasoning_effort, tier, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, max_concurrency, current_session_id, state, current_mission_id, current_dock_id, process_id, recovery_attempts, quarantine_until_utc, quarantine_reason, last_heartbeat_utc, created_utc, last_update_utc, last_process_alive_utc, usage_capture_enabled, usage_capture_interval_seconds, usage_capture_mode, usage_capture_command, usage_capture_harbor_id, active)
-                            VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @reasoning_effort, @tier, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @max_concurrency, @current_session_id, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @quarantine_until_utc, @quarantine_reason, @last_heartbeat_utc, @created_utc, @last_update_utc, @last_process_alive_utc, @usage_capture_enabled, @usage_capture_interval_seconds, @usage_capture_mode, @usage_capture_command, @usage_capture_harbor_id, @active);";
+                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, reasoning_effort, tier, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, max_concurrency, current_session_id, state, process_id, recovery_attempts, quarantine_until_utc, quarantine_reason, last_heartbeat_utc, created_utc, last_update_utc, last_process_alive_utc, usage_capture_enabled, usage_capture_interval_seconds, usage_capture_mode, usage_capture_command, usage_capture_harbor_id, active)
+                            VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @reasoning_effort, @tier, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @max_concurrency, @current_session_id, @state, @process_id, @recovery_attempts, @quarantine_until_utc, @quarantine_reason, @last_heartbeat_utc, @created_utc, @last_update_utc, @last_process_alive_utc, @usage_capture_enabled, @usage_capture_interval_seconds, @usage_capture_mode, @usage_capture_command, @usage_capture_harbor_id, @active);";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)captain.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)captain.UserId ?? DBNull.Value);
@@ -77,9 +77,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@runtime_options_json", (object?)captain.RuntimeOptionsJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@cli_permission_policy", (object?)captain.CliPermissionPolicy?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@state", captain.State.ToString());
-                    cmd.Parameters.AddWithValue("@current_mission_id", (object?)captain.CurrentMissionId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@current_dock_id", (object?)captain.CurrentDockId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@process_id", captain.ProcessId.HasValue ? (object)captain.ProcessId.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@process_id", captain.CurrentSessionId != null && captain.ProcessId.HasValue ? (object)captain.ProcessId.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@recovery_attempts", captain.RecoveryAttempts);
                     cmd.Parameters.AddWithValue("@quarantine_until_utc", captain.QuarantineUntilUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(captain.QuarantineUntilUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@quarantine_reason", (object?)captain.QuarantineReason ?? DBNull.Value);
@@ -174,9 +172,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                             max_concurrency = CASE WHEN @update_concurrency = 1 THEN @max_concurrency ELSE max_concurrency END,
                             current_session_id = current_session_id,
                             state = CASE WHEN current_session_id IS NOT NULL THEN state WHEN active_mission_count > 0 AND state IN ('Quarantined','Stopping') AND @state = 'Working' THEN state WHEN active_mission_count > 0 AND @state = 'Idle' THEN CASE WHEN state='Quarantined' AND @quarantine_until_utc IS NULL AND @quarantine_reason IS NULL THEN 'Working' ELSE state END WHEN active_mission_count > 0 AND @state IN ('Planning','Refining','Analyzing') THEN state WHEN active_mission_count > 1 AND @state = 'Stalled' THEN 'Working' ELSE @state END,
-                            current_mission_id = CASE WHEN current_session_id IS NOT NULL OR active_mission_count > 0 THEN current_mission_id ELSE @current_mission_id END,
-                            current_dock_id = CASE WHEN current_session_id IS NOT NULL OR active_mission_count > 0 THEN current_dock_id ELSE @current_dock_id END,
-                            process_id = CASE WHEN current_session_id IS NOT NULL OR active_mission_count > 0 THEN process_id ELSE @process_id END,
+                            process_id = CASE WHEN current_session_id IS NOT NULL THEN process_id ELSE NULL END,
                             recovery_attempts = @recovery_attempts,
                             quarantine_until_utc = @quarantine_until_utc,
                             quarantine_reason = @quarantine_reason,
@@ -206,8 +202,6 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     cmd.Parameters.AddWithValue("@current_session_id", (object?)captain.CurrentSessionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@runtime_options_json", (object?)captain.RuntimeOptionsJson ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@state", captain.State.ToString());
-                    cmd.Parameters.AddWithValue("@current_mission_id", (object?)captain.CurrentMissionId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@current_dock_id", (object?)captain.CurrentDockId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@process_id", captain.ProcessId.HasValue ? (object)captain.ProcessId.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@recovery_attempts", captain.RecoveryAttempts);
                     cmd.Parameters.AddWithValue("@quarantine_until_utc", captain.QuarantineUntilUtc.HasValue ? (object)SqliteDatabaseDriver.ToIso8601(captain.QuarantineUntilUtc.Value) : DBNull.Value);
@@ -490,7 +484,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
         /// <inheritdoc />
         public async Task<bool> TrySetDockAsync(string captainId, string missionId, string dockId, CancellationToken token = default)
         {
-            return await WithSlotsAsync(store => store.SetAssignmentAsync(captainId, missionId, "current_dock_id", dockId, token), token).ConfigureAwait(false);
+            return await WithSlotsAsync(store => store.SetAssignmentAsync(captainId, missionId, "dock_id", dockId, token), token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -723,35 +717,8 @@ namespace Armada.Core.Database.Sqlite.Implementations
         /// <inheritdoc />
         public async Task<bool> TryClaimAsync(string tenantId, string captainId, string missionId, string dockId, CancellationToken token = default)
         {
-            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
-            if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
-            if (string.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
-            if (string.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
-            DateTime now = DateTime.UtcNow;
-            using (SqliteWriteLease writeLease = await _Driver.WriteGate.EnterAsync(token).ConfigureAwait(false))
-            using (SqliteConnection conn = new SqliteProviderConnection(_Driver.ConnectionString))
-            {
-                await conn.OpenAsync(token).ConfigureAwait(false);
-                using (SqliteCommand cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = @"UPDATE captains SET
-                            state = @state,
-                            current_mission_id = @current_mission_id,
-                            current_dock_id = @current_dock_id,
-                            last_heartbeat_utc = @last_heartbeat_utc,
-                            last_update_utc = @last_update_utc
-                            WHERE tenant_id = @tenantId AND id = @id AND active_mission_count = 0 AND current_session_id IS NULL AND state = 'Idle' AND active = 1;";
-                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
-                    cmd.Parameters.AddWithValue("@id", captainId);
-                    cmd.Parameters.AddWithValue("@state", CaptainStateEnum.Working.ToString());
-                    cmd.Parameters.AddWithValue("@current_mission_id", missionId);
-                    cmd.Parameters.AddWithValue("@current_dock_id", dockId);
-                    cmd.Parameters.AddWithValue("@last_heartbeat_utc", SqliteDatabaseDriver.ToIso8601(now));
-                    cmd.Parameters.AddWithValue("@last_update_utc", SqliteDatabaseDriver.ToIso8601(now));
-                    int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                    return rowsAffected > 0;
-                }
-            }
+            if (await ReadAsync(tenantId, captainId, token).ConfigureAwait(false) == null) return false;
+            return await TryClaimAsync(captainId, missionId, dockId, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />

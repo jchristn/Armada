@@ -370,6 +370,7 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Mission.");
                 mission.TenantId = ctx.TenantId;
                 mission.UserId = ctx.UserId;
+                EntityUpdateMerger.ResetMissionConcurrencyMetadata(mission);
                 if (mission.WorkerEnvelope != null)
                 {
                     // A mission may only tighten its vessel's Worker envelope; a looser or invalid one is a 400 with the reason.

@@ -281,7 +281,6 @@ namespace Armada.Tui.Screens.Build
             copy.HotfixBranchPrefix = vessel.HotfixBranchPrefix;
             copy.RequirePullRequestForProtectedBranches = vessel.RequirePullRequestForProtectedBranches;
             copy.RequireMergeQueueForReleaseBranches = vessel.RequireMergeQueueForReleaseBranches;
-            copy.AllowConcurrentMissions = vessel.AllowConcurrentMissions;
             copy.MaxParallelVoyages = vessel.MaxParallelVoyages;
             copy.MaxParallelMissionsPerVoyage = vessel.MaxParallelMissionsPerVoyage;
             copy.SerializeOverlappingMissions = vessel.SerializeOverlappingMissions;

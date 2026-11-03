@@ -33,7 +33,7 @@ namespace Test.Shared.Suites.Tui.Build
                     string frame = host.Screen();
                     TuiCase.Contains(frame, "[Premium]", "tier badge");
                     TuiCase.Contains(frame, "[quarantined]", "quarantine tag");
-                    TuiCase.Contains(frame, "msn_1234...", "current mission");
+                    TuiCase.Contains(frame, "msn_1234", "active mission");
                     CaptainsScreen screen = (CaptainsScreen)((HubScreen)host.Tui.Shell.Screen!).Content;
                     host.Press("home");
                     AssertEqual("cpt_1", screen.Grid.Current!.Id, "claude first");
@@ -117,7 +117,7 @@ namespace Test.Shared.Suites.Tui.Build
             cases.Add(TuiCase.Sync(Suite, "detail", "The captain page shows Mux settings and quarantine, lifts it, opens the log with Readable, and removes", () =>
             {
                 StubHttpHandler stub = Stub();
-                stub.Json("GET", "/api/v1/captains/cpt_2", "{\"Id\":\"cpt_2\",\"Name\":\"mux-1\",\"Runtime\":\"Mux\",\"State\":\"Quarantined\",\"QuarantineReason\":\"Too many failures\",\"SystemInstructions\":\"Be careful.\",\"RuntimeOptionsJson\":\"{\\\"schemaVersion\\\":1,\\\"endpoint\\\":\\\"local-llm\\\"}\",\"CurrentMissionId\":\"msn_1234567890\",\"RecoveryAttempts\":3,\"CreatedUtc\":\"2026-10-02T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-02T10:00:00Z\"}");
+                stub.Json("GET", "/api/v1/captains/cpt_2", "{\"Id\":\"cpt_2\",\"Name\":\"mux-1\",\"Runtime\":\"Mux\",\"State\":\"Quarantined\",\"QuarantineReason\":\"Too many failures\",\"SystemInstructions\":\"Be careful.\",\"RuntimeOptionsJson\":\"{\\\"schemaVersion\\\":1,\\\"endpoint\\\":\\\"local-llm\\\"}\",\"ActiveMissionIds\":[\"msn_1234567890\"],\"ActiveMissionCount\":1,\"RecoveryAttempts\":3,\"CreatedUtc\":\"2026-10-02T10:00:00Z\",\"LastUpdateUtc\":\"2026-10-02T10:00:00Z\"}");
                 stub.Json("GET", "/api/v1/missions/msn_1234567890", "{\"Id\":\"msn_1234567890\",\"Title\":\"Fix parser\",\"Status\":\"InProgress\",\"BranchName\":\"armada/fix\",\"Priority\":100}");
                 stub.Json("GET", "/api/v1/missions/summaries", "{\"Success\":true,\"Objects\":[{\"Id\":\"msn_old\",\"Title\":\"Old work\",\"Status\":\"Complete\",\"CreatedUtc\":\"2026-10-01T10:00:00Z\"}],\"TotalRecords\":1}");
                 stub.Json("POST", "/api/v1/captains/cpt_2/unquarantine", "{\"Id\":\"cpt_2\",\"Name\":\"mux-1\",\"Runtime\":\"Mux\",\"State\":\"Idle\"}");

@@ -84,7 +84,7 @@ namespace Armada.Tui.Screens.Build
             SubscribeCoalesced("usage.snapshot", LoadUsage);
             Column("runtime", "Runtime", c => c.Runtime.ToString(), 0, 12, c => c.Runtime.ToString().ToLowerInvariant());
             Column("state", "State", StateText, 0, 28, c => c.State.ToString().ToLowerInvariant(), (c, t) => StatusBadge.Style(c.State, t));
-            Column("mission", "Current Mission", c => String.IsNullOrEmpty(c.CurrentMissionId) ? "-" : BuildText.Short(c.CurrentMissionId) + "...", 0, 16);
+            Column("mission", "Current Mission", c => String.Join(", ", c.ActiveMissionIds.Select(BuildText.Short)), 0, 16);
             Column("heartbeat", "Heartbeat", c => c.LastHeartbeatUtc.HasValue ? Context.Loc.FormatRelative(c.LastHeartbeatUtc.Value, Context.Clock.UtcNow) : "-", 0, 14);
             Column("createdUtc", "Created", c => Context.Loc.FormatRelative(c.CreatedUtc, Context.Clock.UtcNow), 0, 14, c => c.CreatedUtc);
 
@@ -104,7 +104,7 @@ namespace Armada.Tui.Screens.Build
             RowActions.Add(new OpsAction<Captain>("tools", "View Tools", c => CaptainTools.Show(this, c.Id, c.Name), "t"));
             RowActions.Add(new OpsAction<Captain>("json", "View JSON", c => ShowJson(Tr("Captain") + ": " + c.Name, c), "j"));
             RowActions.Add(new OpsAction<Captain>("notifications", "View Notifications", c => Context.Navigate("/inbox"), "i"));
-            RowActions.Add(new OpsAction<Captain>("mission", "Open Mission", c => Context.Navigate("/missions/" + Uri.EscapeDataString(c.CurrentMissionId!)), "m", c => !String.IsNullOrEmpty(c.CurrentMissionId)));
+            RowActions.Add(new OpsAction<Captain>("mission", "Open Mission", c => Context.Navigate("/missions/" + Uri.EscapeDataString(c.ActiveMissionIds[0])), "m", c => c.ActiveMissionIds.Count == 1));
             RowActions.Add(new OpsAction<Captain>("copy-id", "Copy ID", c => Copy(c.Id, "Captain ID"), "y"));
             RowActions.Add(new OpsAction<Captain>("stop", "Stop", Stop, "x"));
             RowActions.Add(new OpsAction<Captain>("recall", "Recall", Recall, "R"));

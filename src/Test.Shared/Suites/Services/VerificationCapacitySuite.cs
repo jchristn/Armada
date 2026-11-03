@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites.Services
 {
+    using System.Linq;
     using System.Reflection;
     using Armada.Core.Database;
     using Armada.Core.Enums;
@@ -88,12 +89,12 @@ namespace Test.Shared.Suites.Services
                     if (gate == "global") h.Settings.MaxConcurrentMissions = 1;
                     if (gate == "runtime") h.Settings.Agents = new List<AgentSettings> { new AgentSettings { Runtime = AgentRuntimeEnum.Mux, MaxConcurrent = 1 } };
                     if (gate == "vessel") { h.Vessel.MaxParallelMissionsPerVoyage = 1; await h.Db.Vessels.UpdateAsync(h.Vessel); }
-                    Captain other = gate == "captain" ? h.Captain : await h.Db.Captains.CreateAsync(new Captain("occupier", AgentRuntimeEnum.Mux));
+                    Captain other = gate == "captain" ? h.Captain : await CaptainAssignmentFixture.CreateAsync(h.Db, new Captain("occupier", AgentRuntimeEnum.Mux));
                     if (gate == "endpoint")
                     {
                         ModelEndpoint endpoint = await h.Db.ModelEndpoints.CreateAsync(new ModelEndpoint { Name = "shared", BaseUrl = "http://127.0.0.1:19899/v1", InferenceOptions = new InferenceOptions { MaxConcurrentMissions = 1 } });
                         foreach (Captain captain in new[] { h.Captain, other })
-                        { captain.Runtime = AgentRuntimeEnum.ApiEndpoint; captain.ModelEndpointId = endpoint.Id; await h.Db.Captains.UpdateAsync(captain); }
+                        { captain.Runtime = AgentRuntimeEnum.ApiEndpoint; captain.ModelEndpointId = endpoint.Id; await CaptainAssignmentFixture.UpdateAsync(h.Db, captain); }
                     }
                     Mission held = await h.Db.Missions.CreateAsync(new Mission("other process") { VesselId = gate == "vessel" ? h.Vessel.Id : null, VoyageId = gate == "vessel" ? verify.VoyageId : null });
                     AssertTrue(await h.Db.Captains.TryClaimAsync(other.Id, held.Id, null));
@@ -178,13 +179,13 @@ namespace Test.Shared.Suites.Services
                 Mission verify = await h.MarkVerifyingAsync();
                 Captain planning = (await h.Db.Captains.ReadAsync(h.Captain.Id))!;
                 AssertTrue(await h.Db.Captains.TryClaimExclusiveAsync(planning.Id, "planning-session", CaptainStateEnum.Planning));
-                AssertTrue(await h.Db.Captains.TryUpdateExclusiveAsync(planning.Id, "planning-session", CaptainStateEnum.Planning, null, 9020));
+                AssertTrue(await h.Db.Captains.TryUpdateExclusiveAsync(planning.Id, "planning-session", CaptainStateEnum.Planning, 9020));
                 planning = (await h.Db.Captains.ReadAsync(planning.Id))!; planning.RecoveryAttempts = 2;
-                await h.Db.Captains.UpdateAsync(planning);
+                await CaptainAssignmentFixture.UpdateAsync(h.Db, planning);
                 AssertTrue(await h.Db.Captains.ReleaseVerificationCapacityAsync(h.Captain.Id, verify.Id, 4242, verify.LastUpdateUtc));
                 Captain stored = (await h.Db.Captains.ReadAsync(h.Captain.Id))!;
                 AssertEqual(CaptainStateEnum.Planning, stored.State); AssertEqual("planning-session", stored.CurrentSessionId);
-                AssertNull(stored.CurrentMissionId); AssertEqual(9020, stored.ProcessId); AssertEqual(2, stored.RecoveryAttempts);
+                AssertNull(stored.ActiveMissionIds.SingleOrDefault()); AssertEqual(9020, stored.ProcessId); AssertEqual(2, stored.RecoveryAttempts);
                 AssertFalse(await h.Missions.TryAdmitVerificationResumeAsync(verify, h.Captain));
             });
             Add("public_cancel_releases_only_verification_ownership", async () =>
@@ -220,7 +221,7 @@ namespace Test.Shared.Suites.Services
             Add("recall_releases_exclusive_owner_without_a_mission", async () =>
             {
                 using Harness h = await Harness.CreateAsync();
-                Captain captain = await h.Db.Captains.CreateAsync(new Captain("exclusive refiner"));
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(h.Db, new Captain("exclusive refiner"));
                 AssertTrue(await h.Db.Captains.TryClaimExclusiveAsync(captain.Id, "session", CaptainStateEnum.Refining));
                 await h.Captains.RecallAsync(captain.Id);
                 Captain stored = (await h.Db.Captains.ReadAsync(captain.Id))!;
@@ -255,7 +256,7 @@ namespace Test.Shared.Suites.Services
                 typeof(MissionService).GetField("_LocalCommands", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(h.Missions, h.Commands);
                 h.Vessel = await h.Db.Vessels.CreateAsync(new Vessel("verification", "https://example.invalid/repo") { MaxParallelVoyages = 0, MaxParallelMissionsPerVoyage = 0 });
                 await h.Db.WorkflowProfiles.CreateAsync(new WorkflowProfile { Name = "checks", VesselId = h.Vessel.Id, Scope = WorkflowProfileScopeEnum.Vessel, Active = true, IsDefault = true, BuildCommand = "verify-fixture" });
-                h.Captain = await h.Db.Captains.CreateAsync(new Captain("verify", AgentRuntimeEnum.Mux) { MaxConcurrency = 1 });
+                h.Captain = await CaptainAssignmentFixture.CreateAsync(h.Db, new Captain("verify", AgentRuntimeEnum.Mux) { MaxConcurrency = 1 });
                 string path = TestTemp.NewDirectory("verification_capacity_dock");
                 Dock dock = await h.Db.Docks.CreateAsync(new Dock(h.Vessel.Id) { WorktreePath = path, Active = true });
                 Directory.CreateDirectory(Path.Combine(h.Settings.LogDirectory, "docks"));

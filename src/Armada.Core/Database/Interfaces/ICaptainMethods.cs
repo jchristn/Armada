@@ -97,7 +97,7 @@ namespace Armada.Core.Database.Interfaces
         Task<bool> TryClaimExclusiveAsync(string captainId, string sessionId, CaptainStateEnum state, CancellationToken token = default, bool recover = false);
 
         /// <summary>Update runtime fields only while the caller still owns the exclusive session.</summary>
-        Task<bool> TryUpdateExclusiveAsync(string captainId, string sessionId, CaptainStateEnum state, string? dockId, int? processId, CancellationToken token = default);
+        Task<bool> TryUpdateExclusiveAsync(string captainId, string sessionId, CaptainStateEnum state, int? processId, CancellationToken token = default);
 
         /// <summary>Release only the matching exclusive session, never another session or a mission assignment.</summary>
         Task<bool> TryReleaseExclusiveAsync(string captainId, string sessionId, CancellationToken token = default);

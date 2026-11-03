@@ -155,12 +155,13 @@ Identity section of a black box record: the failed mission or voyage and everyth
 | `stageOutcomeId` | string | yes | no | at most 2000 chars | Stage outcome of the attempt, or null. |
 | `attempt` | integer | no | yes |  | Attempt number of this entry for the subject, starting at 1. |
 | `isRescue` | boolean | no | yes |  | Whether the mission is a rescue. |
-| `parentMissionId` | string | yes | no | at most 2000 chars | Parent mission, or null. |
+| `parentMissionId` | string | yes | no | at most 2000 chars | Hierarchy parent mission, or null. |
+| `rescueOfMissionId` | string | yes | no | at most 2000 chars | Original failed mission addressed by this rescue; separate from hierarchy. Older rescue snapshots may contain this provenance in parentMissionId. |
 | `branchName` | string | yes | no | at most 2000 chars | Mission branch, or null. |
 | `redispatchAttempts` | integer | yes | no |  | Redispatch attempts the mission used, or null when unknown (enrichment). |
 | `outputRepairAttempts` | integer | yes | no |  | Output repair attempts the mission used, or null when unknown (enrichment). |
 | `noOpRedispatchAttempts` | integer | yes | no |  | No-op redispatch attempts the mission used, or null when unknown (enrichment). |
-| `rescueChain` | array of string or null | yes | no | at most 20 items; each at most 1024 chars | The mission's ancestors by ParentMissionId, nearest first; null when not analyzed. |
+| `rescueChain` | array of string or null | yes | no | at most 20 items; each at most 1024 chars | The mission's rescue predecessors by RescueOfMissionId, nearest first; null when not analyzed. |
 
 ### BlackBoxStatusChange
 

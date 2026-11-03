@@ -1,6 +1,6 @@
 # v1.3.0 concurrency testing
 
-Vessel create/update/read accept `maxParallelVoyages` and `maxParallelMissionsPerVoyage`. Both are integers from 0 to 1000; 0 means unlimited. New vessels default to 1 voyage and 4 missions per voyage. Existing vessels migrate conservatively: the old disabled flag becomes 1/1, enabled becomes 0/0. During the staged migration the legacy flag remains stored, but explicit limits control admission.
+Vessel create/update/read accept `maxParallelVoyages` and `maxParallelMissionsPerVoyage`. Both are integers from 0 to 1000; 0 means unlimited. New vessels default to 1 voyage and 4 missions per voyage. Existing vessels migrate conservatively: the old disabled flag becomes 1/1, enabled becomes 0/0. Migration 121 removes the old flag; supplying it to vessel REST/MCP operations returns migration guidance.
 
 Only Assigned and InProgress consume mission slots. A voyage retains admission through review, verification and landing until it is terminal or all its missions settle. Each independent standalone mission forms its own voyage group; its dependent pipeline stages share that group so review can proceed. Waiting missions expose VesselVoyageLimit or VoyageMissionLimit with the IDs holding capacity.
 
@@ -34,15 +34,15 @@ Build the Dashboard (`npm --prefix src/Armada.Dashboard run build`) and the solu
 4. Dispatch another voyage on that vessel. It should wait while the first voyage runs or awaits review/landing. Set **Parallel voyages = 2** to admit it on the next dispatch cycle, or finish/cancel the first voyage.
 5. Try **0** for either limit to remove that specific cap. Global, runtime, endpoint, captain eligibility and branch-safety gates still apply. Lowering a limit prevents new admissions; it does not stop work already running.
 
-New vessel defaults can be set in the `Concurrency` settings-file group. Explicit values on vessel creation override those defaults. Existing vessels keep their migrated values until edited. The legacy `AllowConcurrentMissions` field is retained during the staged migration but no longer controls admission.
+New vessel defaults can be set in the `Concurrency` settings-file group. Explicit values on vessel creation override those defaults. Existing vessels keep their migrated values until edited. The legacy `AllowConcurrentMissions` field is removed. Use the numeric limits.
 
 ## Current scope
 
-This is a usable vessel and multi-mission captain slice of the v1.3.0 plan. Hierarchy/branch strategies, persisted wait intervals, unified admission/invariants, final legacy-field removal and Grafana changes remain in the plan. SQLite has live migration and end-to-end coverage; the other providers' migration/query implementations compile and pass migration hygiene checks, but have not been exercised against database servers in this increment.
+The legacy cleanup and migrations 119–121 are complete, including populated v1.2 upgrades and live slot/metadata/wait-storage tests on SQLite, PostgreSQL, MySQL and SQL Server. Hierarchy/branch execution, wait telemetry, Grafana and the remaining stress/invariant matrix are still in the plan.
 
 ## Multi-mission captain contract
 
-Captain create/update/read accepts `maxConcurrency` (1..256, bounded by the server ceiling). Omitted values default to 1 for CLI runtimes and 4 for ApiEndpoint/Mux; configured defaults apply on server creation. Reads expose server-owned `activeMissionCount`, `activeMissionIds` and `currentSessionId`. Lowering capacity does not stop existing missions. Planning/refinement/analysis remain exclusive. A mission owns a durable slot keyed by mission ID; claiming also assigns the mission atomically. Releasing one slot is idempotent and preserves siblings, including during quarantine. Migration 118 adds slot storage and backfills active assignments. The singular legacy pointer fields remain compatibility surfaces until the final removal migration.
+Captain create/update/read accepts `maxConcurrency` (1..256, bounded by the server ceiling). Omitted values default to 1 for CLI runtimes and 4 for ApiEndpoint/Mux; configured defaults apply on server creation. Reads expose server-owned `activeMissionCount`, `activeMissionIds` and `currentSessionId`. Lowering capacity does not stop existing missions. Planning/refinement/analysis remain exclusive. A mission owns a durable slot keyed by mission ID; claiming also assigns the mission atomically. Releasing one slot is idempotent and preserves siblings, including during quarantine. Migration 118 adds slot storage and backfills active assignments. Migration 121 removes the singular pointers. Read each active mission for its dock, process, heartbeat and recovery attempts. Captain ProcessId belongs only to an exclusive session.
 
 
 ## Test one captain end to end
@@ -88,3 +88,7 @@ To validate manually, fill an explicitly pinned captain while leaving an unrelat
 ### Mission worktree isolation
 
 `Services.MissionDockResolver`, `E2E.MissionDockIsolation` and sibling-completion cases in `Services.HandoffResilience` verify recorded-dock resolution, caller scope, distinct real git worktrees, REST/MCP parity, snapshot fallbacks and sibling slot preservation. Open a mission’s Diff and Instructions with a valid dock, then with a missing dock and no saved artifact: the latter must explain unavailability and never show another mission’s work. See [validation](concurrency/MISSION_DOCK_ISOLATION_VALIDATION.md).
+
+### Final ownership schema (migrations 119–121)
+
+The [legacy cleanup validation record](concurrency/LEGACY_CLEANUP_VALIDATION.md) covers populated v1.2 upgrades on all four providers, exact mission/session ownership, rescue provenance and responsive Dashboard checks. Back up before upgrading; restoring that backup is required to return to v1.2. Test three missions on one captain, cancel just one, and confirm the other two keep their own process, dock, instructions and diff. A running agent reporting Testing must remain counted until its process exits.

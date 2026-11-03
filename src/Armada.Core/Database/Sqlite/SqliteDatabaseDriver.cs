@@ -82,6 +82,7 @@ namespace Armada.Core.Database.Sqlite
             Fleets = new FleetMethods(this, _Settings, _Logging);
             Vessels = new VesselMethods(this, _Settings, _Logging);
             Captains = new CaptainMethods(this, _Settings, _Logging);
+            MissionWaitIntervals = new Armada.Core.Database.MissionWaitIntervalMethods(() => new SqliteProviderConnection(_ConnectionString), WriteGate);
             Missions = new MissionMethods(this, _Settings, _Logging);
             Voyages = new VoyageMethods(this, _Settings, _Logging);
             PlanningSessions = new PlanningSessionMethods(this, _Settings, _Logging);
@@ -177,6 +178,7 @@ namespace Armada.Core.Database.Sqlite
             Fleets = new FleetMethods(this, _Settings, _Logging);
             Vessels = new VesselMethods(this, _Settings, _Logging);
             Captains = new CaptainMethods(this, _Settings, _Logging);
+            MissionWaitIntervals = new Armada.Core.Database.MissionWaitIntervalMethods(() => new SqliteProviderConnection(_ConnectionString), WriteGate);
             Missions = new MissionMethods(this, _Settings, _Logging);
             Voyages = new VoyageMethods(this, _Settings, _Logging);
             PlanningSessions = new PlanningSessionMethods(this, _Settings, _Logging);
@@ -461,12 +463,15 @@ namespace Armada.Core.Database.Sqlite
         /// <inheritdoc />
         internal override async Task ReplayMigrationsAsync(CancellationToken token = default)
         {
+            int version = await GetSchemaVersionAsync(token).ConfigureAwait(false);
             using (SqliteWriteLease writeLease = await _WriteGate.EnterAsync(token).ConfigureAwait(false))
             using (SqliteConnection conn = new SqliteProviderConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 foreach (SchemaMigration migration in TableQueries.GetMigrations())
                 {
+                    // v121 is a destructive boundary: verify historical migrations on an upgrade fixture, never recreate removed columns.
+                    if (version >= 121 && migration.Version < 119) continue;
                     using (SqliteTransaction tx = conn.BeginTransaction())
                     {
                         await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
@@ -624,8 +629,6 @@ namespace Armada.Core.Database.Sqlite
             catch { vessel.AutoApprove = null; }
             vessel.MaxParallelVoyages = Convert.ToInt32(reader["max_parallel_voyages"]);
             vessel.MaxParallelMissionsPerVoyage = Convert.ToInt32(reader["max_parallel_missions_per_voyage"]);
-            try { vessel.AllowConcurrentMissions = Convert.ToInt64(reader["allow_concurrent_missions"]) == 1; }
-            catch { vessel.AllowConcurrentMissions = false; }
             try { vessel.DefaultPipelineId = NullableString(reader["default_pipeline_id"]); } catch { }
             try
             {
@@ -712,8 +715,6 @@ namespace Armada.Core.Database.Sqlite
             try { captain.ModelProfileId = NullableString(reader["model_profile_id"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
-            captain.CurrentMissionId = NullableString(reader["current_mission_id"]);
-            captain.CurrentDockId = NullableString(reader["current_dock_id"]);
             captain.ProcessId = NullableInt(reader["process_id"]);
             captain.RecoveryAttempts = Convert.ToInt32(reader["recovery_attempts"]);
             try { captain.QuarantineUntilUtc = FromIso8601Nullable(reader["quarantine_until_utc"]); } catch { }
@@ -812,6 +813,14 @@ namespace Armada.Core.Database.Sqlite
             try { mission.AgentOutput = NullableString(reader["agent_output"]); } catch { }
             mission.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             mission.StartedUtc = FromIso8601Nullable(reader["started_utc"]);
+            mission.RescueOfMissionId = reader["rescue_of_mission_id"] == DBNull.Value ? null : reader["rescue_of_mission_id"].ToString();
+            mission.BaseBranchName = reader["base_branch_name"] == DBNull.Value ? null : reader["base_branch_name"].ToString();
+            mission.OwnedPathsJson = reader["owned_paths_json"] == DBNull.Value ? null : reader["owned_paths_json"].ToString();
+            mission.ReadsPathsJson = reader["reads_paths_json"] == DBNull.Value ? null : reader["reads_paths_json"].ToString();
+            mission.Depth = Math.Clamp(Convert.ToInt32(reader["depth"]), 0, 16);
+            mission.BranchStrategy = Enum.TryParse(reader["branch_strategy"].ToString(), out MissionBranchStrategyEnum strategy) ? strategy : MissionBranchStrategyEnum.New;
+            mission.ReadyUtc = FromIso8601Nullable(reader["ready_utc"]);
+            mission.AssignedUtc = FromIso8601Nullable(reader["assigned_utc"]);
             mission.CompletedUtc = FromIso8601Nullable(reader["completed_utc"]);
             try { mission.TotalRuntimeMs = NullableLong(reader["total_runtime_ms"]); } catch { }
             mission.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);

@@ -357,7 +357,7 @@ namespace Armada.Helm.Commands
             {
                 if (captain.State != CaptainStateEnum.Stalled) continue;
 
-                string chain = BuildChain(captain, captain.CurrentMissionId, missionLookup, vesselLookup);
+                string chain = captain.ActiveMissionIds.Count == 0 ? BuildChain(captain, null, missionLookup, vesselLookup) : String.Join("; ", captain.ActiveMissionIds.Select(id => BuildChain(captain, id, missionLookup, vesselLookup)));
                 string heartbeatAge = captain.LastHeartbeatUtc.HasValue
                     ? FormatAge(now - captain.LastHeartbeatUtc.Value)
                     : "never";

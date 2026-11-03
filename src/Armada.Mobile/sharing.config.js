@@ -14,6 +14,8 @@ const sharedDirs = ['api', 'types', 'lib'];
 const sharedFiles = ['i18n/catalog.ts'];
 
 const dashboardOnly = [
+  'lib/dashboardNavigation.ts', // React Router web breadcrumbs and route audit; native navigation uses navModel
+
   'lib/useDuplicateRequest.ts', // dashboard route/query state; native screens open their own forms
   'lib/chartImage.ts', // canvas and clipboard export of charts
   'lib/dialogA11y.ts', // DOM focus management for HTML dialogs

@@ -23,8 +23,6 @@ function captain(id: string, name: string, tier?: string | null): Captain {
     allowedPersonas: null,
     preferredPersona: null,
     state: 'Idle',
-    currentMissionId: null,
-    currentDockId: null,
     processId: null,
   } as Captain;
 }

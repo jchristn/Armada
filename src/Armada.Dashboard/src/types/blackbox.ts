@@ -101,6 +101,7 @@ export interface BlackBoxSubject {
   dockId?: string | null;
   attempt?: number;
   isRescue?: boolean;
+  rescueOfMissionId?: string | null;
   parentMissionId?: string | null;
   branchName?: string | null;
 }

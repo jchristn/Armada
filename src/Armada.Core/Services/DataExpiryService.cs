@@ -113,6 +113,11 @@ namespace Armada.Core.Services
                     AND completed_utc < @cutoff;",
                     cutoffStr, token).ConfigureAwait(false);
 
+                // Rescue provenance is independent of hierarchy and must not dangle after bulk expiry.
+                await ExecuteDeleteAsync(conn,
+                    "UPDATE missions SET rescue_of_mission_id=NULL WHERE rescue_of_mission_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM missions original WHERE original.id=missions.rescue_of_mission_id);",
+                    cutoffStr, token).ConfigureAwait(false);
+
                 // Delete the stage outcomes of the missions just removed (and of any mission removed before outcomes were
                 // cleaned up with it); they hold no data that outlives the mission.
                 totalDeleted += await ExecuteDeleteAsync(conn,

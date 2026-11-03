@@ -42,10 +42,6 @@ namespace Armada.Server.Mcp
         /// </summary>
         public string? WorkingDirectory { get; set; }
 
-        /// <summary>
-        /// Legacy stored flag; use the numeric voyage and mission admission limits.
-        /// </summary>
-        public bool? AllowConcurrentMissions { get; set; }
 
         /// <summary>Maximum admitted voyage groups; zero is unlimited.</summary>
         public int? MaxParallelVoyages { get; set; }

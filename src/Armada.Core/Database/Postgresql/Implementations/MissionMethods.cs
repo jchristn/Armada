@@ -194,11 +194,28 @@ namespace Armada.Core.Database.Postgresql.Implementations
             }
         }
 
-        /// <summary>
-        /// Update the mission heartbeat timestamp without rewriting the full record.
-        /// </summary>
-        /// <param name="id">Mission identifier.</param>
-        /// <param name="token">Cancellation token.</param>
+        /// <inheritdoc />
+        public async Task<bool> TryUpdateRuntimeContextAsync(string id, string captainId, int? processId, DateTime? heartbeatUtc, int recoveryAttempts, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
+            if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
+            using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (NpgsqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "UPDATE missions SET last_heartbeat_utc=COALESCE(@heartbeat,last_heartbeat_utc),stall_recovery_attempts=@attempts WHERE id=@id AND captain_id=@captain AND (process_id=@process OR (process_id IS NULL AND CAST(@process AS integer) IS NULL)) AND status IN ('Assigned','InProgress','Verifying');";
+                    cmd.Parameters.AddWithValue("@id", id);
+                    cmd.Parameters.AddWithValue("@captain", captainId);
+                    cmd.Parameters.AddWithValue("@process", processId.HasValue ? (object)processId.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@heartbeat", heartbeatUtc.HasValue ? (object)heartbeatUtc.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@attempts", Math.Max(0, recoveryAttempts));
+                    return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false) == 1;
+                }
+            }
+        }
+
+        /// <inheritdoc />
         public async Task UpdateHeartbeatAsync(string id, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(id)) throw new ArgumentNullException(nameof(id));
@@ -250,7 +267,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "DELETE FROM stage_outcomes WHERE mission_id IN (SELECT id FROM missions WHERE id = @id); DELETE FROM missions WHERE id = @id;";
+                    cmd.CommandText = "UPDATE missions SET rescue_of_mission_id = NULL WHERE rescue_of_mission_id = @id AND EXISTS (SELECT 1 FROM (SELECT id FROM missions WHERE id = @id) AS rescue_target); DELETE FROM stage_outcomes WHERE mission_id IN (SELECT id FROM missions WHERE id = @id); DELETE FROM missions WHERE id = @id;";
                     cmd.Parameters.AddWithValue("@id", id);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
@@ -511,7 +528,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "DELETE FROM stage_outcomes WHERE mission_id IN (SELECT id FROM missions WHERE tenant_id = @tenantId AND id = @id); DELETE FROM missions WHERE tenant_id = @tenantId AND id = @id;";
+                    cmd.CommandText = "UPDATE missions SET rescue_of_mission_id = NULL WHERE rescue_of_mission_id = @id AND EXISTS (SELECT 1 FROM (SELECT id FROM missions WHERE tenant_id = @tenantId AND id = @id) AS rescue_target); DELETE FROM stage_outcomes WHERE mission_id IN (SELECT id FROM missions WHERE tenant_id = @tenantId AND id = @id); DELETE FROM missions WHERE tenant_id = @tenantId AND id = @id;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@id", id);
                     await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -704,7 +721,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "DELETE FROM stage_outcomes WHERE mission_id IN (SELECT id FROM missions WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id); DELETE FROM missions WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
+                    cmd.CommandText = "UPDATE missions SET rescue_of_mission_id = NULL WHERE rescue_of_mission_id = @id AND EXISTS (SELECT 1 FROM (SELECT id FROM missions WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id) AS rescue_target); DELETE FROM stage_outcomes WHERE mission_id IN (SELECT id FROM missions WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id); DELETE FROM missions WHERE tenant_id = @tenantId AND user_id = @userId AND id = @id;";
                     cmd.Parameters.AddWithValue("@tenantId", tenantId);
                     cmd.Parameters.AddWithValue("@userId", userId);
                     cmd.Parameters.AddWithValue("@id", id);
@@ -821,12 +838,13 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 cmd.Transaction = tx;
                 cmd.Connection = conn;
                 cmd.CommandText = @"INSERT INTO missions (id, tenant_id, user_id, voyage_id, vessel_id, captain_id, requested_captain_id, assigned_harbor_id, title, description,
-                    status, mode, priority, parent_mission_id, branch_name, dock_id, process_id,
-                    pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, last_blackbox_entry_id, start_commit, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, worker_envelope_json, rework_round, rework_escalated, tier, created_utc, started_utc, completed_utc, last_update_utc)
+                    status, mode, priority, stall_recovery_attempts, parent_mission_id, rescue_of_mission_id, base_branch_name, ready_utc, assigned_utc, owned_paths_json, reads_paths_json, depth, branch_strategy, branch_name, dock_id, process_id,
+                    pr_url, commit_hash, diff_snapshot, agent_output, persona, depends_on_mission_id, failure_reason, failure_kind, last_blackbox_entry_id, start_commit, wait_for_voyage_workers, requires_review, review_deny_action, review_comment, reviewed_by_user_id, review_requested_utc, reviewed_utc, review_deadline_utc, total_runtime_ms, redispatch_attempts, output_repair_attempts, noop_redispatch_attempts, is_rescue, is_evaluation, worker_envelope_json, rework_round, rework_escalated, tier, created_utc, started_utc, completed_utc, last_update_utc, last_heartbeat_utc)
                     VALUES (@id, @tenant_id, @user_id, @voyage_id, @vessel_id, @captain_id, @requested_captain_id, @assigned_harbor_id, @title, @description,
-                    @status, @mode, @priority, @parent_mission_id, @branch_name, @dock_id, @process_id,
-                    @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @last_blackbox_entry_id, @start_commit, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @worker_envelope_json, @rework_round, @rework_escalated, @tier, @created_utc, @started_utc, @completed_utc, @last_update_utc);";
+                    @status, @mode, @priority, @stall_recovery_attempts, @parent_mission_id, @rescue_of_mission_id, @base_branch_name, @ready_utc, @assigned_utc, @owned_paths_json, @reads_paths_json, @depth, @branch_strategy, @branch_name, @dock_id, @process_id,
+                    @pr_url, @commit_hash, @diff_snapshot, @agent_output, @persona, @depends_on_mission_id, @failure_reason, @failure_kind, @last_blackbox_entry_id, @start_commit, @wait_for_voyage_workers, @requires_review, @review_deny_action, @review_comment, @reviewed_by_user_id, @review_requested_utc, @reviewed_utc, @review_deadline_utc, @total_runtime_ms, @redispatch_attempts, @output_repair_attempts, @noop_redispatch_attempts, @is_rescue, @is_evaluation, @worker_envelope_json, @rework_round, @rework_escalated, @tier, @created_utc, @started_utc, @completed_utc, @last_update_utc, @last_heartbeat_utc);";
                 AddMissionParameters(cmd, mission);
+                cmd.Parameters.AddWithValue("@last_heartbeat_utc", mission.LastHeartbeatUtc.HasValue ? (object)mission.LastHeartbeatUtc.Value : DBNull.Value);
                 await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
             }
         }
@@ -856,7 +874,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         assigned_harbor_id = @assigned_harbor_id,
                         title = @title, description = @description, status = @status,
                         mode = @mode,
-                        priority = @priority, parent_mission_id = @parent_mission_id,
+                        priority = @priority, parent_mission_id = @parent_mission_id, rescue_of_mission_id = @rescue_of_mission_id, base_branch_name = @base_branch_name, ready_utc = @ready_utc, assigned_utc = COALESCE(@assigned_utc, assigned_utc), owned_paths_json = @owned_paths_json, reads_paths_json = @reads_paths_json, depth = @depth, branch_strategy = @branch_strategy,
                         branch_name = @branch_name, dock_id = @dock_id, process_id = @process_id,
                         pr_url = @pr_url, commit_hash = @commit_hash, diff_snapshot = @diff_snapshot,
                         agent_output = @agent_output,
@@ -914,6 +932,14 @@ namespace Armada.Core.Database.Postgresql.Implementations
             cmd.Parameters.AddWithValue("@mode", mission.Mode.ToString());
             cmd.Parameters.AddWithValue("@priority", mission.Priority);
             cmd.Parameters.AddWithValue("@parent_mission_id", (object?)mission.ParentMissionId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@rescue_of_mission_id", (object?)mission.RescueOfMissionId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@base_branch_name", (object?)mission.BaseBranchName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@owned_paths_json", (object?)mission.OwnedPathsJson ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@reads_paths_json", (object?)mission.ReadsPathsJson ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@depth", Math.Clamp(mission.Depth, 0, 16));
+            cmd.Parameters.AddWithValue("@branch_strategy", mission.BranchStrategy.ToString());
+            cmd.Parameters.AddWithValue("@ready_utc", mission.ReadyUtc.HasValue ? (object)mission.ReadyUtc.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@assigned_utc", mission.AssignedUtc.HasValue ? (object)mission.AssignedUtc.Value : DBNull.Value);
             cmd.Parameters.AddWithValue("@branch_name", (object?)mission.BranchName ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@dock_id", (object?)mission.DockId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@process_id", mission.ProcessId.HasValue ? (object)mission.ProcessId.Value : DBNull.Value);
@@ -1044,6 +1070,14 @@ namespace Armada.Core.Database.Postgresql.Implementations
             try { mission.AgentOutput = NullableString(reader["agent_output"]); } catch { }
             mission.CreatedUtc = DateTime.SpecifyKind((DateTime)reader["created_utc"], DateTimeKind.Utc);
             mission.StartedUtc = NullableDateTime(reader["started_utc"]);
+            mission.RescueOfMissionId = reader["rescue_of_mission_id"] == DBNull.Value ? null : reader["rescue_of_mission_id"].ToString();
+            mission.BaseBranchName = reader["base_branch_name"] == DBNull.Value ? null : reader["base_branch_name"].ToString();
+            mission.OwnedPathsJson = reader["owned_paths_json"] == DBNull.Value ? null : reader["owned_paths_json"].ToString();
+            mission.ReadsPathsJson = reader["reads_paths_json"] == DBNull.Value ? null : reader["reads_paths_json"].ToString();
+            mission.Depth = Math.Clamp(Convert.ToInt32(reader["depth"]), 0, 16);
+            mission.BranchStrategy = Enum.TryParse(reader["branch_strategy"].ToString(), out MissionBranchStrategyEnum strategy) ? strategy : MissionBranchStrategyEnum.New;
+            mission.ReadyUtc = NullableDateTime(reader["ready_utc"]);
+            mission.AssignedUtc = NullableDateTime(reader["assigned_utc"]);
             mission.CompletedUtc = NullableDateTime(reader["completed_utc"]);
             try { mission.TotalRuntimeMs = NullableLong(reader["total_runtime_ms"]); } catch { }
             mission.LastUpdateUtc = DateTime.SpecifyKind((DateTime)reader["last_update_utc"], DateTimeKind.Utc);

@@ -351,7 +351,7 @@ describe('ImportWizard', () => {
 function captain(id: string, name: string, state: string): Captain {
   return {
     id, tenantId: 'ten', name, runtime: 'ClaudeCode', supportsPlanningSessions: true, planningSessionSupportReason: null, systemInstructions: null,
-    model: null, allowedPersonas: null, preferredPersona: null, state, currentMissionId: null, currentDockId: null, processId: null,
+    model: null, allowedPersonas: null, preferredPersona: null, state, processId: null,
     recoveryAttempts: 0, lastHeartbeatUtc: null, createdUtc: '', lastUpdateUtc: '',
   };
 }

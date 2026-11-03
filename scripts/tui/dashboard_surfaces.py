@@ -36,7 +36,7 @@ def routes():
         elif m.group(2):
             out.append("/" + m.group(2))
     redirects = {}
-    for m in re.finditer(r'<Route path="([^"]+)" element=\{<Navigate to="([^"]+)"', src):
+    for m in re.finditer(r'<Route path="([^"]+)" element=\{<(?:Navigate|LegacyPageRedirect) to="([^"]+)"', src):
         redirects["/" + m.group(1)] = m.group(2)
     return out, redirects
 

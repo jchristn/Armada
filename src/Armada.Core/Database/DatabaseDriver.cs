@@ -9,6 +9,14 @@ namespace Armada.Core.Database
     /// </summary>
     public abstract class DatabaseDriver : IDisposable
     {
+        /// <summary>Mission scheduling wait interval persistence.</summary>
+        public IMissionWaitIntervalMethods MissionWaitIntervals
+        {
+            get => _MissionWaitIntervals;
+            protected set => _MissionWaitIntervals = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+        private IMissionWaitIntervalMethods _MissionWaitIntervals = null!;
+
         #region Public-Members
 
         /// <summary>Read-only storage and record statistics.</summary>

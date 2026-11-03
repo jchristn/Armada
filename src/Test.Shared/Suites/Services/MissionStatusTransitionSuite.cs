@@ -193,8 +193,8 @@ namespace Test.Shared.Suites.Services
                     IMissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
 
                     Captain captain = new Captain("idle-captain");
-                    captain.CurrentMissionId = null;
-                    await testDb.Driver.Captains.CreateAsync(captain);
+                    captain.Assignment = null;
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain);
 
                     // Should not throw - just returns
                     await missionService.HandleCompletionAsync(captain);
@@ -455,7 +455,7 @@ namespace Test.Shared.Suites.Services
             // Create a captain
             Captain captain = new Captain("test-captain");
             captain.State = CaptainStateEnum.Working;
-            await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+            await CaptainAssignmentFixture.CreateAsync(db, captain).ConfigureAwait(false);
 
             // Create a dock
             Dock dock = new Dock(vessel.Id);
@@ -474,9 +474,9 @@ namespace Test.Shared.Suites.Services
             await db.Missions.CreateAsync(mission).ConfigureAwait(false);
 
             // Wire up captain
-            captain.CurrentMissionId = mission.Id;
-            captain.CurrentDockId = dock.Id;
-            await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            captain.Assignment = mission;
+            captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+            await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
 
             return new TestEntitiesResult(captain, mission, dock);
         }

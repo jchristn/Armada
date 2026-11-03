@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites.Services
 {
+    using System.Linq;
     using System;
     using System.Collections.Generic;
     using System.Net;
@@ -42,10 +43,10 @@ namespace Test.Shared.Suites.Services
                         LoggingModule quiet = new LoggingModule(); quiet.Settings.EnableConsole = false;
                         using DatabaseDriver db = DatabaseDriverFactory.Create(fx.Settings.Database, quiet);
                         await db.InitializeAsync().ConfigureAwait(false);
-                        Captain captain = await db.Captains.CreateAsync(new Captain("route-stop") { State = CaptainStateEnum.Working, ProcessId = 177001 }).ConfigureAwait(false);
+                        Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("route-stop") { State = CaptainStateEnum.Working, ProcessId = 177001 }).ConfigureAwait(false);
                         Mission mission = await db.Missions.CreateAsync(new Mission("held assignment") { CaptainId = captain.Id, Status = MissionStatusEnum.InProgress, ProcessId = captain.ProcessId }).ConfigureAwait(false);
-                        captain.CurrentMissionId = mission.Id;
-                        await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                        captain.Assignment = mission;
+                        await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
                         IAdmiralService admiral = (IAdmiralService)typeof(Armada.Server.ArmadaServer).GetField("_Admiral", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fx.Server)!;
                         Func<Captain, Task>? originalStop = admiral.OnStopAgent;
                         int logicalStops = 0;
@@ -72,9 +73,10 @@ namespace Test.Shared.Suites.Services
                             else
                             {
                                 AssertEqual(HttpStatusCode.Conflict, response.StatusCode, "Unconfirmed stops must report a state conflict, never success.");
-                                AssertEqual(CaptainStateEnum.Working, after.State);
-                                AssertEqual((int?)177001, after.ProcessId);
-                                AssertEqual(mission.Id, after.CurrentMissionId);
+                                AssertEqual(CaptainStateEnum.Stopping, after.State);
+                                AssertNull(after.ProcessId);
+                                AssertEqual((int?)177001, active.ProcessId);
+                                AssertEqual(mission.Id, after.ActiveMissionIds.SingleOrDefault());
                                 AssertEqual(MissionStatusEnum.InProgress, active.Status);
                                 AssertContains("Recall deferred", active.FailureReason!);
                                 AssertEqual(MissionFailureKindEnum.Infra, active.FailureKind, "the deferred recall records a kind");
@@ -83,8 +85,8 @@ namespace Test.Shared.Suites.Services
                         finally
                         {
                             // The fixture never owns a real PID: clear its synthetic assignment before server shutdown.
-                            captain.ProcessId = null; captain.CurrentMissionId = null; captain.State = CaptainStateEnum.Idle;
-                            await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                            captain.ProcessId = null; captain.Assignment = null; captain.State = CaptainStateEnum.Idle;
+                            await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
                             admiral.OnStopAgent = originalStop;
                         }
                     }, tags: new List<string> { TestTags.Negative }));
@@ -121,8 +123,13 @@ namespace Test.Shared.Suites.Services
                     LoggingModule quiet = new LoggingModule(); quiet.Settings.EnableConsole = false;
                     using DatabaseDriver db = DatabaseDriverFactory.Create(fx.Settings.Database, quiet);
                     await db.InitializeAsync().ConfigureAwait(false);
-                    Captain own = await db.Captains.CreateAsync(new Captain("owned") { TenantId = ownTenant.Id, UserId = user.Id, State = CaptainStateEnum.Working, ProcessId = 177001 }).ConfigureAwait(false);
-                    Captain other = await db.Captains.CreateAsync(new Captain("foreign") { TenantId = otherTenant.Id, UserId = otherUser.Id, State = CaptainStateEnum.Working, ProcessId = 177002 }).ConfigureAwait(false);
+                    Captain own = await CaptainAssignmentFixture.CreateAsync(db, new Captain("owned") { TenantId = ownTenant.Id, UserId = user.Id, State = CaptainStateEnum.Working, ProcessId = 177001 }).ConfigureAwait(false);
+                    Captain other = await CaptainAssignmentFixture.CreateAsync(db, new Captain("foreign") { TenantId = otherTenant.Id, UserId = otherUser.Id, State = CaptainStateEnum.Working, ProcessId = 177002 }).ConfigureAwait(false);
+                    foreach (Captain held in new[] { own, other })
+                    {
+                        held.Assignment = await db.Missions.CreateAsync(new Mission("tenant-owned execution") { TenantId=held.TenantId, UserId=held.UserId, CaptainId=held.Id, Status=MissionStatusEnum.InProgress, ProcessId=held.ProcessId });
+                        await CaptainAssignmentFixture.UpdateAsync(db, held);
+                    }
                     Vessel foreignVessel = await db.Vessels.CreateAsync(new Vessel("foreign vessel", "https://example.test/fixture.git") { TenantId = otherTenant.Id, UserId = otherUser.Id }).ConfigureAwait(false);
                     Objective foreignObjective = await db.Objectives.CreateAsync(new Objective { Title = "foreign objective", TenantId = otherTenant.Id, UserId = otherUser.Id }).ConfigureAwait(false);
                     PlanningSession foreignPlan = await db.PlanningSessions.CreateAsync(new PlanningSession
@@ -153,7 +160,7 @@ namespace Test.Shared.Suites.Services
                         foreach (Captain seeded in new[] { own, other })
                         {
                             seeded.ProcessId = null; seeded.State = CaptainStateEnum.Idle;
-                            await db.Captains.UpdateAsync(seeded).ConfigureAwait(false);
+                            await CaptainAssignmentFixture.UpdateAsync(db, seeded).ConfigureAwait(false);
                         }
                         admiral.OnStopAgent = originalStop;
                     }

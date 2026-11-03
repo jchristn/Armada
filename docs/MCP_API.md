@@ -1,8 +1,17 @@
 # Armada MCP API Reference
 
+### v1.3.0 concurrency schema boundary
+
+Migrations 119–121 complete the storage transition. Captain responses contain `MaxConcurrency`, `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; `CurrentMissionId` and `CurrentDockId` are removed. Read each mission for its `DockId`, `ProcessId`, heartbeat and recovery attempts. Captain `ProcessId` is reserved for exclusive sessions. Vessel requests use `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage`; `AllowConcurrentMissions` is removed and supplying it returns an explicit migration error. Helm rejects `--allow-concurrent` with replacement options.
+
+Mission metadata adds `RescueOfMissionId`, `BranchStrategy`, `BaseBranchName`, `ReadyUtc`, `AssignedUtc`, `Depth`, `OwnedPathsJson` and `ReadsPathsJson`. Rescue links migrate out of `ParentMissionId`; deleting the original clears the rescue link. Assignment time is recorded atomically with the slot claim. A live agent’s `Testing` marker is progress information; execution remains `InProgress` so capacity and exit ownership are retained. Migration 121 normalizes live legacy Testing jobs and preserves their process handles. Hierarchy execution, branch strategies and wait reporting remain separate plan items; persisted metadata and wait storage do not imply those operations are available yet.
+
+This is an owner-approved compatibility exception for v1.3.0; see [compatibility](COMPATIBILITY.md#v130-concurrency-exception) and [upgrade guidance](UPGRADING.md#v120-to-v130-development). Back up before upgrading and restore that backup before running an older release.
+
+
 ## v1.3.0 development: parallelization and concurrency
 
-Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The legacy singular mission/dock fields remain until migration 121; use active mission IDs to find each mission’s dock and process. Admission serializes vessel checks separately from shared capacity claims, with bounded lock waits. A lock timeout leaves the mission Pending for retry; no new endpoint or request field is needed. Equivalent captains with fewer occupied slots are preferred after explicit/persona/tier routing. See [testing](CONCURRENCY_TESTING.md).
+Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The singular mission/dock fields are removed by migration 121; use active mission IDs to find each mission’s dock and process. Admission serializes vessel checks separately from shared capacity claims, with bounded lock waits. A lock timeout leaves the mission Pending for retry; no new endpoint or request field is needed. Equivalent captains with fewer occupied slots are preferred after explicit/persona/tier routing. See [testing](CONCURRENCY_TESTING.md).
 
 **Version:** 1.3.0
 **Default URL:** `http://localhost:7891/mcp`
@@ -7207,7 +7216,6 @@ Paginated result wrapper returned by `enumerate`.
 | `gitHubTokenOverride` | string \| null | Write-only JSON input for the GitHub token override. This allows create and update requests to supply the token without Armada ever returning it. |
 | `EnableModelContext` | bool | Whether model context accumulation is enabled for this vessel. When true, captains are instructed to update the model context with key information discovered during missions. |
 | `ModelContext` | string \| null | Agent-accumulated context about this repository. Contains key information discovered by AI agents during missions, such as architectural insights, testing patterns, build quirks, and other knowledge useful for future missions. Updated by agents via update_vessel_context when EnableModelContext is true. |
-| `AllowConcurrentMissions` | bool | Whether this vessel allows multiple concurrent missions. Default false. When false, only one mission may be in an active state (Assigned, InProgress, WorkProduced, PullRequestOpen) at a time. |
 | `AutoApprove` | bool \| null | Per-vessel override of the captain auto-approve setting for missions on this vessel. Null (the default) leaves the captain's own setting in effect; true or false wins over the captain setting, so a vessel can require CLI captains to run without their auto-approve or permission-bypass flags (or allow them). |
 | `RequirePassingChecksToLand` | bool | Whether successful landing requires at least one passing structured check for the current branch or mission context. |
 | `ProtectedBranchPatterns` | array | Optional protected-branch glob or exact-match patterns. |
@@ -7267,6 +7275,14 @@ Paginated result wrapper returned by `enumerate`.
 | `SelectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | Ordered playbook selections requested for the mission |
 | `PlaybookSnapshots` | array\<[MissionPlaybookSnapshot](#missionplaybooksnapshot)\> | Immutable playbook materialization used for execution |
 | `ParentMissionId` | string \| null | Parent mission ID for sub-tasks |
+| `RescueOfMissionId` | string \| null | Server-owned original failed mission addressed by a rescue; cleared when the original is purged |
+| `BranchStrategy` | string | Persisted branch metadata, default New; hierarchy execution remains in the plan |
+| `BaseBranchName` | string \| null | Server-owned base branch metadata |
+| `Depth` | int | Server-owned hierarchy depth, default 0 |
+| `ReadyUtc` | string \| null | Server-owned readiness timestamp |
+| `AssignedUtc` | string \| null | Server-owned atomic assignment timestamp |
+| `OwnedPathsJson` | string \| null | Server-owned writable-scope metadata |
+| `ReadsPathsJson` | string \| null | Server-owned read-scope metadata |
 | `BranchName` | string \| null | Git branch name created for this mission |
 | `DockId` | string \| null | Assigned dock (worktree) ID |
 | `ProcessId` | int \| null | OS process ID of the agent working this mission |
@@ -7308,9 +7324,11 @@ Paginated result wrapper returned by `enumerate`.
 | `Runtime` | string | [AgentRuntimeEnum](#agentruntimeenum) value |
 | `Model` | string \| null | Optional model override for this captain |
 | `State` | string | [CaptainStateEnum](#captainstateenum) value |
-| `CurrentMissionId` | string \| null | Currently assigned mission ID |
-| `CurrentDockId` | string \| null | Currently assigned dock (worktree) ID |
-| `ProcessId` | int \| null | OS process ID of the agent |
+| `MaxConcurrency` | int | Maximum simultaneous execution assignments (1..256, server ceiling applies) |
+| `ActiveMissionCount` | int | Server-owned number of Assigned/InProgress execution slots |
+| `ActiveMissionIds` | string[] | Server-owned execution mission IDs; use each mission for its dock and process |
+| `CurrentSessionId` | string \| null | Server-owned exclusive planning/refinement/analysis owner |
+| `ProcessId` | int \| null | Exclusive-session process ID; execution process IDs are on each mission |
 | `RecoveryAttempts` | int | Number of recovery attempts after stalls |
 | `LastHeartbeatUtc` | string \| null | ISO 8601 last heartbeat timestamp |
 | `CreatedUtc` | string | ISO 8601 creation timestamp |

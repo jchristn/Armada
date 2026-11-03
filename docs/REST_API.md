@@ -1,8 +1,17 @@
 # Armada REST API Reference
 
+### v1.3.0 concurrency schema boundary
+
+Migrations 119–121 complete the storage transition. Captain responses contain `MaxConcurrency`, `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; `CurrentMissionId` and `CurrentDockId` are removed. Read each mission for its `DockId`, `ProcessId`, heartbeat and recovery attempts. Captain `ProcessId` is reserved for exclusive sessions. Vessel requests use `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage`; `AllowConcurrentMissions` is removed and supplying it returns an explicit migration error. Helm rejects `--allow-concurrent` with replacement options.
+
+Mission metadata adds `RescueOfMissionId`, `BranchStrategy`, `BaseBranchName`, `ReadyUtc`, `AssignedUtc`, `Depth`, `OwnedPathsJson` and `ReadsPathsJson`. Rescue links migrate out of `ParentMissionId`; deleting the original clears the rescue link. Assignment time is recorded atomically with the slot claim. A live agent’s `Testing` marker is progress information; execution remains `InProgress` so capacity and exit ownership are retained. Migration 121 normalizes live legacy Testing jobs and preserves their process handles. Hierarchy execution, branch strategies and wait reporting remain separate plan items; persisted metadata and wait storage do not imply those operations are available yet.
+
+This is an owner-approved compatibility exception for v1.3.0; see [compatibility](COMPATIBILITY.md#v130-concurrency-exception) and [upgrade guidance](UPGRADING.md#v120-to-v130-development). Back up before upgrading and restore that backup before running an older release.
+
+
 ## v1.3.0 development: parallelization and concurrency
 
-Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The legacy singular mission/dock fields remain until migration 121; use active mission IDs to find each mission’s dock and process. Admission serializes vessel checks separately from shared capacity claims, with bounded lock waits. A lock timeout leaves the mission Pending for retry; no new endpoint or request field is needed. Equivalent captains with fewer occupied slots are preferred after explicit/persona/tier routing. See [testing](CONCURRENCY_TESTING.md).
+Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The singular mission/dock fields are removed by migration 121; use active mission IDs to find each mission’s dock and process. Admission serializes vessel checks separately from shared capacity claims, with bounded lock waits. A lock timeout leaves the mission Pending for retry; no new endpoint or request field is needed. Equivalent captains with fewer occupied slots are preferred after explicit/persona/tier routing. See [testing](CONCURRENCY_TESTING.md).
 
 **Version:** 1.3.0
 **Base URL:** `http://localhost:7890`
@@ -10799,7 +10808,6 @@ A git repository registered with Armada.
 | `GitHubTokenOverrideInput` | string? | null | Write-only: supply a per-vessel GitHub token on create/update. Never returned; see `HasGitHubTokenOverride` |
 | `MaxParallelVoyages` | int | 1 | Admitted voyage groups on this vessel, including review and landing; 0 is unlimited; clamped to 0..1000 (negative becomes 1) |
 | `MaxParallelMissionsPerVoyage` | int | 4 | Running missions per voyage (Assigned/InProgress); 0 is unlimited; same bounds |
-| `AllowConcurrentMissions` | bool | false | Legacy stored field; use the numeric admission limits |
 | `AutoApprove` | bool? | null | Per-vessel override of the captain auto-approve setting; null leaves the captain's own setting in effect |
 | `RequirePassingChecksToLand` | bool | false | Landing requires at least one passing structured check for the branch or mission |
 | `ProtectedBranchPatterns` | string[] | [] | Protected-branch glob or exact-match patterns |
@@ -10929,6 +10937,14 @@ An atomic unit of work assigned to a captain.
 | `SelectedPlaybooks` | array\<[SelectedPlaybook](#selectedplaybook)\> | `[]` | Ordered playbook selections requested for the mission |
 | `PlaybookSnapshots` | array\<[MissionPlaybookSnapshot](#missionplaybooksnapshot)\> | `[]` | Immutable playbook materialization used for execution |
 | `ParentMissionId` | string? | null | Parent mission ID for sub-tasks |
+| `RescueOfMissionId` | string? | null | Server-owned rescue provenance, separate from hierarchy; cleared if the original is purged |
+| `BranchStrategy` | string | New | Persisted branch metadata; hierarchy execution is a later milestone |
+| `BaseBranchName` | string? | null | Server-owned base branch metadata |
+| `Depth` | int | 0 | Server-owned hierarchy depth |
+| `ReadyUtc` | datetime? | null | Server-owned readiness timestamp |
+| `AssignedUtc` | datetime? | null | Server-owned time of the last atomic slot assignment |
+| `OwnedPathsJson` | string? | null | Server-owned writable-scope metadata; hierarchy scheduling is not yet enabled |
+| `ReadsPathsJson` | string? | null | Server-owned read-scope metadata |
 | `BranchName` | string? | null | Git branch name |
 | `DockId` | string? | null | Dock identifier for the mission's worktree |
 | `ProcessId` | int? | null | OS process ID of the agent working on the mission |
@@ -10975,8 +10991,10 @@ A worker AI agent instance executing missions.
   "Model": null,
   "SystemInstructions": null,
   "State": "Idle",
-  "CurrentMissionId": null,
-  "CurrentDockId": null,
+  "MaxConcurrency": 1,
+  "ActiveMissionCount": 0,
+  "ActiveMissionIds": [],
+  "CurrentSessionId": null,
   "ProcessId": null,
   "RecoveryAttempts": 0,
   "LastHeartbeatUtc": null,
@@ -10995,10 +11013,12 @@ A worker AI agent instance executing missions.
 | `Model` | string? | null | Optional model override for this captain. When null, the runtime chooses its default model |
 | `SystemInstructions` | string? | null | Per-captain system instructions injected into every mission prompt |
 | `State` | [CaptainStateEnum](#captainstateenum) | `Idle` | Current state |
-| `CurrentMissionId` | string? | null | Currently assigned mission ID |
-| `CurrentDockId` | string? | null | Currently assigned dock (worktree) ID |
-| `ProcessId` | int? | null | OS process ID |
-| `RecoveryAttempts` | int | 0 | Auto-recovery attempts for current mission |
+| `MaxConcurrency` | int | runtime default | Maximum simultaneous execution assignments, bounded by the server ceiling |
+| `ActiveMissionCount` | int | 0 | Server-owned Assigned/InProgress execution count |
+| `ActiveMissionIds` | string[] | [] | Server-owned execution mission IDs |
+| `CurrentSessionId` | string? | null | Exclusive planning/refinement/analysis owner |
+| `ProcessId` | int? | null | Exclusive-session process ID; execution process IDs are on each mission |
+| `RecoveryAttempts` | int | 0 | Exclusive-session recovery state; mission recovery is StallRecoveryAttempts |
 | `LastHeartbeatUtc` | datetime? | null | Last heartbeat timestamp (UTC) |
 | `ModelEndpointId` | string? | null | Inference model endpoint driven by an `ApiEndpoint` captain; null for CLI runtimes |
 | `AllowedPersonas` | string? | null | JSON array of personas the captain may fill (for example `["Worker","Judge"]`); null allows any |

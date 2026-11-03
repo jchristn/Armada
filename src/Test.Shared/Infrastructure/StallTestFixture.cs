@@ -85,7 +85,7 @@ namespace Test.Shared.Infrastructure
             // The test process is the "agent": alive for the whole test, and never actually stopped.
             captain.ProcessId = Environment.ProcessId;
             captain.LastHeartbeatUtc = lastHeartbeatUtc;
-            captain = await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+            captain = await CaptainAssignmentFixture.CreateAsync(db, captain).ConfigureAwait(false);
 
             Dock dock = new Dock(vessel.Id);
             dock.CaptainId = captain.Id;
@@ -104,12 +104,12 @@ namespace Test.Shared.Infrastructure
             mission.ProcessId = Environment.ProcessId;
             mission = await db.Missions.CreateAsync(mission).ConfigureAwait(false);
 
-            captain.CurrentMissionId = mission.Id;
-            captain.CurrentDockId = dock.Id;
+            captain.Assignment = mission;
+            captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
             captain.LastHeartbeatUtc = lastHeartbeatUtc;
-            await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
 
-            fixture.Captain = (await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false)) ?? captain;
+            fixture.Captain = ((await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false)) ?? captain).ForMission(mission);
             fixture.Mission = mission;
             return fixture;
         }

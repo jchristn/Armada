@@ -199,7 +199,9 @@ namespace Armada.Core.BlackBox
             Line(sb, "Persona", s.Persona);
             Line(sb, "Harbor", s.HarborId == null ? null : (s.HarborName ?? s.HarborId));
             Line(sb, "Branch", s.BranchName);
-            if (s.IsRescue || s.ParentMissionId != null) Line(sb, "Rescue of", s.ParentMissionId ?? "yes");
+            // Released records stored rescue provenance as ParentMissionId; only rescue records use that fallback.
+            if (s.IsRescue || s.RescueOfMissionId != null) Line(sb, "Rescue of", s.RescueOfMissionId ?? s.ParentMissionId ?? "yes");
+            else Line(sb, "Parent mission", s.ParentMissionId);
             Line(sb, "Merge entry", s.MergeEntryId);
             Line(sb, "Incident", s.IncidentId);
             sb.Append('\n');

@@ -246,7 +246,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     screen.LandingMode.Choose(screen.LandingMode.Options.First(o => o.Value == "LocalMerge"));
                     AssertTrue(host.WaitForText("Finished work is merged into the working directory. Nothing is pushed."), "LocalMerge hint says nothing is pushed\n" + host.Screen());
                     screen.LandingMode.Choose(screen.LandingMode.Options.First(o => o.Value == "MergeAndPush"));
-                    AssertTrue(host.WaitForText("pushed to the target branch"), "MergeAndPush hint\n" + host.Screen());
+                    AssertTrue(host.WaitForText("then pushed to the target"), "MergeAndPush hint\n" + host.Screen());
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 3), "advanced to captain");
                     AssertEqual(1, stub.CountFor("POST", "/api/v1/vessels"), "one vessel post");

@@ -163,7 +163,7 @@ namespace Test.Shared.Infrastructure
             captain.State = CaptainStateEnum.Working;
             captain.ProcessId = fixture.ProcessHandle;
             captain.LastHeartbeatUtc = now - heartbeatAge;
-            captain = await db.Captains.CreateAsync(captain).ConfigureAwait(false);
+            captain = await CaptainAssignmentFixture.CreateAsync(db, captain).ConfigureAwait(false);
 
             Dock dock = new Dock(vessel.Id);
             dock.CaptainId = captain.Id;
@@ -183,10 +183,10 @@ namespace Test.Shared.Infrastructure
             mission.ProcessId = fixture.ProcessHandle;
             mission = await db.Missions.CreateAsync(mission).ConfigureAwait(false);
 
-            captain.CurrentMissionId = mission.Id;
-            captain.CurrentDockId = dock.Id;
+            captain.Assignment = mission;
+            captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
             captain.LastHeartbeatUtc = now - heartbeatAge;
-            await db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            await CaptainAssignmentFixture.UpdateAsync(db, captain).ConfigureAwait(false);
             fixture.Captain = (await db.Captains.ReadAsync(captain.Id).ConfigureAwait(false)) ?? captain;
             fixture.Mission = mission;
             return fixture;
@@ -270,17 +270,20 @@ namespace Test.Shared.Infrastructure
         public async Task ReportActivityAsync(DateTime whenUtc)
         {
             Captain captain = (await _Db.Captains.ReadAsync(Captain.Id).ConfigureAwait(false))!;
-            captain.LastHeartbeatUtc = whenUtc;
-            await _Db.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            Mission held = (await _Db.Missions.ReadAsync(Mission.Id).ConfigureAwait(false))!;
+            AssertRuntimeUpdate(await _Db.Missions.TryUpdateRuntimeContextAsync(held.Id, captain.Id, held.ProcessId, whenUtc, held.StallRecoveryAttempts).ConfigureAwait(false));
         }
 
-        /// <summary>
-        /// The captain's current record.
-        /// </summary>
-        /// <returns>The captain.</returns>
+        private static void AssertRuntimeUpdate(bool updated)
+        {
+            if (!updated) throw new InvalidOperationException("Fixture lost its mission execution owner.");
+        }
+
+        /// <summary>Read this fixture's explicit mission execution context.</summary>
+        /// <returns>The captain scoped to the fixture mission.</returns>
         public async Task<Captain> ReadCaptainAsync()
         {
-            return (await _Db.Captains.ReadAsync(Captain.Id).ConfigureAwait(false))!;
+            return (await _Db.Captains.ReadAsync(Captain.Id).ConfigureAwait(false))!.ForMission(await ReadMissionAsync().ConfigureAwait(false));
         }
 
         /// <summary>

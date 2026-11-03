@@ -75,6 +75,9 @@ namespace Armada.Core.Database.Interfaces
         /// </summary>
         Task UpdateHeartbeatAsync(string id, CancellationToken token = default);
 
+        /// <summary>Update heartbeat and recovery budget only while the recorded execution owner/process still match.</summary>
+        Task<bool> TryUpdateRuntimeContextAsync(string id, string captainId, int? processId, DateTime? heartbeatUtc, int recoveryAttempts, CancellationToken token = default);
+
         /// <summary>
         /// Delete a mission by identifier.
         /// </summary>

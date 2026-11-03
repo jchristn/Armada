@@ -1,6 +1,7 @@
 namespace Armada.Tui.Screens.Build
 {
     using System;
+    using System.Linq;
     using System.Collections.Generic;
     using Armada.Client;
     using Armada.Client.Models;
@@ -105,8 +106,7 @@ namespace Armada.Tui.Screens.Build
             Action("recall", "Recall Captain", Recall, "R", () => Captain != null && (Captain.State == CaptainStateEnum.Working || Captain.State == CaptainStateEnum.Stalled));
             Action("stop", "Stop Captain", Stop, "x", () => Captain != null && (Captain.State == CaptainStateEnum.Working || Captain.State == CaptainStateEnum.Stalled || Captain.State == CaptainStateEnum.Planning), false, true);
             Action("remove", "Remove", Remove, "del", () => Captain != null, false, true);
-            Action("mission", "View Mission", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Captain!.CurrentMissionId!)), "m", () => !String.IsNullOrEmpty(Captain?.CurrentMissionId));
-            Action("dock", "Open Dock", () => Context.Navigate("/docks/" + Uri.EscapeDataString(Captain!.CurrentDockId!)), "k", () => !String.IsNullOrEmpty(Captain?.CurrentDockId));
+            Action("mission", "View Mission", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Captain!.ActiveMissionIds[0])), "m", () => Captain?.ActiveMissionIds.Count == 1);
             Action("copy-id", "Copy ID", () => Copy(CaptainId, "Captain ID"), "y");
 
             Action("usage", "View Usage", () => SelectPanel("usage"), "U", () => Captain != null, true);
@@ -137,9 +137,9 @@ namespace Armada.Tui.Screens.Build
             {
                 CaptainLoad result = new CaptainLoad();
                 result.Captain = await c.GetCaptainAsync(CaptainId, t).ConfigureAwait(false);
-                if (result.Captain != null && !String.IsNullOrEmpty(result.Captain.CurrentMissionId))
+                if (result.Captain != null && !String.IsNullOrEmpty(result.Captain.ActiveMissionIds.FirstOrDefault()))
                 {
-                    try { result.CurrentMission = await c.GetMissionAsync(result.Captain.CurrentMissionId!, t).ConfigureAwait(false); }
+                    try { result.CurrentMission = await c.GetMissionAsync(result.Captain.ActiveMissionIds.FirstOrDefault()!, t).ConfigureAwait(false); }
                     catch (ArmadaApiException) { result.CurrentMission = null; }
                 }
 
@@ -330,10 +330,12 @@ namespace Armada.Tui.Screens.Build
                 doc.Field("Quarantine", q + "   q " + Tr("Lift Quarantine"), doc.Theme.Warning);
             }
 
-            doc.Field("Current Mission", String.IsNullOrEmpty(c.CurrentMissionId) ? "-" : c.CurrentMissionId + "   (m)");
-            doc.Field("Current Dock", String.IsNullOrEmpty(c.CurrentDockId) ? "-" : c.CurrentDockId + "   (k)");
+            doc.Field("Current Mission", String.IsNullOrEmpty(String.Join(", ", c.ActiveMissionIds)) ? "-" : String.Join(", ", c.ActiveMissionIds) + "   (m)");
+            if (c.CurrentSessionId != null)
+            {
             doc.Field("Process ID", c.ProcessId.HasValue && c.ProcessId.Value != 0 ? c.ProcessId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "-");
             doc.Field("Recovery Attempts", c.RecoveryAttempts.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
             doc.Field("Last Heartbeat", c.LastHeartbeatUtc.HasValue ? Context.Loc.FormatRelative(c.LastHeartbeatUtc.Value, now) + " (" + Context.Loc.FormatDateTime(c.LastHeartbeatUtc.Value) + ")" : "-");
             doc.Field("Created", Context.Loc.FormatRelative(c.CreatedUtc, now) + " (" + Context.Loc.FormatDateTime(c.CreatedUtc) + ")");
             doc.Field("Last Updated", Context.Loc.FormatRelative(c.LastUpdateUtc, now) + " (" + Context.Loc.FormatDateTime(c.LastUpdateUtc) + ")");

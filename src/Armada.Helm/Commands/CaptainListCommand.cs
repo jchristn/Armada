@@ -64,18 +64,9 @@ namespace Armada.Helm.Commands
                     ? captain.LastHeartbeatUtc.Value.ToString("HH:mm:ss")
                     : "[dim]-[/]";
 
-                string missionCell = "-";
-                if (!string.IsNullOrEmpty(captain.CurrentMissionId))
-                {
-                    if (missionLookup.TryGetValue(captain.CurrentMissionId, out Mission? mission) && !string.IsNullOrEmpty(mission.Title))
-                    {
-                        missionCell = Markup.Escape(mission.Title) + "\n" + $"[dim]{Markup.Escape(captain.CurrentMissionId)}[/]";
-                    }
-                    else
-                    {
-                        missionCell = Markup.Escape(captain.CurrentMissionId);
-                    }
-                }
+                string missionCell = captain.ActiveMissionIds.Count == 0 ? "-" : String.Join("\n", captain.ActiveMissionIds.Select(id =>
+                    missionLookup.TryGetValue(id, out Mission? mission) && !String.IsNullOrEmpty(mission.Title)
+                        ? Markup.Escape(mission.Title) + "\n[dim]" + Markup.Escape(id) + "[/]" : Markup.Escape(id)));
 
                 table.AddRow(
                     $"[dim]{Markup.Escape(captain.Id)}[/]",

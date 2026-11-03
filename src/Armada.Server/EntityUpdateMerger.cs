@@ -15,6 +15,18 @@ namespace Armada.Server
     {
         #region Public-Methods
 
+        /// <summary>Clear server-derived concurrency metadata supplied by an external mission creator.</summary>
+        public static void ResetMissionConcurrencyMetadata(Mission mission)
+        {
+            mission.RescueOfMissionId = null;
+            mission.BaseBranchName = null;
+            mission.ReadyUtc = null;
+            mission.AssignedUtc = null;
+            mission.Depth = 0;
+            mission.OwnedPathsJson = null;
+            mission.ReadsPathsJson = null;
+        }
+
         /// <summary>
         /// Apply a fleet replacement body: the body supplies the editable fields; id, tenant, owner, and creation time
         /// come from the stored record.
@@ -88,7 +100,7 @@ namespace Armada.Server
 
         /// <summary>
         /// Apply a captain replacement body: the body supplies the configuration fields (name, runtime, model, persona
-        /// and runtime options); id, tenant, owner, operational state (state, current mission and dock, process,
+        /// and runtime options); id, tenant, owner, operational state (state, active mission identities, exclusive session, process,
         /// recovery attempts, quarantine, heartbeats), and creation time come from the stored record. Runtime options
         /// are normalized for the runtime as on create.
         /// </summary>
@@ -151,8 +163,6 @@ namespace Armada.Server
             incoming.TenantId = existing.TenantId;
             incoming.UserId = existing.UserId;
             incoming.State = existing.State;
-            incoming.CurrentMissionId = existing.CurrentMissionId;
-            incoming.CurrentDockId = existing.CurrentDockId;
             incoming.ProcessId = existing.ProcessId;
             incoming.RecoveryAttempts = existing.RecoveryAttempts;
             incoming.QuarantineUntilUtc = existing.QuarantineUntilUtc;

@@ -35,8 +35,8 @@ interface CaptainDetailData {
 async function loadDetail(id: string): Promise<CaptainDetailData> {
   const captain = await getCaptain(id);
   let currentMission: Mission | null = null;
-  if (captain.currentMissionId) {
-    try { currentMission = await getMission(captain.currentMissionId); } catch { currentMission = null; }
+  if (captain.activeMissionIds?.length === 1) {
+    try { currentMission = await getMission(captain.activeMissionIds[0]); } catch { currentMission = null; }
   }
   let missions: MissionSummary[] = [];
   try {
@@ -186,16 +186,12 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
           ) : null}
 
           <Section title={t('Activity')}>
-            <InfoRow label={t('Running missions')} value={`${captain.activeMissionCount ?? (captain.currentMissionId ? 1 : 0)} / ${captain.maxConcurrency ?? 1}`} />
+            <InfoRow label={t('Running missions')} value={`${captain.activeMissionCount ?? 0} / ${captain.maxConcurrency ?? 1}`} />
             {(captain.activeMissionIds ?? []).map(id => <ListRow key={id} title={id} onPress={() => router.push(`/missions/${encodeURIComponent(id)}` as Href)} />)}
-            {captain.currentMissionId ? (
-              <ListRow title={t('Current Mission')} subtitle={captain.currentMissionId} onPress={() => router.push(`/missions/${captain.currentMissionId}` as Href)} testID="captain-current-mission" />
-            ) : <InfoRow label={t('Current Mission')} value={null} />}
-            {captain.currentDockId ? (
-              <ListRow title={t('Current Dock')} subtitle={captain.currentDockId} onPress={() => router.push(`/docks/${captain.currentDockId}` as Href)} testID="captain-current-dock" />
-            ) : <InfoRow label={t('Current Dock')} value={null} />}
-            <InfoRow label={t('Process ID')} value={captain.processId} />
-            <InfoRow label={t('Recovery Attempts')} value={captain.recoveryAttempts ?? 0} />
+            {captain.currentSessionId ? <>
+              <InfoRow label={t('Process ID')} value={captain.processId} />
+              <InfoRow label={t('Recovery Attempts')} value={captain.recoveryAttempts ?? 0} />
+            </> : null}
             <InfoRow label={t('Last Heartbeat')} value={captain.lastHeartbeatUtc ? `${formatRelativeTime(captain.lastHeartbeatUtc)} (${formatDateTime(captain.lastHeartbeatUtc)})` : null} />
             <InfoRow label={t('Created')} value={`${formatRelativeTime(captain.createdUtc)} (${formatDateTime(captain.createdUtc)})`} />
             <InfoRow label={t('Last Updated')} value={`${formatRelativeTime(captain.lastUpdateUtc)} (${formatDateTime(captain.lastUpdateUtc)})`} />

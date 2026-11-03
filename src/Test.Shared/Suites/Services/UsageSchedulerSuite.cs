@@ -211,7 +211,7 @@ namespace Test.Shared.Suites.Services
                     UsageCaptureIntervalSeconds = 300,
                     UsageCaptureMode = UsageCaptureModeEnum.Auto
                 };
-                second = await fixture.Database.Captains.CreateAsync(second).ConfigureAwait(false);
+                second = await CaptainAssignmentFixture.CreateAsync(fixture.Database, second).ConfigureAwait(false);
 
                 UsageCaptureScheduler scheduler = fixture.CreateScheduler();
                 await scheduler.RebuildAsync().ConfigureAwait(false);
@@ -286,7 +286,7 @@ namespace Test.Shared.Suites.Services
                 Captain captain = await fixture.CreateCaptainAsync("mode-disabled", 300).ConfigureAwait(false);
                 captain.UsageCaptureEnabled = true;
                 captain.UsageCaptureMode = UsageCaptureModeEnum.Disabled;
-                await fixture.Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(fixture.Database, captain).ConfigureAwait(false);
 
                 UsageCaptureScheduler scheduler = fixture.CreateScheduler();
                 await scheduler.RebuildAsync().ConfigureAwait(false);
@@ -303,7 +303,7 @@ namespace Test.Shared.Suites.Services
 
                 // Switching the mode to Auto makes the same captain schedulable again.
                 captain.UsageCaptureMode = UsageCaptureModeEnum.Auto;
-                await fixture.Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(fixture.Database, captain).ConfigureAwait(false);
                 await scheduler.RebuildAsync().ConfigureAwait(false);
                 UsageCaptureGroup group = scheduler.Groups()[0];
                 AssertEqual(1, group.MemberCaptainIds.Count, "the re-enabled captain forms one group");
@@ -349,7 +349,7 @@ namespace Test.Shared.Suites.Services
                 fixture.Settings.UsageCapture.Enabled = true;
                 Captain idle = await fixture.CreateCaptainAsync("idle", 300).ConfigureAwait(false);
                 idle.UsageCaptureEnabled = false;
-                await fixture.Database.Captains.UpdateAsync(idle).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(fixture.Database, idle).ConfigureAwait(false);
                 UsageCaptureScheduler rebuilt = fixture.CreateScheduler();
                 await rebuilt.RebuildAsync().ConfigureAwait(false);
                 AssertEqual(1, rebuilt.Groups().Count, "only the capturing captain forms a group");
@@ -583,8 +583,8 @@ namespace Test.Shared.Suites.Services
                     Captain local = await fixture.CreateCaptainAsync("local-dock", 300).ConfigureAwait(false);
                     Dock localDock = new Dock(localVessel.Id) { TenantId = TenantId, CaptainId = local.Id };
                     localDock = await fixture.Database.Docks.CreateAsync(localDock).ConfigureAwait(false);
-                    local.CurrentDockId = localDock.Id;
-                    local = await fixture.Database.Captains.UpdateAsync(local).ConfigureAwait(false);
+                    local.Assignment ??= new Mission("fixture assignment"); local.Assignment.DockId = localDock.Id;
+                    local = await CaptainAssignmentFixture.UpdateAsync(fixture.Database, local).ConfigureAwait(false);
 
                     UsageProbeHost? resolved = await fixture.Accounts.TryResolveHostAsync(fixture.Database, manager, local, fixture.Settings).ConfigureAwait(false);
                     AssertNotNull(resolved, "a local dock resolves to the Admiral host");
@@ -599,8 +599,8 @@ namespace Test.Shared.Suites.Services
                     Captain remote = await fixture.CreateCaptainAsync("harbor-dock", 300).ConfigureAwait(false);
                     Dock harborDock = new Dock(remoteVessel.Id) { TenantId = TenantId, CaptainId = remote.Id, HarborId = "hbr_sched", RepositoryPath = "/repos/vsl_remote" };
                     harborDock = await fixture.Database.Docks.CreateAsync(harborDock).ConfigureAwait(false);
-                    remote.CurrentDockId = harborDock.Id;
-                    remote = await fixture.Database.Captains.UpdateAsync(remote).ConfigureAwait(false);
+                    remote.Assignment ??= new Mission("fixture assignment"); remote.Assignment.DockId = harborDock.Id;
+                    remote = await CaptainAssignmentFixture.UpdateAsync(fixture.Database, remote).ConfigureAwait(false);
 
                     UsageProbeHost? harborHost = await fixture.Accounts.TryResolveHostAsync(fixture.Database, manager, remote, fixture.Settings).ConfigureAwait(false);
                     AssertNotNull(harborHost, "a Harbor dock resolves to that Harbor");
@@ -818,7 +818,7 @@ namespace Test.Shared.Suites.Services
 
                 // The dropped captain opts out while the probe is held.
                 dropped.UsageCaptureEnabled = false;
-                await fixture.Database.Captains.UpdateAsync(dropped).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(fixture.Database, dropped).ConfigureAwait(false);
 
                 fixture.Executor.Release();
                 UsageCaptureAttemptResult result = await AwaitAsync(attempt.Completion).ConfigureAwait(false);
@@ -843,7 +843,7 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(singleAttempt.Started, "the single-member attempt starts");
 
                 kept.UsageCaptureEnabled = false;
-                await fixture.Database.Captains.UpdateAsync(kept).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(fixture.Database, kept).ConfigureAwait(false);
                 fixture.Executor.Release();
 
                 UsageCaptureAttemptResult discarded = await AwaitAsync(singleAttempt.Completion).ConfigureAwait(false);
@@ -1152,7 +1152,7 @@ namespace Test.Shared.Suites.Services
                 long nextGeneration = fixture.Service.Generation;
                 fixture.Settings.UsageCapture.MinimumIntervalSeconds = 60;
                 captain.UsageCaptureIntervalSeconds = 900;
-                await fixture.Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(fixture.Database, captain).ConfigureAwait(false);
                 await scheduler.RebuildAsync().ConfigureAwait(false);
                 AssertTrue(fixture.Service.Generation > nextGeneration, "a member's requested interval change invalidates the generation");
                 AssertEqual(900, scheduler.Groups()[0].EffectiveIntervalSeconds, "the rebuilt group runs at the member's new interval");
@@ -1588,7 +1588,7 @@ namespace Test.Shared.Suites.Services
                     UsageCaptureIntervalSeconds = intervalSeconds,
                     UsageCaptureMode = UsageCaptureModeEnum.Auto
                 };
-                return await Database.Captains.CreateAsync(captain).ConfigureAwait(false);
+                return await CaptainAssignmentFixture.CreateAsync(Database, captain).ConfigureAwait(false);
             }
 
             public async Task<Captain> CreateCustomCaptainAsync(string name, string commandJson)
@@ -1601,7 +1601,7 @@ namespace Test.Shared.Suites.Services
                     UsageCaptureMode = UsageCaptureModeEnum.Custom,
                     UsageCaptureCommand = commandJson
                 };
-                return await Database.Captains.CreateAsync(captain).ConfigureAwait(false);
+                return await CaptainAssignmentFixture.CreateAsync(Database, captain).ConfigureAwait(false);
             }
 
             public void Dispose()

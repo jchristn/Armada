@@ -213,7 +213,6 @@ export interface Vessel {
   auditCommand?: string | null;
   /** Default Worker eligibility envelope for missions on this vessel; null or absent means none (routing unchanged). */
   workerEnvelope?: WorkerEnvelope | null;
-  allowConcurrentMissions: boolean;
   maxParallelVoyages?: number;
   maxParallelMissionsPerVoyage?: number;
   /** Chain a mission that overlaps an active one after it (DependsOnMissionId) at dispatch. */
@@ -286,8 +285,6 @@ export interface Captain {
   /** True when capture is enabled and the mode is not Disabled. */
   usageCaptureActive?: boolean;
   state: string;
-  currentMissionId: string | null;
-  currentDockId: string | null;
   processId: number | null;
   recoveryAttempts: number;
   lastHeartbeatUtc: string | null;
@@ -386,6 +383,14 @@ export interface Mission {
   mode: MissionMode;
   priority: number;
   parentMissionId: string | null;
+  rescueOfMissionId?: string | null;
+  branchStrategy?: 'New' | 'ContinueParent' | 'ForkFromParent';
+  baseBranchName?: string | null;
+  depth?: number;
+  readyUtc?: string | null;
+  assignedUtc?: string | null;
+  ownedPathsJson?: string | null;
+  readsPathsJson?: string | null;
   persona: string | null;
   dependsOnMissionId: string | null;
   requiresReview: boolean;

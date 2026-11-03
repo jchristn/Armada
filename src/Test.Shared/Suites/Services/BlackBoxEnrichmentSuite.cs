@@ -308,12 +308,27 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1, link.OverlapFileCount);
             }));
 
+            cases.Add(Case("hierarchy_is_not_rescue", "A hierarchy parent is not recorded as rescue provenance", TestTags.Positive, async () =>
+            {
+                using Fixture f = await Fixture.CreateAsync();
+                Mission parent = await f.AddMissionAsync("Hierarchy parent", MissionStatusEnum.Failed);
+                f.Mission.ParentMissionId = parent.Id;
+                await f.Db.Driver.Missions.UpdateAsync(f.Mission);
+                string id = await f.CaptureConflictAsync("src/core/a.cs");
+                BlackBoxEntry entry = await f.ProcessAsync(id);
+                BlackBoxRecord record = await f.Bb.Pipeline.LoadRecordAsync(entry);
+                AssertEqual(parent.Id, record.Subject!.ParentMissionId);
+                AssertNull(record.Subject.RescueOfMissionId);
+                AssertTrue(record.Subject.RescueChain == null || record.Subject.RescueChain.Count == 0);
+                AssertFalse((await f.LinksAsync(id)).Any(l => l.Relation == BlackBoxLinkRelationEnum.RescueOf));
+            }));
+
             cases.Add(Case("attempts_and_rescue_chain", "Stage outcomes and handoffs become attempts; the rescue chain, counters and rescue links are recorded", TestTags.Positive, async () =>
             {
                 using Fixture f = await Fixture.CreateAsync().ConfigureAwait(false);
                 Mission grandparent = await f.AddMissionAsync("Original", MissionStatusEnum.Failed).ConfigureAwait(false);
-                Mission parent = await f.AddMissionAsync("Rescue 1", MissionStatusEnum.Failed, m => m.ParentMissionId = grandparent.Id).ConfigureAwait(false);
-                f.Mission.ParentMissionId = parent.Id;
+                Mission parent = await f.AddMissionAsync("Rescue 1", MissionStatusEnum.Failed, m => m.RescueOfMissionId = grandparent.Id).ConfigureAwait(false);
+                f.Mission.RescueOfMissionId = parent.Id;
                 f.Mission.IsRescue = true;
                 f.Mission.RedispatchAttempts = 2;
                 await f.Db.Driver.Missions.UpdateAsync(f.Mission).ConfigureAwait(false);
@@ -331,6 +346,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("Blocked", record.Attempts.Single(a => a.Source == "Handoff").Disposition);
                 AssertEqual(parent.Id + "," + grandparent.Id, String.Join(",", record.Subject!.RescueChain!), "nearest ancestor first");
                 AssertEqual(2, record.Subject.RedispatchAttempts);
+                AssertEqual(parent.Id, record.Subject.RescueOfMissionId);
+                AssertNull(record.Subject.ParentMissionId);
                 List<BlackBoxLink> links = await f.LinksAsync(entryId).ConfigureAwait(false);
                 AssertEqual(parent.Id, links.Single(l => l.Relation == BlackBoxLinkRelationEnum.RescueOf).MissionId);
                 AssertEqual("msn_rescue_child", links.Single(l => l.Relation == BlackBoxLinkRelationEnum.ParentOfRescue).MissionId);

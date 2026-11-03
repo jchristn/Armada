@@ -57,8 +57,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (SqlCommand cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, system_instructions, allowed_personas, preferred_persona, runtime_options_json, cli_permission_policy, reasoning_effort, tier, state, current_mission_id, current_dock_id, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc, usage_capture_enabled, usage_capture_interval_seconds, usage_capture_mode, usage_capture_command, usage_capture_harbor_id, active)
-                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @cli_permission_policy, @reasoning_effort, @tier, @state, @current_mission_id, @current_dock_id, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc, @usage_capture_enabled, @usage_capture_interval_seconds, @usage_capture_mode, @usage_capture_command, @usage_capture_harbor_id, @active);";
+                    cmd.CommandText = @"INSERT INTO captains (id, tenant_id, user_id, name, runtime, model, model_endpoint_id, system_instructions, allowed_personas, preferred_persona, runtime_options_json, max_concurrency, current_session_id, cli_permission_policy, reasoning_effort, tier, state, process_id, recovery_attempts, last_heartbeat_utc, last_process_alive_utc, quarantine_until_utc, quarantine_reason, created_utc, last_update_utc, usage_capture_enabled, usage_capture_interval_seconds, usage_capture_mode, usage_capture_command, usage_capture_harbor_id, active)
+                        VALUES (@id, @tenant_id, @user_id, @name, @runtime, @model, @model_endpoint_id, @system_instructions, @allowed_personas, @preferred_persona, @runtime_options_json, @max_concurrency, @current_session_id, @cli_permission_policy, @reasoning_effort, @tier, @state, @process_id, @recovery_attempts, @last_heartbeat_utc, @last_process_alive_utc, @quarantine_until_utc, @quarantine_reason, @created_utc, @last_update_utc, @usage_capture_enabled, @usage_capture_interval_seconds, @usage_capture_mode, @usage_capture_command, @usage_capture_harbor_id, @active);";
                     cmd.Parameters.AddWithValue("@id", captain.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)captain.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)captain.UserId ?? DBNull.Value);
@@ -76,9 +76,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@reasoning_effort", (object?)captain.ReasoningEffort?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@tier", (object?)captain.Tier?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@state", captain.State.ToString());
-                    cmd.Parameters.AddWithValue("@current_mission_id", (object?)captain.CurrentMissionId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@current_dock_id", (object?)captain.CurrentDockId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@process_id", captain.ProcessId.HasValue ? (object)captain.ProcessId.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@process_id", captain.CurrentSessionId != null && captain.ProcessId.HasValue ? (object)captain.ProcessId.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@recovery_attempts", captain.RecoveryAttempts);
                     cmd.Parameters.AddWithValue("@last_heartbeat_utc", captain.LastHeartbeatUtc.HasValue ? (object)SqlServerDatabaseDriver.ToIso8601(captain.LastHeartbeatUtc.Value) : DBNull.Value);
                     cmd.Parameters.AddWithValue("@last_process_alive_utc", captain.LastProcessAliveUtc.HasValue ? (object)captain.LastProcessAliveUtc.Value : DBNull.Value);
@@ -172,9 +170,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                         reasoning_effort = @reasoning_effort,
                         tier = @tier,
                         state = CASE WHEN current_session_id IS NOT NULL THEN state WHEN active_mission_count > 0 AND state IN ('Quarantined','Stopping') AND @state = 'Working' THEN state WHEN active_mission_count > 0 AND @state = 'Idle' THEN CASE WHEN state='Quarantined' AND @quarantine_until_utc IS NULL AND @quarantine_reason IS NULL THEN 'Working' ELSE state END WHEN active_mission_count > 0 AND @state IN ('Planning','Refining','Analyzing') THEN state WHEN active_mission_count > 1 AND @state = 'Stalled' THEN 'Working' ELSE @state END,
-                        current_mission_id = CASE WHEN current_session_id IS NOT NULL OR active_mission_count > 0 THEN current_mission_id ELSE @current_mission_id END,
-                        current_dock_id = CASE WHEN current_session_id IS NOT NULL OR active_mission_count > 0 THEN current_dock_id ELSE @current_dock_id END,
-                        process_id = CASE WHEN current_session_id IS NOT NULL OR active_mission_count > 0 THEN process_id ELSE @process_id END,
+                        process_id = CASE WHEN current_session_id IS NOT NULL THEN process_id ELSE NULL END,
                         recovery_attempts = @recovery_attempts,
                         last_heartbeat_utc = @last_heartbeat_utc,
                         last_process_alive_utc = @last_process_alive_utc,
@@ -204,8 +200,6 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     cmd.Parameters.AddWithValue("@reasoning_effort", (object?)captain.ReasoningEffort?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@tier", (object?)captain.Tier?.ToString() ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@state", captain.State.ToString());
-                    cmd.Parameters.AddWithValue("@current_mission_id", (object?)captain.CurrentMissionId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@current_dock_id", (object?)captain.CurrentDockId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@process_id", captain.ProcessId.HasValue ? (object)captain.ProcessId.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@recovery_attempts", captain.RecoveryAttempts);
                     cmd.Parameters.AddWithValue("@last_heartbeat_utc", captain.LastHeartbeatUtc.HasValue ? (object)SqlServerDatabaseDriver.ToIso8601(captain.LastHeartbeatUtc.Value) : DBNull.Value);
@@ -665,36 +659,8 @@ namespace Armada.Core.Database.SqlServer.Implementations
         /// <inheritdoc />
         public async Task<bool> TryClaimAsync(string tenantId, string captainId, string missionId, string dockId, CancellationToken token = default)
         {
-            if (string.IsNullOrEmpty(tenantId)) throw new ArgumentNullException(nameof(tenantId));
-            if (string.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
-            if (string.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
-            if (string.IsNullOrEmpty(dockId)) throw new ArgumentNullException(nameof(dockId));
-
-            DateTime now = DateTime.UtcNow;
-
-            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
-            {
-                await conn.OpenAsync(token).ConfigureAwait(false);
-                using (SqlCommand cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = @"UPDATE captains SET
-                        state = @state,
-                        current_mission_id = @current_mission_id,
-                        current_dock_id = @current_dock_id,
-                        last_heartbeat_utc = @last_heartbeat_utc,
-                        last_update_utc = @last_update_utc
-                        WHERE tenant_id = @tenantId AND id = @id AND active_mission_count = 0 AND current_session_id IS NULL AND state = 'Idle' AND active = 1;";
-                    cmd.Parameters.AddWithValue("@tenantId", tenantId);
-                    cmd.Parameters.AddWithValue("@id", captainId);
-                    cmd.Parameters.AddWithValue("@state", CaptainStateEnum.Working.ToString());
-                    cmd.Parameters.AddWithValue("@current_mission_id", missionId);
-                    cmd.Parameters.AddWithValue("@current_dock_id", dockId);
-                    cmd.Parameters.AddWithValue("@last_heartbeat_utc", SqlServerDatabaseDriver.ToIso8601(now));
-                    cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(now));
-                    int rowsAffected = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                    return rowsAffected > 0;
-                }
-            }
+            if (await ReadAsync(tenantId, captainId, token).ConfigureAwait(false) == null) return false;
+            return await TryClaimAsync(captainId, missionId, dockId, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -955,7 +921,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
         /// <inheritdoc />
         public async Task<bool> TrySetDockAsync(string captainId, string missionId, string dockId, CancellationToken token = default)
         {
-            return await WithSlotsAsync(store => store.SetAssignmentAsync(captainId, missionId, "current_dock_id", dockId, token), token).ConfigureAwait(false);
+            return await WithSlotsAsync(store => store.SetAssignmentAsync(captainId, missionId, "dock_id", dockId, token), token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />

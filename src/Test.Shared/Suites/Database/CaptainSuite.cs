@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites.Database
 {
+    using System.Linq;
     using System;
     using System.Collections.Generic;
     using System.Threading;
@@ -40,25 +41,25 @@ namespace Test.Shared.Suites.Database
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
                 {
                     DatabaseDriver db = testDb.Driver;
-                    Captain captain = await db.Captains.CreateAsync(new Captain("active-test"));
+                    Captain captain = await CaptainAssignmentFixture.CreateAsync(db, new Captain("active-test"));
                     AssertTrue((await db.Captains.ReadAsync(captain.Id))!.Active);
                     captain.Active = false;
-                    await db.Captains.UpdateAsync(captain, updateActive: true);
+                    await CaptainAssignmentFixture.UpdateAsync(db, captain, updateActive: true);
                     AssertFalse((await db.Captains.ReadAsync(captain.Id))!.Active);
                     AssertFalse(await db.Captains.TryClaimAsync(captain.Id, "msn_disabled", null));
                     captain.Active = true;
-                    await db.Captains.UpdateAsync(captain, updateActive: true);
+                    await CaptainAssignmentFixture.UpdateAsync(db, captain, updateActive: true);
                     AssertTrue(await db.Captains.TryClaimAsync(captain.Id, "msn_enabled", null));
                     Captain working = (await db.Captains.ReadAsync(captain.Id))!;
                     working.Active = false;
-                    await db.Captains.UpdateAsync(working, updateActive: true);
+                    await CaptainAssignmentFixture.UpdateAsync(db, working, updateActive: true);
                     Captain stored = (await db.Captains.ReadAsync(captain.Id))!;
                     AssertFalse(stored.Active);
                     working.Active = true;
-                    await db.Captains.UpdateAsync(working);
+                    await CaptainAssignmentFixture.UpdateAsync(db, working);
                     AssertFalse((await db.Captains.ReadAsync(captain.Id))!.Active);
                     AssertEqual(CaptainStateEnum.Working, stored.State);
-                    AssertEqual("msn_enabled", stored.CurrentMissionId);
+                    AssertEqual("msn_enabled", stored.ActiveMissionIds.SingleOrDefault());
                 }
             }));
 
@@ -69,7 +70,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("create-test", AgentRuntimeEnum.ClaudeCode);
-                    Captain result = await db.Captains.CreateAsync(captain);
+                    Captain result = await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     AssertNotNull(result);
                     AssertEqual("create-test", result.Name);
@@ -85,7 +86,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("read-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
                     AssertNotNull(result);
@@ -101,7 +102,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("name-lookup-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     Captain? result = await db.Captains.ReadByNameAsync("name-lookup-test");
                     AssertNotNull(result);
@@ -116,21 +117,23 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("update-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = "msn_test123";
-                    captain.CurrentDockId = "dck_test456";
+                    captain.Assignment = await db.Missions.CreateAsync(new Mission("update assignment") { Id = "msn_test123" });
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = "dck_test456";
                     captain.ProcessId = 9876;
                     captain.RecoveryAttempts = 3;
-                    await db.Captains.UpdateAsync(captain);
+                    await CaptainAssignmentFixture.UpdateAsync(db, captain);
 
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
                     AssertNotNull(result);
                     AssertEqual(CaptainStateEnum.Working, result!.State);
-                    AssertEqual("msn_test123", result.CurrentMissionId);
-                    AssertEqual("dck_test456", result.CurrentDockId);
-                    AssertEqual(9876, result.ProcessId);
+                    AssertEqual("msn_test123", result.ActiveMissionIds.SingleOrDefault());
+                    AssertNull(result.Assignment);
+                    AssertEqual("dck_test456", (await db.Missions.ReadAsync("msn_test123"))!.DockId);
+                    AssertNull(result.ProcessId);
+                    AssertEqual(9876, await db.Captains.ReadMissionProcessAsync(captain.Id, "msn_test123"));
                     AssertEqual(3, result.RecoveryAttempts);
                 }
             }));
@@ -141,7 +144,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("exists-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     AssertTrue(await db.Captains.ExistsAsync(captain.Id));
                     AssertFalse(await db.Captains.ExistsAsync("cpt_nonexistent"));
@@ -156,9 +159,9 @@ namespace Test.Shared.Suites.Database
                     Captain c1 = new Captain("enum-1");
                     Captain c2 = new Captain("enum-2");
                     Captain c3 = new Captain("enum-3");
-                    await db.Captains.CreateAsync(c1);
-                    await db.Captains.CreateAsync(c2);
-                    await db.Captains.CreateAsync(c3);
+                    await CaptainAssignmentFixture.CreateAsync(db, c1);
+                    await CaptainAssignmentFixture.CreateAsync(db, c2);
+                    await CaptainAssignmentFixture.CreateAsync(db, c3);
 
                     List<Captain> all = await db.Captains.EnumerateAsync();
                     AssertEqual(3, all.Count);
@@ -173,7 +176,7 @@ namespace Test.Shared.Suites.Database
                     for (int i = 0; i < 5; i++)
                     {
                         Captain captain = new Captain("page-" + i.ToString());
-                        await db.Captains.CreateAsync(captain);
+                        await CaptainAssignmentFixture.CreateAsync(db, captain);
                     }
 
                     EnumerationQuery query = new EnumerationQuery();
@@ -211,10 +214,10 @@ namespace Test.Shared.Suites.Database
                     Captain stalled1 = new Captain("stalled-1");
                     stalled1.State = CaptainStateEnum.Stalled;
 
-                    await db.Captains.CreateAsync(idle1);
-                    await db.Captains.CreateAsync(idle2);
-                    await db.Captains.CreateAsync(working1);
-                    await db.Captains.CreateAsync(stalled1);
+                    await CaptainAssignmentFixture.CreateAsync(db, idle1);
+                    await CaptainAssignmentFixture.CreateAsync(db, idle2);
+                    await CaptainAssignmentFixture.CreateAsync(db, working1);
+                    await CaptainAssignmentFixture.CreateAsync(db, stalled1);
 
                     List<Captain> idle = await db.Captains.EnumerateByStateAsync(CaptainStateEnum.Idle);
                     AssertEqual(2, idle.Count);
@@ -238,7 +241,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("state-change-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
                     AssertEqual(CaptainStateEnum.Idle, captain.State);
 
                     await db.Captains.UpdateStateAsync(captain.Id, CaptainStateEnum.Working);
@@ -261,7 +264,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("heartbeat-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     Captain? before = await db.Captains.ReadAsync(captain.Id);
                     AssertNull(before!.LastHeartbeatUtc);
@@ -281,17 +284,19 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("claim-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
                     AssertEqual(CaptainStateEnum.Idle, captain.State);
 
+                    await db.Missions.CreateAsync(new Mission("claim") { Id = "msn_claim_test" });
                     bool claimed = await db.Captains.TryClaimAsync(captain.Id, "msn_claim_test", "dck_claim_test");
                     AssertTrue(claimed);
 
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
                     AssertNotNull(result);
                     AssertEqual(CaptainStateEnum.Working, result!.State);
-                    AssertEqual("msn_claim_test", result.CurrentMissionId);
-                    AssertEqual("dck_claim_test", result.CurrentDockId);
+                    AssertEqual("msn_claim_test", result.ActiveMissionIds.SingleOrDefault());
+                    AssertNull(result.Assignment);
+                    AssertEqual("dck_claim_test", (await db.Missions.ReadAsync("msn_claim_test"))!.DockId);
                 }
             }));
 
@@ -302,17 +307,18 @@ namespace Test.Shared.Suites.Database
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("already-working");
                     captain.State = CaptainStateEnum.Working;
-                    captain.CurrentMissionId = "msn_existing";
-                    captain.CurrentDockId = "dck_existing";
-                    await db.Captains.CreateAsync(captain);
+                    captain.Assignment = await db.Missions.CreateAsync(new Mission("existing") { Id = "msn_existing" });
+                    captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = "dck_existing";
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     bool claimed = await db.Captains.TryClaimAsync(captain.Id, "msn_new", "dck_new");
                     AssertFalse(claimed);
 
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Working, result!.State);
-                    AssertEqual("msn_existing", result.CurrentMissionId);
-                    AssertEqual("dck_existing", result.CurrentDockId);
+                    AssertEqual("msn_existing", result.ActiveMissionIds.SingleOrDefault());
+                    AssertNull(result.Assignment);
+                    AssertEqual("dck_existing", (await db.Missions.ReadAsync("msn_existing"))!.DockId);
                 }
             }));
 
@@ -322,13 +328,14 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("claim-first");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
+                    await db.Missions.CreateAsync(new Mission("first") { Id = "msn_first" });
                     AssertTrue(await db.Captains.TryClaimAsync(captain.Id, "msn_first", null), "claim without a dock");
                     Captain? claimed = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Working, claimed!.State);
-                    AssertEqual("msn_first", claimed.CurrentMissionId);
-                    AssertNull(claimed.CurrentDockId);
+                    AssertEqual("msn_first", claimed.ActiveMissionIds.SingleOrDefault());
+                    AssertNull(claimed.Assignment?.DockId);
 
                     AssertFalse(await db.Captains.TrySetDockAsync(captain.Id, "msn_other", "dck_other"), "dock for another mission is refused");
                     AssertTrue(await db.Captains.TrySetDockAsync(captain.Id, "msn_first", "dck_first"), "dock for the held mission is recorded");
@@ -336,8 +343,10 @@ namespace Test.Shared.Suites.Database
                     AssertTrue(await db.Captains.TrySetProcessAsync(captain.Id, "msn_first", 4242), "process for the held mission is recorded");
 
                     Captain? attached = await db.Captains.ReadAsync(captain.Id);
-                    AssertEqual("dck_first", attached!.CurrentDockId);
-                    AssertEqual(4242, attached.ProcessId);
+                    AssertNull(attached!.Assignment);
+                    AssertEqual("dck_first", (await db.Missions.ReadAsync("msn_first"))!.DockId);
+                    AssertNull(attached.ProcessId);
+                    AssertEqual(4242, await db.Captains.ReadMissionProcessAsync(captain.Id, "msn_first"));
                 }
             }));
 
@@ -347,7 +356,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("guarded-release");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
                     AssertTrue(await db.Captains.TryClaimAsync(captain.Id, "msn_current", "dck_current"));
                     AssertTrue(await db.Captains.TrySetProcessAsync(captain.Id, "msn_current", 77));
 
@@ -355,14 +364,15 @@ namespace Test.Shared.Suites.Database
                     AssertFalse(await db.Captains.TryReleaseFromMissionAsync(captain.Id, "msn_stale"), "stale release is refused");
                     Captain? untouched = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Working, untouched!.State);
-                    AssertEqual("msn_current", untouched.CurrentMissionId);
-                    AssertEqual(77, untouched.ProcessId);
+                    AssertEqual("msn_current", untouched.ActiveMissionIds.SingleOrDefault());
+                    AssertNull(untouched.ProcessId);
+                    AssertEqual(77, await db.Captains.ReadMissionProcessAsync(captain.Id, "msn_current"));
 
                     AssertTrue(await db.Captains.TryReleaseFromMissionAsync(captain.Id, "msn_current"), "release of the held mission applies");
                     Captain? released = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Idle, released!.State);
-                    AssertNull(released.CurrentMissionId);
-                    AssertNull(released.CurrentDockId);
+                    AssertNull(released.ActiveMissionIds.SingleOrDefault());
+                    AssertNull(released.Assignment?.DockId);
                     AssertNull(released.ProcessId);
                     AssertFalse(await db.Captains.TryReleaseFromMissionAsync(captain.Id, "msn_current"), "a second release is a no-op");
                 }
@@ -375,10 +385,10 @@ namespace Test.Shared.Suites.Database
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("quarantined-release");
                     captain.State = CaptainStateEnum.Quarantined;
-                    captain.CurrentMissionId = "msn_q";
-                    await db.Captains.CreateAsync(captain);
+                    captain.Assignment = new Mission { Id = "msn_q" };
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
-                    AssertFalse(await db.Captains.TryReleaseFromMissionAsync(captain.Id, "msn_q"));
+                    AssertTrue(await db.Captains.TryReleaseFromMissionAsync(captain.Id, "msn_q"));
                     Captain? result = await db.Captains.ReadAsync(captain.Id);
                     AssertEqual(CaptainStateEnum.Quarantined, result!.State);
                 }
@@ -390,7 +400,7 @@ namespace Test.Shared.Suites.Database
                 {
                     DatabaseDriver db = testDb.Driver;
                     Captain captain = new Captain("delete-test");
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
                     AssertTrue(await db.Captains.ExistsAsync(captain.Id));
 
                     await db.Captains.DeleteAsync(captain.Id);

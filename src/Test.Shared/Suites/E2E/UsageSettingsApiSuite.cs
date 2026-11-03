@@ -46,7 +46,7 @@ namespace Test.Shared.Suites.E2E
                     LoggingModule logging = new LoggingModule(); logging.Settings.EnableConsole = false;
                     IdleUsageProbe probe = new IdleUsageProbe();
                     using InProcessHarbor harbor = await InProcessHarbor.ConnectAsync(manager, "hbr_idle_usage", Constants.SystemTenantId, Constants.SystemUserId, new AgentRuntimeFactory(logging), new string[] { "usage-probe", "ClaudeCode" }, logging, usageProbe: probe).ConfigureAwait(false);
-                    Captain captain = await database.Captains.CreateAsync(new Captain("idle-usage") { TenantId = Constants.SystemTenantId, UserId = Constants.SystemUserId, UsageCaptureEnabled = true }).ConfigureAwait(false);
+                    Captain captain = await CaptainAssignmentFixture.CreateAsync(database, new Captain("idle-usage") { TenantId = Constants.SystemTenantId, UserId = Constants.SystemUserId, UsageCaptureEnabled = true }).ConfigureAwait(false);
                     string path = "/api/v1/captains/" + captain.Id;
                     using (HttpResponseMessage unresolved = await server.Client.PostAsync(path + "/usage/capture", JsonHelper.ToJsonContent(new { }), ct).ConfigureAwait(false))
                     {
@@ -70,7 +70,7 @@ namespace Test.Shared.Suites.E2E
                         AssertStatusCode(HttpStatusCode.TooManyRequests, cooldown, "manual reads still honor observed cooldowns");
                     Captain stored = (await database.Captains.ReadAsync(captain.Id, ct).ConfigureAwait(false))!;
                     AssertEqual(harbor.HarborId, stored.UsageCaptureHarborId);
-                    AssertNull(stored.CurrentDockId); AssertEqual(CaptainStateEnum.Idle, stored.State);
+                    AssertNull(stored.Assignment?.DockId); AssertEqual(CaptainStateEnum.Idle, stored.State);
                     await scheduler.RebuildAsync(ct).ConfigureAwait(false);
                     AssertTrue(scheduler.Groups().Any(group => group.HarborId == harbor.HarborId && group.MemberCaptainIds.Contains(captain.Id)), "scheduled capture retains the idle host");
                     await UsageTestData.PutAsync(server.Client, path, "{\"Name\":\"renamed-idle\"}", HttpStatusCode.OK).ConfigureAwait(false);

@@ -236,36 +236,29 @@ namespace Armada.Core.Models
         [JsonIgnore]
         public bool HasMissionCapacity => Active && CurrentSessionId == null && ActiveMissionCount < MaxConcurrency
             && (State == CaptainStateEnum.Idle || (State == CaptainStateEnum.Working && ActiveMissionCount > 0));
-        /// <summary>Check durable ownership, retaining legacy assignments during the staged migration.</summary>
-        public bool HoldsMission(string id) => ActiveMissionIds.Contains(id) || CurrentMissionId == id;
+        /// <summary>Check execution slot identities or this explicitly scoped runtime context.</summary>
+        public bool HoldsMission(string id) => ActiveMissionIds.Contains(id) || Assignment?.Id == id;
         /// <summary>Make a transient mission-scoped view; never change another mission's process/dock context.</summary>
         public Captain ForMission(Mission mission)
         {
             Captain scoped = (Captain)MemberwiseClone();
             scoped.CurrentSessionId = null;
-            scoped.CurrentMissionId = mission.Id;
-            scoped.CurrentDockId = mission.DockId;
+            scoped.Assignment = mission;
             scoped.ProcessId = mission.ProcessId;
-            scoped.RecoveryAttempts = ActiveMissionCount > 0 ? mission.StallRecoveryAttempts : RecoveryAttempts;
-            scoped.LastHeartbeatUtc = mission.LastHeartbeatUtc ?? mission.StartedUtc ?? LastHeartbeatUtc;
+            scoped.RecoveryAttempts = mission.StallRecoveryAttempts;
+            scoped.LastHeartbeatUtc = mission.LastHeartbeatUtc ?? mission.StartedUtc ?? mission.CreatedUtc;
             return scoped;
         }
 
         /// <summary>Whether this captain may accept new work. Disabling leaves in-flight work running.</summary>
         public bool Active { get; set; } = true;
 
-        /// <summary>
-        /// Currently assigned mission identifier.
-        /// </summary>
-        public string? CurrentMissionId { get; set; } = null;
+        /// <summary>Transient runtime context for one explicit mission; never serialized or stored on the captain.</summary>
+        [JsonIgnore]
+        public Mission? Assignment { get; set; }
 
         /// <summary>
-        /// Currently assigned dock identifier.
-        /// </summary>
-        public string? CurrentDockId { get; set; } = null;
-
-        /// <summary>
-        /// Operating system process identifier.
+        /// Operating system process identifier for the current exclusive session. Mission processes are recorded on each mission.
         /// </summary>
         public int? ProcessId { get; set; } = null;
 

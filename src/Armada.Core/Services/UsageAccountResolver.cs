@@ -167,9 +167,7 @@ namespace Armada.Core.Services
 
             string hostId;
             string? harborId = null;
-            Dock? dock = String.IsNullOrWhiteSpace(captain.CurrentDockId)
-                ? null
-                : await database.Docks.ReadAsync(captain.CurrentDockId!, token).ConfigureAwait(false);
+            Dock? dock = captain.UsageCaptureHarborId == null ? await CaptainContextResolver.ReadDockAsync(database, captain, token).ConfigureAwait(false) : null;
             if (captain.UsageCaptureHarborId != null)
             {
                 Harbor? selected = await database.Harbors.ReadAsync(captain.UsageCaptureHarborId, token).ConfigureAwait(false);

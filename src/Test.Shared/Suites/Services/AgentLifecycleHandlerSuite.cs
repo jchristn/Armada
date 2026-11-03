@@ -572,9 +572,11 @@ namespace Test.Shared.Suites.Services
                     Mission? reread = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.InProgress, reread!.Status, "mission stays InProgress");
 
-                    AssertTrue(await handler.ApplyAgentReportedStatusAsync(mission.Id, MissionStatusEnum.Testing).ConfigureAwait(false), "Testing is agent-reportable");
+                    AssertFalse(await handler.ApplyAgentReportedStatusAsync(mission.Id, MissionStatusEnum.Testing).ConfigureAwait(false), "Testing progress cannot free execution capacity");
                     reread = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
-                    AssertEqual(MissionStatusEnum.Testing, reread!.Status);
+                    AssertEqual(MissionStatusEnum.InProgress, reread!.Status);
+                    reread.Status = MissionStatusEnum.Testing;
+                    await testDb.Driver.Missions.UpdateAsync(reread);
                     AssertTrue(await handler.ApplyAgentReportedStatusAsync(mission.Id, MissionStatusEnum.InProgress).ConfigureAwait(false), "InProgress is agent-reportable from Testing");
                 }
             }));
@@ -589,8 +591,8 @@ namespace Test.Shared.Suites.Services
                     Mission mission = new Mission("Status mission");
                     mission.Status = MissionStatusEnum.InProgress;
                     mission.CaptainId = captain.Id;
-                    captain.CurrentMissionId = mission.Id;
-                    await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    captain.Assignment = mission;
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
                     await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
 
                     int processId = 838383;
@@ -660,7 +662,7 @@ namespace Test.Shared.Suites.Services
                     AgentLifecycleHandler handler = CreateHandler(testDb.Driver, out _);
 
                     Captain captain = new Captain("heartbeat-captain", AgentRuntimeEnum.Cursor);
-                    await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("Heartbeat voyage", "Telemetry proof");
                     await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -704,7 +706,7 @@ namespace Test.Shared.Suites.Services
                     settings.HeartbeatIntervalSeconds = 5;
 
                     Captain captain = new Captain("silent-heartbeat-captain", AgentRuntimeEnum.Cursor);
-                    await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                     Voyage voyage = new Voyage("Silent heartbeat voyage", "Telemetry proof");
                     await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
@@ -803,11 +805,11 @@ namespace Test.Shared.Suites.Services
                     mission.VoyageId = voyage.Id;
                     mission.Persona = "Worker";
                     mission.CaptainId = captain.Id;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
 
                     await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
                     await testDb.Driver.Voyages.CreateAsync(voyage).ConfigureAwait(false);
-                    await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
                     await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
 
                     int processId = 828282;
@@ -851,10 +853,10 @@ namespace Test.Shared.Suites.Services
                     mission.VesselId = vessel.Id;
                     mission.Persona = "Judge";
                     mission.CaptainId = captain.Id;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
 
                     await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
-                    await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
                     await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
 
                     int processId = 838383;
@@ -884,10 +886,10 @@ namespace Test.Shared.Suites.Services
                     mission.VesselId = vessel.Id;
                     mission.Persona = "Worker";
                     mission.CaptainId = captain.Id;
-                    captain.CurrentMissionId = mission.Id;
+                    captain.Assignment = mission;
 
                     await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
-                    await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
                     await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
 
                     int processId = 848484;
@@ -1015,7 +1017,7 @@ namespace Test.Shared.Suites.Services
                 for (int i = 0; i < 3; i++) seeds.Add(await SeedHarborMissionAsync(db.Driver, settings, AgentRuntimeEnum.ApiEndpoint, "_slot" + i));
                 Captain owner = seeds[0].Captain;
                 owner.MaxConcurrency = 3;
-                await db.Driver.Captains.UpdateAsync(owner, updateConcurrency: true);
+                await CaptainAssignmentFixture.UpdateAsync(db.Driver, owner, updateConcurrency: true);
                 foreach (HarborMissionSeed seed in seeds)
                 {
                     seed.Mission.CaptainId = owner.Id;
@@ -1117,8 +1119,8 @@ namespace Test.Shared.Suites.Services
                 HarborConnectionManager manager = new HarborConnectionManager(new HarborService(db.Driver, CreateLogging()), CreateLogging(), null);
                 handler.SetHarborConnections(manager);
                 AssertEqual(2, await handler.RestoreHarborMissionsAsync().ConfigureAwait(false));
-                Captain ca = (await db.Driver.Captains.ReadAsync(a.Captain.Id).ConfigureAwait(false))!;
-                Captain cb = (await db.Driver.Captains.ReadAsync(b.Captain.Id).ConfigureAwait(false))!;
+                Mission ca = (await db.Driver.Missions.ReadAsync(a.Mission.Id).ConfigureAwait(false))!;
+                Mission cb = (await db.Driver.Missions.ReadAsync(b.Mission.Id).ConfigureAwait(false))!;
                 AssertTrue(ca.ProcessId != cb.ProcessId);
                 AssertEqual(ca.ProcessId, (await db.Driver.Missions.ReadAsync(a.Mission.Id).ConfigureAwait(false))!.ProcessId);
                 AssertEqual(cb.ProcessId, (await db.Driver.Missions.ReadAsync(b.Mission.Id).ConfigureAwait(false))!.ProcessId);
@@ -1135,8 +1137,8 @@ namespace Test.Shared.Suites.Services
                 HarborConnectionManager nextManager = new HarborConnectionManager(new HarborService(db.Driver, CreateLogging()), CreateLogging(), null);
                 restarted.SetHarborConnections(nextManager);
                 AssertEqual(2, await restarted.RestoreHarborMissionsAsync().ConfigureAwait(false));
-                AssertEqual(ca.ProcessId, (await db.Driver.Captains.ReadAsync(a.Captain.Id).ConfigureAwait(false))!.ProcessId);
-                AssertEqual(cb.ProcessId, (await db.Driver.Captains.ReadAsync(b.Captain.Id).ConfigureAwait(false))!.ProcessId);
+                AssertEqual(ca.ProcessId, await db.Driver.Captains.ReadMissionProcessAsync(a.Captain.Id, a.Mission.Id).ConfigureAwait(false));
+                AssertEqual(cb.ProcessId, await db.Driver.Captains.ReadMissionProcessAsync(b.Captain.Id, b.Mission.Id).ConfigureAwait(false));
                 restarted.DetachHarborMissions();
             }));
 
@@ -1195,12 +1197,12 @@ namespace Test.Shared.Suites.Services
             Directory.CreateDirectory(dock.WorktreePath);
             File.WriteAllText(Path.Combine(dock.WorktreePath, "work.txt"), "uncommitted work");
             dock = await database.Docks.CreateAsync(dock).ConfigureAwait(false);
-            Captain captain = new Captain("Restart captain" + suffix, runtime) { State = CaptainStateEnum.Working, ProcessId = 2000000007, CurrentDockId = dock.Id };
-            captain = await database.Captains.CreateAsync(captain).ConfigureAwait(false);
+            Captain captain = new Captain("Restart captain" + suffix, runtime) { State = CaptainStateEnum.Working, ProcessId = 2000000007};
+            captain = await CaptainAssignmentFixture.CreateAsync(database, captain).ConfigureAwait(false);
             Mission mission = new Mission("Original mission") { CaptainId = captain.Id, VesselId = vessel.Id, DockId = dock.Id, BranchName = dock.BranchName, ProcessId = captain.ProcessId, Status = MissionStatusEnum.InProgress, StartedUtc = DateTime.UtcNow.AddMinutes(-5) };
             mission = await database.Missions.CreateAsync(mission).ConfigureAwait(false);
-            captain.CurrentMissionId = mission.Id;
-            await database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            captain.Assignment = mission;
+            await CaptainAssignmentFixture.UpdateAsync(database, captain).ConfigureAwait(false);
             HarborJobRecord job = await database.HarborJobs.CreateAsync(new HarborJobRecord { JobId = "existing-job" + suffix, HarborId = dock.HarborId!, CaptainId = captain.Id, MissionId = mission.Id, Runtime = runtime.ToString(), Kind = Armada.Core.Harbor.HarborJobKindEnum.Mission, StartedUtc = mission.StartedUtc }).ConfigureAwait(false);
             return new HarborMissionSeed(captain, mission, dock, job);
         }

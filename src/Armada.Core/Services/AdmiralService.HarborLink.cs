@@ -224,12 +224,22 @@ namespace Armada.Core.Services
             return true;
         }
 
+        private async Task PersistRuntimeContextAsync(Captain captain, CancellationToken token)
+        {
+            if (captain.Assignment != null)
+                await _Database.Missions.TryUpdateRuntimeContextAsync(captain.Assignment.Id, captain.Id,
+                    captain.ProcessId, captain.LastHeartbeatUtc, captain.RecoveryAttempts, token).ConfigureAwait(false);
+            else if (captain.CurrentSessionId != null)
+                await _Database.Captains.TryUpdateExclusiveAsync(captain.Id, captain.CurrentSessionId,
+                    captain.State, captain.ProcessId, token).ConfigureAwait(false);
+        }
+
         private async Task ResetStallClockAsync(Captain captain, DateTime linkedSince, CancellationToken token)
         {
             if (captain.LastHeartbeatUtc.HasValue && captain.LastHeartbeatUtc.Value >= linkedSince) return;
             captain.LastHeartbeatUtc = linkedSince;
             captain.LastUpdateUtc = DateTime.UtcNow;
-            await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+            await PersistRuntimeContextAsync(captain, token).ConfigureAwait(false);
         }
 
         private async Task ContinueAfterConfirmedStopAsync(Captain captain, Mission? mission, CaptainStopPurposeEnum purpose, CancellationToken token)
@@ -278,7 +288,7 @@ namespace Armada.Core.Services
                 // A real recovery attempt was made, so it counts even though the stop could not be confirmed.
                 captain.RecoveryAttempts++;
                 captain.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                await PersistRuntimeContextAsync(captain, token).ConfigureAwait(false);
             }
 
             bool first = !episode.StopPending;
@@ -298,6 +308,7 @@ namespace Armada.Core.Services
             {
                 // The owning host has not confirmed the job stopped: an environment problem, not the work.
                 bool alreadyRecorded = String.Equals(mission.FailureReason, _UnconfirmedStopReason, StringComparison.Ordinal);
+                mission.StallRecoveryAttempts = captain.RecoveryAttempts;
                 mission.FailureKind = MissionFailureKindEnum.Infra;
                 mission.FailureReason = _UnconfirmedStopReason;
                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -360,7 +371,7 @@ namespace Armada.Core.Services
                 // The attempts spent waiting on the stop never relaunched anything: the working captain gets them back.
                 captain.RecoveryAttempts = episode.RecoveryAttemptsBefore.Value;
                 captain.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                await PersistRuntimeContextAsync(captain, token).ConfigureAwait(false);
             }
             episode.UnreachableSinceUtc = null;
             episode.StopRequestedUtc = null;
@@ -374,6 +385,7 @@ namespace Armada.Core.Services
                 && String.Equals(mission.FailureReason, _UnconfirmedStopReason, StringComparison.Ordinal))
             {
                 // The unconfirmed stop no longer describes the mission.
+                mission.StallRecoveryAttempts = captain.RecoveryAttempts;
                 mission.FailureReason = null;
                 mission.FailureKind = null;
                 mission.LastUpdateUtc = DateTime.UtcNow;
@@ -437,8 +449,8 @@ namespace Armada.Core.Services
 
         private async Task<CaptainLinkEpisode> LoadEpisodeAsync(Captain captain, Mission? mission, int? processId, CancellationToken token)
         {
-            string? missionId = mission?.Id ?? captain.CurrentMissionId;
-            if (_LinkEpisodes.TryGetValue(captain.CurrentMissionId ?? captain.Id, out CaptainLinkEpisode? cached))
+            string? missionId = mission?.Id ?? captain.Assignment?.Id;
+            if (_LinkEpisodes.TryGetValue(captain.Assignment?.Id ?? captain.Id, out CaptainLinkEpisode? cached))
             {
                 if (String.Equals(cached.MissionId, missionId, StringComparison.Ordinal) && (cached.ProcessId == processId || !cached.IsOpen))
                 {
@@ -448,7 +460,7 @@ namespace Armada.Core.Services
 
                 // The captain moved on (another mission or a relaunched process): its old episode no longer applies.
                 await CloseEpisodeAsync(captain, String.Equals(mission?.Id, cached.MissionId, StringComparison.Ordinal) ? mission : null, cached, CaptainReconcileOutcomeEnum.Superseded, null, token).ConfigureAwait(false);
-                _LinkEpisodes.TryRemove(captain.CurrentMissionId ?? captain.Id, out CaptainLinkEpisode? _);
+                _LinkEpisodes.TryRemove(captain.Assignment?.Id ?? captain.Id, out CaptainLinkEpisode? _);
             }
 
             CaptainLinkEpisode episode = await RehydrateEpisodeAsync(captain.Id, missionId, processId, token).ConfigureAwait(false);
@@ -458,7 +470,7 @@ namespace Armada.Core.Services
             }
 
             episode.ProcessId = processId;
-            _LinkEpisodes[captain.CurrentMissionId ?? captain.Id] = episode;
+            _LinkEpisodes[captain.Assignment?.Id ?? captain.Id] = episode;
             return episode;
         }
 

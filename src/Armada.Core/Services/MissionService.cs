@@ -572,7 +572,7 @@ namespace Armada.Core.Services
             vesselAdmission = null;
 
             captain.State = CaptainStateEnum.Working;
-            captain.CurrentMissionId = mission.Id;
+            captain = captain.ForMission(mission);
             captain.LastHeartbeatUtc = DateTime.UtcNow;
             captain.LastUpdateUtc = DateTime.UtcNow;
 
@@ -621,7 +621,7 @@ namespace Armada.Core.Services
                     return false;
                 }
 
-                captain.CurrentDockId = dock.Id;
+                captain = captain.ForMission(mission);
 
                 // Commit continuity: a later stage must start from exactly the commit the stage before it produced. A dock
                 // that lacks it (the branch lived on another host and this one created it from the default branch) would
@@ -793,9 +793,9 @@ namespace Armada.Core.Services
         public async Task HandleCompletionAsync(Captain captain, CancellationToken token = default)
         {
             if (captain == null) throw new ArgumentNullException(nameof(captain));
-            if (String.IsNullOrEmpty(captain.CurrentMissionId)) return;
+            if (String.IsNullOrEmpty(captain.Assignment?.Id)) return;
 
-            await HandleCompletionAsync(captain, captain.CurrentMissionId, token).ConfigureAwait(false);
+            await HandleCompletionAsync(captain, captain.Assignment!.Id!, token).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -955,7 +955,7 @@ namespace Armada.Core.Services
                 if (current == null) return;
                 if (String.IsNullOrEmpty(captain.TenantId))
                 {
-                    if (current.State != CaptainStateEnum.Idle || !String.IsNullOrEmpty(current.CurrentMissionId)) return;
+                    if (current.State != CaptainStateEnum.Idle || current.ActiveMissionCount > 0 || current.CurrentSessionId != null) return;
                     current.State = CaptainStateEnum.Quarantined;
                 }
                 else if (current.State != CaptainStateEnum.Quarantined)
@@ -1333,8 +1333,7 @@ namespace Armada.Core.Services
                 if (released)
                 {
                     captain.State = CaptainStateEnum.Idle;
-                    captain.CurrentMissionId = null;
-                    captain.CurrentDockId = null;
+                    captain.Assignment = null;
                     captain.ProcessId = null;
                     captain.RecoveryAttempts = 0;
                     _Logging.Info(_Header + "released captain " + captain.Id + " from mission " + mission.Id);

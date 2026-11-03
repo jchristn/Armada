@@ -18,8 +18,8 @@ namespace Armada.Core.Database.Mysql.Implementations
             => WithSlotsAsync(store => store.ClaimExclusiveAsync(captainId, sessionId, state, recover, token), token);
 
         /// <inheritdoc />
-        public Task<bool> TryUpdateExclusiveAsync(string captainId, string sessionId, Armada.Core.Enums.CaptainStateEnum state, string? dockId, int? processId, CancellationToken token = default)
-            => WithSlotsAsync(store => store.UpdateExclusiveAsync(captainId, sessionId, state, dockId, processId, token), token);
+        public Task<bool> TryUpdateExclusiveAsync(string captainId, string sessionId, Armada.Core.Enums.CaptainStateEnum state, int? processId, CancellationToken token = default)
+            => WithSlotsAsync(store => store.UpdateExclusiveAsync(captainId, sessionId, state, processId, token), token);
 
         /// <inheritdoc />
         public Task<bool> TryReleaseExclusiveAsync(string captainId, string sessionId, CancellationToken token = default)

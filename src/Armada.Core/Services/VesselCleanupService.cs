@@ -375,7 +375,12 @@ namespace Armada.Core.Services
             // In-use evidence comes from the database and needs no host access.
             if (dock.Active && !String.IsNullOrEmpty(dock.CaptainId))
                 return Classify(r, VesselCleanupDispositionEnum.InUse, "Dock is active and held by captain " + dock.CaptainId + ".");
-            Captain? holder = snap.Captains.FirstOrDefault(c => c.CurrentDockId == dock.Id);
+            Captain? holder = snap.Captains.FirstOrDefault(c => missions.Any(m => c.HoldsMission(m.Id)));
+            if (holder == null && dock.CaptainId != null)
+            {
+                Captain? candidate = snap.Captains.FirstOrDefault(c => c.Id == dock.CaptainId && c.CurrentSessionId != null);
+                if (candidate != null && (await CaptainContextResolver.ReadDockAsync(_Database, candidate, token).ConfigureAwait(false))?.Id == dock.Id) holder = candidate;
+            }
             if (holder != null)
                 return Classify(r, VesselCleanupDispositionEnum.InUse, "Captain " + holder.Id + " (" + holder.State + ") is using this dock.");
             if (dock.State == DockStateEnum.Provisioning || dock.State == DockStateEnum.Leased || dock.State == DockStateEnum.Reclaiming)
@@ -446,7 +451,7 @@ namespace Armada.Core.Services
             AttachMission(r, missions);
             string? use = await _Inspector.DescribeWorkReferenceAsync(missions, branch, snap.MergeEntries, token).ConfigureAwait(false);
             if (use != null) return Classify(r, VesselCleanupDispositionEnum.InUse, use);
-            Captain? holder = branch == null ? null : snap.Captains.FirstOrDefault(c => c.State != CaptainStateEnum.Idle && missions.Any(m => m.Id == c.CurrentMissionId));
+            Captain? holder = branch == null ? null : snap.Captains.FirstOrDefault(c => c.State != CaptainStateEnum.Idle && missions.Any(m => c.HoldsMission(m.Id)));
             if (holder != null) return Classify(r, VesselCleanupDispositionEnum.InUse, "Captain " + holder.Id + " is working on this branch.");
 
             string? unsafePath = CheckManagedPath(vessel, entry.Path, local, null);

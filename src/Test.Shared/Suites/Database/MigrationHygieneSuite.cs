@@ -147,7 +147,7 @@ namespace Test.Shared.Suites.Database
                 }
             }));
 
-            cases.Add(Case("replay_all_migrations_preserves_schema_and_data", "Applying every migration twice on a populated database keeps schema and data identical", TestTags.Positive, async ct =>
+            cases.Add(Case("replay_all_migrations_preserves_schema_and_data", "Replaying applicable migrations across the v121 boundary keeps schema and data identical", TestTags.Positive, async ct =>
             {
                 using (IsolatedTestDatabase isolated = await IsolatedTestDatabase.CreateAsync("replay", null, ct).ConfigureAwait(false))
                 using (DatabaseDriver driver = DatabaseDriverFactory.Create(isolated.Settings, QuietLogging()))
@@ -233,6 +233,7 @@ namespace Test.Shared.Suites.Database
             string normalized = Regex.Replace(statement, @"\s+", " ").Trim();
             // Phase 6 deliberately discards pre-revision-2 false choices. SQLite cannot alter column
             // nullability, so v113 replaces only this flag; the captain row and all other data survive.
+            if (version == 121 && (normalized == "ALTER TABLE vessels DROP COLUMN allow_concurrent_missions;" || normalized == "ALTER TABLE captains DROP COLUMN current_mission_id;" || normalized == "ALTER TABLE captains DROP COLUMN current_dock_id;")) return true;
             if (provider == "Sqlite" && version == 113 &&
                 (normalized == "ALTER TABLE captains RENAME COLUMN usage_capture_enabled TO usage_capture_enabled_legacy;" ||
                  normalized == "ALTER TABLE captains DROP COLUMN usage_capture_enabled_legacy;")) return true;

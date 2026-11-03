@@ -172,11 +172,6 @@ namespace Armada.Core.Models
         /// </summary>
         public BranchCleanupPolicyEnum? BranchCleanupPolicy { get; set; } = null;
 
-        /// <summary>
-        /// Legacy stored flag retained until the removal migration. Admission uses
-        /// MaxParallelVoyages and MaxParallelMissionsPerVoyage.
-        /// </summary>
-        public bool AllowConcurrentMissions { get; set; } = false;
 
         /// <summary>Maximum admitted voyage groups on this vessel; zero means unlimited.</summary>
         public int MaxParallelVoyages

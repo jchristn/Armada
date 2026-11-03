@@ -262,11 +262,14 @@ namespace Armada.Core.Database.Postgresql
         /// <inheritdoc />
         internal override async Task ReplayMigrationsAsync(CancellationToken token = default)
         {
+            int version = await GetSchemaVersionAsync(token).ConfigureAwait(false);
             using (NpgsqlConnection conn = new NpgsqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 foreach (SchemaMigration migration in TableQueries.GetMigrations())
                 {
+                    // v121 is a destructive boundary: verify historical migrations on an upgrade fixture, never recreate removed columns.
+                    if (version >= 121 && migration.Version < 119) continue;
                     using (NpgsqlTransaction tx = await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                     {
                         await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
@@ -311,6 +314,7 @@ namespace Armada.Core.Database.Postgresql
             Fleets = new FleetMethods(this, _Settings, _Logging);
             Vessels = new VesselMethods(this, _Settings, _Logging);
             Captains = new CaptainMethods(this, _Settings, _Logging);
+            MissionWaitIntervals = new Armada.Core.Database.MissionWaitIntervalMethods(() => new Npgsql.NpgsqlConnection(_ConnectionString));
             Missions = new MissionMethods(this, _Settings, _Logging);
             Voyages = new VoyageMethods(this, _Settings, _Logging);
             PlanningSessions = new PlanningSessionMethods(this, _Settings, _Logging);

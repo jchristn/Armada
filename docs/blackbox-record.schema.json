@@ -5795,6 +5795,14 @@
           ],
           "maxLength": 2000
         },
+        "rescueOfMissionId": {
+          "description": "Original failed mission addressed by this rescue, separate from hierarchy ancestry.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
         "branchName": {
           "description": "Mission branch, or null.",
           "type": [
@@ -5825,7 +5833,7 @@
           ]
         },
         "rescueChain": {
-          "description": "Rescue chain: the mission's ancestors by ParentMissionId, nearest first; null when not analyzed.",
+          "description": "Rescue chain: the mission's rescue predecessors by RescueOfMissionId, nearest first; null when not analyzed.",
           "type": [
             "array",
             "null"

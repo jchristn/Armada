@@ -152,6 +152,9 @@ namespace Armada.Core.Models
         /// </summary>
         public string? ParentMissionId { get; set; } = null;
 
+        /// <summary>Original failed mission addressed by this rescue, separate from hierarchy ancestry.</summary>
+        public string? RescueOfMissionId { get; set; } = null;
+
         /// <summary>
         /// Mission branch, or null.
         /// </summary>
@@ -173,7 +176,7 @@ namespace Armada.Core.Models
         public int? NoOpRedispatchAttempts { get; set; } = null;
 
         /// <summary>
-        /// Rescue chain: the mission's ancestors by ParentMissionId, nearest first; null when not analyzed.
+        /// Rescue chain: the mission's rescue predecessors by RescueOfMissionId, nearest first; null when not analyzed.
         /// </summary>
         [CollectionBound(BlackBoxLimits.MaxAttempts, Reason = "Walked at most MaxAttempts parents")]
         public List<string>? RescueChain { get; set; } = null;

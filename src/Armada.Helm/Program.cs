@@ -580,6 +580,11 @@ namespace Armada.Helm
 
         static int Main(string[] args)
         {
+            if (args.Any(arg => arg.Equals("--allow-concurrent", StringComparison.OrdinalIgnoreCase) || arg.StartsWith("--allow-concurrent=", StringComparison.OrdinalIgnoreCase)))
+            {
+                Console.Error.WriteLine("--allow-concurrent was removed in v1.3.0. Use --max-parallel-voyages and --max-parallel-missions-per-voyage instead.");
+                return 1;
+            }
             // Normalize Windows-style help flags (/?  -?) to the standard --help everywhere,
             // so `armada /?`, `armada mission /?`, etc. all work.
             for (int i = 0; i < args.Length; i++)

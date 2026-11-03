@@ -99,7 +99,7 @@ namespace Test.Shared.Suites.Services
                 using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver, settings);
                 Services s = Services.Create(t.Driver, settings, bb.Capture, new StubGitService());
                 Vessel vessel = await VesselAsync(t.Driver).ConfigureAwait(false);
-                Captain captain = await t.Driver.Captains.CreateAsync(new Captain("bb-assign-" + Short())).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(t.Driver, new Captain("bb-assign-" + Short())).ConfigureAwait(false);
                 Dock dock = await t.Driver.Docks.CreateAsync(new Dock(vessel.Id) { CaptainId = captain.Id, WorktreePath = TestTemp.NewDirectory("bb_assign_dock"), BranchName = "armada/bb/assign", Active = true }).ConfigureAwait(false);
                 Mission mission = await t.Driver.Missions.CreateAsync(new Mission("assignment failure") { VesselId = vessel.Id, CaptainId = captain.Id, DockId = dock.Id, Status = MissionStatusEnum.Assigned, BranchName = "armada/bb/assign" }).ConfigureAwait(false);
 
@@ -143,7 +143,7 @@ namespace Test.Shared.Suites.Services
                 StubGitService git = new StubGitService { ShouldThrowOnWorktree = true };
                 Services s = Services.Create(t.Driver, settings, bb.Capture, git);
                 Vessel vessel = await VesselAsync(t.Driver).ConfigureAwait(false);
-                await t.Driver.Captains.CreateAsync(new Captain("bb-provision-" + Short())).ConfigureAwait(false);
+                await CaptainAssignmentFixture.CreateAsync(t.Driver, new Captain("bb-provision-" + Short())).ConfigureAwait(false);
                 Mission mission = await t.Driver.Missions.CreateAsync(new Mission("provision failure") { VesselId = vessel.Id, Status = MissionStatusEnum.Pending }).ConfigureAwait(false);
 
                 AssertFalse(await s.Missions.TryAssignAsync(mission, vessel).ConfigureAwait(false), "not assigned");
@@ -174,7 +174,7 @@ namespace Test.Shared.Suites.Services
                 StubGitService git = new StubGitService { HeadCommitResult = "1111111111111111111111111111111111111111" };
                 Services s = Services.Create(t.Driver, settings, bb.Capture, git);
                 Vessel vessel = await VesselAsync(t.Driver).ConfigureAwait(false);
-                Captain captain = await t.Driver.Captains.CreateAsync(new Captain("bb-start-" + Short())).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(t.Driver, new Captain("bb-start-" + Short())).ConfigureAwait(false);
                 Mission mission = await t.Driver.Missions.CreateAsync(new Mission("scoped", "Touch only src/in.cs") { VesselId = vessel.Id, Status = MissionStatusEnum.WorkProduced }).ConfigureAwait(false);
 
                 Dock? dock = await s.Docks.ProvisionAsync(vessel, captain, "armada/bb/start", mission.Id).ConfigureAwait(false);
@@ -312,9 +312,9 @@ namespace Test.Shared.Suites.Services
                 AssertEntry(cancel, BlackBoxPhaseEnum.External, BlackBoxStepEnum.OperatorTransition, MissionFailureKindEnum.OperatorAction, "Pending", "Cancelled");
                 AssertEqual(BlackBoxTriageEnum.External, cancel.Triage);
 
-                Captain captain = await t.Driver.Captains.CreateAsync(new Captain("bb-recall-" + Short()) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                Captain captain = await CaptainAssignmentFixture.CreateAsync(t.Driver, new Captain("bb-recall-" + Short()) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                 Mission running = await t.Driver.Missions.CreateAsync(new Mission("recall me") { Status = MissionStatusEnum.InProgress, CaptainId = captain.Id }).ConfigureAwait(false);
-                captain.CurrentMissionId = running.Id; await t.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                captain.Assignment = running; await CaptainAssignmentFixture.UpdateAsync(t.Driver, captain).ConfigureAwait(false);
                 await s.Captains.RecallAsync(captain.Id, null, new OperatorStopContext { Source = OperatorStopContext.SourceRestStopCaptain, UserId = "usr_op" }).ConfigureAwait(false);
                 BlackBoxEntry stop = await CurrentAsync(t.Driver, running.Id).ConfigureAwait(false);
                 AssertEntry(stop, BlackBoxPhaseEnum.Execution, BlackBoxStepEnum.OperatorStop, MissionFailureKindEnum.OperatorAction, "InProgress", "Cancelled");
@@ -575,8 +575,8 @@ namespace Test.Shared.Suites.Services
                 Mission a = await t.Driver.Missions.CreateAsync(new Mission("waits a") { Status = MissionStatusEnum.Pending, VesselId = vessel.Id }).ConfigureAwait(false);
                 Mission b = await t.Driver.Missions.CreateAsync(new Mission("waits b") { Status = MissionStatusEnum.Pending, VesselId = vessel.Id }).ConfigureAwait(false);
 
-                await InvokeAsync(s.Admiral, "DispatchPendingMissionsAsync", CancellationToken.None).ConfigureAwait(false);
-                await InvokeAsync(s.Admiral, "DispatchPendingMissionsAsync", CancellationToken.None).ConfigureAwait(false);
+                await InvokeAsync(s.Admiral, "DispatchPendingMissionsAsync", CancellationToken.None, null).ConfigureAwait(false);
+                await InvokeAsync(s.Admiral, "DispatchPendingMissionsAsync", CancellationToken.None, null).ConfigureAwait(false);
                 foreach (Mission m in new[] { a, b })
                 {
                     EnumerationResult<ArmadaEvent> events = await t.Driver.Events.EnumerateAsync(new EnumerationQuery { MissionId = m.Id, EventType = "mission.dispatch_deferred", PageSize = 10 }).ConfigureAwait(false);
@@ -654,7 +654,7 @@ namespace Test.Shared.Suites.Services
             yield return M(BlackBoxStepEnum.ScopeViolation, BlackBoxPhaseEnum.Completion, ms, ms, MissionFailureKindEnum.ScopeViolation, "WorkProduced", "Failed");
             yield return M(BlackBoxStepEnum.BoundaryViolation, BlackBoxPhaseEnum.Completion, completion, completion, MissionFailureKindEnum.Boundary, "WorkProduced", "Failed");
             yield return M(BlackBoxStepEnum.DefinitionOfDone, BlackBoxPhaseEnum.Completion, completion, completion, MissionFailureKindEnum.TestFail, "WorkProduced", "Failed");
-            yield return M(BlackBoxStepEnum.StageCheck, BlackBoxPhaseEnum.Completion, adm, adm, MissionFailureKindEnum.InvalidOutput, "InProgress", "Failed");
+            yield return M(BlackBoxStepEnum.StageCheck, BlackBoxPhaseEnum.Completion, "src/Armada.Core/Services/AdmiralService.Verification.cs", adm, MissionFailureKindEnum.InvalidOutput, "InProgress", "Failed");
             yield return M(BlackBoxStepEnum.JudgeRejected, BlackBoxPhaseEnum.Review, completion, completion, MissionFailureKindEnum.JudgeRejected, "WorkProduced", "Failed");
             yield return M(BlackBoxStepEnum.ReviewDenied, BlackBoxPhaseEnum.Review, review, review, MissionFailureKindEnum.ReviewDenied, "Review", "Failed");
             yield return M(BlackBoxStepEnum.ReviewTimeout, BlackBoxPhaseEnum.Review, review, review, MissionFailureKindEnum.ReviewDenied, "Review", "Failed");
@@ -763,10 +763,10 @@ namespace Test.Shared.Suites.Services
             using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver, settings);
             Services s = Services.Create(t.Driver, settings, bb.Capture, new StubGitService());
             int pid = 900000 + Random.Shared.Next(1, 90000);
-            Captain captain = await t.Driver.Captains.CreateAsync(new Captain("bb-exit-" + Short()) { State = CaptainStateEnum.Working, ProcessId = pid }).ConfigureAwait(false);
+            Captain captain = await CaptainAssignmentFixture.CreateAsync(t.Driver, new Captain("bb-exit-" + Short()) { State = CaptainStateEnum.Working, ProcessId = pid }).ConfigureAwait(false);
             Mission mission = await t.Driver.Missions.CreateAsync(new Mission("exit " + kind) { Status = MissionStatusEnum.InProgress, CaptainId = captain.Id, ProcessId = pid, StartedUtc = DateTime.UtcNow.AddMinutes(-3), RedispatchAttempts = redispatchAttempts }).ConfigureAwait(false);
-            captain.CurrentMissionId = mission.Id;
-            await t.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            captain.Assignment = mission;
+            await CaptainAssignmentFixture.UpdateAsync(t.Driver, captain).ConfigureAwait(false);
 
             await s.Admiral.HandleProcessExitAsync(pid, new RuntimeExitInfo { ExitCode = exitCode, FailureKind = kind }, captain.Id, mission.Id).ConfigureAwait(false);
             Mission after = (await t.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false))!;

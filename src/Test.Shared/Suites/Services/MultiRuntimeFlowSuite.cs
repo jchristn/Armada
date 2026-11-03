@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites.Services
 {
+    using System.Linq;
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
@@ -146,8 +147,8 @@ namespace Test.Shared.Suites.Services
                 await testDb.Driver.Missions.UpdateAsync(repaired).ConfigureAwait(false);
                 Captain? holder = await testDb.Driver.Captains.ReadAsync(judgeCaptain.Id).ConfigureAwait(false);
                 holder!.State = CaptainStateEnum.Working;
-                holder.CurrentMissionId = judge.Id;
-                await testDb.Driver.Captains.UpdateAsync(holder).ConfigureAwait(false);
+                holder.Assignment = judge;
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, holder).ConfigureAwait(false);
 
                 await h.Missions.HandleCompletionAsync(holder, judge.Id).ConfigureAwait(false);
                 Mission? failed = await testDb.Driver.Missions.ReadAsync(judge.Id).ConfigureAwait(false);
@@ -158,7 +159,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, landingCalls);
 
                 Captain? released = await testDb.Driver.Captains.ReadAsync(judgeCaptain.Id).ConfigureAwait(false);
-                AssertTrue(released!.CurrentMissionId != judge.Id, "the captain is released after the terminal failure");
+                AssertTrue(released!.ActiveMissionIds.SingleOrDefault() != judge.Id, "the captain is released after the terminal failure");
             }));
 
             cases.Add(CaseAsync("restart_later_stage_keeps_branch", "Restarting a failed later stage keeps the earlier stage's branch, reopens the voyage, and restores the cancelled stages after it", TestTags.Positive, async () =>
@@ -755,7 +756,7 @@ namespace Test.Shared.Suites.Services
                 // Restart dispatches at once when a captain is idle; keep the only captain busy so the restarted Judge waits
                 // (this harness's git has no slice commits, so launching it would fail it again and re-cancel integration).
                 integrator.State = CaptainStateEnum.Working;
-                await testDb.Driver.Captains.UpdateAsync(integrator).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, integrator).ConfigureAwait(false);
                 await h.Missions.RestartAsync((await testDb.Driver.Missions.ReadAsync(rejected.Id).ConfigureAwait(false))!).ConfigureAwait(false);
                 Mission? restored = await testDb.Driver.Missions.ReadAsync(integration.Id).ConfigureAwait(false);
                 AssertEqual(MissionStatusEnum.Pending, restored!.Status, "restarting the failed mission brings integration back");
@@ -1008,7 +1009,7 @@ namespace Test.Shared.Suites.Services
                 Mission r2 = await testDb.Driver.Missions.CreateAsync(new Mission("[Worker] Rework 2: Do it", "x") { VesselId = vessel.Id, VoyageId = voyage.Id, Persona = "Worker", CaptainId = workerCaptain.Id, Status = MissionStatusEnum.WorkProduced, DependsOnMissionId = r1.Id, BranchName = "b" }).ConfigureAwait(false);
                 Captain reviewer = await CreateCaptainAsync(testDb, "Judge only", AgentRuntimeEnum.Codex, CaptainStateEnum.Working).ConfigureAwait(false);
                 reviewer.AllowedPersonas = "[\"Judge\"]";
-                await testDb.Driver.Captains.UpdateAsync(reviewer).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, reviewer).ConfigureAwait(false);
                 Mission judge = await CreateRunningMissionAsync(testDb, h, vessel, voyage, reviewer, "Judge", false).ConfigureAwait(false);
                 judge.DependsOnMissionId = r2.Id;
                 await testDb.Driver.Missions.UpdateAsync(judge).ConfigureAwait(false);
@@ -1027,17 +1028,17 @@ namespace Test.Shared.Suites.Services
                 Captain quarantined = await CreateCaptainAsync(testDb, "Quarantined", AgentRuntimeEnum.Codex, CaptainStateEnum.Quarantined).ConfigureAwait(false);
                 Captain disallowed = await CreateCaptainAsync(testDb, "Judge only", AgentRuntimeEnum.ClaudeCode).ConfigureAwait(false);
                 disallowed.AllowedPersonas = "[\"Judge\"]";
-                await testDb.Driver.Captains.UpdateAsync(disallowed).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, disallowed).ConfigureAwait(false);
                 Captain foreign = await CreateCaptainAsync(testDb, "Foreign owner", AgentRuntimeEnum.Codex).ConfigureAwait(false);
                 TenantMetadata foreignTenant = await testDb.Driver.Tenants.CreateAsync(new TenantMetadata("Escalation ownership fence")).ConfigureAwait(false);
                 UserMaster foreignUser = await testDb.Driver.Users.CreateAsync(new UserMaster(foreignTenant.Id, "escalation-other@example.com", "password")).ConfigureAwait(false);
                 foreign.UserId = foreignUser.Id;
-                await testDb.Driver.Captains.UpdateAsync(foreign).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, foreign).ConfigureAwait(false);
                 Mission mission = new Mission("Recover", "Finish") { CaptainId = failed.Id };
                 AssertNull(await CaptainEscalationSelector.SelectAsync(testDb.Driver, mission, failed.Id, new List<Mission>()).ConfigureAwait(false), "No unauthorized fallback is selected");
                 Captain alternative = await CreateCaptainAsync(testDb, "Alternative", AgentRuntimeEnum.Codex).ConfigureAwait(false);
                 alternative.Tier = CaptainTierEnum.Standard;
-                await testDb.Driver.Captains.UpdateAsync(alternative).ConfigureAwait(false);
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, alternative).ConfigureAwait(false);
                 mission.Tier = CaptainTierEnum.Premium;
                 AssertNull(await CaptainEscalationSelector.SelectAsync(testDb.Driver, mission, failed.Id, new List<Mission>()).ConfigureAwait(false), "The mission tier floor applies");
                 mission.Tier = null;
@@ -1082,7 +1083,7 @@ namespace Test.Shared.Suites.Services
         {
             Captain captain = new Captain(name, runtime);
             captain.State = state;
-            return await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+            return await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
         }
 
         private static async Task<Vessel> CreateVesselAsync(TestDatabase testDb)
@@ -1116,9 +1117,9 @@ namespace Test.Shared.Suites.Services
 
             mission.DockId = dock.Id;
             await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
-            captain.CurrentMissionId = mission.Id;
-            captain.CurrentDockId = dock.Id;
-            await testDb.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+            captain.Assignment = mission;
+            captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+            await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
             return mission;
         }
 

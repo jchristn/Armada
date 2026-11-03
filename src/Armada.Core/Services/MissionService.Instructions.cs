@@ -246,6 +246,9 @@ namespace Armada.Core.Services
             // If there's an existing runtime instruction file, preserve it and prepend our instructions
             IDockFileSystem files = harborHost != null ? harborHost.Files : _LocalFiles;
             string? existing = await files.ReadTextAsync(instructionsPath, token).ConfigureAwait(false);
+            // Pi's generated override is output, not repository context. Read AGENTS.md again on regeneration.
+            if (instructionsFileName == "AGENTS.override.md" && existing?.Contains("# Mission Instructions", StringComparison.Ordinal) == true)
+                existing = null;
 
             // A runtime whose instructions file is not the repository's own (MUX.md, CODEX.md, GEMINI.md, CURSOR.md,
             // AGENTS.override.md for pi) would otherwise never see the project's rules: mux loads MUX.md first and skips

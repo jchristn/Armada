@@ -5590,6 +5590,12 @@
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
+    },
+    {
+      "kind": "route",
+      "key": "/*",
+      "status": "not-applicable",
+      "notes": "Browser catch-all renders the shared NotFound recovery page; native routers already handle unmatched routes."
     }
   ]
 }

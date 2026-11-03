@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites.Models
 {
+    using System.Linq;
     using System;
     using System.Collections.Generic;
     using System.Text.Json;
@@ -60,8 +61,8 @@ namespace Test.Shared.Suites.Models
                 AssertEqual(AgentRuntimeEnum.ClaudeCode, captain.Runtime);
                 AssertNull(captain.Model);
                 AssertEqual(CaptainStateEnum.Idle, captain.State);
-                AssertNull(captain.CurrentMissionId);
-                AssertNull(captain.CurrentDockId);
+                AssertNull(captain.ActiveMissionIds.SingleOrDefault());
+                AssertNull(captain.Assignment?.DockId);
                 AssertNull(captain.ProcessId);
                 AssertEqual(0, captain.RecoveryAttempts);
                 AssertNull(captain.LastHeartbeatUtc);
@@ -107,7 +108,7 @@ namespace Test.Shared.Suites.Models
                 captain.Model = "gpt-5.4-mini";
                 captain.RuntimeOptionsJson = "{\"schemaVersion\":1,\"endpoint\":\"mux-dev\"}";
                 captain.State = CaptainStateEnum.Working;
-                captain.CurrentMissionId = "msn_test";
+                captain.Assignment = new Mission { Id = "msn_test" };
                 captain.ProcessId = 12345;
                 captain.RecoveryAttempts = 2;
 

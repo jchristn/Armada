@@ -30,8 +30,7 @@ vi.mock('../components/ModelProbeEvaluate', () => ({ default: () => null }));
 
 const captain = {
   id: 'cpt_sel', tenantId: 'default', name: 'selected-captain', runtime: 'Gemini', model: null, state: 'Idle', allowedPersonas: null,
-  createdUtc: '2026-10-01T00:00:00Z', lastUpdateUtc: '2026-10-01T00:00:00Z', currentMissionId: null,
-  usageCaptureEnabled: false, usageCaptureActive: false, usageCaptureMode: 'Auto', usageCaptureIntervalSeconds: 300,
+  createdUtc: '2026-10-01T00:00:00Z', lastUpdateUtc: '2026-10-01T00:00:00Z', usageCaptureEnabled: false, usageCaptureActive: false, usageCaptureMode: 'Auto', usageCaptureIntervalSeconds: 300,
 } as unknown as Captain;
 
 function renderAt(path: string) {

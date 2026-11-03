@@ -456,6 +456,7 @@ namespace Armada.Core.BlackBox
                 StageOutcomeId = context.StageOutcomeId,
                 IsRescue = mission.IsRescue,
                 ParentMissionId = mission.ParentMissionId,
+                RescueOfMissionId = mission.RescueOfMissionId,
                 BranchName = mission.BranchName
             };
             record.Status = StatusOf(context.StatusBefore?.ToString(), mission.Status.ToString(), mission.LastUpdateUtc);

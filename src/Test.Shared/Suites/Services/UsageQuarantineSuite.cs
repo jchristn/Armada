@@ -296,12 +296,12 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<ArgumentNullException>(() => service.ApplyUsageQuotaAsync("cpt_x", null!), "a null decision is refused").ConfigureAwait(false);
 
                 Captain assigned = await CreateCaptainAsync(db, "quota-assigned", CaptainStateEnum.Idle, null).ConfigureAwait(false);
-                assigned.CurrentMissionId = "msn_quota_assigned";
-                assigned = await db.Driver.Captains.UpdateAsync(assigned).ConfigureAwait(false);
-                AssertEqual(UsageQuotaOutcomeEnum.SkippedBusy, await service.ApplyUsageQuotaAsync(assigned.Id, hold).ConfigureAwait(false), "an idle captain that already holds a mission is never held");
+                AssertTrue(await db.Driver.Captains.TryClaimExclusiveAsync(assigned.Id, "psn_quota", CaptainStateEnum.Planning));
+                AssertEqual(UsageQuotaOutcomeEnum.SkippedBusy, await service.ApplyUsageQuotaAsync(assigned.Id, hold).ConfigureAwait(false), "an exclusive session is not moved into a quota hold");
                 Captain assignedAfter = (await db.Driver.Captains.ReadAsync(assigned.Id).ConfigureAwait(false))!;
-                AssertEqual(CaptainStateEnum.Idle, assignedAfter.State, "the assigned captain keeps its state");
-                AssertNull(assignedAfter.QuarantineReason, "no quota reason is written to an assigned captain");
+                AssertEqual(CaptainStateEnum.Planning, assignedAfter.State);
+                AssertEqual("psn_quota", assignedAfter.CurrentSessionId);
+                AssertNull(assignedAfter.QuarantineReason);
 
                 Captain stopping = await CreateCaptainAsync(db, "quota-stopping", CaptainStateEnum.Stopping, null).ConfigureAwait(false);
                 AssertEqual(UsageQuotaOutcomeEnum.SkippedBusy, await service.ApplyUsageQuotaAsync(stopping.Id, hold).ConfigureAwait(false), "a stopping captain is never moved into a quota hold");
@@ -389,13 +389,13 @@ namespace Test.Shared.Suites.Services
         private static async Task<Captain> CreateCaptainAsync(TestDatabase db, string name, CaptainStateEnum state, string? reason)
         {
             Captain captain = new Captain(name + "-" + Guid.NewGuid().ToString("N").Substring(0, 6), AgentRuntimeEnum.ClaudeCode) { TenantId = TenantId };
-            captain = await db.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+            captain = await CaptainAssignmentFixture.CreateAsync(db.Driver, captain).ConfigureAwait(false);
             if (state != CaptainStateEnum.Idle || reason != null)
             {
                 captain.State = state;
                 captain.QuarantineReason = reason;
                 captain.QuarantineUntilUtc = reason == null ? null : DateTime.UtcNow.AddHours(1);
-                captain = await db.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                captain = await CaptainAssignmentFixture.UpdateAsync(db.Driver, captain).ConfigureAwait(false);
             }
 
             return captain;

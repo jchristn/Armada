@@ -53,7 +53,7 @@ function vessel(over: Partial<Vessel> = {}): Vessel {
     defaultBranch: 'main', projectContext: 'Project notes', styleGuide: null, enableModelContext: true, modelContext: null,
     hasGitHubTokenOverride: false, landingMode: 'LocalMerge', branchCleanupPolicy: null, requirePassingChecksToLand: false,
     protectedBranchPatterns: [], releaseBranchPrefix: 'release/', hotfixBranchPrefix: 'hotfix/', requirePullRequestForProtectedBranches: false,
-    requireMergeQueueForReleaseBranches: false, allowConcurrentMissions: false, defaultPipelineId: null, active: true, createdUtc: NOW, lastUpdateUtc: NOW,
+    requireMergeQueueForReleaseBranches: false, defaultPipelineId: null, active: true, createdUtc: NOW, lastUpdateUtc: NOW,
     ...over,
   };
 }

@@ -32,6 +32,23 @@ namespace Test.Shared.Suites.Services
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("wait_retention_and_rescue_provenance", "Data expiry clears rescue provenance; independent wait retention preserves open intervals", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                var db = testDb.Driver;
+                Mission original = await db.Missions.CreateAsync(new Mission("old original") { Status=MissionStatusEnum.Failed, CompletedUtc=DateTime.UtcNow.AddDays(-45) });
+                Mission rescue = await db.Missions.CreateAsync(new Mission("rescue") { RescueOfMissionId=original.Id, IsRescue=true });
+                await db.MissionWaitIntervals.CreateAsync(new MissionWaitInterval { MissionId=rescue.Id, StartedUtc=DateTime.UtcNow.AddDays(-50), EndedUtc=DateTime.UtcNow.AddDays(-45) });
+                MissionWaitInterval open = await db.MissionWaitIntervals.CreateAsync(new MissionWaitInterval { MissionId=rescue.Id, StartedUtc=DateTime.UtcNow.AddDays(-50) });
+                LoggingModule logging = new(); logging.Settings.EnableConsole=false;
+                await new DataExpiryService(logging, testDb.ConnectionString, 30).PurgeExpiredDataAsync();
+                await db.MissionWaitIntervals.DeleteExpiredAsync(DateTime.UtcNow.AddDays(-30));
+                AssertNull(await db.Missions.ReadAsync(original.Id));
+                Mission retained = (await db.Missions.ReadAsync(rescue.Id))!;
+                AssertTrue(retained.IsRescue); AssertNull(retained.RescueOfMissionId);
+                AssertEqual(open.Id, (await db.MissionWaitIntervals.EnumerateByMissionAsync(rescue.Id)).Single().Id);
+            }));
+
             cases.Add(CaseAsync("purge_disabled_when_retention_zero", "PurgeExpiredDataAsync DisabledWhenRetentionZero", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())

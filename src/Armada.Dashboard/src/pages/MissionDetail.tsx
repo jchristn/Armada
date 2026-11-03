@@ -733,7 +733,7 @@ export default function MissionDetail() {
       )}
 
       {/* Mission Info */}
-      <div className="detail-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
+      <div className="detail-grid server-detail-grid">
         <div className="detail-field">
           <span className="detail-label" title={t('Unique mission ID (msn_ prefix). Use it with the REST API, MCP tools and the armada CLI.')}>{t('ID')}</span>
           <span className="id-display">
@@ -861,6 +861,12 @@ export default function MissionDetail() {
             )
             : <span className="text-dim" title={t('No Harbor took this mission: it ran on the Admiral host, or it has not been routed yet.')}>{t('Admiral host')}</span>}
         </div>
+        {mission.rescueOfMissionId && (
+          <div className="detail-field">
+            <span className="detail-label">{t('Rescue of')}</span>
+            <Link to={`/missions/${encodeURIComponent(mission.rescueOfMissionId)}`} className="mono">{mission.rescueOfMissionId}</Link>
+          </div>
+        )}
         <div className="detail-field">
           <span className="detail-label" title={t('Mission that created this one as a sub-task, for example an architect mission that planned it.')}>{t('Parent Mission')}</span>
           {mission.parentMissionId

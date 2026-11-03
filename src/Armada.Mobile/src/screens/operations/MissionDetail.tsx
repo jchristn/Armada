@@ -351,6 +351,7 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
           onPress={mission.requestedCaptainId ? () => open(`/captains/${mission.requestedCaptainId}`) : undefined}
         />
         <KeyValueRow label={t('Actual Captain')} value={mission.captainId ? names.captainName(mission.captainId) : null} onPress={mission.captainId ? () => open(`/captains/${mission.captainId}`) : undefined} />
+        {mission.rescueOfMissionId ? <KeyValueRow label={t('Rescue of')} value={mission.rescueOfMissionId} mono onPress={() => open(`/missions/${mission.rescueOfMissionId}`)} /> : null}
         <KeyValueRow label={t('Parent Mission')} value={mission.parentMissionId} mono onPress={mission.parentMissionId ? () => open(`/missions/${mission.parentMissionId}`) : undefined} />
         <KeyValueRow label={t('Persona')} value={mission.persona || t('Worker')} />
         {mission.dependsOnMissionId ? (
