@@ -16,7 +16,7 @@ The required v1.3.0 deliverable comprises U0 through U6 below: observation mode,
 - [x] U1 storage foundation: migrations 123/124 on all providers, typed immutable history/evidence, policy/strategy revisions, scoped paging, reservation CAS/retention, capture-start timing and atomic Observe-mode claim/history primitives. See [validation](docs/usage-selection/U1_STORAGE_VALIDATION.md).
 - [x] U1 live policy coordinator and Dashboard settings controls, REST/MCP updates, environment metadata, optimistic revisions and recoverable persistence. See [segment notes](docs/usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md).
 - [x] U1 complete: provider-neutral storage/migrations and scoped ledger guards, live Dashboard/REST/MCP settings with persistence/revision/override validation, and four-provider lifecycle tests. Remaining native settings/recovery workflows belong to U4.
-- [ ] U2 exit verified; final wave build pending: Observe dispatch/repair, bounded evidence loading, scoped history/preview/client inspection, restart/raw-capture pruning and responsive comparison pass. Preview mirrors retry/placement-policy readiness without provisioning a dock; a proposed choice is never labeled an admitted execution.
+- [x] U2 complete (`048629f8a`, build-all v1.3.0 successful): Observe dispatch/repair, bounded evidence loading, scoped history/preview/client inspection, restart/raw-capture pruning and responsive comparison pass. Preview mirrors retry/placement-policy readiness without provisioning a dock; a proposed choice is never labeled an admitted execution.
 - [ ] U3 completion: enforced strategy dispatch/repair, shared-account transaction locks, source/budget/version revalidation, credential-host checks and unreserved-execution cutover accounting are implemented. SQLite, PostgreSQL, MySQL and SQL Server admission/repair races pass; PostgreSQL/MySQL mission ownership mapping was repaired and regression-tested; classified cooldowns, authorized exceptions, recovery actions and full lifecycle/operator validation remain.
 - [ ] U4 complete client/operator surfaces.
 - [ ] U5 observability, provider/stress and simulated-user validation.
@@ -275,7 +275,7 @@ Every unchecked task is future work. Each milestone ends with recorded automated
 - [x] Implement the pure evaluator, batched evidence loader, deterministic preference bands and read-only preview using shared eligibility. Implement actual versus hypothetical records and material waiting-state deduplication. Full placement/backoff preview parity is tracked below.
 - [x] Persist actual attempt decisions and shadow reservations without altering current routing, holds, slot counts or reset behavior. Capture intended/actual model and execution correlations.
 - [x] Add mission summary/history APIs, MCP/SDK/Helm reads and minimal shared Dashboard mission section. Complete Observe-mode parity and candidate redaction tests.
-- [ ] Exit: dispatch a mission end to end and inspect why current versus hypothetical choices differ; evidence survives restart/raw snapshot pruning and the comparison works responsively.
+- [x] Exit: dispatch/repair compatibility and current versus hypothetical choices are verified; authenticated evidence survives restart/raw snapshot pruning and the comparison passes responsive/translated preview review. Wave `048629f8a` passed build-all v1.3.0.
 
 ### U3. Atomic enforcement and recovery
 
@@ -364,3 +364,7 @@ Record coverage, screenshots/transcripts, expected versus actual outcomes and fi
 After the deterministic implementation is validated, use decision/execution correlations to study consumption by persona/task/model, completion reliability, evaluation evidence and cost. Observed account deltas include external work and concurrent missions; they are not clean per-mission training labels. Use provenance-aware estimates with confidence bounds and an explain-only comparison before changing routing.
 
 No adaptive model, learned budget estimate, automatic quality downgrade or cross-host account inference is part of the required v1.3.0 milestones. The decision ledger deliberately preserves the inputs needed to evaluate those proposals later without pretending today's capture is an exact billing meter.
+
+### Verification follow-up in progress
+
+The MCP HTTP test helper now validates initialization and closes its owned single-use session. A bounded-session fixture exercises repeated calls and initialization rejection; this closes a test-resource leak and improves the outstanding whole-process error diagnosis. The complete E2E group and final omnibus run are being revalidated before U5 can be marked complete.
