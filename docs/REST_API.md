@@ -12806,6 +12806,10 @@ Global occupancy counts Assigned/InProgress in a single SQL snapshot. Runtime an
 
 Planning and backlog refinement reserve a captain atomically before provisioning or activating the session. They require an active idle captain with no execution slots; spare mission capacity does not permit an exclusive session. Competing creation keeps the existing REST conflict response (409) or MCP tool error and cannot release the winner. Runtime updates and stop/failure cleanup are scoped to the session id. Recovery reclaims an available captain or its matching owner; if another session or mission owns it, the recovering session fails with an ownership explanation while that work is preserved. Pending waiting links use the recorded session owner. No request fields or response shapes change.
 
+## v1.3.0 mission worktree isolation
+
+Live mission diffs and instruction files resolve only the mission’s recorded `DockId`, checked against its tenant/vessel and the caller’s dock access. A captain’s singular dock pointer and same-branch active docks are never substitutes. Saved diff files/database snapshots and instruction snapshots remain available through the existing paths. When neither the mission’s dock nor a saved artifact is available, REST retains its 404 response and MCP `get_mission_diff` returns `Unavailable`; existing Harbor-access failures retain 503/Unavailable. Response fields are unchanged. Dashboard diff viewers show the error separately from a successful empty diff.
+
 ## v1.3.0 waiting diagnostics
 
 Pending mission reads include `AssignmentBlocker` (`assignmentBlocker` after camel-case client normalization). REST `GET /api/v1/missions/{id}` and MCP `mission_status` compute the same explanation; non-Pending missions have no blocker. The existing safety, capacity, tenant and user restrictions still apply.

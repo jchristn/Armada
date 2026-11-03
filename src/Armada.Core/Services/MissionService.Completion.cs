@@ -455,15 +455,8 @@ namespace Armada.Core.Services
 
             _Logging.Info(_Header + "mission " + mission.Id + " work produced by captain " + captain.Id);
 
-            // Get dock for diff capture (prefer mission-level DockId, fall back to captain-level)
-            Dock? dock = null;
-            string? dockId = mission.DockId ?? captain.CurrentDockId;
-            if (!String.IsNullOrEmpty(dockId))
-            {
-                dock = !String.IsNullOrEmpty(mission.TenantId)
-                    ? await _Database.Docks.ReadAsync(mission.TenantId, dockId, token).ConfigureAwait(false)
-                    : await _Database.Docks.ReadAsync(dockId, token).ConfigureAwait(false);
-            }
+            // A captain may own several worktrees; only this mission's recorded dock belongs to its completion.
+            Dock? dock = await MissionDockResolver.ReadAsync(_Database, mission, token).ConfigureAwait(false);
 
             if (dock != null && String.IsNullOrEmpty(mission.BranchName) && !String.IsNullOrEmpty(dock.BranchName))
             {

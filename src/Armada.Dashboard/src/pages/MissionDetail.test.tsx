@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import MissionDetail from './MissionDetail';
-import { getHarbor, getMission, getMissionBlackBox, getMissionLandingPreview, listCaptains, listCheckRuns, listDeployments, listVessels, purgeMission, retryMissionLanding } from '../api/client';
+import { getHarbor, getMissionDiff, getMission, getMissionBlackBox, getMissionLandingPreview, listCaptains, listCheckRuns, listDeployments, listVessels, purgeMission, retryMissionLanding } from '../api/client';
 import { translateTemplate } from '../i18n/runtime';
 import type { Captain, Harbor, LandingPreviewResult, Mission } from '../types/models';
 import { blackBoxEntryFixture } from '../test/fixtures/blackbox';
@@ -81,6 +81,16 @@ function renderPage() {
 }
 
 describe('MissionDetail waiting and landing', () => {
+  it('keeps a failed diff read distinct from an empty successful diff', async () => {
+    vi.mocked(getMission).mockResolvedValue(mission({ status: 'Complete' }));
+    vi.mocked(getMissionLandingPreview).mockResolvedValue(preview({ missionStatus: 'Complete' }));
+    vi.mocked(getMissionDiff).mockRejectedValue(new Error('No diff available: no mission worktree or saved diff exists'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Diff' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('No diff available: no mission worktree or saved diff exists');
+    expect(screen.queryByText('No modified files')).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     vi.mocked(listVessels).mockResolvedValue(emptyPage as never);
     vi.mocked(listCaptains).mockResolvedValue(emptyPage as never);

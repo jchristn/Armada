@@ -1178,6 +1178,41 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(MissionStatusEnum.Pending, stillWaiting!.Status);
             }));
 
+            foreach (string mode in new[] { "own", "missing", "wrong-vessel" })
+                cases.Add(CaseAsync("completion_dock_isolation_" + mode, "Completion uses its mission dock and preserves a sibling: " + mode, TestTags.Positive, async () =>
+                {
+                    using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync(); var db = testDb.Driver;
+                    StubGitService git = new StubGitService { DiffResult = "diff --git a/report b/report\n+own report\n" };
+                    Harness h = new Harness(testDb, git);
+                    List<string> captured = new List<string>();
+                    h.Missions.OnCaptureDiff = (_, dock) => { captured.Add(dock.Id); return Task.CompletedTask; };
+                    Vessel vessel = await CreateVesselAsync(testDb);
+                    Vessel otherVessel = await db.Vessels.CreateAsync(new Vessel("other repository", "https://example.invalid/other"));
+                    string siblingPath = TestTemp.NewDirectory("sibling_dock"), ownPath = TestTemp.NewDirectory("own_dock");
+                    Captain captain = await db.Captains.CreateAsync(new Captain("parallel") { MaxConcurrency = 3 });
+                    Dock siblingDock = await db.Docks.CreateAsync(new Dock(vessel.Id) { CaptainId = captain.Id, WorktreePath = siblingPath });
+                    Dock ownDock = await db.Docks.CreateAsync(new Dock(mode == "wrong-vessel" ? otherVessel.Id : vessel.Id) { CaptainId = captain.Id, WorktreePath = ownPath });
+                    Mission sibling = await db.Missions.CreateAsync(new Mission("sibling") { VesselId = vessel.Id, DockId = siblingDock.Id });
+                    AssertTrue(await db.Captains.TryClaimAsync(captain.Id, sibling.Id, siblingDock.Id));
+                    Mission target = await db.Missions.CreateAsync(new Mission("target", "produce a detailed report") { VesselId = vessel.Id,
+                        DockId = mode == "missing" ? null : ownDock.Id, Mode = MissionModeEnum.Research });
+                    AssertTrue(await db.Captains.TryClaimAsync(captain.Id, target.Id, target.DockId));
+                    target = (await db.Missions.ReadAsync(target.Id))!;
+                    target.Status = MissionStatusEnum.InProgress; await db.Missions.UpdateAsync(target);
+                    try
+                    {
+                        await h.Missions.HandleCompletionAsync((await db.Captains.ReadAsync(captain.Id))!, target.Id);
+                        AssertFalse(git.DiffCalls.Contains(siblingPath));
+                        AssertEqual(mode == "own", captured.Contains(ownDock.Id));
+                        AssertFalse(captured.Contains(siblingDock.Id));
+                        AssertEqual(MissionStatusEnum.Complete, (await db.Missions.ReadAsync(target.Id))!.Status);
+                        Captain stored = (await db.Captains.ReadAsync(captain.Id))!;
+                        AssertEqual(1, stored.ActiveMissionCount); AssertTrue(stored.HoldsMission(sibling.Id));
+                        AssertTrue((await db.Docks.ReadAsync(siblingDock.Id))!.Active);
+                    }
+                    finally { TestTemp.TryDelete(siblingPath); TestTemp.TryDelete(ownPath); }
+                }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Handoff and Dispatch Resilience",

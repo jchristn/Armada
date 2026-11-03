@@ -73,7 +73,7 @@ export default function MissionDetail() {
   const { pushToast } = useNotifications();
 
   // Diff viewer (shared modal)
-  const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean }>({ open: false, title: '', rawDiff: '', loading: false });
+  const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean; error?: string }>({ open: false, title: '', rawDiff: '', loading: false });
 
   // Log viewer (shared modal)
   const [logModal, setLogModal] = useState<{ open: boolean; title: string; missionId: string; content: string; totalLines: number; lineCount: number }>({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 });
@@ -229,8 +229,8 @@ export default function MissionDetail() {
     try {
       const result = await getMissionDiff(id);
       setDiffModal(d => ({ ...d, rawDiff: result?.diff || '', loading: false }));
-    } catch {
-      setDiffModal(d => ({ ...d, rawDiff: '', loading: false }));
+    } catch (e) {
+      setDiffModal(d => ({ ...d, rawDiff: '', loading: false, error: e instanceof Error ? e.message : String(e) }));
     }
   }
 
@@ -577,6 +577,7 @@ export default function MissionDetail() {
         open={diffModal.open}
         title={diffModal.title}
         rawDiff={diffModal.rawDiff}
+        error={diffModal.error}
         loading={diffModal.loading}
         onClose={() => setDiffModal({ open: false, title: '', rawDiff: '', loading: false })}
       />

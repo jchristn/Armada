@@ -150,16 +150,7 @@ namespace Armada.Server.Routes
                         : await _database.Captains.ReadAsync(ctx.TenantId!, ctx.UserId!, mission.CaptainId).ConfigureAwait(false);
             }
 
-            Dock? dock = null;
-            string? dockId = mission.DockId ?? captain?.CurrentDockId;
-            if (!String.IsNullOrEmpty(dockId))
-            {
-                dock = ctx.IsAdmin
-                    ? await _database.Docks.ReadAsync(dockId).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Docks.ReadAsync(ctx.TenantId!, dockId).ConfigureAwait(false)
-                        : await _database.Docks.ReadAsync(ctx.TenantId!, ctx.UserId!, dockId).ConfigureAwait(false);
-            }
+            Dock? dock = await MissionDockResolver.ReadAsync(_database, mission, caller: ctx).ConfigureAwait(false);
 
             if (dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath))
                 return null;
@@ -1246,40 +1237,7 @@ namespace Armada.Server.Routes
                 }
 
                 // Fall back to live worktree diff
-                Dock? dock = null;
-                if (!String.IsNullOrEmpty(mission.DockId))
-                {
-                    dock = ctx.IsAdmin
-                        ? await _database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false)
-                        : ctx.IsTenantAdmin
-                            ? await _database.Docks.ReadAsync(ctx.TenantId!, mission.DockId).ConfigureAwait(false)
-                            : await _database.Docks.ReadAsync(ctx.TenantId!, ctx.UserId!, mission.DockId).ConfigureAwait(false);
-                }
-
-                if (dock == null && !String.IsNullOrEmpty(mission.CaptainId))
-                {
-                    Captain? captain = ctx.IsAdmin
-                        ? await _database.Captains.ReadAsync(mission.CaptainId).ConfigureAwait(false)
-                        : ctx.IsTenantAdmin
-                            ? await _database.Captains.ReadAsync(ctx.TenantId!, mission.CaptainId).ConfigureAwait(false)
-                            : await _database.Captains.ReadAsync(ctx.TenantId!, ctx.UserId!, mission.CaptainId).ConfigureAwait(false);
-                    if (captain != null && !String.IsNullOrEmpty(captain.CurrentDockId))
-                    {
-                        dock = ctx.IsAdmin
-                            ? await _database.Docks.ReadAsync(captain.CurrentDockId).ConfigureAwait(false)
-                            : ctx.IsTenantAdmin
-                                ? await _database.Docks.ReadAsync(ctx.TenantId!, captain.CurrentDockId).ConfigureAwait(false)
-                                : await _database.Docks.ReadAsync(ctx.TenantId!, ctx.UserId!, captain.CurrentDockId).ConfigureAwait(false);
-                    }
-                }
-
-                if (dock == null && !String.IsNullOrEmpty(mission.BranchName) && !String.IsNullOrEmpty(mission.VesselId))
-                {
-                    List<Dock> docks = ctx.IsAdmin
-                        ? await _database.Docks.EnumerateByVesselAsync(mission.VesselId).ConfigureAwait(false)
-                        : await _database.Docks.EnumerateByVesselAsync(ctx.TenantId!, mission.VesselId).ConfigureAwait(false);
-                    dock = docks.FirstOrDefault(d => d.BranchName == mission.BranchName && d.Active);
-                }
+                Dock? dock = await MissionDockResolver.ReadAsync(_database, mission, caller: ctx).ConfigureAwait(false);
 
                 if (dock == null || String.IsNullOrEmpty(dock.WorktreePath))
                     { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "No diff available: no mission worktree or saved diff exists" }; }

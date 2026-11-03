@@ -61,7 +61,7 @@ export default function VoyageDetail() {
   const [error, setError] = useState('');
 
   // Modals
-  const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean }>({ open: false, title: '', rawDiff: '', loading: false });
+  const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean; error?: string }>({ open: false, title: '', rawDiff: '', loading: false });
   const [logModal, setLogModal] = useState<{ open: boolean; title: string; missionId: string; content: string; totalLines: number; lineCount: number }>({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 });
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; danger: boolean; onConfirm: () => void }>({ open: false, title: '', message: '', danger: false, onConfirm: () => {} });
@@ -201,8 +201,8 @@ export default function VoyageDetail() {
     try {
       const result = await getMissionDiff(missionId);
       setDiffModal(d => ({ ...d, rawDiff: result?.diff || '', loading: false }));
-    } catch {
-      setDiffModal(d => ({ ...d, rawDiff: '', loading: false }));
+    } catch (e) {
+      setDiffModal(d => ({ ...d, rawDiff: '', loading: false, error: e instanceof Error ? e.message : String(e) }));
     }
   }
 
@@ -498,6 +498,7 @@ export default function VoyageDetail() {
         open={diffModal.open}
         title={diffModal.title}
         rawDiff={diffModal.rawDiff}
+        error={diffModal.error}
         loading={diffModal.loading}
         onClose={() => setDiffModal({ open: false, title: '', rawDiff: '', loading: false })}
       />

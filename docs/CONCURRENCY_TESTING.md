@@ -84,3 +84,7 @@ To validate manually, fill an explicitly pinned captain while leaving an unrelat
 ### Exclusive session ownership
 
 `Database.ExclusiveCaptain` races 50 sessions and mixes session claims with mission slots. Planning/refinement coordinator regressions cover losing creation during provisioning and stale stop/recovery after ownership changes. See [validation](concurrency/EXCLUSIVE_SESSION_VALIDATION.md). Try creating a planning session and a backlog refinement on the same captain: only one may reserve it. Stop the owner and create another session; repeating a stop on the old session must preserve the new owner. Missions should wait while a session owns the captain, even when its configured mission capacity is greater than one.
+
+### Mission worktree isolation
+
+`Services.MissionDockResolver`, `E2E.MissionDockIsolation` and sibling-completion cases in `Services.HandoffResilience` verify recorded-dock resolution, caller scope, distinct real git worktrees, REST/MCP parity, snapshot fallbacks and sibling slot preservation. Open a mission’s Diff and Instructions with a valid dock, then with a missing dock and no saved artifact: the latter must explain unavailability and never show another mission’s work. See [validation](concurrency/MISSION_DOCK_ISOLATION_VALIDATION.md).

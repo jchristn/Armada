@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { copyToClipboard } from './CopyButton';
+import { ErrorState } from './StateBlocks';
 import { useLocale } from '../../context/LocaleContext';
 import { parseUnifiedDiff, type UnifiedDiffLine } from '../../lib/unifiedDiff';
 
@@ -8,6 +9,7 @@ interface DiffViewerProps {
   title: string;
   rawDiff: string;
   loading?: boolean;
+  error?: string;
   onClose: () => void;
 }
 
@@ -44,7 +46,7 @@ function renderDiffLines(lines: UnifiedDiffLine[]): string {
   return html;
 }
 
-export default function DiffViewer({ open, title, rawDiff, loading, onClose }: DiffViewerProps) {
+export default function DiffViewer({ open, title, rawDiff, loading, error, onClose }: DiffViewerProps) {
   const { t } = useLocale();
   // Index of the selected file section (sections are identified by position, not by re-matching names).
   const [selectedFile, setSelectedFile] = useState<number | null>(null);
@@ -89,7 +91,7 @@ export default function DiffViewer({ open, title, rawDiff, loading, onClose }: D
       <div className="diff-modal" onClick={e => e.stopPropagation()}>
         <div className="diff-modal-header">
           <h3 className="viewer-title">{title}</h3>
-          {!isEmpty && (
+          {!isEmpty && !error && (
             <div className="diff-modal-stats">
               <span className="diff-stat-files">
                 {files.length} {t(files.length === 1 ? 'file changed' : 'files changed')}
@@ -99,7 +101,7 @@ export default function DiffViewer({ open, title, rawDiff, loading, onClose }: D
             </div>
           )}
           <div className="viewer-actions">
-            {!isEmpty && (
+            {!isEmpty && !error && (
               <button
                 className={`btn btn-sm${copied ? ' copied' : ''}`}
                 onClick={handleCopy}
@@ -112,7 +114,7 @@ export default function DiffViewer({ open, title, rawDiff, loading, onClose }: D
           </div>
         </div>
         <div className="diff-modal-body">
-          {files.length > 0 && (
+          {!error && files.length > 0 && (
             <div className="diff-file-nav">
               <div className="diff-file-nav-header">
                 {t('Files')} ({files.length})
@@ -145,6 +147,8 @@ export default function DiffViewer({ open, title, rawDiff, loading, onClose }: D
                   <span className="text-dim">{t('Loading diff...')}</span>
                 </div>
               </div>
+            ) : error ? (
+              <div style={{ padding: '1rem' }}><ErrorState message={error} /></div>
             ) : (
               <div
                 className="diff-content-area"

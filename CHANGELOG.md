@@ -22,6 +22,8 @@ v1.3.0 focuses on **parallelization and concurrency**: more independent work in 
 
 ### Scheduling admission
 
+- Bind mission instructions, live REST/MCP diffs and completion capture to the recorded mission dock. Remove captain/branch worktree guesses, enforce dock scope, preserve saved snapshots, and keep sibling assignments intact. Dashboard mission diff viewers now show read failures instead of reporting “No modified files.”
+
 - Atomically reserve captains for exclusive planning/refinement sessions before provisioning. Guard runtime updates, recovery and release by session ownership, preserve newer work during losing creation or late stop/cleanup, and resolve waiting-card links from the recorded owner. Ordinary captain edits cannot acquire or erase a session reservation.
 
 - Unify captain selection for dispatch, read-only waiting diagnostics, stuck-admission preflight and launch retry checks; reuse the eligibility predicate for verification repairs. Resolve voyage preferences without writes during diagnostics, preserve persona/default/strict routing, report full eligible captains even when unrelated captains are free, and explain ineligible spare slots on working captains. Add parity and retry-backoff regressions.

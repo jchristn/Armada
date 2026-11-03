@@ -71,7 +71,7 @@ export default function Missions() {
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: '', message: '', onConfirm: () => {} });
 
   // Diff/Log modals
-  const [diffModal, setDiffModal] = useState<{ title: string; rawDiff: string } | null>(null);
+  const [diffModal, setDiffModal] = useState<{ title: string; rawDiff: string; error?: string } | null>(null);
   const [logModal, setLogModal] = useState<{ title: string; missionId: string; content: string; totalLines?: number; loading: boolean } | null>(null);
 
   // Transition modal
@@ -291,8 +291,8 @@ export default function Missions() {
     try {
       const result = await getMissionDiff(id);
       setDiffModal({ title: t('Mission Diff'), rawDiff: result?.diff || '' });
-    } catch {
-      setDiffModal({ title: t('Mission Diff'), rawDiff: '' });
+    } catch (e) {
+      setDiffModal({ title: t('Mission Diff'), rawDiff: '', error: e instanceof Error ? e.message : String(e) });
     }
   }
 
@@ -472,7 +472,7 @@ export default function Missions() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
       {deletion.dialog}
-      <DiffViewer open={diffModal !== null} title={diffModal?.title ?? ''} rawDiff={diffModal?.rawDiff ?? ''} onClose={() => setDiffModal(null)} />
+      <DiffViewer open={diffModal !== null} title={diffModal?.title ?? ''} rawDiff={diffModal?.rawDiff ?? ''} error={diffModal?.error} onClose={() => setDiffModal(null)} />
       <LogViewer
         open={logModal !== null}
         title={logModal?.title ?? ''}

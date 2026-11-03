@@ -588,24 +588,7 @@ namespace Armada.Server.Mcp.Tools
                         if (git == null)
                             return (object)McpToolError.Unavailable("No saved diff available and git service not configured");
 
-                        Dock? dock = null;
-                        if (!String.IsNullOrEmpty(mission.DockId))
-                        {
-                            dock = await database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false);
-                        }
-
-                        if (dock == null && !String.IsNullOrEmpty(mission.CaptainId))
-                        {
-                            Captain? captain = await database.Captains.ReadAsync(mission.CaptainId).ConfigureAwait(false);
-                            if (captain != null && !String.IsNullOrEmpty(captain.CurrentDockId))
-                                dock = await database.Docks.ReadAsync(captain.CurrentDockId).ConfigureAwait(false);
-                        }
-
-                        if (dock == null && !String.IsNullOrEmpty(mission.BranchName) && !String.IsNullOrEmpty(mission.VesselId))
-                        {
-                            List<Dock> docks = await database.Docks.EnumerateByVesselAsync(mission.VesselId).ConfigureAwait(false);
-                            dock = docks.FirstOrDefault(d => d.BranchName == mission.BranchName && d.Active);
-                        }
+                        Dock? dock = await MissionDockResolver.ReadAsync(database, mission, caller: caller).ConfigureAwait(false);
 
                         if (dock == null || String.IsNullOrEmpty(dock.WorktreePath))
                             return (object)McpToolError.Unavailable("No diff available: no mission worktree or saved diff exists");
