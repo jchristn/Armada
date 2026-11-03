@@ -17,14 +17,14 @@ namespace Test.Shared.Suites.Services
     /// <summary>Deterministic headroom ranking, unknown evidence, safety fences and settings boundaries.</summary>
     public sealed class UsageSelectionSuite : IArmadaTestSuite
     {
-        private const string SuiteId = "Services.UsageSelection";
-        private static readonly DateTime Now = new DateTime(2026, 11, 3, 12, 0, 0, DateTimeKind.Utc);
+        private const string _SuiteId = "Services.UsageSelection";
+        private static readonly DateTime _Now = new DateTime(2026, 11, 3, 12, 0, 0, DateTimeKind.Utc);
 
         /// <summary>Build portable descriptors for every standard runner.</summary>
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
-            void Add(string id, Action body) => cases.Add(new TestCaseDescriptor(SuiteId, id, id.Replace('_', ' '),
+            void Add(string id, Action body) => cases.Add(new TestCaseDescriptor(_SuiteId, id, id.Replace('_', ' '),
                 (CancellationToken token) => { token.ThrowIfCancellationRequested(); body(); return Task.CompletedTask; }));
             Add("safe_defaults_and_json_roundtrip", () =>
             {
@@ -38,6 +38,37 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(90, settings.DecisionRetentionDays);
                 UsageSelectionSettings copy = JsonSerializer.Deserialize<UsageSelectionSettings>(JsonSerializer.Serialize(settings))!;
                 copy.Validate(); AssertEqual(settings.Mode, copy.Mode); AssertEqual(settings.MaximumCandidates, copy.MaximumCandidates);
+            });
+            Add("strategies_are_explicit_and_do_not_bypass_gates", () =>
+            {
+                UsageSelectionSettings settings = new UsageSelectionSettings();
+                AssertEqual(CaptainSelectionStrategyEnum.FirstAvailable, settings.Strategy);
+                UsageSelectionCandidate a = Fresh("a", 80); a.FirstAvailableRank = 0;
+                UsageSelectionCandidate b = Fresh("b", 10); b.FirstAvailableRank = 1;
+                AssertEqual("a", UsageSelectionPolicy.Evaluate(new[] { b, a }, settings, _Now).SelectedCaptainId);
+                settings.Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance;
+                AssertEqual("b", UsageSelectionPolicy.Evaluate(new[] { a, b }, settings, _Now).SelectedCaptainId);
+                settings.Strategy = CaptainSelectionStrategyEnum.MostUsedAllowance;
+                AssertEqual("a", UsageSelectionPolicy.Evaluate(new[] { b, a }, settings, _Now).SelectedCaptainId);
+                a.Windows[0].Window.UsedPercent = 99;
+                AssertEqual("b", UsageSelectionPolicy.Evaluate(new[] { a, b }, settings, _Now).SelectedCaptainId);
+                settings.Strategy = CaptainSelectionStrategyEnum.FirstAvailable;
+                AssertEqual("b", UsageSelectionPolicy.Evaluate(new[] { a, b }, settings, _Now).SelectedCaptainId);
+                settings.Strategy = (CaptainSelectionStrategyEnum)99;
+                AssertThrows<ArgumentOutOfRangeException>(() => settings.Validate());
+            });
+            Add("settings_file_defaults_and_strategy_roundtrip", () =>
+            {
+                ArmadaSettings defaults = ArmadaSettings.Parse("{}");
+                AssertEqual(CaptainSelectionStrategyEnum.FirstAvailable, defaults.UsageSelection.Strategy);
+                AssertEqual(UsageSelectionModeEnum.Observe, defaults.UsageSelection.Mode);
+                ArmadaSettings configured = ArmadaSettings.Parse("{\"UsageSelection\":{\"Strategy\":\"MostUsedAllowance\",\"ReservePercent\":15}}");
+                AssertEqual(CaptainSelectionStrategyEnum.MostUsedAllowance, configured.UsageSelection.Strategy);
+                AssertEqual(15.0, configured.UsageSelection.ReservePercent);
+                AssertEqual(CaptainSelectionStrategyEnum.MostUsedAllowance,
+                    ArmadaSettings.Parse(JsonSerializer.Serialize(configured)).UsageSelection.Strategy);
+                AssertThrows<ArgumentException>(() => ArmadaSettings.Parse("{\"UsageSelection\":{\"ReservePercent\":90}}"));
+                AssertThrows<JsonException>(() => ArmadaSettings.Parse("{\"UsageSelection\":{\"Strategy\":\"RandomUnknown\"}}"));
             });
             Add("settings_clamp_reject_nonfinite_and_crossfield_errors", () =>
             {
@@ -78,11 +109,11 @@ namespace Test.Shared.Suites.Services
                 UsageSelectionCandidate comfortable = Fresh("comfortable", 10); comfortable.OccupiedSlots = 2; comfortable.Capacity = 4;
                 AssertEqual("comfortable", Evaluate(Fresh("constrained", 80), comfortable).SelectedCaptainId);
             });
-            Add("occupied_ratio_precedes_comparable_headroom", () =>
+            Add("remaining_strategy_prefers_comparable_headroom_before_load", () =>
             {
                 UsageSelectionCandidate a = Fresh("a", 10); a.OccupiedSlots = 1; a.Capacity = 2;
                 UsageSelectionCandidate b = Fresh("b", 30); b.OccupiedSlots = 1; b.Capacity = 4;
-                AssertEqual("b", Evaluate(a, b).SelectedCaptainId);
+                AssertEqual("a", Evaluate(a, b).SelectedCaptainId);
             });
             Add("equal_load_comparable_windows_prefer_headroom", () => AssertEqual("b", Evaluate(Fresh("a", 30), Fresh("b", 10)).SelectedCaptainId));
             Add("incomparable_providers_use_assignment_age_and_id", () =>
@@ -90,7 +121,7 @@ namespace Test.Shared.Suites.Services
                 UsageSelectionCandidate a = Fresh("a", 30); a.Provider = "anthropic";
                 UsageSelectionCandidate b = Fresh("b", 10); b.Provider = "openai";
                 AssertEqual("a", Evaluate(b, a).SelectedCaptainId);
-                b.LastAssignedUtc = Now.AddDays(-1); AssertEqual("b", Evaluate(a, b).SelectedCaptainId);
+                b.LastAssignedUtc = _Now.AddDays(-1); AssertEqual("b", Evaluate(a, b).SelectedCaptainId);
                 a.LastAssignedUtc = null; AssertEqual("b", Evaluate(a, b).SelectedCaptainId);
             });
             Add("ranking_is_permutation_invariant_with_three_providers", () =>
@@ -105,7 +136,7 @@ namespace Test.Shared.Suites.Services
             {
                 UsageSelectionCandidate a = Fresh("a", 10); a.IdentityVerified = false; a.HasAuthoritativeQuotaHold = true;
                 AssertEqual("AccountQuotaExhausted", Evaluate(a).Candidates[0].ReasonCode);
-                a.HasAuthoritativeQuotaHold = false; a.CooldownUntilUtc = Now.AddMinutes(1);
+                a.HasAuthoritativeQuotaHold = false; a.CooldownUntilUtc = _Now.AddMinutes(1);
                 AssertEqual("AccountCooldown", Evaluate(a).Candidates[0].ReasonCode);
                 AssertNull(Evaluate(a).SelectedCaptainId);
             });
@@ -122,15 +153,15 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("a", Evaluate(a).SelectedCaptainId);
                 AssertEqual("b", Evaluate(a, Fresh("b", 80)).SelectedCaptainId);
                 UsageSelectionSettings settings = new UsageSelectionSettings { UnknownUsageBehavior = UsageUnknownBehaviorEnum.Wait };
-                AssertNull(UsageSelectionPolicy.Evaluate(new[] { a }, settings, Now).SelectedCaptainId);
+                AssertNull(UsageSelectionPolicy.Evaluate(new[] { a }, settings, _Now).SelectedCaptainId);
             });
             Add("freshness_respects_existing_horizon_and_new_cap", () =>
             {
-                UsageSelectionCandidate a = Fresh("a", 0); a.CapturedUtc = Now.AddSeconds(-121);
+                UsageSelectionCandidate a = Fresh("a", 0); a.CapturedUtc = _Now.AddSeconds(-121);
                 AssertEqual("UsageStale", Evaluate(a).Candidates[0].ReasonCode);
-                a.EffectiveCaptureIntervalSeconds = 1000; a.CapturedUtc = Now.AddSeconds(-901);
+                a.EffectiveCaptureIntervalSeconds = 1000; a.CapturedUtc = _Now.AddSeconds(-901);
                 AssertEqual("UsageStale", Evaluate(a).Candidates[0].ReasonCode);
-                a.CapturedUtc = Now.AddSeconds(-900); AssertEqual(UsageSelectionBandEnum.Comfortable, Evaluate(a).Candidates[0].Band);
+                a.CapturedUtc = _Now.AddSeconds(-900); AssertEqual(UsageSelectionBandEnum.Comfortable, Evaluate(a).Candidates[0].Band);
             });
             Add("failed_derived_future_and_changed_evidence_are_unknown", () =>
             {
@@ -138,9 +169,9 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("UsageNotAuthoritative", Evaluate(a).Candidates[0].ReasonCode);
                 a.Status = UsageSnapshotStatusEnum.Ok; a.Source = UsageCaptureSourceEnum.Derived;
                 AssertEqual("UsageNotAuthoritative", Evaluate(a).Candidates[0].ReasonCode);
-                a.Source = UsageCaptureSourceEnum.Headers; a.CapturedUtc = Now.AddMinutes(6);
+                a.Source = UsageCaptureSourceEnum.Headers; a.CapturedUtc = _Now.AddMinutes(6);
                 AssertEqual("FutureObservation", Evaluate(a).Candidates[0].ReasonCode);
-                a.CapturedUtc = Now; a.ConfigurationMatches = false;
+                a.CapturedUtc = _Now; a.ConfigurationMatches = false;
                 AssertEqual("UsageConfigurationChanged", Evaluate(a).Candidates[0].ReasonCode);
             });
             Add("tightest_window_includes_active_and_unsettled_estimates", () =>
@@ -166,11 +197,11 @@ namespace Test.Shared.Suites.Services
             Add("soft_reserve_exception_cannot_bypass_hard_quota", () =>
             {
                 UsageSelectionCandidate a = Fresh("a", 95);
-                AssertEqual("a", UsageSelectionPolicy.Evaluate(new[] { a }, new UsageSelectionSettings(), Now, true).SelectedCaptainId);
+                AssertEqual("a", UsageSelectionPolicy.Evaluate(new[] { a }, new UsageSelectionSettings { Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance }, _Now, true).SelectedCaptainId);
                 a.Windows[0].Window.UsedPercent = 100;
-                AssertNull(UsageSelectionPolicy.Evaluate(new[] { a }, new UsageSelectionSettings(), Now, true).SelectedCaptainId);
+                AssertNull(UsageSelectionPolicy.Evaluate(new[] { a }, new UsageSelectionSettings { Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance }, _Now, true).SelectedCaptainId);
                 a.Windows[0].Window.UsedPercent = 99;
-                AssertNull(UsageSelectionPolicy.Evaluate(new[] { a }, new UsageSelectionSettings(), Now, true).SelectedCaptainId);
+                AssertNull(UsageSelectionPolicy.Evaluate(new[] { a }, new UsageSelectionSettings { Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance }, _Now, true).SelectedCaptainId);
             });
             Add("model_and_scope_applicability_are_conservative", () =>
             {
@@ -182,15 +213,15 @@ namespace Test.Shared.Suites.Services
             });
             Add("passed_reset_requires_fresh_capture_not_invented_zero", () =>
             {
-                UsageSelectionCandidate a = Fresh("a", 100); a.Windows[0].Window.ResetsUtc = Now;
+                UsageSelectionCandidate a = Fresh("a", 100); a.Windows[0].Window.ResetsUtc = _Now;
                 AssertEqual("AwaitingFreshUsage", Evaluate(a).Candidates[0].ReasonCode);
                 a.Windows[0].GenerationConfirmed = false; AssertEqual("AwaitingFreshUsage", Evaluate(a).Candidates[0].ReasonCode);
             });
             Add("multiple_blocking_windows_report_latest_known_reset", () =>
             {
-                UsageSelectionCandidate a = Fresh("a", 100); a.Windows[0].Window.ResetsUtc = Now.AddHours(1);
-                a.Windows.Add(new UsageSelectionWindowEvidence { Window = new UsageWindow { Name = "weekly", UsedPercent = 100, ResetsUtc = Now.AddHours(5) } });
-                AssertEqual(Now.AddHours(5), Evaluate(a).Candidates[0].NextReconsiderUtc!.Value);
+                UsageSelectionCandidate a = Fresh("a", 100); a.Windows[0].Window.ResetsUtc = _Now.AddHours(1);
+                a.Windows.Add(new UsageSelectionWindowEvidence { Window = new UsageWindow { Name = "weekly", UsedPercent = 100, ResetsUtc = _Now.AddHours(5) } });
+                AssertEqual(_Now.AddHours(5), Evaluate(a).Candidates[0].NextReconsiderUtc!.Value);
                 a.Windows[1].Window.ResetsUtc = null; AssertNull(Evaluate(a).Candidates[0].NextReconsiderUtc);
             });
             Add("count_windows_need_valid_unit_and_limit", () =>
@@ -213,7 +244,7 @@ namespace Test.Shared.Suites.Services
             Add("candidate_limit_never_selects_truncated_input", () =>
             {
                 UsageSelectionSettings settings = new UsageSelectionSettings { MaximumCandidates = 1 };
-                UsageSelectionEvaluation result = UsageSelectionPolicy.Evaluate(new[] { Fresh("a", 0), Fresh("b", 0) }, settings, Now);
+                UsageSelectionEvaluation result = UsageSelectionPolicy.Evaluate(new[] { Fresh("a", 0), Fresh("b", 0) }, settings, _Now);
                 AssertTrue(result.CandidateLimitExceeded); AssertNull(result.SelectedCaptainId); AssertEqual(0, result.Candidates.Count);
                 AssertThrows<ArgumentException>(() => Evaluate(Fresh("a", 0), Fresh("a", 0)));
             });
@@ -222,15 +253,15 @@ namespace Test.Shared.Suites.Services
                 UsageSelectionCandidate a = Fresh("a", 10); string before = JsonSerializer.Serialize(a);
                 Evaluate(a); AssertEqual(before, JsonSerializer.Serialize(a));
             });
-            return new TestSuiteDescriptor(SuiteId, "Usage selection policy", cases);
+            return new TestSuiteDescriptor(_SuiteId, "Usage selection policy", cases);
         }
 
         private static UsageSelectionEvaluation Evaluate(params UsageSelectionCandidate[] candidates)
-            => UsageSelectionPolicy.Evaluate(candidates, new UsageSelectionSettings(), Now);
+            => UsageSelectionPolicy.Evaluate(candidates, new UsageSelectionSettings { Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance }, _Now);
 
         private static UsageSelectionCandidate Fresh(string id, double used)
             => new UsageSelectionCandidate { CaptainId = id, Provider = "anthropic", Model = "opus", IdentityVerified = true,
-                CapturedUtc = Now, Status = UsageSnapshotStatusEnum.Ok, Source = UsageCaptureSourceEnum.Headers, LastAssignedUtc = Now,
+                CapturedUtc = _Now, Status = UsageSnapshotStatusEnum.Ok, Source = UsageCaptureSourceEnum.Headers, LastAssignedUtc = _Now,
                 Windows = new List<UsageSelectionWindowEvidence> { new UsageSelectionWindowEvidence {
                     Window = new UsageWindow { Name = "five_hour", WindowMinutes = 300, Unit = "percent", UsedPercent = used } } } };
     }

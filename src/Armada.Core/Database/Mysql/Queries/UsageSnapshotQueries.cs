@@ -10,10 +10,10 @@ namespace Armada.Core.Database.Mysql.Queries
     {
         internal const string SnapshotInsert = @"INSERT INTO usage_snapshots
             (id, tenant_id, captain_id, harbor_id, host_id, runtime, provider, account_key,
-             captured_utc, received_utc, status, source, windows_json, raw_excerpt, error_code)
+             captured_utc, received_utc, probe_started_utc, status, source, windows_json, raw_excerpt, error_code)
             VALUES
             (@id, @tenant_id, @captain_id, @harbor_id, @host_id, @runtime, @provider, @account_key,
-             @captured_utc, @received_utc, @status, @source, @windows_json, @raw_excerpt, @error_code);";
+             @captured_utc, @received_utc, @probe_started_utc, @status, @source, @windows_json, @raw_excerpt, @error_code);";
 
         internal const string SnapshotSelectById = "SELECT * FROM usage_snapshots WHERE id = @id AND tenant_id = @tenant_id;";
 

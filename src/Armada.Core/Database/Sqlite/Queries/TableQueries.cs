@@ -2824,7 +2824,9 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"ALTER TABLE fleet_actions ADD COLUMN mission_mode TEXT NOT NULL DEFAULT 'Implementation';",
                     @"ALTER TABLE fleet_action_runs ADD COLUMN applicability_command TEXT NULL;",
                     @"ALTER TABLE fleet_action_runs ADD COLUMN applicability_command_windows TEXT NULL;",
-                    @"ALTER TABLE fleet_action_runs ADD COLUMN mission_mode TEXT NOT NULL DEFAULT 'Implementation';") { AlreadyAppliedCheckSql = "SELECT COUNT(*) FROM pragma_table_info('fleet_action_runs') WHERE name='mission_mode'" }
+                    @"ALTER TABLE fleet_action_runs ADD COLUMN mission_mode TEXT NOT NULL DEFAULT 'Implementation';") { AlreadyAppliedCheckSql = "SELECT COUNT(*) FROM pragma_table_info('fleet_action_runs') WHERE name='mission_mode'" },
+                Armada.Core.Database.UsageSelectionSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.UsageSelectionSchema.CaptureTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite)
 
             };
         }

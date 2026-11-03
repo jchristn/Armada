@@ -92,6 +92,9 @@ namespace Armada.Core.Models
         /// </summary>
         public string? AccountKey { get; set; } = null;
 
+        /// <summary>Admiral-side start of an active capture, before host round trip. Null for legacy/passive observations; those cannot settle post-execution debt.</summary>
+        public DateTime? ProbeStartedUtc { get; set; } = null;
+
         /// <summary>
         /// UTC time the observation was made (the provider's own timestamp for a session-log harvest, the
         /// probe start otherwise). Series group raw samples by this time, not by arrival.

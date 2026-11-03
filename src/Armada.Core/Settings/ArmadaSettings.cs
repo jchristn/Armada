@@ -980,6 +980,20 @@ namespace Armada.Core.Settings
         private ConcurrencySettings _Concurrency = new ConcurrencySettings();
         private readonly List<string> _ConcurrencyWarnings = new List<string>();
 
+        /// <summary>Usage-aware selection policy. Defaults to Observe/FirstAvailable; null restores defaults. A complete group is validated before replacement.</summary>
+        public UsageSelectionSettings UsageSelection
+        {
+            get => _UsageSelection;
+            set
+            {
+                UsageSelectionSettings incoming = value ?? new UsageSelectionSettings();
+                incoming.Validate();
+                _UsageSelection = incoming;
+            }
+        }
+
+        private UsageSelectionSettings _UsageSelection = new UsageSelectionSettings();
+
         /// <summary>
         /// Account usage capture settings (server switch, interval floor, probe concurrency and timeouts,
         /// excerpt cap, raw/rollup retention days). Never null; setting null restores the defaults.
@@ -1154,6 +1168,7 @@ namespace Armada.Core.Settings
         /// loaded from, else ~/.armada/settings.json).</param>
         public async Task SaveAsync(string? path = null)
         {
+            UsageSelection.Validate();
             NormalizeConcurrency();
             NormalizePaths();
             path ??= EffectiveSettingsFilePath;
@@ -1207,6 +1222,7 @@ namespace Armada.Core.Settings
         /// <exception cref="IOException">The file could not be written.</exception>
         public bool WriteBack(string? path = null)
         {
+            UsageSelection.Validate();
             NormalizeConcurrency();
             NormalizePaths();
             path ??= EffectiveSettingsFilePath;
@@ -1253,6 +1269,7 @@ namespace Armada.Core.Settings
             LegacyLandingSettings? legacy = JsonSerializer.Deserialize<LegacyLandingSettings>(json, _SerializerOptions);
             if (legacy != null && !legacy.LandingMode.HasValue) settings.LandingMode = legacy.ResolveLandingMode();
             settings.NormalizeConcurrency();
+            settings.UsageSelection.Validate();
             settings.NormalizePaths();
             return settings;
         }

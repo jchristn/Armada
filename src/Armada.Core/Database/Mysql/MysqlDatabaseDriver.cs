@@ -56,6 +56,7 @@ namespace Armada.Core.Database.Mysql
             Vessels = new VesselMethods(_ConnectionString);
             Captains = new CaptainMethods(_ConnectionString);
             MissionWaitIntervals = new Armada.Core.Database.MissionWaitIntervalMethods(() => new MySqlConnector.MySqlConnection(_ConnectionString));
+            CaptainSelections = new Armada.Core.Database.CaptainSelectionMethods(() => new MySqlConnector.MySqlConnection(_ConnectionString));
             Missions = new MissionMethods(_ConnectionString);
             Voyages = new VoyageMethods(_ConnectionString);
             PlanningSessions = new PlanningSessionMethods(_ConnectionString);
@@ -1537,7 +1538,9 @@ namespace Armada.Core.Database.Mysql
                     @"ALTER TABLE fleet_actions ADD COLUMN mission_mode VARCHAR(64) NOT NULL DEFAULT 'Implementation';",
                     @"ALTER TABLE fleet_action_runs ADD COLUMN applicability_command LONGTEXT NULL;",
                     @"ALTER TABLE fleet_action_runs ADD COLUMN applicability_command_windows LONGTEXT NULL;",
-                    @"ALTER TABLE fleet_action_runs ADD COLUMN mission_mode VARCHAR(64) NOT NULL DEFAULT 'Implementation';") { AlreadyAppliedCheckSql = "SELECT CASE WHEN COUNT(*)=6 THEN 1 ELSE 0 END FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN ('fleet_actions','fleet_action_runs') AND column_name IN ('applicability_command','applicability_command_windows','mission_mode')" }
+                    @"ALTER TABLE fleet_action_runs ADD COLUMN mission_mode VARCHAR(64) NOT NULL DEFAULT 'Implementation';") { AlreadyAppliedCheckSql = "SELECT CASE WHEN COUNT(*)=6 THEN 1 ELSE 0 END FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN ('fleet_actions','fleet_action_runs') AND column_name IN ('applicability_command','applicability_command_windows','mission_mode')" },
+                Armada.Core.Database.UsageSelectionSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Mysql),
+                Armada.Core.Database.UsageSelectionSchema.CaptureTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.Mysql)
 
             };
         }

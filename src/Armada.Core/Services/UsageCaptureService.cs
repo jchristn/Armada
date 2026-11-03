@@ -419,6 +419,7 @@ namespace Armada.Core.Services
                                 UsageProbeResult.Failed("LeaseExpired", "the capture attempt's lease expired before it reached the credential host"),
                                 attemptToken).ConfigureAwait(false);
 
+                        DateTime probeStartedUtc = Now();
                         UsageProbeResult probe = await CaptureThroughHostAsync(job, group, attemptToken).ConfigureAwait(false);
                         DateTime finished = Now();
 
@@ -441,7 +442,7 @@ namespace Armada.Core.Services
                         if (members.Count == 0)
                             return await DiscardAsync(job, "NoMembers", probe, attemptToken).ConfigureAwait(false);
 
-                        UsageSnapshot snapshot = await CommitAsync(group, members, probe, triggeringCaptainId, finished, attemptToken).ConfigureAwait(false);
+                        UsageSnapshot snapshot = await CommitAsync(group, members, probe, triggeringCaptainId, finished, attemptToken, probeStartedUtc).ConfigureAwait(false);
                         DateTime? next = ScheduleNext(group, probe, finished);
 
                         bool healthy = probe.Status == UsageSnapshotStatusEnum.Ok
@@ -627,7 +628,7 @@ namespace Armada.Core.Services
             return parsed;
         }
 
-        private async Task<UsageSnapshot> CommitAsync(UsageCaptureGroup group, List<string> memberCaptainIds, UsageProbeResult probe, string? triggeringCaptainId, DateTime receivedUtc, CancellationToken token)
+        private async Task<UsageSnapshot> CommitAsync(UsageCaptureGroup group, List<string> memberCaptainIds, UsageProbeResult probe, string? triggeringCaptainId, DateTime receivedUtc, CancellationToken token, DateTime? probeStartedUtc = null)
         {
             using UsageTelemetryOperation telemetry = UsageTelemetry.Start("storage", group.Runtime.ToString());
             UsageSnapshot snapshot = new UsageSnapshot
@@ -640,6 +641,7 @@ namespace Armada.Core.Services
                 Provider = probe.Provider,
                 AccountKey = probe.AccountKey,
                 CapturedUtc = probe.CapturedUtc,
+                ProbeStartedUtc = probeStartedUtc,
                 ReceivedUtc = receivedUtc,
                 Status = probe.Status,
                 Source = probe.Source,

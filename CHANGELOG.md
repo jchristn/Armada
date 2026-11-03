@@ -21,6 +21,7 @@ v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-
 
 - Plan [usage-based captain selection and decision history](USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) for v1.3.0: shared-account headroom, deterministic routing, atomic reservations, durable decision evidence, operator diagnostics and all-client validation. Implementation remains pending.
 - Start usage-selection U0 with an executable deterministic headroom policy, validated typed settings and normalized evidence fixtures. Preserve existing dispatch behavior until history and atomic admission integration are ready. See [baseline and contract review](docs/usage-selection/BASELINE_AND_CONTRACT.md).
+- Add usage-selection storage foundations (migrations 123/124): structured tenant-scoped decision history, captured policy/strategy evidence, guarded reservation lifecycle and atomic Observe-mode slot/history writes. Add configurable FirstAvailable, MostRemainingAllowance and MostUsedAllowance policy strategies; settings-file contracts default to Observe/FirstAvailable. Dispatch integration and interactive controls remain in progress.
 
 - Enable Serialize overlapping missions by default for new vessels across the model, REST/MCP, Dashboard and TUI creation paths. Explicit opt-outs and existing stored values are preserved.
 

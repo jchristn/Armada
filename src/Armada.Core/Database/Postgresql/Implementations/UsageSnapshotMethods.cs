@@ -85,6 +85,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     PostgresqlCommandHelper.Add(cmd, "@account_key", String.IsNullOrEmpty(snapshot.AccountKey) ? null : snapshot.AccountKey);
                     PostgresqlCommandHelper.AddDate(cmd, "@captured_utc", snapshot.CapturedUtc);
                     PostgresqlCommandHelper.AddDate(cmd, "@received_utc", snapshot.ReceivedUtc);
+                    PostgresqlCommandHelper.Add(cmd, "@probe_started_utc", snapshot.ProbeStartedUtc?.ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture));
                     PostgresqlCommandHelper.Add(cmd, "@status", snapshot.Status.ToString());
                     PostgresqlCommandHelper.Add(cmd, "@source", snapshot.Source.ToString());
                     PostgresqlCommandHelper.Add(cmd, "@windows_json", snapshot.WindowsJson);
@@ -478,6 +479,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             snapshot.AccountKey = PostgresqlCommandHelper.ReadString(reader["account_key"]);
             snapshot.CapturedUtc = PostgresqlCommandHelper.ReadDate(reader["captured_utc"]);
             snapshot.ReceivedUtc = PostgresqlCommandHelper.ReadDate(reader["received_utc"]);
+            snapshot.ProbeStartedUtc = reader["probe_started_utc"] == DBNull.Value ? null : DateTime.Parse(reader["probe_started_utc"].ToString()!, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind).ToUniversalTime();
             snapshot.Status = PostgresqlCommandHelper.ReadEnum(reader["status"], UsageSnapshotStatusEnum.Failed);
             snapshot.Source = PostgresqlCommandHelper.ReadEnum(reader["source"], UsageCaptureSourceEnum.OAuthEndpoint);
             snapshot.WindowsJson = PostgresqlCommandHelper.ReadString(reader["windows_json"]);

@@ -906,8 +906,26 @@ namespace Test.Shared.Suites.Database
                 UsageSnapshot good = new UsageSnapshot { TenantId = "ten_recover", HostId = "host", AccountKey = "account", Provider = "anthropic", Status = UsageSnapshotStatusEnum.Ok, CapturedUtc = DateTime.UtcNow.AddHours(-2), WindowsJson = "[]" };
                 UsageSnapshot error = new UsageSnapshot { TenantId = good.TenantId, HostId = good.HostId, AccountKey = good.AccountKey, Status = UsageSnapshotStatusEnum.Failed, CapturedUtc = DateTime.UtcNow.AddHours(-1), ErrorCode = "HostUnavailable" };
                 using DatabaseDriver driver = DatabaseDriverFactory.Create(isolated.Settings, logging);
-                await driver.UsageSnapshots.CreateAsync(good, new List<string> { "cpt_recovered" }, ct).ConfigureAwait(false);
-                await driver.UsageSnapshots.CreateAsync(error, new List<string> { "cpt_recovered" }, ct).ConfigureAwait(false);
+                // Seed the historical schema through its historical shape, not today's post-migration writer.
+                // Current snapshot writes also persist capture-start timing introduced in migration 124.
+                using (DbConnection seed = CreateUpgradeConnection(isolated.Settings))
+                {
+                    await seed.OpenAsync(ct).ConfigureAwait(false);
+                    foreach (UsageSnapshot snapshot in new[] { good, error })
+                    {
+                        using DbCommand insert = seed.CreateCommand();
+                        insert.CommandText = "INSERT INTO usage_snapshots(id,tenant_id,captain_id,harbor_id,host_id,runtime,provider,account_key,captured_utc,received_utc,status,source,windows_json,raw_excerpt,error_code) VALUES(@id,@tenant,NULL,NULL,'host',@runtime,@provider,'account',@captured,@received,@status,@source,@windows,NULL,@error);";
+                        void Parameter(string name, object? value) { DbParameter parameter = insert.CreateParameter(); parameter.ParameterName = name; parameter.Value = value ?? DBNull.Value; insert.Parameters.Add(parameter); }
+                        object Timestamp(DateTime value) => isolated.Type == DatabaseTypeEnum.Sqlite || isolated.Type == DatabaseTypeEnum.SqlServer ? value.ToString("o", System.Globalization.CultureInfo.InvariantCulture) : value;
+                        Parameter("@id", snapshot.Id); Parameter("@tenant", snapshot.TenantId); Parameter("@runtime", snapshot.Runtime.ToString());
+                        Parameter("@provider", snapshot.Provider); Parameter("@captured", Timestamp(snapshot.CapturedUtc)); Parameter("@received", Timestamp(snapshot.ReceivedUtc));
+                        Parameter("@status", snapshot.Status.ToString()); Parameter("@source", snapshot.Source.ToString()); Parameter("@windows", snapshot.WindowsJson); Parameter("@error", snapshot.ErrorCode);
+                        await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                        insert.CommandText = "INSERT INTO usage_snapshot_captains(id,tenant_id,snapshot_id,captain_id,captured_utc) VALUES(@link,@tenant,@id,'cpt_recovered',@captured);";
+                        Parameter("@link", Armada.Core.Constants.IdGenerator.GenerateKSortable("usc_", 24));
+                        await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                    }
+                }
                 await driver.InitializeAsync(ct).ConfigureAwait(false);
                 UsageLatestState saved = (await driver.UsageSnapshots.EnumerateLatestStatesAsync(new UsageLatestStateQuery { TenantId = good.TenantId }, ct).ConfigureAwait(false)).Objects.Single();
                 AssertEqual(good.Id, saved.LastGoodSnapshotId);

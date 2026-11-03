@@ -85,6 +85,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     SqliteCommandHelper.Add(cmd, "@account_key", String.IsNullOrEmpty(snapshot.AccountKey) ? null : snapshot.AccountKey);
                     SqliteCommandHelper.AddDate(cmd, "@captured_utc", snapshot.CapturedUtc);
                     SqliteCommandHelper.AddDate(cmd, "@received_utc", snapshot.ReceivedUtc);
+                    SqliteCommandHelper.Add(cmd, "@probe_started_utc", snapshot.ProbeStartedUtc?.ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture));
                     SqliteCommandHelper.Add(cmd, "@status", snapshot.Status.ToString());
                     SqliteCommandHelper.Add(cmd, "@source", snapshot.Source.ToString());
                     SqliteCommandHelper.Add(cmd, "@windows_json", snapshot.WindowsJson);
@@ -478,6 +479,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
             snapshot.AccountKey = SqliteCommandHelper.ReadString(reader["account_key"]);
             snapshot.CapturedUtc = SqliteCommandHelper.ReadDate(reader["captured_utc"]);
             snapshot.ReceivedUtc = SqliteCommandHelper.ReadDate(reader["received_utc"]);
+            snapshot.ProbeStartedUtc = reader["probe_started_utc"] == DBNull.Value ? null : DateTime.Parse(reader["probe_started_utc"].ToString()!, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind).ToUniversalTime();
             snapshot.Status = SqliteCommandHelper.ReadEnum(reader["status"], UsageSnapshotStatusEnum.Failed);
             snapshot.Source = SqliteCommandHelper.ReadEnum(reader["source"], UsageCaptureSourceEnum.OAuthEndpoint);
             snapshot.WindowsJson = SqliteCommandHelper.ReadString(reader["windows_json"]);

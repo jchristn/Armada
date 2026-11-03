@@ -79,6 +79,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                     MysqlCommandHelper.Add(cmd, "@account_key", String.IsNullOrEmpty(snapshot.AccountKey) ? null : snapshot.AccountKey);
                     MysqlCommandHelper.AddDate(cmd, "@captured_utc", snapshot.CapturedUtc);
                     MysqlCommandHelper.AddDate(cmd, "@received_utc", snapshot.ReceivedUtc);
+                    MysqlCommandHelper.Add(cmd, "@probe_started_utc", snapshot.ProbeStartedUtc?.ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture));
                     MysqlCommandHelper.Add(cmd, "@status", snapshot.Status.ToString());
                     MysqlCommandHelper.Add(cmd, "@source", snapshot.Source.ToString());
                     MysqlCommandHelper.Add(cmd, "@windows_json", snapshot.WindowsJson);
@@ -472,6 +473,7 @@ namespace Armada.Core.Database.Mysql.Implementations
             snapshot.AccountKey = MysqlCommandHelper.ReadString(reader["account_key"]);
             snapshot.CapturedUtc = MysqlCommandHelper.ReadDate(reader["captured_utc"]);
             snapshot.ReceivedUtc = MysqlCommandHelper.ReadDate(reader["received_utc"]);
+            snapshot.ProbeStartedUtc = reader["probe_started_utc"] == DBNull.Value ? null : DateTime.Parse(reader["probe_started_utc"].ToString()!, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind).ToUniversalTime();
             snapshot.Status = MysqlCommandHelper.ReadEnum(reader["status"], UsageSnapshotStatusEnum.Failed);
             snapshot.Source = MysqlCommandHelper.ReadEnum(reader["source"], UsageCaptureSourceEnum.OAuthEndpoint);
             snapshot.WindowsJson = MysqlCommandHelper.ReadString(reader["windows_json"]);

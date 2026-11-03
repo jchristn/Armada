@@ -16,6 +16,9 @@ namespace Armada.Core.Models
         /// <summary>Proven intended model, or null when automatic routing is unresolved.</summary>
         public string? Model { get; set; } = null;
 
+        /// <summary>Existing deterministic routing order inside a preference bucket, supplied by shared routing.</summary>
+        public int FirstAvailableRank { get; set; } = 0;
+
         /// <summary>Existing routing preference bucket; lower is preferred.</summary>
         public int RoutingBucket { get; set; } = 0;
 

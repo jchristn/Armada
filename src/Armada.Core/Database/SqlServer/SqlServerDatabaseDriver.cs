@@ -62,6 +62,7 @@ namespace Armada.Core.Database.SqlServer
             Vessels = new VesselMethods(this, _Settings, _Logging);
             Captains = new CaptainMethods(this, _Settings, _Logging);
             MissionWaitIntervals = new Armada.Core.Database.MissionWaitIntervalMethods(() => new Microsoft.Data.SqlClient.SqlConnection(_ConnectionString));
+            CaptainSelections = new Armada.Core.Database.CaptainSelectionMethods(() => new Microsoft.Data.SqlClient.SqlConnection(_ConnectionString));
             Missions = new MissionMethods(this, _Settings, _Logging);
             Voyages = new VoyageMethods(this, _Settings, _Logging);
             PlanningSessions = new PlanningSessionMethods(this, _Settings, _Logging);

@@ -85,6 +85,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     SqlServerCommandHelper.Add(cmd, "@account_key", String.IsNullOrEmpty(snapshot.AccountKey) ? null : snapshot.AccountKey);
                     SqlServerCommandHelper.AddDate(cmd, "@captured_utc", snapshot.CapturedUtc);
                     SqlServerCommandHelper.AddDate(cmd, "@received_utc", snapshot.ReceivedUtc);
+                    SqlServerCommandHelper.Add(cmd, "@probe_started_utc", snapshot.ProbeStartedUtc?.ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture));
                     SqlServerCommandHelper.Add(cmd, "@status", snapshot.Status.ToString());
                     SqlServerCommandHelper.Add(cmd, "@source", snapshot.Source.ToString());
                     SqlServerCommandHelper.Add(cmd, "@windows_json", snapshot.WindowsJson);
@@ -478,6 +479,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
             snapshot.AccountKey = SqlServerCommandHelper.ReadString(reader["account_key"]);
             snapshot.CapturedUtc = SqlServerCommandHelper.ReadDate(reader["captured_utc"]);
             snapshot.ReceivedUtc = SqlServerCommandHelper.ReadDate(reader["received_utc"]);
+            snapshot.ProbeStartedUtc = reader["probe_started_utc"] == DBNull.Value ? null : DateTime.Parse(reader["probe_started_utc"].ToString()!, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind).ToUniversalTime();
             snapshot.Status = SqlServerCommandHelper.ReadEnum(reader["status"], UsageSnapshotStatusEnum.Failed);
             snapshot.Source = SqlServerCommandHelper.ReadEnum(reader["source"], UsageCaptureSourceEnum.OAuthEndpoint);
             snapshot.WindowsJson = SqlServerCommandHelper.ReadString(reader["windows_json"]);

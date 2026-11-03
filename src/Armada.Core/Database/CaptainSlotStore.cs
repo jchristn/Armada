@@ -79,13 +79,22 @@ namespace Armada.Core.Database
             return changed;
         }
 
-        internal async Task<bool> ClaimAsync(string captainId, string missionId, string? dockId, CancellationToken token, int ceiling = 256)
+        internal async Task<bool> ClaimAsync(string captainId, string missionId, string? dockId, CancellationToken token, int ceiling = 256, Armada.Core.Models.CaptainSelectionRecordSet? selection = null)
         {
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
             if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
             using DbTransaction tx = await _Connection.BeginTransactionAsync(token).ConfigureAwait(false);
             try
             {
+                if (selection != null)
+                {
+                    if (selection.Decision.Mode != UsageSelectionModeEnum.Observe || selection.Decision.SelectedCaptainId != captainId || selection.Decision.MissionId != missionId)
+                        throw new ArgumentException("Observed admission must match its selected captain, mission and Observe mode.", nameof(selection));
+                    using DbCommand scope = Command(tx, "SELECT COUNT(*) FROM captains c JOIN missions m ON m.id=@mission WHERE c.id=@id AND c.tenant_id=@tenant AND m.tenant_id=@tenant AND ((m.user_id=@owner) OR (m.user_id IS NULL AND @owner IS NULL)) AND m.status='Pending'", captainId, missionId);
+                    DbParameter owner = scope.CreateParameter(); owner.ParameterName = "@owner"; owner.Value = (object?)selection.Decision.UserId ?? DBNull.Value; scope.Parameters.Add(owner);
+                    DbParameter tenant = scope.CreateParameter(); tenant.ParameterName = "@tenant"; tenant.Value = selection.Decision.TenantId; scope.Parameters.Add(tenant);
+                    if (Convert.ToInt32(await scope.ExecuteScalarAsync(token).ConfigureAwait(false), CultureInfo.InvariantCulture) != 1) return false;
+                }
                 using DbCommand row = Command(tx, "UPDATE captains SET active_mission_count=active_mission_count WHERE id=@id;", captainId);
                 await row.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 // Updating the captain row serializes claims before the unique mission-slot insertion.
@@ -101,7 +110,12 @@ namespace Armada.Core.Database
                 using DbCommand insert = Command(tx, "INSERT INTO captain_mission_slots(mission_id,captain_id,dock_id) VALUES(@mission,@id,@value);", captainId, missionId, dockId);
                 await insert.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 using DbCommand assign = Command(tx, "UPDATE missions SET captain_id=@id,status='Assigned',dock_id=COALESCE(@value,dock_id),assigned_utc=@now,last_update_utc=@now WHERE id=@mission AND status='Pending';", captainId, missionId, dockId);
-                await assign.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                int assigned = await assign.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                if (selection != null)
+                {
+                    if (assigned != 1) return false;
+                    await CaptainSelectionMethods.WriteAggregateAsync(_Connection, tx, selection, token).ConfigureAwait(false);
+                }
                 await tx.CommitAsync(token).ConfigureAwait(false);
                 return true;
             }

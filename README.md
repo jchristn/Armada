@@ -150,7 +150,7 @@ Armada does not replace your agent. It runs it. The comparison is with the work 
 
 ## v1.3.0 development: concurrency and built-in fleet actions
 
-Planned v1.3.0 work also includes [usage-based captain selection and durable decision history](USAGE_BASED_CAPTAIN_SELECTION_PLAN.md): choose eligible captains using account headroom and explain why each captain/model was selected or why work must wait. The baseline and pure ranking policy are implemented and tested; dispatch integration, durable history and operator controls remain planned.
+Planned v1.3.0 work also includes [usage-based captain selection and durable decision history](USAGE_BASED_CAPTAIN_SELECTION_PLAN.md): choose eligible captains using account headroom and explain why each captain/model was selected or why work must wait. The baseline, configurable policy strategies, durable storage and atomic Observe-mode admission primitives are implemented and tested. Dispatch integration, enforcement and operator controls remain in progress.
 
 v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**.
 

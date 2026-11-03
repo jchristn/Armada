@@ -9,6 +9,14 @@ namespace Armada.Core.Database
     /// </summary>
     public abstract class DatabaseDriver : IDisposable
     {
+        /// <summary>Immutable tenant-scoped captain selection history and usage reservations.</summary>
+        public ICaptainSelectionMethods CaptainSelections
+        {
+            get => _CaptainSelections;
+            protected set => _CaptainSelections = DuplicateEntityTranslationProxy.Wrap(value);
+        }
+        private ICaptainSelectionMethods _CaptainSelections = null!;
+
         /// <summary>Mission scheduling wait interval persistence.</summary>
         public IMissionWaitIntervalMethods MissionWaitIntervals
         {

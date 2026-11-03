@@ -9,6 +9,8 @@ namespace Armada.Core.Settings
     /// </summary>
     public sealed class UsageSelectionSettings
     {
+        /// <summary>Selection strategy. Default FirstAvailable preserves existing routing preferences.</summary>
+        public CaptainSelectionStrategyEnum Strategy { get; set; } = CaptainSelectionStrategyEnum.FirstAvailable;
         /// <summary>Rollout mode. Default Observe.</summary>
         public UsageSelectionModeEnum Mode { get; set; } = UsageSelectionModeEnum.Observe;
         /// <summary>Unknown evidence policy. Default AllowDeprioritized.</summary>
@@ -50,6 +52,7 @@ namespace Armada.Core.Settings
         /// <exception cref="ArgumentOutOfRangeException">A mode or unknown policy value is unrecognized.</exception>
         public void Validate()
         {
+            if (!Enum.IsDefined(typeof(CaptainSelectionStrategyEnum), Strategy)) throw new ArgumentOutOfRangeException(nameof(Strategy), "Unknown captain selection strategy.");
             if (!Enum.IsDefined(typeof(UsageSelectionModeEnum), Mode)) throw new ArgumentOutOfRangeException(nameof(Mode), "Unknown usage selection mode.");
             if (!Enum.IsDefined(typeof(UsageUnknownBehaviorEnum), UnknownUsageBehavior)) throw new ArgumentOutOfRangeException(nameof(UnknownUsageBehavior), "Unknown usage evidence policy.");
             if (ComfortableHeadroomPercent <= ReservePercent) throw new ArgumentException("Comfortable headroom must exceed the protected reserve.", nameof(ComfortableHeadroomPercent));

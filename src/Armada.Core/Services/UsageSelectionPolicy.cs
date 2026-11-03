@@ -46,16 +46,18 @@ namespace Armada.Core.Services
             }
 
             // A pairwise comparable-window comparator can be non-transitive when a third provider is present.
-            // Compare percentages only inside a whole equal-priority/equal-load group with one common semantic key.
+            // Compare percentages only inside a whole equal-priority/band group with one common semantic key.
             List<UsageSelectionCandidateResult> ordered = new List<UsageSelectionCandidateResult>();
             foreach (IEnumerable<UsageSelectionCandidateResult> group in evaluation.Candidates
-                .GroupBy(r => new { r.Candidate.RoutingBucket, r.Band, Load = Load(r.Candidate) })
-                .OrderBy(g => g.Key.RoutingBucket).ThenBy(g => g.Key.Band).ThenBy(g => g.Key.Load))
+                .GroupBy(r => new { r.Candidate.RoutingBucket, Band = BandOrder(r.Band, settings.Strategy) })
+                .OrderBy(g => g.Key.RoutingBucket).ThenBy(g => g.Key.Band))
             {
                 List<UsageSelectionCandidateResult> rows = group.ToList();
                 string? key = rows[0].ComparableWindowKey;
-                bool comparable = key != null && rows.All(r => r.ComparableWindowKey == key && r.AvailablePercent.HasValue);
-                ordered.AddRange(rows.OrderByDescending(r => comparable ? r.AvailablePercent : null)
+                bool comparable = settings.Strategy != CaptainSelectionStrategyEnum.FirstAvailable && key != null && rows.All(r => r.ComparableWindowKey == key && r.AvailablePercent.HasValue);
+                ordered.AddRange(rows.OrderBy(r => settings.Strategy == CaptainSelectionStrategyEnum.FirstAvailable ? r.Candidate.FirstAvailableRank : 0)
+                    .ThenBy(r => comparable ? (settings.Strategy == CaptainSelectionStrategyEnum.MostUsedAllowance ? r.AvailablePercent : -r.AvailablePercent) : null)
+                    .ThenBy(r => settings.Strategy == CaptainSelectionStrategyEnum.FirstAvailable ? 0 : Load(r.Candidate))
                     .ThenBy(r => r.Candidate.LastAssignedUtc ?? DateTime.MaxValue)
                     .ThenBy(r => r.Candidate.CaptainId, StringComparer.Ordinal));
             }
@@ -64,6 +66,17 @@ namespace Armada.Core.Services
             evaluation.ReasonCode = evaluation.SelectedCaptainId != null ? "SelectedForHeadroom"
                 : ordered.Count == 0 ? "NoEligibleCaptain" : ordered[0].ReasonCode;
             return evaluation;
+        }
+
+        private static int BandOrder(UsageSelectionBandEnum band, CaptainSelectionStrategyEnum strategy)
+        {
+            if (strategy == CaptainSelectionStrategyEnum.FirstAvailable) return band == UsageSelectionBandEnum.Blocked ? 1 : 0;
+            if (strategy == CaptainSelectionStrategyEnum.MostUsedAllowance)
+            {
+                if (band == UsageSelectionBandEnum.Constrained) return 0;
+                if (band == UsageSelectionBandEnum.Comfortable) return 1;
+            }
+            return (int)band;
         }
 
         private static double Load(UsageSelectionCandidate candidate)
