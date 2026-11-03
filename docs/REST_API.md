@@ -7272,9 +7272,9 @@ Cancel a background job.
 
 Fleet actions apply one action across many vessels and record a per-vessel result. A **Command** action runs a shell command in each vessel's working directory and captures exit code and output. A **Mission** action dispatches one voyage per vessel through the normal dispatch path. Every invocation is a persisted, cancellable **run** with one **target** per vessel. See [FLEET_ACTIONS.md](FLEET_ACTIONS.md) for the operator guide.
 
-**Permissions.** Enumerations and `GET` reads are `Authenticated`. Every other write under `/api/v1/fleet-actions` and `/api/v1/fleet-action-runs` is `TenantAdmin`, the same level as voyage dispatch. The service additionally requires tenant admin for anything that creates, edits, deletes, runs, or cancels a **Command** action, because that check depends on the body. All reads and writes are scoped to the caller's tenant; another tenant's ID returns `404`. Denials (`403`) are logged with the request ID.
+**Permissions.** Enumerations and `GET` reads are `Authenticated`. Every other write under `/api/v1/fleet-actions` and `/api/v1/fleet-action-runs` is `TenantAdmin`, the same level as voyage dispatch. The service additionally requires tenant admin for anything that creates, edits, deletes, runs, or cancels a **Command** action, or an action with an applicability check, because that check depends on the body. All reads and writes are scoped to the caller's tenant; another tenant's ID returns `404`. Denials (`403`) are logged with the request ID.
 
-**Template variables.** `CommandText` and `PromptTemplate` may use `{{vessel.name}}`, `{{vessel.id}}`, `{{vessel.defaultBranch}}`, `{{vessel.workingDirectory}}`, `{{vessel.buildCommand}}` (the vessel's `DefinitionOfDoneBuildCommand`) and `{{health.summary}}`. Names are case-insensitive and may have spaces inside the braces. Any other `{{name}}` is rejected with `400` and the message names it. Values are substituted verbatim in a single pass and never re-expanded.
+**Template variables.** `CommandText`, `PromptTemplate`, and the applicability commands may use `{{vessel.name}}`, `{{vessel.id}}`, `{{vessel.defaultBranch}}`, `{{vessel.workingDirectory}}`, `{{vessel.ecosystems}}`, `{{vessel.buildCommand}}` (the vessel's `DefinitionOfDoneBuildCommand`, else the repository's build script or the ecosystem default), `{{vessel.testCommand}}`, `{{vessel.lintCommand}}`, `{{vessel.auditCommand}}`, `{{vessel.outdatedCommand}}`, `{{vessel.licensesCommand}}`, `{{health.summary}}`, `{{scan.summary}}` (Mission actions with a `ScanSourceActionKey`), and `{{input.<name>}}` for declared inputs. Names are case-insensitive and may have spaces inside the braces. Any other `{{name}}` is rejected with `400` and the message names it. Values are substituted verbatim in a single pass and never re-expanded.
 
 **Error mapping.** `400` invalid input or unknown template variable; `403` permission; `404` action, run, target, or any target vessel not found in the caller's tenant; `409` cancelling a run that already finished.
 
@@ -7370,13 +7370,22 @@ Start a run of a saved action. Every vessel is re-read with the tenant-scoped re
 {
   "VesselIds": ["vsl_abc", "vsl_def"],
   "Concurrency": 2,
+  "InputValues": { "package": "Newtonsoft.Json", "version": "13.0.4" },
   "Overrides": { "TimeoutSeconds": 600, "RequiresCleanWorkingTree": false, "PipelineId": null }
 }
 ```
 
+A follow-up run targets the vessels of an earlier run instead:
+
+```json
+{ "FromRunId": "far_...", "FromTargetStatuses": ["Findings", "Failed"] }
+```
+
 | Field | Type | Notes |
 |---|---|---|
-| `VesselIds` | string[] | Required; 1-500 after de-duplication; more than 1000 entries is `400` `CollectionLimitExceeded` |
+| `VesselIds` | string[] | Required unless `FromRunId` is set; 1-500 after de-duplication; more than 1000 entries is `400` `CollectionLimitExceeded` |
+| `FromRunId` | string | Optional follow-up: the earlier run (`far_`) in the caller's tenant whose vessels to target; `VesselIds` must then be empty. `400` when both are set or no target matches |
+| `FromTargetStatuses` | string[] | Target statuses selected from `FromRunId`; default `Findings` and `Failed`; `400` without `FromRunId` |
 | `InputValues` | object | Values for the action's `Inputs`; at most 256 entries |
 | `Concurrency` | int | Optional; defaults to the action's `DefaultConcurrency`; clamped 1-32 |
 | `Overrides.TimeoutSeconds` | int | Optional; clamped 5-7200 |
@@ -7482,15 +7491,15 @@ Cancel a run. Pending targets become `Cancelled`; running Command targets are ki
 
 #### Fleet action models
 
-`FleetAction`: `Id` (`fac_`), `TenantId`, `UserId`, `Name`, `Description`, `Kind`, `CommandText`, `PromptTemplate`, `PipelineId`, `Persona`, `TimeoutSeconds`, `DefaultConcurrency`, `RequiresCleanWorkingTree`, `IsBuiltIn`, `BuiltInKey`, `Active`, `CreatedUtc`, `LastUpdateUtc`.
+`FleetAction`: `Id` (`fac_`), `TenantId`, `UserId`, `Name`, `Description`, `Kind`, `CommandText`, `CommandWindows`, `PromptTemplate`, `PipelineId`, `Persona`, `TimeoutSeconds`, `DefaultConcurrency`, `RequiresCleanWorkingTree`, `OutputParser` (a registered parser ID, or `auto` for the parser matching the vessel's audit command), `ScanSourceActionKey`, `RequiredTools`, `RequiresNetwork`, `Inputs` (`FleetActionInput`: `Name`, `Type` = `string`, `semver`, `enum`, or `package`, `Required`, `Default`, `AllowedValues`, `Description`), `ApplicabilityCommand` and `ApplicabilityCommandWindows` (optional check run in each working directory first; non-zero exit skips the vessel with `NotApplicable`), `MissionMode` (`Implementation`, or `Audit`/`Research` for report-only Mission actions: read-only, Worker-only pipeline, landing `None`, report stored on the target's `OutputText`), `IsBuiltIn`, `BuiltInKey`, `Active`, `CreatedUtc`, `LastUpdateUtc`. The create and update bodies (`FleetActionUpsertRequest`) take the same editable fields; on update an empty string clears the applicability commands.
 
-`FleetActionRun`: `Id` (`far_`), `TenantId`, `UserId`, `ActionId` (null for ad hoc), snapshot fields `ActionName`, `Kind`, `CommandText`, `PromptTemplate`, `PipelineId`, `Persona`, `TimeoutSeconds`, `RequiresCleanWorkingTree`, plus `Concurrency`, `Status`, `TargetCount`, `SucceededCount`, `FailedCount` (Failed + TimedOut), `SkippedCount`, `CancelledCount`, `StartedUtc`, `CompletedUtc`, `CreatedUtc`, `LastUpdateUtc`.
+`FleetActionRun`: `Id` (`far_`), `TenantId`, `UserId`, `ActionId` (null for ad hoc), snapshot fields `ActionName`, `Kind`, `CommandText`, `CommandWindows`, `PromptTemplate`, `PipelineId`, `Persona`, `TimeoutSeconds`, `RequiresCleanWorkingTree`, `OutputParser`, `ScanSourceActionKey`, `RequiredTools`, `RequiresNetwork`, `Inputs`, `InputValues`, `ApplicabilityCommand`, `ApplicabilityCommandWindows`, `MissionMode`, plus `Concurrency`, `Status`, `TargetCount`, `SucceededCount`, `FailedCount` (Failed + TimedOut), `FindingsCount`, `SkippedCount`, `CancelledCount`, `StartedUtc`, `CompletedUtc`, `CreatedUtc`, `LastUpdateUtc`.
 
-`FleetActionRunTarget`: `Id` (`fat_`), `TenantId`, `RunId`, `VesselId`, `VesselName`, `Status`, `SkipReason`, `FailureReason`, `RenderedText`, `ExitCode`, `OutputText`, `ErrorText`, `OutputTruncated`, `VoyageId`, `StartedUtc`, `CompletedUtc`, `DurationMs`, `CreatedUtc`, `LastUpdateUtc`. Output is truncated to the last `FleetActions.MaxOutputBytes` bytes of each stream.
+`FleetActionRunTarget`: `Id` (`fat_`), `TenantId`, `RunId`, `VesselId`, `VesselName`, `Status`, `SkipReason`, `FailureReason`, `RenderedText`, `ExitCode`, `OutputText`, `ErrorText`, `OutputTruncated`, `ScanSummary`, `VoyageId`, `StartedUtc`, `CompletedUtc`, `DurationMs`, `CreatedUtc`, `LastUpdateUtc`. Command output is truncated to the last `FleetActions.MaxOutputBytes` bytes of each stream. A Mission target's `OutputText` is the captain's final message (for a report-only action, the report), kept from the start. `ScanSummary` is the parsed findings summary, or for a command without a parser its exit code and output tail.
 
-Run status: `Pending`, `Running`, `Completed` (no failures), `CompletedWithFailures` (at least one Failed or TimedOut target), `Cancelled`, `Failed` (the runner itself failed). Target status: `Pending`, `Skipped`, `Running`, `Succeeded`, `Failed`, `Cancelled`, `TimedOut`.
+Run status: `Pending`, `Running`, `Completed` (no failures), `CompletedWithFailures` (at least one Failed or TimedOut target), `Cancelled`, `Failed` (the runner itself failed). Target status: `Pending`, `Skipped`, `Running`, `Succeeded`, `Failed`, `Cancelled`, `TimedOut`, `Findings` (a parser found at least one finding).
 
-Skip reasons: `DirtyTree`, `NoWorkingDirectory`, `NoBuildCommand`, `DispatchRejected` (validator message in `ErrorText`), `VesselNotFound`, `HarborUnavailable`, `NotAuthorized` (reserved). Failure reasons: `Interrupted`, `NonZeroExit`, `Timeout`, `GitStatusFailed`, `TemplateError`, `ExecutionError`, `DispatchFailed`, `DispatchUnavailable`, `VoyageFailed`, `VoyageMissing`.
+Skip reasons: `DirtyTree`, `NoWorkingDirectory`, `NoBuildCommand`, `NoMatchingEcosystem` (a referenced ecosystem command resolved to nothing), `NotApplicable` (the applicability check exited non-zero), `ToolMissing:<tool>`, `NetworkUnavailable`, `DispatchRejected` (validator message in `ErrorText`), `VesselNotFound`, `HarborUnavailable`, `NotAuthorized` (reserved). Failure reasons: `Interrupted`, `NonZeroExit`, `Timeout`, `GitStatusFailed`, `TemplateError`, `ExecutionError`, `DispatchFailed`, `DispatchUnavailable`, `VoyageFailed`, `VoyageMissing`.
 
 ---
 

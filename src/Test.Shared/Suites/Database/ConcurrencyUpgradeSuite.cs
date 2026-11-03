@@ -137,7 +137,7 @@ namespace Test.Shared.Suites.Database
                     await tx.CommitAsync(ct);
                 }
             }
-            await db.InitializeAsync(ct); AssertEqual(121, await db.GetSchemaVersionAsync(ct), provider);
+            await db.InitializeAsync(ct); AssertEqual(db.GetLatestSchemaVersion(), await db.GetSchemaVersionAsync(ct), provider);
             Captain captain = (await db.Captains.ReadAsync("cpt_upgrade", ct))!;
             AssertEqual(4, captain.MaxConcurrency); AssertEqual(1, captain.ActiveMissionCount); AssertEqual("msn_running", captain.ActiveMissionIds.Single()); AssertNull(captain.ProcessId);
             Mission testing = (await db.Missions.ReadAsync("msn_testing", ct))!;

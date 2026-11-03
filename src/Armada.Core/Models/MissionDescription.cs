@@ -44,6 +44,14 @@ namespace Armada.Core.Models
         [JsonIgnore]
         public string? Persona { get; set; } = null;
 
+        /// <summary>
+        /// Mission mode, set by in-process callers (a report-only Mission fleet action uses Audit or Research). Every
+        /// mission created from this description, including each pipeline stage, gets this mode. Not part of the wire
+        /// format.
+        /// </summary>
+        [JsonIgnore]
+        public Armada.Core.Enums.MissionModeEnum Mode { get; set; } = Armada.Core.Enums.MissionModeEnum.Implementation;
+
         #endregion
 
         #region Constructors-and-Factories

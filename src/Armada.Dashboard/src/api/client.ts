@@ -2625,14 +2625,20 @@ export const enumerateFleetActionRuns = (query?: FleetActionRunEnumerateQuery) =
 /** Run plus summaries of every target (no output text). */
 export const getFleetActionRun = (id: string) => get<FleetActionRunDetail>(`/api/v1/fleet-action-runs/${encodeURIComponent(id)}`);
 
+/**
+ * Page a run's targets. With `includeOutput` the request asks for each target's output text (for report views);
+ * a server that ignores the flag returns summaries without `outputText`, so callers fall back to
+ * getFleetActionRunTarget for those rows.
+ */
 export const enumerateFleetActionRunTargets = (
   runId: string,
-  query?: { pageNumber?: number; pageSize?: number; status?: FleetActionTargetStatus | '' },
+  query?: { pageNumber?: number; pageSize?: number; status?: FleetActionTargetStatus | ''; includeOutput?: boolean },
 ) =>
   post<EnumerationResult<FleetActionRunTargetSummary>>(`/api/v1/fleet-action-runs/${encodeURIComponent(runId)}/targets/enumerate`, {
     PageNumber: query?.pageNumber ?? 1,
     PageSize: query?.pageSize ?? 25,
     ...(query?.status ? { Status: query.status } : {}),
+    ...(query?.includeOutput ? { IncludeOutput: true } : {}),
   });
 
 /** One target including rendered text and captured output; the only endpoint that returns output. */

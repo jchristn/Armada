@@ -291,7 +291,7 @@
       "status": "implemented",
       "tui": "HubScreen",
       "workstream": "W3.7",
-      "notes": "hub: Actions and Runs tabs; ?run=new opens the run flow"
+      "notes": "hub: Actions and Runs tabs; ?run=new opens the run flow; run flow asks for declared inputs (string, semver, enum, package) with the server's validation"
     },
     {
       "kind": "route",
@@ -299,7 +299,7 @@
       "status": "implemented",
       "tui": "FleetActionRunScreen",
       "workstream": "W3.7",
-      "notes": "live run detail, targets, target drawer"
+      "notes": "live run detail, targets, target drawer; v View report (Mission runs: every target's captain report under vessel and status headings, advertised for report-only runs); f Follow-up run (FromRunId with Findings and Failed by default, linked fix actions first)"
     },
     {
       "kind": "route",
@@ -995,7 +995,7 @@
       "status": "implemented",
       "tui": "FleetActionsScreen",
       "workstream": "W3.7",
-      "notes": "Actions"
+      "notes": "Actions; Report-only marker for Audit and Research actions; form edits mission mode and the applicability check commands"
     },
     {
       "kind": "tab",
@@ -1003,7 +1003,7 @@
       "status": "implemented",
       "tui": "FleetActionRunsScreen",
       "workstream": "W3.7",
-      "notes": "Runs"
+      "notes": "Runs; Report-only marker"
     },
     {
       "kind": "tab",
@@ -1419,7 +1419,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.CreateFleetActionAsync",
       "workstream": "W0.2",
-      "notes": "Fleet Actions"
+      "notes": "Fleet Actions; mission mode and applicability commands"
     },
     {
       "kind": "api",
@@ -2691,7 +2691,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.GetFleetActionRunTargetAsync",
       "workstream": "W0.2",
-      "notes": "Fleet Actions"
+      "notes": "Fleet Actions; target drawer and run report"
     },
     {
       "kind": "api",
@@ -4227,7 +4227,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.RunFleetActionAsync",
       "workstream": "W0.2",
-      "notes": "Fleet Actions"
+      "notes": "Fleet Actions; run flow and follow-up run (FromRunId, FromTargetStatuses, InputValues)"
     },
     {
       "kind": "api",
@@ -4547,7 +4547,7 @@
       "status": "implemented",
       "tui": "ArmadaClient.UpdateFleetActionAsync",
       "workstream": "W0.2",
-      "notes": "Fleet Actions"
+      "notes": "Fleet Actions; mission mode and applicability commands"
     },
     {
       "kind": "api",

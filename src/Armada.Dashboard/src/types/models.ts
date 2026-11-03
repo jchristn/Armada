@@ -3431,10 +3431,12 @@ export interface VesselImportErrorDetail {
 export type FleetActionKind = 'Command' | 'Mission';
 export type FleetActionRunStatus = 'Pending' | 'Running' | 'Completed' | 'CompletedWithFailures' | 'Cancelled' | 'Failed';
 export type FleetActionTargetStatus = 'Pending' | 'Skipped' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'TimedOut' | 'Findings';
+/** Typed run-time input kinds; `package` is a shell-safe package identifier such as Newtonsoft.Json or @scope/name. */
+export type FleetActionInputType = 'string' | 'semver' | 'enum' | 'package';
 
 export interface FleetActionInput {
   name: string;
-  type: 'string' | 'semver' | 'enum';
+  type: FleetActionInputType;
   required: boolean;
   default?: string | null;
   allowedValues: string[];
@@ -3442,7 +3444,7 @@ export interface FleetActionInput {
 }
 export interface FleetActionInputRequest {
   Name: string;
-  Type: 'string' | 'semver' | 'enum';
+  Type: FleetActionInputType;
   Required?: boolean;
   Default?: string | null;
   AllowedValues?: string[];
@@ -3455,6 +3457,11 @@ export interface FleetAction {
   commandWindows?: string | null;
   outputParser?: string | null;
   scanSourceActionKey?: string | null;
+  /** Optional shell check run in each vessel working directory first; a non-zero exit skips it as NotApplicable. */
+  applicabilityCommand?: string | null;
+  applicabilityCommandWindows?: string | null;
+  /** Mission kind only. Audit and Research are report-only: nothing lands and each target keeps the captain report. */
+  missionMode?: MissionMode;
   id: string;
   tenantId: string | null;
   userId: string | null;
@@ -3483,6 +3490,11 @@ export interface FleetActionUpsertRequest {
   CommandWindows?: string | null;
   OutputParser?: string | null;
   ScanSourceActionKey?: string | null;
+  /** Empty string clears it on update. Creating or editing an action with one requires tenant admin. */
+  ApplicabilityCommand?: string | null;
+  ApplicabilityCommandWindows?: string | null;
+  /** Mission kind only; the server rejects a non-Implementation mode for Command actions. */
+  MissionMode?: MissionMode | null;
   Name?: string;
   Description?: string | null;
   Kind?: FleetActionKind;
@@ -3504,7 +3516,12 @@ export interface FleetActionRunOverrides {
 
 export interface FleetActionRunRequest {
   InputValues?: Record<string, string>;
+  /** Empty when FromRunId is set. */
   VesselIds: string[];
+  /** Follow-up run: target the vessels of this earlier run whose target status is in FromTargetStatuses. */
+  FromRunId?: string | null;
+  /** Statuses to pick from FromRunId (server default Findings and Failed). */
+  FromTargetStatuses?: FleetActionTargetStatus[] | null;
   Concurrency?: number | null;
   Overrides?: FleetActionRunOverrides | null;
   Definition?: FleetActionUpsertRequest | null;
@@ -3527,6 +3544,9 @@ export interface FleetActionRun {
   commandWindows?: string | null;
   outputParser?: string | null;
   scanSourceActionKey?: string | null;
+  applicabilityCommand?: string | null;
+  applicabilityCommandWindows?: string | null;
+  missionMode?: MissionMode;
   inputValues?: Record<string, string>;
   approvalOptions?: RunApprovalOptions | null;
   id: string;
@@ -3556,6 +3576,8 @@ export interface FleetActionRun {
 
 export interface FleetActionRunTargetSummary {
   scanSummary?: string | null;
+  /** Present only when the enumerate request asked for output (IncludeOutput). */
+  outputText?: string | null;
   id: string;
   runId: string | null;
   vesselId: string;

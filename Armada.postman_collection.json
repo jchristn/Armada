@@ -7446,6 +7446,34 @@
                     }
                 },
                 {
+                    "name": "Create Report-Only Action",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/fleet-actions",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "fleet-actions"
+                            ]
+                        },
+                        "description": "Create a report-only Mission action: each mission runs read-only on the Worker-only pipeline with landing mode None, and the captain's report is stored on the run target's OutputText.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"Name\": \"Accessibility review\",\n  \"Kind\": \"Mission\",\n  \"MissionMode\": \"Audit\",\n  \"PromptTemplate\": \"Review {{vessel.name}} for accessibility problems. Report findings ranked by severity with file and line.\"\n}"
+                        }
+                    }
+                },
+                {
                     "name": "Get Fleet Action",
                     "request": {
                         "method": "GET",
@@ -7558,6 +7586,66 @@
                             }
                         }
                     ]
+                },
+                {
+                    "name": "Run Update a Specific Dependency",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/fleet-actions/{{actionId}}/run",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "fleet-actions",
+                                "{{actionId}}",
+                                "run"
+                            ]
+                        },
+                        "description": "Run the update-package built-in (use its action ID as actionId). Vessels whose manifests do not mention the package are skipped with NotApplicable before any captain is dispatched.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"VesselIds\": [\n    \"{{vesselId}}\"\n  ],\n  \"InputValues\": {\n    \"package\": \"Newtonsoft.Json\",\n    \"version\": \"13.0.4\"\n  }\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "Run Follow-Up (Fix Where Found)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/fleet-actions/{{actionId}}/run",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "fleet-actions",
+                                "{{actionId}}",
+                                "run"
+                            ]
+                        },
+                        "description": "Start a follow-up run of a saved action (for example Fix failing tests) on the vessels of an earlier run (for example Run tests) whose target status is Findings or Failed. VesselIds must be empty when FromRunId is set.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"FromRunId\": \"{{runId}}\",\n  \"FromTargetStatuses\": [\n    \"Findings\",\n    \"Failed\"\n  ],\n  \"Concurrency\": 2\n}"
+                        }
+                    }
                 },
                 {
                     "name": "Run Ad Hoc Action",

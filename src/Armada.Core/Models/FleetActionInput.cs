@@ -7,7 +7,7 @@ namespace Armada.Core.Models
     {
         /// <summary>Template name, using letters, digits and underscores.</summary>
         public string Name { get; set; } = "";
-        /// <summary>string, semver, or enum.</summary>
+        /// <summary>string, semver, enum, or package (a shell-safe package identifier such as Newtonsoft.Json or @scope/name).</summary>
         public string Type { get; set; } = "string";
         /// <summary>Whether a nonempty value is required.</summary>
         public bool Required { get; set; }

@@ -192,11 +192,12 @@ namespace Test.Shared.Suites.Tui
                     AssertTrue(host.PumpUntil(() => host.Tui.Shell.Screen is VesselScreen v && v.Vessel != null), "vessel\n" + host.Screen());
                     VesselScreen screen = (VesselScreen)host.Tui.Shell.Screen!;
                     AssertTrue(host.PumpUntil(() => { host.Screen(); return screen.Overview.PlainText.Contains("Serialize Overlapp", StringComparison.Ordinal); }), "field on the overview: " + screen.Overview.PlainText);
-                    TuiCase.Contains(Status(host), "L Serialize overlapping missions", "toggle key in the hints");
+                    // Serialize Overlapping Missions defaults to on, so the key offers to turn it off.
+                    TuiCase.Contains(Status(host), "L Stop serializing overlapping missions", "toggle key in the hints");
                     host.Press("L");
                     AssertTrue(host.PumpUntil(() => stub.CountFor("PUT", "/api/v1/vessels/vsl_demo") == 1), "vessel updated");
                     VesselUpsertRequest put = stub.LastBody<VesselUpsertRequest>("PUT", "/api/v1/vessels/vsl_demo");
-                    AssertTrue(put.SerializeOverlappingMissions, "serialize turned on");
+                    AssertFalse(put.SerializeOverlappingMissions, "serialize turned off");
                     AssertEqual("DemoRepo", put.Name, "the full record is sent");
 
                     GoTo(host, screen, "reservations");

@@ -848,7 +848,7 @@ Paginated enumeration of any entity type with filtering and sorting. This is the
 | `vessel_import_batch` (aliases `vessel_import_batches`, `vessel-import-batch`, `import_batches`) | `status` (Discovered/Importing/Completed/CompletedWithFailures/Failed/Discovering), `createdAfter`, `createdBefore`, `order`. Scoped to the caller's tenant. Items are not included; read a batch with items through `GET /api/v1/vessels/import/batches/{id}`. |
 | `fleet_action` | `includeInactive`, `createdAfter`, `createdBefore` |
 | `fleet_action_run` | `status` (Pending/Running/Completed/CompletedWithFailures/Cancelled/Failed), `createdAfter`, `createdBefore` |
-| `fleet_action_run_target` | `runId` (required), `status` (Pending/Skipped/Running/Succeeded/Failed/Cancelled/TimedOut) |
+| `fleet_action_run_target` | `runId` (required), `status` (Pending/Skipped/Running/Succeeded/Failed/Cancelled/TimedOut/Findings) |
 | `vessel_health` (aliases `vessel-health`, `health`) | `status` (overall status: Pass/Warn/Fail/NotApplicable/Unknown), `fleetId`, `search` (vessel name substring). Every active vessel appears, including never-evaluated ones. Rows are sorted by vessel name; for richer filters and sorting use `POST /api/v1/vessel-health/enumerate` |
 | `blackbox` (aliases `black_box`, `blackbox_entries`, `blackbox-entries`) | `status` (the resolution: Open/Resolved/Duplicate/WontFix/ArmadaFixed; `InvalidArgument` otherwise), `search` (case-insensitive substring of the reason, summary and notes), `fleetId`, `vesselId`, `voyageId`, `missionId`, `captainId`, `createdAfter`, `createdBefore`, `order`. Rows are `BlackBoxEntrySummary` objects, visible to the caller exactly as with [list_blackbox_entries](#list_blackbox_entries), which takes the richer filters (phase, step, kind, triage, fingerprint, path, pinned, isCurrent). `Unavailable` when the black box is not running (always over stdio) |
 
@@ -1005,12 +1005,17 @@ Create a reusable action.
 | `commandText` | string | Command | Shell command template |
 | `promptTemplate` | string | Mission | Prompt template |
 | `pipelineId` | string | No | Pipeline for Mission dispatch |
-| `persona` | string | No | Persona name (stored; not yet applied at dispatch) |
+| `persona` | string | No | Persona name applied at dispatch (Mission kind) |
 | `timeoutSeconds` | int | No | Per-target timeout, 5-7200 (default from settings) |
 | `defaultConcurrency` | int | No | 1-32, default 4 |
 | `requiresCleanWorkingTree` | bool | No | Skip dirty working trees; default true for Command |
 | `requiredTools` | string[] | No | Executable names required on the host (at most 256) |
-| `inputs` | object[] | No | Typed runtime inputs (at most 256; each `allowedValues` at most 256) |
+| `inputs` | object[] | No | Typed runtime inputs (at most 256; each `allowedValues` at most 256). `type` is `string`, `semver`, `enum`, or `package` (a shell-safe package identifier) |
+| `outputParser` | string | No | Registered parser ID, or `auto` for the parser matching the vessel's audit command |
+| `scanSourceActionKey` | string | No | Built-in key or ID of the scan action whose latest result `{{scan.summary}}` cites |
+| `applicabilityCommand` | string | No | Shell check run in each working directory first; a non-zero exit skips the vessel (`NotApplicable`). Requires tenant admin |
+| `applicabilityCommandWindows` | string | No | PowerShell variant of the applicability check |
+| `missionMode` | string | No | Mission kind: `Implementation` (default), or `Audit` / `Research` for report-only actions (read-only, Worker-only pipeline, nothing lands, the report is the target output) |
 
 A list over its limit is `InvalidArgument` with `Code` `CollectionLimitExceeded` (also on `update_fleet_action` and
 `run_fleet_action`, where `vesselIds` may hold at most 1000 entries and `inputValues` at most 256).
@@ -1039,7 +1044,10 @@ Start a run. Pass `actionId` for a saved action, or the inline definition fields
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `vesselIds` | string[] | Yes | Target vessel IDs in the caller's tenant (1-500; more than 1000 entries is `CollectionLimitExceeded`). One unknown or cross-tenant vessel rejects the whole request (404). |
+| `vesselIds` | string[] | Unless `fromRunId` | Target vessel IDs in the caller's tenant (1-500; more than 1000 entries is `CollectionLimitExceeded`). One unknown or cross-tenant vessel rejects the whole request (404). |
+| `fromRunId` | string | No | Follow-up run: target the vessels of this earlier run (`far_`) whose status is in `fromTargetStatuses`, for example a fix after a scan. Do not combine with `vesselIds` |
+| `fromTargetStatuses` | string[] | No | Statuses selected from `fromRunId` (default `Findings` and `Failed`) |
+| `inputValues` | object | No | Values for the action's declared inputs |
 | `actionId` | string | No | Saved action ID (`fac_`). Omit for ad hoc. |
 | `concurrency` | int | No | 1-32; defaults to the action's `defaultConcurrency` |
 | `name`, `kind`, `commandText`, `promptTemplate` | string | Ad hoc | Inline definition |

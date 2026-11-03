@@ -2817,8 +2817,14 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"UPDATE captains SET process_id=NULL WHERE current_session_id IS NULL;",
                     @"ALTER TABLE vessels DROP COLUMN allow_concurrent_missions;",
                     @"ALTER TABLE captains DROP COLUMN current_mission_id;",
-                    @"ALTER TABLE captains DROP COLUMN current_dock_id;") { AlreadyAppliedCheckSql = "SELECT CASE WHEN (SELECT COUNT(*) FROM pragma_table_info('captains') WHERE name IN ('current_mission_id','current_dock_id'))+(SELECT COUNT(*) FROM pragma_table_info('vessels') WHERE name='allow_concurrent_missions')=0 THEN 1 ELSE 0 END" }
-
+                    @"ALTER TABLE captains DROP COLUMN current_dock_id;") { AlreadyAppliedCheckSql = "SELECT CASE WHEN (SELECT COUNT(*) FROM pragma_table_info('captains') WHERE name IN ('current_mission_id','current_dock_id'))+(SELECT COUNT(*) FROM pragma_table_info('vessels') WHERE name='allow_concurrent_missions')=0 THEN 1 ELSE 0 END" },
+                new SchemaMigration(122, "Add fleet action applicability commands and mission mode (report-only Audit and Research actions) to actions and run snapshots",
+                    @"ALTER TABLE fleet_actions ADD COLUMN applicability_command TEXT NULL;",
+                    @"ALTER TABLE fleet_actions ADD COLUMN applicability_command_windows TEXT NULL;",
+                    @"ALTER TABLE fleet_actions ADD COLUMN mission_mode TEXT NOT NULL DEFAULT 'Implementation';",
+                    @"ALTER TABLE fleet_action_runs ADD COLUMN applicability_command TEXT NULL;",
+                    @"ALTER TABLE fleet_action_runs ADD COLUMN applicability_command_windows TEXT NULL;",
+                    @"ALTER TABLE fleet_action_runs ADD COLUMN mission_mode TEXT NOT NULL DEFAULT 'Implementation';") { AlreadyAppliedCheckSql = "SELECT COUNT(*) FROM pragma_table_info('fleet_action_runs') WHERE name='mission_mode'" }
 
             };
         }

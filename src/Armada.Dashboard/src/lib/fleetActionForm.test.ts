@@ -1,14 +1,20 @@
 import type { FleetAction, FleetActionRun } from '../types/models';
 import {
+  DEFAULT_FOLLOW_UP_STATUSES,
+  PACKAGE_INPUT_PATTERN,
   adHocFromDefinition,
+  asFollowUpRequest,
   buildActionUpsertPayload,
   buildAdHocDefinition,
   buildSavedRunRequest,
   definitionFromRun,
   emptyAdHoc,
   formFromAction,
+  orderFollowUpActions,
   runProgress,
   validateActionForm,
+  validateInputValues,
+  validateRunInputs,
 } from './fleetActionForm';
 
 const action: FleetAction = {
@@ -38,6 +44,7 @@ describe('fleet action form', () => {
     expect(buildActionUpsertPayload(form, 'edit')).toEqual({
       Name: 'Build', Description: '', Kind: 'Command', CommandText: 'dotnet build', PromptTemplate: null, PipelineId: '', Persona: '',
       TimeoutSeconds: 600, DefaultConcurrency: 8, RequiresCleanWorkingTree: false,
+      ApplicabilityCommand: '', ApplicabilityCommandWindows: '', MissionMode: 'Implementation',
     });
     const mission = { ...formFromAction(null, 'create', 300, ''), name: 'm', kind: 'Mission' as const, promptTemplate: 'p', pipelineId: 'ppl_1', requiresCleanWorkingTree: true };
     expect(buildActionUpsertPayload(mission, 'create')).toMatchObject({ Description: null, CommandText: null, PromptTemplate: 'p', PipelineId: 'ppl_1', Persona: null, TimeoutSeconds: null, RequiresCleanWorkingTree: false });
@@ -85,4 +92,91 @@ it('retains scan, tool, platform and typed input snapshots through an ad hoc rer
   };
   const rerun = buildAdHocDefinition(adHocFromDefinition(definitionFromRun(run)));
   expect(rerun).toMatchObject({ CommandWindows: 'scan.exe {{input.version}}', OutputParser: 'npm-audit-json', RequiredTools: ['scan'], RequiresNetwork: true, ScanSourceActionKey: 'prior-scan', Inputs: [{ Name: 'version', Type: 'semver', Required: true, Default: '2.0.0' }] });
+});
+
+describe('applicability checks and mission mode', () => {
+  it('reads them from the source action and defaults a blank form', () => {
+    expect(formFromAction(null, 'create', 300, '')).toMatchObject({ missionMode: 'Implementation', applicabilityCommand: '', applicabilityCommandWindows: '' });
+    const audit: FleetAction = { ...action, kind: 'Mission', commandText: null, promptTemplate: 'Review', missionMode: 'Audit', applicabilityCommand: 'test -f package.json', applicabilityCommandWindows: 'if (!(Test-Path package.json)) { exit 1 }' };
+    expect(formFromAction(audit, 'edit', 300, '')).toMatchObject({ missionMode: 'Audit', applicabilityCommand: 'test -f package.json', applicabilityCommandWindows: 'if (!(Test-Path package.json)) { exit 1 }' });
+    // A Command action never carries a report-only mode into the form.
+    expect(formFromAction({ ...action, missionMode: 'Audit' }, 'edit', 300, '').missionMode).toBe('Implementation');
+  });
+
+  it('omits unset values on create and sends the mission mode for Mission actions', () => {
+    const blank = { ...formFromAction(null, 'create', 300, ''), name: 'n', commandText: 'make' };
+    const created = buildActionUpsertPayload(blank, 'create');
+    expect(created).not.toHaveProperty('ApplicabilityCommand');
+    expect(created).not.toHaveProperty('ApplicabilityCommandWindows');
+    expect(created).not.toHaveProperty('MissionMode');
+    const mission = { ...blank, kind: 'Mission' as const, promptTemplate: 'Review', missionMode: 'Research' as const, applicabilityCommand: 'test -d src', applicabilityCommandWindows: '  ' };
+    expect(buildActionUpsertPayload(mission, 'create')).toMatchObject({ MissionMode: 'Research', ApplicabilityCommand: 'test -d src' });
+    expect(buildActionUpsertPayload(mission, 'create')).not.toHaveProperty('ApplicabilityCommandWindows');
+  });
+
+  it('clears blank checks with empty strings on edit and forces Implementation for Command actions', () => {
+    const form = { ...formFromAction(action, 'edit', 300, ''), missionMode: 'Audit' as const, applicabilityCommand: ' ' };
+    expect(buildActionUpsertPayload(form, 'edit')).toMatchObject({ Kind: 'Command', ApplicabilityCommand: '', ApplicabilityCommandWindows: '', MissionMode: 'Implementation' });
+    const mission = { ...form, kind: 'Mission' as const, promptTemplate: 'p', applicabilityCommandWindows: 'Test-Path x' };
+    expect(buildActionUpsertPayload(mission, 'edit')).toMatchObject({ MissionMode: 'Audit', ApplicabilityCommand: '', ApplicabilityCommandWindows: 'Test-Path x' });
+  });
+
+  it('keeps the run snapshot checks and mode through an ad hoc re-run', () => {
+    const run = {
+      actionName: 'Review', kind: 'Mission', commandText: null, promptTemplate: 'Review it', pipelineId: null, timeoutSeconds: 300, requiresCleanWorkingTree: false,
+      missionMode: 'Audit', applicabilityCommand: 'test -f go.mod', applicabilityCommandWindows: null,
+    } as FleetActionRun;
+    const rerun = buildAdHocDefinition(adHocFromDefinition(definitionFromRun(run)));
+    expect(rerun).toMatchObject({ Kind: 'Mission', MissionMode: 'Audit', ApplicabilityCommand: 'test -f go.mod', ApplicabilityCommandWindows: null });
+  });
+});
+
+describe('package inputs', () => {
+  const inputs = [
+    { name: 'pkg', type: 'package' as const, required: true },
+    { name: 'note', type: 'string' as const, required: false },
+  ];
+
+  it('accepts package identifiers from common ecosystems', () => {
+    for (const ok of ['Newtonsoft.Json', '@scope/name', 'com.example:artifact', 'left-pad', 'six', 'github.com/pkg/errors', 'libc++', '7zip']) {
+      expect(PACKAGE_INPUT_PATTERN.test(ok)).toBe(true);
+      expect(validateInputValues(inputs, { pkg: ok })).toEqual({});
+    }
+  });
+
+  it('rejects shell metacharacters, leading punctuation, and over-long names', () => {
+    for (const bad of ['a;rm -rf /', 'pkg name', '$(id)', '-flag', '.hidden', 'a|b', 'a`b`', `a${'b'.repeat(200)}`]) {
+      expect(validateInputValues(inputs, { pkg: bad }).pkg).toBe('Use a package name such as Newtonsoft.Json or @scope/name.');
+    }
+  });
+
+  it('requires required inputs and skips optional blanks', () => {
+    expect(validateInputValues(inputs, { pkg: ' ', note: '' })).toEqual({ pkg: 'This input is required.' });
+  });
+});
+
+describe('follow-up runs', () => {
+  const adHoc = emptyAdHoc('Command');
+
+  it('builds a request with no vessels, the source run, and statuses in display order', () => {
+    const request = asFollowUpRequest(buildSavedRunRequest(['vsl_1'], 4, action, null), 'far_9', ['Failed', 'Findings']);
+    expect(request).toEqual({ VesselIds: [], Concurrency: 4, FromRunId: 'far_9', FromTargetStatuses: ['Findings', 'Failed'] });
+    expect(DEFAULT_FOLLOW_UP_STATUSES).toEqual(['Findings', 'Failed']);
+  });
+
+  it('skips the vessel count check but requires a status', () => {
+    expect(validateRunInputs({ vesselCount: 0, mode: 'saved', action, concurrency: '4', adHoc, followUp: { statuses: ['Failed'] } })).toEqual({});
+    expect(validateRunInputs({ vesselCount: 0, mode: 'saved', action, concurrency: '4', adHoc, followUp: { statuses: [] } }).vessels).toBe('Choose at least one target status.');
+    expect(validateRunInputs({ vesselCount: 0, mode: 'saved', action, concurrency: '4', adHoc }).vessels).toBe('Select at least one vessel.');
+  });
+
+  it('lists actions paired with the run action first, by built-in key or action id', () => {
+    const make = (id: string, scanSourceActionKey: string | null): FleetAction => ({ ...action, id, name: id, scanSourceActionKey });
+    const all = [make('lint', null), make('fix-tests', 'run-tests'), make('other', 'lint'), make('fix-custom', 'fac_scan'), make('fix-tests-2', 'run-tests')];
+    const ordered = orderFollowUpActions(all, { actionId: 'fac_scan', builtInKey: 'run-tests' });
+    expect(ordered.suggested.map(a => a.id)).toEqual(['fix-tests', 'fix-custom', 'fix-tests-2']);
+    expect(ordered.others.map(a => a.id)).toEqual(['lint', 'other']);
+    // Ad hoc runs (no action) suggest nothing.
+    expect(orderFollowUpActions(all, { actionId: null, builtInKey: null }).suggested).toEqual([]);
+  });
 });

@@ -2488,8 +2488,14 @@ namespace Armada.Core.Database.SqlServer.Queries
                     @"UPDATE captains SET process_id=NULL WHERE current_session_id IS NULL;",
                     @"ALTER TABLE vessels DROP COLUMN allow_concurrent_missions;",
                     @"ALTER TABLE captains DROP COLUMN current_mission_id;",
-                    @"ALTER TABLE captains DROP COLUMN current_dock_id;") { AlreadyAppliedCheckSql = "SELECT CASE WHEN COUNT(*)=0 THEN 1 ELSE 0 END FROM sys.columns WHERE (object_id=OBJECT_ID('captains') AND name IN ('current_mission_id','current_dock_id')) OR (object_id=OBJECT_ID('vessels') AND name='allow_concurrent_missions')" }
-
+                    @"ALTER TABLE captains DROP COLUMN current_dock_id;") { AlreadyAppliedCheckSql = "SELECT CASE WHEN COUNT(*)=0 THEN 1 ELSE 0 END FROM sys.columns WHERE (object_id=OBJECT_ID('captains') AND name IN ('current_mission_id','current_dock_id')) OR (object_id=OBJECT_ID('vessels') AND name='allow_concurrent_missions')" },
+                new SchemaMigration(122, "Add fleet action applicability commands and mission mode (report-only Audit and Research actions) to actions and run snapshots",
+                    @"IF COL_LENGTH('fleet_actions', 'applicability_command') IS NULL ALTER TABLE fleet_actions ADD applicability_command NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('fleet_actions', 'applicability_command_windows') IS NULL ALTER TABLE fleet_actions ADD applicability_command_windows NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('fleet_actions', 'mission_mode') IS NULL ALTER TABLE fleet_actions ADD mission_mode NVARCHAR(64) NOT NULL DEFAULT 'Implementation';",
+                    @"IF COL_LENGTH('fleet_action_runs', 'applicability_command') IS NULL ALTER TABLE fleet_action_runs ADD applicability_command NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('fleet_action_runs', 'applicability_command_windows') IS NULL ALTER TABLE fleet_action_runs ADD applicability_command_windows NVARCHAR(MAX) NULL;",
+                    @"IF COL_LENGTH('fleet_action_runs', 'mission_mode') IS NULL ALTER TABLE fleet_action_runs ADD mission_mode NVARCHAR(64) NOT NULL DEFAULT 'Implementation';")
 
             };
         }

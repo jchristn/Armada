@@ -313,6 +313,7 @@ namespace Armada.Core.Services
 
                 if (!String.IsNullOrWhiteSpace(md.Persona))
                     mission.Persona = md.Persona!.Trim();
+                mission.Mode = md.Mode;
                 MissionDispatchAdvice? advice = await AdviseDispatchAsync(mission, vessel, token).ConfigureAwait(false);
                 mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
                 ApplyDispatchAdvice(mission, advice, voyageWarnings, voyageLint);
@@ -452,6 +453,7 @@ namespace Armada.Core.Services
                     mission.DependsOnMissionId = previousMissionId;
                     mission.RequiresReview = stage.RequiresReview;
                     mission.ReviewDenyAction = stage.ReviewDenyAction;
+                    mission.Mode = md.Mode;
 
                     // A mission's tier floor applies to every stage; a requested captain applies to the first stage
                     // only (later stages are routed by their persona).

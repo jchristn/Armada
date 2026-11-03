@@ -52,6 +52,26 @@ namespace Armada.Core.Services.Interfaces
             => DispatchAsync(vessel, title, prompt, pipelineId, persona, token);
 
         /// <summary>
+        /// Dispatch one target with its mission and landing modes. The default ignores both modes, for dispatchers that
+        /// predate them.
+        /// </summary>
+        /// <param name="dispatch">What to dispatch.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The dispatched voyage identifier.</returns>
+        Task<string> DispatchAsync(FleetActionMissionDispatch dispatch, CancellationToken token = default)
+            => DispatchAsync(dispatch.Vessel, dispatch.Title, dispatch.Prompt, dispatch.PipelineId, dispatch.Persona, dispatch.ApprovalOptions, token);
+
+        /// <summary>
+        /// Read the captain's final report for a finished voyage: the output of its last finished mission, or null when
+        /// there is none.
+        /// </summary>
+        /// <param name="voyageId">Voyage identifier.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Report text, or null.</returns>
+        Task<string?> GetReportAsync(string voyageId, CancellationToken token = default)
+            => Task.FromResult<string?>(null);
+
+        /// <summary>
         /// Read the outcome of a dispatched voyage.
         /// </summary>
         /// <param name="voyageId">Voyage identifier.</param>

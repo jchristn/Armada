@@ -1530,8 +1530,14 @@ namespace Armada.Core.Database.Mysql
                     @"UPDATE captains SET process_id=NULL WHERE current_session_id IS NULL;",
                     @"ALTER TABLE vessels DROP COLUMN allow_concurrent_missions;",
                     @"ALTER TABLE captains DROP COLUMN current_mission_id;",
-                    @"ALTER TABLE captains DROP COLUMN current_dock_id;") { AlreadyAppliedCheckSql = "SELECT CASE WHEN COUNT(*)=0 THEN 1 ELSE 0 END FROM information_schema.columns WHERE table_schema=DATABASE() AND ((table_name='captains' AND column_name IN ('current_mission_id','current_dock_id')) OR (table_name='vessels' AND column_name='allow_concurrent_missions'))" }
-
+                    @"ALTER TABLE captains DROP COLUMN current_dock_id;") { AlreadyAppliedCheckSql = "SELECT CASE WHEN COUNT(*)=0 THEN 1 ELSE 0 END FROM information_schema.columns WHERE table_schema=DATABASE() AND ((table_name='captains' AND column_name IN ('current_mission_id','current_dock_id')) OR (table_name='vessels' AND column_name='allow_concurrent_missions'))" },
+                new SchemaMigration(122, "Add fleet action applicability commands and mission mode (report-only Audit and Research actions) to actions and run snapshots",
+                    @"ALTER TABLE fleet_actions ADD COLUMN applicability_command LONGTEXT NULL;",
+                    @"ALTER TABLE fleet_actions ADD COLUMN applicability_command_windows LONGTEXT NULL;",
+                    @"ALTER TABLE fleet_actions ADD COLUMN mission_mode VARCHAR(64) NOT NULL DEFAULT 'Implementation';",
+                    @"ALTER TABLE fleet_action_runs ADD COLUMN applicability_command LONGTEXT NULL;",
+                    @"ALTER TABLE fleet_action_runs ADD COLUMN applicability_command_windows LONGTEXT NULL;",
+                    @"ALTER TABLE fleet_action_runs ADD COLUMN mission_mode VARCHAR(64) NOT NULL DEFAULT 'Implementation';") { AlreadyAppliedCheckSql = "SELECT CASE WHEN COUNT(*)=6 THEN 1 ELSE 0 END FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN ('fleet_actions','fleet_action_runs') AND column_name IN ('applicability_command','applicability_command_windows','mission_mode')" }
 
             };
         }

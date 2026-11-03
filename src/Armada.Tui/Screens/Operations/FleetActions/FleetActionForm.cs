@@ -11,8 +11,10 @@ namespace Armada.Tui.Screens.Operations
 
     /// <summary>
     /// The dashboard's FleetActionFormModal: create, edit, and duplicate a fleet action (name, description, kind,
-    /// command text or prompt template with pipeline and persona, timeout 5-7200, concurrency 1-32, clean-tree check,
-    /// and the template variable list with insert). Kind switches the fields shown; validation matches the
+    /// command text or prompt template with pipeline, persona, and mission mode (Implementation, or the report-only
+    /// Audit and Research), the optional applicability check commands (POSIX and Windows), timeout 5-7200, concurrency
+    /// 1-32, clean-tree check, and the template variable list with insert). Declared inputs are not edited here: an
+    /// edit keeps them and a duplicate copies them. Kind switches the fields shown; validation matches the
     /// dashboard (including unknown template variables), and server errors stay in the dialog. Use on the UI loop.
     /// </summary>
     public static class FleetActionForm
@@ -64,6 +66,16 @@ namespace Armada.Tui.Screens.Operations
             InputField concurrency = new InputField();
             concurrency.Validator = v => Int32.TryParse(v.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int n) && n >= 1 && n <= 32 ? null : "Concurrency must be a whole number from 1 to 32.";
             OpsCheckField clean = new OpsCheckField("Requires a clean working tree", true);
+            List<SelectOption<string>> modeOptions = new List<SelectOption<string>>();
+            foreach (MissionModeEnum m in FleetActionLabels.MissionModes)
+                modeOptions.Add(new SelectOption<string>(m.ToString(), screen.Tr(FleetActionLabels.MissionModeLabel(m)), screen.Tr(FleetActionLabels.MissionModeDescription(m))));
+            SelectField<string> missionMode = screen.NewSelect("Mission mode", modeOptions);
+            missionMode.SetValue(MissionModeEnum.Implementation.ToString());
+            InputField applicability = new InputField();
+            applicability.Placeholder = "Optional, for example grep -q Newtonsoft.Json *.csproj";
+            InputField applicabilityWindows = new InputField();
+            applicabilityWindows.Placeholder = "Optional; falls back to the applicability command";
+            List<string> inputNames = source != null ? source.Inputs.Select(i => i.Name).ToList() : new List<string>();
 
             if (source == null)
             {
@@ -88,13 +100,16 @@ namespace Armada.Tui.Screens.Operations
                 timeout.Value = (source.TimeoutSeconds > 0 ? source.TimeoutSeconds : defaultTimeout).ToString(CultureInfo.InvariantCulture);
                 concurrency.Value = (source.DefaultConcurrency > 0 ? source.DefaultConcurrency : 4).ToString(CultureInfo.InvariantCulture);
                 clean.Checked = source.RequiresCleanWorkingTree;
+                missionMode.SetValue(source.MissionMode.ToString());
+                applicability.Value = source.ApplicabilityCommand ?? "";
+                applicabilityWindows.Value = source.ApplicabilityCommandWindows ?? "";
             }
 
             Button variables = new Button("Template variables", () =>
             {
                 bool isCommand = kind.Value != "Mission";
                 OpsTextArea target = isCommand ? command : prompt;
-                ShowVariables(screen, token => target.Editor.InsertText(token));
+                ShowVariables(screen, token => target.Editor.InsertText(token), source?.Inputs);
             });
 
             dialog.AddField("Name", name);
@@ -102,9 +117,12 @@ namespace Armada.Tui.Screens.Operations
             dialog.AddField("Kind", kind, FleetActionLabels.KindDescription(FleetActionKindEnum.Command));
             dialog.AddField("Command text", command, "Runs through the platform shell (/bin/sh on Linux and macOS, PowerShell on Windows) in each vessel working directory.", 6);
             dialog.AddField("Prompt template", prompt, null, 8);
+            dialog.AddField("Mission mode", missionMode, FleetActionLabels.MissionModeDescription(MissionModeEnum.Implementation));
             dialog.AddField("Pipeline", pipeline);
             dialog.AddField("Persona", persona, "Stored with the action; not yet applied at dispatch. Use a pipeline to choose personas.");
             dialog.AddField("Template variables", variables, "Variables are substituted per vessel in a single pass, without shell escaping. Names are case-insensitive. Any other {{name}} is rejected.");
+            dialog.AddField("Applicability check", applicability, "Optional shell command run first in each working directory; a non-zero exit skips the vessel as Not applicable. Uses the same template variables.");
+            dialog.AddField("Applicability (Windows)", applicabilityWindows, "Optional PowerShell variant for Windows hosts.");
             dialog.AddField("Timeout (seconds)", timeout, "5 to 7200 seconds");
             dialog.AddField("Default concurrency", concurrency, "1 to 32");
             dialog.AddField("", clean);
@@ -118,8 +136,11 @@ namespace Armada.Tui.Screens.Operations
                 prompt.Visible = !isCommand;
                 pipeline.Visible = !isCommand;
                 persona.Visible = !isCommand;
+                missionMode.Visible = !isCommand;
                 Armada.Tui.Widgets.FormRow? kindRow = dialog.Form.Rows.FirstOrDefault(r => ReferenceEquals(r.Field, kind));
                 if (kindRow != null) kindRow.Hint = FleetActionLabels.KindDescription(isCommand ? FleetActionKindEnum.Command : FleetActionKindEnum.Mission);
+                Armada.Tui.Widgets.FormRow? modeRow = dialog.Form.Rows.FirstOrDefault(r => ReferenceEquals(r.Field, missionMode));
+                if (modeRow != null) modeRow.Hint = FleetActionLabels.MissionModeDescription(SelectedMode(missionMode));
             };
             apply();
             kind.ValueChanged += (s, e) =>
@@ -128,6 +149,7 @@ namespace Armada.Tui.Screens.Operations
                 clean.Checked = isCommand && (source != null && source.Kind == FleetActionKindEnum.Command ? source.RequiresCleanWorkingTree : isCommand);
                 apply();
             };
+            missionMode.ValueChanged += (s, e) => apply();
 
             EventHandler<string> arrived = (s, list) =>
             {
@@ -152,7 +174,7 @@ namespace Armada.Tui.Screens.Operations
             dialog.Validate = () =>
             {
                 string body = kind.Value == "Mission" ? prompt.Text : command.Text;
-                List<string> unknown = FleetActionLabels.FindUnknownVariables(body);
+                List<string> unknown = FleetActionLabels.FindUnknownVariables(body + "\n" + applicability.Value + "\n" + applicabilityWindows.Value, inputNames);
                 return unknown.Count > 0 ? screen.Tr("Unknown template variable: {{names}}", LocalizationArgs.Of("names", String.Join(", ", unknown))) : null;
             };
             dialog.Submit = d =>
@@ -170,6 +192,19 @@ namespace Armada.Tui.Screens.Operations
                 payload.TimeoutSeconds = isCommand ? Int32.Parse(timeout.Value.Trim(), CultureInfo.InvariantCulture) : (int?)null;
                 payload.DefaultConcurrency = Int32.Parse(concurrency.Value.Trim(), CultureInfo.InvariantCulture);
                 payload.RequiresCleanWorkingTree = isCommand && clean.Checked;
+                payload.MissionMode = isCommand ? (edit ? MissionModeEnum.Implementation : (MissionModeEnum?)null) : SelectedMode(missionMode);
+                payload.ApplicabilityCommand = applicability.Value.Trim().Length > 0 ? applicability.Value.Trim() : clearValue;
+                payload.ApplicabilityCommandWindows = applicabilityWindows.Value.Trim().Length > 0 ? applicabilityWindows.Value.Trim() : clearValue;
+                if (!edit && source != null)
+                {
+                    // A duplicate keeps the parts of the definition this form does not edit.
+                    payload.Inputs = source.Inputs.ToList();
+                    payload.OutputParser = source.OutputParser;
+                    payload.ScanSourceActionKey = source.ScanSourceActionKey;
+                    payload.CommandWindows = source.CommandWindows;
+                    payload.RequiredTools = source.RequiredTools.ToList();
+                    payload.RequiresNetwork = source.RequiresNetwork;
+                }
                 string? editId = edit && source != null ? source.Id : null;
                 screen.Call((c, t) => editId != null ? c.UpdateFleetActionAsync(editId, payload, t) : c.CreateFleetActionAsync(payload, t), result =>
                 {
@@ -187,7 +222,8 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         /// <param name="screen">Owning screen.</param>
         /// <param name="insert">Receives the token, or null for a read-only list.</param>
-        public static void ShowVariables(OpsScreen screen, Action<string>? insert)
+        /// <param name="inputs">Declared runtime inputs, listed as <c>{{input.name}}</c>, or null.</param>
+        public static void ShowVariables(OpsScreen screen, Action<string>? insert, IEnumerable<FleetActionInput>? inputs = null)
         {
             List<ActionMenuItem> items = new List<ActionMenuItem>();
             for (int i = 0; i < FleetActionLabels.TemplateVariableNames.Length; i++)
@@ -197,7 +233,23 @@ namespace Armada.Tui.Screens.Operations
                 items.Add(item);
             }
 
+            foreach (FleetActionInput input in inputs ?? Enumerable.Empty<FleetActionInput>())
+            {
+                string token = "{{input." + input.Name + "}}";
+                string help = screen.Tr("Runtime input ({{type}})", LocalizationArgs.Of("type", input.Type)) + (String.IsNullOrEmpty(input.Description) ? "" : ": " + input.Description);
+                items.Add(new ActionMenuItem(token, () => insert?.Invoke(token), help));
+            }
+
             screen.ShowMenu("Template variables", items);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static MissionModeEnum SelectedMode(SelectField<string> field)
+        {
+            return Enum.TryParse(field.Value, out MissionModeEnum mode) ? mode : MissionModeEnum.Implementation;
         }
 
         #endregion

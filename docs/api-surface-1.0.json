@@ -10073,6 +10073,16 @@
       "resource": "FleetAction:Create",
       "arguments": [
         {
+          "name": "applicabilityCommand",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "applicabilityCommandWindows",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "commandText",
           "type": "string",
           "required": false
@@ -10099,6 +10109,11 @@
         },
         {
           "name": "kind",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionMode",
           "type": "string",
           "required": false
         },
@@ -15202,6 +15217,16 @@
           "required": false
         },
         {
+          "name": "applicabilityCommand",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "applicabilityCommandWindows",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "approvalOptions",
           "type": "object",
           "required": false
@@ -15222,6 +15247,16 @@
           "required": false
         },
         {
+          "name": "fromRunId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fromTargetStatuses",
+          "type": "array<string>",
+          "required": false
+        },
+        {
           "name": "inputValues",
           "type": "object",
           "required": false
@@ -15233,6 +15268,11 @@
         },
         {
           "name": "kind",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionMode",
           "type": "string",
           "required": false
         },
@@ -15284,10 +15324,10 @@
         {
           "name": "vesselIds",
           "type": "array<string>",
-          "required": true
+          "required": false
         }
       ],
-      "description": "Start a fleet action run over vessels. Pass actionId to run a saved action, or the inline definition fields (name, kind, commandText or promptTemplate) for an ad hoc run. Every vessel must be in the caller's tenant or the whole request is rejected. Returns the run id; poll fleet_action_run_status.",
+      "description": "Start a fleet action run over vessels. Pass actionId to run a saved action, or the inline definition fields (name, kind, commandText or promptTemplate) for an ad hoc run. Pass vesselIds, or fromRunId to follow up on an earlier run (for example run a fix action only on the vessels where a scan found something). Every vessel must be in the caller's tenant or the whole request is rejected. Returns the run id; poll fleet_action_run_status.",
       "experimental": false
     },
     {
@@ -16316,6 +16356,16 @@
           "required": true
         },
         {
+          "name": "applicabilityCommand",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "applicabilityCommandWindows",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "commandText",
           "type": "string",
           "required": false
@@ -16342,6 +16392,11 @@
         },
         {
           "name": "kind",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "missionMode",
           "type": "string",
           "required": false
         },
@@ -18988,6 +19043,30 @@
           "short": "f",
           "valueKind": "scalar",
           "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "from-run",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "from-status",
+          "short": null,
+          "valueKind": "vector",
+          "type": "String[]",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "input",
+          "short": "i",
+          "valueKind": "vector",
+          "type": "String[]",
           "required": false
         },
         {

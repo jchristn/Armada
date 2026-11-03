@@ -100,6 +100,12 @@ namespace Test.Shared.Infrastructure
         /// <summary>Approval snapshots received by the dispatcher.</summary>
         public Dictionary<string, RunApprovalOptions?> ApprovalsByVessel { get; } = new Dictionary<string, RunApprovalOptions?>();
 
+        /// <summary>Full dispatch requests received through the request overload, by vessel ID.</summary>
+        public Dictionary<string, FleetActionMissionDispatch> DispatchesByVessel { get; } = new Dictionary<string, FleetActionMissionDispatch>(StringComparer.Ordinal);
+
+        /// <summary>Final reports returned by <see cref="GetReportAsync"/>, by voyage ID.</summary>
+        public Dictionary<string, string> ReportsByVoyage { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
         #region Private-Members
 
         private readonly object _Lock = new object();
@@ -151,6 +157,19 @@ namespace Test.Shared.Infrastructure
         {
             lock (_Lock) ApprovalsByVessel[vessel.Id] = approvalOptions?.Snapshot();
             return DispatchAsync(vessel, title, prompt, pipelineId, persona, token);
+        }
+
+        /// <inheritdoc />
+        public Task<string> DispatchAsync(FleetActionMissionDispatch dispatch, CancellationToken token = default)
+        {
+            lock (_Lock) DispatchesByVessel[dispatch.Vessel.Id] = dispatch;
+            return DispatchAsync(dispatch.Vessel, dispatch.Title, dispatch.Prompt, dispatch.PipelineId, dispatch.Persona, dispatch.ApprovalOptions, token);
+        }
+
+        /// <inheritdoc />
+        public Task<string?> GetReportAsync(string voyageId, CancellationToken token = default)
+        {
+            lock (_Lock) return Task.FromResult<string?>(ReportsByVoyage.TryGetValue(voyageId, out string? report) ? report : null);
         }
 
         /// <inheritdoc />

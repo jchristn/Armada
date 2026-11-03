@@ -210,6 +210,9 @@ namespace Test.Shared.Suites.Tui
                 using (ArmadaClient admin = LiveServerSetup.Admin(fx))
                 {
                     VesselSetup setup = await LiveServerSetup.CreateVesselAsync(admin, "fa-e2e");
+                    // The first listing seeds the built-in actions (more than one page); list first so the custom
+                    // action created below is the newest and lands on the first page.
+                    await admin.EnumerateFleetActionsAsync();
                     FleetActionUpsertRequest action = new FleetActionUpsertRequest();
                     action.Name = "E2E status " + Guid.NewGuid().ToString("N").Substring(0, 6);
                     action.Kind = FleetActionKindEnum.Command;
