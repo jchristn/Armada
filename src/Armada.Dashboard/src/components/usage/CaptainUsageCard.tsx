@@ -18,7 +18,7 @@ interface CaptainUsageCardProps {
 
 /** Provider history link for one account, with the account/host filters preserved in the URL. */
 export function usageHistoryPath(view: UsageSnapshotView): string {
-  const params = new URLSearchParams({ source: 'usage-limits' });
+  const params = new URLSearchParams({ source: 'usage-overview', section: 'account-limits' });
   if (view.provider) params.set('provider', view.provider);
   if (view.accountKey) params.set('accountKey', view.accountKey);
   if (view.hostId) params.set('hostId', view.hostId);

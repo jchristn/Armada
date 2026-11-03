@@ -76,13 +76,13 @@ describe('Token usage tabs', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Provider' }), { target: { value: '' } });
     const releases: Array<() => void> = [];
     vi.mocked(getUsageSeries).mockImplementation(filter => new Promise(resolve => { releases.push(() => resolve(series(filter.metric, filter.from))); }));
-    const refresh = screen.getByRole('button', { name: 'Refresh usage overview' });
+    const refresh = screen.getByRole('button', { name: 'Refresh captain usage' });
     expect(refresh).toHaveClass('refresh-btn');
     expect(refresh).toHaveAttribute('type', 'button');
     fireEvent.click(refresh);
     expect(refresh).toHaveClass('refreshing');
     await waitFor(() => expect(releases).toHaveLength(2));
-    await waitFor(() => expect(getUsageLatest).toHaveBeenCalledTimes(optionsBefore + 1));
+    await waitFor(() => expect(getUsageLatest).toHaveBeenCalledTimes(optionsBefore + 2));
     await waitFor(() => expect(getUsageMissions).toHaveBeenCalledTimes(missionsBefore + 1));
     await act(async () => { releases[0](); });
     expect(refresh).toHaveClass('refreshing');
@@ -97,7 +97,7 @@ describe('Token usage tabs', () => {
     renderAt('/activity?source=usage-overview&provider=anthropic');
     await screen.findByRole('button', { name: 'Show chart data table' });
     vi.mocked(getUsageSeries).mockRejectedValueOnce(new Error('offline'));
-    const refresh = screen.getByRole('button', { name: 'Refresh usage overview' });
+    const refresh = screen.getByRole('button', { name: 'Refresh captain usage' });
     fireEvent.click(refresh);
     await screen.findByText('offline');
     await waitFor(() => expect(refresh).not.toHaveClass('refreshing'));
@@ -112,15 +112,15 @@ describe('Token usage tabs', () => {
     await screen.findByText('Usage by model');
     expect(screen.getAllByRole('tablist')).toHaveLength(1);
     expect(getUsageSeries).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('tab', { name: 'Usage Overview' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Captain Usage' }));
     await screen.findByRole('combobox', { name: 'Range' });
     expect(screen.getByTestId('where')).toHaveTextContent('source=usage-overview');
     expect(screen.getAllByRole('tablist')).toHaveLength(1);
     expect(screen.getByRole('combobox', { name: 'Range' }).closest('form')).toBe(screen.getByRole('combobox', { name: 'Window' }).closest('form'));
-    fireEvent.click(screen.getByRole('tab', { name: 'Account Limits' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Filters' }));
-    await screen.findByRole('combobox', { name: 'Provider' });
-    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('source=usage-limits'));
+    expect(screen.queryByRole('tab', { name: 'Account Limits' })).not.toBeInTheDocument();
+    const accountTable = await screen.findByRole('table', { name: 'Limits grouped by account and host' });
+    const charts = screen.getByRole('heading', { name: 'Limit utilization (%)' }).closest('.usage-chart')!;
+    expect(charts.compareDocumentPosition(accountTable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('preserves legacy nested-tab links and their filters', async () => {
@@ -141,7 +141,7 @@ describe('Token usage tabs', () => {
     await waitFor(() => expect(getUsageSeries).toHaveBeenCalledWith(expect.objectContaining({ metric: 'limits', bucketMinutes: 60 })));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Show chart data table' }));
-    const row = within(screen.getByRole('table')).getAllByRole('row').find((r) => r.textContent?.includes('acct_sel')) as HTMLElement;
+    const row = within(screen.getByRole('table', { name: 'Chart data: limits are grouped by observation time, tokens by completion time.' })).getAllByRole('row').find((r) => r.textContent?.includes('acct_sel')) as HTMLElement;
     fireEvent.click(within(row).getByRole('button', { name: /Show missions for/ }));
     await waitFor(() => expect(getUsageMissions).toHaveBeenCalledTimes(1));
     const limitsCall = vi.mocked(getUsageSeries).mock.calls.filter((c) => c[0].metric === 'limits' && c[0].bucketMinutes === 60).pop()![0];
@@ -178,7 +178,6 @@ describe('Token usage tabs', () => {
   it('retains filter values after a failed request and offers a retry', async () => {
     vi.mocked(getUsageLatest).mockRejectedValue(new Error('latest unavailable'));
     renderAt('/activity?tab=limits&provider=anthropic&hostId=hbr_laptop');
-    fireEvent.click(await screen.findByRole('button', { name: 'Filters' }));
     await waitFor(() => expect(getUsageLatest).toHaveBeenCalledWith(expect.objectContaining({ provider: 'anthropic', hostId: 'hbr_laptop' })));
     expect((await screen.findAllByText('latest unavailable')).length).toBeGreaterThan(0);
     expect(screen.getByRole('combobox', { name: 'Provider' })).toHaveValue('anthropic');
@@ -191,10 +190,12 @@ describe('Token usage tabs', () => {
     expect(screen.getByRole('combobox', { name: 'Provider' })).toHaveValue('anthropic');
   });
 
-  it('opens the Limits tab with the provider history filters from a captain usage link', async () => {
+  it('opens the account table with preserved filters from a legacy limits link', async () => {
     vi.mocked(getUsageLatest).mockResolvedValue({ success: true, pageNumber: 1, pageSize: 25, totalPages: 1, totalRecords: 0, objects: [], totalMs: 1 });
-    renderAt('/activity?tab=limits&provider=anthropic&accountKey=acct_x&hostId=hbr_y');
-    fireEvent.click(await screen.findByRole('button', { name: 'Filters' }));
+    renderAt('/activity?source=usage-limits&provider=anthropic&accountKey=acct_x&hostId=hbr_y');
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('source=usage-overview'));
+    expect(screen.getByTestId('where')).toHaveTextContent('section=account-limits');
+    expect(screen.getByRole('tab', { name: 'Captain Usage' })).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => expect(getUsageLatest).toHaveBeenCalledWith({ provider: 'anthropic', accountKey: 'acct_x', hostId: 'hbr_y', pageNumber: 1, pageSize: 25, sortBy: 'updated', sortDirection: 'descending' }));
     expect(screen.getByRole('combobox', { name: 'Account' })).toHaveValue('acct_x');
   });

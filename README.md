@@ -164,7 +164,7 @@ This development branch identifies packages and images as v1.3.0. Development im
 
 Two anchor features help you understand a captain's available capacity and a model's fit for the work you assign:
 
-- **Check and monitor captain usage.** Check a captain's account usage on demand with **Capture now**, enable recurring capture, and monitor reported account limits, utilization, and reset windows over time. The dashboard brings usage checks and monitoring into the captain's detail page and the Account Limits view.
+- **Check and monitor captain usage.** Check a captain's account usage on demand with **Capture now**, enable recurring capture, and monitor reported account limits, utilization, and reset windows over time. The dashboard brings usage checks and monitoring into the captain's detail page and **Activity > Captain Usage**, which combines usage charts with the current account limits table.
 - **Evaluate model fit for purpose by persona.** Evaluate a captain or model endpoint before assigning it a role such as Worker, Architect, or Judge. Quick probes check runtime behavior, including output contracts, tool calling, speed, and answer consistency. Full evaluations add task battery packs and selected personas, with per-persona outcomes and a report to help you judge suitability for your workload. Start an evaluation from Captains or a captain's Evaluations page, and follow its results while it runs or afterward.
 
 The release also includes:

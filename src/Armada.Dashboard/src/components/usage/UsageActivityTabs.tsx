@@ -151,7 +151,7 @@ function UsageFilterForm({ fields, series = [], children, onRefresh }: { fields:
       {children && <div className="usage-filter-actions">
         <button type="submit" className="btn btn-sm" title={t('Apply these filters.')}>{t('Apply')}</button>
         <button type="button" className="btn btn-sm" onClick={clear} title={t('Remove the provider, account and host filters.')}>{t('Clear filters')}</button>
-        {onRefresh && <RefreshButton onRefresh={async () => { await Promise.all([onRefresh(), loadOptions()]); }} title="Refresh usage overview" />}
+        {onRefresh && <RefreshButton onRefresh={async () => { await Promise.all([onRefresh(), loadOptions()]); }} title="Refresh captain usage" />}
       </div>}
     </form>
   );
@@ -179,11 +179,13 @@ interface SeriesState {
   error: string;
 }
 
-/** Overview tab: limit lines and token bars on one time scale, plus the exact-selection mission drill-down. */
-export function UsageOverviewTab() {
+/** Captain usage: history charts, selected-bucket missions and the current account limits table. */
+export function CaptainUsageTab() {
   const { t } = useLocale();
   const [params, setParams] = useSearchParams();
   const revision = useUsageRevision();
+  const accountLimitsRef = useRef<HTMLElement>(null);
+  const section = params.get('section');
   const requestVersion = useRef(0);
   const [refreshRevision, setRefreshRevision] = useState(0);
   const range = rangeFor(params.get('range'));
@@ -193,6 +195,10 @@ export function UsageOverviewTab() {
   const hostId = params.get('hostId') || '';
   const windowName = params.get('window') || '';
   const [state, setState] = useState<SeriesState>({ status: 'loading', limits: [], tokens: [], limitCoverage: null, tokenCoverage: null, fromUtc: '', toUtc: '', error: '' });
+
+  useEffect(() => {
+    if (section === 'account-limits' && state.status !== 'loading') accountLimitsRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [section, state.status]);
 
   const selFrom = params.get('from') || '';
   const selTo = params.get('to') || '';
@@ -293,7 +299,7 @@ export function UsageOverviewTab() {
         </label>
       </UsageFilterForm>
 
-      {metric !== 'tokens' && <AccountUsageNote />}
+      <AccountUsageNote />
 
       {state.status === 'error' && (
         <div className="usage-overview-error">
@@ -324,39 +330,10 @@ export function UsageOverviewTab() {
           onClose={clearSelection}
         />
       )}
-    </div>
-  );
-}
-
-/** Limits tab: filters plus the account and host table. */
-export function UsageLimitsTab() {
-  const { t } = useLocale();
-  const [params, setParams] = useSearchParams();
-  const [expanded, setExpanded] = useState(false);
-  const active = IDENTITY_FIELDS.some((field) => params.has(field.param));
-  return (
-    <div className="usage-limits">
-      <AccountUsageNote />
-      <div className="card request-history-filters-card">
-        <div className="request-card-header">
-          <button type="button" className="collapsible-header" aria-label={t('Filters')} aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
-            <span className="collapsible-caret" aria-hidden="true">{expanded ? '▾' : '▸'}</span>
-            <span className="collapsible-title">{t('Filters')}</span>
-            {active && <span className="filter-active-pill">{t('Active')}</span>}
-          </button>
-          {expanded && <button type="button" className="btn btn-sm" onClick={() => {
-            const next = new URLSearchParams(params);
-            for (const field of IDENTITY_FIELDS) next.delete(field.param);
-            setParams(next);
-          }}>{t('Reset')}</button>}
-        </div>
-        {expanded && <div className="request-card-body"><UsageFilterForm fields={IDENTITY_FIELDS} /></div>}
-      </div>
-      <AccountLimitsTable
-        provider={params.get('provider') || undefined}
-        accountKey={params.get('accountKey') || undefined}
-        hostId={params.get('hostId') || undefined}
-      />
+      <section ref={accountLimitsRef} style={{ scrollMarginTop: '5rem' }} id="account-limits" aria-labelledby="account-limits-title">
+        <h3 id="account-limits-title">{t('Account Limits')}</h3>
+        <AccountLimitsTable provider={provider || undefined} accountKey={accountKey || undefined} hostId={hostId || undefined} refreshRevision={refreshRevision} />
+      </section>
     </div>
   );
 }

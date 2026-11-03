@@ -18,9 +18,9 @@ const PAGE_KEYS: Record<string, string[]> = {
     'Highest applicable account limit window for this captain, with its name and freshness. 75% and above is a warning, 90% and above is near the limit. A dash state never means zero usage.',
     'Usage shows the first account pages for these captains. Open a captain\'s usage section for every account.',
     'View Usage',
-    'Open Activity > Usage Overview to view usage over time.',
+    'Open Activity > Captain Usage to view usage over time.',
   ],
-  'Activity.tsx': ['Usage Overview', 'Account Limits'],
+  'Activity.tsx': ['Captain Usage'],
 };
 const pageSources = import.meta.glob(['../pages/Captains.tsx', '../pages/Activity.tsx'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 
@@ -31,7 +31,7 @@ const ARIA_DQ = /ariaLabel="([^"]*)"/g;
 
 /** Strings looked up through tables (invisible to the t('...') scan) plus ActionMenu labels translated by the menu. */
 const TABLE_KEYS = [
-  'Refresh usage overview',
+  'Refresh captain usage',
   'Refresh token usage',
   ...Object.values(USAGE_KIND_TEXT),
   ...Object.values(USAGE_KIND_HINT),

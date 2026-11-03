@@ -17,10 +17,6 @@ The shared clients retain the snapshots, series and mission query contracts for 
 
 Regenerate manifests with `python3 scripts/tui/generate-parity-manifest.py` and `python3 scripts/mobile/generate-parity-manifest.py`.
 
-Phase 7 canonical navigation: Dashboard Activity uses peer Token Usage, Usage
-Overview and Account Limits tabs. TUI and mobile now use `source=usage-limits`
-for Account Limits and continue accepting `source=limits`. The dashboard-only
-interactive historical quota overview remains outside native presentation scope;
-`source=usage-overview` opens native Account Limits. These new manifest entries
-are implemented or explicitly not-applicable, never marked planned. The mobile
-manifest's 23 unrelated pre-existing planned API entries are unchanged.
+Current Dashboard navigation uses peer Token Usage and Captain Usage tabs. Captain Usage combines the interactive historical charts and the latest account limits table. Old `source=usage-limits` and nested limits links open its account-table section with filters preserved; `source=usage-overview` remains the stable chart/page URL.
+
+TUI and Mobile retain their native Account Limits surface (`source=usage-limits`, with `source=limits` and `source=usage-overview` aliases). Historical quota charts remain outside native presentation scope. The parity manifests document that exception and have no planned entries.

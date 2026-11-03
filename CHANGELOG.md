@@ -48,13 +48,15 @@ v1.3.0 focuses on **parallelization and concurrency**: more independent work in 
 
 ### Usage chart clarity
 
-- Label Activity’s account usage views to explain that captain-reported usage may include direct Claude Code, Codex or other harness activity outside Armada on the same provider account. Keep the note on Usage Overview’s limit views and Account Limits, with translations for every supported locale.
+- Consolidate Usage Overview and Account Limits into **Captain Usage**: charts first, current account limits at the bottom, shared identity filters and page refresh. Preserve old account-limit bookmarks and provider-history links, and update the shared breadcrumb/tab labels.
+
+- Label Activity’s account usage views to explain that captain-reported usage may include direct Claude Code, Codex or other harness activity outside Armada on the same provider account. Keep the note on Captain Usage, with translations for every supported locale.
 
 - Remove the unlabeled 75% and 90% horizontal threshold guides from Limit utilization. Use compact provider/window legend names, with stable source numbers when accounts or hosts would otherwise be ambiguous. Account/host details remain available on hover, in point tooltips and in the data table.
 
 ### Activity refresh controls
 
-- Add the shared rotating-arrow/success-check refresh button to Activity > Usage Overview and Token Usage; standardize the token heatmap's local refresh control too. The remaining Activity tabs already expose the same control through their tables.
+- Add the shared rotating-arrow/success-check refresh button to Activity > Captain Usage and Token Usage; standardize the token heatmap's local refresh control too. The remaining Activity tabs already expose the same control through their tables.
 - Refresh overview charts, filter choices and the selected mission bucket while preserving URL filters, draft filters and selection. Token Usage refreshes totals, both charts, the heatmap and captain choices without resetting its range or filters. Loading feedback follows the requests, failures remain retryable, and stale responses cannot replace newer data.
 
 ### Dashboard navigation

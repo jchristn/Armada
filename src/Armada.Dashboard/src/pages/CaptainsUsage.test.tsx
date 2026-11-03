@@ -140,7 +140,7 @@ describe('Captains usage column and View Usage action', () => {
   });
 
   for (const [name] of [['ok-captain', 'cpt_ok'], ['disabled-captain', 'cpt_off'], ['unsupported-captain', 'cpt_unsup'], ['nodata-captain', 'cpt_none'], ['failed-captain', 'cpt_fail']] as const) {
-    it(`View Usage opens Token Usage Overview from ${name}`, async () => {
+    it(`View Usage opens Captain Usage from ${name}`, async () => {
       renderCaptains();
       await screen.findByText(name);
       await userEvent.click(within(row(name)).getByRole('button', { name: 'Actions' }));
@@ -149,7 +149,7 @@ describe('Captains usage column and View Usage action', () => {
     });
   }
 
-  it('View Usage is reachable with the keyboard only and opens Token Usage Overview', async () => {
+  it('View Usage is reachable with the keyboard only and opens Captain Usage', async () => {
     const user = userEvent.setup();
     renderCaptains();
     await screen.findByText('unsupported-captain');

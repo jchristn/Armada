@@ -78,7 +78,7 @@ describe('CaptainUsageCard', () => {
     expect(screen.getAllByText(`Resets at(${future}) (ago(${future}))`).length).toBe(2);
     expect(screen.getByRole('link', { name: 'cpt_b' }).getAttribute('href')).toBe('/captains/cpt_b');
     expect(screen.getByText('Requested every 300s, effective every 600s', { exact: false })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Provider history' }).getAttribute('href')).toBe('/activity?source=usage-limits&provider=anthropic&accountKey=acct_abcdef123456&hostId=hbr_laptop');
+    expect(screen.getByRole('link', { name: 'Provider history' }).getAttribute('href')).toBe('/activity?source=usage-overview&section=account-limits&provider=anthropic&accountKey=acct_abcdef123456&hostId=hbr_laptop');
   });
 
   it('keeps loading, error, empty and disabled distinct', async () => {

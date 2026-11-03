@@ -7,8 +7,7 @@ const RequestHistory = lazy(() => import('./RequestHistory'));
 const Events = lazy(() => import('./Events'));
 const Signals = lazy(() => import('./Signals'));
 const TokenUsage = lazy(() => import('./TokenUsage'));
-const UsageOverview = lazy(() => import('../components/usage/UsageActivityTabs').then((module) => ({ default: module.UsageOverviewTab })));
-const AccountLimits = lazy(() => import('../components/usage/UsageActivityTabs').then((module) => ({ default: module.UsageLimitsTab })));
+const CaptainUsage = lazy(() => import('../components/usage/UsageActivityTabs').then((module) => ({ default: module.CaptainUsageTab })));
 const Jobs = lazy(() => import('./Jobs'));
 
 function panel(node: ReactNode): ReactNode {
@@ -27,13 +26,15 @@ function panel(node: ReactNode): ReactNode {
  */
 export default function Activity() {
   const [params, setParams] = useSearchParams();
-  // Preserve bookmarks from the former nested usage tabs.
+  // Keep old account-limit and nested usage bookmarks on the consolidated page.
   const source = params.get('source');
   const legacyTab = params.get('tab');
   useEffect(() => {
-    if ((!source || source === 'tokens') && (legacyTab === 'overview' || legacyTab === 'limits')) {
+    const nested = (!source || source === 'tokens') && (legacyTab === 'overview' || legacyTab === 'limits');
+    if (source === 'usage-limits' || nested) {
       const next = new URLSearchParams(params);
-      next.set('source', legacyTab === 'overview' ? 'usage-overview' : 'usage-limits');
+      next.set('source', 'usage-overview');
+      if (source === 'usage-limits' || legacyTab === 'limits') next.set('section', 'account-limits');
       next.delete('tab');
       setParams(next, { replace: true });
     }
@@ -44,8 +45,7 @@ export default function Activity() {
     { key: 'events', label: 'Events', tooltip: 'The server\'s event log: state changes such as missions starting, finishing, or failing.', render: () => panel(<Events />) },
     { key: 'signals', label: 'Signals', tooltip: 'Messages sent between the Admiral and captains.', render: () => panel(<Signals />) },
     { key: 'tokens', label: 'Token Usage', tooltip: 'Model tokens and cost used by captains, by day, captain, vessel, and model.', render: () => panel(<TokenUsage />) },
-    { key: 'usage-overview', label: 'Usage Overview', render: () => panel(<UsageOverview />) },
-    { key: 'usage-limits', label: 'Account Limits', render: () => panel(<AccountLimits />) },
+    { key: 'usage-overview', label: 'Captain Usage', render: () => panel(<CaptainUsage />) },
     { key: 'jobs', label: 'Jobs', tooltip: 'Background jobs such as vessel imports and health checks, with their status, progress, and Cancel.', render: () => panel(<Jobs />) },
   ];
 

@@ -17,6 +17,12 @@
     },
     {
       "kind": "route",
+      "key": "/*",
+      "status": "not-applicable",
+      "notes": "Browser catch-all renders the shared NotFound recovery page; native routers already handle unmatched routes."
+    },
+    {
+      "kind": "route",
       "key": "/activity",
       "status": "implemented",
       "tui": "HubScreen",
@@ -793,19 +799,11 @@
     },
     {
       "kind": "tab",
-      "key": "Activity:usage-limits",
-      "status": "implemented",
-      "tui": "UsageLimitsScreen",
-      "workstream": "AC7",
-      "notes": "Account/host limits with pagination and capture; canonical Activity source."
-    },
-    {
-      "kind": "tab",
       "key": "Activity:usage-overview",
       "status": "not-applicable",
       "tui": "",
       "workstream": "AC7",
-      "notes": "Dashboard-only interactive historical quota chart. Native clients retain latest account limits and token history, as scoped in docs/captain-usage-plan/DASHBOARD_PARITY.md; overview links open native Account Limits."
+      "notes": "Dashboard Captain Usage combines historical quota charts and latest account limits. Native clients open their existing Account Limits surface for this source; historical quota charts remain browser-only as scoped in docs/captain-usage-plan/DASHBOARD_PARITY.md."
     },
     {
       "kind": "tab",
@@ -5590,12 +5588,6 @@
       "tui": "ServerSettingsScreen",
       "workstream": "W7.7",
       "notes": ""
-    },
-    {
-      "kind": "route",
-      "key": "/*",
-      "status": "not-applicable",
-      "notes": "Browser catch-all renders the shared NotFound recovery page; native routers already handle unmatched routes."
     }
   ]
 }

@@ -13,6 +13,7 @@ import CopyButton from '../shared/CopyButton';
 import UsageWindowBar from './UsageWindowBar';
 
 interface AccountLimitsTableProps {
+  refreshRevision?: number;
   provider?: string;
   accountKey?: string;
   hostId?: string;
@@ -21,7 +22,7 @@ interface AccountLimitsTableProps {
 const MAX_PAGE_SIZE = 100;
 
 /** Limits grouped by account and host: one row per account observation, member captains beneath it. */
-export default function AccountLimitsTable({ provider, accountKey, hostId }: AccountLimitsTableProps) {
+export default function AccountLimitsTable({ provider, accountKey, hostId, refreshRevision = 0 }: AccountLimitsTableProps) {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const revision = useUsageRevision();
   const [pageNumber, setPageNumber] = useState(1);
@@ -59,7 +60,7 @@ export default function AccountLimitsTable({ provider, accountKey, hostId }: Acc
   useEffect(() => {
     void load();
     return () => { requestVersion.current++; };
-  }, [load, revision, attempt]);
+  }, [load, revision, attempt, refreshRevision]);
   const { seconds, setSeconds } = useAutoRefresh('usage-account-limits', () => { void load(); });
 
   const rows = result?.objects ?? [];
