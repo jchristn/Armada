@@ -32,7 +32,14 @@ U0's design/UX review and implementation map are recorded in the linked review. 
 - [x] Migration 126 operational debt for Disabled/legacy/unknown executions, startup adoption, guarded reconciliation and active-capture proof. Do not invent historical selection decisions or balances.
 - [x] Shared Dashboard mission card, history/filter/paging/preview, safe historical names/links, Core SDK, Helm inspection and generic MCP enumeration with scope before paging.
 - [x] Shared semantic English source and eight translated locale catalogs; native bundler access to shared resources.
-- [ ] Finish wave verification, visual artifacts, commit/push and `build-all v1.3.0`. Exact evidence and remaining limits: [implementation guide](docs/usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md).
+- [x] Enforcement wave committed/pushed (`e3bd1abc4`, container follow-ups `d2274d9d6`/`cc7c33a92`); `build-all v1.3.0` completed for server/dashboard/proxy and VSIX. Exact evidence and remaining limits: [implementation guide](docs/usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md).
+
+### Follow-up: native inspection and regression completion
+
+- [x] Mobile mission overview selection section uses existing native controls for recorded model provenance, comparisons, paged/filterable history, retained detail/JSON and blocked read-only previews. Deleted captains have no link; revoked access clears evidence. Polling pauses off-screen/background.
+- [x] Shared TUI/Mobile API parity inventories include all five reads. Native recovery/settings controls and the TUI mission inspection workflow remain U4 work.
+- [x] Native tests/type checking/lint and shared-module lint pass; terminal display/focus/parity/localization checks pass with an explicit headless default palette, independent of shell `NO_COLOR`.
+- [ ] Finish full-suite interaction diagnosis, commit/push and follow-up `build-all v1.3.0`.
 
 ## 1. Requirements and implementation rules
 

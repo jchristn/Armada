@@ -2625,6 +2625,38 @@
     },
     {
       "kind": "api",
+      "key": "getCaptainSelection",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "Mission selection summary, paged history/comparison and read-only preview; recovery mutations remain in the usage-selection plan"
+    },
+    {
+      "kind": "api",
+      "key": "getCaptainSelectionCandidates",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "Mission selection summary, paged history/comparison and read-only preview; recovery mutations remain in the usage-selection plan"
+    },
+    {
+      "kind": "api",
+      "key": "getCaptainSelectionDecision",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "Mission selection summary, paged history/comparison and read-only preview; recovery mutations remain in the usage-selection plan"
+    },
+    {
+      "kind": "api",
+      "key": "getCaptainSelectionHistory",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "Mission selection summary, paged history/comparison and read-only preview; recovery mutations remain in the usage-selection plan"
+    },
+    {
+      "kind": "api",
       "key": "getCaptainTools",
       "status": "implemented",
       "mobile": "src/screens/captains",
@@ -3990,6 +4022,14 @@
       "mobile": "",
       "workstream": "W2.2",
       "notes": "black box browsing, evidence, maintenance and administration are dashboard, TUI, CLI and MCP surfaces (MISSION_BLACKBOX_PLAN.md 11); the app reads entries, briefs, resolve and recovery only"
+    },
+    {
+      "kind": "api",
+      "key": "previewCaptainSelection",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "Mission selection summary, paged history/comparison and read-only preview; recovery mutations remain in the usage-selection plan"
     },
     {
       "kind": "api",

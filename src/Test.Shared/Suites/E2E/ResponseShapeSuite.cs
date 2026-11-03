@@ -314,7 +314,9 @@ namespace Test.Shared.Suites.E2E
                     string rpc = await McpTestCalls.CallToolAsync(mcp, "delete_missions", new { ids = ids }).ConfigureAwait(false);
                     E2eMcpToolEnvelope envelope = JsonHelper.Deserialize<E2eMcpToolEnvelope>(rpc);
                     string text = envelope.Result?.Content.FirstOrDefault()?.Text ?? "";
-                    McpToolError error = JsonHelper.Deserialize<McpToolError>(text);
+                    McpToolError error;
+                    try { error = JsonHelper.Deserialize<McpToolError>(text); }
+                    catch (System.Text.Json.JsonException) { throw new AssertionException("MCP oversized-request reply was not structured JSON: " + (text.Length > 500 ? text.Substring(0, 500) : text)); }
                     AssertEqual(McpToolErrorCodeEnum.InvalidArgument, error.ErrorCode, text);
                     AssertEqual(CollectionLimitExceededException.ErrorCode, error.Code, text);
                 }

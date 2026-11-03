@@ -4920,6 +4920,8 @@ export interface CaptainSelectionDecisionDetail {
   executionEvents: EnumerationResult<{ eventKind: string; actualModel?: string | null; reportingSource?: string | null; occurredUtc: string }>;
 }
 export interface CaptainSelectionPreview {
+  isPreview?: boolean;
+  algorithmVersion?: string;
   missionId: string;
   mode: UsageSelectionSettings['mode'];
   strategy: CaptainSelectionStrategy;

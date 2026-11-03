@@ -5,6 +5,7 @@
  *   jest.mock('@dashboard/api/client', () => require('../test/operationsClient').operationsClientMockFactory());
  */
 const OPERATIONS_CALLS = [
+  'getCaptainSelection', 'getCaptainSelectionHistory', 'getCaptainSelectionDecision', 'getCaptainSelectionCandidates', 'previewCaptainSelection',
   'getStatus', 'getHealth', 'getDoctor', 'getSettings',
   'listMissions', 'listMissionSummaries', 'getMission', 'getMissionHistory', 'getTokenUsage', 'getMissionLandingPreview',
   'getMissionGitHubPullRequest', 'enumerateMissionPullRequestReviews', 'enumerateMissionPullRequestChecks', 'createMission', 'updateMission', 'deleteMission', 'purgeMission', 'dispatchMission',
@@ -42,6 +43,7 @@ export function operationsClientMockFactory(): Record<string, unknown> {
     if (typeof actual[name] !== 'function') throw new Error(`operationsClient: ${name} is not a client export`);
     calls[name] = jest.fn(async () => { throw new ApiError('No black box entry.', 404, { code: 'BlackBoxNotFound' }); });
   }
+  calls.getCaptainSelection = jest.fn(async (missionId: string) => ({ missionId, currentMode: 'Observe', currentStrategy: 'FirstAvailable', historyAvailable: false, currentAttempt: null, latestDecision: null }));
   return { ...base, ...calls };
 }
 

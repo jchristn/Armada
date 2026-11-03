@@ -53,6 +53,7 @@ import type { OperationsDetailProps } from './listTypes';
 import { AssignmentBlockerCard, LandingPreviewCard, PullRequestCard } from './mission/MissionCards';
 import { MissionFormSheet, type MissionFormValues } from './mission/MissionFormSheet';
 import { MissionDiffTab, MissionInstructionsTab, MissionLogTab } from './mission/MissionTabs';
+import { CaptainSelectionSection } from './mission/CaptainSelectionSection';
 import { ReviewSheet } from './mission/ReviewSheet';
 import { TransitionSheet } from './mission/TransitionSheet';
 import { externalUrl, openExternalUrl } from '../../lib/externalLinks';
@@ -296,7 +297,9 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
       refreshControl={<RefreshControl refreshing={missionQuery.refreshing} onRefresh={() => void missionQuery.refresh()} tintColor={colors.primary} />}
     >
       <View style={styles.primaryActions}>
-        {state.canResolveReview ? <Button label={t('Resolve Review')} onPress={() => setReviewOpen(true)} testID="mission-action-review" /> : null}
+        <CaptainSelectionSection missionId={mission.id} status={mission.status} revision={mission.lastUpdateUtc} onOpen={open} />
+
+      {state.canResolveReview ? <Button label={t('Resolve Review')} onPress={() => setReviewOpen(true)} testID="mission-action-review" /> : null}
         {state.canMarkComplete ? <Button label={t('Mark Complete')} onPress={markComplete} testID="mission-action-complete" /> : null}
         {state.showLand ? (
           <Button
