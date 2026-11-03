@@ -1,0 +1,772 @@
+{
+  "results": [
+    {
+      "theme": "light",
+      "width": 1280,
+      "locale": "en",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        806
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 1280,
+      "locale": "en",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        574,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 1280,
+      "locale": "es",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        806
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 1280,
+      "locale": "es",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        574,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 1280,
+      "locale": "ja",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        806
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 1280,
+      "locale": "ja",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        574,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "locale": "en",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        374
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "locale": "en",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "locale": "es",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        374
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "locale": "es",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "locale": "ja",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        374
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 768,
+      "locale": "ja",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "locale": "en",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        264
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "locale": "en",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "locale": "es",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        264
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "locale": "es",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "locale": "ja",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        264
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "locale": "ja",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "locale": "en",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        806
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "locale": "en",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        574,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "locale": "es",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        806
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "locale": "es",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        574,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "locale": "ja",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        806
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 1280,
+      "locale": "ja",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        574,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "locale": "en",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        374
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "locale": "en",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "locale": "es",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        374
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "locale": "es",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "locale": "ja",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        374
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 768,
+      "locale": "ja",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "locale": "en",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        264
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "locale": "en",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "locale": "es",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        264
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "locale": "es",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "locale": "ja",
+      "view": "comparison",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        208,
+        104,
+        264
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one",
+        "/captains/cpt_one",
+        "/captains/cpt_unknown"
+      ],
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "locale": "ja",
+      "view": "history",
+      "overflow": false,
+      "clipped": [],
+      "columns": [
+        176,
+        104,
+        192,
+        160,
+        72
+      ],
+      "missingKeys": false,
+      "links": [
+        "/captains/cpt_one"
+      ],
+      "passed": true
+    },
+    {
+      "state": "rtl-expanded",
+      "width": 1280,
+      "direction": "rtl",
+      "overflow": false,
+      "columns": 3,
+      "badFocus": [],
+      "passed": true
+    },
+    {
+      "state": "rtl-expanded",
+      "width": 768,
+      "direction": "rtl",
+      "overflow": false,
+      "columns": 3,
+      "badFocus": [],
+      "passed": true
+    },
+    {
+      "state": "rtl-expanded",
+      "width": 390,
+      "direction": "rtl",
+      "overflow": false,
+      "columns": 3,
+      "badFocus": [],
+      "passed": true
+    },
+    {
+      "state": "wait",
+      "text": "Captain selection\nEnforce\nMost remaining allowance\nCompare captains\nPreview current selection\n\u21bb\n\nLatest retained decision; this is not the current execution attempt.\n\nSelected captain\nNot selected\nIntended model\nUnknown\nRuntime-reported model\nUnknown\n\nWaiting for an eligible execution host with the required credentials. 2026/11/3 4:00:00",
+      "passed": true
+    },
+    {
+      "state": "legacy",
+      "text": "Captain selection\nEnforce\nMost remaining allowance\nCompare captains\nPreview current selection\n\u21bb\n\nSelection history was not recorded for this attempt.",
+      "passed": true
+    },
+    {
+      "state": "error",
+      "text": "Captain selection\nCompare captains\nPreview current selection\n\u21bb\n\nSelection details could not be refreshed.",
+      "passed": true
+    },
+    {
+      "state": "redacted",
+      "text": "Captain selection\nCompare captains\nPreview current selection\n\u21bb\n\nSelection details could not be refreshed.",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

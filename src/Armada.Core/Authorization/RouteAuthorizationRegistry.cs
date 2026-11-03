@@ -71,6 +71,8 @@ namespace Armada.Core.Authorization
 
             // Captain selection: shared service enforces tenant/owner and mission-token scope.
             Add("GET", "/api/v1/missions/{id}/captain-selection", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/captain-selection/history/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/captain-selection-decisions/{id}/candidates/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/missions/{id}/captain-selection/history", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/missions/{id}/captain-selection/preview", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("GET", "/api/v1/captain-selection-decisions/{id}", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

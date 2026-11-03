@@ -47,6 +47,12 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(0L, (await database.Driver.CaptainSelections.EnumerateExecutionEventsAsync("tenant-a", created.Id, "other", token: token).ConfigureAwait(false)).TotalRecords);
                 AssertEqual("SufficientHeadroom", (await database.Driver.CaptainSelections.ReadReasonsAsync("tenant-a", created.Id, records.Candidates[0].Id, "owner", "owner", token).ConfigureAwait(false)).Single().ReasonCode);
 
+                List<CaptainSelectionDecisionView> projected = await database.Driver.CaptainSelections.ReadDecisionViewsAsync("tenant-a", new[] { created.Id }, "owner", "owner", token).ConfigureAwait(false);
+                AssertEqual(1, projected.Count); AssertEqual("opus-resolved", projected[0].ReportedModel);
+                AssertFalse(projected[0].SelectedCaptainAvailable, "deleted historical captain must not create a dangling link");
+                AssertEqual(0, (await database.Driver.CaptainSelections.ReadDecisionViewsAsync("tenant-b", new[] { created.Id }, token: token).ConfigureAwait(false)).Count);
+                AssertEqual(0, (await database.Driver.CaptainSelections.ReadDecisionViewsAsync("tenant-a", new[] { created.Id }, "other", "other", token).ConfigureAwait(false)).Count);
+                AssertNull((await database.Driver.CaptainSelections.ReadDecisionViewsAsync("tenant-a", new[] { created.Id }, "owner", "other", token).ConfigureAwait(false))[0].ReportedModel);
                 AssertEqual("opus", (await database.Driver.CaptainSelections.ReadDecisionAsync("tenant-a", created.Id, "owner", token).ConfigureAwait(false))!.SelectedModel, "actual event never rewrites intended selection");
             });
             Add("tenant_and_owner_scope_precede_candidate_counts_and_pages", async token =>

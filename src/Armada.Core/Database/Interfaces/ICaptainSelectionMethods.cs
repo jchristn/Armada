@@ -14,6 +14,14 @@ namespace Armada.Core.Database.Interfaces
         Task<List<UsageSelectionAccountEvidence>> ReadAccountEvidenceAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default);
         /// <summary>Batch SQL-aggregated reservations for the current verified accounts of a bounded captain set.</summary>
         Task<List<UsageSelectionBudgetTotals>> ReadBudgetTotalsAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default);
+        /// <summary>Preserve legacy routing while tracking an unmeasured execution on its actual credential host, without selection history.</summary>
+        Task<bool> TryAdmitLegacyAsync(string captainId, string missionId, string? executionHostId, int ceiling = 256, CancellationToken token = default);
+        /// <summary>Readmit a legacy verification repair and track operational uncertainty on its credential host.</summary>
+        Task<bool> TryAdmitLegacyRepairAsync(string captainId, string missionId, DateTime verificationVersion, string? executionHostId, int ceiling = 256, CancellationToken token = default);
+        /// <summary>Revalidate account evidence and budgets under a shared account lock, then atomically claim and record an enforced admission.</summary>
+        Task<CaptainSelectionAdmissionReceipt> TryAdmitEnforcedAsync(CaptainSelectionRecordSet records, string? dockId = null, int ceiling = 256, CancellationToken token = default);
+        /// <summary>Revalidate and atomically readmit an enforced verification repair with its own budget and decision.</summary>
+        Task<CaptainSelectionAdmissionReceipt> TryAdmitEnforcedRepairAsync(CaptainSelectionRecordSet records, DateTime verificationVersion, int ceiling = 256, CancellationToken token = default);
         /// <summary>Atomically claim a captain/mission and store Observe-mode history. Only a new Claimed receipt permits launch; replay returns AlreadyCommitted. Enforce mode is rejected until budget revalidation is integrated.</summary>
         Task<CaptainSelectionAdmissionReceipt> TryAdmitObservedAsync(CaptainSelectionRecordSet records, string? dockId = null, int ceiling = 256, CancellationToken token = default);
         /// <summary>Atomically persist a complete decision aggregate. Replaying its attempt returns the original decision.</summary>
@@ -22,6 +30,8 @@ namespace Armada.Core.Database.Interfaces
         Task<CaptainSelectionAdmissionReceipt> TryAdmitObservedRepairAsync(CaptainSelectionRecordSet records, DateTime verificationVersion, int ceiling = 256, CancellationToken token = default);
         /// <summary>Read the admitted decision correlated to the mission's current attempt, or null for an unrecorded legacy/Disabled attempt.</summary>
         Task<CaptainSelectionDecision?> ReadCurrentDecisionAsync(string tenantId, string missionId, string? ownerUserId = null, CancellationToken token = default);
+        /// <summary>Batch authorized scalar decision projections and model provenance without per-row lookups. Hidden candidate identities are suppressed.</summary>
+        Task<List<CaptainSelectionDecisionView>> ReadDecisionViewsAsync(string tenantId, IReadOnlyList<string> decisionIds, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default);
         /// <summary>Read a decision by tenant and optional mission-owner scope. Null owner is reserved for authorized administrators.</summary>
         Task<CaptainSelectionDecision?> ReadDecisionAsync(string tenantId, string decisionId, string? ownerUserId = null, CancellationToken token = default);
         /// <summary>Read the immutable effective policy referenced by an authorized decision.</summary>
@@ -30,6 +40,8 @@ namespace Armada.Core.Database.Interfaces
         Task<EnumerationResult<CaptainSelectionDecision>> EnumerateByMissionAsync(string tenantId, string missionId, string? ownerUserId = null, int pageNumber = 1, int pageSize = 25, CancellationToken token = default);
         /// <summary>Filter and page a visible mission's history in SQL, preserving scope in totals.</summary>
         Task<EnumerationResult<CaptainSelectionDecision>> EnumerateHistoryAsync(string tenantId, string missionId, string? ownerUserId, CaptainSelectionHistoryQuery query, CancellationToken token = default);
+        /// <summary>Read one scoped historical candidate by captain, including whether its current record is still visible.</summary>
+        Task<CaptainSelectionCandidateRecord?> ReadCandidateByCaptainAsync(string tenantId, string decisionId, string captainId, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default);
         /// <summary>Page candidate rows after mission and candidate-owner scope, before totals. Null owner scope is administrator-only.</summary>
         Task<EnumerationResult<CaptainSelectionCandidateRecord>> EnumerateCandidatesAsync(string tenantId, string decisionId, string? ownerUserId = null, string? candidateOwnerUserId = null, int pageNumber = 1, int pageSize = 25, CancellationToken token = default);
         /// <summary>Read one authorized candidate's immutable windows; never perform an unscoped lookup.</summary>
@@ -40,6 +52,14 @@ namespace Armada.Core.Database.Interfaces
         Task<EnumerationResult<CaptainSelectionExecutionEvent>> EnumerateExecutionEventsAsync(string tenantId, string decisionId, string? ownerUserId = null, int pageNumber = 1, int pageSize = 25, CancellationToken token = default);
         /// <summary>Read the latest actual model report for an authorized decision, preserving reporting provenance.</summary>
         Task<CaptainSelectionExecutionEvent?> ReadLastModelReportAsync(string tenantId, string decisionId, string? ownerUserId = null, CancellationToken token = default);
+        /// <summary>Adopt a bounded page of running unreserved executions at startup, without inventing historical selections.</summary>
+        Task<int> AdoptUntrackedExecutionsAsync(int batchSize = 100, string? localHostId = null, CancellationToken token = default);
+        /// <summary>Check whether a mission still owns a particular internal unreserved execution key.</summary>
+        Task<bool> IsUntrackedExecutionRunningAsync(string tenantId, string missionId, string executionKey, CancellationToken token = default);
+        /// <summary>Read the oldest-checked operational uncertainty page, server maintenance only.</summary>
+        Task<List<UsageUntrackedExecution>> ReadUntrackedExecutionsAsync(int batchSize = 100, CancellationToken token = default);
+        /// <summary>Reconcile one operational uncertainty row by its tenant and version; all state writes are compare-and-set.</summary>
+        Task<bool> UpdateUntrackedExecutionAsync(UsageUntrackedExecution row, int expectedRevision, CancellationToken token = default);
         /// <summary>Read a bounded fair reconciliation page across tenants; server maintenance only, never an API response.</summary>
         Task<List<UsageBudgetReservation>> ReadReconciliationBatchAsync(int batchSize = 100, CancellationToken token = default);
         /// <summary>Advance a reconciliation cursor only if the reservation revision still matches.</summary>

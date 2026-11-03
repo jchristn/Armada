@@ -35,6 +35,9 @@ namespace Armada.Core.Models
         /// </summary>
         public DateTime? UntilUtc { get; set; } = null;
 
+        /// <summary>Usage-policy retry/reset hint, not a guaranteed recovery or start time.</summary>
+        public DateTime? SelectionNextReconsiderUtc { get; set; }
+
         /// <summary>
         /// The mission this one waits for, for dependency reasons.
         /// </summary>

@@ -35,6 +35,16 @@ describe('configurable captain selection', () => {
     await screen.findByText('Captain selection settings saved and applied.');
     expect(updateSettings).toHaveBeenCalledWith({ expectedUsageSelectionRevision: 7, usageSelection: { ...stored.usageSelection, strategy: 'MostUsedAllowance' } });
   });
+  it('enables opt-in enforcement when supported and saves it with the selected strategy', async () => {
+    vi.mocked(getSettings).mockResolvedValue({ ...structuredClone(stored), usageSelectionCapabilities: { ...stored.usageSelectionCapabilities!, enforcementAvailable: true } });
+    render(<UsageSelectionSettingsPanel canEdit />);
+    const mode = await screen.findByLabelText('Mode');
+    expect(screen.getByRole('option', { name: 'Enforce' })).toBeEnabled();
+    fireEvent.change(mode, { target: { value: 'Enforce' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText('Captain selection settings saved and applied.');
+    expect(updateSettings).toHaveBeenCalledWith({ expectedUsageSelectionRevision: 7, usageSelection: { ...stored.usageSelection, mode: 'Enforce' } });
+  });
   it('keeps edits after revision conflict and supports explicit refresh', async () => {
     vi.mocked(updateSettings).mockRejectedValue(new Error('Settings changed. Reload before saving.'));
     render(<UsageSelectionSettingsPanel canEdit />);

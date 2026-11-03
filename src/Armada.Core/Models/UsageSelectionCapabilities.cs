@@ -1,11 +1,13 @@
 namespace Armada.Core.Models
 {
+    using Armada.Core.Services;
     using Armada.Core.Enums;
 
     /// <summary>Explicit availability and configuration-source metadata for usage selection controls.</summary>
     public sealed class UsageSelectionCapabilities
     {
         /// <summary>Available strategy names; none bypass safety or capacity gates.</summary>
+        [CollectionBound(3)]
         public CaptainSelectionStrategyEnum[] Strategies { get; set; } = new[] { CaptainSelectionStrategyEnum.FirstAvailable, CaptainSelectionStrategyEnum.MostRemainingAllowance, CaptainSelectionStrategyEnum.MostUsedAllowance };
         /// <summary>Observe integration is available.</summary>
         public bool ObserveAvailable { get; set; } = true;

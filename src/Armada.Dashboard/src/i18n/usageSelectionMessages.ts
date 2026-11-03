@@ -1,35 +1,4 @@
-/** Stable keys with English fallback; locale catalogs may override each key. */
-export const usageSelectionMessages: Record<string, string> = {
-  'usageSelection.title': 'Captain selection',
-  'usageSelection.description': 'Choose how Armada compares eligible captains within the existing routing preferences. Observe records the proposed choice while preserving current routing.',
-  'usageSelection.adminOnly': 'Only a global administrator can change captain selection settings.',
-  'usageSelection.mode': 'Mode',
-  'usageSelection.disabled': 'Disabled',
-  'usageSelection.observe': 'Observe',
-  'usageSelection.enforce': 'Enforce',
-  'usageSelection.enforcementUnavailable': 'Enforcement is not available on this server.',
-  'usageSelection.strategy': 'Selection strategy',
-  'usageSelection.firstAvailable': 'First available',
-  'usageSelection.mostRemaining': 'Most remaining allowance',
-  'usageSelection.mostUsed': 'Most used allowance',
-  'usageSelection.strategyHint': 'First available keeps the existing order. Most remaining favors headroom; most used favors accounts nearer their limits. Safety gates still apply.',
-  'usageSelection.unknown': 'Unknown or stale usage',
-  'usageSelection.allowUnknown': 'Allow after known eligible accounts',
-  'usageSelection.waitUnknown': 'Wait for fresh evidence',
-  'usageSelection.environment': 'An environment override controls this policy. Change ARMADA_USAGE_SELECTION to edit it.',
-  'usageSelection.loadFailed': 'Captain selection settings could not be loaded.',
-  'usageSelection.saveFailed': 'Captain selection settings could not be saved.',
-  'usageSelection.saved': 'Captain selection settings saved and applied.',
-  'usageSelection.invalid': 'Enter valid values. Comfortable headroom must exceed the reserve.',
-  'usageSelection.reservePercent': 'Protected reserve (%)',
-  'usageSelection.comfortableHeadroomPercent': 'Comfortable headroom (%)',
-  'usageSelection.perAttemptReservationPercent': 'Estimate per attempt (%)',
-  'usageSelection.maximumFreshnessSeconds': 'Maximum evidence age (seconds)',
-  'usageSelection.unknownRetrySeconds': 'Unknown-usage retry (seconds)',
-  'usageSelection.providerCooldownSeconds': 'Provider cooldown (seconds)',
-  'usageSelection.settlementLagSeconds': 'Settlement lag (seconds)',
-  'usageSelection.maximumUnsettledSeconds': 'Unsettled estimate age (seconds)',
-  'usageSelection.decisionRetentionDays': 'History retention (days)',
-  'usageSelection.maximumCandidates': 'Maximum comparison candidates',
-  'usageSelection.advanced': 'Evidence and accounting limits',
-};
+import messages from '../../../Armada.Core/Resources/UsageSelectionMessages.json';
+
+/** Shared semantic English source, also embedded by native clients. Locale packs override these keys. */
+export const usageSelectionMessages: Record<string, string> = messages;

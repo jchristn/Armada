@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\UsageSelectionMessages.json" LogicalName="Armada.Core.UsageSelectionMessages.json" />
     <EmbeddedResource Include="Prompts\persona-improvements.json" />
     <EmbeddedResource Include="Prompts\persona-briefs.json" />
     <EmbeddedResource Include="Prompts\persona-briefs-v1.json" />

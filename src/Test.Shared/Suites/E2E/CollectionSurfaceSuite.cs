@@ -48,6 +48,7 @@ namespace Test.Shared.Suites.E2E
             ["GET /api/v1/captains/{id}/tools"] = "One captain's tool sources (at most 256) and counts; its tools are one EnumerationResult page (POST .../tools/enumerate twin)",
             ["GET /api/v1/captains/{id}/log"] = "Log read bounded by lines (1-5000) with offset paging",
             ["GET /api/v1/harbors/{id}/metrics"] = "One Harbor's metrics",
+            ["GET /api/v1/missions/{id}/captain-selection"] = "One current-attempt/latest-retained decision summary; history is separately paginated",
             ["GET /api/v1/missions/history"] = "Aggregated summary buckets",
             ["GET /api/v1/model-profiles/{id}/scorecard"] = "One profile's aggregated scorecard for one persona",
             ["GET /api/v1/model-alerts/thresholds"] = "The alert thresholds (defaults and per-persona overrides), one settings object",

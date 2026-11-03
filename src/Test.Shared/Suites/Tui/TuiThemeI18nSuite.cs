@@ -89,6 +89,9 @@ namespace Test.Shared.Suites.Tui
                 AssertEqual("zh-Hans", loc.Normalize("zh-CN"), "zh alias");
                 AssertEqual("yue-Hant", loc.Normalize("zh-HK"), "cantonese alias");
                 AssertEqual("en", new LocalizationService().Normalize("xx-YY"), "unknown falls back");
+                AssertEqual("First available", new LocalizationService().T("usageSelection.firstAvailable"), "shared semantic English fallback");
+                loc.SetLocale("ja");
+                AssertEqual("Effective headroom: 80%", loc.T("usageSelection.headroomValue", LocalizationArgs.Of("value", "80%")), "missing semantic locale key falls back before interpolation");
                 AssertEqual("other", PluralRules.Select("ja", 1), "ja has only other");
                 AssertEqual("one", PluralRules.Select("fr", 0), "fr zero is one");
             }));
@@ -112,7 +115,7 @@ namespace Test.Shared.Suites.Tui
                     }
 
                     // The sidebar's right border is the first vertical border glyph after its left border in column 0.
-                    char[] verticals = new char[] { '\u2502', '\u2503' };
+                    char[] verticals = new char[] { '\u2502', '\u2503', '|' };
                     int bar = frame.Split('\n').Where(l => l.Contains("\u30c0\u30c3\u30b7\u30e5\u30dc\u30fc\u30c9")).Select(l => TextCells.Width(l.Substring(0, l.IndexOfAny(verticals, 1)))).First();
                     int plain = frame.Split('\n').Where(l => l.IndexOfAny(verticals, 1) > 0 && !l.Contains("\u30c0\u30c3")).Select(l => TextCells.Width(l.Substring(0, l.IndexOfAny(verticals, 1)))).First();
                     AssertTrue(plain > 1, "sidebar right border found");

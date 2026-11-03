@@ -7,6 +7,27 @@ namespace Armada.Core.Database
     /// <summary>Structured selection-ledger migration shared by the supported SQL dialects.</summary>
     internal static class UsageSelectionSchema
     {
+        internal static SchemaMigration UntrackedExecutionMigration(DatabaseTypeEnum provider)
+        {
+            bool sqlServer = provider == DatabaseTypeEnum.SqlServer;
+            string create = sqlServer ? "IF OBJECT_ID('usage_untracked_executions', 'U') IS NULL CREATE TABLE " : "CREATE TABLE IF NOT EXISTS ";
+            string add = sqlServer ? "IF COL_LENGTH('missions','usage_execution_key') IS NULL ALTER TABLE missions ADD usage_execution_key NVARCHAR(64) NULL;"
+                : "ALTER TABLE missions ADD COLUMN " + (provider == DatabaseTypeEnum.Postgresql ? "IF NOT EXISTS " : "") + "usage_execution_key VARCHAR(64) NULL;";
+            string index = (sqlServer ? "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='ix_usage_untracked_check' AND object_id=OBJECT_ID('usage_untracked_executions')) " : "")
+                + "CREATE INDEX " + (provider == DatabaseTypeEnum.Sqlite || provider == DatabaseTypeEnum.Postgresql ? "IF NOT EXISTS " : "")
+                + "ix_usage_untracked_check ON usage_untracked_executions(state,last_update_utc,id);";
+            string table = create + @"usage_untracked_executions(id VARCHAR(64) NOT NULL PRIMARY KEY,tenant_id VARCHAR(64) NOT NULL,user_id VARCHAR(64) NULL,
+                created_utc VARCHAR(40) NOT NULL,last_update_utc VARCHAR(40) NOT NULL,active INTEGER NOT NULL,
+                mission_id VARCHAR(64) NOT NULL,execution_key VARCHAR(64) NOT NULL,captain_id VARCHAR(64) NOT NULL,
+                host_id VARCHAR(64) NULL,runtime VARCHAR(64) NOT NULL,account_key VARCHAR(64) NULL,account_attribution_verified INTEGER NOT NULL,configuration_revision VARCHAR(1024) NULL,
+                state VARCHAR(32) NOT NULL,revision INTEGER NOT NULL,execution_ended_utc VARCHAR(40) NULL,settlement_lag_seconds INTEGER NOT NULL,
+                maximum_unsettled_seconds INTEGER NOT NULL,settled_by_snapshot_id VARCHAR(64) NULL,transition_reason VARCHAR(64) NULL,
+                UNIQUE(tenant_id,execution_key));";
+            if (sqlServer) table = table.Replace("VARCHAR", "NVARCHAR", StringComparison.Ordinal);
+            return new SchemaMigration(126, "Track unreserved executions without fabricating selection history", add, table, index,
+                "UPDATE missions SET usage_execution_key=id WHERE usage_execution_key IS NULL AND captain_id IS NOT NULL AND status IN ('Assigned','InProgress');");
+        }
+
         internal static SchemaMigration HistoryDisplayMigration(DatabaseTypeEnum provider)
         {
             string check = provider == DatabaseTypeEnum.Sqlite ? "SELECT COUNT(*) FROM pragma_table_info('captain_selection_windows') WHERE name='normalization_code'"

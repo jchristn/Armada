@@ -94,7 +94,7 @@ describe('Usage i18n catalog', () => {
     for (const [code, pack] of Object.entries(catalog.locales)) {
       for (const key of keys) {
         const value = pack.phrases?.[key] ?? pack.terms?.[key];
-        if (value && placeholders(key) !== placeholders(value)) bad.push(`${code}: ${key}`);
+        if (value && placeholders(usageSelectionMessages[key] ?? key) !== placeholders(value)) bad.push(`${code}: ${key}`);
       }
     }
     expect(bad).toEqual([]);

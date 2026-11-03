@@ -8,6 +8,8 @@ namespace Armada.Core.Models
     {
         /// <summary>Visible captain identity.</summary>
         public string CaptainId { get; set; } = String.Empty;
+        /// <summary>Whether the caller can currently open the captain. False for deleted or no-longer-visible captains.</summary>
+        public bool CaptainAvailable { get; set; }
         /// <summary>Visible captain display name.</summary>
         public string CaptainName { get; set; } = String.Empty;
         /// <summary>Configured intended model; null is unknown, never the actual reported model.</summary>

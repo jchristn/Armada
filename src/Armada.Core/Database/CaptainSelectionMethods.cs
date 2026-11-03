@@ -49,7 +49,7 @@ namespace Armada.Core.Database
         }
 
         private static string Utc(DateTime value) => value.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
-        private static DateTime ParseUtc(object value) => DateTime.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
+        private static DateTime ParseUtc(object value) => value is DateTime date ? DateTime.SpecifyKind(date, DateTimeKind.Utc) : DateTime.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
         private static string PageSql(DbConnection connection) => connection.GetType().Name == "SqlConnection"
             ? " OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY" : " LIMIT @take OFFSET @skip";
         private static void Required(string value, string name)
@@ -64,17 +64,17 @@ namespace Armada.Core.Database
 
         /// <inheritdoc />
         public Task<CaptainSelectionAdmissionReceipt> TryAdmitObservedAsync(CaptainSelectionRecordSet records, string? dockId = null, int ceiling = 256, CancellationToken token = default)
-            => AdmitObservedAsync(records, dockId, ceiling, null, token);
+            => AdmitSelectionAsync(records, dockId, ceiling, null, UsageSelectionModeEnum.Observe, token);
 
         /// <inheritdoc />
         public Task<CaptainSelectionAdmissionReceipt> TryAdmitObservedRepairAsync(CaptainSelectionRecordSet records, DateTime verificationVersion, int ceiling = 256, CancellationToken token = default)
-            => AdmitObservedAsync(records, null, ceiling, verificationVersion, token);
+            => AdmitSelectionAsync(records, null, ceiling, verificationVersion, UsageSelectionModeEnum.Observe, token);
 
-        private Task<CaptainSelectionAdmissionReceipt> AdmitObservedAsync(CaptainSelectionRecordSet records, string? dockId, int ceiling, DateTime? verificationVersion, CancellationToken token)
+        private Task<CaptainSelectionAdmissionReceipt> AdmitSelectionAsync(CaptainSelectionRecordSet records, string? dockId, int ceiling, DateTime? verificationVersion, UsageSelectionModeEnum expectedMode, CancellationToken token)
         {
             Validate(records);
-            if (records.Decision.Mode != UsageSelectionModeEnum.Observe || String.IsNullOrWhiteSpace(records.Decision.SelectedCaptainId))
-                throw new ArgumentException("Observed admission requires Observe mode and an actual selected captain.", nameof(records));
+            if (records.Decision.Mode != expectedMode || String.IsNullOrWhiteSpace(records.Decision.SelectedCaptainId))
+                throw new ArgumentException("Selection admission requires the requested mode and an actual selected captain.", nameof(records));
             return RunAsync(async connection =>
             {
                 CaptainSelectionDecision? existing = await ReadAttemptAsync(connection, null, records.Decision.TenantId, records.Decision.ExecutionAttemptId, token).ConfigureAwait(false);
@@ -287,11 +287,16 @@ namespace Armada.Core.Database
                 using DbCommand command = Command(connection, null, "SELECT COUNT(*)" + where);
                 CandidateParameters(command, tenantId, decisionId, ownerUserId, candidateOwnerUserId);
                 long count = Convert.ToInt64(await command.ExecuteScalarAsync(token).ConfigureAwait(false), CultureInfo.InvariantCulture);
-                command.CommandText = "SELECT c.*" + where + " ORDER BY c.rank_number,c.id" + PageSql(connection);
+                command.CommandText = "SELECT c.*," + CurrentCaptainExistsSql(candidateOwnerUserId) + " AS captain_available" + where + " ORDER BY c.rank_number,c.id" + PageSql(connection);
                 Add(command, "@skip", (pageNumber - 1) * pageSize); Add(command, "@take", pageSize);
                 List<CaptainSelectionCandidateRecord> rows = new List<CaptainSelectionCandidateRecord>();
                 using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
-                while (await reader.ReadAsync(token).ConfigureAwait(false)) rows.Add(MapCaptainSelectionCandidateRecord(reader));
+                while (await reader.ReadAsync(token).ConfigureAwait(false))
+                {
+                    CaptainSelectionCandidateRecord row = MapCaptainSelectionCandidateRecord(reader);
+                    row.CurrentCaptainExists = Convert.ToInt32(reader["captain_available"], CultureInfo.InvariantCulture) != 0;
+                    rows.Add(row);
+                }
                 return EnumerationResult<CaptainSelectionCandidateRecord>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, rows, count);
             }, token);
         }

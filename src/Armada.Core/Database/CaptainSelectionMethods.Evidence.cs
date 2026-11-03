@@ -10,6 +10,27 @@ namespace Armada.Core.Database
 
     internal sealed partial class CaptainSelectionMethods
     {
+        private static string CurrentCaptainExistsSql(string? candidateOwner)
+            => "CASE WHEN EXISTS(SELECT 1 FROM captains live WHERE live.id=c.captain_id AND live.tenant_id=c.tenant_id"
+                + (candidateOwner == null ? "" : " AND (live.user_id=@candidateOwner OR live.user_id IS NULL)") + ") THEN 1 ELSE 0 END";
+
+        /// <inheritdoc />
+        public Task<CaptainSelectionCandidateRecord?> ReadCandidateByCaptainAsync(string tenantId, string decisionId, string captainId, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default)
+        {
+            Required(tenantId, nameof(tenantId)); Required(decisionId, nameof(decisionId)); Required(captainId, nameof(captainId));
+            return RunAsync(async connection =>
+            {
+                using DbCommand command = Command(connection, null, "SELECT c.*," + CurrentCaptainExistsSql(candidateOwnerUserId) + " AS captain_available FROM captain_selection_candidates c JOIN captain_selection_decisions d ON d.id=c.decision_id WHERE "
+                    + CandidateScope(ownerUserId, candidateOwnerUserId) + " AND c.captain_id=@captain;");
+                CandidateParameters(command, tenantId, decisionId, ownerUserId, candidateOwnerUserId); Add(command, "@captain", captainId);
+                using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+                if (!await reader.ReadAsync(token).ConfigureAwait(false)) return null;
+                CaptainSelectionCandidateRecord row = MapCaptainSelectionCandidateRecord(reader);
+                row.CurrentCaptainExists = Convert.ToInt32(reader["captain_available"], CultureInfo.InvariantCulture) != 0;
+                return row;
+            }, token);
+        }
+
         /// <inheritdoc />
         public Task<CaptainSelectionExecutionEvent?> ReadLastModelReportAsync(string tenantId, string decisionId, string? ownerUserId = null, CancellationToken token = default)
         {

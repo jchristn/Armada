@@ -141,7 +141,7 @@ namespace Armada.Server.Mcp
             if (register == null) throw new ArgumentNullException(nameof(register));
             register = MapToolExceptions(MarkExperimental(register));
             McpStatusTools.Register(register, admiral, onStop, stopServerUnavailableMessage);
-            McpEnumerateTools.Register(register, database, mergeQueue, logging != null ? new InboxService(database, logging, settings) : null, cliPermissionService, blackBox);
+            McpEnumerateTools.Register(register, database, mergeQueue, logging != null ? new InboxService(database, logging, settings) : null, cliPermissionService, blackBox, missionService == null || settings == null ? null : new CaptainSelectionAccessService(database, missionService, settings));
             McpFleetTools.Register(register, database);
             McpVesselTools.Register(register, database, dockService, vesselService, settings, admiral, blackBoxCapture, blackBoxHooks);
             if (vesselImportService != null) McpVesselImportTools.Register(register, vesselImportService, fleetCategorizationService);

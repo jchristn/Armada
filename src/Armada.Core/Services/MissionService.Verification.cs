@@ -33,19 +33,27 @@ namespace Armada.Core.Services
                 List<Captain> admitted = await ApplyCapacityLimitsAsync(new List<Captain> { current }, routingView, token).ConfigureAwait(false);
                 if (admitted.Count == 0) return false;
                 if (CanAssignMissionAsync != null && !await CanAssignMissionAsync(routingView, current).ConfigureAwait(false)) return false;
+                if (_Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce && String.IsNullOrWhiteSpace(mission.TenantId)) return false;
                 if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled && !String.IsNullOrEmpty(mission.TenantId))
                 {
-                    if (_Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce) return false;
                     CaptainAdmissionSelection repair = new CaptainAdmissionSelection { Mission = routingView, Eligibility = eligibility,
                         Visible = new List<Captain> { current }, Available = new List<Captain> { current }, Selected = current,
                         RoutingBuckets = new List<CaptainRoutingBucket> { new CaptainRoutingBucket { ReasonCode = "RepairCaptain", Captains = new List<Captain> { current } } } };
                     UsageSelectionSnapshot snapshot = await BuildUsageSelectionAsync(repair, _Settings.EffectiveUsageSelection.Copy(), token).ConfigureAwait(false);
+                    if (snapshot.Settings.Mode == UsageSelectionModeEnum.Enforce && snapshot.Evaluation.SelectedCaptainId != current.Id) return false;
+                    if (UsagePolicyKey() != System.Text.Json.JsonSerializer.Serialize(snapshot.Settings)) return false;
+                    string? executionHost = mission.AssignedHarborId ?? UsageSelectionLocalHostId;
+                    UsageSelectionCandidate? repairUsage = snapshot.Evaluation.Candidates.SingleOrDefault(c => c.Candidate.CaptainId == current.Id)?.Candidate;
+                    if (snapshot.Settings.Mode == UsageSelectionModeEnum.Enforce && (String.IsNullOrWhiteSpace(executionHost)
+                        || repairUsage?.IdentityVerified == true && repairUsage.ConfigurationMatches && snapshot.Evidence.TryGetValue(current.Id, out UsageSelectionAccountEvidence? observed) && observed.HostId != executionHost)) return false;
                     CaptainSelectionRecordSet records = UsageSelectionRecordBuilder.Build(snapshot, mission, "Repair", admitted: true);
-                    CaptainSelectionAdmissionReceipt receipt = await _Database.CaptainSelections.TryAdmitObservedRepairAsync(records, mission.LastUpdateUtc,
-                        _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
+                    records.AdmissionHostId = executionHost;
+                    CaptainSelectionAdmissionReceipt receipt = snapshot.Settings.Mode == UsageSelectionModeEnum.Enforce
+                        ? await _Database.CaptainSelections.TryAdmitEnforcedRepairAsync(records, mission.LastUpdateUtc, _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false)
+                        : await _Database.CaptainSelections.TryAdmitObservedRepairAsync(records, mission.LastUpdateUtc, _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
                     return receipt.Claimed;
                 }
-                return await _Database.Captains.TryResumeVerificationAsync(current.Id, mission.Id, mission.LastUpdateUtc,
+                return await _Database.CaptainSelections.TryAdmitLegacyRepairAsync(current.Id, mission.Id, mission.LastUpdateUtc, mission.AssignedHarborId ?? UsageSelectionLocalHostId,
                     _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
             }
             finally { _CapacityLock.Release(); }

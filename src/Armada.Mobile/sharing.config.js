@@ -8,6 +8,7 @@
 const path = require('path');
 
 const dashboardSrc = path.resolve(__dirname, '..', 'Armada.Dashboard', 'src');
+const usageMessagesDir = path.resolve(__dirname, '..', 'Armada.Core', 'Resources');
 const i18nDir = path.resolve(__dirname, '..', 'Armada.Server', 'wwwroot', 'i18n');
 
 const sharedDirs = ['api', 'types', 'lib'];
@@ -30,7 +31,7 @@ const dashboardOnly = [
 ];
 
 module.exports = {
-  sharedRoots: { dashboardSrc, i18nDir },
+  sharedRoots: { dashboardSrc, i18nDir, usageMessagesDir },
   sharedDirs,
   sharedFiles,
   dashboardOnly,

@@ -158,7 +158,7 @@ namespace Armada.Core.Database
             {
                 using DbTransaction transaction = await connection.BeginTransactionAsync(token).ConfigureAwait(false);
                 int count = 0;
-                foreach (string table in _ChildTables.Concat(new[] { "usage_account_cooldowns", "captain_selection_decisions", "captain_selection_policy_revisions" }))
+                foreach (string table in _ChildTables.Concat(new[] { "usage_untracked_executions", "usage_account_cooldowns", "captain_selection_decisions", "captain_selection_policy_revisions" }))
                 {
                     using DbCommand command = Command(connection, transaction, "DELETE FROM " + table + " WHERE tenant_id=@tenant;");
                     Add(command, "@tenant", tenantId); count += await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);

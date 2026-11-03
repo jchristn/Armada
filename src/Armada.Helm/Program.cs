@@ -271,6 +271,9 @@ namespace Armada.Helm
                     .WithDescription("List missions");
                 mission.AddCommand<MissionCreateCommand>("create")
                     .WithDescription("Create a new mission");
+                mission.AddCommand<MissionSelectionCommand>("selection")
+                    .WithDescription("Inspect captain selection, history or a read-only preview")
+                    .WithExample("mission", "selection", "msn_example", "--history", "--json");
                 mission.AddCommand<MissionShowCommand>("show")
                     .WithDescription("Show mission details (accepts name or ID)");
                 mission.AddCommand<MissionCancelCommand>("cancel")

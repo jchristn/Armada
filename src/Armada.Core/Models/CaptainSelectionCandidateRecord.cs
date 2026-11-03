@@ -46,6 +46,10 @@ namespace Armada.Core.Models
         /// <summary>Capture time used by the original evaluation, even if its raw snapshot expires.</summary>
         public DateTime? EvidenceCapturedUtc { get; set; }
 
+        /// <summary>Transient current-visibility signal from a scoped query, excluded from stored evidence.</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool CurrentCaptainExists { get; set; }
+
         /// <summary>Create an identified CaptainSelectionCandidateRecord record.</summary>
         public CaptainSelectionCandidateRecord() : base("csc_") { }
     }

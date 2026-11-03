@@ -42,6 +42,7 @@ import CopyButton from '../components/shared/CopyButton';
 import Markdown from '../components/shared/Markdown';
 import Button from '../components/shared/Button';
 import CaptainRef from '../components/shared/CaptainRef';
+import CaptainSelectionCard from '../components/missions/CaptainSelectionCard';
 import AssignmentBlockerCard from '../components/missions/AssignmentBlockerCard';
 import VerificationStatusCard from '../components/missions/VerificationStatusCard';
 import BlackBoxPanel from '../components/blackbox/BlackBoxPanel';
@@ -505,6 +506,7 @@ export default function MissionDetail() {
       {mission.status === 'Pending' && mission.assignmentBlocker && (
         <AssignmentBlockerCard blocker={mission.assignmentBlocker} />
       )}
+      <CaptainSelectionCard missionId={mission.id} status={mission.status} revision={mission.lastUpdateUtc} />
 
       {showManualMerge && mission.vesselId && (
         <BranchesModal

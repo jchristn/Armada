@@ -5,7 +5,7 @@ namespace Armada.Core.Settings
 
     /// <summary>
     /// Usage selection policy defaults and bounds. Observe is the safe rollout default; enforcement is explicit.
-    /// Validate a complete settings object before using or publishing a new live revision.
+    /// Validate a complete settings object before using or publishing a new live revision. Percentages round upward to six decimal places to match durable accounting precision.
     /// </summary>
     public sealed class UsageSelectionSettings
     {
@@ -69,7 +69,7 @@ namespace Armada.Core.Settings
         private static double Bound(double value, double minimum, double maximum, string name)
         {
             if (Double.IsNaN(value) || Double.IsInfinity(value)) throw new ArgumentOutOfRangeException(name, "Usage settings require finite numeric values.");
-            return Math.Clamp(value, minimum, maximum);
+            return Armada.Core.Services.UsageSelectionNumbers.Up(Math.Clamp(value, minimum, maximum));
         }
     }
 }

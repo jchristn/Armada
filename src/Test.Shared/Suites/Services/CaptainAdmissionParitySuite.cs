@@ -148,14 +148,17 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
                 AssertTrue((await h.Db.Events.EnumerateByMissionAsync(h.Mission.Id)).Any(e => e.EventType == WorkerEnvelopeRules.EventType));
             });
-            Add("observe_scoped_dispatch_records_legacy_choice_and_configurable_comparison_before_launch", async () =>
+            foreach (UsageSelectionModeEnum mode in new[] { UsageSelectionModeEnum.Observe, UsageSelectionModeEnum.Enforce })
+            foreach (CaptainSelectionStrategyEnum strategy in Enum.GetValues<CaptainSelectionStrategyEnum>())
+            Add("scoped_dispatch_" + mode + "_" + strategy, async () =>
             {
                 using Harness h = await Harness.CreateAsync();
                 TenantMetadata tenant = await h.Db.Tenants.CreateAsync(new TenantMetadata("observe-dispatch"));
                 UserMaster owner = await h.Db.Users.CreateAsync(new UserMaster(tenant.Id, "observe@example.invalid", "fixture-password"));
                 h.Mission.TenantId = tenant.Id; h.Mission.UserId = owner.Id;
                 await h.Db.Missions.UpdateAsync(h.Mission);
-                h.Settings.UsageSelection.Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance;
+                h.Settings.UsageSelection.Strategy = strategy;
+                h.Settings.UsageSelection.Mode = mode;
                 h.Settings.UsageCapture.Enabled = true;
                 Captain first = await h.Db.Captains.CreateAsync(new Captain("legacy first") { TenantId = tenant.Id, UserId = owner.Id, Model = "opus", LastUpdateUtc = DateTime.UtcNow.AddMinutes(-10), UsageCaptureEnabled = true });
                 Captain second = await h.Db.Captains.CreateAsync(new Captain("more headroom") { TenantId = tenant.Id, UserId = owner.Id, Model = "opus", LastUpdateUtc = DateTime.UtcNow.AddMinutes(-5), UsageCaptureEnabled = true });
@@ -175,27 +178,30 @@ namespace Test.Shared.Suites.Services
                         LastGoodStatus = snapshot.Status, LastGoodWindowsJson = snapshot.WindowsJson, CaptureContextKey = context });
                 }
                 await Capture(first, 80); await Capture(second, 20);
+                Captain actualCaptain = mode == UsageSelectionModeEnum.Enforce && strategy == CaptainSelectionStrategyEnum.MostRemainingAllowance ? second : first;
+                h.Service.UsageSelectionLocalHostId = "host-" + actualCaptain.Id;
+                Captain proposed = strategy == CaptainSelectionStrategyEnum.MostRemainingAllowance ? second : first;
                 CaptainSelectionPreview preview = await h.Service.PreviewCaptainSelectionAsync(h.Mission);
-                AssertEqual(first.Id, preview.ActualCaptainId); AssertEqual(second.Id, preview.HypotheticalCaptainId);
+                AssertEqual(actualCaptain.Id, preview.ActualCaptainId); AssertEqual(proposed.Id, preview.HypotheticalCaptainId);
                 AssertEqual(0L, (await h.Db.CaptainSelections.EnumerateByMissionAsync(tenant.Id, h.Mission.Id)).TotalRecords);
                 h.Captains.OnLaunchAgent = async (captain, mission, dock) =>
                 {
                     CaptainSelectionDecision committed = (await h.Db.CaptainSelections.ReadCurrentDecisionAsync(tenant.Id, mission.Id))!;
-                    AssertEqual(first.Id, committed.SelectedCaptainId, "history must exist before the process starts");
-                    AssertEqual(second.Id, committed.HypotheticalCaptainId);
+                    AssertEqual(actualCaptain.Id, committed.SelectedCaptainId, "history must exist before the process starts");
+                    AssertEqual(mode == UsageSelectionModeEnum.Observe ? proposed.Id : null, committed.HypotheticalCaptainId);
                     h.Launches++; return 8001;
                 };
                 AssertTrue(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
                 AssertEqual(1, h.Launches);
                 CaptainSelectionDecision decision = (await h.Db.CaptainSelections.ReadCurrentDecisionAsync(tenant.Id, h.Mission.Id))!;
-                AssertEqual(first.Id, decision.SelectedCaptainId); AssertEqual(second.Id, decision.HypotheticalCaptainId);
+                AssertEqual(actualCaptain.Id, decision.SelectedCaptainId); AssertEqual(mode == UsageSelectionModeEnum.Observe ? proposed.Id : null, decision.HypotheticalCaptainId);
                 AssertEqual(2, decision.CandidateCount);
                 AssertEqual(1L, (await h.Db.CaptainSelections.EnumerateExecutionEventsAsync(tenant.Id, decision.Id)).TotalRecords);
-                UsageBudgetReservation reservation = (await h.Db.CaptainSelections.ReadReservationsAsync(tenant.Id, "host-" + first.Id, first.Runtime.ToString(), "opaque-account")).Single();
+                UsageBudgetReservation reservation = (await h.Db.CaptainSelections.ReadReservationsAsync(tenant.Id, "host-" + actualCaptain.Id, actualCaptain.Runtime.ToString(), "opaque-account")).Single();
                 AssertTrue(reservation.ExecutionStartedUtc.HasValue);
                 AssertFalse(await h.Db.CaptainSelections.TryTransitionReservationAsync(tenant.Id, reservation.Id, reservation.Revision, UsageReservationStateEnum.Active,
                     UsageReservationStateEnum.Released, DateTime.UtcNow.AddSeconds(1), "NotStarted"), "a launched attempt cannot be released as unstarted");
-                AssertEqual(0, (await h.Db.CaptainSelections.ReadReservationsAsync(tenant.Id, "host-" + second.Id, second.Runtime.ToString(), "opaque-account")).Count);
+                AssertEqual(0, (await h.Db.CaptainSelections.ReadReservationsAsync(tenant.Id, "host-" + (actualCaptain.Id == first.Id ? second.Id : first.Id), actualCaptain.Runtime.ToString(), "opaque-account")).Count);
             });
             return new TestSuiteDescriptor(suite, "Captain admission parity", cases);
         }

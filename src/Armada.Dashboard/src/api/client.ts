@@ -1,3 +1,4 @@
+import type { CaptainSelectionSummary, CaptainSelectionDecisionView, CaptainSelectionDecisionDetail, CaptainSelectionCandidateView, CaptainSelectionPreview, CaptainSelectionHistoryQuery } from '../types/models';
 import type {
   ScopeEnum,
   UsageCaptureReceipt,
@@ -2682,3 +2683,16 @@ export const writeBatteryPackFile = (id: string, path: string, content: string) 
 export const deleteBatteryPackFile = (id: string, path: string) => del<BatteryPackDetail>(`/api/v1/battery/packs/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`);
 export const deleteBatteryPack = (id: string) => del<{ deleted: boolean }>(`/api/v1/battery/packs/${encodeURIComponent(id)}`);
 export const validateBatteryPack = (id: string) => post<BatteryPackInfo>(`/api/v1/battery/packs/${encodeURIComponent(id)}/validate`, {});
+
+
+// Read-only selection inspection uses the shared scoped server contracts.
+export const getCaptainSelection = (missionId: string, signal?: AbortSignal) =>
+  get<CaptainSelectionSummary>(`/api/v1/missions/${encodeURIComponent(missionId)}/captain-selection`, { signal });
+export const getCaptainSelectionHistory = (missionId: string, query?: CaptainSelectionHistoryQuery, signal?: AbortSignal) =>
+  get<EnumerationResult<CaptainSelectionDecisionView>>(`/api/v1/missions/${encodeURIComponent(missionId)}/captain-selection/history${cliQuery({ ...query })}`, { signal });
+export const getCaptainSelectionDecision = (decisionId: string, tenantId?: string, pageNumber = 1, pageSize = 10, signal?: AbortSignal) =>
+  get<CaptainSelectionDecisionDetail>(`/api/v1/captain-selection-decisions/${encodeURIComponent(decisionId)}${cliQuery({ tenantId, pageNumber, pageSize })}`, { signal });
+export const getCaptainSelectionCandidates = (decisionId: string, tenantId?: string, pageNumber = 1, pageSize = 10, signal?: AbortSignal) =>
+  get<EnumerationResult<CaptainSelectionCandidateView>>(`/api/v1/captain-selection-decisions/${encodeURIComponent(decisionId)}/candidates${cliQuery({ tenantId, pageNumber, pageSize })}`, { signal });
+export const previewCaptainSelection = (missionId: string, pageNumber = 1, pageSize = 10, signal?: AbortSignal) =>
+  post<CaptainSelectionPreview>(`/api/v1/missions/${encodeURIComponent(missionId)}/captain-selection/preview${cliQuery({ pageNumber, pageSize })}`, {}, { signal });

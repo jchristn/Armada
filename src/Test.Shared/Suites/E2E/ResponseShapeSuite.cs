@@ -52,6 +52,10 @@ namespace Test.Shared.Suites.E2E
         // roots of the declared-bounds check, but a response model that reaches one makes it checked again.
         private static readonly Dictionary<string, string> _InternalModels = new Dictionary<string, string>(StringComparer.Ordinal)
         {
+            ["CaptainSelectionRecordSet"] = "Internal atomic ledger write aggregate; APIs return bounded redacted decision/candidate DTOs",
+            ["UsageSelectionCandidateResult"] = "Internal per-candidate pure-policy result; transports map to redacted paginated candidate views",
+            ["UsageSelectionCandidate"] = "Internal pure-policy input with normalized window evidence; never returned by transports",
+            ["UsageSelectionEvaluation"] = "Internal complete policy evaluation; API comparison results are authorized and paginated",
             ["CaptainChatTurnResult"] = "In-process result of an Ask turn; its tool calls are stored and read through the paged Ask tool-call enumerations",
             ["DockLeaseState"] = "Landing's view of which missions hold a dock, used inside the landing pipeline",
             ["LandingDeferral"] = "Landing pipeline decision to defer a landing, recorded in-process",

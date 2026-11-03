@@ -14,7 +14,7 @@ namespace Armada.Core.Services
     public static class UsageSelectionPolicy
     {
         /// <summary>Algorithm identifier stored with every future durable decision.</summary>
-        public const string AlgorithmVersion = "usage-bands-v1";
+        public const string AlgorithmVersion = "usage-bands-v2";
 
         /// <summary>Evaluate an entire bounded eligible-candidate set using the supplied UTC clock.</summary>
         /// <param name="candidates">Already scoped candidates with existing routing/safety fences.</param>
@@ -70,7 +70,7 @@ namespace Armada.Core.Services
 
         private static int BandOrder(UsageSelectionBandEnum band, CaptainSelectionStrategyEnum strategy)
         {
-            if (strategy == CaptainSelectionStrategyEnum.FirstAvailable) return band == UsageSelectionBandEnum.Blocked ? 1 : 0;
+            if (strategy == CaptainSelectionStrategyEnum.FirstAvailable) return band == UsageSelectionBandEnum.Blocked ? 2 : band == UsageSelectionBandEnum.Unknown ? 1 : 0;
             if (strategy == CaptainSelectionStrategyEnum.MostUsedAllowance)
             {
                 if (band == UsageSelectionBandEnum.Constrained) return 0;

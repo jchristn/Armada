@@ -52,6 +52,7 @@ namespace Test.Shared.Suites.E2E
             ["approve_deployment"] = "deployment (DeploymentService scopes by caller)",
             ["verify_deployment"] = "deployment (DeploymentService scopes by caller)",
             ["rollback_deployment"] = "deployment (DeploymentService scopes by caller)",
+            ["get_captain_selection_decision"] = "Retained decision IDs require selection ledger fixtures; cross-tenant scope covered by E2E.CaptainSelectionApi",
             ["get_runbook"] = "runbook (RunbookService scopes by caller)",
             ["get_runbook_execution"] = "runbook execution (RunbookService scopes by caller)",
             ["start_runbook_execution"] = "runbook (RunbookService scopes by caller)",

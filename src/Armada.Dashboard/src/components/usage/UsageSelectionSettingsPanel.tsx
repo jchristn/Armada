@@ -49,7 +49,7 @@ export default function UsageSelectionSettingsPanel({ canEdit }: { canEdit: bool
   return <section className="settings-section usage-settings usage-selection-settings" style={{ marginTop: '1.5rem' }} aria-labelledby="usage-selection-title">
     <div className="usage-panel-heading"><h3 id="usage-selection-title">{t('usageSelection.title')}</h3>
       <button type="button" className="btn btn-sm" onClick={() => void load()} disabled={loading || saving}>{t('Refresh')}</button></div>
-    <p className="text-dim">{t('usageSelection.description')}</p>
+    <p className="text-dim">{t(form?.mode === 'Enforce' ? 'usageSelection.enforceDescription' : form?.mode === 'Disabled' ? 'usageSelection.disabledDescription' : 'usageSelection.description')}</p>
     {loading && <p role="status">{t('Loading...')}</p>}
     {message && <p className={message.error ? 'usage-form-error' : 'text-dim'} role={message.error ? 'alert' : 'status'}>{message.text}</p>}
     {readOnly && <p className="text-dim">{t('usageSelection.environment')}</p>}

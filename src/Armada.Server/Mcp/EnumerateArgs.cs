@@ -74,6 +74,12 @@ namespace Armada.Server.Mcp
         /// </summary>
         public string? MissionId { get; set; }
 
+        /// <summary>Selection decision ID required for candidate enumeration.</summary>
+        public string? DecisionId { get; set; }
+
+        /// <summary>Explicit tenant for standalone selection inspection; global administrators only.</summary>
+        public string? TenantId { get; set; }
+
         /// <summary>
         /// Filter by event type string.
         /// </summary>

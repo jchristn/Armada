@@ -466,6 +466,26 @@
             "key": "usageCooldownCaptainId",
             "value": "cpt_cooldown_fixture",
             "type": "string"
+        },
+        {
+            "key": "selectionDecisionId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "selectionPageNumber",
+            "value": "1",
+            "type": "string"
+        },
+        {
+            "key": "selectionPageSize",
+            "value": "25",
+            "type": "string"
+        },
+        {
+            "key": "selectionExpectedStatus",
+            "value": "200",
+            "type": "string"
         }
     ],
     "item": [
@@ -19110,6 +19130,342 @@
                             "if (!pm.variables.get(\"usageFrom\")) pm.variables.set(\"usageFrom\", new Date(end.getTime() - 86400000).toISOString());"
                         ]
                     }
+                }
+            ]
+        },
+        {
+            "name": "Captain Selection",
+            "description": "v1.3.0 selection inspection. Observe/FirstAvailable default; Enforce is opt-in in existing Server settings. Set missionId, use Summary to capture selectionDecisionId. Use stale or invalid usage fixtures to inspect stable reason codes and null allowance. selectionExpectedStatus defaults to200; set404 for hidden/missing IDs and403 for unauthorized policy updates. Restore it after error checks. Credentials remain in inherited bearerToken/sessionToken variables.",
+            "item": [
+                {
+                    "name": "Selection Summary",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/captain-selection",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "missions",
+                                "{{missionId}}",
+                                "captain-selection"
+                            ]
+                        },
+                        "description": "Current attempt and latest retained decision for an authorized mission. A visible legacy mission returns historyAvailable=false. Reuse a peer or foreign-tenant bearer token with selectionExpectedStatus=404 to verify non-enumerating denial."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
+                                    "if (pm.response.code === 200 && body.latestDecision) pm.collectionVariables.set(\"selectionDecisionId\", body.latestDecision.id);"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Selection History",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/captain-selection/history?pageNumber={{selectionPageNumber}}&pageSize={{selectionPageSize}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "missions",
+                                "{{missionId}}",
+                                "captain-selection",
+                                "history"
+                            ],
+                            "query": [
+                                {
+                                    "key": "pageNumber",
+                                    "value": "{{selectionPageNumber}}"
+                                },
+                                {
+                                    "key": "pageSize",
+                                    "value": "{{selectionPageSize}}"
+                                }
+                            ]
+                        },
+                        "description": "Owner-scoped counts and pages; optional trigger, outcome=Admitted|Waiting, from/to UTC [from,to). Internal account identities are omitted."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
+                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.objects).to.be.an(\"array\"); pm.expect(body.objects.length).to.be.at.most(body.pageSize); pm.expect(body.pageSize).to.be.at.most(1000); } });"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Selection History Enumerate",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/captain-selection/history/enumerate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "missions",
+                                "{{missionId}}",
+                                "captain-selection",
+                                "history",
+                                "enumerate"
+                            ]
+                        },
+                        "description": "",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"pageNumber\": 1,\n  \"pageSize\": 25,\n  \"outcome\": \"Waiting\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
+                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.objects).to.be.an(\"array\"); pm.expect(body.objects.length).to.be.at.most(body.pageSize); pm.expect(body.pageSize).to.be.at.most(1000); } });"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Selection Decision",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/captain-selection-decisions/{{selectionDecisionId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "captain-selection-decisions",
+                                "{{selectionDecisionId}}"
+                            ]
+                        },
+                        "description": "Retained immutable policy, one authorized candidate page and bounded execution events. Intended model and runtime-reported model are distinct. Missing runtime report remains null."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Selection Candidates",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/captain-selection-decisions/{{selectionDecisionId}}/candidates?pageNumber={{selectionPageNumber}}&pageSize={{selectionPageSize}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "captain-selection-decisions",
+                                "{{selectionDecisionId}}",
+                                "candidates"
+                            ],
+                            "query": [
+                                {
+                                    "key": "pageNumber",
+                                    "value": "{{selectionPageNumber}}"
+                                },
+                                {
+                                    "key": "pageSize",
+                                    "value": "{{selectionPageSize}}"
+                                }
+                            ]
+                        },
+                        "description": "Hidden candidates are excluded before counts/pages. Optional tenantId override requires global administrator."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
+                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.objects).to.be.an(\"array\"); pm.expect(body.objects.length).to.be.at.most(body.pageSize); pm.expect(body.pageSize).to.be.at.most(1000); } });"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Selection Candidates Enumerate",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/captain-selection-decisions/{{selectionDecisionId}}/candidates/enumerate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "captain-selection-decisions",
+                                "{{selectionDecisionId}}",
+                                "candidates",
+                                "enumerate"
+                            ]
+                        },
+                        "description": "",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"pageNumber\": 1,\n  \"pageSize\": 25\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
+                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.objects).to.be.an(\"array\"); pm.expect(body.objects.length).to.be.at.most(body.pageSize); pm.expect(body.pageSize).to.be.at.most(1000); } });"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Selection Preview",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/captain-selection/preview",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "missions",
+                                "{{missionId}}",
+                                "captain-selection",
+                                "preview"
+                            ]
+                        },
+                        "description": "Read-only current policy/readiness comparison. No probe, persisted decision, reservation, slot claim or launch. Blocked readiness returns 200 with reasonCode. Placement can change before real admission; preview does not provision a Harbor dock.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
+                                    "const body = pm.response.json();",
+                                    "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
+                                    "pm.test(\"Preview is explicitly non-admitting\", () => { if (pm.response.code === 200) pm.expect(body.isPreview).to.equal(true); });"
+                                ]
+                            }
+                        }
+                    ]
                 }
             ]
         }

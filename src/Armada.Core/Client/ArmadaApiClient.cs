@@ -11,7 +11,7 @@ namespace Armada.Core.Client
     /// Typed HTTP client for the Armada Admiral REST API.
     /// Auto-generated style client covering all /api/v1/ endpoints.
     /// </summary>
-    public class ArmadaApiClient : IDisposable
+    public partial class ArmadaApiClient : IDisposable
     {
         #region Private-Members
 

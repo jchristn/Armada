@@ -24,12 +24,12 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 526 | 15 |
+| REST routes | 528 | 15 |
 | MCP tools | 270 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 77 | 0 |
-| CLI commands | 97 | 0 |
+| CLI commands | 98 | 0 |
 | Settings keys | 350 | 12 |
 
 ## REST API
@@ -133,6 +133,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/blackbox/{id}/unpin` | Authenticated |  | 200 `BlackBoxEntry`, 404 `ApiErrorResponse` |  |
 | GET | `/api/v1/captain-selection-decisions/{id}` | Authenticated |  | 200 `CaptainSelectionDecisionDetail`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/captain-selection-decisions/{id}/candidates` | Authenticated |  | 200 `EnumerationResult<CaptainSelectionCandidateView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| POST | `/api/v1/captain-selection-decisions/{id}/candidates/enumerate` | Authenticated | `CaptainSelectionHistoryQuery` (optional) | 200 `EnumerationResult<CaptainSelectionCandidateView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/captains` | Authenticated |  | 200 `EnumerationResult<Captain>` |  |
 | POST | `/api/v1/captains` | TenantAdmin | `Captain` | 201 `Captain`, 400, 409 `ApiErrorResponse` |  |
 | POST | `/api/v1/captains/delete/multiple` | TenantAdmin | `DeleteMultipleRequest` | 200 `DeleteMultipleResult`, 400 |  |
@@ -285,6 +286,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | POST | `/api/v1/missions/{id}/blackbox/entries/enumerate` | Authenticated | `EnumerationQuery` (optional) | 200 `EnumerationResult<BlackBoxEntrySummary>`, 400 |  |
 | GET | `/api/v1/missions/{id}/captain-selection` | Authenticated |  | 200 `CaptainSelectionSummary`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/missions/{id}/captain-selection/history` | Authenticated |  | 200 `EnumerationResult<CaptainSelectionDecisionView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| POST | `/api/v1/missions/{id}/captain-selection/history/enumerate` | Authenticated | `CaptainSelectionHistoryQuery` (optional) | 200 `EnumerationResult<CaptainSelectionDecisionView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/missions/{id}/captain-selection/preview` | Authenticated |  | 200 `CaptainSelectionPreview`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/missions/{id}/diff` | Authenticated |  | 200, 404, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/missions/{id}/evaluate-autoland` | Authenticated |  | 200 `AutoLandDecision`, 400, 404 |  |
@@ -655,7 +657,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `draft_failure_cause_rule` | Authenticated | `outcomeId*: string` |  |
 | `duplicate_model_endpoint` | Authenticated | `configuration*: object`, `endpointId*: string` |  |
 | `enqueue_merge` | TenantAdmin | `branchName*: string`, `missionId: string`, `priority: integer`, `targetBranch: string`, `testCommand: string`, `vesselId*: string` |  |
-| `enumerate` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `entityType*: string`, `eventType: string`, `fleetId: string`, `includeContext: boolean`, `includeDescription: boolean`, `includeInactive: boolean`, `includeMessage: boolean`, `includeOutput: boolean`, `includePayload: boolean`, `includeTestOutput: boolean`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `runId: string`, `search: string`, `signalType: string`, `status: string`, `threadId: string`, `toCaptainId: string`, `unreadOnly: boolean`, `vesselId: string`, `voyageId: string` |  |
+| `enumerate` | Authenticated | `captainId: string`, `createdAfter: string`, `createdBefore: string`, `decisionId: string`, `entityType*: string`, `eventType: string`, `fleetId: string`, `includeContext: boolean`, `includeDescription: boolean`, `includeInactive: boolean`, `includeMessage: boolean`, `includeOutput: boolean`, `includePayload: boolean`, `includeTestOutput: boolean`, `missionId: string`, `order: string`, `pageNumber: integer`, `pageSize: integer`, `runId: string`, `search: string`, `signalType: string`, `status: string`, `tenantId: string`, `threadId: string`, `toCaptainId: string`, `unreadOnly: boolean`, `vesselId: string`, `voyageId: string` |  |
 | `evaluate_autoland` | Authenticated | `missionId*: string` |  |
 | `evaluate_captain` | Authenticated | `captainId: string`, `depth: string`, `evaluatorCaptainId: string`, `modelEndpointId: string`, `packs: array<string>`, `personas: array<string>`, `runCount: integer` |  |
 | `evaluate_model_alerts` | Authenticated |  |  |
@@ -1021,6 +1023,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada mission list` |  | `--captain\|-c`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--status\|-s`, `--token`, `--verbose`, `--vessel\|-v`, `--voyage` |
 | `armada mission restart` | `<mission>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--title\|-t`, `--token`, `--verbose` |
 | `armada mission retry` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
+| `armada mission selection` | `<mission>*` | `--decision`, `--history`, `--json`, `--outcome`, `--page`, `--page-size`, `--preview`, `--profile`, `--server`, `--tenant`, `--token`, `--verbose` |
 | `armada mission show` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada playbook add` | `<file-name>*` | `--content\|-c`, `--description\|-d`, `--from-file\|-f`, `--inactive`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada playbook list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |

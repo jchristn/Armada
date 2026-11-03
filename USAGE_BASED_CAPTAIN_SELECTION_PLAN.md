@@ -12,17 +12,27 @@ The required v1.3.0 deliverable comprises U0 through U6 below: observation mode,
 
 - [x] U0 baseline/contract review and executable normalized evidence fixtures: [review](docs/usage-selection/BASELINE_AND_CONTRACT.md).
 - [x] Pure policy foundation: typed candidate/window/results, bounded settings defaults and deterministic headroom-band ranking. Connected to Observe dispatch and read-only comparisons; actual routing remains unchanged in Observe.
-- [ ] Finish configurable strategy integration across all clients and Enforce: FirstAvailable compatibility default plus MostRemainingAllowance and MostUsedAllowance now exist in typed settings, policy and stored revisions; Observe dispatch, live server configuration, Dashboard controls, MCP and SDK contracts are implemented. Enforce and remaining client controls are pending.
+- [ ] Finish configurable strategy integration across all clients and Enforce: FirstAvailable compatibility default plus MostRemainingAllowance and MostUsedAllowance now exist in typed settings, policy and stored revisions; Observe dispatch, live server configuration, Dashboard controls, MCP and SDK contracts are implemented. Enforce, the shared Dashboard mission card and Helm inspection are implemented; remaining native controls and recovery actions are pending.
 - [x] U1 storage foundation: migrations 123/124 on all providers, typed immutable history/evidence, policy/strategy revisions, scoped paging, reservation CAS/retention, capture-start timing and atomic Observe-mode claim/history primitives. See [validation](docs/usage-selection/U1_STORAGE_VALIDATION.md).
 - [x] U1 live policy coordinator and Dashboard settings controls, REST/MCP updates, environment metadata, optimistic revisions and recoverable persistence. See [segment notes](docs/usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md).
-- [ ] Finish U1: remaining client controls and milestone-wide validation. Enforcement is not connected.
-- [ ] U2 completion: Observe dispatch/repair records, bounded evidence loading, server preview/history, MCP/SDK reads and conservative shadow reconciliation are implemented. Dashboard mission comparison, Helm, full preview parity and end-to-end routing/lifecycle validation remain.
-- [ ] U3 atomic enforcement, reservations and lifecycle recovery.
+- [ ] Finish U1: remaining client controls and milestone-wide validation. Enforcement is now connected and opt-in; default Observe behavior is preserved.
+- [ ] U2 completion: Observe dispatch/repair records, bounded evidence loading, server preview/history, MCP/SDK reads and conservative shadow reconciliation are implemented. Dashboard mission comparison and Helm reads are implemented and tested. Remaining exit checks include complete read-only placement preview parity and restart/raw-pruning operator validation.
+- [ ] U3 completion: enforced strategy dispatch/repair, shared-account transaction locks, source/budget/version revalidation, credential-host checks and unreserved-execution cutover accounting are implemented. SQLite, PostgreSQL, MySQL and SQL Server admission/repair races pass; PostgreSQL/MySQL mission ownership mapping was repaired and regression-tested; classified cooldowns, authorized exceptions, recovery actions and full lifecycle/operator validation remain.
 - [ ] U4 complete client/operator surfaces.
 - [ ] U5 observability, provider/stress and simulated-user validation.
 - [ ] U6 final release integration and handoff.
 
 U0's design/UX review and implementation map are recorded in the linked review. The policy suite covers 28 cases; existing quota/default regression suites are run alongside it. No history, API, UI or admission milestone is complete based on this foundation.
+
+### Current wave: enforcement and mission inspection (2026-11-03)
+
+- [x] Atomic Enforce dispatch/repair and same-account races, transaction-time source/membership/version/budget checks, intended model binding, replay and rollback.
+- [x] PostgreSQL/MySQL mission readers retain ownership through read/update/repair; provider matrix includes mission CRUD and migration replay/hygiene.
+- [x] Credential-host placement pinning with existing branch continuity and Harbor permission/policy gates; record deduplicated placement waits.
+- [x] Migration 126 operational debt for Disabled/legacy/unknown executions, startup adoption, guarded reconciliation and active-capture proof. Do not invent historical selection decisions or balances.
+- [x] Shared Dashboard mission card, history/filter/paging/preview, safe historical names/links, Core SDK, Helm inspection and generic MCP enumeration with scope before paging.
+- [x] Shared semantic English source and eight translated locale catalogs; native bundler access to shared resources.
+- [ ] Finish wave verification, visual artifacts, commit/push and `build-all v1.3.0`. Exact evidence and remaining limits: [implementation guide](docs/usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md).
 
 ## 1. Requirements and implementation rules
 
@@ -128,7 +138,7 @@ The ordering is deliberate: usage chooses among qualified alternatives, not betw
 4. Load current verified membership, latest applicable authoritative observations, active reservations and unsettled debt in bounded batched reads. A newer failed observation must not make an old successful one fresh. Reject future-skewed, non-finite, malformed, negative or incompatible measurements for routing; preserve a sanitized diagnostic.
 5. For each applicable percentage window calculate `available = max(0, 100 - usedPercent - activeReservationPercent - unsettledPercent)`. The tightest applicable window is the bottleneck. A candidate is soft-gated when available is less than `ReservePercent + PerAttemptReservationPercent`; equality is allowed. At or above 100% observed usage is a hard quota gate regardless of reserve exception.
 6. Percentages from different providers/windows are not interchangeable money or tokens. Compare bands, not raw cross-provider percentages. Count/limit windows may derive a percentage only when unit, limit and applicability are explicit and valid. Unconvertible windows remain unknown; a proven exhausted count window still hard-gates.
-7. For MostRemainingAllowance, within each existing allowed routing preference bucket, rank Comfortable, Constrained, then Unknown. For MostUsedAllowance, rank Constrained, Comfortable, then Unknown. FirstAvailable preserves the supplied existing order among selectable candidates. Comfortable means sufficient launch headroom and at least ComfortableHeadroomPercent; Constrained means sufficient launch headroom below that band. Unknown participates only under AllowDeprioritized. Blocked candidates do not participate. Existing preference/fallback permissions determine whether moving to another bucket is allowed.
+7. For MostRemainingAllowance, within each existing allowed routing preference bucket, rank Comfortable, Constrained, then Unknown. For MostUsedAllowance, rank Constrained, Comfortable, then Unknown. FirstAvailable preserves the supplied existing order among known selectable candidates, followed by explicitly permitted Unknown candidates. Comfortable means sufficient launch headroom and at least ComfortableHeadroomPercent; Constrained means sufficient launch headroom below that band. Unknown participates only under AllowDeprioritized. Blocked candidates do not participate. Existing preference/fallback permissions determine whether moving to another bucket is allowed.
 8. For usage strategies within the same routing bucket and usage band, prefer greater bottleneck headroom (MostRemainingAllowance) or less headroom (MostUsedAllowance) when the entire tied group shares comparable provider/window semantics, then lower occupied-slot ratio, then least-recent assignment, then captain ID ordinal. Skip headroom comparison for the whole tied group when its signatures differ; pairwise conditional comparison can produce non-transitive ordering. FirstAvailable instead uses the existing deterministic routing rank supplied by shared routing. Unknown timestamps/reset times never win as zero. Cross-provider ties skip incomparable headroom and use the remaining tie-breakers.
 9. Revalidate and atomically claim/reserve/persist as described below. If evidence or capacity changed, recompute rather than launching from an outdated preview.
 
@@ -248,13 +258,13 @@ Every unchecked task is future work. Each milestone ends with recorded automated
 ### U1. Schema, settings and immutable history
 
 - [ ] Add typed entities/enums/DTOs, PrettyId prefixes, provider-neutral interfaces and migrations/mappers for all four providers. Add indexes, ownership, immutable decision writes, reservation transitions, retention and restart reconciliation primitives.
-- [ ] Add live UsageSelection settings through existing REST/MCP/settings catalogs, validation, revision recording and masked/environment override metadata. Preserve current scheduling behavior.
+- [x] Add live UsageSelection settings through REST/MCP/settings catalogs, validation, revision recording and environment override metadata. Observe preserves current scheduling behavior.
 - [ ] Test fresh/upgrade/replay, rollback-on-failure, all typed round trips, authorization/counts, retention and snapshot/captain deletion behavior on every provider.
 - [ ] Exit: settings usable through existing surfaces and empty/history states reviewed; no enforcement yet and no unscoped ledger API.
 
 ### U2. Observe mode vertical slice
 
-- [ ] Implement the pure evaluator, batched evidence loader, deterministic preference bands and read-only preview using shared eligibility. Implement actual versus hypothetical records and material waiting-state deduplication.
+- [x] Implement the pure evaluator, batched evidence loader, deterministic preference bands and read-only preview using shared eligibility. Implement actual versus hypothetical records and material waiting-state deduplication. Full placement/backoff preview parity is tracked below.
 - [ ] Persist actual attempt decisions and shadow reservations without altering current routing, holds, slot counts or reset behavior. Capture intended/actual model and execution correlations.
 - [ ] Add mission summary/history APIs, MCP/SDK/Helm reads and minimal shared Dashboard mission section. Complete Observe-mode parity and candidate redaction tests.
 - [ ] Exit: dispatch a mission end to end and inspect why current versus hypothetical choices differ; evidence survives restart/raw snapshot pruning and the comparison works responsively.

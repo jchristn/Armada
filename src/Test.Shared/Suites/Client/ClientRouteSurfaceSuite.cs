@@ -86,6 +86,8 @@ namespace Test.Shared.Suites.Client
             ["GET /swagger"] = "Swagger UI (HTML); the API Explorer reads /openapi.json (GetOpenApiDocumentAsync)",
             ["PATCH /api/v1/vessels/{id}/context"] = "Context patch (the MCP tool update_vessel_context); the dashboard saves context with PUT /api/v1/vessels/{id}",
             ["POST /api/v1/captains/delete/multiple"] = "Batch delete not offered by the dashboard (captains are deleted one at a time)",
+            ["POST /api/v1/captain-selection-decisions/{id}/candidates/enumerate"] = "Enumerate twin of the GET list; SDK and dashboard use the bounded GET query",
+            ["POST /api/v1/missions/{id}/captain-selection/history/enumerate"] = "Enumerate twin of the GET list; SDK and dashboard use the bounded GET query",
             ["POST /api/v1/captains/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
             ["POST /api/v1/captains/{id}/tools/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",
             ["POST /api/v1/check-runs/enumerate"] = "Enumerate twin of the GET list; the dashboard and the client use the GET list with query parameters",

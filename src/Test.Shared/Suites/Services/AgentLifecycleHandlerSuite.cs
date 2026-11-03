@@ -72,6 +72,26 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(captain.Id, request.CaptainId);
                 }));
             }
+            cases.Add(CaseAsync("usage_credential_placement_preserves_host_and_branch", "Usage enforcement pins credentials and refuses branch or Harbor-policy conflicts", TestTags.Positive, async () =>
+            {
+                using TestDatabase db = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                AgentLifecycleHandler handler = CreateRoutedValidationHandler(db.Driver, out ArmadaSettings settings, out _);
+                Captain captain = new Captain("usage placement", AgentRuntimeEnum.ClaudeCode) { TenantId = Constants.DefaultTenantId, UserId = "owner" };
+                Vessel vessel = new Vessel("usage vessel", "https://example.invalid/repo.git");
+                DockPlacementRequest request = new DockPlacementRequest(captain, vessel) { RequiredCredentialHostId = "local", CredentialHostIsAdmiral = true };
+                settings.RequireHarborForLaunch = false;
+                AssertFalse((await handler.ResolveDockPlacementAsync(request).ConfigureAwait(false)).Wait);
+                request.BranchHarborId = "hbr_branch";
+                AssertTrue((await handler.ResolveDockPlacementAsync(request).ConfigureAwait(false)).Wait);
+                request.BranchHarborId = null; settings.RequireHarborForLaunch = true;
+                AssertTrue((await handler.ResolveDockPlacementAsync(request).ConfigureAwait(false)).Wait);
+                settings.RequireHarborForLaunch = false; request.CredentialHostIsAdmiral = false; request.RequiredCredentialHostId = "hbr_usage";
+                AssertTrue((await handler.ResolveDockPlacementAsync(request).ConfigureAwait(false)).Wait, "offline credential Harbor must not fall back locally");
+                request.BranchOnAdmiral = true;
+                AssertTrue((await handler.ResolveDockPlacementAsync(request).ConfigureAwait(false)).Wait);
+                request.BranchOnAdmiral = false; request.BranchHarborId = "hbr_other";
+                AssertTrue((await handler.ResolveDockPlacementAsync(request).ConfigureAwait(false)).Wait);
+            }));
             foreach (bool otherTenant in new[] { false, true })
             {
                 bool crossTenant = otherTenant;

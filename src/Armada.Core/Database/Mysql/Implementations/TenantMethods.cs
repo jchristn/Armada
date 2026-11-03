@@ -147,7 +147,7 @@ namespace Armada.Core.Database.Mysql.Implementations
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 using (MySqlTransaction transaction = (MySqlTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                 {
-                    foreach (string table in new[] { "captain_selection_execution_events", "usage_budget_reservations", "captain_selection_windows", "captain_selection_candidate_reasons", "captain_selection_candidates", "usage_account_cooldowns", "captain_selection_decisions", "captain_selection_policy_revisions", "usage_snapshot_captains", "usage_snapshots", "usage_latest_state", "usage_account_memberships", "usage_hourly_rollups", "tenants" })
+                    foreach (string table in new[] { "captain_selection_execution_events", "usage_budget_reservations", "captain_selection_windows", "captain_selection_candidate_reasons", "captain_selection_candidates", "usage_untracked_executions", "usage_account_cooldowns", "captain_selection_decisions", "captain_selection_policy_revisions", "usage_snapshot_captains", "usage_snapshots", "usage_latest_state", "usage_account_memberships", "usage_hourly_rollups", "tenants" })
                     {
                         using (MySqlCommand cmd = conn.CreateCommand())
                         {

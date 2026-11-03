@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useLocale } from '../../context/LocaleContext';
 import type { MissionAssignmentBlocker } from '../../types/models';
 import { assignmentAdviceTarget } from '../../lib/assignmentAdvice';
+import { selectionReasonKey } from '../../lib/usageSelection';
 import { assignmentBlockerTitle } from '../../lib/missionActions';
 
 interface AssignmentBlockerCardProps {
@@ -25,7 +26,9 @@ export default function AssignmentBlockerCard({ blocker }: AssignmentBlockerCard
         </div>
         <span className={`readiness-pill ${blocker.reason === 'AwaitingDispatch' ? 'ready' : 'warning'}`} title={blocker.reason === 'AwaitingDispatch' ? t('Nothing is blocking this mission; it will be assigned on the next dispatch pass.') : t('Something is holding this mission back. The reason and details are shown in this card.')}>{t('Pending')}</span>
       </div>
-      <p style={{ margin: '0.5rem 0' }}>{blocker.summary}</p>
+      <p style={{ margin: '0.5rem 0' }}>{blocker.selectionReasonCode ? t(selectionReasonKey(blocker.selectionReasonCode)) : blocker.summary}</p>
+      {blocker.selectionReasonCode && <Link className="btn btn-sm" to="/activity?source=usage-overview">{t('Captain Usage')}</Link>}
+      {blocker.selectionNextReconsiderUtc && <p className="text-dim">{t('usageSelection.reconsiderAt', { time: formatDateTime(blocker.selectionNextReconsiderUtc) })}</p>}
       {(blocker.advice?.length ?? 0) > 0 && (
         <section className="assignment-blocker-next-steps" aria-label={t('Next steps')}>
           <h4>{t('Next steps')}</h4>

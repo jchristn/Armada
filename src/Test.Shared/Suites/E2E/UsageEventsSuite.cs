@@ -45,7 +45,7 @@ namespace Test.Shared.Suites.E2E
                     UsageProbeResult probe = new UsageProbeResult { Provider = "openai", AccountKey = "event-account-" + Guid.NewGuid().ToString("N"), CapturedUtc = DateTime.UtcNow, Status = UsageSnapshotStatusEnum.Ok, RawExcerpt = "diagnostic-must-not-be-in-event", Windows = new List<UsageWindow> { new UsageWindow { Name = "daily", UsedPercent = 42 } } };
                     // Exercise the production persistence/notification path without invoking an external provider CLI.
                     MethodInfo commit = typeof(UsageCaptureService).GetMethod("CommitAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
-                    Task<UsageSnapshot> pending = (Task<UsageSnapshot>)commit.Invoke(capture, new object?[] { group, new List<string>(), probe, null, DateTime.UtcNow, CancellationToken.None })!;
+                    Task<UsageSnapshot> pending = (Task<UsageSnapshot>)commit.Invoke(capture, new object?[] { group, new List<string>(), probe, null, DateTime.UtcNow, CancellationToken.None, null })!;
                     UsageSnapshot snapshot = await pending.ConfigureAwait(false);
                     string? frame = await socket.WaitForAsync(m => E2eWebSocketFrame.IsType(m, "usage.snapshot") && m.Contains(snapshot.Id, StringComparison.Ordinal)).ConfigureAwait(false);
                     AssertNotNull(frame, "regular user sees own tenant observation");

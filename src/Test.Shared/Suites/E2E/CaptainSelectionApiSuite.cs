@@ -57,7 +57,8 @@ namespace Test.Shared.Suites.E2E
                         AssertStatusCode(HttpStatusCode.Conflict, response);
                     policy.Mode = UsageSelectionModeEnum.Enforce;
                     using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = policy }), token).ConfigureAwait(false))
-                        AssertStatusCode(HttpStatusCode.Conflict, response);
+                        AssertStatusCode(HttpStatusCode.OK, response);
+                    AssertEqual(UsageSelectionModeEnum.Enforce, server.Settings.EffectiveUsageSelection.Mode);
                     E2ETenantUser tenant = await E2ETenantUser.CreateAsync(server.Client, "selection-settings").ConfigureAwait(false);
                     using HttpClient caller = tenant.CreateClient(server.BaseUrl);
                     using (HttpResponseMessage response = await caller.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new UsageSelectionSettings() }), token).ConfigureAwait(false))
@@ -83,8 +84,8 @@ namespace Test.Shared.Suites.E2E
                     records.Decision.Mode = UsageSelectionModeEnum.Observe; records.Decision.Outcome = "Waiting"; records.Decision.Trigger = "Waiting";
                     records.Decision.EvaluatedUtc = DateTime.UtcNow; records.Decision.AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion; records.Decision.PrimaryReasonCode = "UsageUnknown";
                     records.Decision.CandidateCount = 2;
-                    records.Candidates.Add(new CaptainSelectionCandidateRecord { TenantId = owner.TenantId, UserId = owner.UserId, DecisionId = records.Decision.Id, CaptainId = "visible", CaptainName = "Historical captain", AccountKey = "private-account-key", Rank = 1 });
-                    records.Candidates.Add(new CaptainSelectionCandidateRecord { TenantId = owner.TenantId, UserId = peer.UserId, DecisionId = records.Decision.Id, CaptainId = "hidden", CaptainName = "Hidden peer", Rank = 2 });
+                    records.Candidates.Add(new CaptainSelectionCandidateRecord { TenantId = owner.TenantId, UserId = owner.UserId, DecisionId = records.Decision.Id, CaptainId = "visible", CaptainName = "Historical captain", AccountKey = "private-account-key", Rank = 2 });
+                    records.Candidates.Add(new CaptainSelectionCandidateRecord { TenantId = owner.TenantId, UserId = peer.UserId, DecisionId = records.Decision.Id, CaptainId = "hidden", CaptainName = "Hidden peer", Rank = 1 });
                     await database.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
                     string path = "/api/v1/missions/" + mission.Id + "/captain-selection";
                     using Armada.Client.ArmadaClient sdk = new Armada.Client.ArmadaClient(new Armada.Client.ArmadaClientOptions(server.BaseUrl) { BearerToken = owner.BearerToken });
@@ -99,6 +100,16 @@ namespace Test.Shared.Suites.E2E
                         AssertTrue(summary.HistoryAvailable); AssertNull(summary.CurrentAttempt);
                         AssertEqual(CaptainSelectionStrategyEnum.MostRemainingAllowance, summary.LatestDecision!.Strategy);
                     }
+                    AssertNotNull(await sdk.GetCaptainSelectionDecisionAsync(records.Decision.Id, token: token).ConfigureAwait(false));
+                    AssertEqual("VesselMissing", (await sdk.PreviewCaptainSelectionAsync(mission.Id, token: token).ConfigureAwait(false))!.ReasonCode);
+                    using (Armada.Core.Client.ArmadaApiClient native = new Armada.Core.Client.ArmadaApiClient(caller, server.BaseUrl))
+                    {
+                        AssertTrue((await native.GetCaptainSelectionAsync(mission.Id, token).ConfigureAwait(false))!.HistoryAvailable);
+                        AssertEqual(1L, (await native.GetCaptainSelectionHistoryAsync(mission.Id, token: token).ConfigureAwait(false))!.TotalRecords);
+                        AssertEqual(1L, (await native.GetCaptainSelectionCandidatesAsync(records.Decision.Id, token: token).ConfigureAwait(false))!.TotalRecords);
+                        AssertNotNull(await native.GetCaptainSelectionDecisionAsync(records.Decision.Id, token: token).ConfigureAwait(false));
+                        AssertEqual("VesselMissing", (await native.PreviewCaptainSelectionAsync(mission.Id, token: token).ConfigureAwait(false))!.ReasonCode);
+                    }
                     string detailPath = "/api/v1/captain-selection-decisions/" + records.Decision.Id;
                     using (HttpResponseMessage response = await caller.GetAsync(detailPath, token).ConfigureAwait(false))
                     {
@@ -106,7 +117,18 @@ namespace Test.Shared.Suites.E2E
                         string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
                         AssertFalse(body.Contains("private-account-key", StringComparison.Ordinal)); AssertFalse(body.Contains("Hidden peer", StringComparison.Ordinal));
                         CaptainSelectionDecisionDetail detail = JsonHelper.Deserialize<CaptainSelectionDecisionDetail>(body);
-                        AssertEqual(1L, detail.Candidates.TotalRecords);
+                        AssertEqual(1L, detail.Candidates.TotalRecords); AssertEqual(1, detail.Candidates.Objects[0].Rank);
+                        AssertFalse(detail.Candidates.Objects[0].CaptainAvailable);
+                    }
+                    using (HttpClient ownerMcp = owner.CreateClient("http://127.0.0.1:" + server.Settings.McpPort))
+                    {
+                        string history = await McpTestCalls.CallToolAsync(ownerMcp, "enumerate", new { entityType = "captain_selection_decision", missionId = mission.Id, status = "Waiting" }).ConfigureAwait(false);
+                        AssertContains(records.Decision.Id, history);
+                        string comparison = await McpTestCalls.CallToolAsync(ownerMcp, "enumerate", new { entityType = "captain_selection_candidate", decisionId = records.Decision.Id }).ConfigureAwait(false);
+                        AssertContains("Historical captain", comparison); AssertFalse(comparison.Contains("Hidden peer", StringComparison.Ordinal));
+                        AssertFalse(comparison.Contains("private-account-key", StringComparison.Ordinal));
+                        string invalid = await McpTestCalls.CallToolAsync(ownerMcp, "enumerate", new { entityType = "captain_selection_decision", missionId = mission.Id, createdAfter = "invalid-date" }).ConfigureAwait(false);
+                        AssertContains("ISO 8601", invalid);
                     }
                     foreach (HttpClient denied in new[] { peerClient, foreignClient })
                     {
@@ -114,6 +136,21 @@ namespace Test.Shared.Suites.E2E
                         AssertStatusCode(HttpStatusCode.NotFound, response);
                         using HttpResponseMessage detail = await denied.GetAsync(detailPath + "?tenantId=" + owner.TenantId, token).ConfigureAwait(false);
                         AssertStatusCode(HttpStatusCode.NotFound, detail);
+                    }
+                    using (HttpClient foreignMcp = foreign.CreateClient("http://127.0.0.1:" + server.Settings.McpPort))
+                    {
+                        string denied = await McpTestCalls.CallToolAsync(foreignMcp, "get_captain_selection_decision", new { decisionId = records.Decision.Id }).ConfigureAwait(false);
+                        AssertContains("not found", denied.ToLowerInvariant()); AssertFalse(denied.Contains("Historical captain", StringComparison.Ordinal));
+                    }
+                    using (HttpResponseMessage enumeration = await caller.PostAsync(path + "/history/enumerate", JsonHelper.ToJsonContent(new { Outcome = "Waiting", PageSize = 1 }), token).ConfigureAwait(false))
+                    {
+                        enumeration.EnsureSuccessStatusCode();
+                        AssertEqual(1L, (await JsonHelper.DeserializeAsync<EnumerationResult<CaptainSelectionDecisionView>>(enumeration).ConfigureAwait(false)).TotalRecords);
+                    }
+                    using (HttpResponseMessage comparison = await caller.PostAsync(detailPath + "/candidates/enumerate", JsonHelper.ToJsonContent(new { PageSize = 1 }), token).ConfigureAwait(false))
+                    {
+                        comparison.EnsureSuccessStatusCode();
+                        AssertEqual(1L, (await JsonHelper.DeserializeAsync<EnumerationResult<CaptainSelectionCandidateView>>(comparison).ConfigureAwait(false)).TotalRecords);
                     }
                     using (HttpResponseMessage response = await caller.PostAsync(path + "/preview", JsonHelper.ToJsonContent(new { }), token).ConfigureAwait(false))
                     {

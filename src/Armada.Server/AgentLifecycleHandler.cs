@@ -279,6 +279,32 @@ namespace Armada.Server
             return await ResolveDockPlacementAsync(request).ConfigureAwait(false);
         }
 
+        /// <summary>Place an enforced mission on the credential host that supplied its usage, preserving branch continuity and launch permissions.</summary>
+        public async Task<DockPlacement> ResolveUsageDockPlacementAsync(Mission mission, Captain captain, Vessel vessel, string credentialHostId,
+            string localHostId, CancellationToken token = default)
+        {
+            ArgumentNullException.ThrowIfNull(mission); ArgumentNullException.ThrowIfNull(captain); ArgumentNullException.ThrowIfNull(vessel);
+            if (String.IsNullOrWhiteSpace(credentialHostId)) throw new ArgumentException("A credential host is required.", nameof(credentialHostId));
+            token.ThrowIfCancellationRequested();
+            DockPlacementRequest request = new DockPlacementRequest(captain, vessel)
+            {
+                Purpose = "mission " + mission.Id,
+                TenantId = mission.TenantId,
+                UserId = mission.UserId,
+                BranchName = mission.BranchName
+            };
+            Dock? branchDock = await FindLatestBranchDockAsync(mission, vessel).ConfigureAwait(false);
+            if (DockHostResolver.IsHarborDock(branchDock)) request.BranchHarborId = branchDock!.HarborId;
+            else if (branchDock != null) request.BranchOnAdmiral = true;
+            request.RequiredCredentialHostId = credentialHostId;
+            request.CredentialHostIsAdmiral = credentialHostId == localHostId;
+            token.ThrowIfCancellationRequested();
+            DockPlacement result = await ResolveDockPlacementAsync(request).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
+            return result;
+        }
+
+
         /// <summary>
         /// Choose where a dock is created for any captain work on a vessel (a mission, a planning session, or a Model
         /// Context build), by the same rules as <see cref="ResolveDockPlacementAsync(Mission, Captain, Vessel)"/>.
@@ -293,8 +319,22 @@ namespace Armada.Server
 
             HarborConnectionManager? harbors = _HarborConnections;
             string? branchHarborId = request.BranchHarborId;
+            if (request.RequiredCredentialHostId != null)
+            {
+                if (request.CredentialHostIsAdmiral)
+                {
+                    if (_Settings.RequireHarborForLaunch) return DockPlacement.WaitFor("captured usage belongs to the Admiral host, but launch policy requires a Harbor");
+                    if (branchHarborId != null) return DockPlacement.WaitFor("captured credentials are on the Admiral host, while the existing branch must remain on its Harbor");
+                    return DockPlacement.OnAdmiral("using the credential host that supplied the admitted usage observation");
+                }
+                if (request.BranchOnAdmiral || branchHarborId != null && branchHarborId != request.RequiredCredentialHostId)
+                    return DockPlacement.WaitFor("the captured credential host differs from the host that must retain the existing branch");
+                branchHarborId = request.RequiredCredentialHostId;
+            }
             if (harbors == null || !harbors.HasConnectedHarbor())
             {
+                if (request.RequiredCredentialHostId != null)
+                    return DockPlacement.WaitFor("the credential Harbor that supplied captured usage is not connected");
                 if (branchHarborId != null)
                     return DockPlacement.WaitFor("its branch " + request.BranchName + " is in the repository on Harbor " + branchHarborId + ", which is not connected; the work runs when that Harbor reconnects");
                 if (_Settings.RequireHarborForLaunch)
@@ -367,6 +407,8 @@ namespace Armada.Server
             }
 
             string why = refusals.Count > 0 ? String.Join("; ", refusals) : decision.Reason;
+            if (request.RequiredCredentialHostId != null)
+                return DockPlacement.WaitFor("the captured credential Harbor cannot serve this mission under the existing routing and repository rules (" + why + ")");
             if (branchHarborId != null)
                 return DockPlacement.WaitFor("its branch " + request.BranchName + " is in the repository on Harbor " + harbors.Describe(branchHarborId) + ", which cannot take it now (" + why + ")");
 

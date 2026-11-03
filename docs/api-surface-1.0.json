@@ -1661,6 +1661,28 @@
       "experimental": false
     },
     {
+      "method": "POST",
+      "route": "/api/v1/captain-selection-decisions/{id}/candidates/enumerate",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": "CaptainSelectionHistoryQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<CaptainSelectionCandidateView>",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Captain selection"
+      ],
+      "summary": "Read captain selection candidates",
+      "experimental": false
+    },
+    {
       "method": "GET",
       "route": "/api/v1/captains",
       "auth": "Authenticated",
@@ -4229,6 +4251,28 @@
       "auth": "Authenticated",
       "resource": "Mission:Read",
       "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<CaptainSelectionDecisionView>",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Captain selection"
+      ],
+      "summary": "Read captain selection history",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/missions/{id}/captain-selection/history/enumerate",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": "CaptainSelectionHistoryQuery",
       "requestRequired": false,
       "responses": {
         "200": "EnumerationResult<CaptainSelectionDecisionView>",
@@ -11809,6 +11853,11 @@
           "required": false
         },
         {
+          "name": "decisionId",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "entityType",
           "type": "string",
           "required": true
@@ -11899,6 +11948,11 @@
           "required": false
         },
         {
+          "name": "tenantId",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "threadId",
           "type": "string",
           "required": false
@@ -11924,7 +11978,7 @@
           "required": false
         }
       ],
-      "description": "Find and browse entities with paginated, filtered, sorted access to: inbox (the needs-you items, most urgent first), cli_permission_rules, cli_permission_requests, objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, and blackbox (black box entry summaries, newest first). Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
+      "description": "Find and browse entities with paginated, filtered, sorted access to: inbox (the needs-you items, most urgent first), cli_permission_rules, cli_permission_requests, objectives, fleets, vessels, captains, missions, voyages, docks, signals, events, merge_queue, personas, prompt_templates, pipelines, playbooks, workflow_profiles, project_profiles, skills, check_runs, releases, deployments, incidents, runbooks, runbook_executions, vessel_import_batch, fleet_action, fleet_action_run, fleet_action_run_target, vessel_health, captain_selection_decision (requires missionId), captain_selection_candidate (requires decisionId), and blackbox (black box entry summaries, newest first). Returns paginated results with total counts. Filter by vesselId, fleetId, captainId, voyageId, status, date range, and more.",
       "experimental": false
     },
     {
@@ -25011,6 +25065,116 @@
         {
           "kind": "option",
           "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
+      "command": "mission selection",
+      "description": "Inspect captain selection, history or a read-only preview",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "decision",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "history",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "outcome",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "preview",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "tenant",
           "short": null,
           "valueKind": "scalar",
           "type": "String",

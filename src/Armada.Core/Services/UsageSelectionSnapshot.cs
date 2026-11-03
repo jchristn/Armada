@@ -13,6 +13,7 @@ namespace Armada.Core.Services
         internal Dictionary<string, UsageSelectionAccountEvidence> Evidence { get; set; } = new Dictionary<string, UsageSelectionAccountEvidence>(StringComparer.Ordinal);
         internal Dictionary<string, Captain> Captains { get; set; } = new Dictionary<string, Captain>(StringComparer.Ordinal);
         internal string? ActualCaptainId { get; set; }
+        internal bool CaptureEnabled { get; set; }
         internal DateTime EvaluatedUtc { get; set; }
     }
 }

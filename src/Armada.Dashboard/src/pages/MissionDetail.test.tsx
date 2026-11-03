@@ -8,6 +8,7 @@ import { blackBoxEntryFixture } from '../test/fixtures/blackbox';
 
 vi.mock('../api/client', () => ({
   getMission: vi.fn(),
+  getCaptainSelection: vi.fn((id: string) => Promise.resolve({ missionId: id, currentMode: 'Observe', currentStrategy: 'FirstAvailable', historyAvailable: false })),
   getMissionBlackBox: vi.fn(() => Promise.reject(Object.assign(new Error('not found'), { status: 404, data: { code: 'BlackBoxNotFound' } }))),
   getVoyageBlackBox: vi.fn(() => Promise.reject(Object.assign(new Error('not found'), { status: 404, data: { code: 'BlackBoxNotFound' } }))),
   getBlackBox: vi.fn(),

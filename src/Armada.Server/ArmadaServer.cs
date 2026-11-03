@@ -307,7 +307,7 @@ namespace Armada.Server
             await EnforceDefaultCredentialPolicyAsync().ConfigureAwait(false);
 
             // Initialize services
-            _UsageSelectionConfiguration = new UsageSelectionConfigurationService(_Settings, _Database, _Logging);
+            _UsageSelectionConfiguration = new UsageSelectionConfigurationService(_Settings, _Database, _Logging, enforcementAvailable: true);
             await _UsageSelectionConfiguration.RecordRecoveryAsync().ConfigureAwait(false);
             _Git = new GitService(_Logging);
             IDockService dockService = new DockService(_Logging, _Database, _Settings, _Git);
@@ -461,6 +461,9 @@ namespace Armada.Server
             // Codex app-server; every other runtime answers Unsupported with its reason); a Custom command runs
             // through the host helper as specified.
             Armada.Core.Services.UsageAccountResolver usageAccounts = new Armada.Core.Services.UsageAccountResolver(_Settings.DataDirectory, _Logging);
+            missionService.UsageSelectionLocalHostId = usageAccounts.HostId;
+            while (await _Database.CaptainSelections.AdoptUntrackedExecutionsAsync(1000, usageAccounts.HostId, _TokenSource.Token).ConfigureAwait(false) == 1000)
+                _TokenSource.Token.ThrowIfCancellationRequested();
             Armada.Runtimes.Usage.UsageProbeRegistry usageProbes = new Armada.Runtimes.Usage.UsageProbeRegistry(_Logging, usageAccounts);
             Armada.Runtimes.UsageProbeHostRunner usageProbeHostRunner = new Armada.Runtimes.UsageProbeHostRunner(_Logging, usageAccounts, usageProbes.Resolve);
             Armada.Core.Services.LocalHostCommandExecutor usageLocalCommands = new Armada.Core.Services.LocalHostCommandExecutor { UsageProbe = usageProbeHostRunner };
@@ -576,6 +579,8 @@ namespace Armada.Server
             if (captainService is CaptainService captainServiceImpl) captainServiceImpl.DockHosts = dockHosts;
             missionService.DockHosts = dockHosts;
             missionService.ResolveDockPlacementAsync = _AgentLifecycle.ResolveDockPlacementAsync;
+            missionService.ResolveUsageDockPlacementAsync = (mission, captain, vessel, host) =>
+                _AgentLifecycle.ResolveUsageDockPlacementAsync(mission, captain, vessel, host, usageAccounts.HostId, _TokenSource.Token);
             _MissionLanding.DockHosts = dockHosts;
             _LandingService.DockHosts = dockHosts;
             _LandingService.Docks = dockService;

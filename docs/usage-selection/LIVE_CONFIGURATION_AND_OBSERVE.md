@@ -1,5 +1,7 @@
 # Live selection configuration and Observe history
 
+This document records the earlier Observe wave. Enforce and mission inspection have since been added; use the [current guide](ENFORCEMENT_AND_MISSION_INSPECTION.md) for current capabilities.
+
 This v1.3.0 segment adds configurable policy controls and connects Observe decisions to normal dispatch and verification repair. It does not complete the full usage-selection plan. Enforce remains unavailable; the server refuses live requests to enable it rather than silently applying an incomplete budget gate.
 
 ## Operator controls

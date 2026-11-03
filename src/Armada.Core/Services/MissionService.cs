@@ -57,6 +57,9 @@ namespace Armada.Core.Services
         /// </summary>
         public Func<Mission, Captain, Vessel, Task<DockPlacement>>? ResolveDockPlacementAsync { get; set; }
 
+        /// <summary>Optional placement preserving the verified usage credential host; existing branch and permission rules remain authoritative.</summary>
+        public Func<Mission, Captain, Vessel, string, Task<DockPlacement>>? ResolveUsageDockPlacementAsync { get; set; }
+
         /// <summary>
         /// Where docks live. Operations on a Harbor-hosted dock (instruction files, git, the Definition-of-Done gate) run
         /// on its Harbor through this; without it every dock is treated as local.
@@ -282,9 +285,23 @@ namespace Armada.Core.Services
 
             if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled
                 && _UsageSelectionBlockers.TryGetValue(mission.Id, out UsageSelectionTransientBlocker? usageFailure)
-                && usageFailure.PolicyKey == UsagePolicyKey()) return usageFailure.Blocker;
+                && usageFailure.PolicyKey == UsagePolicyKey() && usageFailure.RetryUtc > DateTime.UtcNow) return usageFailure.Blocker;
 
             CaptainAdmissionSelection selection = await SelectCaptainAdmissionAsync(mission, token).ConfigureAwait(false);
+            if (_Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce && selection.Visible.Count > 0 && !String.IsNullOrWhiteSpace(mission.TenantId))
+            {
+                try
+                {
+                    UsageSelectionSnapshot usage = await BuildUsageSelectionAsync(selection, _Settings.EffectiveUsageSelection.Copy(), token).ConfigureAwait(false);
+                    if (usage.Evaluation.SelectedCaptainId == null)
+                        return new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain,
+                            SelectionReasonCode = usage.Evaluation.ReasonCode, Summary = "No captain currently satisfies the configured usage policy.",
+                            SelectionNextReconsiderUtc = usage.Evaluation.Candidates.FirstOrDefault()?.NextReconsiderUtc };
+                    selection.Selected = selection.Visible.Single(c => c.Id == usage.Evaluation.SelectedCaptainId);
+                }
+                catch (System.Data.Common.DbException)
+                { return new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain, SelectionReasonCode = "SelectionPersistenceUnavailable", Summary = "Selection evidence is temporarily unavailable." }; }
+            }
             observeSelection?.Invoke(selection);
             Mission routingView = selection.Mission;
             List<Captain> allCaptains = selection.Visible;
@@ -501,6 +518,8 @@ namespace Armada.Core.Services
             CaptainAdmissionSelection captainSelection = await SelectCaptainAdmissionAsync(mission, token, recordEnvelope: true).ConfigureAwait(false);
             Captain? captain = captainSelection.Selected;
             UsageSelectionSnapshot? usageSelection = null;
+            if (_Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce && String.IsNullOrWhiteSpace(mission.TenantId))
+            { UsageWait(mission, "MissionScopeUnavailable", "Usage selection requires a tenant-scoped mission."); return false; }
             if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled && !String.IsNullOrEmpty(mission.TenantId))
             {
                 // One detached policy revision governs this attempt. Observe never changes legacy routing.
@@ -512,8 +531,8 @@ namespace Armada.Core.Services
                 }
                 if (usageSelection.Settings.Mode == UsageSelectionModeEnum.Enforce)
                 {
-                    UsageWait(mission, "EnforcementUnavailable", "Usage enforcement is not available in this implementation stage. An administrator can select Observe or Disabled.");
-                    return false;
+                    captain = usageSelection.Evaluation.SelectedCaptainId == null ? null : usageSelection.Captains[usageSelection.Evaluation.SelectedCaptainId];
+                    usageSelection.ActualCaptainId = captain?.Id;
                 }
                 if (usageSelection.Evaluation.CandidateLimitExceeded)
                 {
@@ -521,28 +540,18 @@ namespace Armada.Core.Services
                     return false;
                 }
                 _UsageSelectionBlockers.TryRemove(mission.Id, out _);
-                if (captain == null)
-                {
-                    try
-                    {
-                        CaptainSelectionRecordSet waiting = UsageSelectionRecordBuilder.Build(usageSelection, mission, "Waiting", admitted: false);
-                        EnumerationResult<CaptainSelectionDecision> history = await _Database.CaptainSelections.EnumerateByMissionAsync(mission.TenantId!, mission.Id, mission.UserId, pageSize: 1, token: token).ConfigureAwait(false);
-                        CaptainSelectionDecision? previous = history.Objects.FirstOrDefault();
-                        if (previous == null || previous.EvidenceFingerprint != waiting.Decision.EvidenceFingerprint || previous.Outcome != "Waiting")
-                        {
-                            waiting.Decision.PreviousDecisionId = previous?.Id;
-                            await _Database.CaptainSelections.CreateDecisionAsync(waiting, token).ConfigureAwait(false);
-                        }
-                    }
-                    catch (System.Data.Common.DbException)
-                    {
-                        UsageWait(mission, "SelectionPersistenceUnavailable", "Selection history could not be recorded. Armada will retry without starting a process.");
-                        return false;
-                    }
-                }
+                if (captain == null && !await RecordUsageSelectionWaitAsync(usageSelection, mission, token).ConfigureAwait(false)) return false;
             }
             if (captain == null)
             {
+                if (usageSelection?.Settings.Mode == UsageSelectionModeEnum.Enforce)
+                {
+                    UsageSelectionCandidateResult? blocked = usageSelection.Evaluation.Candidates.FirstOrDefault();
+                    _UsageSelectionBlockers[mission.Id] = new UsageSelectionTransientBlocker { PolicyKey = UsagePolicyKey(), RetryUtc = DateTime.MinValue,
+                        Blocker = new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain,
+                            SelectionReasonCode = usageSelection.Evaluation.ReasonCode, Summary = "No captain currently satisfies the configured usage policy.",
+                            SelectionNextReconsiderUtc = blocked?.NextReconsiderUtc } };
+                }
                 _Logging.Warn(_Header + "no idle captains available for mission " + mission.Id +
                     (mission.Persona != null ? " (persona: " + mission.Persona + ")" : ""));
                 return false;
@@ -556,6 +565,7 @@ namespace Armada.Core.Services
                 bool allowed = await CanAssignMissionAsync(mission, captain).ConfigureAwait(false);
                 if (!allowed)
                 {
+                    if (usageSelection != null) await RecordUsageSelectionWaitAsync(usageSelection, mission, token, "PlacementWaiting").ConfigureAwait(false);
                     _Logging.Info(_Header + "deferring mission " + mission.Id + ": launch policy requires the requesting user's Harbor to be connected and eligible, and none is yet");
                     return false;
                 }
@@ -564,11 +574,16 @@ namespace Armada.Core.Services
             // Choose where the dock lives before creating it: a Harbor that can serve the vessel, the Admiral's host, or
             // nowhere yet (the mission stays Pending and is retried on the next dispatch cycle).
             DockPlacement placement = DockPlacement.OnAdmiral("no Harbor placement is configured");
-            if (ResolveDockPlacementAsync != null)
+            if (ResolveDockPlacementAsync != null || ResolveUsageDockPlacementAsync != null)
             {
-                placement = await ResolveDockPlacementAsync(mission, captain, vessel).ConfigureAwait(false);
+                UsageSelectionCandidate? chosenUsage = usageSelection?.Evaluation.Candidates.SingleOrDefault(c => c.Candidate.CaptainId == captain.Id)?.Candidate;
+                if (usageSelection?.Settings.Mode == UsageSelectionModeEnum.Enforce && chosenUsage?.IdentityVerified == true && chosenUsage.ConfigurationMatches
+                    && usageSelection.Evidence.TryGetValue(captain.Id, out UsageSelectionAccountEvidence? credentialSource) && ResolveUsageDockPlacementAsync != null)
+                    placement = await ResolveUsageDockPlacementAsync(mission, captain, vessel, credentialSource.HostId).ConfigureAwait(false);
+                else if (ResolveDockPlacementAsync != null) placement = await ResolveDockPlacementAsync(mission, captain, vessel).ConfigureAwait(false);
                 if (placement.Wait)
                 {
+                    if (usageSelection != null) await RecordUsageSelectionWaitAsync(usageSelection, mission, token, "PlacementWaiting").ConfigureAwait(false);
                     // Log a reason once per mission until it changes, not on every dispatch cycle.
                     string previousReason = _PlacementWaitReasons.TryGetValue(mission.Id, out string? known) ? known : String.Empty;
                     if (!String.Equals(previousReason, placement.Reason, StringComparison.Ordinal))
@@ -579,6 +594,16 @@ namespace Armada.Core.Services
 
                     return false;
                 }
+            }
+
+            string? usageExecutionHost = placement.HarborId ?? UsageSelectionLocalHostId;
+            if (usageSelection?.Settings.Mode == UsageSelectionModeEnum.Enforce)
+            {
+                if (String.IsNullOrWhiteSpace(usageExecutionHost))
+                { UsageWait(mission, "UsageHostUnresolved", "The execution credential host is not known. Configure the host before enforcing usage selection."); return false; }
+                UsageSelectionCandidate? selectedUsage = usageSelection.Evaluation.Candidates.Single(c => c.Candidate.CaptainId == captain.Id).Candidate;
+                if (selectedUsage.IdentityVerified && selectedUsage.ConfigurationMatches && usageSelection.Evidence.TryGetValue(captain.Id, out UsageSelectionAccountEvidence? observedHost) && observedHost.HostId != usageExecutionHost)
+                { UsageWait(mission, "UsageHostMismatch", "Captured usage belongs to a different credential host than this execution. Capture usage on the selected execution host."); return false; }
             }
 
             _PlacementWaitReasons.TryRemove(mission.Id, out string? _);
@@ -598,8 +623,14 @@ namespace Armada.Core.Services
             {
                 // Evidence and the actual compatibility choice commit with the slot, before any process/dock work.
                 CaptainSelectionRecordSet decision = UsageSelectionRecordBuilder.Build(usageSelection, mission, "Dispatch", admitted: true);
+                decision.AdmissionHostId = usageExecutionHost;
                 CaptainSelectionAdmissionReceipt receipt;
-                try { receipt = await _Database.CaptainSelections.TryAdmitObservedAsync(decision, ceiling: _Settings.Concurrency.MaxCaptainConcurrency, token: token).ConfigureAwait(false); }
+                // A policy update that completed before this check makes this snapshot obsolete. An
+                // overlapping later update may linearize after this attempt; history retains its exact policy.
+                if (UsagePolicyKey() != System.Text.Json.JsonSerializer.Serialize(usageSelection.Settings)) return false;
+                try { receipt = usageSelection.Settings.Mode == UsageSelectionModeEnum.Enforce
+                    ? await _Database.CaptainSelections.TryAdmitEnforcedAsync(decision, ceiling: _Settings.Concurrency.MaxCaptainConcurrency, token: token).ConfigureAwait(false)
+                    : await _Database.CaptainSelections.TryAdmitObservedAsync(decision, ceiling: _Settings.Concurrency.MaxCaptainConcurrency, token: token).ConfigureAwait(false); }
                 catch (System.Data.Common.DbException)
                 {
                     UsageWait(mission, "SelectionPersistenceUnavailable", "Selection admission could not be confirmed. Armada will reconcile the recorded attempt before starting any process.");
@@ -609,7 +640,7 @@ namespace Armada.Core.Services
                 // A replay is recovered by the normal mission-owned lifecycle, never launched a second time here.
                 if (receipt.AlreadyCommitted) return false;
             }
-            else claimed = await _Database.Captains.TryClaimAsync(captain.Id, mission.Id, null, token, _Settings.Concurrency.MaxCaptainConcurrency).ConfigureAwait(false);
+            else claimed = await _Database.CaptainSelections.TryAdmitLegacyAsync(captain.Id, mission.Id, usageExecutionHost, _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
             if (!claimed)
             {
                 _Logging.Info(_Header + "captain " + captain.Id + " was claimed by another mission before " + mission.Id + " could take it; retrying next cycle");

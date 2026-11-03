@@ -2,6 +2,10 @@
 
 This guide covers how an Armada Admiral moves its database forward between releases, what it does to protect your data on the way, and how to get back to a known-good state when you need to. It also lists the retention settings that keep long-running installs from growing without bound.
 
+## v1.3.0 usage-selection development upgrades
+
+Migrations 123 through 126 add immutable selection history, capture timing, current-attempt correlation and operational uncertainty for unreserved work. Existing live executions are adopted before dispatch without reconstructing historical decisions. Observe/FirstAvailable remains the default; Enforce is opt-in. After an upgrade, inspect current captures and mission selection diagnostics before choosing stricter unknown-usage policy. See the [implementation and acceptance guide](usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md). Back up the database and protected settings/usage identity before upgrading; rollback requires restoring that backup. A populated v1.2.0-to-current release drill remains part of the final release plan.
+
 ## Supported upgrade paths
 
 Upgrade any 0.9.x release directly to 1.0. You do not need to step through intermediate builds: the Admiral applies every pending schema migration, in order, the first time the new version starts.

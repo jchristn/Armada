@@ -25,6 +25,8 @@ namespace Armada.Core.Models
         public CaptainSelectionStrategyEnum Strategy { get; set; } = CaptainSelectionStrategyEnum.FirstAvailable;
         /// <summary>Actual captain selected by the running mode.</summary>
         public string? SelectedCaptainId { get; set; } = null;
+        /// <summary>Whether the selected captain still exists and remains visible to this caller.</summary>
+        public bool SelectedCaptainAvailable { get; set; }
         /// <summary>Historical authorized captain name, when retained.</summary>
         public string? SelectedCaptainName { get; set; } = null;
         /// <summary>Configured model at selection; never presented as an actual report.</summary>

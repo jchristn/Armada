@@ -1,10 +1,27 @@
 namespace Armada.Core.Models
 {
+    using System;
     using System.Collections.Generic;
+    using System.Text.Json.Serialization;
 
     /// <summary>An atomic decision aggregate; all managed collections map to relational child rows.</summary>
     public sealed class CaptainSelectionRecordSet
     {
+        /// <summary>Internal compare-and-set mission version for enforcement; never persisted as an opaque record.</summary>
+        [JsonIgnore]
+        public DateTime? AdmissionMissionVersionUtc { get; set; }
+        /// <summary>Internal selected captain configuration/capacity version used during enforcement.</summary>
+        [JsonIgnore]
+        public DateTime? AdmissionCaptainVersionUtc { get; set; }
+        /// <summary>Transient raw model version binding. Never serialized or copied into public evidence without sanitization.</summary>
+        [JsonIgnore]
+        public string? AdmissionCaptainModel { get; set; }
+        /// <summary>Actual credential host selected for this admission; required to use known account evidence in enforcement.</summary>
+        [JsonIgnore]
+        public string? AdmissionHostId { get; set; }
+        /// <summary>Capture-enabled policy snapshot used by the shared source normalizer.</summary>
+        [JsonIgnore]
+        public bool AdmissionCaptureEnabled { get; set; }
         /// <summary>Immutable effective policy revision for the decision.</summary>
         public CaptainSelectionPolicyRevision Policy { get; set; } = new CaptainSelectionPolicyRevision();
         /// <summary>Actual/hypothetical admission or material wait decision.</summary>

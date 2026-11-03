@@ -11,6 +11,9 @@ namespace Armada.Core.Services
 
     public partial class MissionService
     {
+        /// <summary>Stable Admiral credential-host identity. Required for local usage enforcement; the server supplies its protected usage identity.</summary>
+        public string? UsageSelectionLocalHostId { get; set; }
+
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, UsageSelectionTransientBlocker> _UsageSelectionBlockers =
             new System.Collections.Concurrent.ConcurrentDictionary<string, UsageSelectionTransientBlocker>(StringComparer.Ordinal);
 
@@ -54,7 +57,14 @@ namespace Armada.Core.Services
             string? readiness = null;
             if (mission.Status != MissionStatusEnum.Pending) readiness = "MissionNotPending";
             else if (String.IsNullOrEmpty(mission.TenantId)) readiness = "MissionScopeUnavailable";
-            else
+            else if (_LaunchFailures.ContainsKey(mission.Id) || _ProvisionFailureCaptures.ContainsKey(mission.Id)) readiness = "LaunchRetryPending";
+            else if (!String.IsNullOrWhiteSpace(mission.VoyageId))
+            {
+                Voyage? voyage = await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
+                if (voyage?.Status == VoyageStatusEnum.Complete || voyage?.Status == VoyageStatusEnum.Cancelled || voyage?.Status == VoyageStatusEnum.Failed)
+                    readiness = "VoyageNotRunnable";
+            }
+            if (readiness == null)
             {
                 Vessel? vessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
                 if (vessel == null) readiness = "VesselMissing";
@@ -75,11 +85,12 @@ namespace Armada.Core.Services
             }
             CaptainAdmissionSelection selection = await SelectCaptainAdmissionAsync(mission, token).ConfigureAwait(false);
             UsageSelectionSnapshot snapshot = await BuildUsageSelectionAsync(selection, settings, token).ConfigureAwait(false);
+            if (settings.Mode == UsageSelectionModeEnum.Enforce) snapshot.ActualCaptainId = snapshot.Evaluation.SelectedCaptainId;
             preview.EvaluatedUtc = snapshot.EvaluatedUtc; preview.ActualCaptainId = snapshot.ActualCaptainId;
             preview.HypotheticalCaptainId = snapshot.Evaluation.SelectedCaptainId; preview.ReasonCode = snapshot.Evaluation.ReasonCode;
             List<CaptainSelectionCandidateView> rows = snapshot.Evaluation.Candidates.Select((result, index) => new CaptainSelectionCandidateView
             {
-                CaptainId = result.Candidate.CaptainId, CaptainName = UsageSelectionEvidenceSanitizer.Label(snapshot.Captains[result.Candidate.CaptainId].Name)!,
+                CaptainId = result.Candidate.CaptainId, CaptainAvailable = true, CaptainName = UsageSelectionEvidenceSanitizer.Label(snapshot.Captains[result.Candidate.CaptainId].Name)!,
                 Model = UsageSelectionEvidenceSanitizer.Label(result.Candidate.Model), Band = result.Band, ReasonCode = result.ReasonCode, CanSelect = result.CanSelect,
                 AvailablePercent = result.AvailablePercent, CapturedUtc = result.Candidate.CapturedUtc,
                 NextReconsiderUtc = result.NextReconsiderUtc, Rank = index + 1,
@@ -89,6 +100,33 @@ namespace Armada.Core.Services
             preview.Candidates = EnumerationResult<CaptainSelectionCandidateView>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize },
                 rows.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList(), rows.Count);
             return preview;
+        }
+
+        private async Task<bool> RecordUsageSelectionWaitAsync(UsageSelectionSnapshot snapshot, Mission mission, CancellationToken token, string? reason = null)
+        {
+            try
+            {
+                CaptainSelectionRecordSet waiting = UsageSelectionRecordBuilder.Build(snapshot, mission, "Waiting", admitted: false);
+                if (reason != null)
+                {
+                    waiting.Decision.PrimaryReasonCode = reason;
+                    waiting.Decision.EvidenceFingerprint = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                        System.Text.Encoding.UTF8.GetBytes(waiting.Decision.EvidenceFingerprint + ":" + reason))).ToLowerInvariant();
+                }
+                EnumerationResult<CaptainSelectionDecision> history = await _Database.CaptainSelections.EnumerateByMissionAsync(mission.TenantId!, mission.Id, mission.UserId, pageSize: 1, token: token).ConfigureAwait(false);
+                CaptainSelectionDecision? previous = history.Objects.FirstOrDefault();
+                if (previous == null || previous.EvidenceFingerprint != waiting.Decision.EvidenceFingerprint || previous.Outcome != "Waiting")
+                {
+                    waiting.Decision.PreviousDecisionId = previous?.Id;
+                    await _Database.CaptainSelections.CreateDecisionAsync(waiting, token).ConfigureAwait(false);
+                }
+                return true;
+            }
+            catch (System.Data.Common.DbException)
+            {
+                UsageWait(mission, "SelectionPersistenceUnavailable", "Selection history could not be recorded. Armada will retry without starting a process.");
+                return false;
+            }
         }
 
         private async Task RecordSelectionExecutionStartedAsync(Mission mission, CancellationToken token)
@@ -135,7 +173,7 @@ namespace Armada.Core.Services
         private async Task<UsageSelectionSnapshot> BuildUsageSelectionAsync(CaptainAdmissionSelection selection, UsageSelectionSettings settings, CancellationToken token)
         {
             UsageSelectionSnapshot snapshot = new UsageSelectionSnapshot { Settings = settings, EvaluatedUtc = DateTime.UtcNow,
-                ActualCaptainId = selection.Selected?.Id, Captains = selection.Visible.ToDictionary(c => c.Id, StringComparer.Ordinal) };
+                ActualCaptainId = selection.Selected?.Id, CaptureEnabled = _Settings.UsageCapture.EffectiveEnabled, Captains = selection.Visible.ToDictionary(c => c.Id, StringComparer.Ordinal) };
             if (selection.Visible.Count > settings.MaximumCandidates)
             {
                 snapshot.Evaluation = new UsageSelectionEvaluation { CandidateLimitExceeded = true, ReasonCode = "CandidateLimitExceeded" };
@@ -172,34 +210,7 @@ namespace Armada.Core.Services
                 if (candidate.IneligibilityReason == null && !buckets.ContainsKey(captain.Id)) candidate.IneligibilityReason = "RoutingPreferenceExcluded";
                 if (snapshot.Evidence.TryGetValue(captain.Id, out UsageSelectionAccountEvidence? account))
                 {
-                    string? fingerprint = captain.UsageCaptureMode == UsageCaptureModeEnum.Custom ? UsageAccountResolver.CommandFingerprint(captain.UsageCaptureCommand) : null;
-                    string revision = UsageAccountResolver.ConfigurationRevision(account.HostId, captain.Runtime, fingerprint);
-                    string groupKey = UsageAccountResolver.GroupKey(selection.Mission.TenantId!, account.HostId, captain.Runtime, fingerprint);
-                    candidate.Provider = account.Provider;
-                    candidate.IdentityVerified = account.Runtime == captain.Runtime && captain.UsageCaptureActive && _Settings.UsageCapture.EffectiveEnabled;
-                    candidate.ConfigurationMatches = account.ConfigurationRevision == revision && account.CaptureContextKey == UsageAccountResolver.CaptureContextKey(groupKey, revision)
-                        && (String.IsNullOrEmpty(captain.UsageCaptureHarborId) || captain.UsageCaptureHarborId == account.HostId);
-                    candidate.CapturedUtc = account.CapturedUtc; candidate.Status = account.Status; candidate.Source = account.Source;
-                    candidate.EffectiveCaptureIntervalSeconds = account.EffectiveIntervalSeconds;
-                    List<UsageSelectionBudgetTotals> accountTotals = totals.Where(t => t.HostId == account.HostId && t.Runtime == account.Runtime.ToString() && t.AccountKey == account.AccountKey)
-                        .DistinctBy(t => t.WindowKey + ":" + t.Generation).ToList();
-                    candidate.HasUncertainDebt = accountTotals.Any(t => t.HasUncertainDebt);
-                    foreach (UsageWindow window in UsageWindowsJson.Deserialize(account.WindowsJson))
-                    {
-                        if (window == null) { candidate.Windows.Add(new UsageSelectionWindowEvidence()); continue; }
-                        string key = UsageBudgetIdentity.WindowKey(window, captain.UsageCaptureMode == UsageCaptureModeEnum.Custom ? account.ConfigurationRevision : null);
-                        candidate.Windows.Add(new UsageSelectionWindowEvidence { Window = window,
-                            ScopeApplies = String.IsNullOrEmpty(window.Scope) || String.Equals(window.Scope, "account", StringComparison.OrdinalIgnoreCase),
-                            GenerationConfirmed = !String.IsNullOrWhiteSpace(window.Name)
-                                && UsageSelectionEvidenceSanitizer.Label(window.Name) == window.Name
-                                && UsageSelectionEvidenceSanitizer.Label(window.Model) == window.Model
-                                && UsageSelectionEvidenceSanitizer.Label(window.Scope) == window.Scope
-                                && UsageSelectionEvidenceSanitizer.Label(window.Unit) == window.Unit,
-                            ActiveReservationPercent = accountTotals.Where(t => t.WindowKey == key).Sum(t => t.ActivePercent),
-                            UnsettledPercent = accountTotals.Where(t => t.WindowKey == key).Sum(t => t.UnsettledPercent) });
-                    }
-                    foreach (IGrouping<string, UsageSelectionWindowEvidence> duplicate in candidate.Windows.GroupBy(w => UsageBudgetIdentity.WindowKey(w.Window)).Where(g => g.Count() > 1))
-                        foreach (UsageSelectionWindowEvidence window in duplicate) window.GenerationConfirmed = false;
+                    UsageSelectionEvidenceBuilder.Apply(candidate, captain, account, totals, selection.Mission.TenantId!, _Settings.UsageCapture.EffectiveEnabled);
                 }
                 inputs.Add(candidate);
             }

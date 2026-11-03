@@ -32,11 +32,15 @@ namespace Armada.Server
             string? owner = Owner(caller);
             CaptainSelectionDecision? current = await _Database.CaptainSelections.ReadCurrentDecisionAsync(mission.TenantId!, mission.Id, owner, token).ConfigureAwait(false);
             EnumerationResult<CaptainSelectionDecision> history = await _Database.CaptainSelections.EnumerateByMissionAsync(mission.TenantId!, mission.Id, owner, pageSize: 1, token: token).ConfigureAwait(false);
+            List<string> ids = new List<string>();
+            if (current != null) ids.Add(current.Id);
+            if (history.Objects.Count > 0) ids.Add(history.Objects[0].Id);
+            Dictionary<string, CaptainSelectionDecisionView> views = (await _Database.CaptainSelections.ReadDecisionViewsAsync(mission.TenantId!, ids.Distinct(StringComparer.Ordinal).ToList(), owner, owner, token).ConfigureAwait(false)).ToDictionary(v => v.Id, StringComparer.Ordinal);
             UsageSelectionSettings settings = _Settings.EffectiveUsageSelection.Copy();
             return new CaptainSelectionSummary { MissionId = mission.Id, CurrentMode = settings.Mode, CurrentStrategy = settings.Strategy,
                 HistoryAvailable = history.TotalRecords != 0,
-                CurrentAttempt = current == null ? null : await ViewAsync(current, owner, token).ConfigureAwait(false),
-                LatestDecision = history.Objects.Count == 0 ? null : await ViewAsync(history.Objects[0], owner, token).ConfigureAwait(false) };
+                CurrentAttempt = current == null ? null : views.GetValueOrDefault(current.Id),
+                LatestDecision = history.Objects.Count == 0 ? null : views.GetValueOrDefault(history.Objects[0].Id) };
         }
 
         /// <summary>Filter and page decisions after mission visibility; never scan another tenant.</summary>
@@ -45,8 +49,8 @@ namespace Armada.Server
             Mission mission = await MissionAsync(caller, missionId, token).ConfigureAwait(false);
             string? owner = Owner(caller);
             EnumerationResult<CaptainSelectionDecision> page = await _Database.CaptainSelections.EnumerateHistoryAsync(mission.TenantId!, mission.Id, owner, query, token).ConfigureAwait(false);
-            List<CaptainSelectionDecisionView> rows = new List<CaptainSelectionDecisionView>();
-            foreach (CaptainSelectionDecision row in page.Objects) rows.Add(await ViewAsync(row, owner, token).ConfigureAwait(false));
+            Dictionary<string, CaptainSelectionDecisionView> views = (await _Database.CaptainSelections.ReadDecisionViewsAsync(mission.TenantId!, page.Objects.Select(row => row.Id).ToList(), owner, owner, token).ConfigureAwait(false)).ToDictionary(v => v.Id, StringComparer.Ordinal);
+            List<CaptainSelectionDecisionView> rows = page.Objects.Where(row => views.ContainsKey(row.Id)).Select(row => views[row.Id]).ToList();
             return EnumerationResult<CaptainSelectionDecisionView>.Create(query, rows, page.TotalRecords);
         }
 
@@ -67,9 +71,12 @@ namespace Armada.Server
             if (caller.MissionId != null && caller.MissionId != decision.MissionId) throw new KeyNotFoundException("Captain selection decision not found.");
             CaptainSelectionPolicyRevision policy = await _Database.CaptainSelections.ReadPolicyAsync(tenant, decision.PolicyRevisionId, token).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException("Captain selection policy not found.");
-            return new CaptainSelectionDecisionDetail { Decision = await ViewAsync(decision, Owner(caller), token).ConfigureAwait(false), Policy = policy.ToSettings(),
-                Candidates = await CandidatesCoreAsync(caller, decision, pageNumber, pageSize, token).ConfigureAwait(false),
-                ExecutionEvents = await _Database.CaptainSelections.EnumerateExecutionEventsAsync(tenant, decision.Id, Owner(caller), pageSize: 25, token: token).ConfigureAwait(false) };
+            CaptainSelectionDecisionView view = await ViewAsync(decision, Owner(caller), token).ConfigureAwait(false);
+            EnumerationResult<CaptainSelectionExecutionEvent> events = await _Database.CaptainSelections.EnumerateExecutionEventsAsync(tenant, decision.Id, Owner(caller), pageSize: 25, token: token).ConfigureAwait(false);
+            if (view.SelectedCaptainId == null)
+                foreach (CaptainSelectionExecutionEvent item in events.Objects) { item.ActualModel = null; item.ActualProvider = null; }
+            return new CaptainSelectionDecisionDetail { Decision = view, Policy = policy.ToSettings(),
+                Candidates = await CandidatesCoreAsync(caller, decision, pageNumber, pageSize, token, policy).ConfigureAwait(false), ExecutionEvents = events };
         }
 
         /// <summary>Page only visible candidate comparisons; internal account and credential identifiers are omitted.</summary>
@@ -82,14 +89,14 @@ namespace Armada.Server
             return await CandidatesCoreAsync(caller, decision, pageNumber, pageSize, token).ConfigureAwait(false);
         }
 
-        private async Task<EnumerationResult<CaptainSelectionCandidateView>> CandidatesCoreAsync(AuthContext caller, CaptainSelectionDecision decision, int pageNumber, int pageSize, CancellationToken token)
+        private async Task<EnumerationResult<CaptainSelectionCandidateView>> CandidatesCoreAsync(AuthContext caller, CaptainSelectionDecision decision, int pageNumber, int pageSize, CancellationToken token, CaptainSelectionPolicyRevision? recordedPolicy = null)
         {
             EnumerationResult<CaptainSelectionCandidateRecord> page = await _Database.CaptainSelections.EnumerateCandidatesAsync(decision.TenantId, decision.Id, Owner(caller), Owner(caller), pageNumber, pageSize, token).ConfigureAwait(false);
-            CaptainSelectionPolicyRevision? policy = await _Database.CaptainSelections.ReadPolicyAsync(decision.TenantId, decision.PolicyRevisionId, token).ConfigureAwait(false);
-            return EnumerationResult<CaptainSelectionCandidateView>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, page.Objects.Select(row => new CaptainSelectionCandidateView
+            CaptainSelectionPolicyRevision? policy = recordedPolicy ?? await _Database.CaptainSelections.ReadPolicyAsync(decision.TenantId, decision.PolicyRevisionId, token).ConfigureAwait(false);
+            return EnumerationResult<CaptainSelectionCandidateView>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, page.Objects.Select((row, index) => new CaptainSelectionCandidateView
             {
-                CaptainId = row.CaptainId, CaptainName = row.CaptainName ?? row.CaptainId, Model = row.ConfiguredModel,
-                Rank = row.Rank, Band = row.Band, ReasonCode = row.PrimaryReasonCode, AvailablePercent = row.AvailablePercent,
+                CaptainId = row.CaptainId, CaptainAvailable = row.CurrentCaptainExists, CaptainName = row.CaptainName ?? row.CaptainId, Model = row.ConfiguredModel,
+                Rank = (pageNumber - 1) * pageSize + index + 1, Band = row.Band, ReasonCode = row.PrimaryReasonCode, AvailablePercent = row.AvailablePercent,
                 CanSelect = row.Eligible && row.Band != Armada.Core.Enums.UsageSelectionBandEnum.Blocked
                     && (row.Band != Armada.Core.Enums.UsageSelectionBandEnum.Unknown || policy?.UnknownUsageBehavior == Armada.Core.Enums.UsageUnknownBehaviorEnum.AllowDeprioritized),
                 CapturedUtc = row.EvidenceCapturedUtc, ActualSelection = row.CaptainId == decision.SelectedCaptainId,
@@ -99,15 +106,8 @@ namespace Armada.Server
 
         private async Task<CaptainSelectionDecisionView> ViewAsync(CaptainSelectionDecision row, string? owner, CancellationToken token)
         {
-            CaptainSelectionPolicyRevision? policy = await _Database.CaptainSelections.ReadPolicyAsync(row.TenantId, row.PolicyRevisionId, token).ConfigureAwait(false);
-            CaptainSelectionExecutionEvent? report = await _Database.CaptainSelections.ReadLastModelReportAsync(row.TenantId, row.Id, owner, token).ConfigureAwait(false);
-            return new CaptainSelectionDecisionView { Id = row.Id, TenantId = row.TenantId, MissionId = row.MissionId,
-                ExecutionAttemptId = row.Outcome == "Admitted" ? row.ExecutionAttemptId : null, Trigger = row.Trigger, Outcome = row.Outcome,
-                Mode = row.Mode, Strategy = policy?.Strategy ?? Armada.Core.Enums.CaptainSelectionStrategyEnum.FirstAvailable,
-                SelectedCaptainId = row.SelectedCaptainId, IntendedModel = row.SelectedModel, ReportedModel = report?.ActualModel,
-                ModelReportingSource = report?.ReportingSource, HypotheticalCaptainId = row.HypotheticalCaptainId,
-                ReasonCode = row.PrimaryReasonCode, AlgorithmVersion = row.AlgorithmVersion, PolicyRevisionId = row.PolicyRevisionId,
-                EvaluatedUtc = row.EvaluatedUtc, NextReconsiderUtc = row.NextReconsiderUtc };
+            List<CaptainSelectionDecisionView> rows = await _Database.CaptainSelections.ReadDecisionViewsAsync(row.TenantId, new[] { row.Id }, owner, owner, token).ConfigureAwait(false);
+            return rows.FirstOrDefault() ?? throw new KeyNotFoundException("Captain selection decision not found.");
         }
 
         /// <summary>Resolve primary resource visibility before parsing secondary paging/filter arguments.</summary>

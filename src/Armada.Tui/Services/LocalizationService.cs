@@ -239,9 +239,11 @@ namespace Armada.Tui.Services
 
         private string Translate(string text)
         {
-            if (String.IsNullOrEmpty(text) || _Locale == "en") return text ?? "";
+            if (String.IsNullOrEmpty(text)) return text ?? "";
+            bool selectionKey = text.StartsWith("usageSelection.", StringComparison.Ordinal);
+            if (_Locale == "en") return selectionKey ? Armada.Core.Services.UsageSelectionText.Get(text) : text;
             I18nCatalog? catalog = _Catalog;
-            if (catalog == null || !catalog.Locales.TryGetValue(_Locale, out I18nLocalePack? pack) || pack == null) return text;
+            if (catalog == null || !catalog.Locales.TryGetValue(_Locale, out I18nLocalePack? pack) || pack == null) return selectionKey ? Armada.Core.Services.UsageSelectionText.Get(text) : text;
             string trimmed = text.Trim();
             if (trimmed.Length == 0) return text;
 
@@ -251,7 +253,7 @@ namespace Armada.Tui.Services
             if (!trimmed.Contains(' ') && !trimmed.Contains('\n') && pack.Terms != null && pack.Terms.TryGetValue(trimmed, out string? term))
                 return Preserve(text, term);
 
-            return text;
+            return selectionKey ? Armada.Core.Services.UsageSelectionText.Get(text) : text;
         }
 
         private static string Preserve(string original, string translated)

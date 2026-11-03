@@ -470,6 +470,8 @@ export interface AssignmentBlockerAdvice {
 }
 
 export interface MissionAssignmentBlocker {
+  selectionReasonCode?: string | null;
+  selectionNextReconsiderUtc?: string | null;
   advice?: AssignmentBlockerAdvice[];
   reason: MissionAssignmentBlockerReason;
   summary: string;
@@ -4863,4 +4865,75 @@ export interface UsageCaptureSettings {
   maximumExcerptBytes: number;
   rawSnapshotRetentionDays: number;
   rollupRetentionDays: number;
+}
+
+/** Authorized selection projection; internal account identities are never included. */
+export interface CaptainSelectionCandidateView {
+  captainId: string;
+  captainName: string;
+  captainAvailable: boolean;
+  model?: string | null;
+  band: 'Comfortable' | 'Constrained' | 'Unknown' | 'Blocked';
+  reasonCode: string;
+  canSelect: boolean;
+  availablePercent?: number | null;
+  capturedUtc?: string | null;
+  nextReconsiderUtc?: string | null;
+  rank: number;
+  actualSelection: boolean;
+  hypotheticalSelection: boolean;
+}
+export interface CaptainSelectionDecisionView {
+  id: string;
+  tenantId: string;
+  missionId: string;
+  executionAttemptId?: string | null;
+  trigger: string;
+  outcome: string;
+  mode: UsageSelectionSettings['mode'];
+  strategy: CaptainSelectionStrategy;
+  selectedCaptainId?: string | null;
+  selectedCaptainName?: string | null;
+  selectedCaptainAvailable: boolean;
+  intendedModel?: string | null;
+  reportedModel?: string | null;
+  modelReportingSource?: string | null;
+  hypotheticalCaptainId?: string | null;
+  reasonCode: string;
+  algorithmVersion: string;
+  policyRevisionId: string;
+  evaluatedUtc: string;
+  nextReconsiderUtc?: string | null;
+}
+export interface CaptainSelectionSummary {
+  missionId: string;
+  currentMode: UsageSelectionSettings['mode'];
+  currentStrategy: CaptainSelectionStrategy;
+  historyAvailable: boolean;
+  currentAttempt?: CaptainSelectionDecisionView | null;
+  latestDecision?: CaptainSelectionDecisionView | null;
+}
+export interface CaptainSelectionDecisionDetail {
+  decision: CaptainSelectionDecisionView;
+  policy: UsageSelectionSettings;
+  candidates: EnumerationResult<CaptainSelectionCandidateView>;
+  executionEvents: EnumerationResult<{ eventKind: string; actualModel?: string | null; reportingSource?: string | null; occurredUtc: string }>;
+}
+export interface CaptainSelectionPreview {
+  missionId: string;
+  mode: UsageSelectionSettings['mode'];
+  strategy: CaptainSelectionStrategy;
+  evaluatedUtc: string;
+  reasonCode: string;
+  actualCaptainId?: string | null;
+  hypotheticalCaptainId?: string | null;
+  candidates: EnumerationResult<CaptainSelectionCandidateView>;
+}
+export interface CaptainSelectionHistoryQuery {
+  outcome?: string;
+  trigger?: string;
+  from?: string;
+  to?: string;
+  pageNumber?: number;
+  pageSize?: number;
 }

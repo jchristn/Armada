@@ -2,7 +2,7 @@
 
 ### v1.3.0 configurable captain selection
 
-The live `UsageSelection` settings group supports `FirstAvailable`, `MostRemainingAllowance` and `MostUsedAllowance` strategies. GET settings reports the current revision/capabilities; PUT accepts `ExpectedUsageSelectionRevision` and returns 409 for stale revisions or unavailable Enforce. New authenticated mission selection summary/history/preview and retained decision/candidate routes are documented in [live configuration and Observe history](usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md). Observe preserves actual legacy routing and records the configured strategy’s hypothetical choice. Preview is read-only; internal account keys are excluded from selection DTOs.
+The live `UsageSelection` settings group supports `FirstAvailable`, `MostRemainingAllowance` and `MostUsedAllowance` strategies. GET settings reports the current revision/capabilities; PUT accepts `ExpectedUsageSelectionRevision` and returns 409 for stale revisions. Enforce is available as an explicit opt-in; Observe/FirstAvailable remains the default. New authenticated mission selection summary/history/preview and retained decision/candidate routes are documented in [live configuration and Observe history](usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md). Observe preserves actual legacy routing and records the configured strategy’s hypothetical choice. See the [enforcement and inspection guide](usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md) for operational behavior. Preview is read-only; internal account keys are excluded from selection DTOs.
 
 
 ### v1.3.0 concurrency schema boundary

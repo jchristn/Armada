@@ -2534,7 +2534,8 @@ namespace Armada.Core.Database.Postgresql.Queries
                     @"ALTER TABLE fleet_action_runs ADD COLUMN IF NOT EXISTS mission_mode TEXT NOT NULL DEFAULT 'Implementation';"),
                 Armada.Core.Database.UsageSelectionSchema.Migration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
                 Armada.Core.Database.UsageSelectionSchema.CaptureTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
-                Armada.Core.Database.UsageSelectionSchema.HistoryDisplayMigration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql)
+                Armada.Core.Database.UsageSelectionSchema.HistoryDisplayMigration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql),
+                Armada.Core.Database.UsageSelectionSchema.UntrackedExecutionMigration(Armada.Core.Enums.DatabaseTypeEnum.Postgresql)
 
             };
         }

@@ -1044,6 +1044,7 @@ namespace Armada.Core.Database.Postgresql.Implementations
             Mission mission = new Mission();
             mission.Id = reader["id"].ToString()!;
             mission.TenantId = NullableString(reader["tenant_id"]);
+            mission.UserId = NullableString(reader["user_id"]);
             mission.VoyageId = NullableString(reader["voyage_id"]);
             mission.VesselId = NullableString(reader["vessel_id"]);
             mission.CaptainId = NullableString(reader["captain_id"]);

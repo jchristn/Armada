@@ -26,8 +26,10 @@ namespace Armada.Server.Routes
             RegisterOne(app, authenticate, authz, HttpMethod.GET, "/api/v1/missions/{id}/captain-selection", "summary");
             RegisterOne(app, authenticate, authz, HttpMethod.GET, "/api/v1/missions/{id}/captain-selection/history", "history");
             RegisterOne(app, authenticate, authz, HttpMethod.POST, "/api/v1/missions/{id}/captain-selection/preview", "preview");
+            RegisterOne(app, authenticate, authz, HttpMethod.POST, "/api/v1/missions/{id}/captain-selection/history/enumerate", "history");
             RegisterOne(app, authenticate, authz, HttpMethod.GET, "/api/v1/captain-selection-decisions/{id}", "detail");
             RegisterOne(app, authenticate, authz, HttpMethod.GET, "/api/v1/captain-selection-decisions/{id}/candidates", "candidates");
+            RegisterOne(app, authenticate, authz, HttpMethod.POST, "/api/v1/captain-selection-decisions/{id}/candidates/enumerate", "candidates");
         }
 
         private void RegisterOne(Webserver app, Func<HttpContextBase, Task<AuthContext>> authenticate, IAuthorizationService authz, HttpMethod method, string path, string kind)
@@ -48,11 +50,16 @@ namespace Armada.Server.Routes
                         string id = context.Request.Url.Parameters["id"] ?? throw new ArgumentException("Identifier is required.");
                         string? tenant = context.Request.RetrieveQueryValue("tenantId");
                         await _Service.ValidateScopeAsync(caller, id, kind == "detail" || kind == "candidates", tenant, context.Token).ConfigureAwait(false);
-                        int page = Number(context, "pageNumber", 1), size = Number(context, "pageSize", 25);
+                        bool enumerationBody = method == HttpMethod.POST && (kind == "history" || kind == "candidates");
+                        CaptainSelectionHistoryQuery? filter = enumerationBody
+                            ? String.IsNullOrWhiteSpace(context.Request.DataAsString) ? new CaptainSelectionHistoryQuery()
+                                : JsonSerializer.Deserialize<CaptainSelectionHistoryQuery>(context.Request.DataAsString, _Options) ?? new CaptainSelectionHistoryQuery()
+                            : null;
+                        int page = filter?.PageNumber ?? Number(context, "pageNumber", 1), size = filter?.PageSize ?? Number(context, "pageSize", 25);
                         payload = kind switch
                         {
                             "summary" => await _Service.SummaryAsync(caller, id, context.Token).ConfigureAwait(false),
-                            "history" => await _Service.HistoryAsync(caller, id, new CaptainSelectionHistoryQuery { PageNumber = page, PageSize = size,
+                            "history" => await _Service.HistoryAsync(caller, id, filter ?? new CaptainSelectionHistoryQuery { PageNumber = page, PageSize = size,
                                 Trigger = context.Request.RetrieveQueryValue("trigger"), Outcome = context.Request.RetrieveQueryValue("outcome"),
                                 FromUtc = Date(context, "from"), ToUtc = Date(context, "to") }, context.Token).ConfigureAwait(false),
                             "preview" => await _Service.PreviewAsync(caller, id, page, size, context.Token).ConfigureAwait(false),
@@ -73,14 +80,16 @@ namespace Armada.Server.Routes
                 }
                 context.Response.ContentType = "application/json";
                 await context.Response.Send(JsonSerializer.Serialize(payload, _Options)).ConfigureAwait(false);
-            }, openApiMetadata: Metadata(path, kind));
+            }, openApiMetadata: Metadata(path, kind, method));
         }
 
-        private static OpenApiRouteMetadata Metadata(string path, string kind)
+        private static OpenApiRouteMetadata Metadata(string path, string kind, HttpMethod method)
         {
             OpenApiRouteMetadata metadata = OpenApiRouteMetadata.Create("Read captain selection " + kind, new[] { "Captain selection" })
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission or decision identifier"))
                 .WithSecurity("ApiKey");
+            if (method == HttpMethod.POST && (kind == "history" || kind == "candidates"))
+                metadata.WithRequestBody(OpenApiJson.BodyFor<CaptainSelectionHistoryQuery>("Scoped filters and pagination; tenant scope comes from the authenticated caller and path", false));
             if (kind != "summary")
                 foreach (string name in new[] { "pageNumber", "pageSize" }) metadata.WithParameter(OpenApiParameterMetadata.Query(name, "One-based page; pageSize 1..1000, default 25", false));
             if (kind == "detail" || kind == "candidates") metadata.WithParameter(OpenApiParameterMetadata.Query("tenantId", "Explicit tenant for global administrators; defaults to caller tenant", false));

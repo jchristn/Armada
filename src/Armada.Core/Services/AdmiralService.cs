@@ -781,6 +781,8 @@ namespace Armada.Core.Services
             // cancellation still propagates.
             await RunHealthPhaseAsync("reconcile captain slots", () => _Database.Captains.ReconcileMissionSlotsAsync(token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("reconcile usage selection estimates", () => new UsageSelectionReservationReconciler(_Database).ReconcileAsync(DateTime.UtcNow, token: token), token).ConfigureAwait(false);
+            await RunHealthPhaseAsync("adopt unreserved usage executions", () => _Database.CaptainSelections.AdoptUntrackedExecutionsAsync(token: token), token).ConfigureAwait(false);
+            await RunHealthPhaseAsync("reconcile unreserved usage executions", () => new UsageUntrackedExecutionReconciler(_Database, _Settings).ReconcileAsync(DateTime.UtcNow, token: token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("concurrency invariants", () => _ConcurrencyInvariants.CheckAsync(token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("lift expired quarantines", () => LiftExpiredQuarantinesAsync(token), token).ConfigureAwait(false);
             await RunHealthPhaseAsync("release recovered stalled captains", () => ReleaseRecoveredStalledCaptainsAsync(token), token).ConfigureAwait(false);
