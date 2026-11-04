@@ -105,6 +105,7 @@ namespace Armada.Core.Services
             InboxItemKinds.CliPermission,
             InboxItemKinds.Failed,
             InboxItemKinds.StalledCaptain,
+            InboxItemKinds.SelectionBlocked,
             InboxItemKinds.BackgroundJobFailed,
             InboxItemKinds.ModelAlert
         };
@@ -188,6 +189,9 @@ namespace Armada.Core.Services
                         break;
                     case InboxItemKinds.ModelAlert:
                         sections.Add(ModelAlertSection(auth));
+                        break;
+                    case InboxItemKinds.SelectionBlocked:
+                        sections.Add(SelectionBlockedSection(auth));
                         break;
                     case InboxItemKinds.StalledCaptain:
                         // Captains are a registered set (not operational rows that accumulate), so the stalled ones are read
@@ -286,6 +290,40 @@ namespace Armada.Core.Services
                 }).ToList();
                 return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, items, page.TotalRecords);
             });
+        }
+
+        /// <summary>Minutes an operator-actionable selection wait lasts before it becomes a Needs You item.</summary>
+        public const int SelectionBlockedMinutes = 15;
+
+        private PagedSection<InboxItem> SelectionBlockedSection(AuthContext auth)
+        {
+            return Guarded(InboxItemKinds.SelectionBlocked, async (pageNumber, pageSize, token) =>
+            {
+                EnumerationQuery paging = new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize };
+                string? tenant = auth.IsAdmin ? null : auth.TenantId;
+                string? user = auth.IsAdmin || auth.IsTenantAdmin ? null : auth.UserId;
+                if (!auth.IsAdmin && (String.IsNullOrEmpty(tenant) || (!auth.IsTenantAdmin && String.IsNullOrEmpty(user))))
+                    return EnumerationResult<InboxItem>.Create(paging, new List<InboxItem>(), 0);
+                EnumerationResult<CaptainSelectionWaitingItem> page = await _Database.CaptainSelections.EnumerateActionableWaitsAsync(tenant, user,
+                    UsageSelectionReasonCodes.OperatorActionable, DateTime.UtcNow.AddMinutes(-SelectionBlockedMinutes), pageNumber, pageSize, token).ConfigureAwait(false);
+                List<InboxItem> items = page.Objects.Select(SelectionBlockedItem).ToList();
+                return EnumerationResult<InboxItem>.Create(paging, items, page.TotalRecords);
+            });
+        }
+
+        private static InboxItem SelectionBlockedItem(CaptainSelectionWaitingItem wait)
+        {
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.SelectionBlocked,
+                Severity = InboxSeverityEnum.Warning,
+                Title = "Captain selection is waiting: " + wait.MissionTitle,
+                EntityName = wait.MissionTitle,
+                EntityType = "mission",
+                EntityId = wait.MissionId,
+                Detail = UsageSelectionText.ForReason(wait.ReasonCode) + " Open the mission's Captain selection section for the evidence and the permitted next step.",
+                Href = "/missions/" + Uri.EscapeDataString(wait.MissionId)
+            };
         }
 
         private PagedSection<InboxItem> ModelAlertSection(AuthContext auth)

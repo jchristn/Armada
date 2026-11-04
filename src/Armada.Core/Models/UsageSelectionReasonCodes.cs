@@ -1,5 +1,7 @@
 namespace Armada.Core.Models
 {
+    using System.Collections.Generic;
+
     /// <summary>
     /// Stable semantic selection reason codes. Codes are persisted in the ledger and used as translation keys by
     /// every client, so values must never be renamed. Clients localize display text; Armada never stores it.
@@ -95,5 +97,20 @@ namespace Armada.Core.Models
 
         /// <summary>The vessel shares its local and working directory.</summary>
         public const string VesselMisconfigured = "VesselMisconfigured";
+    
+        /// <summary>A preferred captain cannot run and fallback needs an administrator's recovery permission.</summary>
+        public const string FallbackPermissionRequired = "FallbackPermissionRequired";
+
+        /// <summary>
+        /// Waiting reasons that do not clear on their own and need an operator: account identity, capture configuration
+        /// or capture failures, the candidate limit, and a needed fallback permission. Reserve, quota, cooldown and capacity
+        /// waits are excluded because time or running work resolves them.
+        /// </summary>
+        public static IReadOnlyList<string> OperatorActionable { get; } = new List<string>
+        {
+            UsageIdentityUnknown, UsageConfigurationChanged, UsageMissing, UsageStale, UsageNotAuthoritative,
+            UsageEvidenceInvalid, UsageModelUnknown, UsageScopeUnknown, CandidateLimitExceeded, FallbackPermissionRequired,
+            "UsageHostMismatch", "UsageHostUnresolved"
+        }.AsReadOnly();
     }
 }

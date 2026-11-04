@@ -280,6 +280,38 @@ namespace Test.Shared.Suites.Database
                 AssertTrue(assigned[fixture.Captains[0].Id] >= before && assigned[fixture.Captains[0].Id] <= after, "claim time is recorded");
                 AssertEqual(0, (await fixture.Database.CaptainSelections.ReadLastAssignedAsync("ten_other", ids, token).ConfigureAwait(false)).Count, "tenant scoped");
             });
+            Add("actionable_waits_use_latest_enforced_decision_scope_and_reason", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(20, token, captainCount: 3).ConfigureAwait(false);
+                DateTime now = DateTime.UtcNow;
+                await Waiting(fixture, 0, UsageSelectionReasonCodes.UsageStale, now.AddMinutes(-30), UsageSelectionModeEnum.Enforce, token).ConfigureAwait(false);
+                await Waiting(fixture, 1, UsageSelectionReasonCodes.BelowReserve, now.AddMinutes(-30), UsageSelectionModeEnum.Enforce, token).ConfigureAwait(false);
+                await Waiting(fixture, 2, UsageSelectionReasonCodes.UsageIdentityUnknown, now.AddMinutes(-30), UsageSelectionModeEnum.Observe, token).ConfigureAwait(false);
+                DateTime cutoff = now.AddMinutes(-15);
+                EnumerationResult<CaptainSelectionWaitingItem> waits = await fixture.Database.CaptainSelections.EnumerateActionableWaitsAsync(fixture.Tenant.Id, null,
+                    UsageSelectionReasonCodes.OperatorActionable, cutoff, token: token).ConfigureAwait(false);
+                AssertEqual(1L, waits.TotalRecords, "only the enforced, operator-actionable, old wait");
+                AssertEqual(fixture.Missions[0].Id, waits.Objects.Single().MissionId);
+                AssertEqual(UsageSelectionReasonCodes.UsageStale, waits.Objects.Single().ReasonCode);
+                AssertEqual(fixture.Missions[0].Title, waits.Objects.Single().MissionTitle);
+                AssertEqual(1L, (await fixture.Database.CaptainSelections.EnumerateActionableWaitsAsync(null, null, UsageSelectionReasonCodes.OperatorActionable, cutoff, token: token).ConfigureAwait(false)).TotalRecords, "global scope");
+                AssertEqual(0L, (await fixture.Database.CaptainSelections.EnumerateActionableWaitsAsync("ten_other", null, UsageSelectionReasonCodes.OperatorActionable, cutoff, token: token).ConfigureAwait(false)).TotalRecords, "tenant scoped");
+                AssertEqual(0L, (await fixture.Database.CaptainSelections.EnumerateActionableWaitsAsync(fixture.Tenant.Id, "usr_other", UsageSelectionReasonCodes.OperatorActionable, cutoff, token: token).ConfigureAwait(false)).TotalRecords, "owner scoped");
+                AssertEqual(1L, (await fixture.Database.CaptainSelections.EnumerateActionableWaitsAsync(fixture.Tenant.Id, fixture.Owner.Id, UsageSelectionReasonCodes.OperatorActionable, cutoff, token: token).ConfigureAwait(false)).TotalRecords, "owner sees own");
+
+                InboxService inbox = new InboxService(fixture.Database, new SyslogLogging.LoggingModule());
+                AuthContext owner = AuthContext.Authenticated(fixture.Tenant.Id, fixture.Owner.Id, false, false, "Session");
+                EnumerationResult<InboxItem> items = await inbox.EnumerateAsync(owner, new EnumerationQuery { PageNumber = 1, PageSize = 25 }, token).ConfigureAwait(false);
+                InboxItem item = items.Objects.Single(i => i.Kind == InboxItemKinds.SelectionBlocked);
+                AssertEqual("/missions/" + fixture.Missions[0].Id, item.Href);
+                AssertEqual(fixture.Missions[0].Id, item.EntityId);
+                AssertEqual(1L, await inbox.CountAsync(owner, new[] { InboxItemKinds.SelectionBlocked }, token).ConfigureAwait(false));
+
+                // A newer, materially different wait restarts the clock.
+                await Waiting(fixture, 0, UsageSelectionReasonCodes.UsageMissing, now.AddMinutes(-1), UsageSelectionModeEnum.Enforce, token).ConfigureAwait(false);
+                AssertEqual(0L, (await fixture.Database.CaptainSelections.EnumerateActionableWaitsAsync(fixture.Tenant.Id, null, UsageSelectionReasonCodes.OperatorActionable, cutoff, token: token).ConfigureAwait(false)).TotalRecords, "latest decision is too recent");
+                AssertEqual(0, (await fixture.Database.CaptainSelections.EnumerateActionableWaitsAsync(fixture.Tenant.Id, null, new List<string>(), cutoff, token: token).ConfigureAwait(false)).Objects.Count, "no reasons, no items");
+            });
             Add("disabled_execution_preserves_uncertainty_until_proven_post_exit_capture", async token =>
             {
                 using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(20, token).ConfigureAwait(false);
@@ -347,6 +379,18 @@ namespace Test.Shared.Suites.Database
                 AssertTrue(records.Candidates[0].AvailablePercent <= 100 - 50.123456789);
             });
             return new TestSuiteDescriptor(_SuiteId, "Usage enforcement admission", cases);
+        }
+
+        private static async Task Waiting(UsageEnforcementFixture fixture, int index, string reason, DateTime evaluatedUtc, UsageSelectionModeEnum mode, CancellationToken token)
+        {
+            UsageSelectionSettings policy = new UsageSelectionSettings { Mode = mode, Strategy = fixture.Policy.Strategy };
+            CaptainSelectionRecordSet records = new CaptainSelectionRecordSet { Policy = CaptainSelectionPolicyRevision.FromSettings(fixture.Tenant.Id, policy) };
+            CaptainSelectionDecision decision = records.Decision;
+            decision.TenantId = fixture.Tenant.Id; decision.UserId = fixture.Owner.Id; decision.MissionId = fixture.Missions[index].Id;
+            decision.ExecutionAttemptId = decision.Id; decision.PolicyRevisionId = records.Policy.Id; decision.Mode = mode;
+            decision.Outcome = CaptainSelectionOutcomes.Waiting; decision.Trigger = "Dispatch"; decision.EvaluatedUtc = evaluatedUtc;
+            decision.AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion; decision.PrimaryReasonCode = reason; decision.EvidenceFingerprint = reason + evaluatedUtc.Ticks;
+            await fixture.Database.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
         }
     }
 }

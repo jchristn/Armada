@@ -33,6 +33,13 @@ namespace Armada.Core.Database.Interfaces
         /// <summary>Batch the last mission-slot assignment time for a bounded captain set in one tenant. Captains never assigned are omitted.</summary>
         /// <exception cref="ArgumentException">The tenant is missing or more than 1000 captains are requested.</exception>
         Task<Dictionary<string, DateTime>> ReadLastAssignedAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default);
+        /// <summary>
+        /// Page Pending missions whose latest decision is an Enforce-mode Waiting decision for one of <paramref name="reasonCodes"/> since before
+        /// <paramref name="waitingSinceBeforeUtc"/>, oldest first. A null tenant spans all tenants (global administrators).
+        /// </summary>
+        /// <exception cref="ArgumentException">A user scope is given without its tenant, or paging is invalid.</exception>
+        Task<EnumerationResult<CaptainSelectionWaitingItem>> EnumerateActionableWaitsAsync(string? tenantId, string? userId, IReadOnlyList<string> reasonCodes,
+            DateTime waitingSinceBeforeUtc, int pageNumber = 1, int pageSize = 25, CancellationToken token = default);
         /// <summary>Preserve legacy routing while tracking an unmeasured execution on its actual credential host, without selection history.</summary>
         Task<bool> TryAdmitLegacyAsync(string captainId, string missionId, string? executionHostId, int ceiling = 256, CancellationToken token = default);
         /// <summary>Readmit a legacy verification repair and track operational uncertainty on its credential host.</summary>

@@ -69,6 +69,30 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(history, (await h.Db.CaptainSelections.EnumerateByMissionAsync(tenant.Id, current.Id)).TotalRecords);
                 AssertEqual(docks, (await h.Db.Docks.EnumerateAsync()).Count);
             });
+            Add("enforced_wait_records_one_event_and_notification_per_material_state", async () =>
+            {
+                using Harness h = await Harness.CreateAsync();
+                TenantMetadata tenant = await h.Db.Tenants.CreateAsync(new TenantMetadata("selection-wait-event"));
+                UserMaster owner = await h.Db.Users.CreateAsync(new UserMaster(tenant.Id, "wait-event@example.invalid", "fixture-password"));
+                h.Mission.TenantId = tenant.Id; h.Mission.UserId = owner.Id; await h.Db.Missions.UpdateAsync(h.Mission);
+                await h.Db.Captains.CreateAsync(new Captain("no evidence") { TenantId = tenant.Id, UserId = owner.Id });
+                h.Settings.UsageSelection.Mode = UsageSelectionModeEnum.Enforce;
+                h.Settings.UsageSelection.UnknownUsageBehavior = UsageUnknownBehaviorEnum.Wait;
+                List<CaptainSelectionChange> changes = new List<CaptainSelectionChange>();
+                h.Service.OnCaptainSelectionChanged = changes.Add;
+                AssertFalse(await h.Service.TryAssignAsync(h.Mission, h.Vessel), "unknown usage waits");
+                AssertFalse(await h.Service.TryAssignAsync((await h.Db.Missions.ReadAsync(h.Mission.Id))!, h.Vessel), "still waiting");
+                AssertEqual(0, h.Launches);
+                List<ArmadaEvent> events = (await h.Db.Events.EnumerateAsync(new EnumerationQuery { PageNumber = 1, PageSize = 100 })).Objects
+                    .Where(e => e.EventType == MissionService.SelectionWaitingEventType && e.MissionId == h.Mission.Id).ToList();
+                AssertEqual(1, events.Count, "unchanged evidence records one event");
+                CaptainSelectionWaitingEvent payload = JsonSerializer.Deserialize<CaptainSelectionWaitingEvent>(events[0].Payload!)!;
+                AssertEqual(UsageSelectionModeEnum.Enforce, payload.Mode);
+                AssertFalse(String.IsNullOrEmpty(payload.ReasonCode), "stable reason recorded");
+                AssertFalse(events[0].Payload!.Contains("opaque", StringComparison.OrdinalIgnoreCase), "no account identity in the payload");
+                AssertEqual(1, changes.Count(c => c.Outcome == CaptainSelectionOutcomes.Waiting), "one invalidation for one material state");
+                AssertEqual(payload.DecisionId, changes.Single().DecisionId);
+            });
             Add("usage_preview_honors_placement_without_writes", async () =>
             {
                 using Harness h = await Harness.CreateAsync();

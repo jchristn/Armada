@@ -147,6 +147,7 @@ namespace Armada.Core.Services
                     waiting.Decision.PreviousDecisionId = previous?.Id;
                     CaptainSelectionDecision stored = await _Database.CaptainSelections.CreateDecisionAsync(waiting, token).ConfigureAwait(false);
                     NotifySelectionChanged(mission, stored.Id, CaptainSelectionOutcomes.Waiting);
+                    await RecordSelectionWaitingEventAsync(mission, stored, token).ConfigureAwait(false);
                 }
                 return true;
             }
@@ -154,6 +155,34 @@ namespace Armada.Core.Services
             {
                 UsageWait(mission, UsageSelectionReasonCodes.SelectionPersistenceUnavailable, "Selection history could not be recorded. Armada will retry without starting a process.");
                 return false;
+            }
+        }
+
+        /// <summary>Event type recorded when a mission enters a materially new captain-selection waiting state.</summary>
+        public const string SelectionWaitingEventType = "mission.selection_waiting";
+
+        // Material waiting states are already deduplicated by fingerprint, so this records one event per state change.
+        private async Task RecordSelectionWaitingEventAsync(Mission mission, CaptainSelectionDecision decision, CancellationToken token)
+        {
+            try
+            {
+                ArmadaEvent evt = new ArmadaEvent(SelectionWaitingEventType, "Waiting for captain selection: " + UsageSelectionText.ForReason(decision.PrimaryReasonCode));
+                evt.TenantId = mission.TenantId;
+                evt.UserId = mission.UserId;
+                evt.EntityType = "mission";
+                evt.EntityId = mission.Id;
+                evt.MissionId = mission.Id;
+                evt.VesselId = mission.VesselId;
+                evt.VoyageId = mission.VoyageId;
+                evt.Payload = System.Text.Json.JsonSerializer.Serialize(new CaptainSelectionWaitingEvent
+                {
+                    DecisionId = decision.Id, Mode = decision.Mode, ReasonCode = decision.PrimaryReasonCode, NextReconsiderUtc = decision.NextReconsiderUtc
+                });
+                await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
+            {
+                _Logging.Warn(_Header + "could not record the selection waiting event for mission " + mission.Id + ": " + ex.Message);
             }
         }
 

@@ -4022,6 +4022,10 @@ After each committed change (admission, a new material waiting decision, or a re
 broadcasts [`captain-selection.changed`](WEBSOCKET_API.md#captain-selectionchanged) to the mission's tenant. It
 carries identifiers only; clients re-read this API.
 
+Each materially new waiting decision also records a `mission.selection_waiting` event (Events API) whose payload holds
+the decision ID, mode, reason code and recheck hint, without candidates or account identity. Long operator-actionable
+waits appear in the inbox as `selection_blocked`.
+
 ### Captains
 
 A captain is an AI agent instance (Claude Code, Codex, etc.) that executes missions.
@@ -7600,6 +7604,7 @@ then `Warning`), then by `Title`. Every item is returned (no category is capped)
 | `landing_failed` | `Critical` | `mission` | Mission in `LandingFailed` |
 | `failed` | `Warning` | `mission` | Mission in `Failed` |
 | `background_job_failed` | `Warning` | `job` | Latest actionable failed background task attempt within the same tenant, user, kind and name; a new attempt supersedes it |
+| `selection_blocked` | `Warning` | `mission` | A Pending mission whose latest Enforce-mode captain-selection decision has waited at least 15 minutes for a reason an operator must fix (account identity, capture configuration or failure, candidate limit, or a needed fallback permission). One item per mission; a new decision replaces it. Reserve, quota, cooldown and capacity waits are not listed |
 | `stalled_captain` | `Warning` | `captain` | Captain in `Stalled` |
 | `merge_failed` | `Critical` | `merge_entry` | Merge queue entry in `Failed` |
 | `deployment_approval` | `Warning` | `deployment` | Deployment pending approval |

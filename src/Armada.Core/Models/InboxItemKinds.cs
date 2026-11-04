@@ -41,6 +41,9 @@ namespace Armada.Core.Models
         /// <summary>The latest attempt of background work failed and needs intervention.</summary>
         public const string BackgroundJobFailed = "background_job_failed";
 
+        /// <summary>A Pending mission has waited for captain selection for a reason an operator must fix.</summary>
+        public const string SelectionBlocked = "selection_blocked";
+
         #endregion
     }
 }

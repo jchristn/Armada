@@ -932,6 +932,7 @@ Purely informational events (completions, normal progress) are deliberately excl
 | `landing_failed` | Mission produced work that could not be merged | `Critical` |
 | `failed` | Mission failed | `Warning` |
 | `background_job_failed` | Latest actionable failed attempt of background work; follow `Href` to the related workflow and retry | `Warning` |
+| `selection_blocked` | Pending mission waiting 15 minutes or more for captain selection for an operator-actionable reason; follow `Href` to the mission's Captain selection section | `Warning` |
 | `merge_failed` | Queued merge failed testing or landing | `Critical` |
 | `deployment_approval` | Deployment waiting for your approval before it runs | `Warning` |
 | `deployment_failed` | Deployment failed or failed verification | `Critical` |
