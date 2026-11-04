@@ -29,10 +29,15 @@ namespace Test.Shared.Suites.Database
                 AssertTrue((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(old, token: token).ConfigureAwait(false)).Claimed);
                 AssertTrue(await fixture.Database.CaptainSelections.ReleaseUnstartedAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Captains[0].Id, old.Decision.ExecutionAttemptId, token).ConfigureAwait(false));
                 Mission pending = (await fixture.Database.Missions.ReadAsync(fixture.Missions[0].Id, token).ConfigureAwait(false))!;
+                System.Reflection.PropertyInfo receiptProperty = typeof(Mission).GetProperty("UsageAdmissionExecutionKey", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+                AssertEqual(old.Decision.ExecutionAttemptId, receiptProperty.GetValue(pending)?.ToString());
+                AssertFalse(System.Text.Json.JsonSerializer.Serialize(pending).Contains("UsageAdmissionExecutionKey", StringComparison.OrdinalIgnoreCase), "internal execution ownership is not a transport field");
                 pending.Status = MissionStatusEnum.Pending; pending.CaptainId = null; await fixture.Database.Missions.UpdateAsync(pending, token).ConfigureAwait(false);
                 AssertTrue(await fixture.Database.Captains.TryReleaseFromMissionAsync(fixture.Captains[0].Id, pending.Id, token).ConfigureAwait(false));
                 CaptainSelectionRecordSet fresh = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
                 AssertTrue((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(fresh, token: token).ConfigureAwait(false)).Claimed);
+                AssertEqual(old.Decision.ExecutionAttemptId, receiptProperty.GetValue(pending)?.ToString(), "a previously read snapshot retains its old attempt identity");
+                AssertEqual(fresh.Decision.ExecutionAttemptId, receiptProperty.GetValue((await fixture.Database.Missions.ReadAsync(pending.Id, token).ConfigureAwait(false))!)?.ToString());
                 AssertFalse(await fixture.Database.CaptainSelections.ReleaseUnstartedAsync(fixture.Tenant.Id, pending.Id, fixture.Captains[0].Id, old.Decision.ExecutionAttemptId, token).ConfigureAwait(false));
                 AssertFalse(await fixture.Database.CaptainSelections.MarkLaunchAttemptedAsync(fixture.Tenant.Id, pending.Id, fixture.Captains[0].Id, old.Decision.ExecutionAttemptId, token).ConfigureAwait(false));
                 AssertEqual(fresh.Decision.Id, (await fixture.Database.CaptainSelections.ReadReservationsAsync(fixture.Tenant.Id, "host", "ClaudeCode", "opaque-account", token).ConfigureAwait(false)).Single().DecisionId);

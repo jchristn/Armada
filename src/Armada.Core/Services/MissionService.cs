@@ -648,7 +648,7 @@ namespace Armada.Core.Services
                 return false;
             }
 
-            if (mission.UsageAdmissionExecutionKey == null && !String.IsNullOrEmpty(mission.TenantId))
+            if (usageSelection == null && !String.IsNullOrEmpty(mission.TenantId))
                 mission.UsageAdmissionExecutionKey = await _Database.CaptainSelections.ReadUsageExecutionKeyAsync(mission.TenantId, mission.Id, token).ConfigureAwait(false);
             _UsageSelectionBlockers.TryRemove(mission.Id, out _);
             mission.BranchName = branchName;

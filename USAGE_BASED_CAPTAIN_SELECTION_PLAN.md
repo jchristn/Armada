@@ -379,3 +379,5 @@ Mobile polling lifecycle follow-up: timers are owned by screen focus and cleared
 - [ ] Complete lifecycle/race/provider tests, regression checks, documentation, commit/push and build-all v1.3.0 before marking U3 complete.
 
 The U3 receipt boundary also binds launch/cleanup to the owned execution key, with a superseded-attempt regression. Current focused checks pass (69 including transport authorization/coverage); the complete first regression run found two contract-test fixture gaps, both corrected and passing in the focused rerun. A final frozen-source omnibus and provider rerun are required before the U3 exit is checked. See [U3 validation and operator steps](docs/usage-selection/U3_RECOVERY_VALIDATION.md).
+
+Snapshot ownership follow-up: all four mission readers capture the internal execution key with the row. Process-exit classification and recovery use that same snapshot, rather than fetching a potentially newer key. The superseded-attempt regression verifies old/new snapshot identities and that the internal key is absent from transport JSON. The 110-case focused rerun passes; provider and full release reruns are in progress.

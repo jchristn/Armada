@@ -1,6 +1,6 @@
 # Usage enforcement and mission inspection (v1.3.0)
 
-This wave adds opt-in Enforce admission and operator inspection on `feature/v1.3.0`. Observe/FirstAvailable remains the default. The complete [implementation plan](../../USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) still tracks recovery actions, additional native surfaces, telemetry and release validation; those are not implied complete by these additions.
+This wave adds opt-in Enforce admission and operator inspection on `feature/v1.3.0`. Observe/FirstAvailable remains the default. The complete [implementation plan](../../USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) still tracks additional native operator surfaces, telemetry and release validation; those are not implied complete by these additions.
 
 ## Configure and test
 
@@ -11,6 +11,8 @@ This wave adds opt-in Enforce admission and operator inspection on `feature/v1.3
 5. With Unknown usage set to Wait, missing/stale/ambiguous account evidence leaves work Pending with a semantic reason. Refresh capture through the existing Captain Usage controls. Recheck times are hints, not guaranteed starts. A reported provider reset never invents fresh balance. Unknown Allow deprioritized explicitly permits uncertain usage; it does not turn it into a measured zero.
 6. Two captains sharing one account must share its reservation budget. With only one attempt's estimated headroom left above the reserve, concurrent admissions allow one attempt. Running work stays running after policy edits. A credential-host mismatch or unavailable credential Harbor waits instead of moving a known-account admission to another account.
 7. Inspect the same authorized data with `armada mission selection <mission>`, `--history --outcome Waiting --page 1 --page-size 25`, `--preview`, `--decision <decision>`, or `--json`. JSON follows the existing Helm PascalCase contract. `--history`, `--preview` and `--decision` are mutually exclusive.
+
+8. As an administrator, open **Recovery permissions** on a Pending mission to grant or revoke eligible fallback or a soft-reserve exception with an audit reason. The dialog reloads conflicting revisions without losing that reason. Strict assignment, exhausted quota, cooldown, scope and capacity still apply. Historical detail retains the exact authorization used by that decision. Follow the [U3 validation steps](U3_RECOVERY_VALIDATION.md).
 
 ## Mobile inspection
 
@@ -50,9 +52,9 @@ Browser review renders the real React card/CSS against isolated fixture response
 
 ## Remaining work
 
-Classified provider cooldowns, audited authorized fallback/reserve exceptions, complete proven-unstarted failure/recovery handling, richer settlement proof/export, native Mobile/TUI operational controls, Events/Needs You and WebSocket invalidation, telemetry/stress/upgrade evidence and final release packaging remain tracked in the plan. The current conservative behavior may keep failed/unknown work's allowance uncertain until a trustworthy capture; no force-release or bypass action is being advertised.
+Native Mobile/TUI operational controls, richer account reservation/export views, Events/Needs You and WebSocket invalidation, telemetry/stress/upgrade evidence and final release packaging remain tracked in U4-U6. The current conservative behavior may keep failed/unknown work's allowance uncertain until a trustworthy capture; no force-release or hard-hold bypass action is advertised. Classified shared-account cooldowns, proven-unstarted handling and audited Dashboard/REST/MCP/.NET recovery permissions are implemented in [U3](U3_RECOVERY_VALIDATION.md).
 
-## Verification record
+## Earlier wave verification record
 
 The final backend omnibus on source `9214ed53f` is green. These are isolated development checks; production was not deployed.
 
@@ -73,3 +75,7 @@ The backend run includes retained evidence after actual raw pruning and server r
 Headless TUI tests explicitly select their expected palette; Auto/high-contrast tests remain intact. The MCP contract crawler respects the existing 100-calls/second production limit, and its helper validates initialization and closes owned sessions. These corrections resolve the earlier omnibus failures without changing production throttling.
 
 Public inventory is 528 REST routes, 270 MCP tools and 98 CLI commands. Repeated `build-all.sh v1.3.0` waves have published server, dashboard and proxy images with Linux amd64/arm64 manifests and produced the VSIX. Artifact probes confirm the server/proxy assemblies and bundled Dashboard assets, and the standalone Dashboard index. U1/U2 are complete; the remaining work above and in U3-U6 is explicit.
+
+## U3 recovery verification
+
+Implementation source `a15a707f0` adds shared-account cooldowns, immutable actual execution attribution, owned-receipt cleanup and administrator recovery permissions. The frozen focused batch passes 110/110 on .NET 10, and the .NET 8 selection/contract/TUI batch passes 121/121. PostgreSQL/MySQL/SQL Server each pass 63/63, Dashboard passes 1,897/1,897, native passes 1,392/1,392, and the recovery browser pass is 24/24. Public inventory is now 529 REST routes and 271 MCP tools (98 CLI commands). Full regression/build completion is recorded in the U3 guide when finished.

@@ -1206,8 +1206,7 @@ namespace Armada.Core.Services
 
             // Exactly one handler owns a process exit. The claim is a conditional write on the mission's recorded
             // process, so a concurrent health check (or an exit from an earlier attempt) cannot also act on it.
-            string? exitUsageExecutionKey = String.IsNullOrEmpty(mission.TenantId) ? null
-                : await _Database.CaptainSelections.ReadUsageExecutionKeyAsync(mission.TenantId, mission.Id, token).ConfigureAwait(false);
+            string? exitUsageExecutionKey = mission.UsageAdmissionExecutionKey;
             if (!await _Database.Missions.TryClaimProcessExitAsync(missionId, processId, token).ConfigureAwait(false))
             {
                 _Logging.Debug(_Header + "exit of agent process " + processId + " for mission " + missionId + " is already handled or belongs to an earlier attempt -- skipping");

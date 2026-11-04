@@ -660,6 +660,7 @@ namespace Armada.Core.Database.SqlServer
         {
             Mission mission = new Mission();
             mission.Id = reader["id"].ToString()!;
+            try { mission.UsageAdmissionExecutionKey = NullableString(reader["usage_execution_key"]); } catch (IndexOutOfRangeException) { }
             mission.TenantId = NullableString(reader["tenant_id"]);
             mission.UserId = NullableString(reader["user_id"]);
             mission.VoyageId = NullableString(reader["voyage_id"]);

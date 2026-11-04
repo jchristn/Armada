@@ -248,8 +248,6 @@ namespace Armada.Core.Services
             {
                 Mission? mission = await _Database.Missions.ReadAsync(assignmentId, token).ConfigureAwait(false);
                 if (mission != null && (mission.CaptainId != captain.Id || mission.Status == MissionStatusEnum.Verifying)) return;
-                if (mission != null && !String.IsNullOrEmpty(mission.TenantId))
-                    mission.UsageAdmissionExecutionKey = await _Database.CaptainSelections.ReadUsageExecutionKeyAsync(mission.TenantId, mission.Id, token).ConfigureAwait(false);
                 if (mission != null) captain.Assignment = mission;
                 captain.RecoveryAttempts++;
                 _Logging.Info(_Header + "auto-recovery attempt " + captain.RecoveryAttempts + "/" + _Settings.MaxRecoveryAttempts + " for captain " + captain.Id);
