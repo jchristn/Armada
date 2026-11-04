@@ -76,6 +76,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
+import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
 import { buildObjectiveDuplicatePayload } from '../lib/duplicates';
 import { refinementSummaryFromEvent } from '../lib/refinementSummary';
@@ -161,6 +162,8 @@ export default function ObjectiveDetail() {
   const [saving, setSaving] = useState(false);
   const [refreshingGitHub, setRefreshingGitHub] = useState(false);
   const [error, setError] = useState('');
+  // A failed entity load (for example a stale link) renders an error state instead of an empty editor.
+  const [loadFailure, setLoadFailure] = useState<{ id: string | undefined; message: string } | null>(null);
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({
     open: false,
@@ -489,7 +492,7 @@ export default function ObjectiveDetail() {
         await loadRefinementSessions(result.id, requestedRefinementSessionId || undefined);
         setError('');
       } catch (err: unknown) {
-        if (mounted) setError(err instanceof Error ? err.message : t('Failed to load backlog item.'));
+        if (mounted) setLoadFailure({ id, message: err instanceof Error ? err.message : t('Failed to load backlog item.') });
       } finally {
         if (mounted) setLoading(false);
       }
@@ -825,6 +828,15 @@ export default function ObjectiveDetail() {
       <div className="playbook-empty-state">
         <strong>{t('Loading backlog item...')}</strong>
         <span>{t('Refreshing backlog metadata, linked delivery records, and captain-backed refinement transcripts.')}</span>
+      </div>
+    );
+  }
+
+  if (!createMode && loadFailure && loadFailure.id === id) {
+    return (
+      <div>
+        <PageHeader breadcrumb={[{ label: t('Backlog'), to: canonicalListPath }, { label: id || '' }]} title={id || ''} />
+        <ErrorState message={loadFailure.message} />
       </div>
     );
   }

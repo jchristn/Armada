@@ -366,8 +366,8 @@ export default function VoyageDetail() {
       {/* Progress bar */}
       {totalMissions > 0 && (
         <div style={{ marginBottom: 20 }}>
-          <div style={{ height: 10, background: '#e0e0e8', borderRadius: 5, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${progressPct}%`, background: 'var(--primary)', transition: 'width 0.3s' }} />
+          <div style={{ height: 10, background: 'var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${progressPct}%`, background: 'var(--accent)', transition: 'width 0.3s' }} />
           </div>
           <span className="text-muted" style={{ fontSize: 12, marginTop: 4, display: 'inline-block' }} title={t('The bar fills as missions finish successfully. Failed missions count toward the total but not toward complete.')}>
             {t('{{completed}}/{{total}} complete, {{failed}} failed', { completed: completedCount, total: totalMissions, failed: failedCount })}

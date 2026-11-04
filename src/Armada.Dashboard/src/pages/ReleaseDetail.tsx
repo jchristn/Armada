@@ -25,6 +25,7 @@ import DataTable from '../components/shared/DataTable';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
+import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
 import { joinList, RELEASE_STATUSES, splitList } from '../lib/deliveryForms';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
@@ -92,6 +93,8 @@ export default function ReleaseDetail() {
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  // A failed entity load (for example a stale link) renders an error state instead of an empty editor.
+  const [loadFailure, setLoadFailure] = useState<{ id: string | undefined; message: string } | null>(null);
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({
     open: false,
@@ -164,7 +167,7 @@ export default function ReleaseDetail() {
         setCheckRunIds(joinList(result.checkRunIds));
         setError('');
       } catch (err: unknown) {
-        if (mounted) setError(err instanceof Error ? err.message : t('Failed to load release.'));
+        if (mounted) setLoadFailure({ id, message: err instanceof Error ? err.message : t('Failed to load release.') });
       } finally {
         if (mounted) setLoading(false);
       }
@@ -363,6 +366,15 @@ export default function ReleaseDetail() {
   }
 
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
+
+  if (!createMode && loadFailure && loadFailure.id === id) {
+    return (
+      <div>
+        <PageHeader breadcrumb={[{ label: t('Releases'), to: '/releases' }, { label: id || '' }]} title={id || ''} />
+        <ErrorState message={loadFailure.message} />
+      </div>
+    );
+  }
 
   return (
     <div>

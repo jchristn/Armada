@@ -58,14 +58,24 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import CopyButton, { copyToClipboard } from '../components/shared/CopyButton';
 import { useAuth } from '../context/AuthContext';
 import { useLocale } from '../context/LocaleContext';
+import { formatDurationMs, type Translate } from '../lib/fleetActionLabels';
 import ErrorModal from '../components/shared/ErrorModal';
 import RepositoryHealthSettingsSection from '../components/vessels/health/RepositoryHealthSettingsSection';
+
+/** Render the server's TimeSpan uptime ("d.hh:mm:ss.fffffff") as a compact duration; unparseable values pass through. */
+function formatUptime(t: Translate, locale: string, uptime: string | null | undefined): string {
+  if (!uptime) return '-';
+  const match = /^(?:(\d+)\.)?(\d+):(\d+):(\d+)/.exec(uptime);
+  if (!match) return uptime;
+  const totalSeconds = (Number(match[1] || 0) * 86400) + (Number(match[2]) * 3600) + (Number(match[3]) * 60) + Number(match[4]);
+  return formatDurationMs(t, locale, totalSeconds * 1000);
+}
 
 export default function Server() {
   const { isAdmin } = useAuth();
   const { connected } = useWebSocket();
   const { pushToast } = useNotifications();
-  const { t, formatDateTime } = useLocale();
+  const { t, formatDateTime, locale } = useLocale();
 
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [settings, setSettings] = useState<ServerSettings | null>(null);
@@ -314,7 +324,7 @@ export default function Server() {
       setHealth(result);
       showToast('info', t('Health: {{status}} | Uptime: {{uptime}}', {
         status: translateHealthStatus(result.status),
-        uptime: result.uptime,
+        uptime: formatUptime(t, locale, result.uptime),
       }));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : t('Unknown error');
@@ -573,7 +583,7 @@ export default function Server() {
         <div className="card" title={t('How long the Admiral process has been running since its last start or restart.')}>
           <div className="card-label">{t('Uptime')}</div>
           <div className="card-value" style={{ fontSize: '1.2rem' }}>
-            {health?.uptime || '-'}
+            {formatUptime(t, locale, health?.uptime)}
           </div>
           {health?.startUtc && (
             <div className="card-detail text-muted">

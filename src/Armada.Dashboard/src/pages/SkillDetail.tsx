@@ -10,6 +10,7 @@ import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
+import { ErrorState } from '../components/shared/StateBlocks';
 import StatusBadge from '../components/shared/StatusBadge';
 import { canEdit as canEditScoped, type ScopeViewer } from '../lib/scoping';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
@@ -41,6 +42,8 @@ export default function SkillDetail() {
   const [loading, setLoading] = useState(!createMode);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // A failed entity load (for example a stale link) renders an error state instead of an empty editor.
+  const [loadFailure, setLoadFailure] = useState<{ id: string | undefined; message: string } | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [jsonOpen, setJsonOpen] = useState(false);
 
@@ -57,7 +60,7 @@ export default function SkillDetail() {
         setActive(s.active);
         setError('');
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : t('Failed to load skill.')))
+      .catch((err: unknown) => setLoadFailure({ id, message: err instanceof Error ? err.message : t('Failed to load skill.') }))
       .finally(() => setLoading(false));
   }, [id, createMode]);
 
@@ -99,6 +102,15 @@ export default function SkillDetail() {
   }
 
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
+
+  if (!createMode && loadFailure && loadFailure.id === id) {
+    return (
+      <div>
+        <PageHeader breadcrumb={[{ label: t('Skills'), to: '/skills' }, { label: id || '' }]} title={id || ''} />
+        <ErrorState message={loadFailure.message} />
+      </div>
+    );
+  }
 
   return (
     <div>

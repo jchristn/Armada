@@ -155,7 +155,7 @@ export default function SignalDetail() {
       <div className="card">
         <h3 title={t('Message content of the signal. JSON payloads are shown formatted.')}>{t('Payload')}</h3>
         <pre style={{
-          background: '#f5f5fa',
+          background: 'var(--bg-hover)',
           padding: 16,
           borderRadius: 'var(--radius)',
           overflow: 'auto',

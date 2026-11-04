@@ -91,22 +91,22 @@ export default function VoyageCreate() {
       <form onSubmit={handleSubmit}>
         {/* Voyage metadata */}
         <div className="card" style={{ marginBottom: 16, padding: 20 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 16 }}>{t('Voyage Details')}</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 16 }}>{t('Voyage Details')}</h3>
 
           <label style={{ display: 'block', marginBottom: 14 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }} title={t('Name for the voyage, shown in lists and on the dashboard. Required. Example: Q3 auth cleanup.')}>{t('Title')}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Name for the voyage, shown in lists and on the dashboard. Required. Example: Q3 auth cleanup.')}>{t('Title')}</span>
             <input value={title} onChange={e => setTitle(e.target.value)} required title={t('Name for the voyage, shown in lists and on the dashboard. Required. Example: Q3 auth cleanup.')}
               placeholder={t('Name for this batch of missions')} style={{ marginTop: 4 }} />
           </label>
 
           <label style={{ display: 'block', marginBottom: 14 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }} title={t('Optional notes about the voyage as a whole. Captains do not see this; each mission\'s own description is its instructions.')}>{t('Description')}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Optional notes about the voyage as a whole. Captains do not see this; each mission\'s own description is its instructions.')}>{t('Description')}</span>
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} title={t('Optional notes about the voyage as a whole. Captains do not see this; each mission\'s own description is its instructions.')}
               placeholder={t('Optional description for the voyage...')} style={{ marginTop: 4 }} />
           </label>
 
           <label style={{ display: 'block', marginBottom: 14 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }} title={t('Repository every mission in this voyage works in. Each mission gets its own branch and worktree there. Required.')}>{t('Vessel')}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Repository every mission in this voyage works in. Each mission gets its own branch and worktree there. Required.')}>{t('Vessel')}</span>
             <select value={vesselId} onChange={e => setVesselId(e.target.value)} required title={t('Repository every mission in this voyage works in. Each mission gets its own branch and worktree there. Required.')} style={{ marginTop: 4 }}>
               <option value="">{t('Select a vessel...')}</option>
               {vessels.map(v => <option key={v.id} value={v.id}>{v.name} ({v.id})</option>)}
@@ -114,7 +114,7 @@ export default function VoyageCreate() {
           </label>
 
           <label style={{ display: 'block', marginBottom: 14 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }} title={t('Sequence of persona stages each mission runs through, such as Architect then Worker then Judge. Inherit uses the vessel\'s pipeline, then the fleet\'s, then Worker only.')}>{t('Pipeline')}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Sequence of persona stages each mission runs through, such as Architect then Worker then Judge. Inherit uses the vessel\'s pipeline, then the fleet\'s, then Worker only.')}>{t('Pipeline')}</span>
             <select value={selectedPipeline} onChange={e => setSelectedPipeline(e.target.value)} title={t('Sequence of persona stages each mission runs through, such as Architect then Worker then Judge. Inherit uses the vessel\'s pipeline, then the fleet\'s, then Worker only.')} style={{ marginTop: 4 }}>
               <option value="">{t('Inherit (vessel, then fleet, then WorkerOnly)')}</option>
               {pipelines.map(p => (
@@ -126,7 +126,7 @@ export default function VoyageCreate() {
           </label>
 
           <label style={{ display: 'block', marginBottom: 14 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }} title={t('How finished missions in this voyage land. Default uses the vessel\'s landing mode, or the server default when the vessel has none.')}>{t('Landing Mode')}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dim)' }} title={t('How finished missions in this voyage land. Default uses the vessel\'s landing mode, or the server default when the vessel has none.')}>{t('Landing Mode')}</span>
             <select value={landingMode} onChange={e => setLandingMode(e.target.value)} title={t('How finished missions in this voyage land. Default uses the vessel\'s landing mode, or the server default when the vessel has none.')} style={{ marginTop: 4 }}>
               {landingModes.map(m => <option key={m.value || 'default'} value={m.value}>{m.label}</option>)}
             </select>
@@ -140,7 +140,7 @@ export default function VoyageCreate() {
         {/* Mission rows */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
               {t('Missions')} ({missions.length})
             </h3>
             <button type="button" className="btn-sm" onClick={addMission} title={t('Add another mission to this voyage. Each mission runs on its own branch and can be picked up by a different captain.')}>+ {t('Add Mission')}</button>
@@ -157,19 +157,19 @@ export default function VoyageCreate() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, marginBottom: 8 }}>
                 <label style={{ display: 'block' }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }} title={t('Short name for this mission, shown in lists. Required. Example: Add retry to the webhook sender.')}>{t('Title')}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Short name for this mission, shown in lists. Required. Example: Add retry to the webhook sender.')}>{t('Title')}</span>
                   <input value={m.title} onChange={e => updateMission(i, 'title', e.target.value)} title={t('Short name for this mission, shown in lists. Required. Example: Add retry to the webhook sender.')}
                     required placeholder={t('What needs to be done?')} style={{ marginTop: 2, fontSize: 13 }} />
                 </label>
                 <label style={{ display: 'block', width: 80 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }} title={t('Dispatch order from 0 to 1000. Lower numbers are assigned to a captain first; the default is 100.')}>{t('Priority')}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Dispatch order from 0 to 1000. Lower numbers are assigned to a captain first; the default is 100.')}>{t('Priority')}</span>
                   <input type="number" value={m.priority} onChange={e => updateMission(i, 'priority', Number(e.target.value))} title={t('Dispatch order from 0 to 1000. Lower numbers are assigned to a captain first; the default is 100.')}
                     min={0} max={1000} style={{ marginTop: 2, fontSize: 13 }} />
                 </label>
               </div>
 
               <label style={{ display: 'block' }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }} title={t('Instructions the captain works from: what to change, where, and how to know it is done. Markdown is fine.')}>{t('Description')}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)' }} title={t('Instructions the captain works from: what to change, where, and how to know it is done. Markdown is fine.')}>{t('Description')}</span>
                 <textarea value={m.description} onChange={e => updateMission(i, 'description', e.target.value)} title={t('Instructions the captain works from: what to change, where, and how to know it is done. Markdown is fine.')}
                   rows={2} placeholder={t('Detailed instructions for the AI captain...')} style={{ marginTop: 2, fontSize: 13 }} />
               </label>
@@ -186,7 +186,7 @@ export default function VoyageCreate() {
 
         {/* Submit */}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button type="button" onClick={() => navigate('/voyages')} title={t('Leave without creating the voyage. Anything you entered is discarded.')} style={{ background: '#f0f0f5', color: 'var(--text)', padding: '8px 16px', borderRadius: 'var(--radius)', border: 'none', cursor: 'pointer' }}>
+          <button type="button" onClick={() => navigate('/voyages')} className="btn" title={t('Leave without creating the voyage. Anything you entered is discarded.')}>
             {t('Cancel')}
           </button>
           <button type="submit" className="btn-primary" disabled={submitting} title={t('Create the voyage and its missions. The missions are dispatched to idle captains on the chosen vessel right away.')}>

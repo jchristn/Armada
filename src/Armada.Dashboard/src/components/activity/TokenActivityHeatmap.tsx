@@ -91,7 +91,8 @@ const TokenActivityHeatmap = forwardRef<TokenActivityHeatmapHandle, TokenActivit
     if (!loading && host && cell) {
       const x = cell.getBoundingClientRect().left - host.getBoundingClientRect().left + host.scrollLeft;
       if (x < host.scrollLeft) host.scrollLeft = x;
-      if (x + 20 > host.scrollLeft + host.clientWidth) host.scrollLeft = x + 20 - host.clientWidth;
+      const right = x + cell.offsetWidth;
+      if (right > host.scrollLeft + host.clientWidth) host.scrollLeft = right - host.clientWidth;
     }
   }, [selectedCell, loading]);
 
@@ -154,7 +155,7 @@ const TokenActivityHeatmap = forwardRef<TokenActivityHeatmapHandle, TokenActivit
       <div className="token-activity-stats"><span title={t('Sum of the chosen metric over the heatmap window.')}>{t('Total')}: <strong>{formatTokens(stats.total)}</strong></span><span title={t('Highest single-square count in the window. It sets the darkest color.')}>{peakLabel}: <strong>{formatTokens(stats.peak)}</strong></span><span title={t('Squares in the window with any token usage.')}>{activeLabel}: <strong>{stats.active}</strong></span></div>
       <div ref={scroll} className="vhist-heatmap-scroll token-activity-scroll">
         <div className="tok-heat-columns" style={gridStyle} aria-hidden="true">
-          <span className="tok-heat-corner" />{columnLabels.map(l => <span className="tok-heat-column-label" key={l.column} style={{ gridColumn: `${l.column + 2} / span ${Math.min(l.span, heat.columns - l.column)}` }}>{l.label}</span>)}
+          <span className="tok-heat-corner" />{columnLabels.map(l => <span className="tok-heat-column-label" key={l.column} style={{ gridColumn: `${l.column + 2} / span ${Math.min(l.span, heat.columns - l.column)}`, justifySelf: l.column + l.span > heat.columns ? 'end' : undefined }}>{l.label}</span>)}
         </div>
         <div ref={grid} className={`tok-heat-grid is-${active.kind}`} style={gridStyle} role="grid" aria-label={t('Token activity')} onKeyDown={keyDown}>
           {heat.rows.map((row, r) => <div role="row" className="vhist-heatmap-row" key={row.key}>
