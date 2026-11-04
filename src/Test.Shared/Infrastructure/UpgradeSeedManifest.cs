@@ -69,6 +69,9 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         public Dictionary<string, MissionStatusEnum> MissionStatuses { get; set; } = new Dictionary<string, MissionStatusEnum>();
 
+        /// <summary>Statuses the baseline refused to reach through manual transitions; their missions hold the last status reached.</summary>
+        public List<MissionStatusEnum> UnreachableStatuses { get; set; } = new List<MissionStatusEnum>();
+
         /// <summary>
         /// Title of every seeded mission, keyed by mission ID.
         /// </summary>
