@@ -333,7 +333,6 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
                     return (
                       <g key={`reset-${i}`} className="usage-chart-reset" data-series={s} aria-hidden="true">
                         <line x1={rx} x2={rx} y1={PAD_TOP} y2={LIMITS_HEIGHT - PAD_BOTTOM} />
-                        <text x={rx + 3} y={PAD_TOP + 10}>{t('Reset')}</text>
                       </g>
                     );
                   })}
@@ -388,6 +387,13 @@ export default function UsageOverTimeChart({ limits, tokens, fromUtc, toUtc, sel
                 {seriesEstimated(series) && <span className="usage-chart-flag">{t('Estimated')}</span>}
               </li>
             ))}
+            {/* One legend entry explains the dotted reset lines, so several resets never stack labels in the plot. */}
+            {limitResets.some((r) => r.resets.length > 0) && (
+              <li key="legend-reset" className="usage-chart-legend-reset">
+                <span className="usage-chart-swatch usage-chart-swatch-reset" aria-hidden="true" />
+                {t('Reset')}
+              </li>
+            )}
           </ul>
         )}
       </section>

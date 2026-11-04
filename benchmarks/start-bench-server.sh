@@ -13,7 +13,10 @@
 #
 # Usage:
 #   start-bench-server.sh [--name admission] [--port 25160] [--framework net10.0]
-#                         [--stub-seconds 1] [--no-build]
+#                         [--stub-seconds 1] [--telemetry] [--no-build]
+#
+# --telemetry turns on the Admiral's Prometheus exporter at
+# http://127.0.0.1:<port + 2>/metrics (selection stage latency and outcomes).
 #
 # Port block 25160-25169 is reserved for this suite. Your ~/.armada and the
 # default ports 7890/7891 are never touched.
@@ -21,13 +24,14 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-NAME="admission"; PORT=25160; FRAMEWORK="net10.0"; STUB_SECONDS=1; DO_BUILD=1
+NAME="admission"; PORT=25160; FRAMEWORK="net10.0"; STUB_SECONDS=1; DO_BUILD=1; TELEMETRY=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --name) NAME="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --framework) FRAMEWORK="$2"; shift 2 ;;
     --stub-seconds) STUB_SECONDS="$2"; shift 2 ;;
+    --telemetry) TELEMETRY=true; shift ;;
     --no-build) DO_BUILD=0; shift ;;
     -h|--help) grep '^#' "$0" | grep -v '^#!' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -44,6 +48,7 @@ fi
 DATA_DIR="${SCRIPT_DIR}/.run/${NAME}"
 rm -rf "$DATA_DIR"; mkdir -p "$DATA_DIR"
 sed -e "s|__DATA_DIR__|${DATA_DIR}|g" -e "s|__PORT__|${PORT}|g" -e "s|__MCP_PORT__|$((PORT + 1))|g" \
+  -e "s|__TELEMETRY__|${TELEMETRY}|g" -e "s|__METRICS_PORT__|$((PORT + 2))|g" \
   "${SCRIPT_DIR}/config/settings.json" > "${DATA_DIR}/settings.json"
 
 # A one-commit bare repository every benchmark vessel clones.

@@ -104,6 +104,24 @@ describe('UsageOverTimeChart', () => {
     expect(container.querySelector('[data-mark="limits-0-5"]')?.getAttribute('aria-label')).toContain('Reset');
   });
 
+  it('explains reset lines with one legend entry instead of labels in the plot', () => {
+    const twoResets = [
+      point(0, 60), point(1, 5, { lastResetUtc: '2026-10-01T01:10:00.000Z' }),
+      point(2, 40, { lastResetUtc: '2026-10-01T01:10:00.000Z' }), point(3, 2, { lastResetUtc: '2026-10-01T03:05:00.000Z' }),
+    ];
+    const other = [point(0, 30), point(1, 4, { lastResetUtc: '2026-10-01T01:20:00.000Z' })];
+    const { container } = render(<UsageOverTimeChart limits={[limitSeries('acct_a', 'host_a', twoResets), limitSeries('acct_b', 'host_a', other)]} tokens={[]} fromUtc={FROM} toUtc={TO} onSelectBucket={vi.fn()} />);
+    expect(container.querySelectorAll('.usage-chart-reset')).toHaveLength(3);
+    expect(container.querySelectorAll('.usage-chart-reset text')).toHaveLength(0);
+    const legend = container.querySelector('.usage-chart-legend') as HTMLElement;
+    expect(within(legend).getAllByText('Reset')).toHaveLength(1);
+  });
+
+  it('omits the reset legend entry when no window reset', () => {
+    const { container } = render(<UsageOverTimeChart limits={[limitSeries('acct_a', 'host_a', [point(0, 10), point(1, 20)])]} tokens={[]} fromUtc={FROM} toUtc={TO} onSelectBucket={vi.fn()} />);
+    expect(container.querySelector('.usage-chart-legend-reset')).toBeNull();
+  });
+
   it('selects the focused bucket with Enter after moving with the arrow keys', () => {
     const onSelect = vi.fn();
     const limits = [
