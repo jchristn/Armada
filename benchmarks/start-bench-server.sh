@@ -6,7 +6,7 @@
 # Builds Armada.Server in Release (unless --no-build), regenerates
 # settings.json from benchmarks/config/settings.json on every start, creates
 # a local bare git repository for benchmark vessels, puts the stub agent
-# (benchmarks/stub/bin/claude) first on PATH, and starts the Admiral on
+# (benchmarks/stub/agent/claude) first on PATH, and starts the Admiral on
 # 127.0.0.1:<port> (default 25160; MCP is port + 1). Prints the PID, data
 # directory and repository URL as KEY=VALUE lines, then returns once the
 # server is healthy. Stop it with: kill <PID>.
@@ -54,7 +54,7 @@ git -C "$WORK" -c user.name=bench -c user.email=bench@example.invalid add README
 git -C "$WORK" -c user.name=bench -c user.email=bench@example.invalid commit -q -m "Benchmark seed"
 git clone -q --bare "$WORK" "$BARE"
 
-ARMADA_DATA_DIR="$DATA_DIR" ARMADA_BENCH_STUB_SECONDS="$STUB_SECONDS" PATH="${SCRIPT_DIR}/stub/bin:${PATH}" \
+ARMADA_DATA_DIR="$DATA_DIR" ARMADA_BENCH_STUB_SECONDS="$STUB_SECONDS" PATH="${SCRIPT_DIR}/stub/agent:${PATH}" \
   nohup dotnet "${REPO_ROOT}/src/Armada.Server/bin/Release/${FRAMEWORK}/Armada.Server.dll" > "${DATA_DIR}/server-console.log" 2>&1 &
 PID=$!
 for i in $(seq 1 120); do

@@ -27,7 +27,7 @@ a 50 ms noise floor), with zero accounting violations. A broken budget exits 3.
 - `start-bench-server.sh` builds `Armada.Server` in Release and runs it from the working tree with data, logs and the
   database under `benchmarks/.run/<name>/`. `settings.json` is regenerated from `config/settings.json` on every start.
 - The suite uses ports 25160-25169 on `127.0.0.1`. `~/.armada` and ports 7890/7891 are never touched.
-- Captains run `stub/bin/claude`, which waits one second and prints a stream-json result. No model or network is used.
+- Captains run `stub/agent/claude`, which waits one second and prints a stream-json result. No model or network is used.
 - Usage comes from the documented Custom capture contract: `stub/usage.py` prints a fixed five-hour window for each
   synthetic account. There is no product API that forges allowance.
 - Vessels clone a one-commit local bare repository created under `.run/`.
