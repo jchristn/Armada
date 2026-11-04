@@ -7545,7 +7545,14 @@
         "usageSelection.recovery.reserveOn": "Excepción de reserva permitida",
         "usageSelection.recovery.reserveOff": "Reserva protegida",
         "usageSelection.reason.fallbackPermission": "Usar otro capitán para esta misión requiere autorización de un administrador.",
-        "usageSelection.recovery.conflict": "Los permisos cambiaron o esta misión ya no está pendiente. Actualice antes de reintentar."
+        "usageSelection.recovery.conflict": "Los permisos cambiaron o esta misión ya no está pendiente. Actualice antes de reintentar.",
+        "usageSelection.tuiEmpty": "Abra esta pestaña para inspeccionar la selección de capitán.",
+        "usageSelection.page": "Página {{page}} de {{pages}}",
+        "usageSelection.headroom": "Margen",
+        "usageSelection.captainDeleted": "ya no existe",
+        "usageSelection.recovery.unavailable": "Los permisos de recuperación requieren un administrador del inquilino o del sistema y una misión pendiente.",
+        "usageSelection.recovery.saveFailed": "No se pudieron guardar los permisos de recuperación.",
+        "usageSelection.recovery.permissions": "Permisos"
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -14038,7 +14045,14 @@
         "usageSelection.recovery.reserveOn": "允许预留例外",
         "usageSelection.recovery.reserveOff": "保护预留",
         "usageSelection.reason.fallbackPermission": "此任务使用备用舰长需要管理员授权。",
-        "usageSelection.recovery.conflict": "权限已更改，或此任务已不再处于待处理状态。请刷新后重试。"
+        "usageSelection.recovery.conflict": "权限已更改，或此任务已不再处于待处理状态。请刷新后重试。",
+        "usageSelection.tuiEmpty": "打开此标签页以检查舰长选择。",
+        "usageSelection.page": "第 {{page}} 页，共 {{pages}} 页",
+        "usageSelection.headroom": "余量",
+        "usageSelection.captainDeleted": "已不存在",
+        "usageSelection.recovery.unavailable": "恢复权限需要租户或系统管理员，且任务处于待处理状态。",
+        "usageSelection.recovery.saveFailed": "无法保存恢复权限。",
+        "usageSelection.recovery.permissions": "权限"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -20494,7 +20508,14 @@
         "usageSelection.recovery.reserveOn": "允許預留例外",
         "usageSelection.recovery.reserveOff": "保護預留",
         "usageSelection.reason.fallbackPermission": "此任務使用備用艦長需要管理員授權。",
-        "usageSelection.recovery.conflict": "權限已變更，或此任務已不再處於待處理狀態。請重新整理後再試。"
+        "usageSelection.recovery.conflict": "權限已變更，或此任務已不再處於待處理狀態。請重新整理後再試。",
+        "usageSelection.tuiEmpty": "開啟此分頁以檢查艦長選擇。",
+        "usageSelection.page": "第 {{page}} 頁，共 {{pages}} 頁",
+        "usageSelection.headroom": "餘量",
+        "usageSelection.captainDeleted": "已不存在",
+        "usageSelection.recovery.unavailable": "復原權限需要租戶或系統管理員，且任務處於待處理狀態。",
+        "usageSelection.recovery.saveFailed": "無法儲存復原權限。",
+        "usageSelection.recovery.permissions": "權限"
       },
       "sections": {}
     },
@@ -26910,7 +26931,14 @@
         "usageSelection.recovery.reserveOn": "允許預留例外",
         "usageSelection.recovery.reserveOff": "保護預留",
         "usageSelection.reason.fallbackPermission": "此任務使用備用艦長需要管理員授權。",
-        "usageSelection.recovery.conflict": "權限已變更，或此任務已不再處於待處理狀態。請重新整理後再試。"
+        "usageSelection.recovery.conflict": "權限已變更，或此任務已不再處於待處理狀態。請重新整理後再試。",
+        "usageSelection.tuiEmpty": "打開呢個分頁睇艦長揀選。",
+        "usageSelection.page": "第 {{page}} 頁，共 {{pages}} 頁",
+        "usageSelection.headroom": "餘量",
+        "usageSelection.captainDeleted": "已經唔存在",
+        "usageSelection.recovery.unavailable": "復原權限需要租戶或者系統管理員，而且任務要喺待處理狀態。",
+        "usageSelection.recovery.saveFailed": "儲存唔到復原權限。",
+        "usageSelection.recovery.permissions": "權限"
       },
       "sections": {}
     },
@@ -33342,7 +33370,14 @@
         "usageSelection.recovery.reserveOn": "予約枠の例外を許可",
         "usageSelection.recovery.reserveOff": "予約枠を保護",
         "usageSelection.reason.fallbackPermission": "このミッションで代替キャプテンを使用するには管理者の許可が必要です。",
-        "usageSelection.recovery.conflict": "権限が変更されたか、このミッションは待機中ではなくなりました。更新してから再試行してください。"
+        "usageSelection.recovery.conflict": "権限が変更されたか、このミッションは待機中ではなくなりました。更新してから再試行してください。",
+        "usageSelection.tuiEmpty": "このタブを開いてキャプテン選択を確認します。",
+        "usageSelection.page": "{{pages}} ページ中 {{page}} ページ",
+        "usageSelection.headroom": "余裕",
+        "usageSelection.captainDeleted": "存在しません",
+        "usageSelection.recovery.unavailable": "復旧権限には、テナントまたはシステムの管理者と保留中のミッションが必要です。",
+        "usageSelection.recovery.saveFailed": "復旧権限を保存できませんでした。",
+        "usageSelection.recovery.permissions": "権限"
       },
       "sections": {}
     },
@@ -39765,7 +39800,14 @@
         "usageSelection.recovery.reserveOn": "Reserveausnahme erlaubt",
         "usageSelection.recovery.reserveOff": "Reserve geschützt",
         "usageSelection.reason.fallbackPermission": "Ein anderer Captain erfordert die Freigabe eines Administrators für diese Mission.",
-        "usageSelection.recovery.conflict": "Die Berechtigungen wurden geändert oder die Mission wartet nicht mehr. Vor dem nächsten Versuch aktualisieren."
+        "usageSelection.recovery.conflict": "Die Berechtigungen wurden geändert oder die Mission wartet nicht mehr. Vor dem nächsten Versuch aktualisieren.",
+        "usageSelection.tuiEmpty": "Öffnen Sie diesen Tab, um die Kapitänsauswahl zu prüfen.",
+        "usageSelection.page": "Seite {{page}} von {{pages}}",
+        "usageSelection.headroom": "Spielraum",
+        "usageSelection.captainDeleted": "existiert nicht mehr",
+        "usageSelection.recovery.unavailable": "Wiederherstellungsberechtigungen erfordern einen Mandanten- oder Systemadministrator und eine ausstehende Mission.",
+        "usageSelection.recovery.saveFailed": "Die Wiederherstellungsberechtigungen konnten nicht gespeichert werden.",
+        "usageSelection.recovery.permissions": "Berechtigungen"
       },
       "sections": {}
     },
@@ -46188,7 +46230,14 @@
         "usageSelection.recovery.reserveOn": "Exception de réserve autorisée",
         "usageSelection.recovery.reserveOff": "Réserve protégée",
         "usageSelection.reason.fallbackPermission": "L’utilisation d’un autre capitaine pour cette mission exige l’autorisation d’un administrateur.",
-        "usageSelection.recovery.conflict": "Les autorisations ont changé ou cette mission n’est plus en attente. Actualisez avant de réessayer."
+        "usageSelection.recovery.conflict": "Les autorisations ont changé ou cette mission n’est plus en attente. Actualisez avant de réessayer.",
+        "usageSelection.tuiEmpty": "Ouvrez cet onglet pour examiner la sélection du capitaine.",
+        "usageSelection.page": "Page {{page}} sur {{pages}}",
+        "usageSelection.headroom": "Marge",
+        "usageSelection.captainDeleted": "n'existe plus",
+        "usageSelection.recovery.unavailable": "Les autorisations de récupération exigent un administrateur du locataire ou du système et une mission en attente.",
+        "usageSelection.recovery.saveFailed": "Les autorisations de récupération n'ont pas pu être enregistrées.",
+        "usageSelection.recovery.permissions": "Autorisations"
       },
       "sections": {}
     },
@@ -52611,7 +52660,14 @@
         "usageSelection.recovery.reserveOn": "Eccezione alla riserva consentita",
         "usageSelection.recovery.reserveOff": "Riserva protetta",
         "usageSelection.reason.fallbackPermission": "Usare un altro capitano per questa missione richiede l’autorizzazione di un amministratore.",
-        "usageSelection.recovery.conflict": "I permessi sono cambiati o la missione non è più in attesa. Aggiornare prima di riprovare."
+        "usageSelection.recovery.conflict": "I permessi sono cambiati o la missione non è più in attesa. Aggiornare prima di riprovare.",
+        "usageSelection.tuiEmpty": "Apri questa scheda per esaminare la selezione del capitano.",
+        "usageSelection.page": "Pagina {{page}} di {{pages}}",
+        "usageSelection.headroom": "Margine",
+        "usageSelection.captainDeleted": "non esiste più",
+        "usageSelection.recovery.unavailable": "I permessi di ripristino richiedono un amministratore del tenant o di sistema e una missione in attesa.",
+        "usageSelection.recovery.saveFailed": "Impossibile salvare i permessi di ripristino.",
+        "usageSelection.recovery.permissions": "Permessi"
       },
       "sections": {}
     }

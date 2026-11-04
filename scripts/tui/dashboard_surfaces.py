@@ -19,7 +19,7 @@ HUB_PAGES = {
     "CliPermissions": ("/cli-permissions", "tab"),
 }
 
-EVENT_RE = re.compile(r"'((?:mission|voyage|captain|deployment|objective|incident|planning-session|objective-refinement-session|ask)\.[a-z][a-z.\-]*)'")
+EVENT_RE = re.compile(r"'((?:mission|voyage|captain|captain-selection|deployment|objective|incident|planning-session|objective-refinement-session|ask)\.[a-z][a-z.\-]*)'")
 
 
 def read(path):

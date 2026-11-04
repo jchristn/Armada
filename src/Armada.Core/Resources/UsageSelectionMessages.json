@@ -113,5 +113,12 @@
   "usageSelection.recovery.reserveOn": "Reserve exception allowed",
   "usageSelection.recovery.reserveOff": "Reserve protected",
   "usageSelection.reason.fallbackPermission": "Using another captain requires an administrator to allow eligible fallback for this mission.",
-  "usageSelection.recovery.conflict": "Permissions changed or this mission is no longer Pending. Refresh before retrying."
+  "usageSelection.recovery.conflict": "Permissions changed or this mission is no longer Pending. Refresh before retrying.",
+  "usageSelection.tuiEmpty": "Open this tab to inspect captain selection.",
+  "usageSelection.page": "Page {{page}} of {{pages}}",
+  "usageSelection.headroom": "Headroom",
+  "usageSelection.captainDeleted": "no longer exists",
+  "usageSelection.recovery.unavailable": "Recovery permissions require a tenant or system administrator and a Pending mission.",
+  "usageSelection.recovery.saveFailed": "Recovery permissions could not be saved.",
+  "usageSelection.recovery.permissions": "Permissions"
 }

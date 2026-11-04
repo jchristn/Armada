@@ -1202,8 +1202,8 @@
       "key": "authorizeCaptainSelectionRecovery",
       "status": "implemented",
       "tui": "ArmadaClient.AuthorizeCaptainSelectionRecoveryAsync",
-      "workstream": "W0.2",
-      "notes": "Battery packs"
+      "workstream": "U4",
+      "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
     {
       "kind": "api",
@@ -2586,32 +2586,32 @@
       "key": "getCaptainSelection",
       "status": "implemented",
       "tui": "ArmadaClient.GetCaptainSelectionAsync",
-      "workstream": "U2",
-      "notes": "Typed SDK transport; mission selection workflow tracked in USAGE_BASED_CAPTAIN_SELECTION_PLAN.md U4"
+      "workstream": "U4",
+      "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
     {
       "kind": "api",
       "key": "getCaptainSelectionCandidates",
       "status": "implemented",
       "tui": "ArmadaClient.GetCaptainSelectionCandidatesAsync",
-      "workstream": "U2",
-      "notes": "Typed SDK transport; mission selection workflow tracked in USAGE_BASED_CAPTAIN_SELECTION_PLAN.md U4"
+      "workstream": "U4",
+      "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
     {
       "kind": "api",
       "key": "getCaptainSelectionDecision",
       "status": "implemented",
       "tui": "ArmadaClient.GetCaptainSelectionDecisionAsync",
-      "workstream": "U2",
-      "notes": "Typed SDK transport; mission selection workflow tracked in USAGE_BASED_CAPTAIN_SELECTION_PLAN.md U4"
+      "workstream": "U4",
+      "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
     {
       "kind": "api",
       "key": "getCaptainSelectionHistory",
       "status": "implemented",
       "tui": "ArmadaClient.GetCaptainSelectionHistoryAsync",
-      "workstream": "U2",
-      "notes": "Typed SDK transport; mission selection workflow tracked in USAGE_BASED_CAPTAIN_SELECTION_PLAN.md U4"
+      "workstream": "U4",
+      "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
     {
       "kind": "api",
@@ -3954,8 +3954,8 @@
       "key": "previewCaptainSelection",
       "status": "implemented",
       "tui": "ArmadaClient.PreviewCaptainSelectionAsync",
-      "workstream": "U2",
-      "notes": "Typed SDK transport; mission selection workflow tracked in USAGE_BASED_CAPTAIN_SELECTION_PLAN.md U4"
+      "workstream": "U4",
+      "notes": "Mission Captain Selection tab (MissionSelectionPanel): summary, comparison, history, preview and administrator recovery"
     },
     {
       "kind": "api",
@@ -4908,6 +4908,14 @@
       "tui": "NotificationService",
       "workstream": "W1.10",
       "notes": "toast and notification history; approvals queue (reviews, landings, stalls, deployment approvals)"
+    },
+    {
+      "kind": "event",
+      "key": "captain-selection.changed",
+      "status": "implemented",
+      "tui": "MissionSelectionPanel",
+      "workstream": "U4",
+      "notes": "reloads the mission's Captain Selection tab for a matching mission id; carries no evidence"
     },
     {
       "kind": "event",

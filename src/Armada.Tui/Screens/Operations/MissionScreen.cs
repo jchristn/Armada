@@ -5,6 +5,7 @@ namespace Armada.Tui.Screens.Operations
     using System.Globalization;
     using System.Linq;
     using Armada.Client.Models;
+    using Armada.Client.Socket;
     using Armada.Core;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -19,7 +20,7 @@ namespace Armada.Tui.Screens.Operations
     /// Mark Complete, Diff, Log, Instructions, Run Check, Land or Retry Landing), the More menu (Edit, Transition
     /// Status, View JSON, Restart, Purge, Delete, and the rest), and panels for the overview (Landing Preview, GitHub
     /// Pull Request with refresh and open, every field, failure reason, review comment), the description (Markdown, copy
-    /// raw), linked checks and deployments, and playbook snapshots; the overview also shows the CLI tool permission
+    /// raw), linked checks and deployments, playbook snapshots, and captain selection (see <see cref="MissionSelectionPanel"/>); the overview also shows the CLI tool permission
     /// policy the captain launched with (the note the Admiral writes at the top of the mission log). Reloads on
     /// <c>mission.changed</c>. Not thread-safe.
     /// </summary>
@@ -112,6 +113,11 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public BlackBoxFailurePanel Failure { get; }
 
+        /// <summary>
+        /// Captain Selection panel: selection summary, comparison, history, preview and recovery permissions.
+        /// </summary>
+        public MissionSelectionPanel Selection { get; }
+
         #endregion
 
         #region Private-Members
@@ -167,6 +173,7 @@ namespace Armada.Tui.Screens.Operations
             Failure = new BlackBoxFailurePanel(this, BlackBoxPanelSourceEnum.Mission, () => MissionId);
             Failure.Changed = Load;
             AddFailureActions(this, Failure);
+            Selection = new MissionSelectionPanel(this, () => MissionId, () => Mission?.Status.ToString());
 
             Overview.Builder = BuildOverview;
             Description.Builder = BuildDescription;
@@ -178,14 +185,17 @@ namespace Armada.Tui.Screens.Operations
             AddPanel("description", "Description", Description);
             AddPanel("linked", "Linked Checks and Deployments", Linked);
             AddPanel("playbooks", "Playbooks", Playbooks);
+            AddPanel("selection", "usageSelection.title", Selection);
             AddPanel("failure", "Failure", Failure);
             Tabs.SelectedChanged += (s, e) =>
             {
                 if (ReferenceEquals(CurrentPanel, Failure)) Failure.Ensure();
+                if (ReferenceEquals(CurrentPanel, Selection)) Selection.Ensure();
             };
 
             SubscribeCoalesced("mission.changed", Load);
             SubscribeCoalesced("blackbox.", () => { if (Failure.Loaded) Failure.Reload(); });
+            Track(Context.Events.Subscribe(ArmadaEventTypes.CaptainSelectionChanged, Selection.OnSocketMessage));
             Load();
             LoadLinked();
         }
