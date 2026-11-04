@@ -16,7 +16,7 @@ This wave adds opt-in Enforce admission and operator inspection on `feature/v1.3
 
 The existing mobile mission overview includes Captain selection. Compare captains opens readable, stacked entries using native text and key/value controls, so a phone or enlarged text does not require a desktop-width table. History has server-side All/Admitted/Waiting filters, paging and retained-decision inspection. Preview displays its readiness reason even with no candidate rows. Refresh, navigation, pagination and JSON use existing native controls. Intended/runtime-reported models remain separate; deleted captain names remain plain text. Access revocation clears cached data and JSON. Queries are canceled when superseded; periodic refresh pauses while the screen is unfocused or the app is in the background.
 
-Native verification includes 1,391 assertions across 84 suites, type checking, native/shared lint and focused selection tests. Device/emulator visual review and full native recovery/settings parity remain U4/U5 checks; the browser screenshots in this wave are Dashboard evidence, not device screenshots.
+Native verification includes 1,392 assertions across 84 suites, type checking, native/shared lint and focused selection tests. Device/emulator visual review and full native recovery/settings parity remain U4/U5 checks; the browser screenshots in this wave are Dashboard evidence, not device screenshots.
 
 ## Admission and accounting
 
@@ -54,12 +54,22 @@ Classified provider cooldowns, audited authorized fallback/reserve exceptions, c
 
 ## Verification record
 
-Local evidence for this wave includes 61/61 browser checks with inspected screenshots, 1,892/1,892 Dashboard tests and a production build, native type checking and 1,391/1,391 native assertions, six fixture-backed Helm command checks, 55 targeted repair/admission/response-shape checks, and the refreshed public API inventory (528 REST routes, 270 MCP tools, 98 CLI commands). PostgreSQL, MySQL and SQL Server each pass 55/55 shared checks, including admission/repair races, mission CRUD and migration hygiene. Final framework/provider/full-suite/build outcomes are recorded below when complete. Provider and runtime fixtures are isolated; these checks do not deploy the production server.
+The final backend omnibus on source `9214ed53f` is green. These are isolated development checks; production was not deployed.
 
-The enforcement source wave is `e3bd1abc4`; container catalog follow-ups are `d2274d9d6` and `cc7c33a92`. `build-all.sh v1.3.0` succeeded, pushing/pulling the server, dashboard and proxy `v1.3.0`/`latest` images and producing the VSIX. Native inspection/parity follow-up `1f3b59b78` also completed `build-all v1.3.0`. Headless TUI fixtures now start with an explicit Dark palette so `NO_COLOR=1` in an automation shell does not invalidate Unicode-specific layout assertions; explicit Auto/high-contrast tests remain intact (60/60 related checks pass).
+| Verification | Result |
+| --- | --- |
+| .NET 10 omnibus | 6,885 passed, zero failed, 14 skipped |
+| .NET 8 focused API/storage/admission/MCP checks | 83/83 passed |
+| PostgreSQL, MySQL and SQL Server shared provider checks | 55/55 each |
+| Dashboard tests and production build | 1,892/1,892 passed; build succeeded |
+| Native tests, type checking and native/shared lint | 1,392/1,392 passed across 84 suites; clean process exit and static checks passed |
+| TUI palette and parity checks | 60/60 passed |
+| Dashboard browser layout, localization and keyboard checks | 61/61 passed; representative screenshots inspected |
+| Fixture-backed Helm commands | 6/6 passed |
+| Repository Postman selection requests | Seven requests parsed; assertion scripts compiled |
 
-The Observe exit checks now include authenticated retained detail after real raw-capture pruning and server restart, placement-policy refusal without writes, and retry backoff with an untried qualified alternative. Preview badges say Proposed. The final batch passes 50 checks on .NET 8 (including storage/admission) and 26 on .NET 10 (selection API/admission parity). Phone captain-column sizing preserves the visible status column; the 61-case browser rerun and inspected preview screenshots pass.
+The backend run includes retained evidence after actual raw pruning and server restart, placement refusal without preview writes, retry backoff, shared-account admission races, and failed-transaction rollback. The 14 skips cover unavailable toolchain, provider-specific and baseline-upgrade fixtures; broader stress/platform/upgrade validation remains U5/U6 work.
 
-The omnibus regression attempt was **not all green**: eight TUI failures from inherited NO_COLOR/parity metadata were subsequently fixed and pass the 60-case TUI group. One order-dependent MCP bulk-error formatting failure remains for U5 investigation; the diagnostic now includes the unexpected text. The complete E2E group passes 1,346 tests with one provider-inapplicable skip, and Client/Database/ResponseShape passes 796/796. This is distinct from the passing selection/accounting invariants; do not report the earlier omnibus as a clean full-suite run.
+Headless TUI tests explicitly select their expected palette; Auto/high-contrast tests remain intact. The MCP contract crawler respects the existing 100-calls/second production limit, and its helper validates initialization and closes owned sessions. These corrections resolve the earlier omnibus failures without changing production throttling.
 
-Observe exit wave `048629f8a` completed `build-all v1.3.0` successfully. U1 and U2 are complete; U3-U6 remain active. The MCP test helper now validates initialization and closes its owned session; a one-session-budget fixture verifies repeated calls release that budget and failed initialization cannot dispatch a tool. The targeted MCP/selection/response-shape batch passes 12/12. This is a tested resource-lifecycle correction, while a clean post-fix omnibus run remains a U5 requirement.
+Public inventory is 528 REST routes, 270 MCP tools and 98 CLI commands. Repeated `build-all.sh v1.3.0` waves have published server, dashboard and proxy images with Linux amd64/arm64 manifests and produced the VSIX. Artifact probes confirm the server/proxy assemblies and bundled Dashboard assets, and the standalone Dashboard index. U1/U2 are complete; the remaining work above and in U3-U6 is explicit.

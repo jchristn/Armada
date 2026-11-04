@@ -76,14 +76,13 @@ function CaptainSelectionBody({ missionId, status, revision, onOpen }: Selection
     focused.current = true;
     if (initialFocus.current) initialFocus.current = false;
     else void reload.current();
-    return () => { focused.current = false; loading.current = false; abort.current?.abort(); };
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active' && !loading.current) void reload.current();
+    }, 15000);
+    return () => { clearInterval(timer); focused.current = false; loading.current = false; abort.current?.abort(); };
   }, []));
   // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch scoped evidence when its query or mission revision changes
   useEffect(() => { void load(); return () => abort.current?.abort(); }, [load, revision]);
-  useEffect(() => {
-    const timer = setInterval(() => { if (focused.current && AppState.currentState === 'active' && !loading.current) void load(); }, 15000);
-    return () => clearInterval(timer);
-  }, [load]);
   const choose = (value: ViewMode) => { setView(value); setPage(1); setRecord(null); setExpanded(true); };
   const rows = view === 'history' ? history : candidates;
   return <Section title={t('usageSelection.title')}>

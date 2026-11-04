@@ -1,11 +1,25 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import type { EffectCallback } from 'react';
+import { AppState } from 'react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 import * as client from '@dashboard/api/client';
 import type { CaptainSelectionDecisionView } from '@dashboard/types/models';
 import { CaptainSelectionSection } from '../screens/operations/mission/CaptainSelectionSection';
 import { page } from '../test/operationsClient';
 import { renderScreen } from '../test/screen';
 
-jest.mock('expo-router', () => require('../test/routerMock').routerMockFactory());
+let mockFocusEffect: EffectCallback | undefined;
+let mockBlurEffect: (() => void) | undefined;
+jest.mock('expo-router', () => ({
+  ...require('../test/routerMock').routerMockFactory(),
+  useFocusEffect(effect: EffectCallback) {
+    const { useEffect } = jest.requireActual<typeof import('react')>('react');
+    useEffect(() => {
+      mockFocusEffect = effect;
+      const cleanup = effect(); mockBlurEffect = typeof cleanup === 'function' ? cleanup : undefined;
+      return cleanup;
+    }, [effect]);
+  },
+}));
 jest.mock('@dashboard/api/client', () => require('../test/operationsClient').operationsClientMockFactory());
 const api = client as jest.Mocked<typeof client>;
 const decision: CaptainSelectionDecisionView = { id: 'csd_one', tenantId: 'tenant', missionId: 'msn_one', trigger: 'Dispatch', outcome: 'Admitted', mode: 'Enforce', strategy: 'MostRemainingAllowance',
@@ -23,6 +37,27 @@ beforeEach(() => {
   api.getCaptainSelectionHistory.mockResolvedValue(page([{ ...decision, id: 'csd_older', outcome: 'Waiting', reasonCode: 'PlacementWaiting' }], 1, 10));
   api.previewCaptainSelection.mockResolvedValue({ missionId: 'msn_one', isPreview: true, mode: 'Enforce', strategy: 'MostRemainingAllowance', evaluatedUtc: decision.evaluatedUtc,
     reasonCode: 'VesselMissing', candidates: page([]) });
+});
+it('polls only the focused screen and reloads when it regains focus', async () => {
+  jest.useFakeTimers();
+  const previousState = AppState.currentState; AppState.currentState = 'active';
+  let closeRefocused: ReturnType<EffectCallback> = undefined;
+  try {
+    await renderScreen(<CaptainSelectionSection missionId="msn_one" status="Pending" onOpen={open} />);
+    await screen.findByText('runtime-model');
+    const initial = api.getCaptainSelection.mock.calls.length;
+    await act(async () => { jest.advanceTimersByTime(30000); });
+    expect(api.getCaptainSelection.mock.calls.length).toBeGreaterThan(initial);
+    await act(async () => { mockBlurEffect?.(); });
+    const paused = api.getCaptainSelection.mock.calls.length;
+    await act(async () => { jest.advanceTimersByTime(30000); });
+    expect(api.getCaptainSelection).toHaveBeenCalledTimes(paused);
+    await act(async () => { closeRefocused = mockFocusEffect?.(); });
+    expect(api.getCaptainSelection).toHaveBeenCalledTimes(paused + 1);
+  } finally {
+    await act(async () => { if (typeof closeRefocused === 'function') closeRefocused(); });
+    AppState.currentState = previousState; jest.useRealTimers();
+  }
 });
 it('separates intended/reported models, keeps deleted captains unlinked and pages comparisons', async () => {
   await renderScreen(<CaptainSelectionSection missionId="msn_one" status="InProgress" onOpen={open} />);
