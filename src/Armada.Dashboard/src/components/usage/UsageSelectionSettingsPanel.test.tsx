@@ -5,7 +5,8 @@ import { translateTemplate } from '../../i18n/runtime';
 import UsageSelectionSettingsPanel from './UsageSelectionSettingsPanel';
 import type { SettingsData } from '../../types/models';
 
-vi.mock('../../api/client', () => ({ getSettings: vi.fn(), updateSettings: vi.fn(), apiErrorMessage: vi.fn((error: unknown, fallback: string) => error instanceof Error ? error.message : fallback) }));
+vi.mock('../../api/client', () => ({ getSettings: vi.fn(), updateSettings: vi.fn(),
+  isApiStatus: (error: unknown, status: number) => (error as { status?: number })?.status === status, apiErrorMessage: vi.fn((error: unknown, fallback: string) => error instanceof Error ? error.message : fallback) }));
 const locale = { t: (key: string) => translateTemplate('en', key, null) };
 vi.mock('../../context/LocaleContext', () => ({ useLocale: () => locale }));
 const stored: SettingsData = {
@@ -55,6 +56,13 @@ describe('configurable captain selection', () => {
     expect(strategy).toHaveValue('MostRemainingAllowance');
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(strategy).toHaveValue('FirstAvailable'));
+  });
+  it('explains a stale revision as a settings conflict', async () => {
+    vi.mocked(updateSettings).mockRejectedValue(Object.assign(new Error('Conflict'), { status: 409 }));
+    render(<UsageSelectionSettingsPanel canEdit />);
+    await screen.findByLabelText('Selection strategy');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Another administrator changed these settings. Refresh before saving again.');
   });
   it('rejects blank numeric input and cross-field reserve errors', async () => {
     render(<UsageSelectionSettingsPanel canEdit />);

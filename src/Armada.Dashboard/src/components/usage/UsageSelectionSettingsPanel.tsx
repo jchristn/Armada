@@ -1,17 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { apiErrorMessage, getSettings, updateSettings } from '../../api/client';
+import { apiErrorMessage, getSettings, isApiStatus, updateSettings } from '../../api/client';
 import { useLocale } from '../../context/LocaleContext';
+import { USAGE_SELECTION_BOUNDS, USAGE_SELECTION_NUMERIC_FIELDS, USAGE_SELECTION_STRATEGY_KEYS, usageSelectionModeDescriptionKey, usageSelectionReadOnly, usageSelectionValid } from '../../lib/usageSelectionForm';
 import type { CaptainSelectionStrategy, SettingsData, UsageSelectionSettings } from '../../types/models';
-
-type NumericField = Exclude<keyof UsageSelectionSettings, 'mode' | 'strategy' | 'unknownUsageBehavior'>;
-const bounds: Record<NumericField, [number, number, number]> = {
-  reservePercent: [0, 95, 0.1], comfortableHeadroomPercent: [1, 100, 0.1], perAttemptReservationPercent: [0.1, 25, 0.1],
-  maximumFreshnessSeconds: [120, 86400, 1], unknownRetrySeconds: [5, 3600, 1], providerCooldownSeconds: [5, 3600, 1],
-  settlementLagSeconds: [0, 3600, 1], maximumUnsettledSeconds: [60, 86400, 1], decisionRetentionDays: [7, 1825, 1], maximumCandidates: [1, 10000, 1],
-};
-const strategyKey: Record<CaptainSelectionStrategy, string> = {
-  FirstAvailable: 'usageSelection.firstAvailable', MostRemainingAllowance: 'usageSelection.mostRemaining', MostUsedAllowance: 'usageSelection.mostUsed',
-};
 
 /** Uses the same server settings controls as usage capture, with optimistic revision checks. */
 export default function UsageSelectionSettingsPanel({ canEdit }: { canEdit: boolean }) {
@@ -33,9 +24,8 @@ export default function UsageSelectionSettingsPanel({ canEdit }: { canEdit: bool
   useEffect(() => { if (canEdit) void load(); }, [canEdit, load]);
   if (!canEdit) return <section className="settings-section usage-settings"><h3>{t('usageSelection.title')}</h3><p className="text-dim">{t('usageSelection.adminOnly')}</p></section>;
   const capability = settings?.usageSelectionCapabilities;
-  const readOnly = capability?.environmentOverride || capability?.appliedLive === false;
-  const invalid = form && ((Object.keys(bounds) as NumericField[]).some(key => !Number.isFinite(form[key]) || form[key] < bounds[key][0] || form[key] > bounds[key][1]
-    || bounds[key][2] === 1 && !Number.isInteger(form[key])) || form.comfortableHeadroomPercent <= form.reservePercent);
+  const readOnly = usageSelectionReadOnly(capability);
+  const invalid = form && !usageSelectionValid(form);
   async function save() {
     if (!form || invalid || readOnly) return;
     setSaving(true); setMessage(null);
@@ -43,13 +33,13 @@ export default function UsageSelectionSettingsPanel({ canEdit }: { canEdit: bool
       const result = await updateSettings({ usageSelection: form, expectedUsageSelectionRevision: settings?.usageSelectionRevision });
       setSettings(result); setForm(result.usageSelection ? { ...result.usageSelection } : form);
       setMessage({ error: false, text: t('usageSelection.saved') });
-    } catch (error) { setMessage({ error: true, text: apiErrorMessage(error, t('usageSelection.saveFailed')) }); }
+    } catch (error) { setMessage({ error: true, text: isApiStatus(error, 409) ? t('usageSelection.conflict') : apiErrorMessage(error, t('usageSelection.saveFailed')) }); }
     finally { setSaving(false); }
   }
   return <section className="settings-section usage-settings usage-selection-settings" style={{ marginTop: '1.5rem' }} aria-labelledby="usage-selection-title">
     <div className="usage-panel-heading"><h3 id="usage-selection-title">{t('usageSelection.title')}</h3>
       <button type="button" className="btn btn-sm" onClick={() => void load()} disabled={loading || saving}>{t('Refresh')}</button></div>
-    <p className="text-dim">{t(form?.mode === 'Enforce' ? 'usageSelection.enforceDescription' : form?.mode === 'Disabled' ? 'usageSelection.disabledDescription' : 'usageSelection.description')}</p>
+    <p className="text-dim">{t(usageSelectionModeDescriptionKey(form?.mode))}</p>
     {loading && <p role="status">{t('Loading...')}</p>}
     {message && <p className={message.error ? 'usage-form-error' : 'text-dim'} role={message.error ? 'alert' : 'status'}>{message.text}</p>}
     {readOnly && <p className="text-dim">{t('usageSelection.environment')}</p>}
@@ -64,7 +54,7 @@ export default function UsageSelectionSettingsPanel({ canEdit }: { canEdit: bool
             </select>{!capability?.enforcementAvailable && <span className="text-dim">{t('usageSelection.enforcementUnavailable')}</span>}</div>
           <div className="form-group"><label htmlFor="usage-selection-strategy">{t('usageSelection.strategy')}</label>
             <select id="usage-selection-strategy" aria-describedby="usage-selection-strategy-hint" value={form.strategy} onChange={e => setForm({ ...form, strategy: e.target.value as CaptainSelectionStrategy })}>
-              {(capability?.strategies ?? Object.keys(strategyKey) as CaptainSelectionStrategy[]).map(strategy => <option key={strategy} value={strategy}>{t(strategyKey[strategy])}</option>)}
+              {(capability?.strategies ?? Object.keys(USAGE_SELECTION_STRATEGY_KEYS) as CaptainSelectionStrategy[]).map(strategy => <option key={strategy} value={strategy}>{t(USAGE_SELECTION_STRATEGY_KEYS[strategy])}</option>)}
             </select><span className="text-dim" id="usage-selection-strategy-hint">{t('usageSelection.strategyHint')}</span></div>
           <div className="form-group"><label htmlFor="usage-selection-unknown">{t('usageSelection.unknown')}</label>
             <select id="usage-selection-unknown" value={form.unknownUsageBehavior} onChange={e => setForm({ ...form, unknownUsageBehavior: e.target.value as UsageSelectionSettings['unknownUsageBehavior'] })}>
@@ -72,9 +62,9 @@ export default function UsageSelectionSettingsPanel({ canEdit }: { canEdit: bool
             </select></div>
         </div>
         <details><summary>{t('usageSelection.advanced')}</summary><div className="usage-capture-grid">
-          {(Object.keys(bounds) as NumericField[]).map(key => <div className="form-group" key={key}>
+          {USAGE_SELECTION_NUMERIC_FIELDS.map(key => <div className="form-group" key={key}>
             <label htmlFor={`usage-selection-${key}`}>{t(`usageSelection.${key}`)}</label>
-            <input id={`usage-selection-${key}`} type="number" min={bounds[key][0]} max={bounds[key][1]} step={bounds[key][2]} value={Number.isNaN(form[key]) ? '' : form[key]}
+            <input id={`usage-selection-${key}`} type="number" min={USAGE_SELECTION_BOUNDS[key].min} max={USAGE_SELECTION_BOUNDS[key].max} step={USAGE_SELECTION_BOUNDS[key].step} value={Number.isNaN(form[key]) ? '' : form[key]}
               onChange={e => setForm({ ...form, [key]: e.target.value === '' ? NaN : Number(e.target.value) })} />
           </div>)}
         </div></details>

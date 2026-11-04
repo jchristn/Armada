@@ -1,3 +1,4 @@
+import { UsageSelectionSettings } from '../usage/UsageSelectionSettings';
 import { UsageSettings } from '../usage/UsageSettings';
 import { useRouter, type Href } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -78,6 +79,7 @@ export function ServerSettingsTab() {
         <Banner tone="warning" title={t('This page is connected through Armada.Proxy for {{instanceId}}. Local server settings, tunnel settings, setup, restore, shutdown, and factory reset are blocked in remote mode.', { instanceId: instanceId || t('the selected deployment') })} />
       ) : null}
       {isAdmin && !proxyMode ? <UsageSettings /> : null}
+      {isAdmin && !proxyMode ? <UsageSelectionSettings /> : null}
       {!settings ? <Banner tone="danger" title={t('Failed to load server settings. Health data is available, but configuration and backup sections could not be loaded.')} /> : null}
       {incomplete && isAdmin && !proxyMode ? (
         <>

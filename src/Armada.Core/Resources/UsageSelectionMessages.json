@@ -120,5 +120,8 @@
   "usageSelection.captainDeleted": "no longer exists",
   "usageSelection.recovery.unavailable": "Recovery permissions require a tenant or system administrator and a Pending mission.",
   "usageSelection.recovery.saveFailed": "Recovery permissions could not be saved.",
-  "usageSelection.recovery.permissions": "Permissions"
+  "usageSelection.recovery.permissions": "Permissions",
+  "usageSelection.numberRange": "Enter a number from {{min}} to {{max}}.",
+  "usageSelection.save": "Save captain selection settings",
+  "usageSelection.conflict": "Another administrator changed these settings. Refresh before saving again."
 }

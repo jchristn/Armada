@@ -35,6 +35,33 @@ namespace Armada.Tui.Screens.Admin
         }
 
         /// <summary>
+        /// Validate a decimal number (invariant culture, "." separator) within an inclusive range.
+        /// </summary>
+        /// <param name="loc">Localizer.</param>
+        /// <param name="text">Text.</param>
+        /// <param name="min">Minimum.</param>
+        /// <param name="max">Maximum.</param>
+        /// <returns>Translated error, or null.</returns>
+        public static string? DecimalRange(ITextLocalizer loc, string text, double min, double max)
+        {
+            double? n = ParseDouble(text);
+            if (n.HasValue && n.Value >= min && n.Value <= max) return null;
+            return loc.T("usageSelection.numberRange", LocalizationArgs.Of("min", min.ToString(CultureInfo.InvariantCulture), "max", max.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        /// <summary>
+        /// Parse a finite decimal number (invariant culture), or null.
+        /// </summary>
+        /// <param name="text">Text.</param>
+        /// <returns>The number, or null.</returns>
+        public static double? ParseDouble(string? text)
+        {
+            string value = (text ?? "").Trim();
+            if (value.Length == 0 || !Double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double n) || !Double.IsFinite(n)) return null;
+            return n;
+        }
+
+        /// <summary>
         /// Dashboard <c>rangeError</c>: any value that is not a whole number in range gets "Must be a whole number
         /// from {{min}} to {{max}}."
         /// </summary>

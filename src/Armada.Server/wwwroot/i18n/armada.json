@@ -7552,7 +7552,10 @@
         "usageSelection.captainDeleted": "ya no existe",
         "usageSelection.recovery.unavailable": "Los permisos de recuperación requieren un administrador del inquilino o del sistema y una misión pendiente.",
         "usageSelection.recovery.saveFailed": "No se pudieron guardar los permisos de recuperación.",
-        "usageSelection.recovery.permissions": "Permisos"
+        "usageSelection.recovery.permissions": "Permisos",
+        "usageSelection.numberRange": "Introduzca un número entre {{min}} y {{max}}.",
+        "usageSelection.save": "Guardar la configuración de selección de capitán",
+        "usageSelection.conflict": "Otro administrador cambió esta configuración. Actualice antes de volver a guardar."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -14052,7 +14055,10 @@
         "usageSelection.captainDeleted": "已不存在",
         "usageSelection.recovery.unavailable": "恢复权限需要租户或系统管理员，且任务处于待处理状态。",
         "usageSelection.recovery.saveFailed": "无法保存恢复权限。",
-        "usageSelection.recovery.permissions": "权限"
+        "usageSelection.recovery.permissions": "权限",
+        "usageSelection.numberRange": "请输入 {{min}} 到 {{max}} 之间的数字。",
+        "usageSelection.save": "保存舰长选择设置",
+        "usageSelection.conflict": "另一位管理员更改了这些设置。请刷新后再保存。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -20515,7 +20521,10 @@
         "usageSelection.captainDeleted": "已不存在",
         "usageSelection.recovery.unavailable": "復原權限需要租戶或系統管理員，且任務處於待處理狀態。",
         "usageSelection.recovery.saveFailed": "無法儲存復原權限。",
-        "usageSelection.recovery.permissions": "權限"
+        "usageSelection.recovery.permissions": "權限",
+        "usageSelection.numberRange": "請輸入 {{min}} 到 {{max}} 之間的數字。",
+        "usageSelection.save": "儲存艦長選擇設定",
+        "usageSelection.conflict": "另一位管理員變更了這些設定。請重新整理後再儲存。"
       },
       "sections": {}
     },
@@ -26938,7 +26947,10 @@
         "usageSelection.captainDeleted": "已經唔存在",
         "usageSelection.recovery.unavailable": "復原權限需要租戶或者系統管理員，而且任務要喺待處理狀態。",
         "usageSelection.recovery.saveFailed": "儲存唔到復原權限。",
-        "usageSelection.recovery.permissions": "權限"
+        "usageSelection.recovery.permissions": "權限",
+        "usageSelection.numberRange": "請輸入 {{min}} 至 {{max}} 之間嘅數字。",
+        "usageSelection.save": "儲存艦長揀選設定",
+        "usageSelection.conflict": "另一位管理員改咗呢啲設定。請重新整理之後再儲存。"
       },
       "sections": {}
     },
@@ -33377,7 +33389,10 @@
         "usageSelection.captainDeleted": "存在しません",
         "usageSelection.recovery.unavailable": "復旧権限には、テナントまたはシステムの管理者と保留中のミッションが必要です。",
         "usageSelection.recovery.saveFailed": "復旧権限を保存できませんでした。",
-        "usageSelection.recovery.permissions": "権限"
+        "usageSelection.recovery.permissions": "権限",
+        "usageSelection.numberRange": "{{min}} から {{max}} までの数値を入力してください。",
+        "usageSelection.save": "キャプテン選択の設定を保存",
+        "usageSelection.conflict": "別の管理者がこの設定を変更しました。再読み込みしてから保存してください。"
       },
       "sections": {}
     },
@@ -39807,7 +39822,10 @@
         "usageSelection.captainDeleted": "existiert nicht mehr",
         "usageSelection.recovery.unavailable": "Wiederherstellungsberechtigungen erfordern einen Mandanten- oder Systemadministrator und eine ausstehende Mission.",
         "usageSelection.recovery.saveFailed": "Die Wiederherstellungsberechtigungen konnten nicht gespeichert werden.",
-        "usageSelection.recovery.permissions": "Berechtigungen"
+        "usageSelection.recovery.permissions": "Berechtigungen",
+        "usageSelection.numberRange": "Geben Sie eine Zahl von {{min}} bis {{max}} ein.",
+        "usageSelection.save": "Einstellungen der Kapitänsauswahl speichern",
+        "usageSelection.conflict": "Ein anderer Administrator hat diese Einstellungen geändert. Aktualisieren Sie, bevor Sie erneut speichern."
       },
       "sections": {}
     },
@@ -46237,7 +46255,10 @@
         "usageSelection.captainDeleted": "n'existe plus",
         "usageSelection.recovery.unavailable": "Les autorisations de récupération exigent un administrateur du locataire ou du système et une mission en attente.",
         "usageSelection.recovery.saveFailed": "Les autorisations de récupération n'ont pas pu être enregistrées.",
-        "usageSelection.recovery.permissions": "Autorisations"
+        "usageSelection.recovery.permissions": "Autorisations",
+        "usageSelection.numberRange": "Saisissez un nombre entre {{min}} et {{max}}.",
+        "usageSelection.save": "Enregistrer les paramètres de sélection du capitaine",
+        "usageSelection.conflict": "Un autre administrateur a modifié ces paramètres. Actualisez avant d'enregistrer à nouveau."
       },
       "sections": {}
     },
@@ -52667,7 +52688,10 @@
         "usageSelection.captainDeleted": "non esiste più",
         "usageSelection.recovery.unavailable": "I permessi di ripristino richiedono un amministratore del tenant o di sistema e una missione in attesa.",
         "usageSelection.recovery.saveFailed": "Impossibile salvare i permessi di ripristino.",
-        "usageSelection.recovery.permissions": "Permessi"
+        "usageSelection.recovery.permissions": "Permessi",
+        "usageSelection.numberRange": "Inserisci un numero da {{min}} a {{max}}.",
+        "usageSelection.save": "Salva le impostazioni di selezione del capitano",
+        "usageSelection.conflict": "Un altro amministratore ha modificato queste impostazioni. Aggiorna prima di salvare di nuovo."
       },
       "sections": {}
     }
