@@ -2400,6 +2400,13 @@ table.table-dense td { padding-left: 0.45rem; padding-right: 0.45rem; }
     color: #2a6b4d;
 }
 
+/* A strategy's proposed (not admitted) captain: an outline so it reads as a suggestion, not a state. */
+.readiness-pill.proposed {
+    background: transparent;
+    border: 1px solid var(--accent-solid);
+    color: var(--accent-solid);
+}
+
 .readiness-pill.warning {
     background: rgba(191, 132, 36, 0.14);
     color: #8a5a12;

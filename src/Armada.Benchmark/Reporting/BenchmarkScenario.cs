@@ -10,6 +10,10 @@ namespace Armada.Benchmark.Reporting
         [JsonPropertyName("candidates")]
         public int Candidates { get; set; }
 
+        /// <summary>Missions each captain may run at once.</summary>
+        [JsonPropertyName("captainConcurrency")]
+        public int CaptainConcurrency { get; set; } = 4;
+
         /// <summary>Missions per arm.</summary>
         [JsonPropertyName("missions")]
         public int Missions { get; set; }

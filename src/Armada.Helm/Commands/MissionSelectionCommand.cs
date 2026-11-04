@@ -43,7 +43,8 @@ namespace Armada.Helm.Commands
                 if (IsJsonMode(settings)) { WriteJson(preview); return preview == null ? 1 : 0; }
                 if (preview == null) return 1;
                 AnsiConsole.MarkupLine(Markup.Escape(UsageSelectionText.ForReason(preview.ReasonCode)));
-                RenderCandidates(preview.Candidates);
+                // A mission that cannot be previewed (for example not Pending) has no comparison; skip the empty table.
+                if (preview.Candidates.TotalRecords > 0) RenderCandidates(preview.Candidates);
                 return 0;
             }
             CaptainSelectionDecisionDetail? detail;

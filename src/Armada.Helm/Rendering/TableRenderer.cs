@@ -1,5 +1,6 @@
 namespace Armada.Helm.Rendering
 {
+    using System;
     using Spectre.Console;
     using Armada.Core.Enums;
 
@@ -164,8 +165,10 @@ namespace Armada.Helm.Rendering
         /// </summary>
         public static void RenderPaginationHeader(int pageNumber, int totalPages, long totalRecords, double totalMs)
         {
+            // Routes that do not time their reads report zero; omit the timing rather than print "0.0ms".
+            string timing = totalMs > 0 ? $" · {totalMs:F1}ms" : "";
             AnsiConsole.MarkupLine(
-                $"[dim]Page {pageNumber} of {totalPages} · {totalRecords} total records · {totalMs:F1}ms[/]");
+                $"[dim]Page {pageNumber} of {Math.Max(totalPages, 1)} · {totalRecords} total records{timing}[/]");
         }
 
         /// <summary>

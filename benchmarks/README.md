@@ -15,8 +15,8 @@ unrecorded 20-mission Observe warmup runs first.
 | Admission latency p50/p95/p99 | `AssignedUtc - CreatedUtc` per mission: creation to the atomic slot assignment. With fewer captains than missions this includes queueing for a free captain, which is the same in every arm. |
 | Throughput | Admissions per second from the first creation to the last assignment. |
 | Waited over 5 s | Missions whose admission took longer than five seconds. |
-| Account distribution | Admissions per synthetic account (captains are spread round-robin over accounts at 10, 20, 30, 50 and 89 percent used). |
-| Accounting violations | Enforce only: an account admitted more attempts than `floor((100 - used - reserve) / perAttempt)`. The check counts an attempt as settled only after a later capture of its account (read from `/api/v1/usage/snapshots`), which is more lenient than the real reconciler, so any value above the bound is a real over-admission. |
+| Account distribution | Admissions per synthetic account (captains, 4 concurrent missions each by default, are spread round-robin over accounts at 10, 20, 30, 50 and 89 percent used). |
+| Accounting violations | Enforce only: while the arm runs the harness samples the reservation estimates Armada publishes on `GET /api/v1/usage/latest` once a second. Active plus unsettled reservation on an account must never exceed `100 - used - reserve`. |
 | Errors and incomplete missions | Any request error or a mission that did not finish before the arm timeout makes the run incomparable (exit 1). |
 
 The budget, from the usage-selection plan: Observe and Enforce p95 admission must stay within 20% of Disabled (plus

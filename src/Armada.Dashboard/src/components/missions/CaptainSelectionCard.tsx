@@ -94,7 +94,7 @@ export default function CaptainSelectionCard({ missionId, status, revision }: Ca
         : <strong title={row.captainName}>{row.captainName || row.captainId}</strong>}
       <span className="text-dim" title={row.model ?? undefined}>{row.model || t('Unknown')}</span>
     </div> },
-    { key: 'outcome', label: t('Status'), className: 'selection-status-column', render: row => <span className={`readiness-pill ${row.actualSelection ? 'ready' : row.band === 'Blocked' || row.band === 'Unknown' ? 'warning' : ''}`}>{t(selectionOutcomeKey(row, view === 'preview'))}</span> },
+    { key: 'outcome', label: t('Status'), className: 'selection-status-column', render: row => <span className={`readiness-pill ${row.actualSelection && view !== 'preview' ? 'ready' : row.actualSelection || row.hypotheticalSelection ? 'proposed' : row.band === 'Blocked' || row.band === 'Unknown' ? 'warning' : ''}`}>{t(selectionOutcomeKey(row, view === 'preview'))}</span> },
     { key: 'details', label: t('Details'), render: row => <div className="selection-detail-cell"><span>{t(selectionReasonKey(row.reasonCode))}</span>
       <span className="text-dim" title={row.availablePercent == null || !Number.isFinite(row.availablePercent) ? undefined : new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 6 }).format(row.availablePercent / 100)}>{t('usageSelection.headroomValue', { value: percent(row.availablePercent) })}</span>
       {row.capturedUtc && <span className="text-dim">{t('usageSelection.observedAt', { time: formatDateTime(row.capturedUtc) })}</span>}

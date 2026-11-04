@@ -7582,7 +7582,8 @@
         "Scroll": "Desplazar",
         "Captain Selection": "Selección de capitanes",
         "usageSelection.reason.routed": "Elegido por el orden de enrutamiento existente; Observar no cambia el enrutamiento.",
-        "usageSelection.reason.fallback": "Un permiso de recuperación de un administrador permitió usar otro capitán en lugar del preferido."
+        "usageSelection.reason.fallback": "Un permiso de recuperación de un administrador permitió usar otro capitán en lugar del preferido.",
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Cuando la captura automática no puede leer el uso, Armada puede abrir brevemente la CLI y leer su pantalla de uso."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -14112,7 +14113,8 @@
         "Scroll": "滚动",
         "Captain Selection": "舰长选择",
         "usageSelection.reason.routed": "由现有路由顺序选择；观察模式不会改变路由。",
-        "usageSelection.reason.fallback": "管理员的恢复权限允许从首选舰长回退到其他舰长。"
+        "usageSelection.reason.fallback": "管理员的恢复权限允许从首选舰长回退到其他舰长。",
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "当自动采集无法读取用量时，Armada 可以短暂打开 CLI 并读取其用量界面。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -20605,7 +20607,8 @@
         "Scroll": "捲動",
         "Captain Selection": "艦長選擇",
         "usageSelection.reason.routed": "由現有路由順序選擇；觀察模式不會改變路由。",
-        "usageSelection.reason.fallback": "管理員的復原權限允許從首選艦長改用其他艦長。"
+        "usageSelection.reason.fallback": "管理員的復原權限允許從首選艦長改用其他艦長。",
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "當自動擷取無法讀取用量時，Armada 可以短暫開啟 CLI 並讀取其用量畫面。"
       },
       "sections": {}
     },
@@ -27058,7 +27061,8 @@
         "Scroll": "捲動",
         "Captain Selection": "艦長選擇",
         "usageSelection.reason.routed": "由現有路由次序揀選；觀察模式唔會改變路由。",
-        "usageSelection.reason.fallback": "管理員嘅復原權限容許由首選艦長改用其他艦長。"
+        "usageSelection.reason.fallback": "管理員嘅復原權限容許由首選艦長改用其他艦長。",
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "自動擷取讀唔到用量嘅時候，Armada 可以短暫打開 CLI 並讀取佢嘅用量畫面。"
       },
       "sections": {}
     },
@@ -33527,7 +33531,8 @@
         "Scroll": "スクロール",
         "Captain Selection": "キャプテンの選択",
         "usageSelection.reason.routed": "既存のルーティング順で選ばれました。観察モードはルーティングを変更しません。",
-        "usageSelection.reason.fallback": "管理者の復旧許可により、優先キャプテンからのフォールバックが許可されました。"
+        "usageSelection.reason.fallback": "管理者の復旧許可により、優先キャプテンからのフォールバックが許可されました。",
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "自動取得で使用量を読み取れない場合、Armada は CLI を短時間開いて使用量画面を読み取ることがあります。"
       },
       "sections": {}
     },
@@ -39987,7 +39992,8 @@
         "Scroll": "Blättern",
         "Captain Selection": "Kapitänsauswahl",
         "usageSelection.reason.routed": "Durch die bestehende Routing-Reihenfolge gewählt; Beobachten ändert das Routing nicht.",
-        "usageSelection.reason.fallback": "Eine Wiederherstellungsfreigabe eines Administrators erlaubte den Wechsel vom bevorzugten Kapitän."
+        "usageSelection.reason.fallback": "Eine Wiederherstellungsfreigabe eines Administrators erlaubte den Wechsel vom bevorzugten Kapitän.",
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Wenn die automatische Erfassung die Nutzung nicht lesen kann, kann Armada die CLI kurz öffnen und ihre Nutzungsanzeige lesen."
       },
       "sections": {}
     },
@@ -46447,7 +46453,8 @@
         "Scroll": "Défiler",
         "Captain Selection": "Sélection des capitaines",
         "usageSelection.reason.routed": "Choisi par l'ordre de routage existant ; le mode Observer ne modifie pas le routage.",
-        "usageSelection.reason.fallback": "Une autorisation de récupération d'un administrateur a permis de remplacer le capitaine préféré."
+        "usageSelection.reason.fallback": "Une autorisation de récupération d'un administrateur a permis de remplacer le capitaine préféré.",
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Lorsque la capture automatique ne peut pas lire l'utilisation, Armada peut ouvrir brièvement la CLI et lire son écran d'utilisation."
       },
       "sections": {}
     },
@@ -52907,7 +52914,8 @@
         "Scroll": "Scorri",
         "Captain Selection": "Selezione dei capitani",
         "usageSelection.reason.routed": "Scelto dall'ordine di instradamento esistente; Osserva non modifica l'instradamento.",
-        "usageSelection.reason.fallback": "Un'autorizzazione di ripristino di un amministratore ha consentito di sostituire il capitano preferito."
+        "usageSelection.reason.fallback": "Un'autorizzazione di ripristino di un amministratore ha consentito di sostituire il capitano preferito.",
+        "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Quando l'acquisizione automatica non riesce a leggere l'utilizzo, Armada può aprire brevemente la CLI e leggerne la schermata di utilizzo."
       },
       "sections": {}
     }

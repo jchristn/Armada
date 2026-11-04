@@ -62,6 +62,7 @@ namespace Armada.Benchmark
             {
                 Candidates = arguments.Int("candidates", 10),
                 Missions = arguments.Int("missions", 200),
+                CaptainConcurrency = arguments.Int("captain-concurrency", 4),
                 AccountUsedPercents = arguments.List("accounts", "10,20,30,50,89").Select(v => Double.Parse(v, CultureInfo.InvariantCulture)).ToList(),
                 Strategy = arguments.Text("strategy", "MostRemainingAllowance"),
                 ReservePercent = arguments.Number("reserve", 10),
@@ -144,7 +145,7 @@ namespace Armada.Benchmark
         private static int Usage(string message)
         {
             Console.Error.WriteLine("[bench] " + message);
-            Console.Error.WriteLine("Usage: Armada.Benchmark admission --repo-url <url> [--url http://127.0.0.1:25160] [--token default] [--candidates 10] [--missions 200]");
+            Console.Error.WriteLine("Usage: Armada.Benchmark admission --repo-url <url> [--url http://127.0.0.1:25160] [--token default] [--candidates 10] [--missions 200] [--captain-concurrency 4]");
             Console.Error.WriteLine("         [--accounts 10,20,30,50,89] [--strategy MostRemainingAllowance] [--reserve 10] [--per-attempt 0.25] [--arms Enforce,Observe,Disabled]");
             Console.Error.WriteLine("         [--warmup 20] [--arm-timeout 900] [--submit-concurrency 16] [--provider Sqlite] [--output file.json]");
             Console.Error.WriteLine("       Armada.Benchmark compare <baseline.json> <candidate.json> [--tolerance 0.20]");

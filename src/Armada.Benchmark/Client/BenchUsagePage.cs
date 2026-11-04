@@ -9,9 +9,5 @@ namespace Armada.Benchmark.Client
         /// <summary>Rows on this page.</summary>
         [JsonPropertyName("objects")]
         public List<BenchUsageRow> Objects { get; set; } = new List<BenchUsageRow>();
-
-        /// <summary>Total pages.</summary>
-        [JsonPropertyName("totalPages")]
-        public int TotalPages { get; set; }
     }
 }

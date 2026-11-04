@@ -125,7 +125,7 @@ export default function UsageCaptureSettingsPanel({ canEdit }: UsageCaptureSetti
               <input id="usage-settings-pty" type="checkbox" checked={form.allowPtyFallback ?? true} onChange={(e) => { setForm((f) => ({ ...f, allowPtyFallback: e.target.checked })); setMessage(null); }} />
               {' '}{t('Allow interactive terminal (PTY) fallback')}
             </label>
-            <span className="text-dim">{t('Allow interactive terminal (PTY) fallback')}</span>
+            <span className="text-dim">{t('When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.')}</span>
           </div>
           <p className="text-dim">{t('Snapshot and rollup retention are set with the other retention settings.')}</p>
           {errors.length > 0 && <p className="usage-form-error" role="alert">{t('Fix the highlighted values: each must be a whole number inside its range.')}</p>}

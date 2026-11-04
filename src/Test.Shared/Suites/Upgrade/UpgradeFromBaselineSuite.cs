@@ -449,6 +449,19 @@ namespace Test.Shared.Suites.Upgrade
             await GetAsync<Captain>(api, "/api/v1/captains/" + _Seed.CaptainId).ConfigureAwait(false);
             await GetAsync<Objective>(api, "/api/v1/objectives/" + _Seed.ObjectiveId).ConfigureAwait(false);
 
+            // Usage selection after upgrade: Observe/FirstAvailable defaults, a readable revision, and pre-upgrade missions
+            // that answer selection reads with no fabricated history (migrations 123-128 never invent decisions).
+            Armada.Client.Models.SettingsData upgradedSettings = await GetAsync<Armada.Client.Models.SettingsData>(api, "/api/v1/settings").ConfigureAwait(false);
+            AssertEqual(UsageSelectionModeEnum.Observe, upgradedSettings.UsageSelection!.Mode, "usage selection stays Observe after upgrade");
+            AssertEqual(CaptainSelectionStrategyEnum.FirstAvailable, upgradedSettings.UsageSelection.Strategy, "strategy stays FirstAvailable after upgrade");
+            AssertTrue(upgradedSettings.UsageSelectionRevision >= 0, "selection revision readable");
+            string upgradedMission = _Seed.MissionStatuses.Keys.First();
+            CaptainSelectionSummary selection = await GetAsync<CaptainSelectionSummary>(api, "/api/v1/missions/" + upgradedMission + "/captain-selection").ConfigureAwait(false);
+            AssertFalse(selection.HistoryAvailable, "a pre-upgrade mission has no fabricated selection history");
+            EnumerationResult<CaptainSelectionDecisionView> selectionHistory = await GetAsync<EnumerationResult<CaptainSelectionDecisionView>>(api,
+                "/api/v1/missions/" + upgradedMission + "/captain-selection/history").ConfigureAwait(false);
+            AssertEqual(0L, selectionHistory.TotalRecords, "empty selection history after upgrade");
+
             // The seeded tenant's credential still authenticates, and stays scoped to its tenant.
             using (HttpClient tenantApi = BearerClient(_Current.BaseUrl, _Seed.BearerToken))
             {

@@ -17,19 +17,22 @@ namespace Armada.Benchmark.Reporting
         [JsonPropertyName("admissions")]
         public int Admissions { get; set; }
 
-        /// <summary>Reservations the account can hold above the reserve: floor((100 - used - reserve) / perAttempt).</summary>
+        /// <summary>Attempts the account can hold above the reserve: floor((100 - used - reserve) / perAttempt).</summary>
         [JsonPropertyName("capacity")]
         public int Capacity { get; set; }
 
         /// <summary>
-        /// Most reservations the account held at one admission, counting an attempt as settled only once a capture of the
-        /// account followed its completion. Lenient toward the product (the real reconciler settles later), so a
-        /// value above the capacity is a real over-admission.
+        /// Highest Armada reservation estimate (active plus unsettled percent) the account published while the arm ran,
+        /// sampled once a second from <c>GET /api/v1/usage/latest</c>.
         /// </summary>
-        [JsonPropertyName("maxOutstanding")]
-        public int MaxOutstanding { get; set; }
+        [JsonPropertyName("maxReservedPercent")]
+        public double MaxReservedPercent { get; set; }
 
-        /// <summary>True when an Enforce arm held more reservations than the capacity.</summary>
+        /// <summary>Headroom above the protected reserve: 100 - used - reserve.</summary>
+        [JsonPropertyName("headroomPercent")]
+        public double HeadroomPercent { get; set; }
+
+        /// <summary>True when, in Enforce, the published reservation estimate exceeded the headroom above the reserve.</summary>
         [JsonPropertyName("violation")]
         public bool Violation { get; set; }
     }

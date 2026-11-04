@@ -17,8 +17,8 @@ namespace Armada.Benchmark.Runners
     /// <summary>
     /// Admission benchmark. Provisions synthetic accounts and candidate captains over REST, then submits the same mission
     /// batch under each selection mode and times creation to atomic slot assignment from the missions' own server
-    /// timestamps. For Enforce arms the per-account reservation count at each admission, settling an attempt only after a
-    /// later capture of its account (read from the public snapshot history), must stay within the account's capacity.
+    /// timestamps. While an arm runs the harness samples the reservation estimates Armada publishes for each account; in
+    /// Enforce the active plus unsettled estimate must never exceed the headroom above the reserve.
     /// </summary>
     public sealed class AdmissionRunner
     {
@@ -109,7 +109,7 @@ namespace Armada.Benchmark.Runners
                 int account = i % _Scenario.AccountUsedPercents.Count;
                 List<string> arguments = new List<string> { _CaptureScript, "--account", AccountName(account),
                     "--used", _Scenario.AccountUsedPercents[account].ToString(CultureInfo.InvariantCulture) };
-                BenchCaptain captain = await _Client.CreateCaptainAsync("bench-" + i.ToString("D4", CultureInfo.InvariantCulture), _CaptureExecutable, arguments, token).ConfigureAwait(false);
+                BenchCaptain captain = await _Client.CreateCaptainAsync("bench-" + i.ToString("D4", CultureInfo.InvariantCulture), _CaptureExecutable, arguments, _Scenario.CaptainConcurrency, token).ConfigureAwait(false);
                 _AccountOfCaptain[captain.Id] = account;
                 if (i < _Scenario.AccountUsedPercents.Count) _CaptureCaptains.Add(captain.Id);
             }
@@ -167,24 +167,24 @@ namespace Armada.Benchmark.Runners
                 await Task.WhenAll(submits).ConfigureAwait(false);
             }
 
-            DateTime armStartedUtc = DateTime.UtcNow.AddMinutes(-2);
-            List<BenchMission> final = await WaitForTerminalAsync(vessel.Id, missions, token).ConfigureAwait(false);
+            Dictionary<int, double> reserved = new Dictionary<int, double>();
+            List<BenchMission> final = await WaitForTerminalAsync(vessel.Id, missions, reserved, token).ConfigureAwait(false);
             double duration = watch.Elapsed.TotalSeconds;
             List<BenchMission> unfinished = final.Where(m => !_Terminal.Contains(m.Status)).ToList();
             DateTime? lastCompletion = final.Where(m => m.CompletedUtc.HasValue).Select(m => (DateTime?)m.CompletedUtc!.Value.ToUniversalTime()).DefaultIfEmpty(null).Max();
             if (lastCompletion.HasValue) _LastCompletionUtc = lastCompletion.Value.AddSeconds(1);
             foreach (BenchMission mission in unfinished) await _Client.CancelMissionAsync(mission.Id, token).ConfigureAwait(false);
-            Dictionary<int, List<DateTime>> captures = await CaptureTimesAsync(armStartedUtc, token).ConfigureAwait(false);
-            return Summarize(mode, final, unfinished.Count + Math.Max(0, missions - final.Count), _Client.Errors - errorsBefore, duration, captures);
+            return Summarize(mode, final, unfinished.Count + Math.Max(0, missions - final.Count), _Client.Errors - errorsBefore, duration, reserved);
         }
 
-        private async Task<List<BenchMission>> WaitForTerminalAsync(string vesselId, int expected, CancellationToken token)
+        private async Task<List<BenchMission>> WaitForTerminalAsync(string vesselId, int expected, Dictionary<int, double> reserved, CancellationToken token)
         {
             DateTime deadline = DateTime.UtcNow.AddSeconds(_ArmTimeoutSeconds);
             List<BenchMission> missions = new List<BenchMission>();
             while (DateTime.UtcNow < deadline)
             {
                 missions = (await _Client.MissionsAsync(vesselId, token).ConfigureAwait(false)).Objects;
+                await SampleReservationsAsync(reserved, token).ConfigureAwait(false);
                 if (missions.Count >= expected && missions.All(m => _Terminal.Contains(m.Status))) return missions;
                 await Task.Delay(1000, token).ConfigureAwait(false);
             }
@@ -192,37 +192,18 @@ namespace Armada.Benchmark.Runners
             return missions;
         }
 
-        private async Task<Dictionary<int, List<DateTime>>> CaptureTimesAsync(DateTime fromUtc, CancellationToken token)
+        private async Task SampleReservationsAsync(Dictionary<int, double> reserved, CancellationToken token)
         {
-            Dictionary<int, List<DateTime>> captures = new Dictionary<int, List<DateTime>>();
-            for (int page = 1; ; page++)
+            BenchUsagePage page = await _Client.LatestUsageAsync(token).ConfigureAwait(false);
+            foreach (BenchUsageRow row in page.Objects)
             {
-                BenchUsagePage rows = await _Client.SnapshotsAsync(fromUtc, page, token).ConfigureAwait(false);
-                foreach (BenchUsageRow row in rows.Objects)
-                    foreach (int account in row.CaptainIds.Where(_AccountOfCaptain.ContainsKey).Select(id => _AccountOfCaptain[id]).Distinct())
-                    {
-                        if (!captures.TryGetValue(account, out List<DateTime>? times)) captures[account] = times = new List<DateTime>();
-                        times.Add(row.CapturedUtc.ToUniversalTime());
-                    }
-                if (page >= rows.TotalPages || rows.Objects.Count == 0) break;
+                double total = row.ReservationEstimates.Count == 0 ? 0 : row.ReservationEstimates.Max(e => e.ActivePercent + e.UnsettledPercent);
+                foreach (int account in row.CaptainIds.Where(_AccountOfCaptain.ContainsKey).Select(id => _AccountOfCaptain[id]).Distinct())
+                    reserved[account] = Math.Max(reserved.TryGetValue(account, out double seen) ? seen : 0, total);
             }
-            return captures;
         }
 
-        private static int MaxOutstanding(List<BenchMission> admissions, List<DateTime> captures)
-        {
-            int max = 0;
-            foreach (BenchMission admission in admissions)
-            {
-                DateTime at = admission.AssignedUtc!.Value;
-                int outstanding = admissions.Count(other => other.AssignedUtc!.Value <= at
-                    && !(other.CompletedUtc.HasValue && captures.Any(c => c >= other.CompletedUtc.Value && c <= at)));
-                max = Math.Max(max, outstanding);
-            }
-            return max;
-        }
-
-        private ArmResult Summarize(string mode, List<BenchMission> missions, int incomplete, int errors, double duration, Dictionary<int, List<DateTime>> captures)
+        private ArmResult Summarize(string mode, List<BenchMission> missions, int incomplete, int errors, double duration, Dictionary<int, double> reserved)
         {
             List<BenchMission> admitted = missions.Where(m => m.AssignedUtc.HasValue).ToList();
             List<double> latency = admitted.Select(m => Math.Max(0, (m.AssignedUtc!.Value - m.CreatedUtc).TotalMilliseconds)).ToList();
@@ -242,10 +223,11 @@ namespace Armada.Benchmark.Runners
             {
                 double used = _Scenario.AccountUsedPercents[account];
                 int capacity = (int)Math.Floor(Math.Max(0, 100 - used - _Scenario.ReservePercent) / _Scenario.PerAttemptReservationPercent + 1e-9);
-                List<BenchMission> onAccount = admitted.Where(m => m.CaptainId != null && _AccountOfCaptain.TryGetValue(m.CaptainId, out int a) && a == account).ToList();
-                int outstanding = MaxOutstanding(onAccount, captures.TryGetValue(account, out List<DateTime>? times) ? times : new List<DateTime>());
-                AccountShare share = new AccountShare { Account = AccountName(account), UsedPercent = used, Admissions = onAccount.Count, Capacity = capacity,
-                    MaxOutstanding = outstanding, Violation = mode == "Enforce" && outstanding > capacity };
+                int onAccount = admitted.Count(m => m.CaptainId != null && _AccountOfCaptain.TryGetValue(m.CaptainId, out int a) && a == account);
+                double headroom = Math.Max(0, 100 - used - _Scenario.ReservePercent);
+                double maxReserved = Math.Round(reserved.TryGetValue(account, out double seen) ? seen : 0, 6);
+                AccountShare share = new AccountShare { Account = AccountName(account), UsedPercent = used, Admissions = onAccount, Capacity = capacity,
+                    MaxReservedPercent = maxReserved, HeadroomPercent = headroom, Violation = mode == "Enforce" && maxReserved > headroom + 1e-6 };
                 result.Accounts.Add(share);
             }
             result.AccountingViolations = result.Accounts.Count(a => a.Violation);

@@ -73,10 +73,11 @@ namespace Armada.Benchmark.Client
         /// <param name="captureArguments">Capture arguments.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The captain.</returns>
-        public Task<BenchCaptain> CreateCaptainAsync(string name, string captureExecutable, IReadOnlyList<string> captureArguments, CancellationToken token = default)
+        /// <param name="maxConcurrency">Missions the captain may run at once.</param>
+        public Task<BenchCaptain> CreateCaptainAsync(string name, string captureExecutable, IReadOnlyList<string> captureArguments, int maxConcurrency, CancellationToken token = default)
             => SendAsync<BenchCaptain>(HttpMethod.Post, "api/v1/captains", new Dictionary<string, object?>
             {
-                ["Name"] = name, ["Runtime"] = "ClaudeCode", ["Model"] = "opus", ["MaxConcurrency"] = 1,
+                ["Name"] = name, ["Runtime"] = "ClaudeCode", ["Model"] = "opus", ["MaxConcurrency"] = maxConcurrency,
                 ["UsageCaptureEnabled"] = true, ["UsageCaptureMode"] = "Custom", ["UsageCaptureIntervalSeconds"] = 60,
                 ["UsageCaptureCommand"] = JsonSerializer.Serialize(new Dictionary<string, object> { ["executable"] = captureExecutable, ["arguments"] = captureArguments })
             }, token);
@@ -107,17 +108,6 @@ namespace Armada.Benchmark.Client
         /// <returns>The first page of up to 100 rows (one row per account; the scenario uses at most a few accounts).</returns>
         public Task<BenchUsagePage> LatestUsageAsync(CancellationToken token = default)
             => SendAsync<BenchUsagePage>(HttpMethod.Get, "api/v1/usage/latest?pageSize=100", null, token);
-
-        /// <summary>Read usage snapshots captured at or after a time, one page.</summary>
-        /// <param name="fromUtc">Earliest capture time.</param>
-        /// <param name="pageNumber">One-based page.</param>
-        /// <param name="token">Cancellation token.</param>
-        /// <returns>The page (100 rows).</returns>
-        public Task<BenchUsagePage> SnapshotsAsync(DateTime fromUtc, int pageNumber, CancellationToken token = default)
-            => SendAsync<BenchUsagePage>(HttpMethod.Post, "api/v1/usage/snapshots/enumerate", new Dictionary<string, object?>
-            {
-                ["FromUtc"] = fromUtc.ToUniversalTime(), ["Status"] = "Ok", ["PageNumber"] = pageNumber, ["PageSize"] = 100
-            }, token);
 
         /// <summary>Read settings.</summary>
         /// <param name="token">Cancellation token.</param>

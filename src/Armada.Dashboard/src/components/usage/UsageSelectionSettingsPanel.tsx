@@ -45,7 +45,7 @@ export default function UsageSelectionSettingsPanel({ canEdit }: { canEdit: bool
     {readOnly && <p className="text-dim">{t('usageSelection.environment')}</p>}
     {form && <>
       <fieldset className="usage-capture-fields" disabled={saving || loading || readOnly}>
-        <legend>{t('usageSelection.title')}</legend>
+        <legend className="sr-only">{t('usageSelection.title')}</legend>
         <div className="usage-capture-grid">
           <div className="form-group"><label htmlFor="usage-selection-mode">{t('usageSelection.mode')}</label>
             <select id="usage-selection-mode" value={form.mode} onChange={e => setForm({ ...form, mode: e.target.value as UsageSelectionSettings['mode'] })}>

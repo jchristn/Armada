@@ -68,6 +68,7 @@ li > a:not(.btn):not([class]),
 [data-theme="dark"] .readiness-pill.ready { color: #4ade80; }
 [data-theme="dark"] .readiness-pill.warning { color: #fbbf24; }
 [data-theme="dark"] .readiness-pill.error { color: #fca5a5; }
+[data-theme="dark"] .readiness-pill.proposed { color: #93c5fd; border-color: #93c5fd; }
 
 /* Solid status fills that carry white text (sidebar attention badges). */
 :root { --danger: #dc2626; --warning: #b45309; }
