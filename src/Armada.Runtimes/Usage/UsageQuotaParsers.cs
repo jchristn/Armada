@@ -28,6 +28,7 @@ namespace Armada.Runtimes.Usage
                     double? percent = pair.Value.Utilization;
                     if (percent.HasValue && (!Double.IsFinite(percent.Value) || percent < 0 || percent > 100)) return Failure("MalformedOutput");
                     result.Windows.Add(new UsageWindow { Name = pair.Key, Model = pair.Key == "seven_day_opus" ? "opus" : pair.Key == "seven_day_sonnet" ? "sonnet" : null, UsedPercent = percent, ResetsUtc = Reset(pair.Value.ResetsAt, observed), Unit = "percent" });
+                    result.Windows[result.Windows.Count - 1].ResetKind = FixedWhenReset(result.Windows[result.Windows.Count - 1]);
                 }
             }
             catch (JsonException) { return Failure("MalformedOutput"); }
@@ -48,11 +49,16 @@ namespace Armada.Runtimes.Usage
                     double? remaining = bucket.RemainingFraction;
                     if (remaining.HasValue && (!Double.IsFinite(remaining.Value) || remaining < 0 || remaining > 1)) return Failure("MalformedOutput");
                     result.Windows.Add(new UsageWindow { Name = "quota_" + (bucket.TokenType ?? "unknown"), Model = bucket.ModelId, UsedPercent = remaining.HasValue ? (1 - remaining.Value) * 100 : null, ResetsUtc = Reset(bucket.ResetTime, observed), Unit = "percent" });
+                    result.Windows[result.Windows.Count - 1].ResetKind = FixedWhenReset(result.Windows[result.Windows.Count - 1]);
                 }
             }
             catch (JsonException) { return Failure("MalformedOutput"); }
             return Finish(result);
         }
+        // Claude five_hour/seven_day and Gemini daily quota windows reset entirely at the reported absolute time.
+        private static UsageWindowResetKindEnum FixedWhenReset(UsageWindow window)
+            => window.ResetsUtc.HasValue ? UsageWindowResetKindEnum.Fixed : UsageWindowResetKindEnum.Unknown;
+
         private static UsageProbeResult Failure(string code)
         {
             UsageProbeResult result = UsageProbeResult.Failed(code);

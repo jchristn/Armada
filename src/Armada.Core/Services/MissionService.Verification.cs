@@ -49,9 +49,11 @@ namespace Armada.Core.Services
                         || repairUsage?.IdentityVerified == true && repairUsage.ConfigurationMatches && snapshot.Evidence.TryGetValue(current.Id, out UsageSelectionAccountEvidence? observed) && observed.HostId != executionHost)) return false;
                     CaptainSelectionRecordSet records = UsageSelectionRecordBuilder.Build(snapshot, mission, "Repair", admitted: true);
                     records.AdmissionHostId = executionHost;
+                    using CaptainSelectionStage admissionStage = CaptainSelectionTelemetry.Stage("transaction", mission.Id);
                     CaptainSelectionAdmissionReceipt receipt = snapshot.Settings.Mode == UsageSelectionModeEnum.Enforce
                         ? await _Database.CaptainSelections.TryAdmitEnforcedRepairAsync(records, mission.LastUpdateUtc, _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false)
                         : await _Database.CaptainSelections.TryAdmitObservedRepairAsync(records, mission.LastUpdateUtc, _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
+                    RecordAdmissionTelemetry(admissionStage, snapshot, records, receipt);
                     if (receipt.Claimed) NotifySelectionChanged(mission, records.Decision.Id, CaptainSelectionOutcomes.Admitted);
                     return receipt.Claimed;
                 }

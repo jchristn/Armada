@@ -43,6 +43,23 @@ namespace Armada.Core.Database
             }, token);
         }
 
+        /// <inheritdoc />
+        public Task<Dictionary<UsageReservationStateEnum, long>> CountReservationsByStateAsync(CancellationToken token = default)
+        {
+            return RunAsync(async connection =>
+            {
+                using DbCommand command = Command(connection, null, "SELECT state,COUNT(*) AS total FROM usage_budget_reservations GROUP BY state;");
+                Dictionary<UsageReservationStateEnum, long> counts = new Dictionary<UsageReservationStateEnum, long>();
+                using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+                while (await reader.ReadAsync(token).ConfigureAwait(false))
+                {
+                    if (Enum.TryParse(reader["state"].ToString(), false, out UsageReservationStateEnum state))
+                        counts[state] = Convert.ToInt64(reader["total"], CultureInfo.InvariantCulture);
+                }
+                return counts;
+            }, token);
+        }
+
         internal static async Task<List<UsageSelectionBudgetTotals>> ReadBudgetTotalsAsync(DbConnection connection, DbTransaction? transaction,
             string tenantId, IReadOnlyList<string> captainIds, CancellationToken token)
         {

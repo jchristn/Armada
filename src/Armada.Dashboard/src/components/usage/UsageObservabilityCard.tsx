@@ -17,6 +17,7 @@ export default function UsageObservabilityCard() {
       <p className="text-dim">{t('Operational metrics, traces and logs for the bundled observability stack. Sign in with your configured Grafana credentials.')}</p>
       <div className="usage-observability-links">
         <a href={`${grafana.replace(/\/$/, '')}/d/armada-usage`} target="_blank" rel="noopener noreferrer">{t('Usage operations')} (Grafana)</a>
+        <a href={`${grafana.replace(/\/$/, '')}/d/armada-captain-selection`} target="_blank" rel="noopener noreferrer">{t('Captain Selection')} (Grafana)</a>
         <a href={prometheus} target="_blank" rel="noopener noreferrer">Prometheus</a>
         <a href={tempo} target="_blank" rel="noopener noreferrer">Tempo</a>
       </div>

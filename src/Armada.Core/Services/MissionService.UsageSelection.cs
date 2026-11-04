@@ -146,6 +146,8 @@ namespace Armada.Core.Services
                 {
                     waiting.Decision.PreviousDecisionId = previous?.Id;
                     CaptainSelectionDecision stored = await _Database.CaptainSelections.CreateDecisionAsync(waiting, token).ConfigureAwait(false);
+                    CaptainSelectionTelemetry.Decision(snapshot.Settings.Mode, CaptainSelectionOutcomes.Waiting, waiting.Decision.Trigger);
+                    CaptainSelectionTelemetry.Wait(snapshot.Settings.Mode, stored.PrimaryReasonCode);
                     NotifySelectionChanged(mission, stored.Id, CaptainSelectionOutcomes.Waiting);
                     await RecordSelectionWaitingEventAsync(mission, stored, token).ConfigureAwait(false);
                 }
@@ -153,6 +155,7 @@ namespace Armada.Core.Services
             }
             catch (Exception ex) when (ex is System.Data.Common.DbException || Armada.Core.Database.TransientDatabaseError.IsTransient(ex))
             {
+                CaptainSelectionTelemetry.PersistenceFailure("History");
                 UsageWait(mission, UsageSelectionReasonCodes.SelectionPersistenceUnavailable, "Selection history could not be recorded. Armada will retry without starting a process.");
                 return false;
             }
@@ -247,6 +250,17 @@ namespace Armada.Core.Services
             }
         }
 
+        // Admission outcome labels: Admitted, Replayed (already committed) or Conflict (slot, revision or evidence changed).
+        private static void RecordAdmissionTelemetry(CaptainSelectionStage stage, UsageSelectionSnapshot snapshot, CaptainSelectionRecordSet records, CaptainSelectionAdmissionReceipt receipt)
+        {
+            string outcome = receipt.Claimed ? CaptainSelectionOutcomes.Admitted : receipt.AlreadyCommitted ? "Replayed" : "Conflict";
+            stage.Complete(outcome);
+            if (!receipt.Claimed) return;
+            CaptainSelectionTelemetry.Decision(snapshot.Settings.Mode, CaptainSelectionOutcomes.Admitted, records.Decision.Trigger);
+            if (snapshot.Settings.Mode == UsageSelectionModeEnum.Observe && !String.Equals(records.Decision.HypotheticalCaptainId, snapshot.ActualCaptainId, StringComparison.Ordinal))
+                CaptainSelectionTelemetry.ObserveDivergence(snapshot.Settings.Strategy);
+        }
+
         private async Task<UsageSelectionSnapshot> BuildUsageSelectionAsync(CaptainAdmissionSelection selection, UsageSelectionSettings settings, CancellationToken token)
         {
             UsageSelectionSnapshot snapshot = new UsageSelectionSnapshot { Settings = settings, Recovery = selection.Mission.UsageRecovery, EvaluatedUtc = DateTime.UtcNow,
@@ -260,13 +274,17 @@ namespace Armada.Core.Services
             List<UsageSelectionAccountEvidence> evidence = new List<UsageSelectionAccountEvidence>();
             List<UsageSelectionBudgetTotals> totals = new List<UsageSelectionBudgetTotals>();
             Dictionary<string, DateTime> lastAssigned = new Dictionary<string, DateTime>(StringComparer.Ordinal);
-            for (int offset = 0; offset < ids.Count; offset += 1000)
+            using (CaptainSelectionStage evidenceStage = CaptainSelectionTelemetry.Stage("evidence", selection.Mission.Id))
             {
-                List<string> batch = ids.Skip(offset).Take(1000).ToList();
-                evidence.AddRange(await _Database.CaptainSelections.ReadAccountEvidenceAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false));
-                totals.AddRange(await _Database.CaptainSelections.ReadBudgetTotalsAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false));
-                foreach (KeyValuePair<string, DateTime> row in await _Database.CaptainSelections.ReadLastAssignedAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false))
-                    lastAssigned[row.Key] = row.Value;
+                for (int offset = 0; offset < ids.Count; offset += 1000)
+                {
+                    List<string> batch = ids.Skip(offset).Take(1000).ToList();
+                    evidence.AddRange(await _Database.CaptainSelections.ReadAccountEvidenceAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false));
+                    totals.AddRange(await _Database.CaptainSelections.ReadBudgetTotalsAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false));
+                    foreach (KeyValuePair<string, DateTime> row in await _Database.CaptainSelections.ReadLastAssignedAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false))
+                        lastAssigned[row.Key] = row.Value;
+                }
+                evidenceStage.Complete();
             }
             foreach (IGrouping<string, UsageSelectionAccountEvidence> group in evidence.GroupBy(row => row.CaptainId, StringComparer.Ordinal))
                 if (group.Count() == 1) snapshot.Evidence[group.Key] = group.Single();
@@ -294,7 +312,11 @@ namespace Armada.Core.Services
                 }
                 inputs.Add(candidate);
             }
-            snapshot.Evaluation = UsageSelectionPolicy.Evaluate(inputs, settings, snapshot.EvaluatedUtc, snapshot.Recovery?.ReserveException == true);
+            using (CaptainSelectionStage evaluation = CaptainSelectionTelemetry.Stage("evaluation", selection.Mission.Id))
+            {
+                snapshot.Evaluation = UsageSelectionPolicy.Evaluate(inputs, settings, snapshot.EvaluatedUtc, snapshot.Recovery?.ReserveException == true);
+                evaluation.Complete(snapshot.Evaluation.SelectedCaptainId == null ? CaptainSelectionOutcomes.Waiting : CaptainSelectionOutcomes.Selected);
+            }
             return snapshot;
         }
     }

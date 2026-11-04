@@ -77,7 +77,7 @@ namespace Armada.Core.Services
                         SnapshotId = source?.SnapshotId, CapturedUtc = source?.CapturedUtc, ProbeStartedUtc = source?.ProbeStartedUtc,
                         Source = source?.Source.ToString(), Status = source?.Status.ToString(), ConfigurationRevision = source?.ConfigurationRevision,
                         WindowKey = key, WindowName = Label(window.Name, 1024), Model = Label(window.Model, 1024), Scope = Label(window.Scope, 1024),
-                        Generation = UsageBudgetIdentity.ContinuousGeneration, UsedPercent = Finite(window.UsedPercent).HasValue ? UsageSelectionNumbers.Up(Math.Min(100, window.UsedPercent!.Value)) : null, Used = window.Used, Limit = window.Limit,
+                        Generation = UsageBudgetIdentity.Generation(window), UsedPercent = Finite(window.UsedPercent).HasValue ? UsageSelectionNumbers.Up(Math.Min(100, window.UsedPercent!.Value)) : null, Used = window.Used, Limit = window.Limit,
                         Unit = Label(window.Unit, 1024), ResetsUtc = window.ResetsUtc, Applicable = applicable,
                         NormalizationCode = Label(window.Name, 1024) != window.Name || Label(window.Model, 1024) != window.Model || Label(window.Scope, 1024) != window.Scope || Label(window.Unit, 1024) != window.Unit || window.UsedPercent > 100 || (Finite(window.UsedPercent).HasValue && UsageSelectionNumbers.Up(Math.Min(100, window.UsedPercent!.Value)) != window.UsedPercent) ? "SourceValuesNormalized" : null,
                         ActiveReservationPercent = Finite(item.ActiveReservationPercent) ?? 0,
@@ -90,7 +90,7 @@ namespace Armada.Core.Services
                         records.Reservations.Add(new UsageBudgetReservation { TenantId = mission.TenantId!, UserId = mission.UserId,
                             DecisionId = decision.Id, MissionId = mission.Id, ExecutionAttemptId = decision.ExecutionAttemptId, CaptainId = captain.Id,
                             MembershipId = source.MembershipId, HostId = source.HostId, Runtime = source.Runtime.ToString(), AccountKey = source.AccountKey,
-                            WindowKey = key, Generation = UsageBudgetIdentity.ContinuousGeneration,
+                            WindowKey = key, Generation = UsageBudgetIdentity.Generation(window),
                             ReservedPercent = snapshot.Settings.PerAttemptReservationPercent });
                 }
             }

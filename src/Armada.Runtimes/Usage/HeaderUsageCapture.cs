@@ -181,6 +181,8 @@ namespace Armada.Runtimes.Usage
                 UsedPercent = Math.Round(used * 100.0 / limit, 2),
                 Unit = unit,
                 ResetsUtc = resets,
+                // Rate-limit headers describe replenishing buckets; the reset time is when capacity refills, not a window boundary.
+                ResetKind = UsageWindowResetKindEnum.Rolling,
                 Scope = "endpoint"
             });
             return null;

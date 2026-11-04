@@ -532,6 +532,7 @@ namespace Armada.Core.Services
                 try { usageSelection = await BuildUsageSelectionAsync(captainSelection, _Settings.EffectiveUsageSelection.Copy(), token).ConfigureAwait(false); }
                 catch (System.Data.Common.DbException)
                 {
+                    CaptainSelectionTelemetry.PersistenceFailure("Evidence");
                     UsageWait(mission, "SelectionPersistenceUnavailable", "Selection evidence is temporarily unavailable. Armada will retry without starting a process.");
                     return false;
                 }
@@ -634,15 +635,18 @@ namespace Armada.Core.Services
                 // A policy update that completed before this check makes this snapshot obsolete. An
                 // overlapping later update may linearize after this attempt; history retains its exact policy.
                 if (UsagePolicyKey() != System.Text.Json.JsonSerializer.Serialize(usageSelection.Settings)) return false;
+                using CaptainSelectionStage admissionStage = CaptainSelectionTelemetry.Stage("transaction", mission.Id);
                 try { receipt = usageSelection.Settings.Mode == UsageSelectionModeEnum.Enforce
                     ? await _Database.CaptainSelections.TryAdmitEnforcedAsync(decision, ceiling: _Settings.Concurrency.MaxCaptainConcurrency, token: token).ConfigureAwait(false)
                     : await _Database.CaptainSelections.TryAdmitObservedAsync(decision, ceiling: _Settings.Concurrency.MaxCaptainConcurrency, token: token).ConfigureAwait(false); }
                 catch (Exception ex) when (ex is System.Data.Common.DbException || TransientDatabaseError.IsTransient(ex))
                 {
+                    CaptainSelectionTelemetry.PersistenceFailure("Admission");
                     UsageWait(mission, UsageSelectionReasonCodes.SelectionPersistenceUnavailable, "Selection admission could not be confirmed. Armada will reconcile the recorded attempt before starting any process.");
                     return false;
                 }
                 claimed = receipt.Claimed;
+                RecordAdmissionTelemetry(admissionStage, usageSelection, decision, receipt);
                 if (claimed)
                 {
                     mission.UsageAdmissionExecutionKey = decision.Decision.ExecutionAttemptId;

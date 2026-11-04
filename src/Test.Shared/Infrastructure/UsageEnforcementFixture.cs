@@ -29,6 +29,8 @@ namespace Test.Shared.Infrastructure
         public UsageSnapshot Snapshot { get; private set; } = null!;
         /// <summary>Policy for this fixture; defaults to Enforce/MostRemainingAllowance.</summary>
         public UsageSelectionSettings Policy { get; } = new UsageSelectionSettings { Mode = UsageSelectionModeEnum.Enforce, Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance };
+        /// <summary>When set, captures report a provider-declared fixed window resetting at this time.</summary>
+        public DateTime? FixedResetUtc { get; set; }
         private UsageEnforcementFixture(TestDatabase fixture) { _Fixture = fixture; }
 
         /// <summary>Create two scoped candidates and one authoritative shared-account observation.</summary>
@@ -61,7 +63,8 @@ namespace Test.Shared.Infrastructure
             DateTime captured = capturedUtc ?? DateTime.UtcNow;
             Snapshot = new UsageSnapshot { TenantId = Tenant.Id, HostId = "host", AccountKey = "opaque-account", Runtime = AgentRuntimeEnum.ClaudeCode,
                 Provider = "anthropic", Source = UsageCaptureSourceEnum.OAuthEndpoint, Status = UsageSnapshotStatusEnum.Ok, ProbeStartedUtc = activeProbe ? captured.AddMilliseconds(-10) : null, CapturedUtc = captured, ReceivedUtc = captured,
-                WindowsJson = UsageWindowsJson.Serialize(new List<UsageWindow> { new UsageWindow { Name = "five-hour", UsedPercent = used } }) };
+                WindowsJson = UsageWindowsJson.Serialize(new List<UsageWindow> { new UsageWindow { Name = "five-hour", UsedPercent = used, ResetsUtc = FixedResetUtc,
+                    ResetKind = FixedResetUtc.HasValue ? UsageWindowResetKindEnum.Fixed : null } }) };
             await Database.UsageSnapshots.CreateAsync(Snapshot, Captains.Select(c => c.Id).ToList(), token).ConfigureAwait(false);
             string revision = UsageAccountResolver.ConfigurationRevision("host", AgentRuntimeEnum.ClaudeCode, null);
             await Database.UsageSnapshots.UpsertLatestStateAsync(new UsageLatestState { TenantId = Tenant.Id, HostId = "host", AccountKey = "opaque-account", Runtime = AgentRuntimeEnum.ClaudeCode,
@@ -103,7 +106,7 @@ namespace Test.Shared.Infrastructure
                 ActiveReservationPercent = input.Windows[0].ActiveReservationPercent, UnsettledPercent = input.Windows[0].UnsettledPercent });
             if (captureEnabled) records.Reservations.Add(new UsageBudgetReservation { TenantId = Tenant.Id, UserId = Owner.Id, DecisionId = decision.Id,
                 MissionId = mission.Id, ExecutionAttemptId = decision.ExecutionAttemptId, CaptainId = captain.Id, MembershipId = source.MembershipId,
-                HostId = source.HostId, Runtime = source.Runtime.ToString(), AccountKey = source.AccountKey, WindowKey = key, Generation = UsageBudgetIdentity.ContinuousGeneration,
+                HostId = source.HostId, Runtime = source.Runtime.ToString(), AccountKey = source.AccountKey, WindowKey = key, Generation = UsageBudgetIdentity.Generation(window),
                 ReservedPercent = Policy.PerAttemptReservationPercent });
             return records;
         }

@@ -147,9 +147,11 @@ namespace Armada.Core.Database
 
             string? custom = captain.UsageCaptureMode == UsageCaptureModeEnum.Custom ? source?.ConfigurationRevision : null;
             List<string> expected = new List<string>();
+            Dictionary<string, string> generations = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (UsageSelectionWindowEvidence evidence in input.Windows)
             {
                 string key = UsageBudgetIdentity.WindowKey(evidence.Window, custom);
+                generations[key] = UsageBudgetIdentity.Generation(evidence.Window);
                 CaptainSelectionWindowRecord? original = windows.SingleOrDefault(w => w.WindowKey == key);
                 if (original == null || original.SnapshotId != source?.SnapshotId || original.CapturedUtc != source?.CapturedUtc
                     || original.ActiveReservationPercent != evidence.ActiveReservationPercent || original.UnsettledPercent != evidence.UnsettledPercent) return false;
@@ -164,7 +166,7 @@ namespace Armada.Core.Database
                 && row.HostId == source?.HostId
                 && row.Runtime == source?.Runtime.ToString()
                 && row.AccountKey == source?.AccountKey
-                && row.Generation == UsageBudgetIdentity.ContinuousGeneration
+                && generations.TryGetValue(row.WindowKey, out string? generation) && row.Generation == generation
                 && row.ReservedPercent == policy.PerAttemptReservationPercent
                 && row.State == UsageReservationStateEnum.Active
                 && row.ExecutionStartedUtc == null);

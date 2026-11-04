@@ -4702,6 +4702,8 @@ export interface UsageWindow {
   unit: string | null;
   windowMinutes: number | null;
   resetsUtc: string | null;
+  /** Adapter-declared reset semantics; absent or Unknown keeps continuous reservation accounting. */
+  resetKind?: 'Unknown' | 'Rolling' | 'Fixed' | null;
   model: string | null;
   scope: string | null;
   configurationRevision?: string | null;

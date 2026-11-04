@@ -43,6 +43,22 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(fresh.Decision.Id, (await fixture.Database.CaptainSelections.ReadReservationsAsync(fixture.Tenant.Id, "host", "ClaudeCode", "opaque-account", token).ConfigureAwait(false)).Single().DecisionId);
                 AssertEqual(1, (await fixture.Database.Captains.ReadAsync(fixture.Captains[0].Id, token).ConfigureAwait(false))!.ActiveMissionCount);
             });
+            Add("fixed_window_reservations_carry_the_evidence_generation", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(used: 40, token: token).ConfigureAwait(false);
+                fixture.FixedResetUtc = DateTime.UtcNow.AddHours(2);
+                await fixture.CaptureAsync(40, token).ConfigureAwait(false);
+                CaptainSelectionRecordSet mismatched = await fixture.RecordsAsync(1, token: token).ConfigureAwait(false);
+                mismatched.Reservations[0].Generation = UsageBudgetIdentity.ContinuousGeneration;
+                AssertFalse((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(mismatched, token: token).ConfigureAwait(false)).Claimed, "a reservation must use the evidence window's generation");
+                CaptainSelectionRecordSet admitted = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
+                AssertTrue(admitted.Reservations[0].Generation.StartsWith(UsageBudgetIdentity.FixedGenerationPrefix, StringComparison.Ordinal), "fixed generation recorded");
+                AssertTrue((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(admitted, token: token).ConfigureAwait(false)).Claimed);
+                UsageBudgetReservation stored = (await fixture.Database.CaptainSelections.ReadReservationsAsync(fixture.Tenant.Id, "host", "ClaudeCode", "opaque-account", token).ConfigureAwait(false)).Single();
+                AssertEqual(admitted.Reservations[0].Generation, stored.Generation, "generation persisted");
+                UsageSelectionBudgetTotals total = (await fixture.Database.CaptainSelections.ReadBudgetTotalsAsync(fixture.Tenant.Id, new[] { fixture.Captains[1].Id }, token).ConfigureAwait(false)).Single();
+                AssertEqual(stored.Generation, total.Generation); AssertTrue(total.ActivePercent > 0, "the shared account still sees the active estimate");
+            });
             Add("cancelled_before_launch_releases_only_with_durable_proof", async token =>
             {
                 using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(used: 40, token: token).ConfigureAwait(false);

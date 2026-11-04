@@ -73,6 +73,8 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(10080, secondary.WindowMinutes, "the secondary duration is the returned value, never assumed");
                 AssertEqual(new DateTime(2026, 10, 31, 17, 45, 0, DateTimeKind.Utc), primary.ResetsUtc, "the absolute epoch reset converts to UTC");
                 AssertEqual(new DateTime(2026, 11, 7, 17, 45, 0, DateTimeKind.Utc), secondary.ResetsUtc, "a weekly reset is accepted without widening the 24-hour error policy");
+                AssertEqual(UsageWindowResetKindEnum.Fixed, primary.ResetKind, "Codex windows reset whole at the reported time");
+                AssertEqual(UsageWindowResetKindEnum.Fixed, secondary.ResetKind, "the weekly Codex window is fixed too");
                 return Task.CompletedTask;
             }));
 
@@ -242,6 +244,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual("five_hour", five.Windows[0].Name, "the window name comes from rateLimitType");
                 AssertEqual(62.0, five.Windows[0].UsedPercent, "the fraction becomes a percentage");
                 AssertEqual(new DateTime(2026, 10, 31, 17, 45, 0, DateTimeKind.Utc), five.Windows[0].ResetsUtc, "resetsAt converts from epoch seconds");
+                AssertEqual(UsageWindowResetKindEnum.Fixed, five.Windows[0].ResetKind, "a Claude rate_limit_event window with a reset is fixed");
                 MissionStreamDecodeResult second = decoder.Decode(lines[1], observed);
                 AssertEqual("seven_day", second.UsageObservations[0].Windows[0].Name, "the weekly window is harvested");
                 AssertEqual(31.0, second.UsageObservations[0].Windows[0].UsedPercent, "the weekly fraction becomes a percentage");
@@ -310,6 +313,7 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(1000L, requests.Limit, "the limit is kept");
                 AssertEqual(0.7, requests.UsedPercent, "the percentage is derived from the denominator");
                 AssertEqual(new DateTime(2026, 10, 27, 13, 0, 5, DateTimeKind.Utc), requests.ResetsUtc, "the RFC 3339 reset is absolute");
+                AssertEqual(UsageWindowResetKindEnum.Rolling, requests.ResetKind, "rate-limit header buckets replenish continuously");
                 AssertEqual(observed.AddSeconds(30), anthropic.RetryAfterUtc, "Retry-After counts from the observation");
                 AssertEqual(observed, anthropic.CapturedUtc, "the capture time is the observation time, never now");
 

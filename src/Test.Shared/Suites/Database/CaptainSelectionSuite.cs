@@ -112,6 +112,31 @@ namespace Test.Shared.Suites.Database
                 await database.Driver.CaptainSelections.DeleteByTenantAsync("tenant-a", token).ConfigureAwait(false);
                 AssertNull(await database.Driver.CaptainSelections.ReadDecisionAsync("tenant-a", keep.Decision.Id, token: token).ConfigureAwait(false));
             });
+            Add("retention_service_prunes_bounded_batches_and_counts_reservations", async token =>
+            {
+                using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DateTime old = DateTime.UtcNow.AddDays(-100);
+                CaptainSelectionRecordSet keep = Records(reserve: true); keep.Decision.EvaluatedUtc = old;
+                await database.Driver.CaptainSelections.CreateDecisionAsync(keep, token).ConfigureAwait(false);
+                for (int i = 0; i < 3; i++)
+                {
+                    CaptainSelectionRecordSet expired = Records(); expired.Decision.EvaluatedUtc = old.AddMinutes(i);
+                    await database.Driver.CaptainSelections.CreateDecisionAsync(expired, token).ConfigureAwait(false);
+                }
+                CaptainSelectionRecordSet recent = Records(); recent.Decision.EvaluatedUtc = DateTime.UtcNow.AddDays(-1);
+                await database.Driver.CaptainSelections.CreateDecisionAsync(recent, token).ConfigureAwait(false);
+                CaptainSelectionRetentionService retention = new CaptainSelectionRetentionService(database.Driver);
+                AssertEqual(2, await retention.PruneAsync(DateTime.UtcNow, 90, batchSize: 1, maxBatches: 2, token: token).ConfigureAwait(false), "bounded by maxBatches");
+                AssertEqual(1, await retention.PruneAsync(DateTime.UtcNow, 90, batchSize: 1, maxBatches: 5, token: token).ConfigureAwait(false), "next pass continues");
+                AssertEqual(0, await retention.PruneAsync(DateTime.UtcNow, 90, token: token).ConfigureAwait(false), "nothing left to expire");
+                AssertNotNull(await database.Driver.CaptainSelections.ReadDecisionAsync("tenant-a", keep.Decision.Id, token: token).ConfigureAwait(false), "live debt kept");
+                AssertNotNull(await database.Driver.CaptainSelections.ReadDecisionAsync("tenant-a", recent.Decision.Id, token: token).ConfigureAwait(false), "inside retention kept");
+                Dictionary<UsageReservationStateEnum, long> counts = await database.Driver.CaptainSelections.CountReservationsByStateAsync(token).ConfigureAwait(false);
+                AssertEqual(1L, counts.TryGetValue(UsageReservationStateEnum.Active, out long active) ? active : 0L, "one active reservation");
+                AssertFalse(counts.ContainsKey(UsageReservationStateEnum.Settled), "no settled rows");
+                await AssertThrowsAsync<ArgumentOutOfRangeException>(() => retention.PruneAsync(DateTime.UtcNow, 3, token: token)).ConfigureAwait(false);
+                await AssertThrowsAsync<ArgumentException>(() => retention.PruneAsync(DateTime.Now, 90, token: token)).ConfigureAwait(false);
+            });
             Add("invalid_aggregate_rejected_without_partial_history", async token =>
             {
                 using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -277,6 +302,121 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(1, await reconciler.ReconcileAsync(captureTime.AddSeconds(1), token: token).ConfigureAwait(false));
                 AssertEqual(0, (await database.Driver.CaptainSelections.ReadReservationsAsync(tenant.Id, "host", "ClaudeCode", "account", token).ConfigureAwait(false)).Count);
                 AssertEqual(0, (await database.Driver.CaptainSelections.ReadBudgetTotalsAsync(tenant.Id, new[] { captain.Id }, token).ConfigureAwait(false)).Count);
+            });
+            Add("fixed_window_reset_closes_old_generation_debt_only_after_a_post_reset_capture", async token =>
+            {
+                using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                TenantMetadata tenant = await database.Driver.Tenants.CreateAsync(new TenantMetadata("selection-reset"), token).ConfigureAwait(false);
+                UserMaster owner = await database.Driver.Users.CreateAsync(new UserMaster(tenant.Id, "reset@example.invalid", "fixture-password"), token).ConfigureAwait(false);
+                Captain captain = await database.Driver.Captains.CreateAsync(new Captain("selection-reset") { TenantId = tenant.Id, UserId = owner.Id, Runtime = AgentRuntimeEnum.ClaudeCode }, token).ConfigureAwait(false);
+                string revision = UsageAccountResolver.ConfigurationRevision("host", captain.Runtime, null);
+                string context = UsageAccountResolver.CaptureContextKey(UsageAccountResolver.GroupKey(tenant.Id, "host", captain.Runtime, null), revision);
+                UsageAccountMembership member = await database.Driver.UsageMemberships.CreateAsync(new UsageAccountMembership { TenantId = tenant.Id, CaptainId = captain.Id,
+                    HostId = "host", Runtime = captain.Runtime, AccountKey = "account", ConfigurationRevision = revision }, token).ConfigureAwait(false);
+                // The attempt ends 5 s before a minute-aligned reset; the 60 s settlement lag keeps ordinary settlement out of reach.
+                DateTime clock = DateTime.UtcNow;
+                DateTime reset = new DateTime(clock.Ticks - clock.Ticks % TimeSpan.TicksPerMinute, DateTimeKind.Utc).AddMinutes(2);
+                DateTime now = reset.AddSeconds(-5);
+                UsageWindow before = new UsageWindow { Name = "five_hour", UsedPercent = 60, Unit = "percent", ResetsUtc = reset, ResetKind = UsageWindowResetKindEnum.Fixed };
+                UsageWindow after = new UsageWindow { Name = "five_hour", UsedPercent = 3, Unit = "percent", ResetsUtc = reset.AddHours(5), ResetKind = UsageWindowResetKindEnum.Fixed };
+                AssertEqual(UsageBudgetIdentity.WindowKey(before), UsageBudgetIdentity.WindowKey(after), "reset time is not part of the window identity");
+                AssertNotEqual(UsageBudgetIdentity.Generation(before), UsageBudgetIdentity.Generation(after), "each reset is its own generation");
+                CaptainSelectionRecordSet records = Records(reserve: true, tenantId: tenant.Id, ownerId: owner.Id);
+                records.Candidates[0].CaptainId = captain.Id;
+                records.Reservations[0].CaptainId = captain.Id; records.Reservations[0].MembershipId = member.Id;
+                records.Reservations[0].WindowKey = UsageBudgetIdentity.WindowKey(before);
+                records.Reservations[0].Generation = UsageBudgetIdentity.Generation(before);
+                await database.Driver.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
+                UsageSelectionReservationReconciler reconciler = new UsageSelectionReservationReconciler(database.Driver);
+                AssertEqual(1, await reconciler.ReconcileAsync(now, token: token).ConfigureAwait(false), "the stopped attempt becomes unsettled debt");
+                async Task Capture(DateTime captured, UsageWindow window)
+                {
+                    UsageSnapshot snapshot = new UsageSnapshot { TenantId = tenant.Id, HostId = "host", Runtime = captain.Runtime, AccountKey = "account",
+                        Source = UsageCaptureSourceEnum.OAuthEndpoint, Status = UsageSnapshotStatusEnum.Ok, CapturedUtc = captured, ReceivedUtc = captured,
+                        ProbeStartedUtc = captured.AddMilliseconds(-200), WindowsJson = UsageWindowsJson.Serialize(new List<UsageWindow> { window }) };
+                    await database.Driver.UsageSnapshots.CreateAsync(snapshot, new List<string> { captain.Id }, token).ConfigureAwait(false);
+                    await database.Driver.UsageSnapshots.UpsertLatestStateAsync(new UsageLatestState { TenantId = tenant.Id, HostId = "host", Runtime = captain.Runtime,
+                        AccountKey = "account", LastGoodSnapshotId = snapshot.Id, LastGoodCapturedUtc = captured, LastGoodReceivedUtc = captured,
+                        LastGoodStatus = UsageSnapshotStatusEnum.Ok, LastGoodWindowsJson = snapshot.WindowsJson, CaptureContextKey = context }, token).ConfigureAwait(false);
+                }
+                async Task<int> Open() => (await database.Driver.CaptainSelections.ReadReservationsAsync(tenant.Id, "host", "ClaudeCode", "account", token).ConfigureAwait(false)).Count;
+
+                await Capture(reset.AddSeconds(-10), before).ConfigureAwait(false);
+                AssertEqual(0, await reconciler.ReconcileAsync(reset.AddSeconds(-2), token: token).ConfigureAwait(false), "nothing closes before the reset passes");
+                await Capture(reset.AddSeconds(10), before).ConfigureAwait(false);
+                AssertEqual(0, await reconciler.ReconcileAsync(reset.AddSeconds(11), token: token).ConfigureAwait(false), "a post-reset capture still showing the old generation proves nothing");
+                AssertEqual(1, await Open(), "debt still open");
+                await Capture(reset.AddSeconds(20), after).ConfigureAwait(false);
+                AssertEqual(1, await reconciler.ReconcileAsync(reset.AddSeconds(21), token: token).ConfigureAwait(false), "a fresh post-reset capture of the next generation closes the old debt");
+                AssertEqual(0, await Open(), "old-generation debt closed without waiting for the settlement lag");
+            });
+            Add("continuous_debt_ignores_window_resets", async token =>
+            {
+                UsageWindow rolling = new UsageWindow { Name = "tokens", Used = 10, Limit = 100, Unit = "tokens", ResetsUtc = DateTime.UtcNow.AddMinutes(1), ResetKind = UsageWindowResetKindEnum.Rolling };
+                UsageWindow unknown = new UsageWindow { Name = "five_hour", UsedPercent = 10, ResetsUtc = DateTime.UtcNow.AddMinutes(1) };
+                UsageWindow fixedWithoutReset = new UsageWindow { Name = "five_hour", UsedPercent = 10, ResetKind = UsageWindowResetKindEnum.Fixed };
+                foreach (UsageWindow window in new[] { rolling, unknown, fixedWithoutReset })
+                {
+                    AssertEqual(UsageBudgetIdentity.ContinuousGeneration, UsageBudgetIdentity.Generation(window), window.Name + " stays continuous");
+                    AssertFalse(UsageBudgetIdentity.TryReadFixedReset(UsageBudgetIdentity.Generation(window), out DateTime _));
+                }
+                DateTime resetAt = new DateTime(2026, 11, 4, 15, 42, 37, 512, DateTimeKind.Utc);
+                string generation = UsageBudgetIdentity.Generation(new UsageWindow { Name = "five_hour", ResetsUtc = resetAt, ResetKind = UsageWindowResetKindEnum.Fixed });
+                AssertEqual("fixed:20261104T1542Z", generation, "reset minute names the generation");
+                AssertTrue(UsageBudgetIdentity.TryReadFixedReset(generation, out DateTime parsed));
+                AssertEqual(new DateTime(2026, 11, 4, 15, 42, 0, DateTimeKind.Utc), parsed); AssertEqual(DateTimeKind.Utc, parsed.Kind);
+                AssertFalse(UsageBudgetIdentity.TryReadFixedReset("fixed:not-a-time", out DateTime _));
+                AssertFalse(UsageBudgetIdentity.TryReadFixedReset(null, out DateTime _));
+                UsageWindow roundTrip = UsageWindowsJson.Deserialize(UsageWindowsJson.Serialize(new List<UsageWindow> { rolling }))[0]!;
+                AssertEqual(UsageWindowResetKindEnum.Rolling, roundTrip.ResetKind, "reset kind survives snapshot storage");
+                AssertNull(UsageWindowsJson.Deserialize("[{\"name\":\"five_hour\",\"usedPercent\":5}]")[0]!.ResetKind, "older snapshots read as unknown");
+                await Task.CompletedTask.ConfigureAwait(false);
+            });
+            Add("load_reconciler_and_retention_cover_large_ledgers_in_bounded_passes", async token =>
+            {
+                // 400 debt-bearing decisions and 1,200 expired decisions: every row must be visited by bounded reconciler
+                // pages and pruned by bounded retention passes, within generous wall-clock limits on the test provider.
+                const int Reserved = 400;
+                const int Expired = 1200;
+                using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                DateTime old = DateTime.UtcNow.AddDays(-120);
+                for (int i = 0; i < Reserved; i++)
+                {
+                    CaptainSelectionRecordSet live = Records(reserve: true); live.Decision.EvaluatedUtc = old;
+                    await database.Driver.CaptainSelections.CreateDecisionAsync(live, token).ConfigureAwait(false);
+                }
+                for (int i = 0; i < Expired; i++)
+                {
+                    CaptainSelectionRecordSet expired = Records(); expired.Decision.EvaluatedUtc = old.AddSeconds(i);
+                    await database.Driver.CaptainSelections.CreateDecisionAsync(expired, token).ConfigureAwait(false);
+                }
+
+                UsageSelectionReservationReconciler reconciler = new UsageSelectionReservationReconciler(database.Driver);
+                System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+                int unsettled = 0;
+                DateTime clock = DateTime.UtcNow.AddSeconds(1);
+                for (int pass = 0; pass < Reserved / 100; pass++)
+                {
+                    unsettled += await reconciler.ReconcileAsync(clock, 100, token).ConfigureAwait(false);
+                    clock = clock.AddSeconds(1);
+                }
+                double reconcileSeconds = watch.Elapsed.TotalSeconds;
+                AssertEqual(Reserved, unsettled, "four pages of 100 visit every stopped attempt exactly once");
+                Dictionary<UsageReservationStateEnum, long> counts = await database.Driver.CaptainSelections.CountReservationsByStateAsync(token).ConfigureAwait(false);
+                AssertEqual((long)Reserved, counts[UsageReservationStateEnum.Unsettled]);
+                AssertFalse(counts.ContainsKey(UsageReservationStateEnum.Active), "no attempt left active");
+                AssertTrue(reconcileSeconds < 60, "reconciliation of " + Reserved + " rows took " + reconcileSeconds.ToString("F1") + " s");
+
+                CaptainSelectionRetentionService retention = new CaptainSelectionRetentionService(database.Driver);
+                watch.Restart();
+                int first = await retention.PruneAsync(DateTime.UtcNow, 90, batchSize: 500, maxBatches: 2, token: token).ConfigureAwait(false);
+                int second = await retention.PruneAsync(DateTime.UtcNow, 90, batchSize: 500, maxBatches: 2, token: token).ConfigureAwait(false);
+                double retentionSeconds = watch.Elapsed.TotalSeconds;
+                AssertEqual(1000, first, "one pass is bounded to two batches of 500");
+                AssertEqual(Expired - 1000, second, "the next pass finishes the backlog");
+                AssertEqual(0, await retention.PruneAsync(DateTime.UtcNow, 90, token: token).ConfigureAwait(false), "debt-bearing decisions are kept");
+                AssertTrue(retentionSeconds < 60, "retention of " + Expired + " decisions took " + retentionSeconds.ToString("F1") + " s");
+                AssertEqual((long)Reserved, (await database.Driver.CaptainSelections.CountReservationsByStateAsync(token).ConfigureAwait(false))[UsageReservationStateEnum.Unsettled]);
             });
             return new TestSuiteDescriptor(_SuiteId, "Captain selection ledger", cases);
         }

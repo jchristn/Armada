@@ -2,6 +2,7 @@ namespace Armada.Core.Models
 {
     using System;
     using System.Text.Json.Serialization;
+    using Armada.Core.Enums;
 
     /// <summary>
     /// One utilization window inside a usage snapshot: a named quota window (for example five_hour or
@@ -79,6 +80,13 @@ namespace Armada.Core.Models
         /// </summary>
         [JsonPropertyName("scope")]
         public string? Scope { get; set; } = null;
+
+        /// <summary>
+        /// Reset semantics declared by the capture adapter. Null (older hosts and snapshots) means unknown, which keeps
+        /// continuous accounting.
+        /// </summary>
+        [JsonPropertyName("resetKind")]
+        public UsageWindowResetKindEnum? ResetKind { get; set; } = null;
 
         /// <summary>
         /// Configuration revision an Estimated window was derived from. Null for observed windows.

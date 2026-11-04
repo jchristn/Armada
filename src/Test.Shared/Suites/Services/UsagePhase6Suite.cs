@@ -61,15 +61,18 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(UsageSnapshotStatusEnum.Ok, claude.Status);
                     AssertEqual(1, claude.Windows.Count);
                     AssertEqual(75.0, claude.Windows[0].UsedPercent!.Value);
+                    AssertEqual(UsageWindowResetKindEnum.Fixed, claude.Windows[0].ResetKind, "a Claude window with resets_at is fixed");
                     AssertEqual(UsageCaptureSourceEnum.OAuthEndpoint, claude.Source);
                     AssertNull(claude.AccountKey, "parsers cannot invent host identity");
                     UsageProbeResult scoped = UsageQuotaParsers.Claude("{\"seven_day_sonnet\":{\"utilization\":100},\"seven_day_cowork\":{\"utilization\":100},\"seven_day_oauth_apps\":{\"utilization\":100}}", now);
                     AssertEqual(1, scoped.Windows.Count, "unmapped application buckets never become global CLI quota");
                     AssertEqual("sonnet", scoped.Windows[0].Model, "model-family quota never becomes a global window");
+                    AssertEqual(UsageWindowResetKindEnum.Unknown, scoped.Windows[0].ResetKind, "no reset time means unknown semantics");
                     UsageProbeResult gemini = UsageQuotaParsers.Gemini("{\"buckets\":[{\"modelId\":\"gemini-test\",\"tokenType\":\"REQUESTS\",\"remainingFraction\":0.25,\"resetTime\":\"2026-11-02T00:00:00Z\"},{\"modelId\":\"gemini-unknown\"}]}", now);
                     AssertEqual(UsageSnapshotStatusEnum.Ok, gemini.Status);
                     AssertEqual(75.0, gemini.Windows[0].UsedPercent!.Value);
                     AssertNull(gemini.Windows[1].UsedPercent);
+                    AssertEqual(UsageWindowResetKindEnum.Fixed, gemini.Windows[0].ResetKind, "a Gemini daily quota with a reset time is fixed");
                     foreach (string json in new[] { "{", "null", "[]", "{\"buckets\":null}" }) AssertFalse(UsageQuotaParsers.Gemini(json, now).Status == UsageSnapshotStatusEnum.Ok);
                     AssertEqual(UsageSnapshotStatusEnum.Failed, UsageQuotaParsers.Claude("{\"five_hour\":{\"utilization\":101}}", now).Status);
                     AssertEqual(UsageSnapshotStatusEnum.Failed, UsageQuotaParsers.Gemini("{\"buckets\":[{\"modelId\":\"test\",\"remainingFraction\":-1}]}", now).Status);

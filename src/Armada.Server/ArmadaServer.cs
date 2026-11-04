@@ -2518,6 +2518,10 @@ namespace Armada.Server
                         try { await _Database.MissionWaitIntervals.DeleteExpiredAsync(DateTime.UtcNow.AddDays(-_Settings.Concurrency.WaitIntervalRetentionDays), token).ConfigureAwait(false); }
                         catch (Exception waitExpiryEx) when (!(waitExpiryEx is OperationCanceledException)) { _Logging.Warn(_Header + "mission wait expiry error: " + waitExpiryEx.Message); }
 
+                        // Selection history keeps UsageSelection.DecisionRetentionDays on every provider; live and debt-bearing decisions stay.
+                        try { await new CaptainSelectionRetentionService(_Database).PruneAsync(DateTime.UtcNow, _Settings.EffectiveUsageSelection.DecisionRetentionDays, token: token).ConfigureAwait(false); }
+                        catch (Exception selectionExpiryEx) when (!(selectionExpiryEx is OperationCanceledException)) { _Logging.Warn(_Header + "selection history expiry error: " + selectionExpiryEx.Message); }
+
                         await PurgeExpiredRequestHistoryAsync(token).ConfigureAwait(false);
 
                         // Retention: Ask threads (archive/delete), finished jobs, finished import batches.

@@ -25,14 +25,16 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(mission.TenantId) || String.IsNullOrWhiteSpace(mission.CaptainId)
                 || exitInfo.ProviderError == null || exitInfo.FailureKind != RuntimeFailureKindEnum.UsageLimit
                 || RuntimeFailureClassifier.Classify(exitInfo.ExitCode, exitInfo.ProviderError) != RuntimeFailureKindEnum.UsageLimit) return false;
-            if (executionKey == null) return false;
+            if (executionKey == null) { CaptainSelectionTelemetry.Cooldown("Unattributed"); return false; }
             DateTime untilUtc = ProviderResetParser.TryGetResetUtc(exitInfo.ProviderError, nowUtc, out DateTime? providerUntil) && providerUntil.HasValue
                 ? providerUntil.Value : nowUtc.AddSeconds(_Settings.EffectiveUsageSelection.ProviderCooldownSeconds);
-            return await _Database.CaptainSelections.TryRecordProviderCooldownAsync(new UsageProviderCooldownRequest
+            bool recorded = await _Database.CaptainSelections.TryRecordProviderCooldownAsync(new UsageProviderCooldownRequest
             {
                 TenantId = mission.TenantId, MissionId = mission.Id, CaptainId = mission.CaptainId,
                 ExecutionKey = executionKey, ObservedUtc = nowUtc, UntilUtc = untilUtc
             }, token).ConfigureAwait(false);
+            CaptainSelectionTelemetry.Cooldown(recorded ? "Recorded" : "Ignored");
+            return recorded;
         }
     }
 }

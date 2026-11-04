@@ -84,6 +84,7 @@ namespace Armada.Core.Services
                         UsedPercent = percent,
                         Unit = "percent",
                         ResetsUtc = resets,
+                        ResetKind = resets.HasValue ? UsageWindowResetKindEnum.Fixed : UsageWindowResetKindEnum.Unknown,
                         Scope = "account",
                         CoverageNote = status
                     }

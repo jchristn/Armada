@@ -28,6 +28,12 @@ Percentage settings/reservations round conservatively upward to six decimal plac
 
 PostgreSQL/MySQL mission readers now retain `UserId` when a mission is read and updated; the repair race exposed this pre-existing ownership omission. The provider tests assert ownership survives before admission.
 
+### Reset generations
+
+Each reservation belongs to a window generation. Capture adapters declare how each window resets: Claude five-hour and seven-day windows, Codex rate-limit windows and Gemini daily quotas are `Fixed` when the provider reports an absolute reset time; rate-limit headers are `Rolling`; interactive PTY readings, older Harbor hosts and windows without a reset time are `Unknown`. Only a `Fixed` window with a reset time gets a generation named by its reset minute (`fixed:20261104T1500Z`); every other window stays on the `continuous` generation.
+
+The reconciler closes an ended reservation from an old fixed generation (as Settled with reason `WindowReset`) only when all of these hold: the reset time has passed, the execution ended before the reset, and a fresh capture of the same account, host and capture configuration that started after the reset reports a newer generation of the same window. Until then the debt still counts. Running work keeps its reservation across a reset, continuous reservations never close on a reset, and Armada never infers a rollover from a moving reset timestamp.
+
 Migration 126 adds an internal execution key and `usage_untracked_executions`. Work started with selection Disabled, before the upgrade, or without a complete measurable reservation creates operational uncertainty, not fabricated historical selection evidence. Startup adopts active legacy work before dispatch. Unknown account attribution conservatively affects the same tenant/runtime until there is proof; it cannot silently disappear when membership changes. With explicit AllowDeprioritized, unknown work can still run.
 
 Active execution stays active. Ended/superseded work stays unsettled until a verified active capture began after execution end plus the configured lag on the same account, host and configuration. Passive observations and missing legacy probe-start times cannot prove settlement. Aging changes unresolved work to Uncertain, never to invented zero debt. Reconciliation is bounded, fair and guarded against stale revisions or rewritten execution-end times.
@@ -59,7 +65,7 @@ Browser review renders the real React card/CSS against isolated fixture response
 
 ## Remaining work
 
-Events/Needs You integration, richer account reservation/export views, telemetry/stress/upgrade evidence and final release packaging remain tracked in U4-U6. The current conservative behavior may keep failed/unknown work's allowance uncertain until a trustworthy capture; no force-release or hard-hold bypass action is advertised. Classified shared-account cooldowns, proven-unstarted handling and audited Dashboard/REST/MCP/.NET recovery permissions are implemented in [U3](U3_RECOVERY_VALIDATION.md).
+Richer account reservation/export views, stress/upgrade evidence and final release packaging remain tracked in U5-U6. Events/Needs You, reservation estimates, telemetry and reset generations are implemented. The current conservative behavior may keep failed/unknown work's allowance uncertain until a trustworthy capture; no force-release or hard-hold bypass action is advertised. Classified shared-account cooldowns, proven-unstarted handling and audited Dashboard/REST/MCP/.NET recovery permissions are implemented in [U3](U3_RECOVERY_VALIDATION.md).
 
 ## Earlier wave verification record
 

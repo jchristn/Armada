@@ -88,6 +88,8 @@ namespace Armada.Core.Database.Interfaces
         Task<bool> UpdateUntrackedExecutionAsync(UsageUntrackedExecution row, int expectedRevision, CancellationToken token = default);
         /// <summary>Read a bounded fair reconciliation page across tenants; server maintenance only, never an API response.</summary>
         Task<List<UsageBudgetReservation>> ReadReconciliationBatchAsync(int batchSize = 100, CancellationToken token = default);
+        /// <summary>Count every reservation by lifecycle state, across tenants, for operational telemetry.</summary>
+        Task<Dictionary<UsageReservationStateEnum, long>> CountReservationsByStateAsync(CancellationToken token = default);
         /// <summary>Advance a reconciliation cursor only if the reservation revision still matches.</summary>
         Task<bool> TouchReservationAsync(string tenantId, string reservationId, int revision, DateTime atUtc, CancellationToken token = default);
         /// <summary>Read active/unsettled/uncertain reservations of one verified tenant/account identity.</summary>

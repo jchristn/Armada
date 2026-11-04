@@ -142,6 +142,7 @@ namespace Armada.Core.Services
                 Unit = "percent",
                 WindowMinutes = minutes,
                 ResetsUtc = resets,
+                ResetKind = resets.HasValue ? UsageWindowResetKindEnum.Fixed : UsageWindowResetKindEnum.Unknown,
                 Scope = "account",
                 CoverageNote = String.IsNullOrWhiteSpace(planType) ? null : "plan " + Bounded(planType!.Trim(), 32)
             });

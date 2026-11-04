@@ -92,7 +92,7 @@ meters, so whichever of those emit are exported alongside these.
 - **loki** (loopback port `3100`) receives background logs through the collector.
 - **grafana** (loopback port `3001`, username `admin`, configured password) includes
   Prometheus, Loki and Tempo datasources and the Reliability, Fleet Operations,
-  Storage and Usage dashboards.
+  Storage, Usage and Captain Selection dashboards.
 
 Bring everything up with:
 
@@ -112,6 +112,8 @@ Config files live under `docker/armada/observability/`:
 - `grafana/provisioning/` -- datasource and dashboard providers
 - `grafana/dashboards/armada-reliability.json` -- the reliability dashboard
 - `grafana/dashboards/armada-fleet-operations.json` -- fleet actions, vessel health, and vessel import
+- `grafana/dashboards/armada-usage.json` -- usage capture operations
+- `grafana/dashboards/armada-captain-selection.json` -- captain selection, admission and reservations
 
 ## Local (non-Docker) use
 
@@ -160,3 +162,41 @@ operations dashboard, Prometheus and Tempo. Browser URLs default to the browser'
 hostname on ports 3001, 9090 and 3200. Set `VITE_GRAFANA_URL`,
 `VITE_PROMETHEUS_URL` and `VITE_TEMPO_URL` at frontend build time for reverse-proxy
 or remote installations; these are public URLs, never credential fields.
+
+## Captain selection
+
+The Captain Selection dashboard (`/d/armada-captain-selection`) shows decisions by
+mode and outcome, new waiting states by reason, how often Observe would have chosen
+a different captain than actual routing, stage latency, admission transaction
+outcomes, reservations by state, reconciliation and provider cooldown outcomes,
+ledger persistence failures and history retention. The External services card on
+the dashboard home page links to it next to the Usage dashboard.
+
+| Instrument | Labels | Meaning |
+|---|---|---|
+| `armada.selection.decisions` | `mode`, `outcome`, `trigger` | Recorded decisions: Admitted, or a materially new Waiting state (not every dispatch cycle) |
+| `armada.selection.waits` | `mode`, `reason` | New waiting states by semantic reason code |
+| `armada.selection.observe_divergence` | `strategy` | Observe admissions where the configured strategy would have chosen another captain |
+| `armada.selection.stage.duration` (seconds) | `stage`, `outcome` | `evidence`, `evaluation`, `transaction`, `reconcile` and `retention` stages. Transaction outcomes are Admitted, Conflict, Replayed and Error |
+| `armada.selection.reservations` | `state` | Reservation rows by lifecycle state, refreshed by the reconciler each health tick |
+| `armada.selection.reconciliation` | `outcome` | Rows Settled, Unsettled, Uncertain, Released or Unchanged per reconciler pass |
+| `armada.selection.cooldowns` | `outcome` | Provider usage-limit exits: Recorded, Ignored or Unattributed |
+| `armada.selection.persistence_failures` | `stage` | Evidence, History or Admission ledger operations that could not be confirmed; the mission waits and no process starts |
+| `armada.selection.retention.deleted` | none | Decisions removed by `UsageSelection.DecisionRetentionDays` |
+
+Labels are fixed semantic codes. A value that is not a PascalCase code (free text,
+identifiers, provider messages) is reported as `Other`, so tenant, user, captain,
+mission, account, snapshot and model values never become labels. Each stage also
+emits a `selection.<stage>` span on the `Armada` activity source with the mission
+ID as a span attribute and an error status when the stage did not finish.
+Evidence and evaluation stages include read-only previews.
+
+Counters reset when the Admiral restarts; the durable decision ledger remains the
+audit record. A failing listener or exporter cannot fail selection or admission,
+while a failed ledger write still keeps the mission waiting.
+
+History retention runs with the other data-expiry work, about every 100 health
+ticks, on every database provider. It removes at most 20 batches of 500 decisions
+per pass and keeps decisions that still hold an active, unsettled or uncertain
+reservation or whose mission is pending or running.
+
