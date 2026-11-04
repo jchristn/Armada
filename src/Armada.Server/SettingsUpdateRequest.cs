@@ -32,7 +32,7 @@ namespace Armada.Server
         /// </summary>
         public UsageCaptureSettings? UsageCapture { get; set; }
 
-        /// <summary>Optional usage selection policy replacement; omitted fields use safe defaults.</summary>
+        /// <summary>Optional usage selection policy update; only the members sent change and omitted members keep their current values.</summary>
         public UsageSelectionSettings? UsageSelection { get; set; }
 
         /// <summary>Optional optimistic revision required to replace UsageSelection; stale updates return conflict.</summary>

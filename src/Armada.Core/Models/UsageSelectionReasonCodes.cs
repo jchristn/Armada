@@ -11,6 +11,12 @@ namespace Armada.Core.Models
         /// <summary>A captain was selected with sufficient headroom.</summary>
         public const string SelectedForHeadroom = "SelectedForHeadroom";
 
+        /// <summary>Observe admitted the captain existing routing chose; the configured strategy only recorded its own choice.</summary>
+        public const string SelectedByRouting = "SelectedByRouting";
+
+        /// <summary>An administrator's recovery permission let an eligible captain run instead of the preferred one.</summary>
+        public const string AuthorizedFallback = "AuthorizedFallback";
+
         /// <summary>The candidate has sufficient launch headroom.</summary>
         public const string SufficientHeadroom = "SufficientHeadroom";
 
@@ -97,7 +103,7 @@ namespace Armada.Core.Models
 
         /// <summary>The vessel shares its local and working directory.</summary>
         public const string VesselMisconfigured = "VesselMisconfigured";
-    
+
         /// <summary>A preferred captain cannot run and fallback needs an administrator's recovery permission.</summary>
         public const string FallbackPermissionRequired = "FallbackPermissionRequired";
 

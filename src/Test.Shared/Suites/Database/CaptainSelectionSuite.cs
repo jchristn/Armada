@@ -372,6 +372,46 @@ namespace Test.Shared.Suites.Database
                 AssertNull(UsageWindowsJson.Deserialize("[{\"name\":\"five_hour\",\"usedPercent\":5}]")[0]!.ResetKind, "older snapshots read as unknown");
                 await Task.CompletedTask.ConfigureAwait(false);
             });
+            Add("whole_second_capture_timestamps_settle_ended_work", async token =>
+            {
+                // Custom executables and providers often report whole seconds: an observation made during a probe that began
+                // at 12.6 s is stamped 12 s. Settlement must accept that, but not a capture stamped well before its probe.
+                using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                TenantMetadata tenant = await database.Driver.Tenants.CreateAsync(new TenantMetadata("selection-resolution"), token).ConfigureAwait(false);
+                UserMaster owner = await database.Driver.Users.CreateAsync(new UserMaster(tenant.Id, "resolution@example.invalid", "fixture-password"), token).ConfigureAwait(false);
+                Captain captain = await database.Driver.Captains.CreateAsync(new Captain("selection-resolution") { TenantId = tenant.Id, UserId = owner.Id, Runtime = AgentRuntimeEnum.ClaudeCode }, token).ConfigureAwait(false);
+                string revision = UsageAccountResolver.ConfigurationRevision("host", captain.Runtime, null);
+                string context = UsageAccountResolver.CaptureContextKey(UsageAccountResolver.GroupKey(tenant.Id, "host", captain.Runtime, null), revision);
+                UsageAccountMembership member = await database.Driver.UsageMemberships.CreateAsync(new UsageAccountMembership { TenantId = tenant.Id, CaptainId = captain.Id,
+                    HostId = "host", Runtime = captain.Runtime, AccountKey = "account", ConfigurationRevision = revision }, token).ConfigureAwait(false);
+                UsageWindow window = new UsageWindow { Name = "five-hour", UsedPercent = 40 };
+                CaptainSelectionRecordSet records = Records(reserve: true, tenantId: tenant.Id, ownerId: owner.Id);
+                records.Candidates[0].CaptainId = captain.Id;
+                records.Reservations[0].CaptainId = captain.Id; records.Reservations[0].MembershipId = member.Id;
+                records.Reservations[0].WindowKey = UsageBudgetIdentity.WindowKey(window);
+                records.Reservations[0].Generation = UsageBudgetIdentity.ContinuousGeneration;
+                await database.Driver.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
+                DateTime now = DateTime.UtcNow.AddSeconds(1);
+                UsageSelectionReservationReconciler reconciler = new UsageSelectionReservationReconciler(database.Driver);
+                AssertEqual(1, await reconciler.ReconcileAsync(now, token: token).ConfigureAwait(false), "stopped attempt becomes unsettled");
+                DateTime after = now.AddSeconds(records.Policy.SettlementLagSeconds + 5);
+                DateTime stamped = new DateTime(after.Ticks - after.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
+                async Task Capture(DateTime captured, DateTime started)
+                {
+                    UsageSnapshot snapshot = new UsageSnapshot { TenantId = tenant.Id, HostId = "host", Runtime = captain.Runtime, AccountKey = "account",
+                        Source = UsageCaptureSourceEnum.Custom, Status = UsageSnapshotStatusEnum.Ok, CapturedUtc = captured, ReceivedUtc = started.AddMilliseconds(50),
+                        ProbeStartedUtc = started, WindowsJson = UsageWindowsJson.Serialize(new List<UsageWindow> { window }) };
+                    await database.Driver.UsageSnapshots.CreateAsync(snapshot, new List<string> { captain.Id }, token).ConfigureAwait(false);
+                    await database.Driver.UsageSnapshots.UpsertLatestStateAsync(new UsageLatestState { TenantId = tenant.Id, HostId = "host", Runtime = captain.Runtime,
+                        AccountKey = "account", LastGoodSnapshotId = snapshot.Id, LastGoodCapturedUtc = captured, LastGoodReceivedUtc = snapshot.ReceivedUtc,
+                        LastGoodStatus = UsageSnapshotStatusEnum.Ok, LastGoodWindowsJson = snapshot.WindowsJson, CaptureContextKey = context }, token).ConfigureAwait(false);
+                }
+                await Capture(stamped.AddSeconds(-3), stamped).ConfigureAwait(false);
+                AssertEqual(0, await reconciler.ReconcileAsync(stamped.AddSeconds(2), token: token).ConfigureAwait(false), "an observation stamped seconds before its probe proves nothing");
+                await Capture(stamped.AddSeconds(5), stamped.AddSeconds(5).AddMilliseconds(600)).ConfigureAwait(false);
+                AssertEqual(1, await reconciler.ReconcileAsync(stamped.AddSeconds(7), token: token).ConfigureAwait(false), "a whole-second stamp within its probe second settles");
+                AssertEqual(0, (await database.Driver.CaptainSelections.ReadReservationsAsync(tenant.Id, "host", "ClaudeCode", "account", token).ConfigureAwait(false)).Count);
+            });
             Add("load_reconciler_and_retention_cover_large_ledgers_in_bounded_passes", async token =>
             {
                 // 400 debt-bearing decisions and 1,200 expired decisions: every row must be visited by bounded reconciler

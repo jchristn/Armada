@@ -9,6 +9,7 @@ namespace Test.Shared.Suites.E2E
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -153,6 +154,55 @@ namespace Test.Shared.Suites.E2E
                     request.ExpectedRevision = 3;
                     using (HttpResponseMessage running = await authorized.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.Conflict, running);
                     AssertEqual(3, (await database.CaptainSelections.ReadRecoveryAsync(admin.TenantId, mission.Id, token).ConfigureAwait(false))!.Revision);
+                }),
+                new TestCaseDescriptor(_SuiteId, "malformed_inputs_filters_and_partial_settings", "Malformed bodies and unknown filters return 400; a partial selection group keeps the omitted members", async token =>
+                {
+                    string directory = TestTemp.NewDirectory("selection-inputs-api");
+                    using InProcessArmadaServer server = await InProcessArmadaServer.StartAsync(directory,
+                        new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(directory, "armada.db") }).ConfigureAwait(false);
+                    ArmadaServer runtime = (ArmadaServer)typeof(InProcessArmadaServer).GetField("_Server", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(server)!;
+                    DatabaseDriver database = (DatabaseDriver)typeof(ArmadaServer).GetField("_Database", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(runtime)!;
+                    Mission mission = await database.Missions.CreateAsync(new Mission("selection inputs") { TenantId = Constants.DefaultTenantId, UserId = Constants.DefaultUserId }, token).ConfigureAwait(false);
+                    CaptainSelectionRecordSet records = new CaptainSelectionRecordSet { Policy = CaptainSelectionPolicyRevision.FromSettings(Constants.DefaultTenantId, new UsageSelectionSettings()) };
+                    records.Decision.TenantId = Constants.DefaultTenantId; records.Decision.UserId = Constants.DefaultUserId; records.Decision.MissionId = mission.Id;
+                    records.Decision.ExecutionAttemptId = records.Decision.Id; records.Decision.PolicyRevisionId = records.Policy.Id;
+                    records.Decision.Mode = UsageSelectionModeEnum.Observe; records.Decision.Outcome = "Waiting"; records.Decision.Trigger = "Waiting";
+                    records.Decision.EvaluatedUtc = DateTime.UtcNow; records.Decision.AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion; records.Decision.PrimaryReasonCode = "UsageMissing";
+                    await database.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
+                    string path = "/api/v1/missions/" + mission.Id + "/captain-selection";
+
+                    async Task Post(string route, string body, HttpStatusCode expected)
+                    {
+                        using StringContent content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                        using HttpResponseMessage response = await server.Client.PostAsync(route, content, token).ConfigureAwait(false);
+                        AssertEqual(expected, response.StatusCode, route + " " + body);
+                        if (expected == HttpStatusCode.BadRequest) AssertContains("application/json", response.Content.Headers.ContentType?.ToString() ?? "", route + " answers JSON");
+                    }
+                    await Post(path + "/recovery", "", HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    await Post(path + "/recovery", "{\"expectedRevision\":", HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    await Post(path + "/recovery", "{\"expectedRevision\":\"zero\",\"allowFallback\":true,\"reason\":\"x\"}", HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    await Post(path + "/history/enumerate", "{\"PageSize\":", HttpStatusCode.BadRequest).ConfigureAwait(false);
+                    await Post("/api/v1/captain-selection-decisions/" + records.Decision.Id + "/candidates/enumerate?tenantId=" + Constants.DefaultTenantId, "{", HttpStatusCode.BadRequest).ConfigureAwait(false);
+
+                    using (HttpResponseMessage response = await server.Client.GetAsync(path + "/history?outcome=waiting", token).ConfigureAwait(false))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        AssertEqual(1L, (await JsonHelper.DeserializeAsync<EnumerationResult<CaptainSelectionDecisionView>>(response).ConfigureAwait(false)).TotalRecords, "filters accept any letter case");
+                    }
+                    foreach (string query in new[] { "?outcome=Bogus", "?trigger=Nope", "?pageSize=0", "?pageSize=1001", "?pageNumber=0" })
+                        using (HttpResponseMessage response = await server.Client.GetAsync(path + "/history" + query, token).ConfigureAwait(false))
+                            AssertEqual(HttpStatusCode.BadRequest, response.StatusCode, "history" + query);
+
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new UsageSelectionSettings { Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance, SettlementLagSeconds = 0 } }), token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.OK, response);
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new { Mode = "Disabled" } }), token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.OK, response);
+                    AssertEqual(UsageSelectionModeEnum.Disabled, server.Settings.EffectiveUsageSelection.Mode, "the sent member changes");
+                    AssertEqual(CaptainSelectionStrategyEnum.MostRemainingAllowance, server.Settings.EffectiveUsageSelection.Strategy, "an omitted member keeps its value");
+                    AssertEqual(0, server.Settings.EffectiveUsageSelection.SettlementLagSeconds, "omitted numbers keep their values");
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new { ReservePercent = 500 } }), token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.BadRequest, response);
+                    AssertEqual(CaptainSelectionStrategyEnum.MostRemainingAllowance, server.Settings.EffectiveUsageSelection.Strategy, "a rejected update changes nothing");
                 }),
                 new TestCaseDescriptor(_SuiteId, "history_scope_redaction_and_preview_has_no_writes", "History scopes counts and redacts account keys; preview never writes or claims", async token =>
                 {

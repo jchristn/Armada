@@ -1432,6 +1432,12 @@ Lists in settings are bounded (see [ENUMERATION.md](ENUMERATION.md)): `Import.Al
 
 **Permission:** AdminOnly
 
+Captain selection settings (see [usage selection operations](usage-selection/OPERATIONS.md)): `GET /api/v1/settings` returns `UsageSelection`, `UsageSelectionRevision` and `UsageSelectionCapabilities`. When `UsageSelection` is supplied on PUT, only the members sent change; omitted members keep their current values. Send `ExpectedUsageSelectionRevision` with the revision you read: a stale revision returns 409 with `Data.Code` naming the conflict and `Data.Field` `UsageSelection`. Out-of-range or cross-field values return 400 with `Data.Code` `InvalidUsageSelection` before anything changes. Environment overrides make the group read-only (409).
+
+```json
+{ "UsageSelection": { "Mode": "Enforce" }, "ExpectedUsageSelectionRevision": 3 }
+```
+
 Self-rebuild fields (see [SERVER_REBUILD.md](SERVER_REBUILD.md)):
 
 | Field | Type | Description |
@@ -3994,8 +4000,14 @@ GET /api/v1/missions/msn_abc123/captain-selection
 ```
 
 `intendedModel` is the configured model at admission; `reportedModel` is set only when the runtime reports the model it
-actually used. Observe-mode decisions also carry `hypotheticalCaptainId`, the captain the configured strategy would
-have chosen.
+actually used. `hypotheticalCaptainId` is present on every decision: in Observe it names the captain the configured
+strategy would have chosen, and in other modes it is null. Each decision also returns `trigger`, `mode`, `strategy`,
+`executionAttemptId`, `selectedCaptainAvailable`, `algorithmVersion`, `policyRevisionId` and `nextReconsiderUtc`.
+An admitted decision's `reasonCode` says what chose the captain: `SelectedByRouting` (Observe; routing is unchanged),
+`SelectedForHeadroom` (the strategy's ranking), `AuthorizedFallback` or `AuthorizedReserveException` (an administrator's
+recovery permission). History filters accept `outcome` `Admitted` or `Waiting` and `trigger` `Dispatch`, `Repair` or
+`Waiting` in any letter case; other values return 400. Query-string `pageSize` outside 1..1000 returns 400, and a
+malformed JSON body returns 400.
 
 Recovery request body:
 

@@ -38,7 +38,7 @@ namespace Armada.Core.Services
             decision.HypotheticalCaptainId = snapshot.Settings.Mode == UsageSelectionModeEnum.Observe ? snapshot.Evaluation.SelectedCaptainId : null;
             decision.HypotheticalOutcome = snapshot.Settings.Mode != UsageSelectionModeEnum.Observe ? null : snapshot.Evaluation.SelectedCaptainId == null ? CaptainSelectionOutcomes.Waiting : CaptainSelectionOutcomes.Selected;
             decision.AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion; decision.PolicyRevisionId = records.Policy.Id;
-            decision.EvaluatedUtc = snapshot.EvaluatedUtc; decision.PrimaryReasonCode = snapshot.Evaluation.ReasonCode;
+            decision.EvaluatedUtc = snapshot.EvaluatedUtc; decision.PrimaryReasonCode = AdmittedReason(snapshot, mission, admitted);
             decision.CandidateCount = snapshot.Evaluation.Candidates.Count;
             decision.NextReconsiderUtc = snapshot.Evaluation.SelectedCaptainId == null ? snapshot.Evaluation.Candidates.FirstOrDefault()?.NextReconsiderUtc : null;
             if (snapshot.Recovery != null)
@@ -106,6 +106,19 @@ namespace Armada.Core.Services
                         Finite(w.ActiveReservationPercent), Finite(w.UnsettledPercent) }).ToArray() }).ToArray() });
             decision.EvidenceFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint))).ToLowerInvariant();
             return records;
+        }
+
+        // An admitted decision states what actually chose the captain: routing in Observe, an authorized reserve exception,
+        // an authorized fallback from the preferred captain, or the strategy's headroom ranking.
+        private static string AdmittedReason(UsageSelectionSnapshot snapshot, Mission mission, bool admitted)
+        {
+            if (!admitted || snapshot.ActualCaptainId == null) return snapshot.Evaluation.ReasonCode;
+            if (snapshot.Settings.Mode == UsageSelectionModeEnum.Observe) return UsageSelectionReasonCodes.SelectedByRouting;
+            UsageSelectionCandidateResult? chosen = snapshot.Evaluation.Candidates.FirstOrDefault(c => c.Candidate.CaptainId == snapshot.ActualCaptainId);
+            if (chosen?.ReasonCode == UsageSelectionReasonCodes.AuthorizedReserveException) return UsageSelectionReasonCodes.AuthorizedReserveException;
+            if (snapshot.Recovery?.AllowFallback == true && !String.IsNullOrEmpty(mission.RequestedCaptainId) && mission.RequestedCaptainId != snapshot.ActualCaptainId)
+                return UsageSelectionReasonCodes.AuthorizedFallback;
+            return snapshot.Evaluation.ReasonCode;
         }
 
         private static string? Label(string? value, int length) => UsageSelectionEvidenceSanitizer.Label(value, length);

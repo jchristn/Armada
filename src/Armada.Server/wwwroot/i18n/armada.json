@@ -7580,7 +7580,9 @@
         "File": "Archivo",
         "Folder": "Carpeta",
         "Scroll": "Desplazar",
-        "Captain Selection": "Selección de capitanes"
+        "Captain Selection": "Selección de capitanes",
+        "usageSelection.reason.routed": "Elegido por el orden de enrutamiento existente; Observar no cambia el enrutamiento.",
+        "usageSelection.reason.fallback": "Un permiso de recuperación de un administrador permitió usar otro capitán en lugar del preferido."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -14108,7 +14110,9 @@
         "File": "文件",
         "Folder": "文件夹",
         "Scroll": "滚动",
-        "Captain Selection": "舰长选择"
+        "Captain Selection": "舰长选择",
+        "usageSelection.reason.routed": "由现有路由顺序选择；观察模式不会改变路由。",
+        "usageSelection.reason.fallback": "管理员的恢复权限允许从首选舰长回退到其他舰长。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -20599,7 +20603,9 @@
         "File": "檔案",
         "Folder": "資料夾",
         "Scroll": "捲動",
-        "Captain Selection": "艦長選擇"
+        "Captain Selection": "艦長選擇",
+        "usageSelection.reason.routed": "由現有路由順序選擇；觀察模式不會改變路由。",
+        "usageSelection.reason.fallback": "管理員的復原權限允許從首選艦長改用其他艦長。"
       },
       "sections": {}
     },
@@ -27050,7 +27056,9 @@
         "File": "檔案",
         "Folder": "資料夾",
         "Scroll": "捲動",
-        "Captain Selection": "艦長選擇"
+        "Captain Selection": "艦長選擇",
+        "usageSelection.reason.routed": "由現有路由次序揀選；觀察模式唔會改變路由。",
+        "usageSelection.reason.fallback": "管理員嘅復原權限容許由首選艦長改用其他艦長。"
       },
       "sections": {}
     },
@@ -33517,7 +33525,9 @@
         "File": "ファイル",
         "Folder": "フォルダー",
         "Scroll": "スクロール",
-        "Captain Selection": "キャプテンの選択"
+        "Captain Selection": "キャプテンの選択",
+        "usageSelection.reason.routed": "既存のルーティング順で選ばれました。観察モードはルーティングを変更しません。",
+        "usageSelection.reason.fallback": "管理者の復旧許可により、優先キャプテンからのフォールバックが許可されました。"
       },
       "sections": {}
     },
@@ -39975,7 +39985,9 @@
         "File": "Datei",
         "Folder": "Ordner",
         "Scroll": "Blättern",
-        "Captain Selection": "Kapitänsauswahl"
+        "Captain Selection": "Kapitänsauswahl",
+        "usageSelection.reason.routed": "Durch die bestehende Routing-Reihenfolge gewählt; Beobachten ändert das Routing nicht.",
+        "usageSelection.reason.fallback": "Eine Wiederherstellungsfreigabe eines Administrators erlaubte den Wechsel vom bevorzugten Kapitän."
       },
       "sections": {}
     },
@@ -46433,7 +46445,9 @@
         "File": "Fichier",
         "Folder": "Dossier",
         "Scroll": "Défiler",
-        "Captain Selection": "Sélection des capitaines"
+        "Captain Selection": "Sélection des capitaines",
+        "usageSelection.reason.routed": "Choisi par l'ordre de routage existant ; le mode Observer ne modifie pas le routage.",
+        "usageSelection.reason.fallback": "Une autorisation de récupération d'un administrateur a permis de remplacer le capitaine préféré."
       },
       "sections": {}
     },
@@ -52891,7 +52905,9 @@
         "File": "File",
         "Folder": "Cartella",
         "Scroll": "Scorri",
-        "Captain Selection": "Selezione dei capitani"
+        "Captain Selection": "Selezione dei capitani",
+        "usageSelection.reason.routed": "Scelto dall'ordine di instradamento esistente; Osserva non modifica l'instradamento.",
+        "usageSelection.reason.fallback": "Un'autorizzazione di ripristino di un amministratore ha consentito di sostituire il capitano preferito."
       },
       "sections": {}
     }

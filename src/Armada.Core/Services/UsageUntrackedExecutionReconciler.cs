@@ -45,7 +45,7 @@ namespace Armada.Core.Services
                     bool observed = row.AccountAttributionVerified && row.AccountKey != null && row.HostId != null && row.ConfigurationRevision != null && source != null
                         && source.AccountKey == row.AccountKey && source.HostId == row.HostId && source.Runtime.ToString() == row.Runtime
                         && source.ConfigurationRevision == row.ConfigurationRevision && source.ProbeStartedUtc >= boundary
-                        && source.CapturedUtc >= source.ProbeStartedUtc && source.CapturedUtc <= nowUtc + UsageQuotaPolicy.MaximumFutureSkew && source.ProbeStartedUtc <= nowUtc
+                        && source.CapturedUtc + UsageQuotaPolicy.CaptureTimestampResolution >= source.ProbeStartedUtc && source.CapturedUtc <= nowUtc + UsageQuotaPolicy.MaximumFutureSkew && source.ProbeStartedUtc <= nowUtc
                         && nowUtc - source.CapturedUtc <= TimeSpan.FromSeconds(Math.Min(policy.MaximumFreshnessSeconds, UsageQuotaPolicy.FreshnessHorizon(source.EffectiveIntervalSeconds).TotalSeconds))
                         && source.Status == UsageSnapshotStatusEnum.Ok && source.Source != UsageCaptureSourceEnum.Derived && Enum.IsDefined(typeof(UsageCaptureSourceEnum), source.Source);
                     if (observed && source != null)

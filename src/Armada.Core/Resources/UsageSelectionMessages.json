@@ -125,5 +125,7 @@
   "usageSelection.save": "Save captain selection settings",
   "usageSelection.conflict": "Another administrator changed these settings. Refresh before saving again.",
   "usageSelection.reservations.estimate": "Estimated Armada reservations: {{active}} running, {{unsettled}} awaiting settlement (not provider usage)",
-  "usageSelection.reservations.uncertain": "Some estimated usage on this account is not settled yet. Captain selection treats it as uncertain until a fresh capture."
+  "usageSelection.reservations.uncertain": "Some estimated usage on this account is not settled yet. Captain selection treats it as uncertain until a fresh capture.",
+  "usageSelection.reason.routed": "Chosen by the existing routing order; Observe does not change routing.",
+  "usageSelection.reason.fallback": "An administrator's recovery permission allowed fallback from the preferred captain."
 }

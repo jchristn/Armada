@@ -57,10 +57,12 @@ namespace Armada.Server.Routes
                                 : JsonSerializer.Deserialize<CaptainSelectionHistoryQuery>(context.Request.DataAsString, _Options) ?? new CaptainSelectionHistoryQuery()
                             : null;
                         int page = filter?.PageNumber ?? Number(context, "pageNumber", 1), size = filter?.PageSize ?? Number(context, "pageSize", 25);
+                        if (page < 1 || size < 1 || size > 1000) throw new ArgumentException("pageNumber must be positive and pageSize must be 1..1000.");
                         payload = kind switch
                         {
                             "recovery" => await _Service.AuthorizeRecoveryAsync(caller, id,
-                                JsonSerializer.Deserialize<UsageSelectionRecoveryRequest>(context.Request.DataAsString, _Options) ?? throw new ArgumentException("Recovery authorization is required."), context.Token).ConfigureAwait(false),
+                                (String.IsNullOrWhiteSpace(context.Request.DataAsString) ? null : JsonSerializer.Deserialize<UsageSelectionRecoveryRequest>(context.Request.DataAsString, _Options))
+                                    ?? throw new ArgumentException("A JSON body with expectedRevision, allowFallback, reserveException and reason is required."), context.Token).ConfigureAwait(false),
                             "summary" => await _Service.SummaryAsync(caller, id, context.Token).ConfigureAwait(false),
                             "history" => await _Service.HistoryAsync(caller, id, filter ?? new CaptainSelectionHistoryQuery { PageNumber = page, PageSize = size,
                                 Trigger = context.Request.RetrieveQueryValue("trigger"), Outcome = context.Request.RetrieveQueryValue("outcome"),
@@ -69,6 +71,14 @@ namespace Armada.Server.Routes
                             "candidates" => await _Service.CandidatesAsync(caller, id, tenant, page, size, context.Token).ConfigureAwait(false),
                             _ => await _Service.DetailAsync(caller, id, tenant, page, size, context.Token).ConfigureAwait(false)
                         };
+                    }
+                    catch (JsonException)
+                    {
+                        // Empty, truncated or wrongly typed bodies are client errors, never a 500.
+                        context.Response.StatusCode = 400;
+                        payload = new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = kind == "recovery"
+                            ? "Request body must be JSON with expectedRevision (number), allowFallback and reserveException (true or false) and reason (text)."
+                            : "Request body must be valid JSON with numeric pageNumber and pageSize." };
                     }
                     catch (Exception error) when (RouteErrorMapper.IsMapped(error))
                     {

@@ -84,7 +84,7 @@ namespace Armada.Core.Services
                     bool identityProven = account != null && account.MembershipId == row.MembershipId && account.HostId == row.HostId
                         && account.Runtime.ToString() == row.Runtime && account.AccountKey == row.AccountKey
                         && account.Status == UsageSnapshotStatusEnum.Ok && account.Source != UsageCaptureSourceEnum.Derived
-                        && account.ProbeStartedUtc <= account.CapturedUtc && account.ProbeStartedUtc <= nowUtc
+                        && account.ProbeStartedUtc <= account.CapturedUtc + UsageQuotaPolicy.CaptureTimestampResolution && account.ProbeStartedUtc <= nowUtc
                         && account.CapturedUtc <= nowUtc + UsageQuotaPolicy.MaximumFutureSkew
                         && nowUtc - account.CapturedUtc <= TimeSpan.FromSeconds(Math.Min(policy.MaximumFreshnessSeconds,
                             UsageQuotaPolicy.FreshnessHorizon(account.EffectiveIntervalSeconds).TotalSeconds));

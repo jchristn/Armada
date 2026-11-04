@@ -25,6 +25,8 @@ namespace Armada.Core.Services
             "LaunchRetryPending" => "usageSelection.reason.retry",
             "VoyageNotRunnable" => "usageSelection.reason.voyage",
             "SelectedForHeadroom" => "usageSelection.reason.selected",
+            "SelectedByRouting" => "usageSelection.reason.routed",
+            "AuthorizedFallback" => "usageSelection.reason.fallback",
             "SufficientHeadroom" => "usageSelection.reason.headroom",
             "BelowReserve" => "usageSelection.reason.reserve",
             "AccountQuotaExhausted" => "usageSelection.reason.exhausted",

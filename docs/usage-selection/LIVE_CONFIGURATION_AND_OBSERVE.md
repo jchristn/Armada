@@ -2,11 +2,11 @@
 
 This document records the earlier Observe wave. Enforce and mission inspection have since been added; use the [current guide](ENFORCEMENT_AND_MISSION_INSPECTION.md) for current capabilities.
 
-This v1.3.0 segment adds configurable policy controls and connects Observe decisions to normal dispatch and verification repair. It does not complete the full usage-selection plan. Enforce remains unavailable; the server refuses live requests to enable it rather than silently applying an incomplete budget gate.
+This v1.3.0 segment adds configurable policy controls and connects Observe decisions to normal dispatch and verification repair. Enforce was added later in v1.3.0 and is an explicit opt-in; see the [enforcement guide](ENFORCEMENT_AND_MISSION_INSPECTION.md) and the [operator guide](OPERATIONS.md).
 
 ## Operator controls
 
-Open Dashboard > Server > Settings > Captain selection as a global administrator. Choose Disabled or Observe and one of:
+Open Dashboard > Server > Settings > Captain selection as a global administrator. Choose Disabled, Observe or Enforce and one of:
 
 - **First available**, the compatibility default using the existing routing order.
 - **Most remaining allowance**, favoring eligible accounts with more effective headroom within comparable routing/band groups.
@@ -34,7 +34,7 @@ The following authenticated REST routes share tenant, mission-owner and mission-
 
 Pages use `pageNumber`/`pageSize`, default 1/25, with size 1..1000. History accepts `trigger`, `outcome`, `from` and `to`; the time range is half-open. Standalone decision reads default to the caller's tenant; only a global administrator can supply a different `tenantId`. Candidate-owner filters apply before totals. Internal account keys never appear in these response models. Retained records can outlive raw captures or a deleted mission.
 
-MCP exposes `get_captain_selection`, `get_captain_selection_history`, `get_captain_selection_decision` and `preview_captain_selection`. The .NET SDK has corresponding typed methods and candidate paging. Missing runtime services return Unavailable, including standalone configurations without an orchestration service. Generic MCP enumerate integration and Helm/native client controls remain in the plan.
+MCP exposes `get_captain_selection`, `get_captain_selection_history`, `get_captain_selection_decision` and `preview_captain_selection`. The .NET SDK has corresponding typed methods and candidate paging. Missing runtime services return Unavailable, including standalone configurations without an orchestration service. Generic MCP `enumerate` covers selection history, and Helm (`mission selection`, `mission selection-recovery`), the TUI and Mobile have native inspection, recovery and settings controls.
 
 ## Execution and estimates
 

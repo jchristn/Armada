@@ -4,7 +4,8 @@ export const selectionStrategyKey: Record<CaptainSelectionStrategy, string> = {
   FirstAvailable: 'usageSelection.firstAvailable', MostRemainingAllowance: 'usageSelection.mostRemaining', MostUsedAllowance: 'usageSelection.mostUsed',
 };
 export const selectionReasons: Record<string, string> = {
-  SelectedForHeadroom: 'usageSelection.reason.selected', SufficientHeadroom: 'usageSelection.reason.headroom',
+  SelectedForHeadroom: 'usageSelection.reason.selected', SelectedByRouting: 'usageSelection.reason.routed',
+  AuthorizedFallback: 'usageSelection.reason.fallback', SufficientHeadroom: 'usageSelection.reason.headroom',
   BelowReserve: 'usageSelection.reason.reserve', AccountQuotaExhausted: 'usageSelection.reason.exhausted', AccountCooldown: 'usageSelection.reason.cooldown',
   UsageIdentityUnknown: 'usageSelection.reason.identity', UsageConfigurationChanged: 'usageSelection.reason.configuration',
   UsageMissing: 'usageSelection.reason.missing', FutureObservation: 'usageSelection.reason.future', UsageStale: 'usageSelection.reason.stale',

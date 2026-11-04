@@ -13,6 +13,14 @@ namespace Armada.Server
     /// <summary>Shared scoped selection history and preview access for REST and MCP callers.</summary>
     public sealed class CaptainSelectionAccessService
     {
+        // Filter values are fixed codes: accept any casing, reject anything else so a typo is not reported as "no history".
+        private static string? Canonical(string? value, string name, params string[] allowed)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            string? match = allowed.FirstOrDefault(a => String.Equals(a, value.Trim(), StringComparison.OrdinalIgnoreCase));
+            return match ?? throw new ArgumentException(name + " must be one of " + String.Join(", ", allowed) + ".");
+        }
+
         private readonly DatabaseDriver _Database;
         private readonly IMissionService _Missions;
         private readonly ArmadaSettings _Settings;
@@ -60,6 +68,10 @@ namespace Armada.Server
         /// <summary>Filter and page decisions after mission visibility; never scan another tenant.</summary>
         public async Task<EnumerationResult<CaptainSelectionDecisionView>> HistoryAsync(AuthContext caller, string missionId, CaptainSelectionHistoryQuery query, CancellationToken token = default)
         {
+            ArgumentNullException.ThrowIfNull(query);
+            query.Outcome = Canonical(query.Outcome, "outcome", CaptainSelectionOutcomes.Admitted, CaptainSelectionOutcomes.Waiting);
+            query.Trigger = Canonical(query.Trigger, "trigger", "Dispatch", "Repair", CaptainSelectionOutcomes.Waiting);
+            if (query.FromUtc.HasValue && query.ToUtc.HasValue && query.FromUtc.Value >= query.ToUtc.Value) throw new ArgumentException("from must be earlier than to.");
             Mission mission = await MissionAsync(caller, missionId, token).ConfigureAwait(false);
             string? owner = Owner(caller);
             EnumerationResult<CaptainSelectionDecision> page = await _Database.CaptainSelections.EnumerateHistoryAsync(mission.TenantId!, mission.Id, owner, query, token).ConfigureAwait(false);

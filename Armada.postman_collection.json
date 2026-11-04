@@ -19543,7 +19543,7 @@
                                 "settings"
                             ]
                         },
-                        "description": "Reads the live UsageSelection group, its revision and capability metadata. Saves usageSelectionRevision for Update Selection Settings. capabilities.environmentOverride true means the group is read-only here."
+                        "description": "Reads the live UsageSelection group, its revision and capability metadata. Saves usageSelectionRevision for Update Selection Settings. capabilities.environmentOverride true means the group is read-only here. Settings responses use PascalCase member names."
                     },
                     "event": [
                         {
@@ -19553,8 +19553,8 @@
                                 "exec": [
                                     "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
                                     "const body = pm.response.json();",
-                                    "pm.test(\"Selection group, revision and capabilities\", () => { pm.expect(body.usageSelection).to.be.an(\"object\"); pm.expect(body.usageSelectionRevision).to.be.a(\"number\"); pm.expect(body.usageSelectionCapabilities.strategies).to.be.an(\"array\").that.is.not.empty; });",
-                                    "pm.collectionVariables.set(\"usageSelectionRevision\", String(body.usageSelectionRevision));"
+                                    "pm.test(\"Selection group, revision and capabilities\", () => { pm.expect(body.UsageSelection).to.be.an(\"object\"); pm.expect(body.UsageSelectionRevision).to.be.a(\"number\"); pm.expect(body.UsageSelectionCapabilities.Strategies).to.be.an(\"array\").that.is.not.empty; });",
+                                    "pm.collectionVariables.set(\"usageSelectionRevision\", String(body.UsageSelectionRevision));"
                                 ]
                             }
                         }
@@ -19581,7 +19581,7 @@
                                 "settings"
                             ]
                         },
-                        "description": "Replaces the UsageSelection group and applies it live. Run Read Selection Settings first: a stale ExpectedUsageSelectionRevision returns 409 (Data.Code names the conflict), an out-of-range or cross-field value returns 400 with Data.Code InvalidUsageSelection before anything changes, and an environment override returns 409. Mode Enforce is opt-in; Observe records the strategy's choice without changing routing. Set selectionExpectedStatus to 409 to test a stale revision.",
+                        "description": "Changes the UsageSelection members sent (omitted members keep their current values) and applies them live. Run Read Selection Settings first: a stale ExpectedUsageSelectionRevision returns 409 (Data.Code names the conflict), an out-of-range or cross-field value returns 400 with Data.Code InvalidUsageSelection before anything changes, and an environment override returns 409. Mode Enforce is opt-in; Observe records the strategy's choice without changing routing. Set selectionExpectedStatus to 409 to test a stale revision.",
                         "body": {
                             "mode": "raw",
                             "raw": "{\n  \"ExpectedUsageSelectionRevision\": {{usageSelectionRevision}},\n  \"UsageSelection\": {\n    \"Mode\": \"Observe\",\n    \"Strategy\": \"MostRemainingAllowance\",\n    \"UnknownUsageBehavior\": \"AllowDeprioritized\",\n    \"ReservePercent\": 10,\n    \"ComfortableHeadroomPercent\": 25,\n    \"PerAttemptReservationPercent\": 2,\n    \"MaximumFreshnessSeconds\": 900,\n    \"UnknownRetrySeconds\": 60,\n    \"ProviderCooldownSeconds\": 300,\n    \"SettlementLagSeconds\": 120,\n    \"MaximumUnsettledSeconds\": 3600,\n    \"DecisionRetentionDays\": 90,\n    \"MaximumCandidates\": 200\n  }\n}",
@@ -19600,8 +19600,8 @@
                                 "exec": [
                                     "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
                                     "const body = pm.response.json();",
-                                    "if (pm.response.code === 200) { pm.test(\"Revision advanced\", () => pm.expect(body.usageSelectionRevision).to.be.above(Number(pm.collectionVariables.get(\"usageSelectionRevision\")))); pm.collectionVariables.set(\"usageSelectionRevision\", String(body.usageSelectionRevision)); }",
-                                    "if (pm.response.code === 409) pm.test(\"Conflict names the group\", () => pm.expect(body.data.field).to.eql(\"UsageSelection\"));"
+                                    "if (pm.response.code === 200) { pm.test(\"Revision advanced\", () => pm.expect(body.UsageSelectionRevision).to.be.above(Number(pm.collectionVariables.get(\"usageSelectionRevision\")))); pm.collectionVariables.set(\"usageSelectionRevision\", String(body.UsageSelectionRevision)); }",
+                                    "if (pm.response.code === 409) pm.test(\"Conflict names the group\", () => pm.expect(body.Data.Field).to.eql(\"UsageSelection\"));"
                                 ]
                             }
                         }

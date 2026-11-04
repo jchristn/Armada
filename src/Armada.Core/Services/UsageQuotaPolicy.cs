@@ -28,6 +28,13 @@ namespace Armada.Core.Services
         /// </summary>
         public static readonly TimeSpan MaximumFutureSkew = TimeSpan.FromMinutes(5);
 
+        /// <summary>
+        /// Resolution allowed between a probe's start and the observation time it reports. Providers and Custom executables
+        /// commonly report whole seconds, so an observation made during a probe can carry a timestamp up to a second
+        /// before the probe started.
+        /// </summary>
+        public static readonly TimeSpan CaptureTimestampResolution = TimeSpan.FromSeconds(1);
+
         #endregion
 
         #region Public-Methods
