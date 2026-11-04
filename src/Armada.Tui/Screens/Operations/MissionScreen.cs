@@ -185,7 +185,7 @@ namespace Armada.Tui.Screens.Operations
             AddPanel("description", "Description", Description);
             AddPanel("linked", "Linked Checks and Deployments", Linked);
             AddPanel("playbooks", "Playbooks", Playbooks);
-            AddPanel("selection", "usageSelection.title", Selection);
+            AddPanel("selection", "Captain Selection", Selection);
             AddPanel("failure", "Failure", Failure);
             Tabs.SelectedChanged += (s, e) =>
             {

@@ -52,7 +52,9 @@ namespace Armada.Tui.Screens
             get
             {
                 if (IsNested) return SelectedTab.Label;
-                return Route.Route.Title + (Route.Tab != null ? ": " + Route.Tab.Label : "");
+                // "Missions: Missions" says nothing twice; the hub's own tab is named once.
+                if (Route.Tab == null || String.Equals(Route.Tab.Label, Route.Route.Title, StringComparison.Ordinal)) return Route.Route.Title;
+                return Route.Route.Title + ": " + Route.Tab.Label;
             }
         }
 

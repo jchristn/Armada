@@ -333,7 +333,17 @@ namespace Armada.Tui.Screens.Operations
             if (panel != null)
             {
                 Rect area = stack.Fill(panel);
-                if (!area.IsEmpty) Scope.RenderChild(surface, panel, area);
+                if (!area.IsEmpty && LoadError != null && !Loaded)
+                {
+                    // The record never loaded: the panels have nothing to show, and their own placeholders ("Loading...",
+                    // "Open this tab to ...") would contradict the error above.
+                    SurfaceText.Draw(surface, 0, area.Y, Tr("Nothing to show until this record loads. Press F5 to retry."), Theme.Muted, width);
+                    Scope.Place(panel, area);
+                }
+                else if (!area.IsEmpty)
+                {
+                    Scope.RenderChild(surface, panel, area);
+                }
             }
         }
 

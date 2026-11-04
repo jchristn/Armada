@@ -564,7 +564,9 @@ namespace Armada.Tui.Screens.Ask
 
             x += SurfaceText.Draw(surface, x, y, (_Ask.ShowThinking ? "[x] " : "[ ] ") + T("Show thinking") + " (Alt+T)   ", Theme.Muted, width - rw - 1 - x);
             x += SurfaceText.Draw(surface, x, y, "/ " + T("Commands") + "   Ctrl+E " + T("Editor") + "   ", Theme.Muted, width - rw - 1 - x);
-            SurfaceText.Draw(surface, x, y, T("AI can make mistakes. Check answers."), Theme.Muted, width - rw - 1 - x);
+            // The caution shows whole or not at all; a cut-off "AI can make m..." reads as noise.
+            string caution = T("AI can make mistakes. Check answers.");
+            if (x + TextCells.Width(caution) <= width - rw - 1) SurfaceText.Draw(surface, x, y, caution, Theme.Muted, width - rw - 1 - x);
             SurfaceText.Draw(surface, width - rw, y, right, rightStyle, rw);
         }
 

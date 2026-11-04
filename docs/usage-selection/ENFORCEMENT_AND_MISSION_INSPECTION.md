@@ -52,7 +52,7 @@ Browser review renders the real React card/CSS against isolated fixture response
 
 ## Native and CLI workflows (U4)
 
-- **TUI:** open a mission and switch to the **Captain selection** tab (`[`/`]`). Keys, shown inline and in the status bar: `c` compare, `h` history (Up/Down and Enter open a decision, `f` cycles the outcome filter), `v` read-only preview, `<`/`>` page, `j` JSON, `g` refresh, and `a` recovery permissions for administrators on Pending missions. The tab reloads on `captain-selection.changed` for that mission.
+- **TUI:** open a mission and switch to the **Captain Selection** tab (`[`/`]`). Keys, shown inline and in the status bar: `c` compare, `h` history (Up/Down and Enter open a decision, `f` cycles the outcome filter), `v` read-only preview, `<`/`>` page, `j` JSON, `g` refresh, and `a` recovery permissions for administrators on Pending missions. The tab reloads on `captain-selection.changed` for that mission.
 - **Mobile:** the mission's Captain selection section shows recovery permissions, and administrators get a **Recovery permissions** sheet for Pending missions. A conflict keeps the draft reason and offers Refresh. The section re-reads on `captain-selection.changed` while focused.
 - **Helm:** `armada mission selection <mission>` prints the summary with recovery permissions. `armada mission selection-recovery <mission> [--allow-fallback] [--reserve-exception] --reason "..." [--expected-revision N] [--yes]` reads the current revision unless one is given, confirms, and saves an audited revision.
 - **WebSocket:** `captain-selection.changed` is broadcast to the mission's tenant after each committed change and carries identifiers only. See [WEBSOCKET_API.md](../WEBSOCKET_API.md#captain-selectionchanged).

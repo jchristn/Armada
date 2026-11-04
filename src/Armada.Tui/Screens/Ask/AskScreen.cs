@@ -388,6 +388,8 @@ namespace Armada.Tui.Screens.Ask
                 hints.Add("Up/Down", "Select");
                 hints.Add("Esc", "Back to the message box");
                 hints.Add("End", "Live tail");
+                // The header's [.] More can be cut off on a narrow terminal; the menu holds summarize, rename, and the rest.
+                if (Ask.Conversation.Thread != null) hints.Add(".", "More");
                 return hints;
             }
 
@@ -733,13 +735,18 @@ namespace Armada.Tui.Screens.Ask
             // Esc first. (s and . behave the same but are often cut off, so only the captain hint grows.)
             string prefix = ReferenceEquals(Scope.Focused, Composer) ? "Esc " : "";
             string right = T("Captain") + ": " + captainLabel + " [" + prefix + "c]";
+            int limit = Math.Max(10, cw * 2 / 3);
             if (thread != null)
             {
-                right += "   " + T("Auto-approve") + ": " + (thread.AutoApprove ? T("on") + " !" : T("off")) + " [Ctrl+Y]";
-                right += "   [s] " + T("Summarize") + "  [.] " + T("More");
+                // Each later segment shows whole or not at all, so a key is never cut off mid-hint. Auto-approve on
+                // is a warning and always stays.
+                string approve = "   " + T("Auto-approve") + ": " + (thread.AutoApprove ? T("on") + " !" : T("off")) + " [Ctrl+Y]";
+                if (thread.AutoApprove || TextCells.Width(right + approve) <= limit) right += approve;
+                string more = "   [s] " + T("Summarize") + "  [.] " + T("More");
+                if (TextCells.Width(right + more) <= limit) right += more;
             }
 
-            int rw = Math.Min(TextCells.Width(right), Math.Max(10, cw * 2 / 3));
+            int rw = Math.Min(TextCells.Width(right), limit);
             int titleWidth = Math.Max(8, cw - rw - 3);
             if (EditingTitle)
             {

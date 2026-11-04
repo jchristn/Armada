@@ -289,7 +289,10 @@ namespace Armada.Tui.Screens.Operations
         /// <inheritdoc />
         protected override int MeasureContentWidth(int availableWidth)
         {
-            return Math.Min(availableWidth, Math.Max(50, (int)(_ScreenWidth * _WidthRatio)));
+            // On a narrow terminal the form takes nearly the whole width, so labels, hints, and the footer keys fit.
+            int wanted = (int)(_ScreenWidth * _WidthRatio);
+            if (_ScreenWidth < 110) wanted = Math.Max(wanted, _ScreenWidth - 8);
+            return Math.Min(availableWidth, Math.Max(50, wanted));
         }
 
         /// <inheritdoc />
