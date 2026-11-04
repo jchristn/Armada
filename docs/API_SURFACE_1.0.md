@@ -24,8 +24,8 @@ administrator).
 
 | Surface | Total | Experimental |
 |---|---|---|
-| REST routes | 528 | 15 |
-| MCP tools | 270 | 8 |
+| REST routes | 529 | 15 |
+| MCP tools | 271 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 77 | 0 |
@@ -288,6 +288,7 @@ Base path `/api/v1`. Request and response bodies are PascalCase JSON; errors are
 | GET | `/api/v1/missions/{id}/captain-selection/history` | Authenticated |  | 200 `EnumerationResult<CaptainSelectionDecisionView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/missions/{id}/captain-selection/history/enumerate` | Authenticated | `CaptainSelectionHistoryQuery` (optional) | 200 `EnumerationResult<CaptainSelectionDecisionView>`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | POST | `/api/v1/missions/{id}/captain-selection/preview` | Authenticated |  | 200 `CaptainSelectionPreview`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
+| POST | `/api/v1/missions/{id}/captain-selection/recovery` | TenantAdmin | `UsageSelectionRecoveryRequest` | 200 `UsageSelectionRecovery`, 400 `ApiErrorResponse`, 401 `ApiErrorResponse`, 403 `ApiErrorResponse`, 404 `ApiErrorResponse`, 409 `ApiErrorResponse`, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/missions/{id}/diff` | Authenticated |  | 200, 404, 503 `ApiStatusErrorResponse` |  |
 | GET | `/api/v1/missions/{id}/evaluate-autoland` | Authenticated |  | 200 `AutoLandDecision`, 400, 404 |  |
 | GET | `/api/v1/missions/{id}/github/pull-request` | Authenticated |  | 200 `GitHubPullRequestDetail`, 404 |  |
@@ -583,6 +584,7 @@ Arguments are camelCase; `*` marks a required argument. See [MCP_API.md](MCP_API
 | `approve_ask_proposal` | Authenticated | `proposalId*: string`, `threadId*: string` |  |
 | `approve_deployment` | TenantAdmin | `comment: string`, `deploymentId*: string` |  |
 | `approve_mission_review` | TenantAdmin | `comment: string`, `conditional: boolean`, `missionId*: string` |  |
+| `authorize_captain_selection_recovery` | TenantAdmin | `missionId*: string`, `recovery*: object` |  |
 | `backup` | AdminOnly | `outputPath: string` |  |
 | `cancel_ask_turn` | Authenticated | `threadId*: string` |  |
 | `cancel_fleet_action_run` | TenantAdmin | `runId*: string` |  |

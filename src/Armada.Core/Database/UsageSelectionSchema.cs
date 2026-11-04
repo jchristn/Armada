@@ -7,6 +7,32 @@ namespace Armada.Core.Database
     /// <summary>Structured selection-ledger migration shared by the supported SQL dialects.</summary>
     internal static class UsageSelectionSchema
     {
+        internal static SchemaMigration RecoveryMigration(DatabaseTypeEnum provider)
+        {
+            bool sqlServer = provider == DatabaseTypeEnum.SqlServer;
+            string create = sqlServer ? "IF OBJECT_ID('usage_execution_sources','U') IS NULL CREATE TABLE " : "CREATE TABLE IF NOT EXISTS ";
+            string sources = create + @"usage_execution_sources(execution_key VARCHAR(64) NOT NULL PRIMARY KEY,tenant_id VARCHAR(64) NOT NULL,
+                mission_id VARCHAR(64) NOT NULL,captain_id VARCHAR(64) NOT NULL,decision_id VARCHAR(64) NULL,
+                host_id VARCHAR(64) NULL,runtime VARCHAR(64) NOT NULL,account_key VARCHAR(64) NULL,configuration_revision VARCHAR(1024) NULL,
+                created_utc VARCHAR(40) NOT NULL,launch_attempted_utc VARCHAR(40) NULL,released_utc VARCHAR(40) NULL);";
+            string overrides = (sqlServer ? "IF OBJECT_ID('usage_selection_recovery','U') IS NULL CREATE TABLE " : "CREATE TABLE IF NOT EXISTS ")
+                + @"usage_selection_recovery(id VARCHAR(64) NOT NULL PRIMARY KEY,tenant_id VARCHAR(64) NOT NULL,mission_id VARCHAR(64) NOT NULL,
+                actor_user_id VARCHAR(64) NOT NULL,reason VARCHAR(1024) NOT NULL,allow_fallback INTEGER NOT NULL,reserve_exception INTEGER NOT NULL,
+                revision INTEGER NOT NULL,created_utc VARCHAR(40) NOT NULL,UNIQUE(tenant_id,mission_id,revision));";
+            string add = sqlServer ? "IF COL_LENGTH('captain_selection_candidates','next_reconsider_utc') IS NULL ALTER TABLE captain_selection_candidates ADD next_reconsider_utc NVARCHAR(40) NULL;"
+                : "ALTER TABLE captain_selection_candidates ADD COLUMN " + (provider == DatabaseTypeEnum.Postgresql ? "IF NOT EXISTS " : "") + "next_reconsider_utc VARCHAR(40) NULL;";
+            if (sqlServer) { sources = sources.Replace("VARCHAR", "NVARCHAR", StringComparison.Ordinal); overrides = overrides.Replace("VARCHAR", "NVARCHAR", StringComparison.Ordinal); }
+            List<string> statements = new List<string> { sources, overrides, add };
+            foreach (string column in new[] { "execution_key", "mission_id", "decision_id" })
+                statements.Add((sqlServer ? "IF COL_LENGTH('usage_account_cooldowns','" + column + "') IS NULL " : "")
+                    + "ALTER TABLE usage_account_cooldowns ADD " + (provider == DatabaseTypeEnum.Sqlite || provider == DatabaseTypeEnum.Postgresql ? "COLUMN " : "")
+                    + (provider == DatabaseTypeEnum.Postgresql ? "IF NOT EXISTS " : "") + column + (sqlServer ? " NVARCHAR(64) NULL;" : " VARCHAR(64) NULL;"));
+            statements.Add((sqlServer ? "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='ix_usage_cooldown_execution' AND object_id=OBJECT_ID('usage_account_cooldowns')) " : "")
+                + "CREATE INDEX " + (provider == DatabaseTypeEnum.Sqlite || provider == DatabaseTypeEnum.Postgresql ? "IF NOT EXISTS " : "")
+                + "ix_usage_cooldown_execution ON usage_account_cooldowns(tenant_id,execution_key);");
+            return new SchemaMigration(127, "Bind usage recovery and provider cooldowns to execution evidence", statements.ToArray());
+        }
+
         internal static SchemaMigration UntrackedExecutionMigration(DatabaseTypeEnum provider)
         {
             bool sqlServer = provider == DatabaseTypeEnum.SqlServer;

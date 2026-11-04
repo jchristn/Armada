@@ -6,6 +6,8 @@ namespace Armada.Core.Models
     /// <summary>Internal scoped source evidence; account keys must never be returned by selection APIs.</summary>
     public sealed class UsageSelectionAccountEvidence
     {
+        /// <summary>Persisted shared-account cooldown; expiry never invents balance.</summary>
+        public DateTime? CooldownUntilUtc { get; set; }
         /// <summary>Captain whose effective membership supplied this observation.</summary>
         public string CaptainId { get; set; } = String.Empty;
         /// <summary>Current membership identity.</summary>

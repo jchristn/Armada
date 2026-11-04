@@ -20,10 +20,11 @@ namespace Armada.Server.Routes
         public CaptainSelectionRoutes(CaptainSelectionAccessService service, JsonSerializerOptions options)
         { _Service = service; _Options = options; }
 
-        /// <summary>Register read-only history and side-effect-free preview routes with OpenAPI and shared authorization.</summary>
+        /// <summary>Register history, side-effect-free previews and audited recovery routes with OpenAPI and shared authorization.</summary>
         public void Register(Webserver app, Func<HttpContextBase, Task<AuthContext>> authenticate, IAuthorizationService authz)
         {
             RegisterOne(app, authenticate, authz, HttpMethod.GET, "/api/v1/missions/{id}/captain-selection", "summary");
+            RegisterOne(app, authenticate, authz, HttpMethod.POST, "/api/v1/missions/{id}/captain-selection/recovery", "recovery");
             RegisterOne(app, authenticate, authz, HttpMethod.GET, "/api/v1/missions/{id}/captain-selection/history", "history");
             RegisterOne(app, authenticate, authz, HttpMethod.POST, "/api/v1/missions/{id}/captain-selection/preview", "preview");
             RegisterOne(app, authenticate, authz, HttpMethod.POST, "/api/v1/missions/{id}/captain-selection/history/enumerate", "history");
@@ -58,6 +59,8 @@ namespace Armada.Server.Routes
                         int page = filter?.PageNumber ?? Number(context, "pageNumber", 1), size = filter?.PageSize ?? Number(context, "pageSize", 25);
                         payload = kind switch
                         {
+                            "recovery" => await _Service.AuthorizeRecoveryAsync(caller, id,
+                                JsonSerializer.Deserialize<UsageSelectionRecoveryRequest>(context.Request.DataAsString, _Options) ?? throw new ArgumentException("Recovery authorization is required."), context.Token).ConfigureAwait(false),
                             "summary" => await _Service.SummaryAsync(caller, id, context.Token).ConfigureAwait(false),
                             "history" => await _Service.HistoryAsync(caller, id, filter ?? new CaptainSelectionHistoryQuery { PageNumber = page, PageSize = size,
                                 Trigger = context.Request.RetrieveQueryValue("trigger"), Outcome = context.Request.RetrieveQueryValue("outcome"),
@@ -85,17 +88,19 @@ namespace Armada.Server.Routes
 
         private static OpenApiRouteMetadata Metadata(string path, string kind, HttpMethod method)
         {
-            OpenApiRouteMetadata metadata = OpenApiRouteMetadata.Create("Read captain selection " + kind, new[] { "Captain selection" })
+            OpenApiRouteMetadata metadata = OpenApiRouteMetadata.Create(kind == "recovery" ? "Authorize captain selection recovery" : "Read captain selection " + kind, new[] { "Captain selection" })
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission or decision identifier"))
                 .WithSecurity("ApiKey");
+            if (kind == "recovery") metadata.WithRequestBody(OpenApiJson.BodyFor<UsageSelectionRecoveryRequest>("Administrator permission, expected revision and required audit reason", true));
             if (method == HttpMethod.POST && (kind == "history" || kind == "candidates"))
                 metadata.WithRequestBody(OpenApiJson.BodyFor<CaptainSelectionHistoryQuery>("Scoped filters and pagination; tenant scope comes from the authenticated caller and path", false));
-            if (kind != "summary")
+            if (kind != "summary" && kind != "recovery")
                 foreach (string name in new[] { "pageNumber", "pageSize" }) metadata.WithParameter(OpenApiParameterMetadata.Query(name, "One-based page; pageSize 1..1000, default 25", false));
             if (kind == "detail" || kind == "candidates") metadata.WithParameter(OpenApiParameterMetadata.Query("tenantId", "Explicit tenant for global administrators; defaults to caller tenant", false));
             if (kind == "history")
                 foreach (string name in new[] { "trigger", "outcome", "from", "to" }) metadata.WithParameter(OpenApiParameterMetadata.Query(name, "History filter; UTC range [from,to)", false));
             metadata.WithResponse(200, kind switch {
+                "recovery" => OpenApiJson.For<UsageSelectionRecovery>("Immutable recovery authorization"),
                 "summary" => OpenApiJson.For<CaptainSelectionSummary>("Current attempt and latest retained selection"),
                 "history" => OpenApiJson.For<EnumerationResult<CaptainSelectionDecisionView>>("Scoped history page"),
                 "preview" => OpenApiJson.For<CaptainSelectionPreview>("Current hypothetical comparison; no writes or launch"),

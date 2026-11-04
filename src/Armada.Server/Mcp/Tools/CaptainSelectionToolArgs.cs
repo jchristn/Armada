@@ -6,6 +6,8 @@ namespace Armada.Server.Mcp.Tools
     /// <summary>Typed selection arguments; account identities are never accepted from callers.</summary>
     public sealed class CaptainSelectionToolArgs
     {
+        /// <summary>Mission-scoped recovery authorization request.</summary>
+        public UsageSelectionRecoveryRequest? Recovery { get; set; }
         /// <summary>Visible mission identifier.</summary>
         public string? MissionId { get; set; }
         /// <summary>Retained decision identifier.</summary>

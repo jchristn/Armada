@@ -72,7 +72,8 @@ namespace Armada.Core.Database
             string[] names = Enumerable.Range(0, captainIds.Count).Select(i => "@captain" + i).ToArray();
             using DbCommand command = Command(connection, transaction, @"SELECT m.id AS membership_id,m.captain_id,m.host_id,m.runtime,m.account_key,m.provider,m.configuration_revision,m.effective_from_utc,
                 l.capture_context_key,l.last_good_snapshot_id,l.last_good_captured_utc,l.last_good_status,l.effective_interval_seconds,
-                s.source,s.windows_json,s.probe_started_utc
+                s.source,s.windows_json,s.probe_started_utc,
+                (SELECT MAX(c.retry_after_utc) FROM usage_account_cooldowns c WHERE c.tenant_id=m.tenant_id AND c.host_id=m.host_id AND c.runtime=m.runtime AND c.account_key=m.account_key AND c.active=1) AS cooldown_until_utc
                 FROM usage_account_memberships m
                 LEFT JOIN usage_latest_state l ON l.tenant_id=m.tenant_id AND l.host_id=m.host_id AND l.runtime=m.runtime AND l.account_key=m.account_key AND l.expired_utc IS NULL
                 LEFT JOIN usage_snapshots s ON s.id=l.last_good_snapshot_id AND s.tenant_id=m.tenant_id AND s.host_id=m.host_id AND s.runtime=m.runtime AND s.account_key=m.account_key
@@ -87,7 +88,7 @@ namespace Armada.Core.Database
             {
                 rows.Add(new UsageSelectionAccountEvidence
                 {
-                    CaptainId = Text("captain_id")!, MembershipId = Text("membership_id")!, HostId = Text("host_id")!,
+                    CooldownUntilUtc = Date("cooldown_until_utc"), CaptainId = Text("captain_id")!, MembershipId = Text("membership_id")!, HostId = Text("host_id")!,
                     Runtime = Enum.Parse<AgentRuntimeEnum>(Text("runtime")!, false), AccountKey = Text("account_key")!, Provider = Text("provider"),
                     ConfigurationRevision = Text("configuration_revision"), CaptureContextKey = Text("capture_context_key"),
                     SnapshotId = Text("last_good_snapshot_id"), CapturedUtc = Date("last_good_captured_utc"), ProbeStartedUtc = Date("probe_started_utc"),

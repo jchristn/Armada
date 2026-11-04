@@ -31,6 +31,7 @@ namespace Test.Shared.Suites.Client
         /// </summary>
         private static readonly Dictionary<string, string> _CoveredElsewhere = new Dictionary<string, string>(StringComparer.Ordinal)
         {
+            ["AuthorizeCaptainSelectionRecoveryAsync"] = "Authenticated SDK administrator recovery mutation, scope, revisions and running-state conflicts covered by E2E.CaptainSelectionApi",
             ["GetCaptainSelectionAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
             ["GetCaptainSelectionHistoryAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",
             ["GetCaptainSelectionDecisionAsync"] = "Live SDK/Core-client owner, retained history, redaction and read-only preview contracts covered by E2E.CaptainSelectionApi",

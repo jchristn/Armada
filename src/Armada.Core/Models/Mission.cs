@@ -10,8 +10,15 @@ namespace Armada.Core.Models
     /// </summary>
     public class Mission
     {
+        // Bound to the locally owned launch/cleanup operation, never serialized or used to select an account.
+        internal string? UsageAdmissionExecutionKey { get; set; }
+
         // Monitoring may resolve scalar routing preferences without persisting or changing the caller's mission.
         internal Mission AdmissionView() => (Mission)MemberwiseClone();
+
+        /// <summary>Transient admission-only recovery authorization, resolved from the scoped audit ledger.</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        internal UsageSelectionRecovery? UsageRecovery { get; set; }
 
         #region Public-Members
 

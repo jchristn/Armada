@@ -14,6 +14,12 @@ namespace Armada.Server.Mcp.Tools
         {
             JsonSerializerOptions options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             object missionSchema = new { type = "object", properties = new { missionId = new { type = "string" }, pageNumber = new { type = "integer", minimum = 1 }, pageSize = new { type = "integer", minimum = 1, maximum = 1000 } }, required = new[] { "missionId" } };
+            register("authorize_captain_selection_recovery", "Authorize or revoke preferred-captain fallback and a soft-reserve exception for a Pending mission. Requires tenant/system administrator, expectedRevision and a reason. Hard quota, cooldown, strict assignment, scope and capacity remain enforced.",
+                new { type = "object", properties = new { missionId = new { type = "string" }, recovery = new { type = "object", properties = new { expectedRevision = new { type = "integer", minimum = 0 }, allowFallback = new { type = "boolean" }, reserveException = new { type = "boolean" }, reason = new { type = "string", minLength = 1, maxLength = 512 } }, required = new[] { "expectedRevision", "reason" } } }, required = new[] { "missionId", "recovery" } }, async args => {
+                    if (selections == null) return (object)McpToolError.Unavailable("Selection service unavailable.");
+                    CaptainSelectionToolArgs request = Read(args, options);
+                    return await selections.AuthorizeRecoveryAsync(McpToolHelpers.ResolveCallerContext(), request.MissionId ?? throw new ArgumentException("missionId is required."), request.Recovery ?? throw new ArgumentException("recovery is required.")).ConfigureAwait(false);
+                });
             register("get_captain_selection", "Read the current admitted attempt and latest retained decision for a visible mission. No account keys are returned.", missionSchema,
                 async args => selections == null ? (object)McpToolError.Unavailable("Selection service unavailable.") : await selections.SummaryAsync(McpToolHelpers.ResolveCallerContext(), Read(args, options).MissionId ?? throw new ArgumentException("missionId is required.")).ConfigureAwait(false));
             register("preview_captain_selection", "Read-only current-state comparison using the configured strategy and shared routing/eligibility. Does not capture, persist, claim or launch.", missionSchema,

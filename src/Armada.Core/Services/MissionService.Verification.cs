@@ -27,6 +27,7 @@ namespace Armada.Core.Services
                 if (current == null || !current.HasMissionCapacity || !CaptainVisibleToMission(current, mission)
                     || current.QuarantineUntilUtc > DateTime.UtcNow) return false;
                 Mission routingView = mission.AdmissionView();
+                if (!String.IsNullOrEmpty(mission.TenantId)) routingView.UsageRecovery = await _Database.CaptainSelections.ReadRecoveryAsync(mission.TenantId, mission.Id, token).ConfigureAwait(false);
                 await ResolvePreferredCaptainAsync(routingView, token, persist: false).ConfigureAwait(false);
                 CaptainEligibilityContext eligibility = await BuildCaptainEligibilityContextAsync(routingView, token).ConfigureAwait(false);
                 if (CaptainIneligibilityReason(current, routingView, eligibility) != null) return false;

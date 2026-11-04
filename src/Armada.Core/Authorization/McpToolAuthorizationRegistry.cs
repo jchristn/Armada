@@ -87,6 +87,7 @@ namespace Armada.Core.Authorization
             Add("mission_status", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("papercut_summary", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("search_memory", "Memory", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("authorize_captain_selection_recovery", "Mission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("get_captain_selection", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("preview_captain_selection", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("get_captain_selection_history", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

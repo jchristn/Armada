@@ -17,6 +17,13 @@ namespace Armada.Core.Services
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, UsageSelectionTransientBlocker> _UsageSelectionBlockers =
             new System.Collections.Concurrent.ConcurrentDictionary<string, UsageSelectionTransientBlocker>(StringComparer.Ordinal);
 
+        /// <inheritdoc />
+        public void ReconsiderCaptainSelection(string missionId)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(missionId);
+            _UsageSelectionBlockers.TryRemove(missionId, out _);
+        }
+
         private string UsagePolicyKey() => System.Text.Json.JsonSerializer.Serialize(_Settings.EffectiveUsageSelection);
 
         private bool UsageRetryPending(Mission mission)
@@ -133,6 +140,26 @@ namespace Armada.Core.Services
             }
         }
 
+        private async Task<bool> OwnsSelectionCleanupAsync(Mission mission)
+        {
+            if (String.IsNullOrEmpty(mission.TenantId) || String.IsNullOrEmpty(mission.UsageAdmissionExecutionKey)) return true;
+            try
+            {
+                string? current = await _Database.CaptainSelections.ReadUsageExecutionKeyAsync(mission.TenantId, mission.Id, CancellationToken.None).ConfigureAwait(false);
+                if (current == mission.UsageAdmissionExecutionKey) return true;
+                _Logging.Info(_Header + "ignoring late assignment cleanup for a superseded execution of mission " + mission.Id);
+                return false;
+            }
+            catch (System.Data.Common.DbException) { return true; }
+        }
+
+        private async Task ReleaseSelectionIfUnstartedAsync(Mission mission, Captain captain)
+        {
+            if (String.IsNullOrEmpty(mission.UsageAdmissionExecutionKey)) return;
+            try { await _Database.CaptainSelections.ReleaseUnstartedAsync(mission.TenantId!, mission.Id, captain.Id, mission.UsageAdmissionExecutionKey, CancellationToken.None).ConfigureAwait(false); }
+            catch (System.Data.Common.DbException) { _Logging.Warn(_Header + "unstarted usage release could not be persisted for mission " + mission.Id + "; retaining conservative debt"); }
+        }
+
         private async Task RecordSelectionExecutionStartedAsync(Mission mission, CancellationToken token)
         {
             if (String.IsNullOrWhiteSpace(mission.TenantId)) return;
@@ -176,7 +203,7 @@ namespace Armada.Core.Services
 
         private async Task<UsageSelectionSnapshot> BuildUsageSelectionAsync(CaptainAdmissionSelection selection, UsageSelectionSettings settings, CancellationToken token)
         {
-            UsageSelectionSnapshot snapshot = new UsageSelectionSnapshot { Settings = settings, EvaluatedUtc = DateTime.UtcNow,
+            UsageSelectionSnapshot snapshot = new UsageSelectionSnapshot { Settings = settings, Recovery = selection.Mission.UsageRecovery, EvaluatedUtc = DateTime.UtcNow,
                 ActualCaptainId = selection.Selected?.Id, CaptureEnabled = _Settings.UsageCapture.EffectiveEnabled, Captains = selection.Visible.ToDictionary(c => c.Id, StringComparer.Ordinal) };
             if (selection.Visible.Count > settings.MaximumCandidates)
             {
@@ -218,7 +245,7 @@ namespace Armada.Core.Services
                 }
                 inputs.Add(candidate);
             }
-            snapshot.Evaluation = UsageSelectionPolicy.Evaluate(inputs, settings, snapshot.EvaluatedUtc);
+            snapshot.Evaluation = UsageSelectionPolicy.Evaluate(inputs, settings, snapshot.EvaluatedUtc, snapshot.Recovery?.ReserveException == true);
             return snapshot;
         }
     }

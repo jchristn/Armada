@@ -32,7 +32,7 @@ namespace Test.Shared.Infrastructure
         private UsageEnforcementFixture(TestDatabase fixture) { _Fixture = fixture; }
 
         /// <summary>Create two scoped candidates and one authoritative shared-account observation.</summary>
-        public static async Task<UsageEnforcementFixture> CreateAsync(double used = 87, CancellationToken token = default)
+        public static async Task<UsageEnforcementFixture> CreateAsync(double used = 87, CancellationToken token = default, int captainCount = 2)
         {
             TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
             UsageEnforcementFixture fixture = new UsageEnforcementFixture(database);
@@ -40,7 +40,7 @@ namespace Test.Shared.Infrastructure
             {
                 fixture.Tenant = await fixture.Database.Tenants.CreateAsync(new TenantMetadata("usage-enforcement"), token).ConfigureAwait(false);
                 fixture.Owner = await fixture.Database.Users.CreateAsync(new UserMaster(fixture.Tenant.Id, "enforcement@example.invalid", "fixture-password"), token).ConfigureAwait(false);
-                for (int index = 0; index < 2; index++)
+                for (int index = 0; index < captainCount; index++)
                 {
                     Captain captain = await fixture.Database.Captains.CreateAsync(new Captain("enforced-" + index) { TenantId = fixture.Tenant.Id, UserId = fixture.Owner.Id,
                         Model = "opus", Runtime = AgentRuntimeEnum.ClaudeCode, MaxConcurrency = 2, UsageCaptureEnabled = true }, token).ConfigureAwait(false);
@@ -79,13 +79,14 @@ namespace Test.Shared.Infrastructure
             UsageWindow window = UsageWindowsJson.Deserialize(source.WindowsJson).Single();
             string key = UsageBudgetIdentity.WindowKey(window);
             UsageSelectionCandidate input = new UsageSelectionCandidate { CaptainId = captain.Id, Model = captain.Model, Capacity = captain.MaxConcurrency, OccupiedSlots = captain.ActiveMissionCount,
-                IdentityVerified = captureEnabled, ConfigurationMatches = true, Provider = "anthropic", CapturedUtc = source.CapturedUtc, Source = source.Source, Status = source.Status,
+                CooldownUntilUtc = source.CooldownUntilUtc, IdentityVerified = captureEnabled, ConfigurationMatches = true, Provider = "anthropic", CapturedUtc = source.CapturedUtc, Source = source.Source, Status = source.Status,
                 HasUncertainDebt = totals.Any(t => t.HasUncertainDebt), EffectiveCaptureIntervalSeconds = source.EffectiveIntervalSeconds,
                 Windows = new List<UsageSelectionWindowEvidence> { new UsageSelectionWindowEvidence { Window = window, ScopeApplies = true, GenerationConfirmed = true,
                     ActiveReservationPercent = totals.Where(t => t.WindowKey == key).Sum(t => t.ActivePercent), UnsettledPercent = totals.Where(t => t.WindowKey == key).Sum(t => t.UnsettledPercent) } } };
-            UsageSelectionCandidateResult result = UsageSelectionPolicy.Evaluate(new[] { input }, Policy, DateTime.UtcNow).Candidates.Single();
+            UsageSelectionRecovery? recovery = await Database.CaptainSelections.ReadRecoveryAsync(Tenant.Id, mission.Id, token).ConfigureAwait(false);
+            UsageSelectionCandidateResult result = UsageSelectionPolicy.Evaluate(new[] { input }, Policy, DateTime.UtcNow, recovery?.ReserveException == true).Candidates.Single();
             CaptainSelectionRecordSet records = new CaptainSelectionRecordSet { Policy = CaptainSelectionPolicyRevision.FromSettings(Tenant.Id, Policy),
-                AdmissionMissionVersionUtc = mission.LastUpdateUtc, AdmissionCaptainVersionUtc = captain.LastUpdateUtc, AdmissionCaptureEnabled = captureEnabled, AdmissionHostId = "host", AdmissionCaptainModel = captain.Model };
+                AdmissionRecoveryRevision = recovery?.Revision ?? 0, AdmissionMissionVersionUtc = mission.LastUpdateUtc, AdmissionCaptainVersionUtc = captain.LastUpdateUtc, AdmissionCaptureEnabled = captureEnabled, AdmissionHostId = "host", AdmissionCaptainModel = captain.Model };
             CaptainSelectionDecision decision = records.Decision;
             decision.TenantId = Tenant.Id; decision.UserId = Owner.Id; decision.MissionId = mission.Id; decision.ExecutionAttemptId = decision.Id;
             decision.PolicyRevisionId = records.Policy.Id; decision.Mode = Policy.Mode; decision.Outcome = "Admitted"; decision.SelectedCaptainId = captain.Id;
@@ -93,7 +94,9 @@ namespace Test.Shared.Infrastructure
             decision.AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion; decision.PrimaryReasonCode = result.ReasonCode;
             CaptainSelectionCandidateRecord candidate = new CaptainSelectionCandidateRecord { TenantId = Tenant.Id, UserId = Owner.Id, DecisionId = decision.Id,
                 CaptainId = captain.Id, ConfiguredModel = captain.Model, Rank = 1, Eligible = true, Band = result.Band, AvailablePercent = UsageSelectionNumbers.Headroom(result.AvailablePercent),
-                PrimaryReasonCode = result.ReasonCode, MembershipId = source.MembershipId, HostId = source.HostId, Runtime = source.Runtime.ToString(), AccountKey = source.AccountKey, EvidenceCapturedUtc = source.CapturedUtc };
+                NextReconsiderUtc = result.NextReconsiderUtc, PrimaryReasonCode = result.ReasonCode, MembershipId = source.MembershipId, HostId = source.HostId, Runtime = source.Runtime.ToString(), AccountKey = source.AccountKey, EvidenceCapturedUtc = source.CapturedUtc };
+            if (recovery != null) records.Events.Add(new CaptainSelectionExecutionEvent { TenantId = Tenant.Id, UserId = Owner.Id, DecisionId = decision.Id,
+                ExecutionAttemptId = decision.ExecutionAttemptId, EventKind = "RecoveryAuthorizationApplied", ReportingSource = recovery.Id, OccurredUtc = decision.EvaluatedUtc });
             records.Candidates.Add(candidate);
             records.Windows.Add(new CaptainSelectionWindowRecord { TenantId = Tenant.Id, UserId = Owner.Id, DecisionId = decision.Id, CandidateId = candidate.Id,
                 WindowKey = key, SnapshotId = source.SnapshotId, CapturedUtc = source.CapturedUtc, UsedPercent = window.UsedPercent, Applicable = true,
@@ -104,6 +107,11 @@ namespace Test.Shared.Infrastructure
                 ReservedPercent = Policy.PerAttemptReservationPercent });
             return records;
         }
+
+        /// <summary>Read the fixture-owned execution identity for a launch or cleanup operation.</summary>
+        public async Task<string> ExecutionKeyAsync(int index, CancellationToken token = default)
+            => await Database.CaptainSelections.ReadUsageExecutionKeyAsync(Tenant.Id, Missions[index].Id, token).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The fixture has not admitted this execution.");
 
         /// <summary>Dispose only the owned database fixture.</summary>
         public void Dispose() { _Fixture.Dispose(); }

@@ -637,6 +637,7 @@ namespace Armada.Core.Services
                     return false;
                 }
                 claimed = receipt.Claimed;
+                if (claimed) mission.UsageAdmissionExecutionKey = decision.Decision.ExecutionAttemptId;
                 // A replay is recovered by the normal mission-owned lifecycle, never launched a second time here.
                 if (receipt.AlreadyCommitted) return false;
             }
@@ -647,6 +648,8 @@ namespace Armada.Core.Services
                 return false;
             }
 
+            if (mission.UsageAdmissionExecutionKey == null && !String.IsNullOrEmpty(mission.TenantId))
+                mission.UsageAdmissionExecutionKey = await _Database.CaptainSelections.ReadUsageExecutionKeyAsync(mission.TenantId, mission.Id, token).ConfigureAwait(false);
             _UsageSelectionBlockers.TryRemove(mission.Id, out _);
             mission.BranchName = branchName;
             mission.CaptainId = captain.Id;
@@ -773,6 +776,8 @@ namespace Armada.Core.Services
             int processId;
             try
             {
+                if (!String.IsNullOrEmpty(mission.TenantId) && !await _Database.CaptainSelections.MarkLaunchAttemptedAsync(mission.TenantId, mission.Id, captain.Id, mission.UsageAdmissionExecutionKey ?? String.Empty, CancellationToken.None).ConfigureAwait(false))
+                    throw new InvalidOperationException("The execution no longer owns an un-released usage admission receipt.");
                 processId = await _Captains.OnLaunchAgent.Invoke(captain, mission, dock).ConfigureAwait(false);
                 await RecordSelectionExecutionStartedAsync(mission, CancellationToken.None).ConfigureAwait(false);
             }
@@ -1337,6 +1342,10 @@ namespace Armada.Core.Services
 
         private async Task RollbackAssignmentAsync(Mission mission, Captain captain, Dock? dock, bool preserveExistingBranch)
         {
+            if (!await OwnsSelectionCleanupAsync(mission).ConfigureAwait(false)) return;
+            // Only durable no-launch proof permits releasing estimated consumption. Ambiguous launcher failures stay unsettled.
+            if (!String.IsNullOrEmpty(mission.TenantId))
+                await ReleaseSelectionIfUnstartedAsync(mission, captain).ConfigureAwait(false);
             // Cleanup runs with no cancellation: a shutdown mid-assignment must not strand a claimed captain.
             try
             {
@@ -1363,7 +1372,10 @@ namespace Armada.Core.Services
 
         private async Task FailAssignmentAsync(Mission mission, Captain captain, Dock dock, string reason, BlackBoxStepEnum step, Exception? exception = null)
         {
+            if (!await OwnsSelectionCleanupAsync(mission).ConfigureAwait(false)) return;
             bool failed = false;
+            if (!String.IsNullOrEmpty(mission.TenantId))
+                await ReleaseSelectionIfUnstartedAsync(mission, captain).ConfigureAwait(false);
             try
             {
                 mission.Status = MissionStatusEnum.Failed;

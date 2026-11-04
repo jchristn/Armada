@@ -899,6 +899,7 @@ namespace Test.Shared.Suites.E2E
         {
             switch (property)
             {
+                case "recovery": return "{\"expectedRevision\":0,\"allowFallback\":false,\"reserveException\":false,\"reason\":\"Tenant isolation contract check\"}";
                 case "status": return tool == "set_vessel_health_override" ? "\"Pass\"" : "\"Cancelled\"";
                 case "criterion": return "\"Overall\"";
                 case "type": return "\"Build\"";

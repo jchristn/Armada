@@ -10,6 +10,22 @@ namespace Armada.Core.Database.Interfaces
     /// <summary>Tenant-scoped immutable selection history and compare-and-set budget lifecycle operations.</summary>
     public interface ICaptainSelectionMethods
     {
+        /// <summary>Read the exact immutable recovery authorization referenced by an already-authorized decision.</summary>
+        Task<UsageSelectionRecovery?> ReadDecisionRecoveryAsync(string tenantId, string decisionId, CancellationToken token = default);
+        /// <summary>Read the latest immutable mission-scoped recovery authorization.</summary>
+        Task<UsageSelectionRecovery?> ReadRecoveryAsync(string tenantId, string missionId, CancellationToken token = default);
+        /// <summary>Record an already-authorized administrator mutation for a Pending mission. Null means a stale revision or admission won the race.</summary>
+        Task<UsageSelectionRecovery?> TryAuthorizeRecoveryAsync(string tenantId, string missionId, string actorUserId, UsageSelectionRecoveryRequest request, CancellationToken token = default);
+        /// <summary>Read the current internal execution identity; never expose it as an account selector.</summary>
+        Task<string?> ReadUsageExecutionKeyAsync(string tenantId, string missionId, CancellationToken token = default);
+        /// <summary>Durably mark possible consumption before entering a launcher. Released receipts cannot launch.</summary>
+        Task<bool> MarkLaunchAttemptedAsync(string tenantId, string missionId, string captainId, string executionKey, CancellationToken token = default);
+        /// <summary>Release only a current execution with durable proof that no launcher was entered.</summary>
+        Task<bool> ReleaseUnstartedAsync(string tenantId, string missionId, string captainId, string executionKey, CancellationToken token = default);
+        /// <summary>Reconcile a stopped/superseded execution only when durable proof rules out a launcher call.</summary>
+        Task<bool> ReleaseStoppedUnstartedAsync(string tenantId, string executionKey, CancellationToken token = default);
+        /// <summary>Persist an idempotent classified cooldown against immutable actual-execution attribution.</summary>
+        Task<bool> TryRecordProviderCooldownAsync(UsageProviderCooldownRequest request, CancellationToken token = default);
         /// <summary>Batch current membership and latest-good evidence for a bounded set of captains in one tenant. Never resolves identity across hosts.</summary>
         Task<List<UsageSelectionAccountEvidence>> ReadAccountEvidenceAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default);
         /// <summary>Batch SQL-aggregated reservations for the current verified accounts of a bounded captain set.</summary>

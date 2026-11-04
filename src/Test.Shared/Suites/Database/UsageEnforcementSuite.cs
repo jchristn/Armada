@@ -22,6 +22,144 @@ namespace Test.Shared.Suites.Database
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
             void Add(string id, Func<CancellationToken, Task> body) => cases.Add(new TestCaseDescriptor(_SuiteId, id, id.Replace('_', ' '), body));
+            Add("superseded_launch_and_cleanup_cannot_touch_a_new_attempt", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(used: 40, token: token).ConfigureAwait(false);
+                CaptainSelectionRecordSet old = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
+                AssertTrue((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(old, token: token).ConfigureAwait(false)).Claimed);
+                AssertTrue(await fixture.Database.CaptainSelections.ReleaseUnstartedAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Captains[0].Id, old.Decision.ExecutionAttemptId, token).ConfigureAwait(false));
+                Mission pending = (await fixture.Database.Missions.ReadAsync(fixture.Missions[0].Id, token).ConfigureAwait(false))!;
+                pending.Status = MissionStatusEnum.Pending; pending.CaptainId = null; await fixture.Database.Missions.UpdateAsync(pending, token).ConfigureAwait(false);
+                AssertTrue(await fixture.Database.Captains.TryReleaseFromMissionAsync(fixture.Captains[0].Id, pending.Id, token).ConfigureAwait(false));
+                CaptainSelectionRecordSet fresh = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
+                AssertTrue((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(fresh, token: token).ConfigureAwait(false)).Claimed);
+                AssertFalse(await fixture.Database.CaptainSelections.ReleaseUnstartedAsync(fixture.Tenant.Id, pending.Id, fixture.Captains[0].Id, old.Decision.ExecutionAttemptId, token).ConfigureAwait(false));
+                AssertFalse(await fixture.Database.CaptainSelections.MarkLaunchAttemptedAsync(fixture.Tenant.Id, pending.Id, fixture.Captains[0].Id, old.Decision.ExecutionAttemptId, token).ConfigureAwait(false));
+                AssertEqual(fresh.Decision.Id, (await fixture.Database.CaptainSelections.ReadReservationsAsync(fixture.Tenant.Id, "host", "ClaudeCode", "opaque-account", token).ConfigureAwait(false)).Single().DecisionId);
+                AssertEqual(1, (await fixture.Database.Captains.ReadAsync(fixture.Captains[0].Id, token).ConfigureAwait(false))!.ActiveMissionCount);
+            });
+            Add("cancelled_before_launch_releases_only_with_durable_proof", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(used: 40, token: token).ConfigureAwait(false);
+                CaptainSelectionRecordSet admitted = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
+                AssertTrue((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(admitted, token: token).ConfigureAwait(false)).Claimed);
+                AssertFalse(await fixture.Database.CaptainSelections.ReleaseStoppedUnstartedAsync(fixture.Tenant.Id, admitted.Decision.ExecutionAttemptId, token).ConfigureAwait(false));
+                Mission mission = (await fixture.Database.Missions.ReadAsync(fixture.Missions[0].Id, token).ConfigureAwait(false))!;
+                mission.Status = MissionStatusEnum.Cancelled; await fixture.Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                AssertTrue(await fixture.Database.CaptainSelections.ReleaseStoppedUnstartedAsync(fixture.Tenant.Id, admitted.Decision.ExecutionAttemptId, token).ConfigureAwait(false));
+                AssertFalse(await fixture.Database.CaptainSelections.MarkLaunchAttemptedAsync(fixture.Tenant.Id, mission.Id, fixture.Captains[0].Id, await fixture.ExecutionKeyAsync(0, token).ConfigureAwait(false), token).ConfigureAwait(false));
+                AssertEqual(0, (await fixture.Database.CaptainSelections.ReadReservationsAsync(fixture.Tenant.Id, "host", "ClaudeCode", "opaque-account", token).ConfigureAwait(false)).Count);
+                AssertEqual(1, (await fixture.Database.CaptainSelections.EnumerateExecutionEventsAsync(fixture.Tenant.Id, admitted.Decision.Id, token: token).ConfigureAwait(false)).Objects.Count(e => e.EventKind == "ProvenUnstarted"));
+            });
+            Add("admitted_recovery_retains_the_exact_audit_revision", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(used: 95, token: token).ConfigureAwait(false);
+                UsageSelectionRecovery audit = (await fixture.Database.CaptainSelections.TryAuthorizeRecoveryAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Owner.Id,
+                    new UsageSelectionRecoveryRequest { ReserveException = true, Reason = "Authorized bounded reserve test" }, token).ConfigureAwait(false))!;
+                CaptainSelectionRecordSet records = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
+                CaptainSelectionExecutionEvent applied = records.Events.Single(); records.Events.Clear();
+                AssertFalse((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(records, token: token).ConfigureAwait(false)).Claimed, "missing audit correlation cannot admit an exception");
+                records.Events.Add(applied);
+                AssertTrue((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(records, token: token).ConfigureAwait(false)).Claimed);
+                UsageSelectionRecovery retained = (await fixture.Database.CaptainSelections.ReadDecisionRecoveryAsync(fixture.Tenant.Id, records.Decision.Id, token).ConfigureAwait(false))!;
+                AssertEqual(audit.Id, retained.Id); AssertEqual(fixture.Owner.Id, retained.ActorUserId); AssertEqual(audit.Reason, retained.Reason);
+                AssertNull(await fixture.Database.CaptainSelections.TryAuthorizeRecoveryAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Owner.Id,
+                    new UsageSelectionRecoveryRequest { ExpectedRevision = 1, Reason = "Cannot edit running work" }, token).ConfigureAwait(false));
+                AssertNull(await fixture.Database.CaptainSelections.ReadDecisionRecoveryAsync("other-tenant", records.Decision.Id, token).ConfigureAwait(false));
+            });
+            Add("fifty_simultaneous_admissions_share_exactly_one_reservation_budget", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(token: token, captainCount: 50).ConfigureAwait(false);
+                List<CaptainSelectionRecordSet> proposals = new List<CaptainSelectionRecordSet>();
+                for (int index = 0; index < 50; index++) proposals.Add(await fixture.RecordsAsync(index, token: token).ConfigureAwait(false));
+                Task<CaptainSelectionAdmissionReceipt>[] attempts = proposals.Select(p => fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(p, token: token)).ToArray();
+                CaptainSelectionAdmissionReceipt[] receipts = await Task.WhenAll(attempts).ConfigureAwait(false);
+                AssertEqual(1, receipts.Count(r => r.Claimed));
+                AssertEqual(1, (await fixture.Database.CaptainSelections.ReadReservationsAsync(fixture.Tenant.Id, "host", "ClaudeCode", "opaque-account", token).ConfigureAwait(false)).Count);
+                int assigned = 0, occupied = 0;
+                foreach (Mission mission in fixture.Missions)
+                    if ((await fixture.Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false))!.Status == MissionStatusEnum.Assigned) assigned++;
+                foreach (Captain captain in fixture.Captains)
+                    occupied += (await fixture.Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false))!.ActiveMissionCount;
+                AssertEqual(1, assigned); AssertEqual(1, occupied);
+            });
+            Add("classified_cooldown_is_shared_durable_idempotent_and_revalidated", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(used: 40, token: token).ConfigureAwait(false);
+                CaptainSelectionRecordSet admitted = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
+                AssertTrue((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(admitted, token: token).ConfigureAwait(false)).Claimed);
+                CaptainSelectionRecordSet stale = await fixture.RecordsAsync(1, token: token).ConfigureAwait(false);
+                AssertTrue(await fixture.Database.CaptainSelections.MarkLaunchAttemptedAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Captains[0].Id, await fixture.ExecutionKeyAsync(0, token).ConfigureAwait(false), token).ConfigureAwait(false));
+                Mission running = (await fixture.Database.Missions.ReadAsync(fixture.Missions[0].Id, token).ConfigureAwait(false))!;
+                ArmadaSettings settings = new ArmadaSettings();
+                UsageSelectionCooldownService service = new UsageSelectionCooldownService(fixture.Database, settings);
+                RuntimeExitInfo limit = RuntimeFailureClassifier.Decide(1, new RuntimeProviderError { ErrorType = "rate_limit_error", RetryAfterSeconds = 180 });
+                DateTime observed = DateTime.UtcNow;
+                AssertTrue(await service.RecordAsync(running, limit, admitted.Decision.ExecutionAttemptId, observed, token).ConfigureAwait(false));
+                AssertFalse(await service.RecordAsync(running, limit, admitted.Decision.ExecutionAttemptId, observed.AddSeconds(20), token).ConfigureAwait(false), "duplicate exits never extend a cooldown");
+                AssertFalse((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(stale, token: token).ConfigureAwait(false)).Claimed);
+                UsageSelectionAccountEvidence account = (await fixture.Database.CaptainSelections.ReadAccountEvidenceAsync(fixture.Tenant.Id, new[] { fixture.Captains[1].Id }, token).ConfigureAwait(false)).Single();
+                AssertEqual(observed.AddSeconds(180), account.CooldownUntilUtc!.Value);
+                await fixture.CaptureAsync(20, token).ConfigureAwait(false);
+                CaptainSelectionRecordSet blocked = await fixture.RecordsAsync(1, token: token).ConfigureAwait(false);
+                AssertEqual("AccountCooldown", blocked.Candidates.Single().PrimaryReasonCode);
+                AssertEqual(account.CooldownUntilUtc, blocked.Candidates.Single().NextReconsiderUtc);
+                AssertEqual(0, (await fixture.Database.Captains.ReadAsync(fixture.Captains[1].Id, token).ConfigureAwait(false))!.ActiveMissionCount);
+                EnumerationResult<CaptainSelectionExecutionEvent> events = await fixture.Database.CaptainSelections.EnumerateExecutionEventsAsync(fixture.Tenant.Id, admitted.Decision.Id, fixture.Owner.Id, token: token).ConfigureAwait(false);
+                AssertEqual(1, events.Objects.Count(e => e.EventKind == "ProviderCooldownObserved"));
+            });
+            Add("cooldown_requires_classification_owned_attempt_and_actual_host_proof", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(used: 40, token: token).ConfigureAwait(false);
+                fixture.Policy.Mode = UsageSelectionModeEnum.Observe;
+                CaptainSelectionRecordSet records = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
+                records.AdmissionHostId = "different-host";
+                AssertTrue((await fixture.Database.CaptainSelections.TryAdmitObservedAsync(records, token: token).ConfigureAwait(false)).Claimed);
+                AssertEqual(0, (await fixture.Database.CaptainSelections.ReadReservationsAsync(fixture.Tenant.Id, "host", "ClaudeCode", "opaque-account", token).ConfigureAwait(false)).Count);
+                AssertTrue(await fixture.Database.CaptainSelections.MarkLaunchAttemptedAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Captains[0].Id, await fixture.ExecutionKeyAsync(0, token).ConfigureAwait(false), token).ConfigureAwait(false));
+                Mission mission = (await fixture.Database.Missions.ReadAsync(fixture.Missions[0].Id, token).ConfigureAwait(false))!;
+                UsageSelectionCooldownService service = new UsageSelectionCooldownService(fixture.Database, new ArmadaSettings());
+                AssertFalse(await service.RecordAsync(mission, RuntimeFailureClassifier.Decide(1, new RuntimeProviderError { HttpStatusCode = 503 }), records.Decision.ExecutionAttemptId, DateTime.UtcNow, token).ConfigureAwait(false));
+                AssertFalse(await service.RecordAsync(mission, RuntimeFailureClassifier.Decide(1, new RuntimeProviderError { ErrorType = "rate_limit_error" }), records.Decision.ExecutionAttemptId, DateTime.UtcNow, token).ConfigureAwait(false));
+                AssertNull((await fixture.Database.CaptainSelections.ReadAccountEvidenceAsync(fixture.Tenant.Id, new[] { fixture.Captains[1].Id }, token).ConfigureAwait(false)).Single().CooldownUntilUtc);
+            });
+            Add("proven_unstarted_release_never_releases_a_launcher_or_sibling", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(used: 40, token: token).ConfigureAwait(false);
+                CaptainSelectionRecordSet first = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
+                AssertTrue((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(first, token: token).ConfigureAwait(false)).Claimed);
+                CaptainSelectionRecordSet second = await fixture.RecordsAsync(1, token: token).ConfigureAwait(false);
+                AssertTrue((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(second, token: token).ConfigureAwait(false)).Claimed);
+                AssertTrue(await fixture.Database.CaptainSelections.MarkLaunchAttemptedAsync(fixture.Tenant.Id, fixture.Missions[1].Id, fixture.Captains[1].Id, await fixture.ExecutionKeyAsync(1, token).ConfigureAwait(false), token).ConfigureAwait(false));
+                AssertTrue(await fixture.Database.CaptainSelections.ReleaseUnstartedAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Captains[0].Id, await fixture.ExecutionKeyAsync(0, token).ConfigureAwait(false), token).ConfigureAwait(false));
+                AssertFalse(await fixture.Database.CaptainSelections.MarkLaunchAttemptedAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Captains[0].Id, await fixture.ExecutionKeyAsync(0, token).ConfigureAwait(false), token).ConfigureAwait(false));
+                AssertFalse(await fixture.Database.CaptainSelections.ReleaseUnstartedAsync(fixture.Tenant.Id, fixture.Missions[1].Id, fixture.Captains[1].Id, await fixture.ExecutionKeyAsync(1, token).ConfigureAwait(false), token).ConfigureAwait(false));
+                List<UsageBudgetReservation> active = await fixture.Database.CaptainSelections.ReadReservationsAsync(fixture.Tenant.Id, "host", "ClaudeCode", "opaque-account", token).ConfigureAwait(false);
+                AssertEqual(1, active.Count); AssertEqual(second.Decision.Id, active.Single().DecisionId);
+                AssertTrue(active.Single().ExecutionStartedUtc.HasValue);
+            });
+            Add("recovery_authorization_is_immutable_revision_bound_and_never_bypasses_exhaustion", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(used: 95, token: token).ConfigureAwait(false);
+                CaptainSelectionRecordSet before = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
+                AssertEqual("BelowReserve", before.Candidates.Single().PrimaryReasonCode);
+                UsageSelectionRecoveryRequest request = new UsageSelectionRecoveryRequest { ExpectedRevision = 0, ReserveException = true, Reason = "Time-sensitive controlled test" };
+                Task<UsageSelectionRecovery?> one = fixture.Database.CaptainSelections.TryAuthorizeRecoveryAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Owner.Id, request, token);
+                Task<UsageSelectionRecovery?> two = fixture.Database.CaptainSelections.TryAuthorizeRecoveryAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Owner.Id, request, token);
+                UsageSelectionRecovery?[] writes = await Task.WhenAll(one, two).ConfigureAwait(false);
+                AssertEqual(1, writes.Count(w => w != null));
+                AssertFalse((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(before, token: token).ConfigureAwait(false)).Claimed);
+                CaptainSelectionRecordSet authorized = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
+                AssertEqual("AuthorizedReserveException", authorized.Candidates.Single().PrimaryReasonCode);
+                AssertEqual(1, authorized.AdmissionRecoveryRevision);
+                UsageSelectionRecovery? revoke = await fixture.Database.CaptainSelections.TryAuthorizeRecoveryAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Owner.Id,
+                    new UsageSelectionRecoveryRequest { ExpectedRevision = 1, Reason = "Revoke the temporary exception" }, token).ConfigureAwait(false);
+                AssertNotNull(revoke); AssertEqual(2, revoke!.Revision);
+                AssertFalse((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(authorized, token: token).ConfigureAwait(false)).Claimed);
+                await fixture.CaptureAsync(100, token).ConfigureAwait(false);
+                AssertEqual("AccountQuotaExhausted", (await fixture.RecordsAsync(0, token: token).ConfigureAwait(false)).Candidates.Single().PrimaryReasonCode);
+                AssertNull(await fixture.Database.CaptainSelections.ReadRecoveryAsync("other-tenant", fixture.Missions[0].Id, token).ConfigureAwait(false));
+            });
             Add("verification_repair_claims_once_and_records_the_new_attempt_atomically", async token =>
             {
                 using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(used: 40, token: token).ConfigureAwait(false);
@@ -122,6 +260,7 @@ namespace Test.Shared.Suites.Database
             {
                 using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(20, token).ConfigureAwait(false);
                 AssertTrue(await fixture.Database.CaptainSelections.TryAdmitLegacyAsync(fixture.Captains[0].Id, fixture.Missions[0].Id, "host", token: token).ConfigureAwait(false));
+                AssertTrue(await fixture.Database.CaptainSelections.MarkLaunchAttemptedAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Captains[0].Id, await fixture.ExecutionKeyAsync(0, token).ConfigureAwait(false), token).ConfigureAwait(false));
                 AssertEqual(0L, (await fixture.Database.CaptainSelections.EnumerateByMissionAsync(fixture.Tenant.Id, fixture.Missions[0].Id, token: token).ConfigureAwait(false)).TotalRecords, "Disabled does not invent selection history");
                 UsageUntrackedExecution debt = (await fixture.Database.CaptainSelections.ReadUntrackedExecutionsAsync(token: token).ConfigureAwait(false)).Single();
                 AssertTrue(debt.AccountAttributionVerified);
@@ -156,7 +295,11 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(1, await fixture.Database.CaptainSelections.AdoptUntrackedExecutionsAsync(localHostId: "host", token: token).ConfigureAwait(false));
                 AssertEqual(0, await fixture.Database.CaptainSelections.AdoptUntrackedExecutionsAsync(localHostId: "host", token: token).ConfigureAwait(false));
                 UsageUntrackedExecution adopted = (await fixture.Database.CaptainSelections.ReadUntrackedExecutionsAsync(token: token).ConfigureAwait(false)).Single();
-                AssertTrue(adopted.AccountAttributionVerified);
+                AssertFalse(adopted.AccountAttributionVerified, "present membership cannot prove an older execution used those credentials");
+                AssertFalse(await fixture.Database.CaptainSelections.ReleaseUnstartedAsync(fixture.Tenant.Id, fixture.Missions[0].Id, fixture.Captains[0].Id, await fixture.ExecutionKeyAsync(0, token).ConfigureAwait(false), token).ConfigureAwait(false), "startup adoption is never proof that a launcher was not called");
+                Mission stopped = (await fixture.Database.Missions.ReadAsync(fixture.Missions[0].Id, token).ConfigureAwait(false))!;
+                stopped.Status = MissionStatusEnum.Cancelled; await fixture.Database.Missions.UpdateAsync(stopped, token).ConfigureAwait(false);
+                AssertFalse(await fixture.Database.CaptainSelections.ReleaseStoppedUnstartedAsync(fixture.Tenant.Id, adopted.ExecutionKey, token).ConfigureAwait(false));
                 AssertEqual(0L, (await fixture.Database.CaptainSelections.EnumerateByMissionAsync(fixture.Tenant.Id, fixture.Missions[0].Id, token: token).ConfigureAwait(false)).TotalRecords);
                 AssertFalse(await fixture.Database.CaptainSelections.UpdateUntrackedExecutionAsync(adopted, adopted.Revision + 1, token).ConfigureAwait(false));
             });

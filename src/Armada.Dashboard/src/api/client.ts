@@ -1,4 +1,4 @@
-import type { CaptainSelectionSummary, CaptainSelectionDecisionView, CaptainSelectionDecisionDetail, CaptainSelectionCandidateView, CaptainSelectionPreview, CaptainSelectionHistoryQuery } from '../types/models';
+import type { UsageSelectionRecovery, UsageSelectionRecoveryRequest, CaptainSelectionSummary, CaptainSelectionDecisionView, CaptainSelectionDecisionDetail, CaptainSelectionCandidateView, CaptainSelectionPreview, CaptainSelectionHistoryQuery } from '../types/models';
 import type {
   ScopeEnum,
   UsageCaptureReceipt,
@@ -2696,3 +2696,6 @@ export const getCaptainSelectionCandidates = (decisionId: string, tenantId?: str
   get<EnumerationResult<CaptainSelectionCandidateView>>(`/api/v1/captain-selection-decisions/${encodeURIComponent(decisionId)}/candidates${cliQuery({ tenantId, pageNumber, pageSize })}`, { signal });
 export const previewCaptainSelection = (missionId: string, pageNumber = 1, pageSize = 10, signal?: AbortSignal) =>
   post<CaptainSelectionPreview>(`/api/v1/missions/${encodeURIComponent(missionId)}/captain-selection/preview${cliQuery({ pageNumber, pageSize })}`, {}, { signal });
+
+export const authorizeCaptainSelectionRecovery = (missionId: string, request: UsageSelectionRecoveryRequest, signal?: AbortSignal) =>
+  post<UsageSelectionRecovery>(`/api/v1/missions/${encodeURIComponent(missionId)}/captain-selection/recovery`, request, { signal });

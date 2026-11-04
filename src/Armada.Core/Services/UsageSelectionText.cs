@@ -28,6 +28,7 @@ namespace Armada.Core.Services
             "SufficientHeadroom" => "usageSelection.reason.headroom",
             "BelowReserve" => "usageSelection.reason.reserve",
             "AccountQuotaExhausted" => "usageSelection.reason.exhausted",
+            "FallbackPermissionRequired" => "usageSelection.reason.fallbackPermission",
             "AccountCooldown" => "usageSelection.reason.cooldown",
             "UsageIdentityUnknown" => "usageSelection.reason.identity",
             "UsageConfigurationChanged" => "usageSelection.reason.configuration",

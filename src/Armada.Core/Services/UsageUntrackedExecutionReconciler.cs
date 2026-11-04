@@ -33,6 +33,8 @@ namespace Armada.Core.Services
                 bool running = await _Database.CaptainSelections.IsUntrackedExecutionRunningAsync(row.TenantId, row.MissionId, row.ExecutionKey, token).ConfigureAwait(false);
                 if (row.State == UsageReservationStateEnum.Active && !running)
                 {
+                    if (await _Database.CaptainSelections.ReleaseStoppedUnstartedAsync(row.TenantId, row.ExecutionKey, token).ConfigureAwait(false))
+                    { changed++; continue; }
                     row.State = UsageReservationStateEnum.Unsettled; row.ExecutionEndedUtc = nowUtc; row.TransitionReason = "UnreservedExecutionEnded";
                 }
                 else if (row.State != UsageReservationStateEnum.Active && row.ExecutionEndedUtc.HasValue)

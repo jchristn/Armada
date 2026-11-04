@@ -1,13 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, getCaptainSelection, getCaptainSelectionHistory, getCaptainSelectionDecision, previewCaptainSelection } from '../../api/client';
+import { ApiError, authorizeCaptainSelectionRecovery, getCaptainSelection, getCaptainSelectionHistory, getCaptainSelectionDecision, previewCaptainSelection } from '../../api/client';
 import { translateTemplate } from '../../i18n/runtime';
 import type { CaptainSelectionDecisionDetail, CaptainSelectionDecisionView, CaptainSelectionSummary } from '../../types/models';
 import CaptainSelectionCard from './CaptainSelectionCard';
 
 vi.mock('../../api/client', () => ({
-  getCaptainSelection: vi.fn(), getCaptainSelectionHistory: vi.fn(), getCaptainSelectionDecision: vi.fn(), previewCaptainSelection: vi.fn(),
+  isApiStatus: (error: { status?: number }, status: number) => error.status === status, apiErrorMessage: (error: Error) => error.message, authorizeCaptainSelectionRecovery: vi.fn(), getCaptainSelection: vi.fn(), getCaptainSelectionHistory: vi.fn(), getCaptainSelectionDecision: vi.fn(), previewCaptainSelection: vi.fn(),
   ApiError: class ApiError extends Error { constructor(message: string, public status: number, public data: unknown) { super(message); } },
 }));
 const locale = {
@@ -34,6 +34,67 @@ describe('mission captain selection', () => {
     vi.mocked(getCaptainSelectionDecision).mockReset().mockResolvedValue(structuredClone(details));
     vi.mocked(getCaptainSelectionHistory).mockReset().mockResolvedValue({ success: true, objects: [{ ...decision, id: 'csd_old', selectedCaptainName: 'Historical captain' }], pageNumber: 1, pageSize: 10, totalPages: 2, totalRecords: 11, totalMs: 1 });
     vi.mocked(previewCaptainSelection).mockReset().mockResolvedValue({ missionId: 'msn_one', mode: 'Observe', strategy: 'MostRemainingAllowance', reasonCode: 'SelectedForHeadroom', evaluatedUtc: '2026-11-03T13:00:00Z', candidates: structuredClone(details.candidates) });
+  });
+  it('keeps long recovery explanations collapsed and interpolates the audit revision', async () => {
+    vi.mocked(getCaptainSelection).mockResolvedValue({ ...summary, recovery: { id: 'ura_retained', missionId: 'msn_one', actorUserId: 'admin', reason: 'Detailed operator rationale', revision: 7, allowFallback: true, reserveException: false, createdUtc: decision.evaluatedUtc } });
+    const { container } = mount('Pending');
+    expect(await screen.findByText('Recovery revision 7')).toBeInTheDocument();
+    const audit = container.querySelector('details.selection-recovery-record');
+    expect(audit).not.toHaveAttribute('open');
+    expect(screen.getByText('Detailed operator rationale', { exact: false })).not.toBeVisible();
+    fireEvent.click(within(audit as HTMLElement).getByText('Recovery revision 7'));
+    // jsdom does not implement details activation; the native summary semantics own keyboard expansion in the browser review.
+    expect(audit?.querySelector('summary')).toBeInTheDocument();
+  });
+  it('requires an audit reason and sends only explicit administrator recovery permissions', async () => {
+    vi.mocked(getCaptainSelection).mockResolvedValue({ ...summary, canManageRecovery: true, recovery: null });
+    vi.mocked(authorizeCaptainSelectionRecovery).mockResolvedValue({ id: 'ura_one', missionId: 'msn_one', actorUserId: 'admin', reason: 'Controlled recovery', revision: 1, allowFallback: true, reserveException: false, createdUtc: '2026-11-03T12:00:00Z' });
+    mount('Pending');
+    fireEvent.click(await screen.findByRole('button', { name: 'Recovery permissions' }));
+    const dialog = screen.getByRole('dialog', { name: 'Recovery permissions' });
+    expect(within(dialog).getByRole('button', { name: 'Save permissions' })).toBeDisabled();
+    expect(within(dialog).getByRole('checkbox', { name: /Allow soft-reserve exception/ })).not.toBeChecked();
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Allow eligible fallback/ }));
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Reason' }), { target: { value: 'Controlled recovery' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save permissions' }));
+    await waitFor(() => expect(authorizeCaptainSelectionRecovery).toHaveBeenCalledWith('msn_one', { expectedRevision: 0, allowFallback: true, reserveException: false, reason: 'Controlled recovery' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+  it('reloads a conflicting recovery revision while keeping the operator reason', async () => {
+    vi.mocked(getCaptainSelection).mockResolvedValue({ ...summary, canManageRecovery: true });
+    vi.mocked(authorizeCaptainSelectionRecovery).mockRejectedValue(new ApiError('Refresh before retrying.', 409, null));
+    mount('Pending'); fireEvent.click(await screen.findByRole('button', { name: 'Recovery permissions' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Reason' }), { target: { value: 'Reason to keep' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save permissions' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Refresh before retrying.');
+    expect(within(dialog).getByRole('textbox')).toHaveValue('Reason to keep');
+    vi.mocked(getCaptainSelection).mockResolvedValue({ ...summary, canManageRecovery: true, recovery: { id: 'ura_peer', missionId: 'msn_one', actorUserId: 'peer', reason: 'Peer updated permissions', revision: 2, allowFallback: false, reserveException: false, createdUtc: decision.evaluatedUtc } });
+    vi.mocked(authorizeCaptainSelectionRecovery).mockResolvedValue({ id: 'ura_updated', missionId: 'msn_one', actorUserId: 'admin', reason: 'Reason to keep', revision: 3, allowFallback: false, reserveException: false, createdUtc: decision.evaluatedUtc });
+    expect(within(dialog).getByRole('button', { name: 'Save permissions' })).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Refresh captain selection' }));
+    await waitFor(() => expect(within(dialog).queryByRole('alert')).toBeNull());
+    expect(within(dialog).getByRole('textbox')).toHaveValue('Reason to keep');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save permissions' }));
+    await waitFor(() => expect(authorizeCaptainSelectionRecovery).toHaveBeenLastCalledWith('msn_one', { expectedRevision: 2, allowFallback: false, reserveException: false, reason: 'Reason to keep' }));
+
+  });
+  it('clears cached evidence when recovery permission and mission access are revoked', async () => {
+    vi.mocked(getCaptainSelection).mockResolvedValue({ ...summary, canManageRecovery: true });
+    vi.mocked(authorizeCaptainSelectionRecovery).mockRejectedValue(new ApiError('Denied', 403, null));
+    mount('Pending'); await screen.findByText('runtime-model');
+    fireEvent.click(screen.getByRole('button', { name: 'Recovery permissions' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Reason' }), { target: { value: 'Permission revoked while editing' } });
+    vi.mocked(getCaptainSelection).mockRejectedValueOnce(new ApiError('Denied', 403, null));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save permissions' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await screen.findByRole('alert')).toHaveTextContent('Selection details could not be refreshed.');
+    expect(screen.queryByText('runtime-model')).toBeNull();
+  });
+  it('does not present recovery mutations to viewers or running work', async () => {
+    mount('Pending'); await screen.findByText('runtime-model');
+    expect(screen.queryByRole('button', { name: 'Recovery permissions' })).toBeNull();
   });
   it('labels preview choices as proposed rather than admitted selections', async () => {
     mount('Pending');

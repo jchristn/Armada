@@ -10,6 +10,10 @@ namespace Armada.Client
     /// <summary>Typed usage-selection history and read-only previews; settings use the shared settings contract.</summary>
     public partial class ArmadaClient
     {
+        /// <summary>Authorize or revoke recovery for a Pending mission with an audited administrator reason and revision.</summary>
+        public Task<UsageSelectionRecovery?> AuthorizeCaptainSelectionRecoveryAsync(string missionId, UsageSelectionRecoveryRequest request, CancellationToken token = default)
+            => PostAsync<UsageSelectionRecovery>("/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/captain-selection/recovery", request, null, token);
+
         /// <summary>Read current attempt separately from the mission's latest retained decision.</summary>
         public Task<CaptainSelectionSummary?> GetCaptainSelectionAsync(string missionId, CancellationToken token = default)
             => GetAsync<CaptainSelectionSummary>("/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/captain-selection", null, token);

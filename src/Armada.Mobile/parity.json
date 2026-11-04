@@ -1249,6 +1249,14 @@
     },
     {
       "kind": "api",
+      "key": "authorizeCaptainSelectionRecovery",
+      "status": "implemented",
+      "mobile": "@dashboard/api/client.authorizeCaptainSelectionRecovery",
+      "workstream": "W0.6",
+      "notes": "Shared authenticated native transport; role-aware recovery screen workflow remains usage-selection U4."
+    },
+    {
+      "kind": "api",
       "key": "backfillBlackBox",
       "status": "not-applicable",
       "mobile": "",

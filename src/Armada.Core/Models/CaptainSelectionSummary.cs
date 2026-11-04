@@ -7,6 +7,10 @@ namespace Armada.Core.Models
     /// <summary>Current attempt correlation and latest retained decision for a visible mission.</summary>
     public sealed class CaptainSelectionSummary
     {
+        /// <summary>Current immutable mission recovery authorization; null means neither permission is granted.</summary>
+        public UsageSelectionRecovery? Recovery { get; set; }
+        /// <summary>Whether this authenticated identity may change recovery authorization while the mission is Pending.</summary>
+        public bool CanManageRecovery { get; set; }
         /// <summary>Authorized mission identity.</summary>
         public string MissionId { get; set; } = String.Empty;
         /// <summary>Current rollout mode.</summary>

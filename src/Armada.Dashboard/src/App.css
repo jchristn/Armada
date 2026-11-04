@@ -9910,3 +9910,21 @@ a.btn:hover { text-decoration: none; }
 .captain-selection-card .pagination-controls { min-width: 0; max-width: 100%; }
 .captain-selection-card .pagination-pager { flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
 .captain-selection-card .selection-actions-column { text-align: end; }
+
+/* Recovery permissions share the dialog shell; option text wraps independently of checkbox geometry. */
+.selection-recovery-options { border: 0; margin: 0; padding: 0; display: grid; gap: 1.25rem; min-width: 0; }
+.selection-recovery-option { display: flex; align-items: flex-start; gap: .75rem; margin: 0; cursor: pointer; }
+.selection-recovery-option > input[type="checkbox"] { flex: 0 0 auto; width: 1rem; height: 1rem; margin: .2rem 0 0; }
+.selection-recovery-option > span { display: grid; gap: .35rem; min-width: 0; line-height: 1.5; }
+.selection-recovery-option .text-dim { font-size: .875rem; }
+.selection-recovery-dialog textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.selection-recovery-record { display: grid; gap: .3rem; margin-block: .75rem; padding-inline-start: .85rem; border-inline-start: 3px solid var(--accent); font-size: .875rem; overflow-wrap: anywhere; }
+.selection-recovery-dialog :is(input, textarea, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.selection-recovery-conflict { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-block-end: 1rem; }
+.selection-recovery-conflict .usage-form-error { margin: 0; overflow-wrap: anywhere; }
+.selection-budget { overflow-wrap: anywhere; }
+
+.selection-recovery-record > summary { cursor: pointer; line-height: 1.5; }
+.selection-recovery-record > summary > span { display: block; }
+.selection-recovery-record > p { margin-block: .5rem 0; line-height: 1.5; }

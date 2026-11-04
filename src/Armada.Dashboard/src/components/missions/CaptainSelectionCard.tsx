@@ -8,6 +8,7 @@ import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import RefreshButton from '../shared/RefreshButton';
 import CopyButton from '../shared/CopyButton';
 import JsonViewer from '../shared/JsonViewer';
+import SelectionRecoveryDialog from './SelectionRecoveryDialog';
 
 interface CaptainSelectionCardProps { missionId: string; status: string; revision?: string }
 type View = 'comparison' | 'history' | 'preview';
@@ -15,6 +16,7 @@ type View = 'comparison' | 'history' | 'preview';
 /** Mission-owned selection inspection. No new route; all tables and refresh controls reuse dashboard components. */
 export default function CaptainSelectionCard({ missionId, status, revision }: CaptainSelectionCardProps) {
   const { t, locale, formatDateTime } = useLocale();
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [summary, setSummary] = useState<CaptainSelectionSummary | null>(null);
   const [history, setHistory] = useState<EnumerationResult<CaptainSelectionDecisionView> | null>(null);
   const [detail, setDetail] = useState<CaptainSelectionDecisionDetail | null>(null);
@@ -115,8 +117,14 @@ export default function CaptainSelectionCard({ missionId, status, revision }: Ca
     </div><div className="selection-actions">
       <button type="button" className="btn btn-sm" aria-expanded={expanded} onClick={() => { setExpanded(!expanded); if (!expanded) setView('comparison'); }}>{t('usageSelection.compare')}</button>
       {status === 'Pending' && <button type="button" className="btn btn-sm" onClick={() => openView('preview')}>{t('usageSelection.preview')}</button>}
+      {status === 'Pending' && summary?.canManageRecovery && <button type="button" className="btn btn-sm" onClick={() => setRecoveryOpen(true)}>{t('usageSelection.recovery.title')}</button>}
       <RefreshButton onRefresh={load} title="usageSelection.refresh" />
     </div></header>
+    {summary?.recovery && <details className="selection-recovery-record"><summary>
+      <strong>{t('usageSelection.recovery.record', { revision: summary.recovery.revision })}</strong>
+      <span>{t(summary.recovery.allowFallback ? 'usageSelection.recovery.fallbackOn' : 'usageSelection.recovery.fallbackOff')} · {t(summary.recovery.reserveException ? 'usageSelection.recovery.reserveOn' : 'usageSelection.recovery.reserveOff')}</span>
+      </summary><p className="text-dim">{summary.recovery.reason} · {formatDateTime(summary.recovery.createdUtc)}</p>
+    </details>}
     {error && <p className="usage-form-error" role="alert">{t('usageSelection.historyLoadFailed')}</p>}
     {!summary && !error && <p className="text-dim" role="status">{t('Loading...')}</p>}
     {summary && !latest && <p className="text-dim selection-empty">{t('usageSelection.noHistory')}</p>}
@@ -146,6 +154,7 @@ export default function CaptainSelectionCard({ missionId, status, revision }: Ca
         {recorded && view === 'comparison' && <div className="selection-record-heading"><p className="text-dim">{formatDateTime(recorded.evaluatedUtc)} · {t(`usageSelection.${recorded.mode.toLowerCase()}`)} · {t(selectionStrategyKey[recorded.strategy])}</p>
           <button type="button" className="btn btn-sm" onClick={() => setJson(detail)}>{t('View JSON')}</button></div>}
         {detail && view === 'comparison' && <p className="selection-budget text-dim">{t('usageSelection.policyBudget', { reserve: percent(detail.policy.reservePercent), estimate: percent(detail.policy.perAttemptReservationPercent) })}</p>}
+        {view === 'comparison' && detail?.recovery && <details className="selection-recovery-record"><summary>{t('usageSelection.recovery.record', { revision: detail.recovery.revision })}</summary><p className="text-dim">{detail.recovery.reason}</p></details>}
         {view === 'comparison' && recorded?.nextReconsiderUtc && <p className="text-dim">{t('usageSelection.reconsiderAt', { time: formatDateTime(recorded.nextReconsiderUtc) })}</p>}
         {view === 'preview' && preview && <p className="selection-summary">{t(selectionReasonKey(preview.reasonCode))} <span className="text-dim">{formatDateTime(preview.evaluatedUtc)}</span></p>}
         <DataTable tableKey={view === 'preview' ? 'captain-selection-preview' : 'captain-selection-comparison'} columns={candidateColumns} rows={comparison?.objects ?? []} rowKey={row => row.captainId}
@@ -155,6 +164,7 @@ export default function CaptainSelectionCard({ missionId, status, revision }: Ca
           autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }} onRefresh={load} refreshTitle="usageSelection.refresh" />
       </>}
     </div>}
+    {recoveryOpen && status === 'Pending' && summary?.canManageRecovery && <SelectionRecoveryDialog key={missionId} missionId={missionId} current={summary.recovery} onClose={() => setRecoveryOpen(false)} onSaved={() => { void load().catch(() => {}); }} />}
     <JsonViewer open={json !== null} title={t('usageSelection.title')} data={json} onClose={() => setJson(null)} />
   </section>;
 }

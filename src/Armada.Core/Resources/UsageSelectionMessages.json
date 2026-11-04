@@ -97,5 +97,21 @@
   "usageSelection.reason.retry": "Waiting for the current launch recovery cycle.",
   "usageSelection.reason.voyage": "The parent voyage can no longer run this mission.",
   "usageSelection.latestRetained": "Latest retained decision; this is not the current execution attempt.",
-  "usageSelection.waiting": "Waiting"
+  "usageSelection.waiting": "Waiting",
+  "usageSelection.recovery.title": "Recovery permissions",
+  "usageSelection.recovery.scope": "Applies to this mission only. New permissions affect future admissions; running work continues.",
+  "usageSelection.recovery.fallback": "Allow eligible fallback",
+  "usageSelection.recovery.fallbackHelp": "Use another qualified captain when the preferred captain cannot run. Strict assignments remain strict.",
+  "usageSelection.recovery.reserve": "Allow soft-reserve exception",
+  "usageSelection.recovery.reserveHelp": "May use protected reserve, but must still fit the attempt estimate. Exhausted quota and cooldowns still block.",
+  "usageSelection.recovery.reason": "Reason",
+  "usageSelection.recovery.audit": "Your identity, reason and permission revision are retained in the audit history. Do not include credentials.",
+  "usageSelection.recovery.save": "Save permissions",
+  "usageSelection.recovery.record": "Recovery revision {{revision}}",
+  "usageSelection.recovery.fallbackOn": "Fallback allowed",
+  "usageSelection.recovery.fallbackOff": "Fallback not allowed",
+  "usageSelection.recovery.reserveOn": "Reserve exception allowed",
+  "usageSelection.recovery.reserveOff": "Reserve protected",
+  "usageSelection.reason.fallbackPermission": "Using another captain requires an administrator to allow eligible fallback for this mission.",
+  "usageSelection.recovery.conflict": "Permissions changed or this mission is no longer Pending. Refresh before retrying."
 }

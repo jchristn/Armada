@@ -8,6 +8,7 @@ namespace Armada.Core.Services
     /// <summary>Internal evaluation snapshot; never serialize its account identities to client responses.</summary>
     internal sealed class UsageSelectionSnapshot
     {
+        internal UsageSelectionRecovery? Recovery { get; set; }
         internal UsageSelectionSettings Settings { get; set; } = new UsageSelectionSettings();
         internal UsageSelectionEvaluation Evaluation { get; set; } = new UsageSelectionEvaluation();
         internal Dictionary<string, UsageSelectionAccountEvidence> Evidence { get; set; } = new Dictionary<string, UsageSelectionAccountEvidence>(StringComparer.Ordinal);

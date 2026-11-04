@@ -139,6 +139,10 @@ namespace Test.Shared.Suites.Services
                 a.HasAuthoritativeQuotaHold = false; a.CooldownUntilUtc = _Now.AddMinutes(1);
                 AssertEqual("AccountCooldown", Evaluate(a).Candidates[0].ReasonCode);
                 AssertNull(Evaluate(a).SelectedCaptainId);
+                a.CooldownUntilUtc = _Now.AddSeconds(-1);
+                AssertEqual("UsageIdentityUnknown", Evaluate(a).Candidates[0].ReasonCode, "cooldown expiration cannot invent account evidence");
+                a.IdentityVerified = true; a.CapturedUtc = _Now.AddHours(-2);
+                AssertEqual("UsageStale", Evaluate(a).Candidates[0].ReasonCode, "expired cooldown does not refresh old usage");
             });
             Add("existing_eligibility_and_capacity_fences_are_not_bypassed", () =>
             {

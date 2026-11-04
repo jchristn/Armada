@@ -28,8 +28,9 @@ namespace Armada.Core.Database
         }
 
         internal static async Task TrackUnreservedExecutionAsync(DbConnection connection, DbTransaction transaction, string missionId,
-            CaptainSelectionRecordSet? records, CancellationToken token, string? localHostId = null)
+            CaptainSelectionRecordSet? records, CancellationToken token, string? localHostId = null, bool adopting = false)
         {
+            await TrackExecutionSourceAsync(connection, transaction, missionId, records, localHostId, adopting, token).ConfigureAwait(false);
             if (records != null && records.Reservations.Count > 0
                 && records.Candidates.SingleOrDefault(c => c.CaptainId == records.Decision.SelectedCaptainId)?.Band != UsageSelectionBandEnum.Unknown) return;
             UsageUntrackedExecution row;
@@ -55,7 +56,7 @@ namespace Armada.Core.Database
             if (evidence.Count == 1 && evidence[0].Runtime.ToString() == row.Runtime)
             {
                 row.HostId = evidence[0].HostId; row.AccountKey = evidence[0].AccountKey; row.ConfigurationRevision = evidence[0].ConfigurationRevision;
-                row.AccountAttributionVerified = evidence[0].HostId == executionHost;
+                row.AccountAttributionVerified = !adopting && evidence[0].HostId == executionHost;
             }
             using DbCommand insert = Command(connection, transaction, @"INSERT INTO usage_untracked_executions(id,tenant_id,user_id,created_utc,last_update_utc,active,mission_id,execution_key,captain_id,
                 host_id,runtime,account_key,account_attribution_verified,configuration_revision,state,revision,execution_ended_utc,settlement_lag_seconds,maximum_unsettled_seconds,settled_by_snapshot_id,transition_reason)
@@ -85,7 +86,7 @@ namespace Armada.Core.Database
                 List<string> ids = new List<string>();
                 using (DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false))
                     while (await reader.ReadAsync(token).ConfigureAwait(false)) ids.Add(reader["id"].ToString()!);
-                foreach (string id in ids) await TrackUnreservedExecutionAsync(connection, transaction, id, null, token, localHostId).ConfigureAwait(false);
+                foreach (string id in ids) await TrackUnreservedExecutionAsync(connection, transaction, id, null, token, localHostId, adopting: true).ConfigureAwait(false);
                 await transaction.CommitAsync(token).ConfigureAwait(false);
                 return ids.Count;
             }, token, write: true);

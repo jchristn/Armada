@@ -112,6 +112,48 @@ namespace Test.Shared.Suites.E2E
                     using (HttpResponseMessage response = await caller.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new UsageSelectionSettings() }), token).ConfigureAwait(false))
                         AssertStatusCode(HttpStatusCode.Forbidden, response);
                 }),
+                new TestCaseDescriptor(_SuiteId, "recovery_permissions_require_scoped_admin_and_audited_revision", "Recovery permissions are scoped, audited and revision-checked through REST, SDK and MCP", async token =>
+                {
+                    string directory = TestTemp.NewDirectory("selection-recovery-api");
+                    using InProcessArmadaServer server = await InProcessArmadaServer.StartAsync(directory,
+                        new DatabaseSettings { Type = DatabaseTypeEnum.Sqlite, Filename = Path.Combine(directory, "armada.db") }).ConfigureAwait(false);
+                    ArmadaServer runtime = (ArmadaServer)typeof(InProcessArmadaServer).GetField("_Server", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(server)!;
+                    DatabaseDriver database = (DatabaseDriver)typeof(ArmadaServer).GetField("_Database", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(runtime)!;
+                    E2ETenantUser admin = await E2ETenantUser.CreateAsync(server.Client, "recovery-admin").ConfigureAwait(false);
+                    E2ETenantUser viewer = await E2ETenantUser.CreateAsync(server.Client, "recovery-viewer", false, admin.TenantId).ConfigureAwait(false);
+                    E2ETenantUser foreign = await E2ETenantUser.CreateAsync(server.Client, "recovery-foreign").ConfigureAwait(false);
+                    Mission mission = await database.Missions.CreateAsync(new Mission("recoverable") { TenantId = admin.TenantId, UserId = viewer.UserId }, token).ConfigureAwait(false);
+                    string path = "/api/v1/missions/" + mission.Id + "/captain-selection/recovery";
+                    UsageSelectionRecoveryRequest request = new UsageSelectionRecoveryRequest { ExpectedRevision = 0, AllowFallback = true, ReserveException = true, Reason = "Operator approved controlled recovery" };
+                    using HttpClient owner = viewer.CreateClient(server.BaseUrl);
+                    using HttpClient other = foreign.CreateClient(server.BaseUrl);
+                    using HttpClient authorized = admin.CreateClient(server.BaseUrl);
+                    using (HttpResponseMessage denied = await owner.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.Forbidden, denied);
+                    using (HttpResponseMessage denied = await other.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.NotFound, denied);
+                    using Armada.Client.ArmadaClient sdk = new Armada.Client.ArmadaClient(new Armada.Client.ArmadaClientOptions(server.BaseUrl) { BearerToken = admin.BearerToken });
+                    UsageSelectionRecovery recovery = (await sdk.AuthorizeCaptainSelectionRecoveryAsync(mission.Id, request, token).ConfigureAwait(false))!;
+                    AssertEqual(1, recovery.Revision); AssertEqual(admin.UserId, recovery.ActorUserId); AssertEqual(request.Reason, recovery.Reason);
+                    using (HttpResponseMessage stale = await authorized.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.Conflict, stale);
+                    CaptainSelectionSummary summary = (await sdk.GetCaptainSelectionAsync(mission.Id, token).ConfigureAwait(false))!;
+                    AssertTrue(summary.CanManageRecovery); AssertTrue(summary.Recovery!.ReserveException);
+                    using HttpClient mcp = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:" + server.Settings.McpPort) };
+                    mcp.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", admin.BearerToken);
+                    string revoked = await McpTestCalls.CallToolAsync(mcp, "authorize_captain_selection_recovery", new { missionId = mission.Id,
+                        recovery = new { expectedRevision = 1, reason = "Revoke after validation", allowFallback = false, reserveException = false } }).ConfigureAwait(false);
+                    AssertContains("Revoke after validation", revoked);
+                    UsageSelectionRecovery latest = (await database.CaptainSelections.ReadRecoveryAsync(admin.TenantId, mission.Id, token).ConfigureAwait(false))!;
+                    AssertEqual(2, latest.Revision); AssertFalse(latest.AllowFallback); AssertFalse(latest.ReserveException);
+                    using (Armada.Core.Client.ArmadaApiClient native = new Armada.Core.Client.ArmadaApiClient(authorized, server.BaseUrl))
+                    {
+                        UsageSelectionRecovery nativeAuthorization = (await native.AuthorizeCaptainSelectionRecoveryAsync(mission.Id,
+                            new UsageSelectionRecoveryRequest { ExpectedRevision = 2, AllowFallback = true, Reason = "Native client authorized qualified fallback" }, token).ConfigureAwait(false))!;
+                        AssertEqual(3, nativeAuthorization.Revision); AssertTrue(nativeAuthorization.AllowFallback);
+                    }
+                    mission.Status = MissionStatusEnum.InProgress; await database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                    request.ExpectedRevision = 3;
+                    using (HttpResponseMessage running = await authorized.PostAsync(path, JsonHelper.ToJsonContent(request), token).ConfigureAwait(false)) AssertStatusCode(HttpStatusCode.Conflict, running);
+                    AssertEqual(3, (await database.CaptainSelections.ReadRecoveryAsync(admin.TenantId, mission.Id, token).ConfigureAwait(false))!.Revision);
+                }),
                 new TestCaseDescriptor(_SuiteId, "history_scope_redaction_and_preview_has_no_writes", "History scopes counts and redacts account keys; preview never writes or claims", async token =>
                 {
                     string directory = TestTemp.NewDirectory("selection-history-api");

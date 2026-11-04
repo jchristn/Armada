@@ -502,6 +502,8 @@ Request lists over their limit are a typed `CollectionLimitExceeded` error (REST
 
 #### Added
 
+- Complete usage-selection enforcement/recovery: persist classified shared-account provider cooldowns against actual execution attribution; retain retry hints in history; distinguish proven-unstarted cleanup from ambiguous launches. Add audited, revision-checked administrator permissions for eligible fallback and soft-reserve exceptions through Dashboard, REST, MCP and .NET clients. Preserve strict assignments and all hard gates. Migration 127 and four-provider contention/lifecycle tests accompany the change.
+
 - REST: `POST /api/v1/ask/threads/{id}/work/enumerate`, `.../work/{workId}/missions/enumerate`,
   `.../work/{workId}/targets/enumerate`, `.../proposals/enumerate`, `.../messages/{messageId}/tool-calls/enumerate`,
   `.../turn/tool-calls/enumerate`, `POST /api/v1/planning-sessions/{id}/messages/enumerate`, and

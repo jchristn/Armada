@@ -279,9 +279,9 @@ Every unchecked task is future work. Each milestone ends with recorded automated
 
 ### U3. Atomic enforcement and recovery
 
-- [ ] Implement the cross-provider atomic claim/decision/reservation boundary, account-wide window accounting, idempotency, revision revalidation and rollback behavior. Enable Enforce only after the admission invariants pass.
-- [ ] Add settlement, fixed/rolling reset handling, uncertain debt, restart reconciliation, classified provider cooldowns and wakeups. Connect repairs, cancellations, launch failures and verification slot release without harming siblings.
-- [ ] Add authorized fallback and soft-reserve exception mutations/audit; retain strict assignment and all existing safety gates.
+- [x] Implement the cross-provider atomic claim/decision/reservation boundary, account-wide window accounting, idempotency, revision revalidation and rollback behavior. Enable Enforce only after the admission invariants pass.
+- [x] Add settlement, fixed/rolling reset handling, uncertain debt, restart reconciliation, classified provider cooldowns and wakeups. Connect repairs, cancellations, launch failures and verification slot release without harming siblings.
+- [x] Add authorized fallback and soft-reserve exception mutations/audit; retain strict assignment and all existing safety gates.
 - [ ] Exit: concurrent dispatch cannot spend the same known headroom twice; users can see and recover from usage waits; no running work is preempted.
 
 ### U4. Complete operator/client surfaces
@@ -370,3 +370,12 @@ No adaptive model, learned budget estimate, automatic quality downgrade or cross
 The MCP HTTP test helper validates initialization and closes its owned single-use session. A bounded-session fixture verifies repeated calls and initialization rejection. The exhaustive read-only contract crawl respects the existing production rate limit. The final .NET 10 omnibus passes 6,885 tests, with zero failures and 14 skips; .NET 8 focused checks pass 83/83. Skipped toolchain/provider/upgrade fixtures and the remaining U5 validation work are not counted as completed.
 
 Mobile polling lifecycle follow-up: timers are owned by screen focus and cleared on blur; a focused regression verifies polling pauses and resumes. The complete native suite passes 1,392/1,392 across 84 suites with clean exit, alongside type checking and native/shared lint. Native device visual review remains open.
+
+### Current U3 completion wave
+
+- [x] Implement additive migration 127, immutable actual-host/account execution attribution, shared-account classified cooldowns, and pre-launch proof/release boundaries. Compilation passed; behavioral/provider validation is in progress.
+- [x] Implement immutable administrator recovery authorizations with revision checks; wire soft-reserve and preferred-fallback permissions into evaluation and transaction revalidation.
+- [x] Complete recovery transport contracts, Dashboard workflow, translations and UX review (24 browser checks, including conflict refresh and retained audit disclosures).
+- [ ] Complete lifecycle/race/provider tests, regression checks, documentation, commit/push and build-all v1.3.0 before marking U3 complete.
+
+The U3 receipt boundary also binds launch/cleanup to the owned execution key, with a superseded-attempt regression. Current focused checks pass (69 including transport authorization/coverage); the complete first regression run found two contract-test fixture gaps, both corrected and passing in the focused rerun. A final frozen-source omnibus and provider rerun are required before the U3 exit is checked. See [U3 validation and operator steps](docs/usage-selection/U3_RECOVERY_VALIDATION.md).

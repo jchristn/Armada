@@ -21,6 +21,35 @@ namespace Test.Shared.Suites.Services
             const string suite = "Services.CaptainAdmissionParity";
             List<TestCaseDescriptor> cases = new();
             void Add(string id, Func<Task> test) => cases.Add(new TestCaseDescriptor(suite, id, id, _ => test()));
+            Add("enforced_preferred_fallback_requires_permission_and_preserves_strict_assignment", async () =>
+            {
+                using Harness h = await Harness.CreateAsync();
+                TenantMetadata tenant = await h.Db.Tenants.CreateAsync(new TenantMetadata("recovery-routing"));
+                UserMaster owner = await h.Db.Users.CreateAsync(new UserMaster(tenant.Id, "recovery-routing@example.invalid", "fixture-password"));
+                Captain preferred = await h.Db.Captains.CreateAsync(new Captain("preferred") { TenantId = tenant.Id, UserId = owner.Id });
+                Captain alternative = await h.Db.Captains.CreateAsync(new Captain("alternative") { TenantId = tenant.Id, UserId = owner.Id });
+                Mission occupied = await h.Db.Missions.CreateAsync(new Mission("occupied") { TenantId = tenant.Id, UserId = owner.Id });
+                AssertTrue(await h.Db.Captains.TryClaimAsync(preferred.Id, occupied.Id, null));
+                h.Mission.TenantId = tenant.Id; h.Mission.UserId = owner.Id; h.Mission.RequestedCaptainId = preferred.Id;
+                await h.Db.Missions.UpdateAsync(h.Mission); h.Settings.UsageSelection.Mode = UsageSelectionModeEnum.Enforce;
+                CaptainSelectionPreview waiting = await h.Service.PreviewCaptainSelectionAsync(h.Mission);
+                AssertNull(waiting.ActualCaptainId);
+                AssertEqual("FallbackPermissionRequired", waiting.Candidates.Objects.Single(c => c.CaptainId == alternative.Id).ReasonCode);
+                AssertNotNull(await h.Db.CaptainSelections.TryAuthorizeRecoveryAsync(tenant.Id, h.Mission.Id, owner.Id,
+                    new UsageSelectionRecoveryRequest { AllowFallback = true, Reason = "Allow a qualified alternative" }));
+                CaptainSelectionPreview permitted = await h.Service.PreviewCaptainSelectionAsync((await h.Db.Missions.ReadAsync(h.Mission.Id))!);
+                AssertEqual(alternative.Id, permitted.ActualCaptainId);
+                preferred.Active = false; await h.Db.Captains.UpdateAsync(preferred, updateActive: true);
+                AssertEqual(alternative.Id, (await h.Service.PreviewCaptainSelectionAsync((await h.Db.Missions.ReadAsync(h.Mission.Id))!)).ActualCaptainId);
+                preferred.Active = true; await h.Db.Captains.UpdateAsync(preferred, updateActive: true);
+                Voyage strict = await h.Db.Voyages.CreateAsync(new Voyage("strict recovery") { TenantId = tenant.Id, UserId = owner.Id,
+                    CaptainOverridesJson = JsonSerializer.Serialize(new[] { new CaptainAssignmentOverride { Persona = "*", CaptainId = preferred.Id, StrictCaptain = true } }) });
+                h.Mission.VoyageId = strict.Id; await h.Db.Missions.UpdateAsync(h.Mission);
+                CaptainSelectionPreview pinned = await h.Service.PreviewCaptainSelectionAsync(h.Mission);
+                AssertNull(pinned.ActualCaptainId);
+                AssertEqual("StrictCaptainOverride", pinned.Candidates.Objects.Single(c => c.CaptainId == alternative.Id).ReasonCode);
+                AssertEqual(0, h.Launches);
+            });
             Add("usage_preview_mirrors_retry_backoff_and_untried_alternative", async () =>
             {
                 using Harness h = await Harness.CreateAsync();
@@ -232,7 +261,9 @@ namespace Test.Shared.Suites.Services
                 CaptainSelectionDecision decision = (await h.Db.CaptainSelections.ReadCurrentDecisionAsync(tenant.Id, h.Mission.Id))!;
                 AssertEqual(actualCaptain.Id, decision.SelectedCaptainId); AssertEqual(mode == UsageSelectionModeEnum.Observe ? proposed.Id : null, decision.HypotheticalCaptainId);
                 AssertEqual(2, decision.CandidateCount);
-                AssertEqual(1L, (await h.Db.CaptainSelections.EnumerateExecutionEventsAsync(tenant.Id, decision.Id)).TotalRecords);
+                EnumerationResult<CaptainSelectionExecutionEvent> executionEvents = await h.Db.CaptainSelections.EnumerateExecutionEventsAsync(tenant.Id, decision.Id);
+                AssertEqual(1, executionEvents.Objects.Count(e => e.EventKind == "LaunchAttempted"));
+                AssertEqual(1, executionEvents.Objects.Count(e => e.EventKind == "ExecutionStarted"));
                 UsageBudgetReservation reservation = (await h.Db.CaptainSelections.ReadReservationsAsync(tenant.Id, "host-" + actualCaptain.Id, actualCaptain.Runtime.ToString(), "opaque-account")).Single();
                 AssertTrue(reservation.ExecutionStartedUtc.HasValue);
                 AssertFalse(await h.Db.CaptainSelections.TryTransitionReservationAsync(tenant.Id, reservation.Id, reservation.Revision, UsageReservationStateEnum.Active,

@@ -17,7 +17,7 @@ export const selectionReasons: Record<string, string> = {
   RequestedCaptainInactive: 'usageSelection.reason.inactive', CaptainInactive: 'usageSelection.reason.inactive', CaptainQuarantined: 'usageSelection.reason.quarantine',
   ReviewAuthorExcluded: 'usageSelection.reason.review', CaptainScopeMismatch: 'usageSelection.reason.ownership', WorkerEnvelopeIncompatible: 'usageSelection.reason.envelope',
   PlacementWaiting: 'usageSelection.reason.placement', LaunchRetryPending: 'usageSelection.reason.retry', VoyageNotRunnable: 'usageSelection.reason.voyage',
-  RoutingPreferenceExcluded: 'usageSelection.reason.routing', AuthorizedReserveException: 'usageSelection.reason.exception',
+  FallbackPermissionRequired: 'usageSelection.reason.fallbackPermission', RoutingPreferenceExcluded: 'usageSelection.reason.routing', AuthorizedReserveException: 'usageSelection.reason.exception',
 };
 export function selectionReasonKey(code?: string | null): string {
   return code ? selectionReasons[code] ?? 'usageSelection.reason.routing' : 'usageSelection.reason.eligible';

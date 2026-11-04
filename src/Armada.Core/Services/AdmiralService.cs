@@ -1206,6 +1206,8 @@ namespace Armada.Core.Services
 
             // Exactly one handler owns a process exit. The claim is a conditional write on the mission's recorded
             // process, so a concurrent health check (or an exit from an earlier attempt) cannot also act on it.
+            string? exitUsageExecutionKey = String.IsNullOrEmpty(mission.TenantId) ? null
+                : await _Database.CaptainSelections.ReadUsageExecutionKeyAsync(mission.TenantId, mission.Id, token).ConfigureAwait(false);
             if (!await _Database.Missions.TryClaimProcessExitAsync(missionId, processId, token).ConfigureAwait(false))
             {
                 _Logging.Debug(_Header + "exit of agent process " + processId + " for mission " + missionId + " is already handled or belongs to an earlier attempt -- skipping");
@@ -1225,6 +1227,9 @@ namespace Armada.Core.Services
             if (exitSnapshot == null || exitSnapshot.ProcessId.HasValue || exitSnapshot.StartedUtc != mission.StartedUtc
                 || MissionStateMachine.IsTerminalOrPostWork(exitSnapshot.Status)) return;
             mission = exitSnapshot;
+
+            try { await new UsageSelectionCooldownService(_Database, _Settings).RecordAsync(mission, exitInfo, exitUsageExecutionKey, DateTime.UtcNow, token).ConfigureAwait(false); }
+            catch (System.Data.Common.DbException) { _Logging.Warn(_Header + "shared-account cooldown could not be persisted for mission " + mission.Id + "; retaining captain quarantine"); }
 
             await EmitEventAsync("captain.process_exited",
                 "Agent process " + processId + " exited with code " + (exitCode?.ToString() ?? "unknown") + " for captain " + captain.Name,

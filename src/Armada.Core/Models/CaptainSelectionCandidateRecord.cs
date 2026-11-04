@@ -6,6 +6,8 @@ namespace Armada.Core.Models
     /// <summary>Typed relational captain_selection_candidates record; managed fields are never stored as a JSON document.</summary>
     public sealed class CaptainSelectionCandidateRecord : CaptainSelectionRecord
     {
+        /// <summary>Earliest reconsideration hint captured with the original reason; not a guaranteed launch time.</summary>
+        public DateTime? NextReconsiderUtc { get; set; }
         /// <summary>DecisionId captured as decision_id in the selection ledger.</summary>
         public string DecisionId { get; set; } = String.Empty;
         /// <summary>CaptainId captured as captain_id in the selection ledger.</summary>

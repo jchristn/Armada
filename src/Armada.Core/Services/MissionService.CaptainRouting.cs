@@ -75,6 +75,9 @@ namespace Armada.Core.Services
                 context.ExcludedAuthors = await ReviewAuthorCaptainIdsAsync(mission, token).ConfigureAwait(false);
             context.EscalatedToRequestedCaptain = !String.IsNullOrEmpty(mission.RequestedCaptainId) && (IntegrationBarrier.IsEscalatedRework(mission)
                 || (mission.Description ?? "").Contains("## Escalated to ", StringComparison.Ordinal));
+            context.UsageFallbackAuthorized = _Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce && mission.UsageRecovery?.AllowFallback == true;
+            context.UsageFallbackRequired = _Settings.EffectiveUsageSelection.Mode == UsageSelectionModeEnum.Enforce
+                && !String.IsNullOrEmpty(mission.RequestedCaptainId) && mission.UsageRecovery?.AllowFallback != true;
             context.StrictCaptainOverride = await HasStrictCaptainOverrideAsync(mission, token).ConfigureAwait(false);
             if (String.IsNullOrEmpty(mission.RequestedCaptainId))
             {
@@ -93,7 +96,7 @@ namespace Armada.Core.Services
             CaptainEligibilityFailure Failure(string code, string summary) => new CaptainEligibilityFailure { Code = code, Summary = summary };
             // The selector, diagnostics and repair admission all apply this predicate. Requested and persona-default
             // captains bypass the ordinary persona/tier fence; safety, scope, authorship and envelopes still apply.
-            if (context.InactiveRequestedCaptain) return Failure("RequestedCaptainInactive", "requested captain is inactive; enable Active before assigning new work");
+            if (context.InactiveRequestedCaptain && (!context.UsageFallbackAuthorized || captain.Id == mission.RequestedCaptainId)) return Failure("RequestedCaptainInactive", "requested captain is inactive; enable Active before assigning new work");
             if (!captain.Active) return Failure("CaptainInactive", "inactive; enable Active before assigning new work");
             if (context.ExcludedAuthors.Contains(captain.Id)) return Failure("ReviewAuthorExcluded", "authored an earlier stage");
             if (!CaptainVisibleToMission(captain, mission)) return Failure("CaptainScopeMismatch", "belongs to another tenant or user");
@@ -102,6 +105,7 @@ namespace Armada.Core.Services
             if (!String.IsNullOrEmpty(mission.RequestedCaptainId) && captain.Id == mission.RequestedCaptainId) return null;
             if (context.EscalatedToRequestedCaptain) return Failure("RequestedCaptainEscalation", "escalated to another captain");
             if (context.StrictCaptainOverride) return Failure("StrictCaptainOverride", "the voyage requires another captain");
+            if (context.UsageFallbackRequired) return Failure("FallbackPermissionRequired", "preferred captain fallback requires administrator authorization");
             if (context.DefaultCaptainId != null && captain.Id == context.DefaultCaptainId) return null;
             if (!String.IsNullOrEmpty(captain.AllowedPersonas) && !CaptainAllowsPersona(captain, context.RoutingPersona)) return Failure("PersonaNotAllowed", "persona not allowed");
             if (mission.Tier.HasValue && !CaptainTierSelector.CanHandle(captain, mission.Tier.Value)) return Failure("TierBelowRequirement", "tier below " + mission.Tier.Value);
@@ -576,6 +580,8 @@ namespace Armada.Core.Services
         {
             public string RoutingPersona { get; set; } = "";
             public HashSet<string> ExcludedAuthors { get; set; } = new HashSet<string>(StringComparer.Ordinal);
+            public bool UsageFallbackAuthorized { get; set; }
+            public bool UsageFallbackRequired { get; set; }
             public bool EscalatedToRequestedCaptain { get; set; } = false;
             public bool StrictCaptainOverride { get; set; } = false;
             public bool InactiveRequestedCaptain { get; set; } = false;

@@ -1199,6 +1199,14 @@
     },
     {
       "kind": "api",
+      "key": "authorizeCaptainSelectionRecovery",
+      "status": "implemented",
+      "tui": "ArmadaClient.AuthorizeCaptainSelectionRecoveryAsync",
+      "workstream": "W0.2",
+      "notes": "Battery packs"
+    },
+    {
+      "kind": "api",
       "key": "backfillBlackBox",
       "status": "implemented",
       "tui": "ArmadaClient.BackfillBlackBoxAsync",

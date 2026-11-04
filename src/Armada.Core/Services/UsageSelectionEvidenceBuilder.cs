@@ -16,6 +16,7 @@ namespace Armada.Core.Services
             string? fingerprint = captain.UsageCaptureMode == UsageCaptureModeEnum.Custom ? UsageAccountResolver.CommandFingerprint(captain.UsageCaptureCommand) : null;
             string revision = UsageAccountResolver.ConfigurationRevision(account.HostId, captain.Runtime, fingerprint);
             string groupKey = UsageAccountResolver.GroupKey(tenantId, account.HostId, captain.Runtime, fingerprint);
+            candidate.CooldownUntilUtc = account.CooldownUntilUtc;
             candidate.Provider = account.Provider;
             candidate.IdentityVerified = account.Runtime == captain.Runtime && captain.UsageCaptureActive && captureEnabled;
             candidate.ConfigurationMatches = account.ConfigurationRevision == revision && account.CaptureContextKey == UsageAccountResolver.CaptureContextKey(groupKey, revision)

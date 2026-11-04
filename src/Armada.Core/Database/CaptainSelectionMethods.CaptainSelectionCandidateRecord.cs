@@ -11,7 +11,8 @@ namespace Armada.Core.Database
     {
         private static async Task InsertCaptainSelectionCandidateRecordAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionCandidateRecord row, CancellationToken token)
         {
-            using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_candidates(id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,captain_id,provider,configured_model,routing_bucket,rank_number,band,primary_reason_code,eligible,occupied_slots,capacity,last_assigned_utc,membership_id,host_id,runtime,account_key,available_percent,captain_name,evidence_captured_utc) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@captain_id,@provider,@configured_model,@routing_bucket,@rank_number,@band,@primary_reason_code,@eligible,@occupied_slots,@capacity,@last_assigned_utc,@membership_id,@host_id,@runtime,@account_key,@available_percent,@captain_name,@evidence_captured_utc);");
+            using DbCommand command = Command(connection, transaction, "INSERT INTO captain_selection_candidates(next_reconsider_utc,id,tenant_id,user_id,created_utc,last_update_utc,active,decision_id,captain_id,provider,configured_model,routing_bucket,rank_number,band,primary_reason_code,eligible,occupied_slots,capacity,last_assigned_utc,membership_id,host_id,runtime,account_key,available_percent,captain_name,evidence_captured_utc) VALUES(@next_reconsider_utc,@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@decision_id,@captain_id,@provider,@configured_model,@routing_bucket,@rank_number,@band,@primary_reason_code,@eligible,@occupied_slots,@capacity,@last_assigned_utc,@membership_id,@host_id,@runtime,@account_key,@available_percent,@captain_name,@evidence_captured_utc);");
+            Add(command, "@next_reconsider_utc", row.NextReconsiderUtc.HasValue ? Utc(row.NextReconsiderUtc.Value) : null);
             Add(command, "@id", row.Id);
             Add(command, "@tenant_id", row.TenantId);
             Add(command, "@user_id", row.UserId);
@@ -44,6 +45,7 @@ namespace Armada.Core.Database
         {
             return new CaptainSelectionCandidateRecord
             {
+                NextReconsiderUtc = reader["next_reconsider_utc"] == DBNull.Value ? null : ParseUtc(reader["next_reconsider_utc"]),
                 Id = Convert.ToString(reader["id"], System.Globalization.CultureInfo.InvariantCulture)!,
                 TenantId = Convert.ToString(reader["tenant_id"], System.Globalization.CultureInfo.InvariantCulture)!,
                 UserId = reader["user_id"] == DBNull.Value ? null : Convert.ToString(reader["user_id"], System.Globalization.CultureInfo.InvariantCulture)!,

@@ -2,6 +2,8 @@
 
 ### v1.3.0 configurable captain selection
 
+`authorize_captain_selection_recovery` uses the same audited administrator service as REST. Arguments are `missionId` and `recovery: { expectedRevision, allowFallback, reserveException, reason }`; property names use camelCase. The mission must still be Pending. Permissions default false, hard gates remain enforced, and stale revisions require a refresh. Use `get_captain_selection` to obtain the current authorization/revision.
+
 `get_usage_selection_settings` and `update_usage_selection_settings` expose the same live policy coordinator as REST and require global administrator access. Update arguments are `settings` (complete group) and optional `expectedRevision`. `get_captain_selection`, `get_captain_selection_history`, `get_captain_selection_decision` and `preview_captain_selection` use shared tenant/owner/mission-token scope. The default is Observe/FirstAvailable; the other strategies are MostRemainingAllowance and MostUsedAllowance. Enforce is available as an explicit opt-in. `enumerate` also supports `captain_selection_decision` (requires `missionId`, optional `status=Admitted|Waiting`, UTC date range) and `captain_selection_candidate` (requires `decisionId`, optional global-admin-only `tenantId`); authorization precedes counts and paging. See the [current enforcement guide](usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md) and [contracts, scope and examples](usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md).
 
 

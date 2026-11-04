@@ -248,6 +248,8 @@ namespace Armada.Core.Services
             {
                 Mission? mission = await _Database.Missions.ReadAsync(assignmentId, token).ConfigureAwait(false);
                 if (mission != null && (mission.CaptainId != captain.Id || mission.Status == MissionStatusEnum.Verifying)) return;
+                if (mission != null && !String.IsNullOrEmpty(mission.TenantId))
+                    mission.UsageAdmissionExecutionKey = await _Database.CaptainSelections.ReadUsageExecutionKeyAsync(mission.TenantId, mission.Id, token).ConfigureAwait(false);
                 if (mission != null) captain.Assignment = mission;
                 captain.RecoveryAttempts++;
                 _Logging.Info(_Header + "auto-recovery attempt " + captain.RecoveryAttempts + "/" + _Settings.MaxRecoveryAttempts + " for captain " + captain.Id);
@@ -387,6 +389,8 @@ namespace Armada.Core.Services
                     await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
                     try
                     {
+                        if (!String.IsNullOrEmpty(mission.TenantId) && !await _Database.CaptainSelections.MarkLaunchAttemptedAsync(mission.TenantId, mission.Id, captain.Id, mission.UsageAdmissionExecutionKey ?? String.Empty, token).ConfigureAwait(false))
+                            throw new InvalidOperationException("The recovery execution no longer owns an un-released usage admission receipt.");
                         int processId = await OnLaunchAgent.Invoke(captain, mission, dock).ConfigureAwait(false);
 
                         // A fast agent can exit (and its handler move the mission on and release the captain) before

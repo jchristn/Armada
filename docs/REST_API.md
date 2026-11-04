@@ -2,6 +2,8 @@
 
 ### v1.3.0 configurable captain selection
 
+`POST /api/v1/missions/{id}/captain-selection/recovery` authorizes or revokes mission-specific recovery permissions. It requires a tenant/system administrator with a user identity, a visible Pending mission, and `{ "expectedRevision": 0, "allowFallback": false, "reserveException": false, "reason": "Operator explanation" }`. Read the current revision from the selection summary first. A stale revision or already-admitted mission returns 409; viewers receive 403 and foreign resources remain 404. Every revision retains actor, reason and time. An admitted decision references its exact authorization, available as `recovery` in historical detail. Neither permission overrides hard quota, cooldown, strict routing, scope or capacity. Summary also returns role-aware `canManageRecovery`.
+
 The live `UsageSelection` settings group supports `FirstAvailable`, `MostRemainingAllowance` and `MostUsedAllowance` strategies. GET settings reports the current revision/capabilities; PUT accepts `ExpectedUsageSelectionRevision` and returns 409 for stale revisions. Enforce is available as an explicit opt-in; Observe/FirstAvailable remains the default. New authenticated mission selection summary/history/preview and retained decision/candidate routes are documented in [live configuration and Observe history](usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md). Observe preserves actual legacy routing and records the configured strategy’s hypothetical choice. See the [enforcement and inspection guide](usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md) for operational behavior. Preview is read-only; internal account keys are excluded from selection DTOs.
 
 

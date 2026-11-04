@@ -11,7 +11,8 @@ namespace Armada.Core.Database
     {
         private static async Task InsertUsageAccountCooldownAsync(DbConnection connection, DbTransaction transaction, UsageAccountCooldown row, CancellationToken token)
         {
-            using DbCommand command = Command(connection, transaction, "INSERT INTO usage_account_cooldowns(id,tenant_id,user_id,created_utc,last_update_utc,active,host_id,runtime,account_key,window_key,revision,observed_utc,retry_after_utc,classification) VALUES(@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@host_id,@runtime,@account_key,@window_key,@revision,@observed_utc,@retry_after_utc,@classification);");
+            using DbCommand command = Command(connection, transaction, "INSERT INTO usage_account_cooldowns(execution_key,mission_id,decision_id,id,tenant_id,user_id,created_utc,last_update_utc,active,host_id,runtime,account_key,window_key,revision,observed_utc,retry_after_utc,classification) VALUES(@execution_key,@mission_id,@decision_id,@id,@tenant_id,@user_id,@created_utc,@last_update_utc,@active,@host_id,@runtime,@account_key,@window_key,@revision,@observed_utc,@retry_after_utc,@classification);");
+            Add(command, "@execution_key", row.ExecutionKey); Add(command, "@mission_id", row.MissionId); Add(command, "@decision_id", row.DecisionId);
             Add(command, "@id", row.Id);
             Add(command, "@tenant_id", row.TenantId);
             Add(command, "@user_id", row.UserId);
@@ -33,6 +34,9 @@ namespace Armada.Core.Database
         {
             return new UsageAccountCooldown
             {
+                ExecutionKey = reader["execution_key"] == DBNull.Value ? null : reader["execution_key"].ToString(),
+                MissionId = reader["mission_id"] == DBNull.Value ? null : reader["mission_id"].ToString(),
+                DecisionId = reader["decision_id"] == DBNull.Value ? null : reader["decision_id"].ToString(),
                 Id = Convert.ToString(reader["id"], System.Globalization.CultureInfo.InvariantCulture)!,
                 TenantId = Convert.ToString(reader["tenant_id"], System.Globalization.CultureInfo.InvariantCulture)!,
                 UserId = reader["user_id"] == DBNull.Value ? null : Convert.ToString(reader["user_id"], System.Globalization.CultureInfo.InvariantCulture)!,

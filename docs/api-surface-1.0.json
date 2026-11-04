@@ -4312,6 +4312,28 @@
       "experimental": false
     },
     {
+      "method": "POST",
+      "route": "/api/v1/missions/{id}/captain-selection/recovery",
+      "auth": "TenantAdmin",
+      "resource": "Mission:Update",
+      "requestType": "UsageSelectionRecoveryRequest",
+      "requestRequired": true,
+      "responses": {
+        "200": "UsageSelectionRecovery",
+        "400": "ApiErrorResponse",
+        "401": "ApiErrorResponse",
+        "403": "ApiErrorResponse",
+        "404": "ApiErrorResponse",
+        "409": "ApiErrorResponse",
+        "503": "ApiStatusErrorResponse"
+      },
+      "tags": [
+        "Captain selection"
+      ],
+      "summary": "Authorize captain selection recovery",
+      "experimental": false
+    },
+    {
       "method": "GET",
       "route": "/api/v1/missions/{id}/diff",
       "auth": "Authenticated",
@@ -9454,6 +9476,25 @@
         }
       ],
       "description": "Approve a mission waiting at a pipeline review gate (status Review). A non-final stage continues to the next stage with this stage's branch, diff, and output; a final stage continues to landing. Set conditional with a comment to pass guidance to the following stages. Refused for captain sessions.",
+      "experimental": false
+    },
+    {
+      "name": "authorize_captain_selection_recovery",
+      "auth": "TenantAdmin",
+      "resource": "Mission:Update",
+      "arguments": [
+        {
+          "name": "missionId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "recovery",
+          "type": "object",
+          "required": true
+        }
+      ],
+      "description": "Authorize or revoke preferred-captain fallback and a soft-reserve exception for a Pending mission. Requires tenant/system administrator, expectedRevision and a reason. Hard quota, cooldown, strict assignment, scope and capacity remain enforced.",
       "experimental": false
     },
     {

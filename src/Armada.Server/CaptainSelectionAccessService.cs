@@ -39,8 +39,22 @@ namespace Armada.Server
             UsageSelectionSettings settings = _Settings.EffectiveUsageSelection.Copy();
             return new CaptainSelectionSummary { MissionId = mission.Id, CurrentMode = settings.Mode, CurrentStrategy = settings.Strategy,
                 HistoryAvailable = history.TotalRecords != 0,
+                Recovery = await _Database.CaptainSelections.ReadRecoveryAsync(mission.TenantId!, mission.Id, token).ConfigureAwait(false),
+                CanManageRecovery = caller.MissionId == null && (caller.IsAdmin || caller.IsTenantAdmin) && !String.IsNullOrWhiteSpace(caller.UserId) && mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending,
                 CurrentAttempt = current == null ? null : views.GetValueOrDefault(current.Id),
                 LatestDecision = history.Objects.Count == 0 ? null : views.GetValueOrDefault(history.Objects[0].Id) };
+        }
+
+        /// <summary>Authorize mission-specific recovery while Pending. Administrators must explain each immutable revision.</summary>
+        public async Task<UsageSelectionRecovery> AuthorizeRecoveryAsync(AuthContext caller, string missionId, UsageSelectionRecoveryRequest request, CancellationToken token = default)
+        {
+            Mission mission = await MissionAsync(caller, missionId, token).ConfigureAwait(false);
+            if (caller.MissionId != null || !(caller.IsAdmin || caller.IsTenantAdmin) || String.IsNullOrWhiteSpace(caller.UserId))
+                throw new UnauthorizedAccessException("Captain-selection recovery requires a tenant or system administrator.");
+            UsageSelectionRecovery recovery = await _Database.CaptainSelections.TryAuthorizeRecoveryAsync(mission.TenantId!, mission.Id, caller.UserId, request, token).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Recovery authorization changed or the mission is no longer Pending. Refresh before retrying.");
+            _Missions.ReconsiderCaptainSelection(mission.Id);
+            return recovery;
         }
 
         /// <summary>Filter and page decisions after mission visibility; never scan another tenant.</summary>
@@ -76,6 +90,7 @@ namespace Armada.Server
             if (view.SelectedCaptainId == null)
                 foreach (CaptainSelectionExecutionEvent item in events.Objects) { item.ActualModel = null; item.ActualProvider = null; }
             return new CaptainSelectionDecisionDetail { Decision = view, Policy = policy.ToSettings(),
+                Recovery = await _Database.CaptainSelections.ReadDecisionRecoveryAsync(tenant, decision.Id, token).ConfigureAwait(false),
                 Candidates = await CandidatesCoreAsync(caller, decision, pageNumber, pageSize, token, policy).ConfigureAwait(false), ExecutionEvents = events };
         }
 
@@ -99,7 +114,7 @@ namespace Armada.Server
                 Rank = (pageNumber - 1) * pageSize + index + 1, Band = row.Band, ReasonCode = row.PrimaryReasonCode, AvailablePercent = row.AvailablePercent,
                 CanSelect = row.Eligible && row.Band != Armada.Core.Enums.UsageSelectionBandEnum.Blocked
                     && (row.Band != Armada.Core.Enums.UsageSelectionBandEnum.Unknown || policy?.UnknownUsageBehavior == Armada.Core.Enums.UsageUnknownBehaviorEnum.AllowDeprioritized),
-                CapturedUtc = row.EvidenceCapturedUtc, ActualSelection = row.CaptainId == decision.SelectedCaptainId,
+                NextReconsiderUtc = row.NextReconsiderUtc, CapturedUtc = row.EvidenceCapturedUtc, ActualSelection = row.CaptainId == decision.SelectedCaptainId,
                 HypotheticalSelection = row.CaptainId == decision.HypotheticalCaptainId
             }).ToList(), page.TotalRecords);
         }

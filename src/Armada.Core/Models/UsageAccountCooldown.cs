@@ -6,6 +6,12 @@ namespace Armada.Core.Models
     /// <summary>Typed relational usage_account_cooldowns record; managed fields are never stored as a JSON document.</summary>
     public sealed class UsageAccountCooldown : CaptainSelectionRecord
     {
+        /// <summary>Actual execution receipt; null for older uncorrelated cooldown records.</summary>
+        public string? ExecutionKey { get; set; }
+        /// <summary>Mission whose owned process exit contributed this cooldown.</summary>
+        public string? MissionId { get; set; }
+        /// <summary>Immutable decision, absent for Disabled/legacy work.</summary>
+        public string? DecisionId { get; set; }
         /// <summary>HostId captured as host_id in the selection ledger.</summary>
         public string HostId { get; set; } = String.Empty;
         /// <summary>Runtime captured as runtime in the selection ledger.</summary>

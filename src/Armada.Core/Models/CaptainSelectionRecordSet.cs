@@ -7,6 +7,9 @@ namespace Armada.Core.Models
     /// <summary>An atomic decision aggregate; all managed collections map to relational child rows.</summary>
     public sealed class CaptainSelectionRecordSet
     {
+        /// <summary>Internal immutable recovery revision bound to this evaluation. Zero requires no authorization.</summary>
+        [JsonIgnore]
+        public int AdmissionRecoveryRevision { get; set; }
         /// <summary>Internal compare-and-set mission version for enforcement; never persisted as an opaque record.</summary>
         [JsonIgnore]
         public DateTime? AdmissionMissionVersionUtc { get; set; }

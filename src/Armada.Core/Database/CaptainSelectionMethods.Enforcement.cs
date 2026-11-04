@@ -32,6 +32,10 @@ namespace Armada.Core.Database
             CaptainSelectionCandidateRecord? recorded = records.Candidates.SingleOrDefault(c => c.CaptainId == decision.SelectedCaptainId);
             if (recorded == null || !recorded.Eligible || decision.Outcome != "Admitted" || records.Policy.Mode != UsageSelectionModeEnum.Enforce)
                 throw new ArgumentException("Enforced admission requires an eligible selected candidate and matching policy.", nameof(records));
+            UsageSelectionRecovery? recovery = await ReadRecoveryAsync(connection, transaction, decision.TenantId, decision.MissionId, token).ConfigureAwait(false);
+            if ((recovery?.Revision ?? 0) != records.AdmissionRecoveryRevision) return false;
+            if (recovery != null && records.Events.Count(e => e.EventKind == "RecoveryAuthorizationApplied" && e.ReportingSource == recovery.Id) != 1) return false;
+            if (recovery == null && records.Events.Any(e => e.EventKind == "RecoveryAuthorizationApplied")) return false;
             DateTime now = DateTime.UtcNow;
             Captain? captain;
             using (DbCommand command = Command(connection, transaction, "SELECT * FROM captains WHERE tenant_id=@tenant AND id=@captain;"))
@@ -75,7 +79,7 @@ namespace Armada.Core.Database
                 OccupiedSlots = captain.ActiveMissionCount, HasAuthoritativeQuotaHold = captain.QuarantineUntilUtc > now && UsageQuotaHold.IsQuotaOwned(captain.QuarantineReason) };
             if (source != null) UsageSelectionEvidenceBuilder.Apply(input, captain, source, totals, decision.TenantId, records.AdmissionCaptureEnabled);
             if (input.IdentityVerified && input.ConfigurationMatches && source?.HostId != records.AdmissionHostId) return false;
-            UsageSelectionCandidateResult actual = UsageSelectionPolicy.Evaluate(new[] { input }, policy, now).Candidates.Single();
+            UsageSelectionCandidateResult actual = UsageSelectionPolicy.Evaluate(new[] { input }, policy, now, recovery?.ReserveException == true).Candidates.Single();
             if (!actual.CanSelect || actual.Band != recorded.Band || actual.ReasonCode != recorded.PrimaryReasonCode || UsageSelectionNumbers.Headroom(actual.AvailablePercent) != recorded.AvailablePercent) return false;
             List<CaptainSelectionWindowRecord> windows = records.Windows.Where(w => w.CandidateId == recorded.Id).ToList();
             if (windows.Count != input.Windows.Count) return false;

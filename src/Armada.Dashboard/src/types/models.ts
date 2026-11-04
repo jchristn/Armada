@@ -4905,7 +4905,15 @@ export interface CaptainSelectionDecisionView {
   evaluatedUtc: string;
   nextReconsiderUtc?: string | null;
 }
+export interface UsageSelectionRecovery {
+  id: string; missionId: string; actorUserId: string; reason: string; allowFallback: boolean; reserveException: boolean; revision: number; createdUtc: string;
+}
+export interface UsageSelectionRecoveryRequest {
+  expectedRevision: number; allowFallback: boolean; reserveException: boolean; reason: string;
+}
 export interface CaptainSelectionSummary {
+  recovery?: UsageSelectionRecovery | null;
+  canManageRecovery?: boolean;
   missionId: string;
   currentMode: UsageSelectionSettings['mode'];
   currentStrategy: CaptainSelectionStrategy;
@@ -4914,6 +4922,7 @@ export interface CaptainSelectionSummary {
   latestDecision?: CaptainSelectionDecisionView | null;
 }
 export interface CaptainSelectionDecisionDetail {
+  recovery?: UsageSelectionRecovery | null;
   decision: CaptainSelectionDecisionView;
   policy: UsageSelectionSettings;
   candidates: EnumerationResult<CaptainSelectionCandidateView>;

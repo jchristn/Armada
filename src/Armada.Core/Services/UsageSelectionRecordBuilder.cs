@@ -25,6 +25,7 @@ namespace Armada.Core.Services
                 records.AdmissionCaptainVersionUtc = selectedVersion.LastUpdateUtc;
                 records.AdmissionCaptainModel = selectedVersion.Model;
             }
+            records.AdmissionRecoveryRevision = snapshot.Recovery?.Revision ?? 0;
             CaptainSelectionDecision decision = records.Decision;
             decision.TenantId = mission.TenantId!; decision.UserId = mission.UserId; decision.MissionId = mission.Id; decision.VoyageId = mission.VoyageId;
             decision.ExecutionAttemptId = decision.Id; decision.Trigger = trigger; decision.Mode = snapshot.Settings.Mode;
@@ -40,6 +41,10 @@ namespace Armada.Core.Services
             decision.EvaluatedUtc = snapshot.EvaluatedUtc; decision.PrimaryReasonCode = snapshot.Evaluation.ReasonCode;
             decision.CandidateCount = snapshot.Evaluation.Candidates.Count;
             decision.NextReconsiderUtc = snapshot.Evaluation.SelectedCaptainId == null ? snapshot.Evaluation.Candidates.FirstOrDefault()?.NextReconsiderUtc : null;
+            if (snapshot.Recovery != null)
+                records.Events.Add(new CaptainSelectionExecutionEvent { TenantId = mission.TenantId!, UserId = mission.UserId, DecisionId = decision.Id,
+                    ExecutionAttemptId = decision.ExecutionAttemptId, EventKind = "RecoveryAuthorizationApplied", ReportingSource = snapshot.Recovery.Id,
+                    OccurredUtc = snapshot.EvaluatedUtc, FailureClassification = snapshot.Recovery.ReserveException ? "SoftReserveException" : snapshot.Recovery.AllowFallback ? "FallbackPermission" : "RecoveryPermissionsRevoked" });
             int rank = 0;
             foreach (UsageSelectionCandidateResult result in snapshot.Evaluation.Candidates)
             {
@@ -50,7 +55,7 @@ namespace Armada.Core.Services
                 {
                     TenantId = mission.TenantId!, UserId = captain.UserId, DecisionId = decision.Id, CaptainId = captain.Id,
                     Provider = Label(input.Provider, 512), ConfiguredModel = Label(input.Model, 1024), CaptainName = Label(captain.Name, 1024), RoutingBucket = input.RoutingBucket, Rank = ++rank,
-                    Band = result.Band, PrimaryReasonCode = result.ReasonCode, Eligible = input.IneligibilityReason == null,
+                    Band = result.Band, NextReconsiderUtc = result.NextReconsiderUtc, PrimaryReasonCode = result.ReasonCode, Eligible = input.IneligibilityReason == null,
                     OccupiedSlots = input.OccupiedSlots, Capacity = input.Capacity, LastAssignedUtc = input.LastAssignedUtc,
                     MembershipId = source?.MembershipId, HostId = source?.HostId, Runtime = source?.Runtime.ToString(), AccountKey = source?.AccountKey,
                     AvailablePercent = UsageSelectionNumbers.Headroom(result.AvailablePercent), EvidenceCapturedUtc = input.CapturedUtc
@@ -91,7 +96,7 @@ namespace Armada.Core.Services
             }
             // Exclude capture IDs/times and raw percentages that did not change a decision band or ranking.
             // Actual admissions still get an independent attempt/decision every time.
-            string fingerprint = JsonSerializer.Serialize(new object?[] { records.Policy.Fingerprint, snapshot.ActualCaptainId,
+            string fingerprint = JsonSerializer.Serialize(new object?[] { records.Policy.Fingerprint, snapshot.Recovery?.Id, snapshot.ActualCaptainId,
                 snapshot.Evaluation.SelectedCaptainId, snapshot.Evaluation.ReasonCode,
                 snapshot.Evaluation.Candidates.Select(r => new object?[] { r.Candidate.CaptainId, r.Candidate.RoutingBucket, r.Band, r.ReasonCode,
                     r.Candidate.OccupiedSlots, r.Candidate.Capacity, r.Candidate.CooldownUntilUtc,

@@ -20,6 +20,8 @@ namespace Armada.Core.Services
         private async Task<CaptainAdmissionSelection> SelectCaptainAdmissionAsync(Mission mission, CancellationToken token, bool recordEnvelope = false)
         {
             Mission view = mission.AdmissionView();
+            if (!String.IsNullOrEmpty(view.TenantId))
+                view.UsageRecovery = await _Database.CaptainSelections.ReadRecoveryAsync(view.TenantId, view.Id, token).ConfigureAwait(false);
             await ResolvePreferredCaptainAsync(view, token, persist: false).ConfigureAwait(false);
             CaptainEligibilityContext context = await BuildCaptainEligibilityContextAsync(view, token).ConfigureAwait(false);
             List<Captain> visible = (await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false))

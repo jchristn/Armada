@@ -7,6 +7,8 @@ namespace Armada.Core.Models
     /// <summary>Authorized decision details with separately paged comparison and execution evidence.</summary>
     public sealed class CaptainSelectionDecisionDetail
     {
+        /// <summary>Immutable recovery authorization applied to this decision, if any. Later revocations do not rewrite it.</summary>
+        public UsageSelectionRecovery? Recovery { get; set; }
         /// <summary>Immutable authorized decision summary.</summary>
         public CaptainSelectionDecisionView Decision { get; set; } = new CaptainSelectionDecisionView();
         /// <summary>Effective non-secret policy values recorded for this decision.</summary>
