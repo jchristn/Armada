@@ -27,12 +27,26 @@ Use an isolated development deployment and disposable repository. Retain existin
 
 ## Verification evidence
 
-The frozen focused .NET 10 selection/routing/API/contract batch passes **110/110**. PostgreSQL, MySQL and SQL Server each pass **63/63** shared checks, including 50 simultaneous contenders for exactly one reservation budget, recovery revision races, cooldown/account scope, rollback, repair and migration hygiene. SQLite is covered by the focused batch. The .NET 8 focused selection/API/parity batch passes **121/121**.
+Implementation commits `a15a707f0` and `c1526497f` are pushed to `feature/v1.3.0`. U3 is complete; U4-U6 remain open.
 
-Dashboard tests pass **1,897/1,897** and its production build succeeds. Native tests pass **1,392/1,392** across 84 suites with clean process exit; native/shared lint and type checking pass. API transport parity has no planned entries; native recovery screen controls remain U4.
+| Check | Result |
+| --- | --- |
+| Full .NET 10 regression | 6,895 passed; zero failed; 14 skipped (6,909 total) |
+| Focused .NET 10 selection/routing/API/contracts | 110/110 |
+| .NET 8 selection/API/contracts/TUI parity | 121/121 |
+| PostgreSQL / MySQL / SQL Server shared suites | 63/63 each |
+| Dashboard tests / production build | 1,897/1,897; build succeeded |
+| Native tests / static checks | 1,392/1,392 in 84 suites, clean exit; type checking and native/shared lint passed |
+| Browser recovery UX | 24/24; screenshots inspected |
+| Existing client parity inventories | TUI 703 and Mobile 710 entries; none planned |
+| Repository Postman selection collection | Eight requests parsed; eight assertion scripts compiled |
+| build-all v1.3.0 | Server, Dashboard and proxy v1.3.0/latest published and pulled; VSIX packaged |
+| Container verification | Three local content probes; Linux amd64/arm64 manifests for all three images |
 
-The browser review uses real Dashboard React/CSS with private fixture responses. Its 24 checks cover light/dark themes at 1280/768/390 pixels in English/Spanish/Japanese, RTL/enlarged text, keyboard trapping/Escape/focus return, and a retained 480-character unbroken audit explanation. Representative screenshots were inspected. The geometry report and screenshots are saved beside this document. This is fixture-backed visual evidence, not a production deployment or a native device review.
+The provider checks include 50 simultaneous contenders for exactly one reservation budget, recovery revision races, cooldown/account scope, rollback, repair, stale snapshot ownership and migration hygiene. SQLite is included in the focused/full runs. The 14 full-suite skips cover toolchain-specific packs, provider-specific cases and unavailable baseline-upgrade fixtures. Broader OS/framework/CI, benchmark, native device and populated upgrade validation remain U5/U6 work.
 
-The repository Postman collection contains the reusable administrator mutation and status/privacy/audit assertions; authenticated REST, SDK, Core-client and MCP behavior is exercised by the local server E2E suite. No credentials or external workspace publication are involved.
+The browser review renders real Dashboard React/CSS with private fixture responses. It covers light/dark themes at 1280/768/390 pixels in English/Spanish/Japanese, RTL/enlarged text, focus trapping/Escape/focus return, a 480-character unbroken audit reason, and conflict refresh without draft loss. See [geometry/focus report](recovery-layout-results.json) and the `screenshots/recovery-*` images. This is fixture-backed visual evidence, not a native device review or production deployment.
 
-Implementation source `a15a707f0` is committed and pushed on `feature/v1.3.0`. The final frozen-source backend regression and build-all are running. U3 is not marked complete until those final checks finish.
+Authenticated REST, SDK, Core-client and MCP behavior is exercised against an isolated local server. The installed Postman CLI does not implement `status`; collection parsing and script compilation are separate from these real transport tests. No credentials or external workspace publication are involved.
+
+See [container evidence](container-validation.json) for platform digests and probe scope. Local probes verify the assemblies and new recovery content without networking or starting a server; both platform manifests are present. The user deployment was not restarted or changed.

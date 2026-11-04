@@ -12,13 +12,13 @@ The required v1.3.0 deliverable comprises U0 through U6 below: observation mode,
 
 - [x] U0 baseline/contract review and executable normalized evidence fixtures: [review](docs/usage-selection/BASELINE_AND_CONTRACT.md).
 - [x] Pure policy foundation: typed candidate/window/results, bounded settings defaults and deterministic headroom-band ranking. Connected to Observe dispatch and read-only comparisons; actual routing remains unchanged in Observe.
-- [ ] Finish configurable strategy integration across all clients and Enforce: FirstAvailable compatibility default plus MostRemainingAllowance and MostUsedAllowance now exist in typed settings, policy and stored revisions; Observe dispatch, live server configuration, Dashboard controls, MCP and SDK contracts are implemented. Enforce, the shared Dashboard mission card and Helm inspection are implemented; remaining native controls and recovery actions are pending.
+- [x] Configurable strategies integrated with Observe/Enforce admission, live server settings, Dashboard, REST/MCP and typed .NET clients; Helm inspection is available. Remaining native operator/settings workflows are tracked in U4.
 - [x] U1 storage foundation: migrations 123/124 on all providers, typed immutable history/evidence, policy/strategy revisions, scoped paging, reservation CAS/retention, capture-start timing and atomic Observe-mode claim/history primitives. See [validation](docs/usage-selection/U1_STORAGE_VALIDATION.md).
 - [x] U1 live policy coordinator and Dashboard settings controls, REST/MCP updates, environment metadata, optimistic revisions and recoverable persistence. See [segment notes](docs/usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md).
 - [x] U1 complete: provider-neutral storage/migrations and scoped ledger guards, live Dashboard/REST/MCP settings with persistence/revision/override validation, and four-provider lifecycle tests. Remaining native settings/recovery workflows belong to U4.
 - [x] U2 complete (`048629f8a`, build-all v1.3.0 successful): Observe dispatch/repair, bounded evidence loading, scoped history/preview/client inspection, restart/raw-capture pruning and responsive comparison pass. Preview mirrors retry/placement-policy readiness without provisioning a dock; a proposed choice is never labeled an admitted execution.
-- [ ] U3 completion: enforced strategy dispatch/repair, shared-account transaction locks, source/budget/version revalidation, credential-host checks and unreserved-execution cutover accounting are implemented. SQLite, PostgreSQL, MySQL and SQL Server admission/repair races pass; PostgreSQL/MySQL mission ownership mapping was repaired and regression-tested; classified cooldowns, authorized exceptions, recovery actions and full lifecycle/operator validation remain.
-- [ ] U4 complete client/operator surfaces.
+- [x] U3 complete (`a15a707f0`, snapshot ownership follow-up `c1526497f`): atomic admission/repair, account-wide cooldowns, owned-receipt cleanup, settlement/restart guards and audited recovery permissions. All four providers, Dashboard recovery UX, full regression and build-all v1.3.0 pass. See [U3 validation](docs/usage-selection/U3_RECOVERY_VALIDATION.md).
+- [ ] U4 complete remaining native operator/settings workflows, richer reservation/wait views, Events/Needs You and WebSocket invalidation.
 - [ ] U5 observability, provider/stress and simulated-user validation.
 - [ ] U6 final release integration and handoff.
 
@@ -282,13 +282,13 @@ Every unchecked task is future work. Each milestone ends with recorded automated
 - [x] Implement the cross-provider atomic claim/decision/reservation boundary, account-wide window accounting, idempotency, revision revalidation and rollback behavior. Enable Enforce only after the admission invariants pass.
 - [x] Add settlement, fixed/rolling reset handling, uncertain debt, restart reconciliation, classified provider cooldowns and wakeups. Connect repairs, cancellations, launch failures and verification slot release without harming siblings.
 - [x] Add authorized fallback and soft-reserve exception mutations/audit; retain strict assignment and all existing safety gates.
-- [ ] Exit: concurrent dispatch cannot spend the same known headroom twice; users can see and recover from usage waits; no running work is preempted.
+- [x] Exit: concurrent dispatch cannot spend the same known headroom twice; users can see and recover from usage waits; no running work is preempted.
 
 ### U4. Complete operator/client surfaces
 
-- [ ] Finish Dashboard history/comparison, wait actions, settings, account reservations and Events/Needs You integration. Reuse global breadcrumbs and shared controls.
-- [ ] Complete native Mobile/TUI, Helm, .NET client, MCP, WebSocket invalidations and route/permission/feature parity inventories. Keep exports paginated/redacted and actual-model provenance visible.
-- [ ] Update translations, docs, API Explorer/OpenAPI, Postman and API surface baselines. Verify manual/event refresh and filter/focus preservation.
+- [ ] Finish remaining Dashboard reservation/wait actions and Events/Needs You integration. History/comparison, settings and audited recovery permissions are delivered in U2/U3. Reuse global breadcrumbs and shared controls.
+- [ ] Complete remaining native Mobile/TUI inspection/settings/recovery workflows and dedicated Helm operator mutations; connect WebSocket invalidations. Maintain .NET/MCP/route/permission/feature inventories as these workflows land. Keep exports paginated/redacted and actual-model provenance visible.
+- [ ] For the remaining operator workflows, update translations, docs, API Explorer/OpenAPI, Postman and API surface baselines. Verify manual/event refresh and filter/focus preservation.
 - [ ] Exit: each supported client can inspect a selection/wait, understand stale/shared evidence and operate the permitted recovery/settings workflow. No orphan UI or JSON-only configuration.
 
 ### U5. Telemetry, provider/stress and simulated-user validation
@@ -365,19 +365,20 @@ After the deterministic implementation is validated, use decision/execution corr
 
 No adaptive model, learned budget estimate, automatic quality downgrade or cross-host account inference is part of the required v1.3.0 milestones. The decision ledger deliberately preserves the inputs needed to evaluate those proposals later without pretending today's capture is an exact billing meter.
 
-### Verification follow-up complete
+### U2 verification follow-up (complete)
 
-The MCP HTTP test helper validates initialization and closes its owned single-use session. A bounded-session fixture verifies repeated calls and initialization rejection. The exhaustive read-only contract crawl respects the existing production rate limit. The final .NET 10 omnibus passes 6,885 tests, with zero failures and 14 skips; .NET 8 focused checks pass 83/83. Skipped toolchain/provider/upgrade fixtures and the remaining U5 validation work are not counted as completed.
+The MCP HTTP test helper validates initialization and closes its owned single-use session. A bounded-session fixture verifies repeated calls and initialization rejection. The exhaustive read-only contract crawl respects the existing production rate limit. That U2 checkpoint passes 6,885 tests in the .NET 10 omnibus, with zero failures and 14 skips; .NET 8 focused checks pass 83/83. Skipped toolchain/provider/upgrade fixtures and the remaining U5 validation work are not counted as completed.
 
 Mobile polling lifecycle follow-up: timers are owned by screen focus and cleared on blur; a focused regression verifies polling pauses and resumes. The complete native suite passes 1,392/1,392 across 84 suites with clean exit, alongside type checking and native/shared lint. Native device visual review remains open.
 
-### Current U3 completion wave
+### U3 completion record
 
-- [x] Implement additive migration 127, immutable actual-host/account execution attribution, shared-account classified cooldowns, and pre-launch proof/release boundaries. Compilation passed; behavioral/provider validation is in progress.
-- [x] Implement immutable administrator recovery authorizations with revision checks; wire soft-reserve and preferred-fallback permissions into evaluation and transaction revalidation.
-- [x] Complete recovery transport contracts, Dashboard workflow, translations and UX review (24 browser checks, including conflict refresh and retained audit disclosures).
-- [ ] Complete lifecycle/race/provider tests, regression checks, documentation, commit/push and build-all v1.3.0 before marking U3 complete.
+- [x] Additive migration 127, immutable actual-host/account execution attribution and structured per-execution provider cooldown receipts. Classified limits share a bounded deadline across the proven account; repeated exits do not extend it and expiration never invents fresh balance.
+- [x] Durable launch markers, proven-unstarted release, conservative legacy adoption and execution-key-bound cleanup. All four mission readers bind the key to the same row snapshot; superseded operations cannot mark or release a newer receipt. In-place continuation retains active debt; verification repairs and re-dispatch receive new admission decisions.
+- [x] Immutable administrator fallback/reserve permissions with optimistic revision checks, exact historical audit correlation and hard-gate preservation. Dashboard recovery uses the shared accessible dialog and refresh controls; conflicts preserve the draft reason, and audit text is expandable. REST/MCP and both .NET clients are covered by authenticated tests.
+- [x] Current .NET 10 focused batch 110/110; .NET 8 selection/API/TUI batch 121/121; PostgreSQL/MySQL/SQL Server 63/63 each, including 50-way shared-account contention, stale snapshot ownership, lifecycle and authorization races. SQLite is covered by the focused/full runs.
+- [x] Full .NET 10 regression: 6,895 passed, zero failed, 14 skipped (6,909 total). Skipped toolchain/provider/baseline-upgrade fixtures remain part of U5/U6 validation; they are not counted as passed.
+- [x] Dashboard 1,897/1,897, production build, native 1,392/1,392 with clean exit, type checking and native/shared lint. Recovery UX review 24/24 across responsive themes/locales, RTL/enlarged text, keyboard focus, long audit text and conflict refresh. Native device review remains U4/U5.
+- [x] Commit/push to feature/v1.3.0; build-all v1.3.0 succeeded for all three images and VSIX. Linux amd64/arm64 manifests and local image assembly/recovery-bundle contents verified; no production deployment.
 
-The U3 receipt boundary also binds launch/cleanup to the owned execution key, with a superseded-attempt regression. Current focused checks pass (69 including transport authorization/coverage); the complete first regression run found two contract-test fixture gaps, both corrected and passing in the focused rerun. A final frozen-source omnibus and provider rerun are required before the U3 exit is checked. See [U3 validation and operator steps](docs/usage-selection/U3_RECOVERY_VALIDATION.md).
-
-Snapshot ownership follow-up: all four mission readers capture the internal execution key with the row. Process-exit classification and recovery use that same snapshot, rather than fetching a potentially newer key. The superseded-attempt regression verifies old/new snapshot identities and that the internal key is absent from transport JSON. The 110-case focused rerun passes; provider and full release reruns are in progress.
+See [operator steps and verification](docs/usage-selection/U3_RECOVERY_VALIDATION.md), [layout report](docs/usage-selection/recovery-layout-results.json) and [container evidence](docs/usage-selection/container-validation.json). U4-U6 remain open.
