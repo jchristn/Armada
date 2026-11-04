@@ -9730,7 +9730,7 @@ a.usage-cell:hover { text-decoration: none; box-shadow: inset 0 0 0 1px currentC
 .usage-chart-grid text, .usage-chart-axis text { fill: var(--text-dim); font-size: 6px; }
 .usage-line-segment { stroke-width: 1.5; cursor: pointer; vector-effect: non-scaling-stroke; }
 .usage-chart-reset line { stroke: var(--text-dim); stroke-dasharray: 2 3; stroke-width: 1; }
-.usage-chart-reset text { fill: var(--text-dim); font-size: 9px; }
+.usage-chart-swatch.usage-chart-swatch-reset { width: 0; height: 0.9rem; border: 0; border-left: 1px dotted var(--text-dim); border-radius: 0; margin: 0 0.45rem; }
 .usage-chart-hit { cursor: pointer; stroke-width: 0.75; }
 .usage-chart-point { vector-effect: non-scaling-stroke; pointer-events: none; }
 .usage-chart-point-target { pointer-events: all; }
