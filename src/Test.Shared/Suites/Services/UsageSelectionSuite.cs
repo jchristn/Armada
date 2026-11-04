@@ -221,7 +221,7 @@ namespace Test.Shared.Suites.Services
             {
                 UsageSelectionCandidate a = Fresh("a", 100); a.Windows[0].Window.ResetsUtc = _Now;
                 AssertEqual("AwaitingFreshUsage", Evaluate(a).Candidates[0].ReasonCode);
-                a.Windows[0].GenerationConfirmed = false; AssertEqual("AwaitingFreshUsage", Evaluate(a).Candidates[0].ReasonCode);
+                a.Windows[0].WindowIdentityConfirmed = false; AssertEqual("AwaitingFreshUsage", Evaluate(a).Candidates[0].ReasonCode);
             });
             Add("multiple_blocking_windows_report_latest_known_reset", () =>
             {

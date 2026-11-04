@@ -29,21 +29,21 @@ namespace Armada.Core.Services
             CaptainSelectionDecision decision = records.Decision;
             decision.TenantId = mission.TenantId!; decision.UserId = mission.UserId; decision.MissionId = mission.Id; decision.VoyageId = mission.VoyageId;
             decision.ExecutionAttemptId = decision.Id; decision.Trigger = trigger; decision.Mode = snapshot.Settings.Mode;
-            decision.Outcome = admitted ? "Admitted" : "Waiting"; decision.SelectedCaptainId = admitted ? snapshot.ActualCaptainId : null;
+            decision.Outcome = admitted ? CaptainSelectionOutcomes.Admitted : CaptainSelectionOutcomes.Waiting; decision.SelectedCaptainId = admitted ? snapshot.ActualCaptainId : null;
             if (decision.SelectedCaptainId != null && snapshot.Captains.TryGetValue(decision.SelectedCaptainId, out Captain? actual))
             {
                 decision.SelectedModel = Label(actual.Model, 1024);
                 if (snapshot.Evidence.TryGetValue(actual.Id, out UsageSelectionAccountEvidence? source)) decision.SelectedProvider = Label(source.Provider, 512);
             }
             decision.HypotheticalCaptainId = snapshot.Settings.Mode == UsageSelectionModeEnum.Observe ? snapshot.Evaluation.SelectedCaptainId : null;
-            decision.HypotheticalOutcome = snapshot.Settings.Mode != UsageSelectionModeEnum.Observe ? null : snapshot.Evaluation.SelectedCaptainId == null ? "Waiting" : "Selected";
+            decision.HypotheticalOutcome = snapshot.Settings.Mode != UsageSelectionModeEnum.Observe ? null : snapshot.Evaluation.SelectedCaptainId == null ? CaptainSelectionOutcomes.Waiting : CaptainSelectionOutcomes.Selected;
             decision.AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion; decision.PolicyRevisionId = records.Policy.Id;
             decision.EvaluatedUtc = snapshot.EvaluatedUtc; decision.PrimaryReasonCode = snapshot.Evaluation.ReasonCode;
             decision.CandidateCount = snapshot.Evaluation.Candidates.Count;
             decision.NextReconsiderUtc = snapshot.Evaluation.SelectedCaptainId == null ? snapshot.Evaluation.Candidates.FirstOrDefault()?.NextReconsiderUtc : null;
             if (snapshot.Recovery != null)
                 records.Events.Add(new CaptainSelectionExecutionEvent { TenantId = mission.TenantId!, UserId = mission.UserId, DecisionId = decision.Id,
-                    ExecutionAttemptId = decision.ExecutionAttemptId, EventKind = "RecoveryAuthorizationApplied", ReportingSource = snapshot.Recovery.Id,
+                    ExecutionAttemptId = decision.ExecutionAttemptId, EventKind = CaptainSelectionEventKinds.RecoveryAuthorizationApplied, ReportingSource = snapshot.Recovery.Id,
                     OccurredUtc = snapshot.EvaluatedUtc, FailureClassification = snapshot.Recovery.ReserveException ? "SoftReserveException" : snapshot.Recovery.AllowFallback ? "FallbackPermission" : "RecoveryPermissionsRevoked" });
             int rank = 0;
             foreach (UsageSelectionCandidateResult result in snapshot.Evaluation.Candidates)
@@ -68,7 +68,7 @@ namespace Armada.Core.Services
                 foreach (UsageSelectionWindowEvidence item in input.Windows)
                 {
                     UsageWindow window = item.Window;
-                    bool applicable = item.ScopeApplies && item.GenerationConfirmed
+                    bool applicable = item.ScopeApplies && item.WindowIdentityConfirmed
                         && (String.IsNullOrWhiteSpace(window.Model) || String.Equals(window.Model.Trim(), input.Model?.Trim(), StringComparison.OrdinalIgnoreCase));
                     string key = UsageBudgetIdentity.WindowKey(window, captain.UsageCaptureMode == UsageCaptureModeEnum.Custom ? source?.ConfigurationRevision : null);
                     records.Windows.Add(new CaptainSelectionWindowRecord
@@ -102,7 +102,7 @@ namespace Armada.Core.Services
                     r.Candidate.OccupiedSlots, r.Candidate.Capacity, r.Candidate.CooldownUntilUtc,
                     r.ReasonCode == "BelowReserve" || r.ReasonCode == "AccountQuotaExhausted" || r.ReasonCode == "AccountCooldown" ? r.NextReconsiderUtc : null,
                     snapshot.Evidence.TryGetValue(r.Candidate.CaptainId, out UsageSelectionAccountEvidence? source) ? source.MembershipId : null,
-                    r.Candidate.Windows.Select(w => new object?[] { UsageBudgetIdentity.WindowKey(w.Window), w.GenerationConfirmed, w.ScopeApplies,
+                    r.Candidate.Windows.Select(w => new object?[] { UsageBudgetIdentity.WindowKey(w.Window), w.WindowIdentityConfirmed, w.ScopeApplies,
                         Finite(w.ActiveReservationPercent), Finite(w.UnsettledPercent) }).ToArray() }).ToArray() });
             decision.EvidenceFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint))).ToLowerInvariant();
             return records;

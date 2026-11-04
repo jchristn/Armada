@@ -48,7 +48,7 @@ History supports trigger/outcome and UTC `[from,to)` filters. Pages default to 2
 
 The mission card lives on the existing Mission detail route and uses its global breadcrumb. It reuses DataTable, pagination, refresh, copy and JSON controls. Identity and state columns are narrow; details get remaining width. Long names/models truncate with full hover text. Phone tables scroll inside the card, while translated controls wrap. Polling preserves filters/pages, pauses in hidden tabs and avoids overlapping requests. Superseded requests are aborted. Authorization loss clears cached evidence.
 
-Browser review renders the real React card/CSS against isolated fixture responses, not the deployed server. Test widths are 1280, 768 and 390; themes light/dark; locales English/Spanish/Japanese; additional enlarged-text/RTL and keyboard focus checks. Waiting, legacy, unavailable and redacted states are included. Representative screenshots and the geometry/focus report are stored beside this document. This review found and corrected a Spanish phone-pagination overflow. It does not replace the final live operator/simulated-user session required by U5.
+Browser review renders the real React card/CSS against isolated fixture responses, not the deployed server. Test widths are 1280, 768 and 390; themes light/dark; locales English/Spanish/Japanese; additional enlarged-text/RTL and keyboard focus checks. Waiting, legacy, unavailable and redacted states are included. The geometry/focus report is stored beside this document; representative screenshots were reviewed locally and are not committed. This review found and corrected a Spanish phone-pagination overflow. It does not replace the final live operator/simulated-user session required by U5.
 
 ## Remaining work
 

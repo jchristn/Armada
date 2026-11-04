@@ -81,7 +81,7 @@ namespace Test.Shared.Infrastructure
             UsageSelectionCandidate input = new UsageSelectionCandidate { CaptainId = captain.Id, Model = captain.Model, Capacity = captain.MaxConcurrency, OccupiedSlots = captain.ActiveMissionCount,
                 CooldownUntilUtc = source.CooldownUntilUtc, IdentityVerified = captureEnabled, ConfigurationMatches = true, Provider = "anthropic", CapturedUtc = source.CapturedUtc, Source = source.Source, Status = source.Status,
                 HasUncertainDebt = totals.Any(t => t.HasUncertainDebt), EffectiveCaptureIntervalSeconds = source.EffectiveIntervalSeconds,
-                Windows = new List<UsageSelectionWindowEvidence> { new UsageSelectionWindowEvidence { Window = window, ScopeApplies = true, GenerationConfirmed = true,
+                Windows = new List<UsageSelectionWindowEvidence> { new UsageSelectionWindowEvidence { Window = window, ScopeApplies = true, WindowIdentityConfirmed = true,
                     ActiveReservationPercent = totals.Where(t => t.WindowKey == key).Sum(t => t.ActivePercent), UnsettledPercent = totals.Where(t => t.WindowKey == key).Sum(t => t.UnsettledPercent) } } };
             UsageSelectionRecovery? recovery = await Database.CaptainSelections.ReadRecoveryAsync(Tenant.Id, mission.Id, token).ConfigureAwait(false);
             UsageSelectionCandidateResult result = UsageSelectionPolicy.Evaluate(new[] { input }, Policy, DateTime.UtcNow, recovery?.ReserveException == true).Candidates.Single();

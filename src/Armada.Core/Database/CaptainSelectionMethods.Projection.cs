@@ -31,7 +31,7 @@ namespace Armada.Core.Database
                     LEFT JOIN captain_selection_candidates c ON c.tenant_id=d.tenant_id AND c.decision_id=d.id AND c.captain_id=d.selected_captain_id" + visible + @"
                     LEFT JOIN captain_selection_candidates h ON h.tenant_id=d.tenant_id AND h.decision_id=d.id AND h.captain_id=d.hypothetical_captain_id" + proposedVisible + @"
                     LEFT JOIN captain_selection_execution_events e ON e.tenant_id=d.tenant_id AND e.id=(SELECT e2.id FROM captain_selection_execution_events e2
-                        WHERE e2.tenant_id=d.tenant_id AND e2.decision_id=d.id AND e2.event_kind='ActualModelReported' AND e2.actual_model IS NOT NULL ORDER BY e2.occurred_utc DESC,e2.id DESC" + last + @")
+                        WHERE e2.tenant_id=d.tenant_id AND e2.decision_id=d.id AND e2.event_kind='" + CaptainSelectionEventKinds.ActualModelReported + "' AND e2.actual_model IS NOT NULL ORDER BY e2.occurred_utc DESC,e2.id DESC" + last + @")
                     WHERE d.tenant_id=@tenant AND d.id IN (" + String.Join(",", ids) + ")" + (ownerUserId == null ? "" : " AND d.user_id=@owner") + ";");
                 Add(command, "@tenant", tenantId); if (ownerUserId != null) Add(command, "@owner", ownerUserId); if (candidateOwnerUserId != null) Add(command, "@candidateOwner", candidateOwnerUserId);
                 for (int index = 0; index < ids.Length; index++) Add(command, ids[index], decisionIds[index]);
@@ -44,7 +44,7 @@ namespace Armada.Core.Database
                     rows.Add(new CaptainSelectionDecisionView
                     {
                         Id = Text("id")!, TenantId = Text("tenant_id")!, MissionId = Text("mission_id")!, Trigger = Text("trigger_kind")!, Outcome = Text("outcome")!,
-                        ExecutionAttemptId = Text("outcome") == "Admitted" ? Text("execution_attempt_id") : null,
+                        ExecutionAttemptId = Text("outcome") == CaptainSelectionOutcomes.Admitted ? Text("execution_attempt_id") : null,
                         Mode = Enum.Parse<UsageSelectionModeEnum>(Text("mode")!), Strategy = Enum.Parse<CaptainSelectionStrategyEnum>(Text("strategy")!),
                         SelectedCaptainId = Text("visible_selected_id"), SelectedCaptainName = Text("selected_name"), SelectedCaptainAvailable = Convert.ToInt32(reader["selected_available"]) != 0,
                         IntendedModel = selected ? Text("selected_model") : null, ReportedModel = selected ? Text("reported_model") : null, ModelReportingSource = selected ? Text("model_source") : null,

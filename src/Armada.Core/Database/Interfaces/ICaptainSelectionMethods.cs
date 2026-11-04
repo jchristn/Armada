@@ -30,6 +30,9 @@ namespace Armada.Core.Database.Interfaces
         Task<List<UsageSelectionAccountEvidence>> ReadAccountEvidenceAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default);
         /// <summary>Batch SQL-aggregated reservations for the current verified accounts of a bounded captain set.</summary>
         Task<List<UsageSelectionBudgetTotals>> ReadBudgetTotalsAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default);
+        /// <summary>Batch the last mission-slot assignment time for a bounded captain set in one tenant. Captains never assigned are omitted.</summary>
+        /// <exception cref="ArgumentException">The tenant is missing or more than 1000 captains are requested.</exception>
+        Task<Dictionary<string, DateTime>> ReadLastAssignedAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default);
         /// <summary>Preserve legacy routing while tracking an unmeasured execution on its actual credential host, without selection history.</summary>
         Task<bool> TryAdmitLegacyAsync(string captainId, string missionId, string? executionHostId, int ceiling = 256, CancellationToken token = default);
         /// <summary>Readmit a legacy verification repair and track operational uncertainty on its credential host.</summary>

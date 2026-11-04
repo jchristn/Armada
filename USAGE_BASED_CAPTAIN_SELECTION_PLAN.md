@@ -17,7 +17,8 @@ The required v1.3.0 deliverable comprises U0 through U6 below: observation mode,
 - [x] U1 live policy coordinator and Dashboard settings controls, REST/MCP updates, environment metadata, optimistic revisions and recoverable persistence. See [segment notes](docs/usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md).
 - [x] U1 complete: provider-neutral storage/migrations and scoped ledger guards, live Dashboard/REST/MCP settings with persistence/revision/override validation, and four-provider lifecycle tests. Remaining native settings/recovery workflows belong to U4.
 - [x] U2 complete (`048629f8a`, build-all v1.3.0 successful): Observe dispatch/repair, bounded evidence loading, scoped history/preview/client inspection, restart/raw-capture pruning and responsive comparison pass. Preview mirrors retry/placement-policy readiness without provisioning a dock; a proposed choice is never labeled an admitted execution.
-- [x] U3 complete (`a15a707f0`, snapshot ownership follow-up `c1526497f`): atomic admission/repair, account-wide cooldowns, owned-receipt cleanup, settlement/restart guards and audited recovery permissions. All four providers, Dashboard recovery UX, full regression and build-all v1.3.0 pass. See [U3 validation](docs/usage-selection/U3_RECOVERY_VALIDATION.md).
+- [x] U3 complete (`a15a707f0`, snapshot ownership follow-up `c1526497f`): atomic admission/repair, account-wide cooldowns, owned-receipt cleanup, settlement/restart guards and audited recovery permissions. All four providers, Dashboard recovery UX, full regression and build-all v1.3.0 pass. See [U3 validation](docs/usage-selection/U3_RECOVERY_VALIDATION.md). Correction from the takeover review: every reservation uses the single `continuous` window generation. Provider adapters do not yet declare fixed versus rolling reset semantics, so old-window debt is held until a post-execution capture settles it, never closed by a reset. This is conservative but incomplete; see the U5 open item.
+- [x] Takeover review remediation (2026-11-03), detailed below: real captain assignment time (migration 128), broader persistence-failure handling, deterministic blocker eviction, stable outcome/event/reason constants, readable policy and enforcement validator, committed review screenshots removed. Four-provider rerun is pending a Docker disk-space fix on the development host.
 - [ ] U4 complete remaining native operator/settings workflows, richer reservation/wait views, Events/Needs You and WebSocket invalidation.
 - [ ] U5 observability, provider/stress and simulated-user validation.
 - [ ] U6 final release integration and handoff.
@@ -280,7 +281,7 @@ Every unchecked task is future work. Each milestone ends with recorded automated
 ### U3. Atomic enforcement and recovery
 
 - [x] Implement the cross-provider atomic claim/decision/reservation boundary, account-wide window accounting, idempotency, revision revalidation and rollback behavior. Enable Enforce only after the admission invariants pass.
-- [x] Add settlement, fixed/rolling reset handling, uncertain debt, restart reconciliation, classified provider cooldowns and wakeups. Connect repairs, cancellations, launch failures and verification slot release without harming siblings.
+- [x] Add settlement, conservative continuous-generation reset handling, uncertain debt, restart reconciliation, classified provider cooldowns and wakeups. Fixed-window rollover adapters moved to U5. Connect repairs, cancellations, launch failures and verification slot release without harming siblings.
 - [x] Add authorized fallback and soft-reserve exception mutations/audit; retain strict assignment and all existing safety gates.
 - [x] Exit: concurrent dispatch cannot spend the same known headroom twice; users can see and recover from usage waits; no running work is preempted.
 
@@ -293,7 +294,8 @@ Every unchecked task is future work. Each milestone ends with recorded automated
 
 ### U5. Telemetry, provider/stress and simulated-user validation
 
-- [ ] Add metrics/spans/Grafana and tests for bounded cardinality, disabled exporters and errors. Add retention/reconciliation load checks.
+- [ ] Add metrics/spans/Grafana and tests for bounded cardinality, disabled exporters and errors. Add retention/reconciliation load checks; the reservation reconciler currently performs 4-6 reads per row.
+- [ ] Provider adapters declare fixed versus rolling reset semantics per window. For proven fixed windows, record a reset generation on reservations and close old-generation debt after a fresh post-reset capture. Until then all accounting stays on the continuous generation; the release handoff must name this limitation.
 - [ ] Run the full shared provider matrix, supported frameworks/OS runners, frontend/native tests, strict lint/type/route/i18n/parity checks and CI coverage. Verify actual AOT applicability and packaging metadata.
 - [ ] Run isolated public-surface benchmarks and a clean simulated-user session with coverage/evidence/findings. Apply authorized fixes in separate iterations and revalidate; do not edit during observation sessions.
 - [ ] Exit: reproducible test/benchmark reports, responsive/accessibility artifacts and user-testing findings disposition; no unexplained admission/accounting invariant failure.
@@ -357,7 +359,7 @@ A developer should hand the operator a clean test deployment, example policies a
 9. Switch users/tenants and check every detail, comparison, count and export for proper redaction. Test a viewer's inability to edit policy or request a reserve exception.
 10. Prune raw captures in the isolated deployment and inspect retained decisions. Confirm evidence remains meaningful, actual model is labeled only when reported, and history explains Observe versus Enforce.
 
-Record coverage, screenshots/transcripts, expected versus actual outcomes and findings under `docs/usage-selection/`. A release handoff must name unresolved limitations: external harness usage, host-local identity, incomplete provider window semantics, conservative reservation estimates and no guaranteed completion budget.
+Record coverage, transcripts, expected versus actual outcomes and findings under `docs/usage-selection/`. Review screenshots locally; do not commit them (the screenshots directory is ignored). A release handoff must name unresolved limitations: external harness usage, host-local identity, incomplete provider window semantics, conservative reservation estimates and no guaranteed completion budget.
 
 ## 15. Deferred adaptive ranking
 
@@ -382,3 +384,18 @@ Mobile polling lifecycle follow-up: timers are owned by screen focus and cleared
 - [x] Commit/push to feature/v1.3.0; build-all v1.3.0 succeeded for all three images and VSIX. Linux amd64/arm64 manifests and local image assembly/recovery-bundle contents verified; no production deployment.
 
 See [operator steps and verification](docs/usage-selection/U3_RECOVERY_VALIDATION.md), [layout report](docs/usage-selection/recovery-layout-results.json) and [container evidence](docs/usage-selection/container-validation.json). U4-U6 remain open.
+
+### Takeover review remediation (2026-11-03)
+
+An independent review of U0-U3 confirmed the admission transaction, lock order, replay, scoped reads and reconciler are sound. It found these defects, now fixed:
+
+- [x] Fairness tie-breaker read `Captain.LastUpdateUtc`, which changes on every captain update (including slot release), and stored it in the ledger as `last_assigned_utc`. Migration 128 adds `captains.last_assigned_utc` on all four providers, backfilled from `MAX(missions.assigned_utc)`. Slot claims and verification resumes set it, and selection reads it through the batched, tenant-scoped `ICaptainSelectionMethods.ReadLastAssignedAsync`. Never-assigned captains keep the existing "unknown never wins" ordering.
+- [x] Waiting-decision persistence caught only `DbException`. It now also handles `TransientDatabaseError` (timeouts and wrapped provider errors), so these surface `SelectionPersistenceUnavailable` and retry.
+- [x] The transient-blocker cache evicted an arbitrary entry when full. It now evicts the entry whose retry is due soonest.
+- [x] Persisted outcomes, execution event kinds and reason codes were repeated string literals. Added `CaptainSelectionOutcomes`, `CaptainSelectionEventKinds` and `UsageSelectionReasonCodes`; stored values are unchanged.
+- [x] `UsageSelectionPolicy`, the transaction-time enforcement validator and the `CaptainSlotStore` scope checks were split into named steps with no behavior change. `GenerationConfirmed` was renamed to `WindowIdentityConfirmed`, because it proves label integrity, not a reset generation.
+- [x] Review screenshots (20 PNGs) were committed against repository policy. They are removed and `docs/usage-selection/screenshots/` is ignored.
+- [x] U3 status corrected to describe continuous-generation accounting (above), with fixed-window adapters tracked in U5.
+
+Evidence: `dotnet build src/Armada.sln` clean (0 warnings). On .NET 10/SQLite, the focused batch `Services.UsageSelection, Database.CaptainSelection, Database.UsageEnforcement, E2E.CaptainSelectionApi, Database.MigrationHygiene, Services.CaptainAdmissionParity, Services.UsageSelectionConfiguration` passes 102/102, including the new `slot_claims_record_assignment_time_independent_of_other_captain_updates`. Full .NET 10 regression: 6,896 passed, zero failed, 14 skipped (6,910 total; the same skipped fixtures as U3). Still open: the PostgreSQL/MySQL/SQL Server rerun of `Database.CaptainSelection, Database.CaptainConcurrency, Database.UsageEnforcement, Database.MigrationHygiene, Database.MissionDatabase` via `scripts/common/run-db-parity-tests.sh`. On 2026-11-03 the containers could not initialize because the development host's Docker VM was out of disk space, which is an environment failure, not a test result. Migration 128 and the refactored admission transaction must pass that matrix before U4 is marked complete.
+

@@ -18,7 +18,7 @@ namespace Armada.Core.Database
             return RunAsync(async connection =>
             {
                 using DbCommand command = Command(connection, null, @"SELECT r.* FROM usage_selection_recovery r JOIN captain_selection_execution_events e ON e.tenant_id=r.tenant_id AND e.reporting_source=r.id
-                    WHERE e.tenant_id=@tenant AND e.decision_id=@decision AND e.event_kind='RecoveryAuthorizationApplied' ORDER BY r.revision DESC" + PageSql(connection));
+                    WHERE e.tenant_id=@tenant AND e.decision_id=@decision AND e.event_kind='" + CaptainSelectionEventKinds.RecoveryAuthorizationApplied + "' ORDER BY r.revision DESC" + PageSql(connection));
                 Add(command, "@tenant", tenantId); Add(command, "@decision", decisionId); Add(command, "@skip", 0); Add(command, "@take", 1);
                 using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
                 return await reader.ReadAsync(token).ConfigureAwait(false) ? MapRecovery(reader) : null;

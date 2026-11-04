@@ -261,6 +261,25 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(0, (await fixture.Database.Captains.ReadAsync(fixture.Captains[0].Id, token).ConfigureAwait(false))!.ActiveMissionCount);
                 AssertEqual(0, (await fixture.Database.CaptainSelections.ReadReservationsAsync(fixture.Tenant.Id, "host", "ClaudeCode", "opaque-account", token).ConfigureAwait(false)).Count);
             });
+            Add("slot_claims_record_assignment_time_independent_of_other_captain_updates", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(20, token).ConfigureAwait(false);
+                string[] ids = new[] { fixture.Captains[0].Id, fixture.Captains[1].Id };
+                AssertEqual(0, (await fixture.Database.CaptainSelections.ReadLastAssignedAsync(fixture.Tenant.Id, ids, token).ConfigureAwait(false)).Count, "never-assigned captains have no assignment time");
+
+                Captain touched = (await fixture.Database.Captains.ReadAsync(fixture.Captains[1].Id, token).ConfigureAwait(false))!;
+                touched.Name = touched.Name + "-renamed";
+                await fixture.Database.Captains.UpdateAsync(touched, token).ConfigureAwait(false);
+                AssertEqual(0, (await fixture.Database.CaptainSelections.ReadLastAssignedAsync(fixture.Tenant.Id, ids, token).ConfigureAwait(false)).Count, "an ordinary captain update is not an assignment");
+
+                DateTime before = DateTime.UtcNow.AddSeconds(-1);
+                AssertTrue(await fixture.Database.CaptainSelections.TryAdmitLegacyAsync(fixture.Captains[0].Id, fixture.Missions[0].Id, "host", token: token).ConfigureAwait(false));
+                DateTime after = DateTime.UtcNow.AddSeconds(1);
+                Dictionary<string, DateTime> assigned = await fixture.Database.CaptainSelections.ReadLastAssignedAsync(fixture.Tenant.Id, ids, token).ConfigureAwait(false);
+                AssertEqual(1, assigned.Count);
+                AssertTrue(assigned[fixture.Captains[0].Id] >= before && assigned[fixture.Captains[0].Id] <= after, "claim time is recorded");
+                AssertEqual(0, (await fixture.Database.CaptainSelections.ReadLastAssignedAsync("ten_other", ids, token).ConfigureAwait(false)).Count, "tenant scoped");
+            });
             Add("disabled_execution_preserves_uncertainty_until_proven_post_exit_capture", async token =>
             {
                 using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(20, token).ConfigureAwait(false);

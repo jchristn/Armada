@@ -32,7 +32,7 @@ namespace Armada.Core.Services
                 string key = UsageBudgetIdentity.WindowKey(window, captain.UsageCaptureMode == UsageCaptureModeEnum.Custom ? account.ConfigurationRevision : null);
                 candidate.Windows.Add(new UsageSelectionWindowEvidence { Window = window,
                     ScopeApplies = String.IsNullOrEmpty(window.Scope) || String.Equals(window.Scope, "account", StringComparison.OrdinalIgnoreCase),
-                    GenerationConfirmed = !String.IsNullOrWhiteSpace(window.Name)
+                    WindowIdentityConfirmed = !String.IsNullOrWhiteSpace(window.Name)
                         && UsageSelectionEvidenceSanitizer.Label(window.Name) == window.Name
                         && UsageSelectionEvidenceSanitizer.Label(window.Model) == window.Model
                         && UsageSelectionEvidenceSanitizer.Label(window.Scope) == window.Scope
@@ -41,7 +41,7 @@ namespace Armada.Core.Services
                     UnsettledPercent = accountTotals.Where(t => t.WindowKey == key).Sum(t => t.UnsettledPercent) });
             }
             foreach (IGrouping<string, UsageSelectionWindowEvidence> duplicate in candidate.Windows.GroupBy(w => UsageBudgetIdentity.WindowKey(w.Window)).Where(g => g.Count() > 1))
-                foreach (UsageSelectionWindowEvidence window in duplicate) window.GenerationConfirmed = false;
+                foreach (UsageSelectionWindowEvidence window in duplicate) window.WindowIdentityConfirmed = false;
         }
 
         internal static bool CanReserve(UsageSelectionCandidate input, UsageSelectionWindowEvidence evidence, UsageSelectionSettings settings, DateTime nowUtc)
@@ -49,7 +49,7 @@ namespace Armada.Core.Services
             UsageWindow window = evidence.Window;
             bool known = window.UsedPercent.HasValue ? Double.IsFinite(window.UsedPercent.Value) && window.UsedPercent >= 0
                 : window.Used >= 0 && window.Limit > 0 && !String.IsNullOrWhiteSpace(window.Unit);
-            bool applicable = evidence.ScopeApplies && evidence.GenerationConfirmed
+            bool applicable = evidence.ScopeApplies && evidence.WindowIdentityConfirmed
                 && (String.IsNullOrWhiteSpace(window.Model) || String.Equals(window.Model.Trim(), input.Model?.Trim(), StringComparison.OrdinalIgnoreCase));
             return input.IdentityVerified && input.ConfigurationMatches && input.Status == UsageSnapshotStatusEnum.Ok
                 && input.Source != UsageCaptureSourceEnum.Derived && Enum.IsDefined(typeof(UsageCaptureSourceEnum), input.Source)

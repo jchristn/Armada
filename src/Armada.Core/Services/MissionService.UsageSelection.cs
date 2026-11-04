@@ -36,7 +36,8 @@ namespace Armada.Core.Services
         {
             if (_UsageSelectionBlockers.Count >= _MaxEnvelopeDecisionsTracked)
             {
-                string? oldest = _UsageSelectionBlockers.Keys.FirstOrDefault();
+                // Evict the blocker whose retry is due soonest; it is the least valuable to keep.
+                string? oldest = _UsageSelectionBlockers.OrderBy(pair => pair.Value.RetryUtc).Select(pair => pair.Key).FirstOrDefault();
                 if (oldest != null) _UsageSelectionBlockers.TryRemove(oldest, out _);
             }
             _UsageSelectionBlockers[mission.Id] = new UsageSelectionTransientBlocker
@@ -62,21 +63,21 @@ namespace Armada.Core.Services
             CaptainSelectionPreview preview = new CaptainSelectionPreview { MissionId = mission.Id, Mode = settings.Mode,
                 Strategy = settings.Strategy, AlgorithmVersion = UsageSelectionPolicy.AlgorithmVersion, EvaluatedUtc = DateTime.UtcNow };
             string? readiness = null;
-            if (mission.Status != MissionStatusEnum.Pending) readiness = "MissionNotPending";
-            else if (String.IsNullOrEmpty(mission.TenantId)) readiness = "MissionScopeUnavailable";
+            if (mission.Status != MissionStatusEnum.Pending) readiness = UsageSelectionReasonCodes.MissionNotPending;
+            else if (String.IsNullOrEmpty(mission.TenantId)) readiness = UsageSelectionReasonCodes.MissionScopeUnavailable;
             else if (_LaunchFailures.TryGetValue(mission.Id, out MissionLaunchFailure? backoff) && DateTime.UtcNow < backoff.NextAttemptUtc
-                && !await HasUntriedIdleCaptainAsync(mission, backoff, token).ConfigureAwait(false)) readiness = "LaunchRetryPending";
+                && !await HasUntriedIdleCaptainAsync(mission, backoff, token).ConfigureAwait(false)) readiness = UsageSelectionReasonCodes.LaunchRetryPending;
             else if (!String.IsNullOrWhiteSpace(mission.VoyageId))
             {
                 Voyage? voyage = await _Database.Voyages.ReadAsync(mission.VoyageId, token).ConfigureAwait(false);
                 if (voyage?.Status == VoyageStatusEnum.Complete || voyage?.Status == VoyageStatusEnum.Cancelled || voyage?.Status == VoyageStatusEnum.Failed)
-                    readiness = "VoyageNotRunnable";
+                    readiness = UsageSelectionReasonCodes.VoyageNotRunnable;
             }
             if (readiness == null)
             {
                 Vessel? vessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
-                if (vessel == null) readiness = "VesselMissing";
-                else if (UsesSharedLocalAndWorkingDirectory(vessel)) readiness = "VesselMisconfigured";
+                if (vessel == null) readiness = UsageSelectionReasonCodes.VesselMissing;
+                else if (UsesSharedLocalAndWorkingDirectory(vessel)) readiness = UsageSelectionReasonCodes.VesselMisconfigured;
                 else
                 {
                     MissionAssignmentBlocker? blocker = (await EvaluateReadinessAdmissionAsync(mission, token).ConfigureAwait(false)).Blocker
@@ -98,7 +99,7 @@ namespace Armada.Core.Services
                 && !await CanAssignMissionAsync(selection.Mission, snapshot.Captains[snapshot.ActualCaptainId]).ConfigureAwait(false);
             if (placementWaiting) snapshot.ActualCaptainId = null;
             preview.EvaluatedUtc = snapshot.EvaluatedUtc; preview.ActualCaptainId = snapshot.ActualCaptainId;
-            preview.HypotheticalCaptainId = snapshot.Evaluation.SelectedCaptainId; preview.ReasonCode = placementWaiting ? "PlacementWaiting" : snapshot.Evaluation.ReasonCode;
+            preview.HypotheticalCaptainId = snapshot.Evaluation.SelectedCaptainId; preview.ReasonCode = placementWaiting ? UsageSelectionReasonCodes.PlacementWaiting : snapshot.Evaluation.ReasonCode;
             List<CaptainSelectionCandidateView> rows = snapshot.Evaluation.Candidates.Select((result, index) => new CaptainSelectionCandidateView
             {
                 CaptainId = result.Candidate.CaptainId, CaptainAvailable = true, CaptainName = UsageSelectionEvidenceSanitizer.Label(snapshot.Captains[result.Candidate.CaptainId].Name)!,
@@ -117,7 +118,7 @@ namespace Armada.Core.Services
         {
             try
             {
-                CaptainSelectionRecordSet waiting = UsageSelectionRecordBuilder.Build(snapshot, mission, "Waiting", admitted: false);
+                CaptainSelectionRecordSet waiting = UsageSelectionRecordBuilder.Build(snapshot, mission, CaptainSelectionOutcomes.Waiting, admitted: false);
                 if (reason != null)
                 {
                     waiting.Decision.PrimaryReasonCode = reason;
@@ -126,16 +127,16 @@ namespace Armada.Core.Services
                 }
                 EnumerationResult<CaptainSelectionDecision> history = await _Database.CaptainSelections.EnumerateByMissionAsync(mission.TenantId!, mission.Id, mission.UserId, pageSize: 1, token: token).ConfigureAwait(false);
                 CaptainSelectionDecision? previous = history.Objects.FirstOrDefault();
-                if (previous == null || previous.EvidenceFingerprint != waiting.Decision.EvidenceFingerprint || previous.Outcome != "Waiting")
+                if (previous == null || previous.EvidenceFingerprint != waiting.Decision.EvidenceFingerprint || previous.Outcome != CaptainSelectionOutcomes.Waiting)
                 {
                     waiting.Decision.PreviousDecisionId = previous?.Id;
                     await _Database.CaptainSelections.CreateDecisionAsync(waiting, token).ConfigureAwait(false);
                 }
                 return true;
             }
-            catch (System.Data.Common.DbException)
+            catch (Exception ex) when (ex is System.Data.Common.DbException || Armada.Core.Database.TransientDatabaseError.IsTransient(ex))
             {
-                UsageWait(mission, "SelectionPersistenceUnavailable", "Selection history could not be recorded. Armada will retry without starting a process.");
+                UsageWait(mission, UsageSelectionReasonCodes.SelectionPersistenceUnavailable, "Selection history could not be recorded. Armada will retry without starting a process.");
                 return false;
             }
         }
@@ -170,7 +171,7 @@ namespace Armada.Core.Services
                 await _Database.CaptainSelections.AppendExecutionEventAsync(new CaptainSelectionExecutionEvent
                 {
                     TenantId = decision.TenantId, UserId = decision.UserId, DecisionId = decision.Id,
-                    ExecutionAttemptId = decision.ExecutionAttemptId, EventKind = "ExecutionStarted",
+                    ExecutionAttemptId = decision.ExecutionAttemptId, EventKind = CaptainSelectionEventKinds.ExecutionStarted,
                     ReportingSource = "MissionLifecycle", OccurredUtc = DateTime.UtcNow
                 }, token).ConfigureAwait(false);
             }
@@ -191,7 +192,7 @@ namespace Armada.Core.Services
                 await _Database.CaptainSelections.AppendExecutionEventAsync(new CaptainSelectionExecutionEvent
                 {
                     TenantId = decision.TenantId, UserId = decision.UserId, DecisionId = decision.Id,
-                    ExecutionAttemptId = decision.ExecutionAttemptId, EventKind = "ActualModelReported", ActualModel = sanitized,
+                    ExecutionAttemptId = decision.ExecutionAttemptId, EventKind = CaptainSelectionEventKinds.ActualModelReported, ActualModel = sanitized,
                     ReportingSource = "RuntimeReport", OccurredUtc = DateTime.UtcNow
                 }, token).ConfigureAwait(false);
             }
@@ -207,17 +208,20 @@ namespace Armada.Core.Services
                 ActualCaptainId = selection.Selected?.Id, CaptureEnabled = _Settings.UsageCapture.EffectiveEnabled, Captains = selection.Visible.ToDictionary(c => c.Id, StringComparer.Ordinal) };
             if (selection.Visible.Count > settings.MaximumCandidates)
             {
-                snapshot.Evaluation = new UsageSelectionEvaluation { CandidateLimitExceeded = true, ReasonCode = "CandidateLimitExceeded" };
+                snapshot.Evaluation = new UsageSelectionEvaluation { CandidateLimitExceeded = true, ReasonCode = UsageSelectionReasonCodes.CandidateLimitExceeded };
                 return snapshot;
             }
             List<string> ids = selection.Visible.Select(c => c.Id).ToList();
             List<UsageSelectionAccountEvidence> evidence = new List<UsageSelectionAccountEvidence>();
             List<UsageSelectionBudgetTotals> totals = new List<UsageSelectionBudgetTotals>();
+            Dictionary<string, DateTime> lastAssigned = new Dictionary<string, DateTime>(StringComparer.Ordinal);
             for (int offset = 0; offset < ids.Count; offset += 1000)
             {
                 List<string> batch = ids.Skip(offset).Take(1000).ToList();
                 evidence.AddRange(await _Database.CaptainSelections.ReadAccountEvidenceAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false));
                 totals.AddRange(await _Database.CaptainSelections.ReadBudgetTotalsAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false));
+                foreach (KeyValuePair<string, DateTime> row in await _Database.CaptainSelections.ReadLastAssignedAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false))
+                    lastAssigned[row.Key] = row.Value;
             }
             foreach (IGrouping<string, UsageSelectionAccountEvidence> group in evidence.GroupBy(row => row.CaptainId, StringComparer.Ordinal))
                 if (group.Count() == 1) snapshot.Evidence[group.Key] = group.Single();
@@ -231,14 +235,14 @@ namespace Armada.Core.Services
             foreach (Captain captain in selection.Visible)
             {
                 UsageSelectionCandidate candidate = new UsageSelectionCandidate { CaptainId = captain.Id, Model = captain.Model,
-                    Capacity = captain.MaxConcurrency, OccupiedSlots = captain.ActiveMissionCount, LastAssignedUtc = captain.LastUpdateUtc,
+                    Capacity = captain.MaxConcurrency, OccupiedSlots = captain.ActiveMissionCount, LastAssignedUtc = lastAssigned.TryGetValue(captain.Id, out DateTime assignedUtc) ? assignedUtc : null,
                     RoutingBucket = buckets.TryGetValue(captain.Id, out int bucket) ? bucket : Int32.MaxValue,
                     FirstAvailableRank = ranks.TryGetValue(captain.Id, out int rank) ? rank : Int32.MaxValue,
                     HasAuthoritativeQuotaHold = captain.QuarantineUntilUtc > snapshot.EvaluatedUtc && UsageQuotaHold.IsQuotaOwned(captain.QuarantineReason) };
                 CaptainEligibilityFailure? failure = EvaluateCaptainIneligibility(captain, selection.Mission, selection.Eligibility);
                 candidate.IneligibilityReason = failure?.Code;
                 if (selection.CapacityExclusions.TryGetValue(captain.Id, out MissionAssignmentBlocker? capacity)) candidate.IneligibilityReason = capacity.Reason.ToString();
-                if (candidate.IneligibilityReason == null && !buckets.ContainsKey(captain.Id)) candidate.IneligibilityReason = "RoutingPreferenceExcluded";
+                if (candidate.IneligibilityReason == null && !buckets.ContainsKey(captain.Id)) candidate.IneligibilityReason = UsageSelectionReasonCodes.RoutingPreferenceExcluded;
                 if (snapshot.Evidence.TryGetValue(captain.Id, out UsageSelectionAccountEvidence? account))
                 {
                     UsageSelectionEvidenceBuilder.Apply(candidate, captain, account, totals, selection.Mission.TenantId!, _Settings.UsageCapture.EffectiveEnabled);

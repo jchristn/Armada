@@ -174,7 +174,7 @@ namespace Armada.Core.Database
                 {
                     CaptainSelectionDecision? decision = await ReadAttemptAsync(connection, transaction, tenantId, executionKey, token).ConfigureAwait(false);
                     await InsertCaptainSelectionExecutionEventAsync(connection, transaction, new CaptainSelectionExecutionEvent { TenantId = tenantId, UserId = decision?.UserId,
-                        DecisionId = source.DecisionId, ExecutionAttemptId = executionKey, EventKind = "ProvenUnstarted", ReportingSource = "StoppedExecutionReconciliation", OccurredUtc = now }, token).ConfigureAwait(false);
+                        DecisionId = source.DecisionId, ExecutionAttemptId = executionKey, EventKind = CaptainSelectionEventKinds.ProvenUnstarted, ReportingSource = "StoppedExecutionReconciliation", OccurredUtc = now }, token).ConfigureAwait(false);
                 }
                 await transaction.CommitAsync(token).ConfigureAwait(false); return true;
             }, token, write: true);
@@ -207,7 +207,7 @@ namespace Armada.Core.Database
                 {
                     CaptainSelectionDecision? decision = await ReadAttemptAsync(connection, transaction, request.TenantId, request.ExecutionKey, token).ConfigureAwait(false);
                     await InsertCaptainSelectionExecutionEventAsync(connection, transaction, new CaptainSelectionExecutionEvent { TenantId = request.TenantId, UserId = decision?.UserId,
-                        DecisionId = source.DecisionId, ExecutionAttemptId = request.ExecutionKey, EventKind = "ProviderCooldownObserved", OccurredUtc = request.ObservedUtc,
+                        DecisionId = source.DecisionId, ExecutionAttemptId = request.ExecutionKey, EventKind = CaptainSelectionEventKinds.ProviderCooldownObserved, OccurredUtc = request.ObservedUtc,
                         FailureClassification = "UsageLimit", ReportingSource = "StructuredRuntimeExit" }, token).ConfigureAwait(false);
                 }
                 await transaction.CommitAsync(token).ConfigureAwait(false); return true;

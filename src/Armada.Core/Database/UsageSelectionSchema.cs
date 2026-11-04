@@ -7,6 +7,26 @@ namespace Armada.Core.Database
     /// <summary>Structured selection-ledger migration shared by the supported SQL dialects.</summary>
     internal static class UsageSelectionSchema
     {
+        internal static SchemaMigration AssignmentTimingMigration(DatabaseTypeEnum provider)
+        {
+            string check = provider == DatabaseTypeEnum.Sqlite ? "SELECT COUNT(*) FROM pragma_table_info('captains') WHERE name='last_assigned_utc'"
+                : provider == DatabaseTypeEnum.SqlServer ? "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID('captains') AND name='last_assigned_utc'"
+                : "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='captains' AND column_name='last_assigned_utc' AND "
+                    + (provider == DatabaseTypeEnum.Mysql ? "table_schema=DATABASE()" : "table_schema=current_schema()");
+            // Same storage type as missions.assigned_utc so the backfill copies values without conversion.
+            string type = provider switch
+            {
+                DatabaseTypeEnum.Sqlite => "TEXT",
+                DatabaseTypeEnum.Postgresql => "TIMESTAMP",
+                DatabaseTypeEnum.Mysql => "DATETIME(6)",
+                _ => "DATETIME2"
+            };
+            string add = "ALTER TABLE captains ADD " + (provider == DatabaseTypeEnum.Sqlite || provider == DatabaseTypeEnum.Postgresql ? "COLUMN " : "")
+                + "last_assigned_utc " + type + " NULL;";
+            string backfill = "UPDATE captains SET last_assigned_utc=(SELECT MAX(m.assigned_utc) FROM missions m WHERE m.captain_id=captains.id) WHERE last_assigned_utc IS NULL;";
+            return new SchemaMigration(128, "Record captain assignment time for usage selection fairness", add, backfill) { AlreadyAppliedCheckSql = check };
+        }
+
         internal static SchemaMigration RecoveryMigration(DatabaseTypeEnum provider)
         {
             bool sqlServer = provider == DatabaseTypeEnum.SqlServer;

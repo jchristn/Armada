@@ -19,7 +19,11 @@ namespace Armada.Core.Models
         /// <summary>Whether a non-null provider scope has a verified match.</summary>
         public bool ScopeApplies { get; set; } = true;
 
-        /// <summary>Whether this observation belongs to a verified current window generation.</summary>
-        public bool GenerationConfirmed { get; set; } = true;
+        /// <summary>
+        /// Whether the window's labels are intact (not sanitized or truncated) and unique within the observation, so its
+        /// window key is a reliable identity. This is not a reset-generation proof: all v1.3.0 accounting uses the
+        /// continuous generation, and fixed-window rollover is never inferred.
+        /// </summary>
+        public bool WindowIdentityConfirmed { get; set; } = true;
     }
 }

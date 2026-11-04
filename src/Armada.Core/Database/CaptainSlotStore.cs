@@ -1,9 +1,10 @@
 namespace Armada.Core.Database
 {
-    using Armada.Core.Enums;
     using System.Data;
     using System.Data.Common;
     using System.Globalization;
+    using Armada.Core.Enums;
+    using Armada.Core.Models;
 
     /// <summary>Transactional mission-slot ownership shared by all four database providers.</summary>
     internal sealed class CaptainSlotStore
@@ -79,22 +80,14 @@ namespace Armada.Core.Database
             return changed;
         }
 
-        internal async Task<bool> ClaimAsync(string captainId, string missionId, string? dockId, CancellationToken token, int ceiling = 256, Armada.Core.Models.CaptainSelectionRecordSet? selection = null, string? usageHostId = null)
+        internal async Task<bool> ClaimAsync(string captainId, string missionId, string? dockId, CancellationToken token, int ceiling = 256, CaptainSelectionRecordSet? selection = null, string? usageHostId = null)
         {
             if (String.IsNullOrEmpty(captainId)) throw new ArgumentNullException(nameof(captainId));
             if (String.IsNullOrEmpty(missionId)) throw new ArgumentNullException(nameof(missionId));
             using DbTransaction tx = await BeginAdmissionTransactionAsync(selection, token).ConfigureAwait(false);
             try
             {
-                if (selection != null)
-                {
-                    if ((selection.Decision.Mode != UsageSelectionModeEnum.Observe && selection.Decision.Mode != UsageSelectionModeEnum.Enforce) || selection.Decision.SelectedCaptainId != captainId || selection.Decision.MissionId != missionId)
-                        throw new ArgumentException("Observed admission must match its selected captain, mission and Observe mode.", nameof(selection));
-                    using DbCommand scope = Command(tx, "SELECT COUNT(*) FROM captains c JOIN missions m ON m.id=@mission WHERE c.id=@id AND c.tenant_id=@tenant AND m.tenant_id=@tenant AND ((m.user_id=@owner) OR (m.user_id IS NULL AND @owner IS NULL)) AND m.status='Pending'", captainId, missionId);
-                    DbParameter owner = scope.CreateParameter(); owner.ParameterName = "@owner"; owner.Value = (object?)selection.Decision.UserId ?? DBNull.Value; scope.Parameters.Add(owner);
-                    DbParameter tenant = scope.CreateParameter(); tenant.ParameterName = "@tenant"; tenant.Value = selection.Decision.TenantId; scope.Parameters.Add(tenant);
-                    if (Convert.ToInt32(await scope.ExecuteScalarAsync(token).ConfigureAwait(false), CultureInfo.InvariantCulture) != 1) return false;
-                }
+                if (selection != null && !await SelectionScopeMatchesAsync(tx, selection, captainId, missionId, pendingOnly: true, token).ConfigureAwait(false)) return false;
                 if (selection?.Decision.Mode == UsageSelectionModeEnum.Enforce && !await LockSelectionMissionAsync(tx, selection, "Pending", token).ConfigureAwait(false)) return false;
                 using DbCommand row = Command(tx, "UPDATE captains SET active_mission_count=active_mission_count WHERE id=@id;", captainId);
                 await row.ExecuteNonQueryAsync(token).ConfigureAwait(false);
@@ -102,7 +95,7 @@ namespace Armada.Core.Database
                     && !await CaptainSelectionMethods.ValidateEnforcementAsync(_Connection, tx, selection, ceiling, token).ConfigureAwait(false)) return false;
                 // Updating the captain row serializes claims before the unique mission-slot insertion.
                 using DbCommand claim = Command(tx, @"UPDATE captains SET state='Working',
-                    last_heartbeat_utc=@now,last_update_utc=@now,active_mission_count=active_mission_count+1
+                    last_heartbeat_utc=@now,last_update_utc=@now,last_assigned_utc=@now,active_mission_count=active_mission_count+1
                     WHERE id=@id AND active=" + (_Postgres ? "TRUE" : "1") + @" AND current_session_id IS NULL
                     AND state IN ('Idle','Working') AND active_mission_count < CASE WHEN max_concurrency<1 THEN 1 WHEN max_concurrency>256 THEN 256 ELSE max_concurrency END AND active_mission_count < @ceiling
                     AND (state='Idle' OR active_mission_count>0)
@@ -133,14 +126,34 @@ namespace Armada.Core.Database
             }
         }
 
-        private ValueTask<DbTransaction> BeginAdmissionTransactionAsync(Armada.Core.Models.CaptainSelectionRecordSet? selection, CancellationToken token)
+        // The recorded decision must name this captain and mission, and both must share its tenant and owner.
+        private async Task<bool> SelectionScopeMatchesAsync(DbTransaction transaction, CaptainSelectionRecordSet selection, string captainId, string missionId, bool pendingOnly, CancellationToken token)
+        {
+            bool supportedMode = selection.Decision.Mode == UsageSelectionModeEnum.Observe || selection.Decision.Mode == UsageSelectionModeEnum.Enforce;
+            if (!supportedMode || selection.Decision.SelectedCaptainId != captainId || selection.Decision.MissionId != missionId)
+                throw new ArgumentException("Selection admission must match its selected captain, mission and an Observe or Enforce mode.", nameof(selection));
+            using DbCommand scope = Command(transaction, "SELECT COUNT(*) FROM captains c JOIN missions m ON m.id=@mission "
+                + "WHERE c.id=@id AND c.tenant_id=@tenant AND m.tenant_id=@tenant AND ((m.user_id=@owner) OR (m.user_id IS NULL AND @owner IS NULL))"
+                + (pendingOnly ? " AND m.status='Pending'" : "") + ";", captainId, missionId);
+            DbParameter tenant = scope.CreateParameter();
+            tenant.ParameterName = "@tenant";
+            tenant.Value = selection.Decision.TenantId;
+            scope.Parameters.Add(tenant);
+            DbParameter owner = scope.CreateParameter();
+            owner.ParameterName = "@owner";
+            owner.Value = (object?)selection.Decision.UserId ?? DBNull.Value;
+            scope.Parameters.Add(owner);
+            return Convert.ToInt32(await scope.ExecuteScalarAsync(token).ConfigureAwait(false), CultureInfo.InvariantCulture) == 1;
+        }
+
+        private ValueTask<DbTransaction> BeginAdmissionTransactionAsync(CaptainSelectionRecordSet? selection, CancellationToken token)
         {
             if (selection?.Decision.Mode == UsageSelectionModeEnum.Enforce && _Connection.GetType().Name != "SqliteConnection")
                 return _Connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, token);
             return _Connection.BeginTransactionAsync(token);
         }
 
-        private async Task<bool> LockSelectionMissionAsync(DbTransaction transaction, Armada.Core.Models.CaptainSelectionRecordSet records, string status, CancellationToken token)
+        private async Task<bool> LockSelectionMissionAsync(DbTransaction transaction, CaptainSelectionRecordSet records, string status, CancellationToken token)
         {
             if (!records.AdmissionMissionVersionUtc.HasValue) throw new ArgumentException("Enforcement requires a mission version.", nameof(records));
             // Acquire mission ownership before captain/account locks. A second admission cannot launch
@@ -211,18 +224,10 @@ namespace Armada.Core.Database
             return true;
         }
 
-        internal async Task<bool> ResumeVerificationAsync(string captainId, string missionId, DateTime version, int ceiling, CancellationToken token, Armada.Core.Models.CaptainSelectionRecordSet? selection = null, string? usageHostId = null)
+        internal async Task<bool> ResumeVerificationAsync(string captainId, string missionId, DateTime version, int ceiling, CancellationToken token, CaptainSelectionRecordSet? selection = null, string? usageHostId = null)
         {
             using DbTransaction tx = await BeginAdmissionTransactionAsync(selection, token).ConfigureAwait(false);
-            if (selection != null)
-            {
-                if ((selection.Decision.Mode != UsageSelectionModeEnum.Observe && selection.Decision.Mode != UsageSelectionModeEnum.Enforce) || selection.Decision.SelectedCaptainId != captainId || selection.Decision.MissionId != missionId)
-                    throw new ArgumentException("Observed repair must match its selected captain, mission and mode.", nameof(selection));
-                using DbCommand scope = Command(tx, "SELECT COUNT(*) FROM captains c JOIN missions m ON m.id=@mission WHERE c.id=@id AND c.tenant_id=@tenant AND m.tenant_id=@tenant AND ((m.user_id=@owner) OR (m.user_id IS NULL AND @owner IS NULL));", captainId, missionId);
-                DbParameter tenant = scope.CreateParameter(); tenant.ParameterName = "@tenant"; tenant.Value = selection.Decision.TenantId; scope.Parameters.Add(tenant);
-                DbParameter owner = scope.CreateParameter(); owner.ParameterName = "@owner"; owner.Value = (object?)selection.Decision.UserId ?? DBNull.Value; scope.Parameters.Add(owner);
-                if (Convert.ToInt32(await scope.ExecuteScalarAsync(token).ConfigureAwait(false), CultureInfo.InvariantCulture) != 1) return false;
-            }
+            if (selection != null && !await SelectionScopeMatchesAsync(tx, selection, captainId, missionId, pendingOnly: false, token).ConfigureAwait(false)) return false;
             if (selection?.Decision.Mode == UsageSelectionModeEnum.Enforce)
             {
                 if (!await LockSelectionMissionAsync(tx, selection, "Verifying", token).ConfigureAwait(false)) return false;
@@ -230,7 +235,7 @@ namespace Armada.Core.Database
                 await row.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 if (!await CaptainSelectionMethods.ValidateEnforcementAsync(_Connection, tx, selection, ceiling, token).ConfigureAwait(false)) return false;
             }
-            using DbCommand claim = Command(tx, @"UPDATE captains SET active_mission_count=active_mission_count+1,state='Working',last_update_utc=@now
+            using DbCommand claim = Command(tx, @"UPDATE captains SET active_mission_count=active_mission_count+1,state='Working',last_update_utc=@now,last_assigned_utc=@now
                 WHERE id=@id AND active=" + (_Postgres ? "TRUE" : "1") + @" AND current_session_id IS NULL AND state IN ('Idle','Working')
                 AND (quarantine_until_utc IS NULL OR quarantine_until_utc<=@now)
                 AND active_mission_count < max_concurrency AND active_mission_count < @ceiling

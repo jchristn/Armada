@@ -2829,7 +2829,8 @@ namespace Armada.Core.Database.Sqlite.Queries
                 Armada.Core.Database.UsageSelectionSchema.CaptureTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
                 Armada.Core.Database.UsageSelectionSchema.HistoryDisplayMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
                 Armada.Core.Database.UsageSelectionSchema.UntrackedExecutionMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
-                Armada.Core.Database.UsageSelectionSchema.RecoveryMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite)
+                Armada.Core.Database.UsageSelectionSchema.RecoveryMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.UsageSelectionSchema.AssignmentTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite)
 
             };
         }

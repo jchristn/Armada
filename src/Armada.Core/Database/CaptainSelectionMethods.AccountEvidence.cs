@@ -21,6 +21,28 @@ namespace Armada.Core.Database
             return RunAsync(connection => ReadBudgetTotalsAsync(connection, null, tenantId, captainIds, token), token);
         }
 
+        /// <inheritdoc />
+        public Task<Dictionary<string, DateTime>> ReadLastAssignedAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default)
+        {
+            Required(tenantId, nameof(tenantId));
+            ArgumentNullException.ThrowIfNull(captainIds);
+            if (captainIds.Count > 1000) throw new ArgumentException("Assignment times are read in batches of at most 1000 captains.", nameof(captainIds));
+            if (captainIds.Count == 0) return Task.FromResult(new Dictionary<string, DateTime>(StringComparer.Ordinal));
+            return RunAsync(async connection =>
+            {
+                string[] names = Enumerable.Range(0, captainIds.Count).Select(i => "@captain" + i).ToArray();
+                using DbCommand command = Command(connection, null, "SELECT id,last_assigned_utc FROM captains WHERE tenant_id=@tenant AND last_assigned_utc IS NOT NULL AND id IN ("
+                    + String.Join(",", names) + ");");
+                Add(command, "@tenant", tenantId);
+                for (int index = 0; index < names.Length; index++) Add(command, names[index], captainIds[index]);
+                Dictionary<string, DateTime> assigned = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+                using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+                while (await reader.ReadAsync(token).ConfigureAwait(false))
+                    assigned[reader["id"].ToString()!] = ParseUtc(reader["last_assigned_utc"]);
+                return assigned;
+            }, token);
+        }
+
         internal static async Task<List<UsageSelectionBudgetTotals>> ReadBudgetTotalsAsync(DbConnection connection, DbTransaction? transaction,
             string tenantId, IReadOnlyList<string> captainIds, CancellationToken token)
         {

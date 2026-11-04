@@ -96,7 +96,7 @@ namespace Armada.Core.Database
                 if (parent == null || parent.Id != entry.DecisionId || parent.UserId != entry.UserId)
                     throw new ArgumentException("Execution event must reference its tenant, owner and decision attempt.", nameof(entry));
                 await InsertCaptainSelectionExecutionEventAsync(connection, transaction, entry, token).ConfigureAwait(false);
-                if (entry.EventKind == "ExecutionStarted")
+                if (entry.EventKind == CaptainSelectionEventKinds.ExecutionStarted)
                 {
                     using DbCommand started = Command(connection, transaction, "UPDATE usage_budget_reservations SET execution_started_utc=@at,last_update_utc=@at,revision=revision+1 WHERE tenant_id=@tenant AND decision_id=@decision AND state='Active' AND execution_started_utc IS NULL AND created_utc<=@at AND last_update_utc<=@at;");
                     Add(started, "@at", Utc(entry.OccurredUtc)); Add(started, "@tenant", entry.TenantId); Add(started, "@decision", entry.DecisionId);
