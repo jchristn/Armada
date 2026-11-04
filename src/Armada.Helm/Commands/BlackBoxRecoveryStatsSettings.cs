@@ -12,14 +12,14 @@ namespace Armada.Helm.Commands
         /// Rule filter.
         /// </summary>
         [Description("Only this rule (for example BBX-LAND-001)")]
-        [CommandOption("--rule")]
+        [CommandOption("--rule <RULE>")]
         public string? Rule { get; set; }
 
         /// <summary>
         /// Vessel filter.
         /// </summary>
-        [Description("Only this vessel (vsl_ id)")]
-        [CommandOption("--vessel")]
+        [Description("Only this vessel (vsl_ ID)")]
+        [CommandOption("--vessel <VESSEL>")]
         public string? Vessel { get; set; }
     }
 }

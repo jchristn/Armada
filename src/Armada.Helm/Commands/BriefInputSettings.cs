@@ -12,28 +12,28 @@ namespace Armada.Helm.Commands
         /// Brief text.
         /// </summary>
         [Description("The mission brief (description) text")]
-        [CommandOption("--brief")]
+        [CommandOption("--brief <TEXT>")]
         public string? Brief { get; set; }
 
         /// <summary>
         /// Brief file.
         /// </summary>
         [Description("Read the brief from a file (- reads stdin)")]
-        [CommandOption("--brief-file")]
+        [CommandOption("--brief-file <PATH>")]
         public string? BriefFile { get; set; }
 
         /// <summary>
         /// Mission title.
         /// </summary>
         [Description("Mission title")]
-        [CommandOption("--title")]
+        [CommandOption("--title <TITLE>")]
         public string? Title { get; set; }
 
         /// <summary>
         /// Dependency.
         /// </summary>
-        [Description("The mission this one would depend on (msn_ id)")]
-        [CommandOption("--depends-on")]
+        [Description("The mission this one would depend on (msn_ ID)")]
+        [CommandOption("--depends-on <MISSION>")]
         public string? DependsOn { get; set; }
     }
 }

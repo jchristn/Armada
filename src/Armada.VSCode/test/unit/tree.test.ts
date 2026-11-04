@@ -13,16 +13,13 @@ function messages(nodes: FailureNode[]): MessageNode[] {
 }
 
 describe('FailuresTreeProvider', () => {
-  it('shows a connect row when disconnected, with no badge', async () => {
+  it('returns no rows when disconnected so the welcome view and its Connect button show, with no badge', async () => {
     const store = makeStore(undefined);
     await store.refresh();
     const tree = new FailuresTreeProvider(store, NOW);
-    const roots = tree.getChildren();
-    assert.strictEqual(roots.length, 1);
-    const row = roots[0] as MessageNode;
-    assert.strictEqual(row.command, 'armada.connect');
-    assert.strictEqual(tree.getTreeItem(row).command?.command, 'armada.connect');
+    assert.deepStrictEqual(tree.getChildren(), []);
     assert.strictEqual(tree.badge(), undefined);
+    assert.strictEqual(tree.viewDescription(), undefined);
   });
 
   it('shows the error with a refresh action when the server fails', async () => {

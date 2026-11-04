@@ -25,7 +25,7 @@ namespace Armada.Helm.Commands
         /// <summary>
         /// Link.
         /// </summary>
-        [Description("Link (a mission id, commit, or URL)")]
+        [Description("Link (a mission ID, commit, or URL)")]
         [CommandOption("--link <LINK>")]
         public string? Link { get; set; }
     }

@@ -212,7 +212,7 @@
       },
       {
         "command": "armada.askArmada",
-        "title": "Ask Armada about this failure",
+        "title": "Ask Armada About This Failure",
         "category": "Armada",
         "icon": "$(question)"
       },
@@ -255,6 +255,62 @@
         },
         {
           "command": "armada.disconnect",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.refreshFailures",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.openBlackBox",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.copyFixThis",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.openFixThisInEditor",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.sendFixThisToChat",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.runRecoveryPath",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.resolveEntry",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.addNote",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.askArmada",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.showBlackBoxTimeline",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.compareBlackBoxAttempts",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.previewMissionOverlap",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.draftArmadaFixMission",
+          "when": "armada.connected"
+        },
+        {
+          "command": "armada.showResilienceGaps",
           "when": "armada.connected"
         }
       ],

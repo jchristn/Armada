@@ -121,7 +121,7 @@ export function renderEntryHtml(entry: BlackBoxEntry, notes: BlackBoxNote[], non
 
   const paths = analysis.RecoveryPaths ?? [];
   sections.push(section('Recovery', [paths.length
-    ? `<ol>${paths.map((p) => `<li><strong>${escapeHtml(p.Title)}</strong> <code>${escapeHtml(p.Id)}</code>${p.Risk ? ` <span class="muted">risk ${escapeHtml(p.Risk)}</span>` : ''}${p.DataLossRisk ? ' <span class="danger">data loss risk</span>' : ''}${p.ExpectedOutcome ? `<br>${escapeHtml(p.ExpectedOutcome)}` : ''}${recoveryExtras(p, dashboard)}${(p.Steps ?? []).length ? `<ul>${(p.Steps ?? []).map((s) => `<li>${escapeHtml(s.Description ?? s.CliCommand ?? s.McpCommand ?? s.RestCommand ?? '')}</li>`).join('')}</ul>` : ''}<br><button data-action="runRecovery" data-path="${escapeHtml(p.Id)}">Dry run ${escapeHtml(p.Id)}</button></li>`).join('')}</ol>`
+    ? `<ol>${paths.map((p) => `<li><strong>${escapeHtml(p.Title)}</strong> <code>${escapeHtml(p.Id)}</code>${p.Risk ? ` <span class="muted">risk ${escapeHtml(p.Risk)}</span>` : ''}${p.DataLossRisk ? ' <span class="danger">data loss risk</span>' : ''}${p.ExpectedOutcome ? `<br>${escapeHtml(p.ExpectedOutcome)}` : ''}${recoveryExtras(p, dashboard)}${(p.Steps ?? []).length ? `<ul>${(p.Steps ?? []).map((s) => `<li>${escapeHtml(s.Description ?? s.CliCommand ?? s.McpCommand ?? s.RestCommand ?? '')}</li>`).join('')}</ul>` : ''}<br><button data-action="runRecovery" data-path="${escapeHtml(p.Id)}" title="Dry run first; nothing runs until you confirm">Dry Run ${escapeHtml(p.Id)}</button></li>`).join('')}</ol>`
     : '<p class="muted">No recovery paths recorded.</p>']));
 
   const attempts = record.Attempts ?? [];
@@ -154,28 +154,35 @@ export function renderEntryHtml(entry: BlackBoxEntry, notes: BlackBoxNote[], non
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(entryLabel(entry))}</title>
 <style>
-body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 0 16px 24px; line-height: 1.45; }
-h1 { font-size: 1.3em; } h2 { font-size: 1.1em; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 4px; margin-top: 20px; }
+body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); padding: 0 16px 24px; line-height: 1.45; overflow-wrap: anywhere; }
+h1 { font-size: 1.3em; margin: 16px 0 4px; } h2 { font-size: 1.1em; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 4px; margin-top: 20px; }
 h3 { font-size: 1em; margin-bottom: 4px; }
-table { border-collapse: collapse; } td { padding: 2px 12px 2px 0; vertical-align: top; } td:first-child { color: var(--vscode-descriptionForeground); white-space: nowrap; }
-pre { background: var(--vscode-textCodeBlock-background); padding: 8px; overflow-x: auto; max-height: 320px; }
-.badge { font-size: 0.75em; padding: 1px 6px; border-radius: 8px; background: var(--vscode-inputValidation-errorBackground); color: var(--vscode-foreground); border: 1px solid var(--vscode-errorForeground); vertical-align: middle; }
+table { border-collapse: collapse; max-width: 100%; } td { padding: 2px 12px 2px 0; vertical-align: top; } td:first-child { color: var(--vscode-descriptionForeground); white-space: nowrap; }
+li { margin-bottom: 6px; }
+code { font-family: var(--vscode-editor-font-family); }
+pre { background: var(--vscode-textCodeBlock-background); padding: 8px; overflow-x: auto; max-height: 320px; overflow-wrap: normal; white-space: pre; }
+summary { cursor: pointer; }
+.badge { font-size: 0.75em; padding: 1px 6px; border-radius: 8px; background: var(--vscode-inputValidation-errorBackground); color: var(--vscode-foreground); border: 1px solid var(--vscode-errorForeground); vertical-align: middle; white-space: nowrap; }
 .muted { color: var(--vscode-descriptionForeground); } .danger { color: var(--vscode-errorForeground); font-weight: 600; }
-.toolbar { position: sticky; top: 0; background: var(--vscode-editor-background); padding: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; }
-button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 4px 10px; cursor: pointer; }
+.toolbar { position: sticky; top: 0; z-index: 1; background: var(--vscode-editor-background); padding: 8px 0; border-bottom: 1px solid var(--vscode-panel-border); display: flex; flex-wrap: wrap; gap: 6px; }
+button { font-family: inherit; font-size: inherit; line-height: 1.4; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: 1px solid var(--vscode-button-border, transparent); border-radius: 2px; padding: 4px 10px; cursor: pointer; }
+button:hover { background: var(--vscode-button-hoverBackground); }
+button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
 button.secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
+li > button { margin-top: 4px; }
 </style>
 </head>
 <body>
 <h1>${escapeHtml(entryLabel(entry))}${suspectedDefect(entry) ? ` <span class="badge">${escapeHtml(analysis.Triage?.Suspected ? 'Suspected Armada defect (prior only)' : 'Suspected Armada defect')}</span>` : ''}</h1>
-<div class="toolbar">
+<div class="toolbar" role="toolbar" aria-label="Black box actions">
 <button data-action="copyFixThis">Copy FIX THIS</button>
 <button data-action="openFixThis" class="secondary">Open FIX THIS in Editor</button>
 <button data-action="sendToChat" class="secondary">Send FIX THIS to Chat</button>
 <button data-action="runRecovery" class="secondary">Run Recovery Path...</button>
 ${open ? '<button data-action="resolve" class="secondary">Resolve</button>' : ''}
 <button data-action="addNote" class="secondary">Add Note</button>
-<button data-action="askArmada" class="secondary">Ask Armada about this failure</button>
+<button data-action="askArmada" class="secondary">Ask Armada About This Failure</button>
 ${(resilience?.ProposedChanges ?? []).length ? '<button data-action="draftFix" class="secondary">Draft Armada Fix Mission</button>' : ''}
 <button data-action="timeline" class="secondary">Timeline</button>
 <button data-action="compareAttempts" class="secondary">Compare Attempts</button>
@@ -189,6 +196,35 @@ document.addEventListener('click', (event) => {
   if (!target) return;
   vscode.postMessage({ action: target.getAttribute('data-action'), pathId: target.getAttribute('data-path') || undefined });
 });
+</script>
+</body>
+</html>`;
+}
+
+/** The page shown when an entry cannot be loaded: the entry label, the error and a Retry button. */
+export function renderEntryErrorHtml(label: string, message: string, nonce: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<title>${escapeHtml(label)}</title>
+<style>
+body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); padding: 16px; line-height: 1.45; overflow-wrap: anywhere; }
+h1 { font-size: 1.3em; margin: 0 0 8px; }
+.error { color: var(--vscode-errorForeground); }
+button { font-family: inherit; font-size: inherit; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: 1px solid var(--vscode-button-border, transparent); border-radius: 2px; padding: 4px 10px; cursor: pointer; }
+button:hover { background: var(--vscode-button-hoverBackground); }
+button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<h1>${escapeHtml(label)}</h1>
+<p class="error" role="alert">Could not load this black box entry. ${escapeHtml(message)}</p>
+<button data-action="refresh">Retry</button>
+<script nonce="${nonce}">
+const vscode = acquireVsCodeApi();
+document.querySelector('button[data-action="refresh"]').addEventListener('click', () => vscode.postMessage({ action: 'refresh' }));
 </script>
 </body>
 </html>`;

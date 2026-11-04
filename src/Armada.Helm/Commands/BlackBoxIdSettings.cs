@@ -11,7 +11,7 @@ namespace Armada.Helm.Commands
         /// <summary>
         /// Entry, mission, or voyage id.
         /// </summary>
-        [Description("Black box entry id (bbx_), or a mission (msn_) or voyage (vyg_) id where the command accepts one")]
+        [Description("Black box entry ID (bbx_), or a mission (msn_) or voyage (vyg_) ID where the command accepts one")]
         [CommandArgument(0, "<id>")]
         public string Id { get; set; } = string.Empty;
     }

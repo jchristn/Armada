@@ -188,7 +188,7 @@ export class BlackBoxCommands {
       const dataLoss = path.DataLossRisk === true || (dry.Plan ?? []).some((s) => s.DataLossRisk === true);
       if (dataLoss) {
         const ack = await vscode.window.showQuickPick([{ label: DATA_LOSS_ACK_LABEL, picked: false }], {
-          title: `"${path.Title}" is marked dataLossRisk`,
+          title: `"${path.Title}" can permanently lose work`,
           placeHolder: 'Tick the acknowledgement and press Enter to continue, or Escape to refuse',
           canPickMany: true,
           ignoreFocusOut: true,
@@ -233,11 +233,11 @@ export class BlackBoxCommands {
     return this.guard(async () => {
       const entry = await this.pickEntry(arg, 'Resolve Black Box Entry');
       if (!entry) return undefined;
-      const resolution = await vscode.window.showQuickPick(RESOLUTION_CHOICES.map((r) => ({ label: r })), { title: `Resolve ${entryLabel(entry)}`, placeHolder: 'Resolution', ignoreFocusOut: true });
+      const resolution = await vscode.window.showQuickPick(RESOLUTION_CHOICES.map((r) => ({ label: r })), { title: `Resolve ${entryLabel(entry)} (1/3)`, placeHolder: 'How was it resolved?', ignoreFocusOut: true });
       if (!resolution) return undefined;
-      const note = await vscode.window.showInputBox({ title: 'Resolution note (optional)', prompt: 'What fixed it?', ignoreFocusOut: true, validateInput: (v) => (v.length > 8000 ? 'Limited to 8000 characters' : undefined) });
+      const note = await vscode.window.showInputBox({ title: `Resolve ${entryLabel(entry)} (2/3)`, prompt: 'Resolution note (optional): what fixed it?', ignoreFocusOut: true, validateInput: (v) => (v.length > 8000 ? 'Limited to 8000 characters' : undefined) });
       if (note === undefined) return undefined;
-      const link = await vscode.window.showInputBox({ title: 'Resolution link (optional)', prompt: 'Mission id, commit, pull request or issue URL', ignoreFocusOut: true });
+      const link = await vscode.window.showInputBox({ title: `Resolve ${entryLabel(entry)} (3/3)`, prompt: 'Resolution link (optional): mission id, commit, pull request or issue URL', ignoreFocusOut: true });
       if (link === undefined) return undefined;
       const value = resolution.label as BlackBoxResolution;
       await this._Deps.getClient().resolve(entry.Id, { Resolution: value, Note: note, Link: link });
@@ -265,11 +265,11 @@ export class BlackBoxCommands {
     }, false);
   }
 
-  /** Ask Armada about this failure: opens the dashboard Ask page with the prompt pre-filled (?prompt=); copies the prompt
+  /** Ask Armada About This Failure: opens the dashboard Ask page with the prompt pre-filled (?prompt=); copies the prompt
    * when the dashboard cannot be pre-filled or the browser cannot be opened. */
   public async askArmada(arg?: unknown): Promise<{ url: string; prefilled: boolean } | undefined> {
     return this.guard(async () => {
-      const entry = await this.pickEntry(arg, 'Ask Armada about this failure');
+      const entry = await this.pickEntry(arg, 'Ask Armada About This Failure');
       if (!entry) return undefined;
       const settings = this._Deps.getSettings();
       if (!settings.dashboardUrl) throw new ArmadaApiError('notConfigured', 'No dashboard URL.');

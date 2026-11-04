@@ -11,28 +11,28 @@ namespace Armada.Helm.Commands
         /// <summary>
         /// Vessel id.
         /// </summary>
-        [Description("Vessel id")]
+        [Description("Vessel ID")]
         [CommandOption("--vessel <ID>")]
         public string? Vessel { get; set; }
 
         /// <summary>
         /// Voyage id.
         /// </summary>
-        [Description("Voyage id")]
+        [Description("Voyage ID")]
         [CommandOption("--voyage <ID>")]
         public string? Voyage { get; set; }
 
         /// <summary>
         /// Mission id.
         /// </summary>
-        [Description("Mission id")]
+        [Description("Mission ID")]
         [CommandOption("--mission <ID>")]
         public string? Mission { get; set; }
 
         /// <summary>
         /// Captain id.
         /// </summary>
-        [Description("Captain id")]
+        [Description("Captain ID")]
         [CommandOption("--captain <ID>")]
         public string? Captain { get; set; }
 

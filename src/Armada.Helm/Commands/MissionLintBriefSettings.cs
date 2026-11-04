@@ -12,14 +12,14 @@ namespace Armada.Helm.Commands
         /// Vessel name or id (enables the path checks).
         /// </summary>
         [Description("Vessel name or ID (checks the paths the brief names against it)")]
-        [CommandOption("--vessel")]
+        [CommandOption("--vessel <VESSEL>")]
         public string? Vessel { get; set; }
 
         /// <summary>
         /// Voyage.
         /// </summary>
-        [Description("The voyage the mission would join (vyg_ id)")]
-        [CommandOption("--voyage")]
+        [Description("The voyage the mission would join (vyg_ ID)")]
+        [CommandOption("--voyage <VOYAGE>")]
         public string? Voyage { get; set; }
     }
 }

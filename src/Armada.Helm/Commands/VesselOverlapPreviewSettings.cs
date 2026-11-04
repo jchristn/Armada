@@ -18,8 +18,8 @@ namespace Armada.Helm.Commands
         /// <summary>
         /// Mission to leave out of the comparison.
         /// </summary>
-        [Description("Leave this mission out of the comparison (msn_ id, for a mission being edited)")]
-        [CommandOption("--exclude-mission")]
+        [Description("Leave this mission out of the comparison (msn_ ID, for a mission being edited)")]
+        [CommandOption("--exclude-mission <MISSION>")]
         public string? ExcludeMission { get; set; }
     }
 }

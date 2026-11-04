@@ -19,6 +19,7 @@ namespace Armada.Helm.Commands
             /// <summary>
             /// Gets or sets the backlog item identifier or title.
             /// </summary>
+            [Description("Backlog item ID (obj_) or title")]
             [CommandArgument(0, "<backlog>")]
             public string Backlog { get; set; } = String.Empty;
         }

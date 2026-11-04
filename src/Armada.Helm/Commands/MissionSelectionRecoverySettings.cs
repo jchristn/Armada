@@ -10,7 +10,7 @@ namespace Armada.Helm.Commands
     {
         /// <summary>Mission identifier.</summary>
         [CommandArgument(0, "<mission>")]
-        [Description("Mission identifier")]
+        [Description("Mission ID (msn_)")]
         public string MissionId { get; set; } = String.Empty;
 
         /// <summary>Permit an eligible fallback from a non-strict preferred captain.</summary>
@@ -24,12 +24,12 @@ namespace Armada.Helm.Commands
         public bool ReserveException { get; set; }
 
         /// <summary>Required audited reason.</summary>
-        [CommandOption("--reason <text>")]
+        [CommandOption("--reason <TEXT>")]
         [Description("Required reason recorded in the audit history (1-512 characters, no credentials)")]
         public string? Reason { get; set; }
 
         /// <summary>Optimistic revision; when omitted the current revision is read and shown first.</summary>
-        [CommandOption("--expected-revision <n>")]
+        [CommandOption("--expected-revision <N>")]
         [Description("Revision being replaced (default: the current revision, read first)")]
         public int? ExpectedRevision { get; set; }
 

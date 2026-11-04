@@ -117,9 +117,8 @@ export class FailuresTreeProvider implements vscode.TreeDataProvider<FailureNode
 
   private rootNodes(): FailureNode[] {
     const store = this._Store;
-    if (store.status === 'disconnected') {
-      return [{ kind: 'message', text: 'Not connected. Click to connect to Armada.', icon: 'plug', command: 'armada.connect' }];
-    }
+    // Empty when disconnected so VS Code shows the view's welcome content (contributes.viewsWelcome) with its Connect button.
+    if (store.status === 'disconnected') return [];
     if (store.status === 'error') {
       return [{ kind: 'message', text: store.error ?? 'Could not load black box entries.', detail: store.error, icon: 'warning', command: 'armada.refreshFailures' }];
     }

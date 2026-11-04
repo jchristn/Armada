@@ -20,6 +20,7 @@ namespace Armada.Helm
             @"\__,_|_| |_|_|_\__,_\__,_\__,_|",
         };
         private static readonly string _VersionLabel = "v" + Constants.ProductVersion;
+        private static Grid? _HelpGrid = null;
 
         /// <summary>
         /// Write the Armada banner to the console.
@@ -40,21 +41,25 @@ namespace Armada.Helm
         }
 
         /// <summary>
-        /// Write a section heading in the help menu.
+        /// Add a section heading to the help menu.
         /// </summary>
         private static void HelpHeading(string title)
         {
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine($"[bold dodgerblue1]{Markup.Escape(title)}[/]");
+            if (_HelpGrid == null) return;
+            _HelpGrid.AddEmptyRow();
+            _HelpGrid.AddRow(new Markup($"[bold dodgerblue1]{Markup.Escape(title)}[/]"), new Text(String.Empty));
         }
 
         /// <summary>
-        /// Write a single command row in the help menu: green command, dim description, aligned.
+        /// Add a command row to the help menu. Rows share one grid so every description starts in the
+        /// same column and long descriptions wrap inside their own column instead of under the command.
         /// </summary>
         private static void HelpRow(string command, string description)
         {
-            string padded = command.Length >= 30 ? command + "  " : command.PadRight(30);
-            AnsiConsole.MarkupLine($"  [green]{Markup.Escape(padded)}[/][dim]{Markup.Escape(description)}[/]");
+            if (_HelpGrid == null) return;
+            _HelpGrid.AddRow(
+                new Markup($"  [green]{Markup.Escape(command)}[/]"),
+                new Markup($"[dim]{Markup.Escape(description)}[/]"));
         }
 
         /// <summary>
@@ -65,6 +70,10 @@ namespace Armada.Helm
             AnsiConsole.MarkupLine("[dim]Usage:[/] armada <command> [[options]]");
             AnsiConsole.MarkupLine("[dim]Per-command help:[/] armada <command> --help   (also -h, /?, -?)");
 
+            _HelpGrid = new Grid();
+            _HelpGrid.AddColumn(new GridColumn().NoWrap().PadRight(2));
+            _HelpGrid.AddColumn(new GridColumn().PadRight(0));
+
             HelpHeading("Common");
             HelpRow("go \"<task>\"", "Dispatch a task in natural language");
             HelpRow("status [--all]", "System status dashboard (--all for everything)");
@@ -73,7 +82,7 @@ namespace Armada.Helm
             HelpRow("log <captain> [--follow]", "Tail a captain's output log");
             HelpRow("diff <mission>", "Show a mission's code changes");
             HelpRow("doctor", "Check system health and report issues");
-            HelpRow("tui [--server URL] [--profile NAME]", "Open the terminal UI (the dashboard in a terminal)");
+            HelpRow("tui [--profile NAME]", "Open the terminal UI (also --server URL)");
             HelpRow("health [--evaluate]", "Show vessel health (dependencies, tests, branches)");
 
             HelpHeading("Missions (armada mission ...)");
@@ -84,7 +93,9 @@ namespace Armada.Helm
             HelpRow("mission restart <id>", "Restart a failed mission (edit instructions)");
             HelpRow("mission retry <id>", "Retry a failed mission (new copy)");
             HelpRow("mission failure <id>", "Show the mission's black box entry (--brief)");
-            HelpRow("mission lint-brief --brief-file f", "Lint a mission brief before dispatch (--vessel)");
+            HelpRow("mission lint-brief", "Lint a mission brief before dispatch (--brief-file, --vessel)");
+            HelpRow("mission selection <id>", "Captain selection: summary, --history, or --preview");
+            HelpRow("mission selection-recovery <id>", "Allow audited selection recovery (--allow-fallback, --reason)");
 
             HelpHeading("Voyages (armada voyage ...)");
             HelpRow("voyage list", "List all voyages");
@@ -100,7 +111,7 @@ namespace Armada.Helm
             HelpRow("blackbox list", "List failures (--vessel, --triage, --since 30d, ...)");
             HelpRow("blackbox objects <id>", "List an entry's evidence objects");
             HelpRow("blackbox cat <id> <name>", "Print an evidence object (--offset, --length)");
-            HelpRow("blackbox download <id> [-o f.zip]", "Download an entry as a .zip");
+            HelpRow("blackbox download <id>", "Download an entry as a .zip (-o file.zip)");
             HelpRow("blackbox recover <id> <path>", "Dry run a recovery path (--execute to run it)");
             HelpRow("blackbox resolve <id>", "Resolve an entry (--resolution, --note, --link)");
             HelpRow("blackbox note <id> \"<text>\"", "Add a note to an entry");
@@ -109,6 +120,7 @@ namespace Armada.Helm
             HelpRow("blackbox gc [--dry-run]", "Run black box garbage collection");
             HelpRow("blackbox retention", "Retention policy, usage, and GC runs");
             HelpRow("blackbox storage status|migrate", "Storage target health, or migrate --to <target>");
+            HelpRow("blackbox storage migration <id>", "Show a storage migration job");
             HelpRow("blackbox bundle [-o bundle.md]", "Maintainer bundle of entries by fingerprint");
             HelpRow("blackbox backfill [--since 30d]", "Record entries for past failures");
             HelpRow("blackbox export-fixture <id>", "Write a sanitized regression fixture");
@@ -143,7 +155,7 @@ namespace Armada.Helm
             HelpRow("vessel list", "List all vessels (repositories)");
             HelpRow("vessel add", "Register a new vessel");
             HelpRow("vessel remove <id|name>", "Decommission a vessel");
-            HelpRow("vessel import <paths...> [--root <dir>]", "Discover repositories and import them as vessels");
+            HelpRow("vessel import <paths...>", "Discover repositories and import them as vessels (--root)");
             HelpRow("vessel history <id|name>", "Commit history by day (--before, --all, --verbose)");
             HelpRow("vessel history <id|name> --heatmap", "Commit activity heatmap for the last year (--from/--to)");
             HelpRow("vessel update <id|name>", "Change settings (--serialize-overlapping-missions)");
@@ -173,7 +185,7 @@ namespace Armada.Helm
             HelpHeading("Configuration (armada config ...)");
             HelpRow("config show", "Display current settings");
             HelpRow("config set <key> <value>", "Set a configuration value");
-            HelpRow("config init", "Interactive setup (config auto-initializes)");
+            HelpRow("config init", "Interactive setup (optional; config auto-initializes)");
 
             HelpHeading("Remote Admirals (armada profile ...)");
             HelpRow("profile list", "List saved Admiral profiles and the active target");
@@ -196,6 +208,9 @@ namespace Armada.Helm
             HelpRow("--token <bearer>", "Credential for it (or ARMADA_TOKEN)");
             HelpRow("--profile <name>", "Use a saved profile ('local' for this machine)");
 
+            AnsiConsole.Write(_HelpGrid);
+            _HelpGrid = null;
+
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[dim]Docs:[/] https://github.com/jchristn/Armada");
             AnsiConsole.WriteLine();
@@ -216,7 +231,7 @@ namespace Armada.Helm
 
             // --- Common commands (top-level, used most often) ---
             config.AddCommand<GoCommand>("go")
-                .WithDescription("Quick dispatch -- natural language task assignment")
+                .WithDescription("Dispatch a task in natural language")
                 .WithExample("go", "\"Add input validation to signup\"")
                 .WithExample("go", "\"Fix login bug\"", "--repo", ".");
 
@@ -318,7 +333,7 @@ namespace Armada.Helm
             {
                 blackbox.SetDescription("Mission and voyage black box: failure records, briefs, evidence, and recovery");
                 blackbox.AddCommand<BlackBoxShowCommand>("show")
-                    .WithDescription("Show the black box entry of a mission, voyage, or entry id")
+                    .WithDescription("Show the black box entry of a mission, voyage, or entry ID")
                     .WithExample("blackbox", "show", "msn_abc123")
                     .WithExample("blackbox", "show", "msn_abc123", "--brief")
                     .WithExample("blackbox", "show", "bbx_abc123", "--json");
@@ -491,7 +506,7 @@ namespace Armada.Helm
                 captain.AddCommand<CaptainRemoveCommand>("remove")
                     .WithDescription("Remove a captain (accepts name or ID)");
                 captain.AddCommand<CaptainStopAllCommand>("stop-all")
-                    .WithDescription("Emergency recall all captains");
+                    .WithDescription("Emergency recall of all captains");
             });
 
             config.AddBranch("fleet", fleet =>
@@ -508,7 +523,7 @@ namespace Armada.Helm
             // --- Infrastructure ---
             config.AddBranch("server", server =>
             {
-                server.SetDescription("Manage Admiral server");
+                server.SetDescription("Manage the Admiral server");
                 server.AddCommand<ServerStartCommand>("start")
                     .WithDescription("Start the Admiral server");
                 server.AddCommand<ServerStatusCommand>("status")
@@ -527,12 +542,12 @@ namespace Armada.Helm
                 cfg.AddCommand<ConfigSetCommand>("set")
                     .WithDescription("Set a configuration value");
                 cfg.AddCommand<ConfigInitCommand>("init")
-                    .WithDescription("Interactive setup (optional -- config auto-initializes)");
+                    .WithDescription("Interactive setup (optional; config auto-initializes)");
             });
 
             config.AddBranch("profile", profile =>
             {
-                profile.SetDescription("Saved Admiral targets shared with armada tui (remote servers)");
+                profile.SetDescription("Manage saved Admiral targets (remote servers, shared with armada tui)");
                 profile.AddCommand<ProfileListCommand>("list")
                     .WithDescription("List saved Admiral profiles and the active target");
                 profile.AddCommand<ProfileAddCommand>("add")
@@ -545,7 +560,7 @@ namespace Armada.Helm
 
             config.AddBranch("mcp", mcp =>
             {
-                mcp.SetDescription("MCP integration");
+                mcp.SetDescription("Manage MCP integration");
                 mcp.AddCommand<McpInstallCommand>("install")
                     .WithDescription("Configure MCP integration for Claude Code, Codex, Gemini, Cursor, and Mux");
                 mcp.AddCommand<McpRemoveCommand>("remove")

@@ -14,7 +14,7 @@ brief to your coding agent, and runs recovery paths with a dry run and a confirm
 - **Recovery paths**: a dry run shows what will happen, a modal dialog confirms, and only then does the path run.
   Paths marked `dataLossRisk` are refused unless you tick an explicit acknowledgement.
 - **Resolve** entries and **add notes**.
-- **Ask Armada about this failure**: opens the dashboard Ask page with the canonical prompt.
+- **Ask Armada About This Failure**: opens the dashboard Ask page with the canonical prompt.
 - **Armada resilience**: right after the Summary the entry view shows whether Armada's own handoff and landing could
   have healed the failure (and what it could have done), the detection gap and invariant, severity with recurrence,
   the recoveries Armada already attempted, code pointers at the Armada build, the proposed Armada changes with
@@ -64,7 +64,8 @@ Build the package (see [Development](#development)) or take `armada-vscode-<vers
 3. Enter your API key or bearer token. It is checked against the server and then stored in VS Code secret storage,
    never in settings files.
 
-**Armada: Disconnect** removes the stored key.
+**Armada: Disconnect** removes the stored key. Until you connect, the Command Palette lists only **Armada: Connect**
+and **Armada: Toggle Workspace Vessel Filter**; the other Armada commands appear once a connection is made.
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -97,7 +98,7 @@ Build the package (see [Development](#development)) or take `armada-vscode-<vers
 | Armada: Run Recovery Path... | Dry run, show the plan, confirm, then run with the confirm token |
 | Armada: Resolve Black Box Entry | Set Resolved, Duplicate, WontFix or ArmadaFixed, with an optional note and link |
 | Armada: Add Note | Add a note to the entry |
-| Armada: Ask Armada about this failure | Open the dashboard Ask page with the canonical prompt pre-filled |
+| Armada: Ask Armada About This Failure | Open the dashboard Ask page with the canonical prompt pre-filled |
 | Armada: Show Black Box Timeline | Open the entry's combined timeline as Markdown (100 events per page, with Next Page and Previous Page) |
 | Armada: Compare Black Box Attempts | Pick another attempt of the mission (or enter any entry id) and open the side-by-side diff |
 | Armada: Draft Armada Fix Mission | Copy the entry's top proposed Armada change as a mission brief and open it in the editor chat (copied only when the editor has no chat) |

@@ -36,14 +36,14 @@ namespace Armada.Helm.Commands
         /// Page number for list commands (1-based).
         /// </summary>
         [Description("Page number (1-based, default: 1)")]
-        [CommandOption("--page")]
+        [CommandOption("--page <PAGE>")]
         public int? Page { get; set; }
 
         /// <summary>
         /// Page size for list commands.
         /// </summary>
         [Description("Results per page (default: 100, max: 1000)")]
-        [CommandOption("--page-size")]
+        [CommandOption("--page-size <SIZE>")]
         public int? PageSize { get; set; }
     }
 }

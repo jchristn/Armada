@@ -37,9 +37,13 @@ namespace Armada.Helm.Rendering
             {
                 CaptainStateEnum.Idle => "dodgerblue1",
                 CaptainStateEnum.Working => "green",
+                CaptainStateEnum.Planning => "green",
+                CaptainStateEnum.Refining => "green",
+                CaptainStateEnum.Analyzing => "green",
                 CaptainStateEnum.Stalled => "red",
+                CaptainStateEnum.Quarantined => "red",
                 CaptainStateEnum.Stopping => "gold1",
-                _ => "white"
+                _ => "default"
             };
         }
 
@@ -71,10 +75,14 @@ namespace Armada.Helm.Rendering
                 "Testing" => "mediumpurple2",
                 "Review" => "darkorange",
                 "PullRequestOpen" => "dodgerblue1",
+                "WorkProduced" => "deepskyblue1",
+                "Verifying" => "mediumpurple2",
                 "Failed" => "red",
+                "LandingFailed" => "red",
+                "Blocked" => "darkorange",
                 "Cancelled" => "grey",
                 "Pending" => "dim",
-                _ => "white"
+                _ => "default"
             };
         }
 
@@ -91,7 +99,11 @@ namespace Armada.Helm.Rendering
                 "Testing" => "🧪",
                 "Review" => "👀",
                 "PullRequestOpen" => "🔀",
+                "WorkProduced" => "📦",
+                "Verifying" => "🧪",
                 "Failed" => "❌",
+                "LandingFailed" => "❌",
+                "Blocked" => "⛔",
                 "Cancelled" => "🚫",
                 "Pending" => "📋",
                 _ => "📋"
@@ -110,7 +122,7 @@ namespace Armada.Helm.Rendering
                 VoyageStatusEnum.Complete => "dim",
                 VoyageStatusEnum.Failed => "red",
                 VoyageStatusEnum.Cancelled => "grey",
-                _ => "white"
+                _ => "default"
             };
         }
 

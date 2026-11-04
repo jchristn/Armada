@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { ArmadaBlackBoxClient, describeError } from '../api/blackbox';
 import { BlackBoxDoctorPage, BlackBoxEntrySummary, BlackBoxNote } from '../api/types';
 import { entryLabel } from '../util/format';
-import { escapeHtml, isEntryViewMessage, renderEntryHtml } from './entryHtml';
+import { isEntryViewMessage, renderEntryErrorHtml, renderEntryHtml } from './entryHtml';
 
 /** Map from webview actions to extension commands. */
 const ACTION_COMMANDS: Record<string, string> = {
@@ -90,7 +90,7 @@ export class EntryViewManager implements vscode.Disposable {
       panel.title = `Black Box: ${entry.MissionId ?? entry.VoyageId ?? entry.Id}`;
       panel.webview.html = renderEntryHtml(entry, notes, nonce, panel.webview.cspSource, { dashboardUrl: this._GetDashboardUrl(), doctor });
     } catch (err) {
-      panel.webview.html = `<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';"></head><body style="font-family: var(--vscode-font-family); padding: 16px;"><h2>${escapeHtml(entryLabel(summary))}</h2><p>${escapeHtml(describeError(err))}</p></body></html>`;
+      panel.webview.html = renderEntryErrorHtml(entryLabel(summary), describeError(err), nonce);
     }
   }
 }

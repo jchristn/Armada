@@ -19,13 +19,15 @@ namespace Armada.Helm.Commands
             /// <summary>
             /// Gets or sets the backlog item identifier or title.
             /// </summary>
+            [Description("Backlog item ID (obj_) or title")]
             [CommandArgument(0, "<backlog>")]
             public string Backlog { get; set; } = String.Empty;
 
             /// <summary>
             /// Gets or sets the target rank.
             /// </summary>
-            [CommandOption("--rank|-r")]
+            [Description("New rank (lower sorts first)")]
+            [CommandOption("--rank|-r <RANK>")]
             public int? Rank { get; set; }
         }
 

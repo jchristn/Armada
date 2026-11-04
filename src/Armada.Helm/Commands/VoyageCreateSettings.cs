@@ -25,21 +25,21 @@ namespace Armada.Helm.Commands
         /// Target vessel name or ID.
         /// </summary>
         [Description("Target vessel (name or ID)")]
-        [CommandOption("--vessel|-v")]
+        [CommandOption("--vessel|-v <VESSEL>")]
         public string? VesselId { get; set; }
 
         /// <summary>
         /// Mission descriptions (repeatable).
         /// </summary>
         [Description("Mission description (repeatable)")]
-        [CommandOption("--mission|-m")]
+        [CommandOption("--mission|-m <TEXT>")]
         public string[]? Missions { get; set; }
 
         /// <summary>
         /// Playbook selections in the form id-or-file-name[:DeliveryMode].
         /// </summary>
         [Description("Playbook selection (repeatable): id-or-file-name[[:InlineFullContent|InstructionWithReference|AttachIntoWorktree]] (default InstructionWithReference)")]
-        [CommandOption("--playbook|-p")]
+        [CommandOption("--playbook|-p <PLAYBOOK>")]
         public string[]? Playbooks { get; set; }
     }
 }

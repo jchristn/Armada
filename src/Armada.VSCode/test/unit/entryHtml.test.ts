@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { describe, it } from 'node:test';
-import { escapeHtml, isEntryViewMessage, renderEntryHtml } from '../../src/views/entryHtml';
+import { escapeHtml, isEntryViewMessage, renderEntryErrorHtml, renderEntryHtml } from '../../src/views/entryHtml';
 import { fullEntry, summary } from '../fakes/fixtures';
 
 describe('renderEntryHtml', () => {
@@ -16,7 +16,7 @@ describe('renderEntryHtml', () => {
     assert.ok(html.includes("script-src 'nonce-NONCE123'"));
     assert.ok(html.includes('checked the merge'));
     assert.ok(html.includes('data-action="resolve"'));
-    assert.ok(html.includes('Ask Armada about this failure'));
+    assert.ok(html.includes('Ask Armada About This Failure'));
   });
 
   it('escapes server text', () => {
@@ -32,6 +32,15 @@ describe('renderEntryHtml', () => {
     assert.ok(html.includes('No recovery paths recorded.'));
     assert.ok(!html.includes('data-action="resolve"'));
     assert.ok(!html.includes('<h2>Conflict</h2>'));
+  });
+
+  it('renders an escaped load error with a nonce-gated Retry button', () => {
+    const html = renderEntryErrorHtml('Add login (msn_x)', 'Cannot reach <server>', 'NONCE9');
+    assert.ok(html.includes('Cannot reach &lt;server&gt;'));
+    assert.ok(html.includes('data-action="refresh"'));
+    assert.ok(html.includes('<script nonce="NONCE9">'));
+    assert.ok(html.includes("script-src 'nonce-NONCE9'"));
+    assert.ok(isEntryViewMessage({ action: 'refresh' }));
   });
 
   it('contains no em-dashes', () => {

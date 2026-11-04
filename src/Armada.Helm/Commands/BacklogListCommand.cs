@@ -21,61 +21,71 @@ namespace Armada.Helm.Commands
             /// <summary>
             /// Gets or sets the search text used to filter backlog items.
             /// </summary>
-            [CommandOption("--search|-s")]
+            [Description("Search text")]
+            [CommandOption("--search|-s <TEXT>")]
             public string? Search { get; set; }
 
             /// <summary>
             /// Gets or sets the status filter.
             /// </summary>
-            [CommandOption("--status")]
+            [Description("Filter by status: Draft, Scoped, Planned, InProgress, Released, Deployed, Completed, Blocked, Cancelled")]
+            [CommandOption("--status <STATUS>")]
             public string? Status { get; set; }
 
             /// <summary>
             /// Gets or sets the objective kind filter.
             /// </summary>
-            [CommandOption("--kind")]
+            [Description("Filter by kind: Feature, Bug, Refactor, Research, Chore, Initiative")]
+            [CommandOption("--kind <KIND>")]
             public string? Kind { get; set; }
 
             /// <summary>
             /// Gets or sets the objective priority filter.
             /// </summary>
-            [CommandOption("--priority")]
+            [Description("Filter by priority: P0, P1, P2, P3")]
+            [CommandOption("--priority <PRIORITY>")]
             public string? Priority { get; set; }
 
             /// <summary>
             /// Gets or sets the backlog state filter.
             /// </summary>
-            [CommandOption("--backlog-state")]
+            [Description("Filter by backlog state: Inbox, Triaged, Refining, ReadyForPlanning, ReadyForDispatch, Dispatched")]
+            [CommandOption("--backlog-state <STATE>")]
             public string? BacklogState { get; set; }
 
             /// <summary>
             /// Gets or sets the effort filter.
             /// </summary>
-            [CommandOption("--effort")]
+            [Description("Filter by effort: XS, S, M, L, XL")]
+            [CommandOption("--effort <EFFORT>")]
             public string? Effort { get; set; }
 
             /// <summary>
             /// Gets or sets the owner filter.
             /// </summary>
-            [CommandOption("--owner")]
+            [Description("Filter by owner")]
+            [CommandOption("--owner <OWNER>")]
             public string? Owner { get; set; }
 
             /// <summary>
             /// Gets or sets the target version filter.
             /// </summary>
-            [CommandOption("--target-version")]
+            [Description("Filter by target version")]
+            [CommandOption("--target-version <VERSION>")]
             public string? TargetVersion { get; set; }
 
             /// <summary>
             /// Gets or sets the fleet filter.
             /// </summary>
-            [CommandOption("--fleet")]
+            [Description("Filter by fleet ID")]
+            [CommandOption("--fleet <FLEET>")]
             public string? FleetId { get; set; }
 
             /// <summary>
             /// Gets or sets the vessel filter.
             /// </summary>
-            [CommandOption("--vessel")]
+            [Description("Filter by vessel ID")]
+            [CommandOption("--vessel <VESSEL>")]
             public string? VesselId { get; set; }
         }
 

@@ -12,7 +12,7 @@ namespace Armada.Helm.Commands
         /// Window in days.
         /// </summary>
         [Description("How many days back to look (default 30)")]
-        [CommandOption("--window-days")]
+        [CommandOption("--window-days <DAYS>")]
         public int? WindowDays { get; set; }
     }
 }

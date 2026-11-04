@@ -11,7 +11,7 @@ namespace Armada.Helm.Commands
         /// <summary>
         /// Recovery path id.
         /// </summary>
-        [Description("Recovery path id (see armada blackbox show)")]
+        [Description("Recovery path ID (see armada blackbox show)")]
         [CommandArgument(1, "<pathId>")]
         public string PathId { get; set; } = string.Empty;
 

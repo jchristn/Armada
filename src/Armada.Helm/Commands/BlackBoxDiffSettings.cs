@@ -11,7 +11,7 @@ namespace Armada.Helm.Commands
         /// <summary>
         /// The entry to compare with.
         /// </summary>
-        [Description("The other black box entry id (bbx_) to compare with")]
+        [Description("The other black box entry ID (bbx_) to compare with")]
         [CommandArgument(1, "<otherId>")]
         public string OtherId { get; set; } = string.Empty;
     }

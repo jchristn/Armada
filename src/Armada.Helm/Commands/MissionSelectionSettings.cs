@@ -10,7 +10,7 @@ namespace Armada.Helm.Commands
     {
         /// <summary>Mission identifier; name-based broad searches are not performed.</summary>
         [CommandArgument(0, "<mission>")]
-        [Description("Mission identifier")]
+        [Description("Mission ID (msn_)")]
         public string MissionId { get; set; } = String.Empty;
         /// <summary>Read a filtered page of retained decisions.</summary>
         [CommandOption("--history")]
@@ -21,15 +21,15 @@ namespace Armada.Helm.Commands
         [Description("Preview current selection without changing the mission")]
         public bool Preview { get; set; }
         /// <summary>Read one retained decision belonging to the mission.</summary>
-        [CommandOption("--decision <id>")]
+        [CommandOption("--decision <ID>")]
         [Description("Inspect a retained selection decision and candidate page")]
         public string? DecisionId { get; set; }
         /// <summary>Explicit tenant for a global administrator reading standalone detail.</summary>
-        [CommandOption("--tenant <id>")]
+        [CommandOption("--tenant <ID>")]
         [Description("Explicit tenant for --decision (global administrator only)")]
         public string? TenantId { get; set; }
         /// <summary>Optional exact history outcome.</summary>
-        [CommandOption("--outcome <outcome>")]
+        [CommandOption("--outcome <OUTCOME>")]
         [Description("History outcome: Admitted or Waiting")]
         public string? Outcome { get; set; }
 

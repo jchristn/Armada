@@ -45,7 +45,7 @@ namespace Armada.Harbor
 
             AddText("Harbor", settings.Name);
             AddValue("Harbor ID", new CopyableIdText(settings.HarborId, "Harbor ID") { HorizontalAlignment = HorizontalAlignment.Left });
-            AddValue("Link URL", new UrlTextBox(settings.ServerLinkUrl, "Link URL", true));
+            AddValue("Admiral address", new UrlTextBox(settings.ServerLinkUrl, "Admiral address", true));
             AddText("Harbor settings", HarborAppSettings.DefaultPath());
             AddText("Armada data", admiral == null ? "-" : admiral.DataDirectory + (admiral.IsLocal ? "" : " (not available: " + admiral.Reason.TrimEnd('.') + ")"));
             AddText(".NET", RuntimeInformation.FrameworkDescription);

@@ -22316,7 +22316,7 @@
     },
     {
       "command": "blackbox show",
-      "description": "Show the black box entry of a mission, voyage, or entry id",
+      "description": "Show the black box entry of a mission, voyage, or entry ID",
       "parameters": [
         {
           "kind": "argument",
@@ -23144,7 +23144,7 @@
     },
     {
       "command": "captain stop-all",
-      "description": "Emergency recall all captains",
+      "description": "Emergency recall of all captains",
       "parameters": [
         {
           "kind": "option",
@@ -23380,7 +23380,7 @@
     },
     {
       "command": "config init",
-      "description": "Interactive setup (optional -- config auto-initializes)",
+      "description": "Interactive setup (optional; config auto-initializes)",
       "parameters": [
         {
           "kind": "option",
@@ -23924,7 +23924,7 @@
     },
     {
       "command": "go",
-      "description": "Quick dispatch -- natural language task assignment",
+      "description": "Dispatch a task in natural language",
       "parameters": [
         {
           "kind": "argument",

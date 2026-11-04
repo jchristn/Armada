@@ -19,42 +19,42 @@ namespace Armada.Helm.Commands
         /// Target vessels (repeatable), by ID or name.
         /// </summary>
         [Description("Target vessel ID or name (repeatable)")]
-        [CommandOption("--vessel|-v")]
+        [CommandOption("--vessel|-v <VESSEL>")]
         public string[]? Vessels { get; set; }
 
         /// <summary>
         /// Target every vessel in a fleet.
         /// </summary>
         [Description("Target every vessel in this fleet (ID)")]
-        [CommandOption("--fleet|-f")]
+        [CommandOption("--fleet|-f <FLEET>")]
         public string? Fleet { get; set; }
 
         /// <summary>
         /// Runtime input values (repeatable), as name=value.
         /// </summary>
         [Description("Input value as name=value (repeatable), for example --input package=Newtonsoft.Json")]
-        [CommandOption("--input|-i")]
+        [CommandOption("--input|-i <NAME=VALUE>")]
         public string[]? Inputs { get; set; }
 
         /// <summary>
         /// Follow-up run: target the vessels of this earlier run instead of --vessel or --fleet.
         /// </summary>
         [Description("Follow up on an earlier run (far_ ID): target its vessels whose status matches --from-status")]
-        [CommandOption("--from-run")]
+        [CommandOption("--from-run <RUN>")]
         public string? FromRun { get; set; }
 
         /// <summary>
         /// Target statuses selected from --from-run (repeatable).
         /// </summary>
         [Description("Target status to select from --from-run (repeatable; default Findings and Failed)")]
-        [CommandOption("--from-status")]
+        [CommandOption("--from-status <STATUS>")]
         public string[]? FromStatuses { get; set; }
 
         /// <summary>
         /// Concurrency for this run.
         /// </summary>
         [Description("Concurrency for this run (1-32)")]
-        [CommandOption("--concurrency|-c")]
+        [CommandOption("--concurrency|-c <N>")]
         public int? Concurrency { get; set; }
         /// <summary>Approve tool prompts and human mission reviews for this run.</summary>
         [Description("Approve all tool prompts and mission reviews for this run (admin only)")]
@@ -63,12 +63,12 @@ namespace Armada.Helm.Commands
 
         /// <summary>Per-run approval countdown.</summary>
         [Description("Approval countdown in seconds (10-3600)")]
-        [CommandOption("--approval-timeout")]
+        [CommandOption("--approval-timeout <SECONDS>")]
         public int? ApprovalTimeoutSeconds { get; set; }
 
         /// <summary>Decision applied when the countdown expires.</summary>
         [Description("Default answer on timeout: Deny or Approve (Approve requires admin)")]
-        [CommandOption("--approval-default")]
+        [CommandOption("--approval-default <ANSWER>")]
         public string? ApprovalDefault { get; set; }
     }
 }

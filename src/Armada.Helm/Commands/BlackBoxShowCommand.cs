@@ -19,7 +19,7 @@ namespace Armada.Helm.Commands
     /// only the entry with its record; otherwise a summary, the Armada resilience section and the recovery paths. Exits
     /// <see cref="BlackBoxCli.NotFoundExitCode"/> with a message on stderr when there is no entry.
     /// </summary>
-    [Description("Show the black box entry of a mission, voyage, or entry id")]
+    [Description("Show the black box entry of a mission, voyage, or entry ID")]
     public class BlackBoxShowCommand : BlackBoxCommandBase<BlackBoxShowSettings>
     {
         #region Protected-Members

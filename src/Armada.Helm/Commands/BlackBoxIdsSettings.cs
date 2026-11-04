@@ -11,7 +11,7 @@ namespace Armada.Helm.Commands
         /// <summary>
         /// Entry ids.
         /// </summary>
-        [Description("Black box entry ids (bbx_)")]
+        [Description("Black box entry IDs (bbx_)")]
         [CommandArgument(0, "<ids>")]
         public string[] Ids { get; set; } = System.Array.Empty<string>();
     }
