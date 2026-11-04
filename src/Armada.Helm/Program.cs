@@ -228,6 +228,8 @@ namespace Armada.Helm
             config.SetApplicationName("armada");
             config.SetApplicationVersion(Constants.ProductVersion);
             config.SetExceptionHandler(HelmErrorHandler.Handle);
+            // Unknown options and stray arguments are errors, so a typo such as --bogus is never silently ignored.
+            config.UseStrictParsing();
 
             // --- Common commands (top-level, used most often) ---
             config.AddCommand<GoCommand>("go")

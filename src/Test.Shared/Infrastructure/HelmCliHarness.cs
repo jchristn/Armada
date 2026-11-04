@@ -13,7 +13,8 @@ namespace Test.Shared.Infrastructure
     /// Runs the <c>armada</c> CLI in process with the real command model (<see cref="Program.ConfigureCommands"/>),
     /// capturing the Spectre console (no colors, not interactive), standard output, and standard error. Host independent: the
     /// ARMADA_SERVER_URL, ARMADA_URL, and ARMADA_TOKEN variables are cleared for the run. The runner executes cases
-    /// one at a time, so swapping the process-wide console and environment for the call is safe.
+    /// one at a time, so swapping the process-wide console and environment for the call is safe. Parse errors are rendered
+    /// by <see cref="HelmErrorHandler"/> and returned as a non-zero exit, as in the shipped CLI.
     /// </summary>
     public static class HelmCliHarness
     {
@@ -57,7 +58,18 @@ namespace Test.Shared.Infrastructure
                     Program.ConfigureCommands(config);
                     config.PropagateExceptions();
                 });
-                int exit = await app.RunAsync(args).ConfigureAwait(false);
+                int exit;
+                try
+                {
+                    exit = await app.RunAsync(args).ConfigureAwait(false);
+                }
+                catch (CommandParseException parse)
+                {
+                    // Parse errors (strict parsing, unknown commands) go through the production handler so the
+                    // captured run matches what a user sees; command failures still propagate to the test.
+                    exit = HelmErrorHandler.Handle(parse, Console.Error);
+                }
+
                 HelmCliRun run = new HelmCliRun();
                 run.ExitCode = exit;
                 run.Output = console.ToString();

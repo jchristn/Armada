@@ -496,6 +496,8 @@ Migration 119 adds mission hierarchy/branch metadata and `ReadyUtc`/`AssignedUtc
 
 Update clients to use captain `ActiveMissionIds` and mission-owned docks/processes. Vessel requests containing the removed boolean fail with migration guidance; Helm rejects `--allow-concurrent`. This is the explicitly approved [compatibility exception](COMPATIBILITY.md#v130-concurrency-exception). SQLite, PostgreSQL, MySQL and SQL Server have populated v1.2 upgrade and live slot/storage coverage. Planning/refinement persistence remains SQLite-only as before; the other providers retain their existing unsupported-session behavior.
 
+Helm now uses strict parsing: an unknown option (`armada mission list --bogus`) or a stray extra argument fails with a non-zero exit before any request, where earlier versions ignored it. Check scripts that pass options a command does not define.
+
 Back up before upgrading. Do not point v1.2.0 at a v1.3.0 database; restoring the pre-upgrade backup is required for rollback. Hierarchy execution, wait telemetry and final stress/release integration remain in the plan.
 
 The new `Concurrency` settings-file group carries defaults and bounds for later milestones. Setters clamp hard bounds; load/save normalizes captain defaults against `MaxCaptainConcurrency` independently of JSON property order. Negative vessel defaults clamp to 1; zero remains unlimited. The existing global `MaxConcurrentMissions` now clamps negative values to 1 and values over 10000 to 10000 instead of rejecting a negative settings file. Adjustment warnings name the supplied and effective values.

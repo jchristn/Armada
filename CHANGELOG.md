@@ -47,6 +47,8 @@ v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-
 - Remove `Captain.CurrentMissionId`, `Captain.CurrentDockId`, `Vessel.AllowConcurrentMissions` and Helm `--allow-concurrent`, as explicitly approved for v1.3.0. Use `ActiveMissionIds` and mission-owned dock/process fields, and the numeric vessel limits. Old vessel inputs and the CLI flag return migration guidance. Captain process IDs are reserved for exclusive sessions. Keep agent Testing hints informational so live execution never disappears from slot accounting; migrate existing live Testing jobs safely. Halt voyage siblings through their individual owned processes, preserving unrelated work on the same captain.
 - Migrations 119–121 preserve active execution/session ownership and separate rescue provenance from hierarchy. MySQL resumes partially applied final migrations. Restoring the pre-upgrade backup is required before downgrading. See [upgrade guidance](docs/UPGRADING.md#v120-to-v130-development).
 
+- Helm rejects unknown options and stray arguments (strict parsing) instead of ignoring them; such commands now exit non-zero before contacting the Admiral.
+
 ### Scheduling admission
 
 - Bind mission instructions, live REST/MCP diffs and completion capture to the recorded mission dock. Remove captain/branch worktree guesses, enforce dock scope, preserve saved snapshots, and keep sibling assignments intact. Dashboard mission diff viewers now show read failures instead of reporting “No modified files.”

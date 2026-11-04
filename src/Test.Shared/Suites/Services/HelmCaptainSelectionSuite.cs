@@ -17,7 +17,7 @@ namespace Test.Shared.Suites.Services
     /// <summary>
     /// The Helm captain-selection commands against a recording Admiral stub: <c>mission selection</c> shows recovery
     /// permissions with the summary, and <c>mission selection-recovery</c> reads the current revision, posts the
-    /// audited request, honors an explicit revision, refuses non-administrators before writing, and requires a reason.
+    /// audited request, honors an explicit revision, refuses non-administrators before writing, and requires a reason. Unknown options are rejected by strict parsing.
     /// </summary>
     public sealed class HelmCaptainSelectionSuite : IArmadaTestSuite
     {
@@ -101,6 +101,28 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(0, run.ExitCode, run.StandardError + run.Output);
                     AssertContains("Recovery permissions revision 2", run.Output, "recovery line");
                     AssertContains("Fallback allowed", run.Output, "fallback state");
+                }
+            }));
+
+            cases.Add(CaseAsync("unknown_options_are_rejected_before_any_request", "Strict parsing: an unknown option fails without calling the Admiral", TestTags.Negative, async () =>
+            {
+                using (RecordingAdmiralStub stub = new RecordingAdmiralStub())
+                {
+                    stub.Replies[Summary] = StubAdmiralReply.Json(SummaryJson(canManage: true, revision: 2));
+                    string failure;
+                    try
+                    {
+                        HelmCliRun run = await Run(stub, "mission", "selection", "msn_1", "--bogus").ConfigureAwait(false);
+                        AssertTrue(run.ExitCode != 0, "non-zero exit for an unknown option");
+                        failure = run.StandardError + run.Output;
+                    }
+                    catch (Exception ex)
+                    {
+                        failure = ex.Message;
+                    }
+
+                    AssertContains("bogus", failure, "names the unknown option");
+                    AssertFalse(stub.Requests().Any(), "no request sent");
                 }
             }));
 
