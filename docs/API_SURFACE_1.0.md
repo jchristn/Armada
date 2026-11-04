@@ -29,7 +29,7 @@ administrator).
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
 | WebSocket event types | 78 | 0 |
-| CLI commands | 98 | 0 |
+| CLI commands | 99 | 0 |
 | Settings keys | 350 | 12 |
 
 ## REST API
@@ -1027,6 +1027,7 @@ Commands of the `armada` CLI (Helm). `*` marks a required argument or option. Gl
 | `armada mission restart` | `<mission>*` | `--description\|-d`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--title\|-t`, `--token`, `--verbose` |
 | `armada mission retry` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada mission selection` | `<mission>*` | `--decision`, `--history`, `--json`, `--outcome`, `--page`, `--page-size`, `--preview`, `--profile`, `--server`, `--tenant`, `--token`, `--verbose` |
+| `armada mission selection-recovery` | `<mission>*` | `--allow-fallback`, `--expected-revision`, `--json`, `--page`, `--page-size`, `--profile`, `--reason`, `--reserve-exception`, `--server`, `--token`, `--verbose`, `--yes\|-y` |
 | `armada mission show` | `<mission>*` | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada playbook add` | `<file-name>*` | `--content\|-c`, `--description\|-d`, `--from-file\|-f`, `--inactive`, `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |
 | `armada playbook list` |  | `--json`, `--page`, `--page-size`, `--profile`, `--server`, `--token`, `--verbose` |

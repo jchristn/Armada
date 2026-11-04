@@ -65,6 +65,7 @@ camelizes REST responses.
   - [Vessel Health](#vessel-health)
   - [Voyages](#voyages)
   - [Missions](#missions)
+  - [Captain Selection](#captain-selection)
   - [Captains](#captains)
   - [Ask](#ask)
   - [CLI Permissions](#cli-permissions)
@@ -3943,6 +3944,83 @@ Return the instructions file the captain was given for a mission. Resolves the l
 **Error:** `404` - Mission not found, or instructions are unavailable (no live dock/worktree and no saved snapshot)
 
 ---
+
+### Captain Selection
+
+Usage-based captain selection records why a captain was chosen (or why a mission waits) as immutable decisions with
+candidate and window evidence. The selection policy itself is the `UsageSelection` settings group (see the v1.3.0 note
+at the top of this document). Every route below authorizes the mission (or the decision's mission) before paging or
+counting, returns `404` for resources the caller cannot see, and never returns internal account keys. Reason codes are
+stable identifiers; clients translate them for display.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/v1/missions/{id}/captain-selection` | Summary: current mode and strategy, the current admitted attempt, the latest retained decision, recovery permissions, and `canManageRecovery` |
+| GET | `/api/v1/missions/{id}/captain-selection/history` | Paged decisions. Query: `pageNumber`, `pageSize` (1-1000, default 25), `trigger`, `outcome` (`Admitted`, `Waiting`), `from`, `to` (UTC, `[from,to)`) |
+| POST | `/api/v1/missions/{id}/captain-selection/history/enumerate` | Same as history with a JSON `CaptainSelectionHistoryQuery` body |
+| POST | `/api/v1/missions/{id}/captain-selection/preview` | Read-only evaluation of current state for a Pending mission. Query: `pageNumber`, `pageSize`. No capture, history write, claim or launch |
+| POST | `/api/v1/missions/{id}/captain-selection/recovery` | Authorize or revoke recovery permissions for a Pending mission (tenant or system administrator) |
+| GET | `/api/v1/captain-selection-decisions/{id}` | Immutable decision detail: decision, recorded policy, recovery revision applied, candidate page and execution events. Query: `tenantId` (global administrators only), `pageNumber`, `pageSize` |
+| GET | `/api/v1/captain-selection-decisions/{id}/candidates` | Candidate page for a decision (same query as detail) |
+| POST | `/api/v1/captain-selection-decisions/{id}/candidates/enumerate` | Candidate page with a JSON paging body |
+
+A mission that has never recorded a decision returns `200` with `currentAttempt` and `latestDecision` set to null; no
+historical decision is invented. Preview returns `200` with a blocked `reasonCode` when scheduling cannot proceed, for
+example `MissionNotPending`, `BelowReserve` or `CandidateLimitExceeded`. A preview is not a promise of admission: actual
+admission re-checks placement, capacity and usage inside its transaction.
+
+```json
+GET /api/v1/missions/msn_abc123/captain-selection
+
+{
+  "missionId": "msn_abc123",
+  "currentMode": "Enforce",
+  "currentStrategy": "MostRemainingAllowance",
+  "historyAvailable": true,
+  "canManageRecovery": false,
+  "recovery": null,
+  "currentAttempt": {
+    "id": "csd_abc123",
+    "outcome": "Admitted",
+    "selectedCaptainId": "cpt_abc123",
+    "selectedCaptainName": "claude-1",
+    "intendedModel": "claude-opus-5-5",
+    "reportedModel": null,
+    "reasonCode": "SelectedForHeadroom",
+    "evaluatedUtc": "2026-11-03T12:00:00Z"
+  },
+  "latestDecision": { "id": "csd_abc123" }
+}
+```
+
+`intendedModel` is the configured model at admission; `reportedModel` is set only when the runtime reports the model it
+actually used. Observe-mode decisions also carry `hypotheticalCaptainId`, the captain the configured strategy would
+have chosen.
+
+Recovery request body:
+
+```json
+{ "expectedRevision": 0, "allowFallback": true, "reserveException": false, "reason": "Preferred captain is offline" }
+```
+
+`expectedRevision` is the revision in the summary's `recovery` (0 when none). The reason is required (1-512
+characters) and retained with the actor and time. Permissions affect future admissions only; running work continues.
+A fallback never bypasses a strict assignment, and a reserve exception never bypasses exhausted quota, a provider
+cooldown, capacity or eligibility.
+
+| Status | Meaning |
+|---|---|
+| 200 | Success, including an explicit no-history summary and a blocked preview |
+| 400 | Malformed paging or filter values |
+| 401 | Missing or invalid credentials |
+| 403 | Authenticated but not allowed (for example a viewer posting recovery) |
+| 404 | Unknown mission or decision, or one the caller cannot see |
+| 409 | Stale `expectedRevision`, or the mission is no longer Pending |
+| 503 | Selection storage unavailable; retry later |
+
+After each committed change (admission, a new material waiting decision, or a recovery authorization) the Admiral
+broadcasts [`captain-selection.changed`](WEBSOCKET_API.md#captain-selectionchanged) to the mission's tenant. It
+carries identifiers only; clients re-read this API.
 
 ### Captains
 

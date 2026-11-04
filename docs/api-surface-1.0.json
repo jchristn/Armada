@@ -25253,6 +25253,116 @@
       ]
     },
     {
+      "command": "mission selection-recovery",
+      "description": "Set audited captain-selection recovery permissions for a Pending mission",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "mission",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "allow-fallback",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "expected-revision",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "reason",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "reserve-exception",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "yes",
+          "short": "y",
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "mission show",
       "description": "Show mission details (accepts name or ID)",
       "parameters": [

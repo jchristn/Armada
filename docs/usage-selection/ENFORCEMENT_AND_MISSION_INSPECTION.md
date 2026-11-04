@@ -50,9 +50,16 @@ The mission card lives on the existing Mission detail route and uses its global 
 
 Browser review renders the real React card/CSS against isolated fixture responses, not the deployed server. Test widths are 1280, 768 and 390; themes light/dark; locales English/Spanish/Japanese; additional enlarged-text/RTL and keyboard focus checks. Waiting, legacy, unavailable and redacted states are included. The geometry/focus report is stored beside this document; representative screenshots were reviewed locally and are not committed. This review found and corrected a Spanish phone-pagination overflow. It does not replace the final live operator/simulated-user session required by U5.
 
+## Native and CLI workflows (U4)
+
+- **TUI:** open a mission and switch to the **Captain selection** tab (`[`/`]`). Keys, shown inline and in the status bar: `c` compare, `h` history (Up/Down and Enter open a decision, `f` cycles the outcome filter), `v` read-only preview, `<`/`>` page, `j` JSON, `g` refresh, and `a` recovery permissions for administrators on Pending missions. The tab reloads on `captain-selection.changed` for that mission.
+- **Mobile:** the mission's Captain selection section shows recovery permissions, and administrators get a **Recovery permissions** sheet for Pending missions. A conflict keeps the draft reason and offers Refresh. The section re-reads on `captain-selection.changed` while focused.
+- **Helm:** `armada mission selection <mission>` prints the summary with recovery permissions. `armada mission selection-recovery <mission> [--allow-fallback] [--reserve-exception] --reason "..." [--expected-revision N] [--yes]` reads the current revision unless one is given, confirms, and saves an audited revision.
+- **WebSocket:** `captain-selection.changed` is broadcast to the mission's tenant after each committed change and carries identifiers only. See [WEBSOCKET_API.md](../WEBSOCKET_API.md#captain-selectionchanged).
+
 ## Remaining work
 
-Native Mobile/TUI operational controls, richer account reservation/export views, Events/Needs You and WebSocket invalidation, telemetry/stress/upgrade evidence and final release packaging remain tracked in U4-U6. The current conservative behavior may keep failed/unknown work's allowance uncertain until a trustworthy capture; no force-release or hard-hold bypass action is advertised. Classified shared-account cooldowns, proven-unstarted handling and audited Dashboard/REST/MCP/.NET recovery permissions are implemented in [U3](U3_RECOVERY_VALIDATION.md).
+Events/Needs You integration, richer account reservation/export views, telemetry/stress/upgrade evidence and final release packaging remain tracked in U4-U6. The current conservative behavior may keep failed/unknown work's allowance uncertain until a trustworthy capture; no force-release or hard-hold bypass action is advertised. Classified shared-account cooldowns, proven-unstarted handling and audited Dashboard/REST/MCP/.NET recovery permissions are implemented in [U3](U3_RECOVERY_VALIDATION.md).
 
 ## Earlier wave verification record
 

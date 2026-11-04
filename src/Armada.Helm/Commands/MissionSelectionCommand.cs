@@ -59,6 +59,7 @@ namespace Armada.Helm.Commands
                 if (IsJsonMode(settings)) { WriteJson(summary); return summary == null ? 1 : 0; }
                 if (summary == null) return 1;
                 AnsiConsole.MarkupLine(Markup.Escape(summary.CurrentMode + " / " + UsageSelectionText.ForStrategy(summary.CurrentStrategy)));
+                if (summary.Recovery != null) AnsiConsole.MarkupLine(Markup.Escape(DescribeRecovery(summary.Recovery)));
                 CaptainSelectionDecisionView? current = summary.CurrentAttempt ?? summary.LatestDecision;
                 if (current == null) { AnsiConsole.MarkupLine(Markup.Escape(UsageSelectionText.Get("usageSelection.noHistory"))); return 0; }
                 if (summary.CurrentAttempt == null) AnsiConsole.MarkupLine("[dim]Latest retained decision; no selection was recorded for the current attempt.[/]");
@@ -74,10 +75,22 @@ namespace Armada.Helm.Commands
             facts.AddRow("Runtime-reported model", Markup.Escape(decision.ReportedModel ?? "Unknown"));
             facts.AddRow("Mode / strategy", Markup.Escape(decision.Mode + " / " + UsageSelectionText.ForStrategy(decision.Strategy)));
             facts.AddRow("Selected at (UTC)", decision.EvaluatedUtc.ToString("u", CultureInfo.InvariantCulture));
-            facts.AddRow("Details", Markup.Escape(decision.Mode == Armada.Core.Enums.UsageSelectionModeEnum.Observe && decision.Outcome == "Admitted" ? UsageSelectionText.Get("usageSelection.observeChoice") : UsageSelectionText.ForReason(decision.ReasonCode)));
+            facts.AddRow("Details", Markup.Escape(decision.Mode == Armada.Core.Enums.UsageSelectionModeEnum.Observe && decision.Outcome == CaptainSelectionOutcomes.Admitted ? UsageSelectionText.Get("usageSelection.observeChoice") : UsageSelectionText.ForReason(decision.ReasonCode)));
             AnsiConsole.Write(facts);
             RenderCandidates(detail.Candidates);
             return 0;
+        }
+
+        /// <summary>One-line English summary of a mission's recovery permissions.</summary>
+        /// <param name="recovery">Recovery record, or null.</param>
+        /// <returns>Summary text.</returns>
+        public static string DescribeRecovery(UsageSelectionRecovery? recovery)
+        {
+            if (recovery == null) return "Recovery permissions: none recorded (revision 0).";
+            return "Recovery permissions revision " + recovery.Revision.ToString(CultureInfo.InvariantCulture) + ": "
+                + UsageSelectionText.Get(recovery.AllowFallback ? "usageSelection.recovery.fallbackOn" : "usageSelection.recovery.fallbackOff") + ", "
+                + UsageSelectionText.Get(recovery.ReserveException ? "usageSelection.recovery.reserveOn" : "usageSelection.recovery.reserveOff")
+                + ". Reason: " + recovery.Reason;
         }
 
         private static void RenderCandidates(EnumerationResult<CaptainSelectionCandidateView> page)

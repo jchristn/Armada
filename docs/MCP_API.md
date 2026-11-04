@@ -58,6 +58,7 @@ If/when MCP-over-tunnel is added, this document will gain explicit routed-tool s
     - [stop_server](#stop_server)
   - **Enumeration**
     - [enumerate](#enumerate)
+  - [Captain Selection](#captain-selection)
   - **Fleets**
     - [get_fleet](#get_fleet)
     - [create_fleet](#create_fleet)
@@ -1083,6 +1084,25 @@ Start a run. Pass `actionId` for a saved action, or the inline definition fields
 Pending targets are cancelled, running commands are killed, and unlanded voyages of a Mission run are cancelled. **Response:** the updated FleetActionRun. Returns an error with `StatusCode` 409 when the run already finished.
 
 ---
+
+## Captain Selection
+
+These tools mirror the [REST captain-selection routes](REST_API.md#captain-selection) and use the same scoped service:
+the mission or decision is authorized before paging, unseen resources return the structured not-found error, and
+internal account keys are never accepted or returned.
+
+| Tool | Arguments | Purpose |
+|---|---|---|
+| `get_captain_selection` | `missionId` | Current admitted attempt, latest retained decision, recovery permissions and `canManageRecovery` |
+| `get_captain_selection_history` | `missionId`, optional `query` (`pageNumber`, `pageSize`, `trigger`, `outcome`, `fromUtc`, `toUtc`) | Paged retained decisions; filters apply before counts |
+| `get_captain_selection_decision` | `decisionId`, optional `tenantId` (global administrators), `pageNumber`, `pageSize` | Immutable decision, recorded policy, candidate page and runtime model evidence |
+| `preview_captain_selection` | `missionId`, optional `pageNumber`, `pageSize` | Read-only evaluation of a Pending mission; no capture, write, claim or launch |
+| `authorize_captain_selection_recovery` | `missionId`, `recovery` (`expectedRevision`, `allowFallback`, `reserveException`, `reason`) | Audited recovery permissions; tenant or system administrator; stale revision is a conflict |
+| `get_usage_selection_settings` | none | Effective server-wide policy, live revision and override metadata (global administrator) |
+| `update_usage_selection_settings` | `settings`, optional `expectedRevision` | Replace the live policy (global administrator); environment overrides stay read-only |
+
+`enumerate` also accepts the entity types `captain_selection_decision` and `captain_selection_candidate` with the same
+scoping. See the [v1.3.0 note](#v130-configurable-captain-selection) above for argument details.
 
 ## Memory
 

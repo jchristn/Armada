@@ -274,6 +274,9 @@ namespace Armada.Helm
                 mission.AddCommand<MissionSelectionCommand>("selection")
                     .WithDescription("Inspect captain selection, history or a read-only preview")
                     .WithExample("mission", "selection", "msn_example", "--history", "--json");
+                mission.AddCommand<MissionSelectionRecoveryCommand>("selection-recovery")
+                    .WithDescription("Set audited captain-selection recovery permissions for a Pending mission")
+                    .WithExample("mission", "selection-recovery", "msn_example", "--allow-fallback", "--reason", "\"Preferred captain offline\"");
                 mission.AddCommand<MissionShowCommand>("show")
                     .WithDescription("Show mission details (accepts name or ID)");
                 mission.AddCommand<MissionCancelCommand>("cancel")
