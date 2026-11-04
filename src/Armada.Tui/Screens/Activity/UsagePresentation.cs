@@ -43,7 +43,7 @@ namespace Armada.Tui.Screens.Activity
                             "unsettled", estimate.UnsettledPercent.ToString("0.#", System.Globalization.CultureInfo.CurrentCulture) + "%")), doc.Theme.Muted);
                 }
                 if (view.ReservationUncertain) doc.Text(doc.Loc.T("usageSelection.reservations.uncertain"), doc.Theme.Muted);
-                doc.Field("Captains", String.Join(", ", view.CaptainIds));
+                doc.Field("Captains", String.Join(", ", view.CaptainIds.Select((id, index) => view.CaptainNames != null && index < view.CaptainNames.Count && !String.IsNullOrEmpty(view.CaptainNames[index]) ? view.CaptainNames[index] + " (" + id + ")" : id)));
                 if (view.CapabilityReason != null) doc.Field("Unsupported", view.CapabilityReason);
                 if (view.ErrorCode != null) doc.Field("Capture failed", view.ErrorCode);
             }

@@ -8,6 +8,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Show Armada dashboard status.
@@ -34,7 +35,7 @@ namespace Armada.Helm.Commands
 
             if (status == null)
             {
-                AnsiConsole.MarkupLine("[red]Unable to retrieve status.[/] Is the Admiral running? Try [green]armada server start[/].");
+                HelmConsole.Error.MarkupLine("[red]Unable to retrieve status.[/] Is the Admiral running? Try [green]armada server start[/].");
                 return 1;
             }
 

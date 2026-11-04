@@ -569,8 +569,8 @@ namespace Armada.Core.Client
         }
 
         /// <summary>
-        /// Create a mission. The server replies with the bare mission, or with <c>{ Mission, Warning }</c>
-        /// (<see cref="MissionCreateResponse"/>) when the mission stays Pending; both shapes return the created mission.
+        /// Create a mission. The server replies with the Mission; servers before v1.3.0 wrapped a mission that stayed
+        /// Pending as <c>{ Mission, Warning }</c> (<see cref="MissionCreateResponse"/>). Both shapes return the created mission.
         /// </summary>
         public async Task<Mission?> CreateMissionAsync(Mission mission, CancellationToken token = default)
         {
@@ -632,7 +632,7 @@ namespace Armada.Core.Client
             try
             {
                 HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/missions/" + id + "/diff", token).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
+                await EnsureSuccessAsync(response, token).ConfigureAwait(false);
                 return await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
             }
             catch
@@ -688,7 +688,7 @@ namespace Armada.Core.Client
         public async Task<string> GetBlackBoxBriefAsync(string entryId, CancellationToken token = default)
         {
             HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/blackbox/" + Uri.EscapeDataString(entryId) + "/brief", token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
             return await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
         }
 
@@ -701,7 +701,7 @@ namespace Armada.Core.Client
         public async Task<string> GetMissionBlackBoxBriefAsync(string missionId, CancellationToken token = default)
         {
             HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + "/api/v1/missions/" + Uri.EscapeDataString(missionId) + "/blackbox/brief", token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
             return await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
         }
 
@@ -1782,6 +1782,41 @@ namespace Armada.Core.Client
 
         #region Private-Methods
 
+        // A failed response becomes an HttpRequestException that keeps the status code and carries the server's own
+        // explanation (the error envelope's Message, plus Data.Code when present), never a raw JSON body.
+        private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken token)
+        {
+            if (response.IsSuccessStatusCode) return;
+            string body = response.Content == null ? "" : await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+            throw Failure(response, body);
+        }
+
+        private static HttpRequestException Failure(HttpResponseMessage response, string body)
+        {
+            int status = (int)response.StatusCode;
+            string reason = String.IsNullOrWhiteSpace(response.ReasonPhrase) ? response.StatusCode.ToString() : response.ReasonPhrase!;
+            string? message = null;
+            string? code = null;
+            if (!String.IsNullOrWhiteSpace(body) && body.TrimStart().StartsWith("{", StringComparison.Ordinal))
+            {
+                try
+                {
+                    ApiErrorEnvelope? envelope = JsonSerializer.Deserialize<ApiErrorEnvelope>(body, _JsonOptions);
+                    message = envelope?.Message;
+                    code = envelope?.Data?.Code;
+                }
+                catch (JsonException)
+                {
+                    message = null;
+                }
+            }
+            if (String.IsNullOrWhiteSpace(message))
+                message = !String.IsNullOrWhiteSpace(body) && body.Length <= 300 && !body.TrimStart().StartsWith("{", StringComparison.Ordinal) && !body.TrimStart().StartsWith("<", StringComparison.Ordinal)
+                    ? body.Trim() : reason + ".";
+            string suffix = " (HTTP " + status.ToString(System.Globalization.CultureInfo.InvariantCulture) + (String.IsNullOrWhiteSpace(code) ? "" : ", " + code) + ")";
+            return new HttpRequestException(message!.TrimEnd() + suffix, null, response.StatusCode);
+        }
+
         private async Task<List<T>> EnumerateAllAsync<T>(string path, CancellationToken token)
         {
             // Each request returns one page; read pages until the total is reached (a safety stop of 100 pages).
@@ -1800,7 +1835,7 @@ namespace Armada.Core.Client
         private async Task<T?> GetAsync<T>(string path, CancellationToken token) where T : class
         {
             HttpResponseMessage response = await _Client.GetAsync(_BaseUrl + path, token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
             return JsonSerializer.Deserialize<T>(json, _JsonOptions);
         }
@@ -1810,8 +1845,7 @@ namespace Armada.Core.Client
         {
             HttpResponseMessage response = await _Client.PostAsJsonAsync(_BaseUrl + path, body, _JsonOptions, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                throw new HttpRequestException(json.Length > 0 ? json : response.ReasonPhrase, null, response.StatusCode);
+            if (!response.IsSuccessStatusCode) throw Failure(response, json);
             return JsonSerializer.Deserialize<TResponse>(json, _JsonOptions);
         }
 
@@ -1819,8 +1853,7 @@ namespace Armada.Core.Client
         {
             HttpResponseMessage response = await _Client.PostAsJsonAsync(_BaseUrl + path, body, _JsonOptions, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                throw new HttpRequestException(json.Length > 0 ? json : response.ReasonPhrase, null, response.StatusCode);
+            if (!response.IsSuccessStatusCode) throw Failure(response, json);
             return json;
         }
 
@@ -1828,22 +1861,21 @@ namespace Armada.Core.Client
         {
             HttpResponseMessage response = await _Client.PostAsJsonAsync(_BaseUrl + path, body, _JsonOptions, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                throw new HttpRequestException(json.Length > 0 ? json : response.ReasonPhrase, null, response.StatusCode);
+            if (!response.IsSuccessStatusCode) throw Failure(response, json);
             return JsonSerializer.Deserialize<T>(json, _JsonOptions);
         }
 
         private async Task PostAsync(string path, CancellationToken token)
         {
             HttpResponseMessage response = await _Client.PostAsync(_BaseUrl + path, null, token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
         }
 
         private async Task<TResponse?> PutAsync<TResponse, TBody>(string path, TBody body, CancellationToken token)
             where TResponse : class
         {
             HttpResponseMessage response = await _Client.PutAsJsonAsync(_BaseUrl + path, body, _JsonOptions, token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
             return JsonSerializer.Deserialize<TResponse>(json, _JsonOptions);
         }
@@ -1851,7 +1883,7 @@ namespace Armada.Core.Client
         private async Task<T?> PutAsync<T>(string path, object body, CancellationToken token) where T : class
         {
             HttpResponseMessage response = await _Client.PutAsJsonAsync(_BaseUrl + path, body, _JsonOptions, token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
             string json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
             return JsonSerializer.Deserialize<T>(json, _JsonOptions);
         }
@@ -1859,7 +1891,7 @@ namespace Armada.Core.Client
         private async Task DeleteAsync(string path, CancellationToken token)
         {
             HttpResponseMessage response = await _Client.DeleteAsync(_BaseUrl + path, token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
         }
 
         #endregion

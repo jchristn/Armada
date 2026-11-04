@@ -27,6 +27,9 @@ namespace Armada.Core.Models
         /// <summary>CaptainIds: account usage contract.</summary>
         [CollectionBound(100)]
         public List<string> CaptainIds { get; set; } = new List<string>();
+        /// <summary>Display names of <see cref="CaptainIds"/>, in the same order; null for a captain that no longer exists. Latest view only.</summary>
+        [CollectionBound(100)]
+        public List<string?>? CaptainNames { get; set; }
         /// <summary>CapturedUtc: account usage contract.</summary>
         public DateTime CapturedUtc { get; set; }
         /// <summary>Status: account usage contract.</summary>

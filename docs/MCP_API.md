@@ -1094,7 +1094,7 @@ internal account keys are never accepted or returned.
 
 | Tool | Arguments | Purpose |
 |---|---|---|
-| `get_captain_selection` | `missionId` | Current admitted attempt, latest retained decision, recovery permissions and `canManageRecovery` |
+| `get_captain_selection` | `missionId` | Current admitted attempt, latest retained decision, recovery permissions and `CanManageRecovery` |
 | `get_captain_selection_history` | `missionId`, optional `query` (`pageNumber`, `pageSize`, `trigger`, `outcome`, `fromUtc`, `toUtc`) | Paged retained decisions; filters apply before counts |
 | `get_captain_selection_decision` | `decisionId`, optional `tenantId` (global administrators), `pageNumber`, `pageSize` | Immutable decision, recorded policy, candidate page and runtime model evidence |
 | `preview_captain_selection` | `missionId`, optional `pageNumber`, `pageSize` | Read-only evaluation of a Pending mission; no capture, write, claim or launch |

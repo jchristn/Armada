@@ -16,7 +16,7 @@ namespace Armada.Server.Routes
         private readonly CaptainSelectionAccessService _Service;
         private readonly JsonSerializerOptions _Options;
 
-        /// <summary>Create selection routes using the server's JSON contract.</summary>
+        /// <summary>Create selection routes. Request bodies bind case-insensitively; responses use the server-wide serializer.</summary>
         public CaptainSelectionRoutes(CaptainSelectionAccessService service, JsonSerializerOptions options)
         { _Service = service; _Options = options; }
 
@@ -72,18 +72,20 @@ namespace Armada.Server.Routes
                             _ => await _Service.DetailAsync(caller, id, tenant, page, size, context.Token).ConfigureAwait(false)
                         };
                     }
-                    catch (JsonException)
+                    catch (JsonException json)
                     {
                         // Empty, truncated or wrongly typed bodies are client errors, never a 500.
+                        JsonValueError described = JsonValueErrorTranslator.Describe(json);
                         context.Response.StatusCode = 400;
-                        payload = new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = kind == "recovery"
-                            ? "Request body must be JSON with expectedRevision (number), allowFallback and reserveException (true or false) and reason (text)."
-                            : "Request body must be valid JSON with numeric pageNumber and pageSize." };
+                        payload = new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Data = described, Message = described.Field != null ? described.Message
+                            : kind == "recovery" ? "Request body must be JSON with ExpectedRevision (number), AllowFallback and ReserveException (true or false) and Reason (text)."
+                            : "Request body must be valid JSON with numeric PageNumber and PageSize." };
                     }
                     catch (Exception error) when (RouteErrorMapper.IsMapped(error))
                     {
                         context.Response.StatusCode = RouteErrorMapper.StatusCodeFor(error, 409);
-                        payload = new ApiErrorResponse { Error = RouteErrorMapper.ResultFor(context.Response.StatusCode), Message = error.Message };
+                        payload = new ApiErrorResponse { Error = RouteErrorMapper.ResultFor(context.Response.StatusCode), Message = error.Message,
+                            Data = kind == "recovery" && context.Response.StatusCode == 409 ? new { Code = "RecoveryRevisionConflict" } : null };
                     }
                     catch (System.Data.Common.DbException)
                     {
@@ -92,7 +94,8 @@ namespace Armada.Server.Routes
                     }
                 }
                 context.Response.ContentType = "application/json";
-                await context.Response.Send(JsonSerializer.Serialize(payload, _Options)).ConfigureAwait(false);
+                // The server-wide serializer gives these routes the same PascalCase bodies and error envelope as every other route.
+                await context.Response.Send(app.Serializer.SerializeJson(payload, false)).ConfigureAwait(false);
             }, openApiMetadata: Metadata(path, kind, method));
         }
 

@@ -28,6 +28,9 @@ namespace Armada.Server.Routes
     /// </summary>
     public class MissionRoutes
     {
+        /// <summary>Response header on a created mission no captain could take yet; the body is still the Mission.</summary>
+        public const string MissionWaitingHeader = "X-Armada-Warning";
+
         private readonly DatabaseDriver _database;
         private readonly IAdmiralService _admiral;
         private readonly IMissionService _missionService;
@@ -383,20 +386,16 @@ namespace Armada.Server.Routes
                 }
                 mission = await _admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 201;
+                // Always the documented Mission body. The mission is saved even when no captain can take it yet, so this
+                // stays a 2xx (an error would invite a duplicate retry); the header and the Pending status say it waits.
                 if (mission.Status == MissionStatusEnum.Pending)
-                {
-                    return (object)new
-                    {
-                        Mission = mission,
-                        Warning = "Mission created but could not be assigned to any captain. It will be retried on the next health check cycle."
-                    };
-                }
+                    req.Http.Response.Headers.Add(MissionWaitingHeader, UsageSelectionText.Get("usageSelection.missionWaiting"));
                 return mission;
             },
             api => api
                 .WithTag("Missions")
                 .WithSummary("Create a mission")
-                .WithDescription("Creates and dispatches a new mission. If a vesselId is provided, the Admiral will assign a captain and set up a worktree.")
+                .WithDescription("Creates and dispatches a new mission and always returns 201 with the Mission. If a vesselId is provided, the Admiral assigns a captain and sets up a worktree. A mission no captain can take yet stays Pending, is retried automatically and carries an X-Armada-Warning header; GET /api/v1/missions/{id}/captain-selection explains a captain-selection wait.")
                 .WithRequestBody(OpenApiJson.BodyFor<Mission>("Mission data", true))
                 .WithResponse(201, OpenApiJson.For<Mission>("Created mission"))
                 .WithSecurity("ApiKey"));

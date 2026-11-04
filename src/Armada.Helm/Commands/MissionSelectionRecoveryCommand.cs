@@ -8,6 +8,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Spectre.Console;
     using Spectre.Console.Cli;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Set the audited fallback and soft-reserve permissions for a Pending mission. Each change is an immutable revision;
@@ -31,7 +32,7 @@ namespace Armada.Helm.Commands
                 if (summary == null) return 1;
                 if (!summary.CanManageRecovery)
                 {
-                    AnsiConsole.MarkupLine("[red]Recovery permissions require a tenant or system administrator and a Pending mission.[/]");
+                    HelmConsole.Error.MarkupLine("[red]Recovery permissions require a tenant or system administrator and a Pending mission.[/]");
                     return 1;
                 }
 

@@ -4,6 +4,7 @@ namespace Armada.Helm.Commands
     using Spectre.Console;
     using Spectre.Console.Cli;
     using Armada.Core.Models;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Reorders a backlog item by rank.
@@ -38,7 +39,7 @@ namespace Armada.Helm.Commands
         {
             if (!settings.Rank.HasValue)
             {
-                AnsiConsole.MarkupLine("[red]A target rank is required.[/] Pass [green]--rank <number>[/].");
+                HelmConsole.Error.MarkupLine("[red]A target rank is required.[/] Pass [green]--rank <number>[/].");
                 return 1;
             }
 
@@ -46,7 +47,7 @@ namespace Armada.Helm.Commands
             Objective? objective = await BacklogCommandSupport.ResolveBacklogItemAsync(GetApiClient(), settings.Backlog, cancellationToken).ConfigureAwait(false);
             if (objective == null)
             {
-                AnsiConsole.MarkupLine("[red]Backlog item not found:[/] " + Markup.Escape(settings.Backlog));
+                HelmConsole.Error.MarkupLine("[red]Backlog item not found:[/] " + Markup.Escape(settings.Backlog));
                 return 1;
             }
 
@@ -67,7 +68,7 @@ namespace Armada.Helm.Commands
                 : null;
             if (refreshed == null)
             {
-                AnsiConsole.MarkupLine("[red]Backlog reorder failed.[/]");
+                HelmConsole.Error.MarkupLine("[red]Backlog reorder failed.[/]");
                 return 1;
             }
 

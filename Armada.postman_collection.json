@@ -19169,7 +19169,7 @@
                                 "captain-selection"
                             ]
                         },
-                        "description": "Current attempt and latest retained decision for an authorized mission. A visible legacy mission returns historyAvailable=false. Reuse a peer or foreign-tenant bearer token with selectionExpectedStatus=404 to verify non-enumerating denial."
+                        "description": "Current attempt and latest retained decision for an authorized mission. A visible legacy mission returns HistoryAvailable=false. Reuse a peer or foreign-tenant bearer token with selectionExpectedStatus=404 to verify non-enumerating denial."
                     },
                     "event": [
                         {
@@ -19180,7 +19180,7 @@
                                     "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
                                     "const body = pm.response.json();",
                                     "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
-                                    "if (pm.response.code === 200 && body.latestDecision) pm.collectionVariables.set(\"selectionDecisionId\", body.latestDecision.id);"
+                                    "if (pm.response.code === 200 && body.LatestDecision) pm.collectionVariables.set(\"selectionDecisionId\", body.LatestDecision.Id);"
                                 ]
                             }
                         }
@@ -19231,7 +19231,7 @@
                                     "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
                                     "const body = pm.response.json();",
                                     "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
-                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.objects).to.be.an(\"array\"); pm.expect(body.objects.length).to.be.at.most(body.pageSize); pm.expect(body.pageSize).to.be.at.most(1000); } });"
+                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.Objects).to.be.an(\"array\"); pm.expect(body.Objects.length).to.be.at.most(body.PageSize); pm.expect(body.PageSize).to.be.at.most(1000); } });"
                                 ]
                             }
                         }
@@ -19265,7 +19265,7 @@
                         "description": "",
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"pageNumber\": 1,\n  \"pageSize\": 25,\n  \"outcome\": \"Waiting\"\n}",
+                            "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25,\n  \"Outcome\": \"Waiting\"\n}",
                             "options": {
                                 "raw": {
                                     "language": "json"
@@ -19282,7 +19282,7 @@
                                     "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
                                     "const body = pm.response.json();",
                                     "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
-                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.objects).to.be.an(\"array\"); pm.expect(body.objects.length).to.be.at.most(body.pageSize); pm.expect(body.pageSize).to.be.at.most(1000); } });"
+                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.Objects).to.be.an(\"array\"); pm.expect(body.Objects.length).to.be.at.most(body.PageSize); pm.expect(body.PageSize).to.be.at.most(1000); } });"
                                 ]
                             }
                         }
@@ -19370,7 +19370,7 @@
                                     "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
                                     "const body = pm.response.json();",
                                     "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
-                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.objects).to.be.an(\"array\"); pm.expect(body.objects.length).to.be.at.most(body.pageSize); pm.expect(body.pageSize).to.be.at.most(1000); } });"
+                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.Objects).to.be.an(\"array\"); pm.expect(body.Objects.length).to.be.at.most(body.PageSize); pm.expect(body.PageSize).to.be.at.most(1000); } });"
                                 ]
                             }
                         }
@@ -19403,7 +19403,7 @@
                         "description": "",
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"pageNumber\": 1,\n  \"pageSize\": 25\n}",
+                            "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 25\n}",
                             "options": {
                                 "raw": {
                                     "language": "json"
@@ -19420,7 +19420,7 @@
                                     "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
                                     "const body = pm.response.json();",
                                     "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
-                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.objects).to.be.an(\"array\"); pm.expect(body.objects.length).to.be.at.most(body.pageSize); pm.expect(body.pageSize).to.be.at.most(1000); } });"
+                                    "pm.test(\"Bounded page\", () => { if (pm.response.code === 200) { pm.expect(body.Objects).to.be.an(\"array\"); pm.expect(body.Objects.length).to.be.at.most(body.PageSize); pm.expect(body.PageSize).to.be.at.most(1000); } });"
                                 ]
                             }
                         }
@@ -19470,7 +19470,7 @@
                                     "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
                                     "const body = pm.response.json();",
                                     "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
-                                    "pm.test(\"Preview is explicitly non-admitting\", () => { if (pm.response.code === 200) pm.expect(body.isPreview).to.equal(true); });"
+                                    "pm.test(\"Preview is explicitly non-admitting\", () => { if (pm.response.code === 200) pm.expect(body.IsPreview).to.equal(true); });"
                                 ]
                             }
                         }
@@ -19503,7 +19503,7 @@
                         "description": "Requires an authenticated tenant/system administrator with a user identity. Applies only to a Pending mission. expectedRevision rejects stale editors (409). Both permissions default false. Strict assignments, exhausted quota, cooldown, scope and capacity remain enforced. Read Selection Summary for the current revision before editing. To test denial, use a viewer token and selectionExpectedStatus=403; a foreign administrator receives 404.",
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"expectedRevision\": {{selectionRecoveryRevision}},\n  \"allowFallback\": false,\n  \"reserveException\": false,\n  \"reason\": \"Revoke temporary recovery permissions after operator validation\"\n}",
+                            "raw": "{\n  \"ExpectedRevision\": {{selectionRecoveryRevision}},\n  \"AllowFallback\": false,\n  \"ReserveException\": false,\n  \"Reason\": \"Revoke temporary recovery permissions after operator validation\"\n}",
                             "options": {
                                 "raw": {
                                     "language": "json"
@@ -19520,8 +19520,8 @@
                                     "pm.test(\"Expected status\", () => pm.response.to.have.status(Number(pm.collectionVariables.get(\"selectionExpectedStatus\") || 200)));",
                                     "const body = pm.response.json();",
                                     "pm.test(\"No internal account key or raw capture\", () => { const raw = pm.response.text(); pm.expect(raw).not.to.match(/\"(?:accountKey|captureContextKey|rawExcerpt)\"\\s*:/i); });",
-                                    "if (pm.response.code === 200 && body.latestDecision) pm.collectionVariables.set(\"selectionDecisionId\", body.latestDecision.id);",
-                                    "if (pm.response.code === 200) { pm.test(\"Audited revision and identity\", () => { pm.expect(body.revision).to.be.above(0); pm.expect(body.actorUserId).to.be.a(\"string\").and.not.empty; pm.expect(body.reason).to.be.a(\"string\").and.not.empty; }); pm.collectionVariables.set(\"selectionRecoveryRevision\", String(body.revision)); }"
+                                    "if (pm.response.code === 200 && body.LatestDecision) pm.collectionVariables.set(\"selectionDecisionId\", body.LatestDecision.Id);",
+                                    "if (pm.response.code === 200) { pm.test(\"Audited revision and identity\", () => { pm.expect(body.Revision).to.be.above(0); pm.expect(body.ActorUserId).to.be.a(\"string\").and.not.empty; pm.expect(body.Reason).to.be.a(\"string\").and.not.empty; }); pm.collectionVariables.set(\"selectionRecoveryRevision\", String(body.Revision)); }"
                                 ]
                             }
                         }

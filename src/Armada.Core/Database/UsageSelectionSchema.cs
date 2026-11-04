@@ -27,6 +27,37 @@ namespace Armada.Core.Database
             return new SchemaMigration(128, "Record captain assignment time for usage selection fairness", add, backfill) { AlreadyAppliedCheckSql = check };
         }
 
+        internal static SchemaMigration TenantTimestampMigration(DatabaseTypeEnum provider)
+        {
+            // SQLite seeded the default tenant with datetime('now'): UTC text without a zone, which older readers took as local
+            // time. Store it in the same zone-qualified UTC form as every other row. Other providers stored real UTC values.
+            if (provider != DatabaseTypeEnum.Sqlite)
+                return new SchemaMigration(130, "Store tenant timestamps as zone-qualified UTC", "UPDATE tenants SET created_utc=created_utc WHERE 1=0;");
+            return new SchemaMigration(130, "Store tenant timestamps as zone-qualified UTC",
+                "UPDATE tenants SET created_utc=strftime('%Y-%m-%dT%H:%M:%fZ', created_utc) WHERE created_utc NOT LIKE '%Z' AND created_utc NOT LIKE '%+%' AND strftime('%s', created_utc) IS NOT NULL;",
+                "UPDATE tenants SET last_update_utc=strftime('%Y-%m-%dT%H:%M:%fZ', last_update_utc) WHERE last_update_utc NOT LIKE '%Z' AND last_update_utc NOT LIKE '%+%' AND strftime('%s', last_update_utc) IS NOT NULL;");
+        }
+
+        internal static SchemaMigration OmittedCandidatesMigration(DatabaseTypeEnum provider)
+        {
+            bool sqlServer = provider == DatabaseTypeEnum.SqlServer;
+            bool mysql = provider == DatabaseTypeEnum.Mysql;
+            // Per-owner reason counts for evaluated candidates a decision does not store as individual rows.
+            string table = (sqlServer ? "IF OBJECT_ID('captain_selection_omitted_candidates','U') IS NULL CREATE TABLE " : "CREATE TABLE IF NOT EXISTS ")
+                + @"captain_selection_omitted_candidates(id VARCHAR(64) NOT NULL PRIMARY KEY,tenant_id VARCHAR(64) NOT NULL,user_id VARCHAR(64) NULL,
+                created_utc VARCHAR(40) NOT NULL,last_update_utc VARCHAR(40) NOT NULL,active INTEGER NOT NULL,
+                decision_id VARCHAR(64) NOT NULL,reason_code VARCHAR(512) NOT NULL,candidate_count INTEGER NOT NULL,
+                UNIQUE(tenant_id,id),
+                FOREIGN KEY(tenant_id,decision_id) REFERENCES captain_selection_decisions(tenant_id,id) ON DELETE CASCADE"
+                + (mysql ? ", INDEX ix_selection_omitted(tenant_id,decision_id,id)" : "") + ");";
+            if (sqlServer) table = table.Replace("VARCHAR(", "NVARCHAR(", StringComparison.Ordinal);
+            List<string> statements = new List<string> { table };
+            if (!mysql)
+                statements.Add((sqlServer ? "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='ix_selection_omitted' AND object_id=OBJECT_ID('captain_selection_omitted_candidates')) " : "")
+                    + "CREATE INDEX " + (sqlServer ? "" : "IF NOT EXISTS ") + "ix_selection_omitted ON captain_selection_omitted_candidates(tenant_id,decision_id,id);");
+            return new SchemaMigration(129, "Count unstored captain selection candidates by reason", statements.ToArray());
+        }
+
         internal static SchemaMigration RecoveryMigration(DatabaseTypeEnum provider)
         {
             bool sqlServer = provider == DatabaseTypeEnum.SqlServer;

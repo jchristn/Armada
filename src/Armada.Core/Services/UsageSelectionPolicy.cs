@@ -114,6 +114,13 @@ namespace Armada.Core.Services
             if (gate != null)
             {
                 DateTime? next = gate == UsageSelectionReasonCodes.AccountCooldown ? candidate.CooldownUntilUtc : null;
+                // Show the account's headroom even when a routing or capacity gate blocks the captain, so an operator can
+                // tell whether allowing fallback would help. Display only: a blocked candidate is never compared or chosen.
+                if (EvidenceGate(candidate, settings, nowUtc) == null)
+                {
+                    UsageSelectionWindowSummary display = SummarizeWindows(candidate, nowUtc);
+                    if (!display.Unknown && !display.Exhausted) result.AvailablePercent = display.Available;
+                }
                 return Block(result, gate, next);
             }
 

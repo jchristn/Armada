@@ -56,14 +56,17 @@ export function upsertById<T extends { id: string }>(items: T[], item: T): T[] {
 }
 
 /** The mission (and any warning) from a dispatch response, which may wrap it as { mission, warning }. */
-export function normalizeMissionResponse(value: unknown): { mission: Mission | null; warning?: string } {
+export function normalizeMissionResponse(value: unknown, waitingWarning?: string): { mission: Mission | null; warning?: string } {
+  // Servers before v1.3.0 wrapped a mission no captain could take yet as { Mission, Warning }; current servers return
+  // the Mission itself, left Pending.
   const maybeWrapped = value as { mission?: Mission; warning?: string } | null;
   if (maybeWrapped?.mission?.id) {
-    return { mission: maybeWrapped.mission, warning: maybeWrapped.warning };
+    return { mission: maybeWrapped.mission, warning: waitingWarning ?? maybeWrapped.warning };
   }
 
   const maybeMission = value as Mission | null;
-  return maybeMission?.id ? { mission: maybeMission } : { mission: null };
+  if (!maybeMission?.id) return { mission: null };
+  return maybeMission.status === 'Pending' && waitingWarning ? { mission: maybeMission, warning: waitingWarning } : { mission: maybeMission };
 }
 
 /** The first 12 characters of an id, or '-'. */

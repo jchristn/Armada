@@ -25,7 +25,21 @@ namespace Test.Shared.Infrastructure
         /// </summary>
         /// <param name="args">Arguments.</param>
         /// <returns>The run.</returns>
-        public static async Task<HelmCliRun> RunCapturedAsync(params string[] args)
+        public static Task<HelmCliRun> RunCapturedAsync(params string[] args) => RunAsync(false, args);
+
+        /// <summary>
+        /// Run the CLI and capture its output, rendering command failures through <see cref="HelmErrorHandler"/> the way the
+        /// shipped CLI does (stderr, non-zero exit) instead of propagating them to the test.
+        /// </summary>
+        /// <param name="args">Arguments.</param>
+        /// <returns>The run.</returns>
+        public static Task<HelmCliRun> RunHandledAsync(params string[] args) => RunAsync(true, args);
+
+        #endregion
+
+        #region Private-Methods
+
+        private static async Task<HelmCliRun> RunAsync(bool handleFailures, string[] args)
         {
             string[] names = new[] { AdmiralTargetResolver.ServerUrlEnvironmentVariable, AdmiralTargetResolver.LegacyServerUrlEnvironmentVariable, AdmiralTargetResolver.TokenEnvironmentVariable };
             Dictionary<string, string?> saved = new Dictionary<string, string?>();
@@ -68,6 +82,10 @@ namespace Test.Shared.Infrastructure
                     // Parse errors (strict parsing, unknown commands) go through the production handler so the
                     // captured run matches what a user sees; command failures still propagate to the test.
                     exit = HelmErrorHandler.Handle(parse, Console.Error);
+                }
+                catch (Exception failure) when (handleFailures)
+                {
+                    exit = HelmErrorHandler.Handle(failure, Console.Error);
                 }
 
                 HelmCliRun run = new HelmCliRun();

@@ -74,6 +74,40 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(0, (await database.Driver.CaptainSelections.ReadWindowsAsync("tenant-b", records.Decision.Id, records.Candidates[0].Id, token: token).ConfigureAwait(false)).Count);
                 AssertEqual(0, (await database.Driver.CaptainSelections.ReadWindowsAsync("tenant-a", records.Decision.Id, records.Candidates[0].Id, "owner", "other", token).ConfigureAwait(false)).Count);
             });
+            Add("omitted_candidate_counts_roundtrip_scope_retention_and_validation", async token =>
+            {
+                using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                CaptainSelectionRecordSet records = Records();
+                void Omit(string owner, string reason, int count)
+                {
+                    records.OmittedCandidates.Add(new CaptainSelectionOmittedCandidates { TenantId = "tenant-a", UserId = owner, DecisionId = records.Decision.Id, ReasonCode = reason, CandidateCount = count });
+                    records.Decision.CandidateCount += count;
+                }
+                Omit("owner", "BelowReserve", 600); Omit("owner", "UsageStale", 200); Omit("other", "BelowReserve", 199);
+                await database.Driver.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
+                List<CaptainSelectionOmittedReason> all = await database.Driver.CaptainSelections.ReadOmittedCandidatesAsync("tenant-a", records.Decision.Id, token: token).ConfigureAwait(false);
+                AssertEqual(2, all.Count); AssertEqual("BelowReserve", all[0].ReasonCode); AssertEqual(799, all[0].Count); AssertEqual(200, all[1].Count);
+                List<CaptainSelectionOmittedReason> scoped = await database.Driver.CaptainSelections.ReadOmittedCandidatesAsync("tenant-a", records.Decision.Id, "owner", "owner", token).ConfigureAwait(false);
+                AssertEqual(600, scoped.Single(r => r.ReasonCode == "BelowReserve").Count, "a hidden peer's captains are not counted for a scoped reader");
+                AssertEqual(0, (await database.Driver.CaptainSelections.ReadOmittedCandidatesAsync("tenant-b", records.Decision.Id, token: token).ConfigureAwait(false)).Count);
+                AssertEqual(0, (await database.Driver.CaptainSelections.ReadOmittedCandidatesAsync("tenant-a", records.Decision.Id, "other", token: token).ConfigureAwait(false)).Count);
+                AssertEqual(1000, (await database.Driver.CaptainSelections.ReadDecisionAsync("tenant-a", records.Decision.Id, token: token).ConfigureAwait(false))!.CandidateCount);
+
+                CaptainSelectionRecordSet mismatched = Records();
+                mismatched.OmittedCandidates.Add(new CaptainSelectionOmittedCandidates { TenantId = "tenant-a", UserId = "owner", DecisionId = mismatched.Decision.Id, ReasonCode = "BelowReserve", CandidateCount = 5 });
+                await AssertThrowsAsync<ArgumentException>(() => database.Driver.CaptainSelections.CreateDecisionAsync(mismatched, token)).ConfigureAwait(false);
+                mismatched.OmittedCandidates[0].CandidateCount = 0;
+                await AssertThrowsAsync<ArgumentException>(() => database.Driver.CaptainSelections.CreateDecisionAsync(mismatched, token)).ConfigureAwait(false);
+
+                CaptainSelectionRecordSet expired = Records(); expired.Decision.EvaluatedUtc = DateTime.UtcNow.AddDays(-100);
+                expired.OmittedCandidates.Add(new CaptainSelectionOmittedCandidates { TenantId = "tenant-a", UserId = "owner", DecisionId = expired.Decision.Id, ReasonCode = "BelowReserve", CandidateCount = 3 });
+                expired.Decision.CandidateCount += 3;
+                await database.Driver.CaptainSelections.CreateDecisionAsync(expired, token).ConfigureAwait(false);
+                AssertEqual(1, await database.Driver.CaptainSelections.DeleteExpiredAsync(DateTime.UtcNow.AddDays(-90), 10, token).ConfigureAwait(false));
+                AssertEqual(0, (await database.Driver.CaptainSelections.ReadOmittedCandidatesAsync("tenant-a", expired.Decision.Id, token: token).ConfigureAwait(false)).Count);
+                await database.Driver.CaptainSelections.DeleteByTenantAsync("tenant-a", token).ConfigureAwait(false);
+                AssertEqual(0, (await database.Driver.CaptainSelections.ReadOmittedCandidatesAsync("tenant-a", records.Decision.Id, token: token).ConfigureAwait(false)).Count);
+            });
             Add("window_evidence_survives_absent_source_and_preserves_nulls", async token =>
             {
                 using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -411,6 +445,76 @@ namespace Test.Shared.Suites.Database
                 await Capture(stamped.AddSeconds(5), stamped.AddSeconds(5).AddMilliseconds(600)).ConfigureAwait(false);
                 AssertEqual(1, await reconciler.ReconcileAsync(stamped.AddSeconds(7), token: token).ConfigureAwait(false), "a whole-second stamp within its probe second settles");
                 AssertEqual(0, (await database.Driver.CaptainSelections.ReadReservationsAsync(tenant.Id, "host", "ClaudeCode", "account", token).ConfigureAwait(false)).Count);
+            });
+            Add("redispatch_carries_its_earlier_no_work_reservation", async token =>
+            {
+                using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                await database.Driver.UsageMemberships.CreateAsync(new UsageAccountMembership { TenantId = "tenant-a", CaptainId = "visible",
+                    HostId = "host", Runtime = AgentRuntimeEnum.ClaudeCode, AccountKey = "account" }, token).ConfigureAwait(false);
+                CaptainSelectionRecordSet first = Records(reserve: true);
+                await database.Driver.CaptainSelections.CreateDecisionAsync(first, token).ConfigureAwait(false);
+                AssertEqual(2.0, (await database.Driver.CaptainSelections.ReadBudgetTotalsAsync("tenant-a", new[] { "visible" }, token).ConfigureAwait(false)).Sum(t => t.ActivePercent));
+                AssertEqual(0.0, (await database.Driver.CaptainSelections.ReadBudgetTotalsAsync("tenant-a", new[] { "visible" }, token, first.Decision.ExecutionAttemptId).ConfigureAwait(false)).Sum(t => t.ActivePercent),
+                    "the retry does not count its own earlier attempt against itself");
+
+                CaptainSelectionRecordSet retry = Records(reserve: true);
+                retry.Decision.Trigger = CaptainSelectionTriggers.Redispatch; retry.Reservations[0].ReservedPercent = 1;
+                retry.AdmissionCarriedAttemptId = first.Decision.ExecutionAttemptId;
+                await database.Driver.CaptainSelections.CreateDecisionAsync(retry, token).ConfigureAwait(false);
+                List<UsageBudgetReservation> open = await database.Driver.CaptainSelections.ReadReservationsAsync("tenant-a", "host", "ClaudeCode", "account", token).ConfigureAwait(false);
+                AssertEqual(1, open.Count, "one reservation, not two");
+                AssertEqual(retry.Decision.ExecutionAttemptId, open[0].ExecutionAttemptId);
+                AssertEqual(2.0, open[0].ReservedPercent, "the carried amount is kept when it is larger");
+                AssertEqual(2.0, (await database.Driver.CaptainSelections.ReadBudgetTotalsAsync("tenant-a", new[] { "visible" }, token).ConfigureAwait(false)).Sum(t => t.ActivePercent));
+
+                CaptainSelectionRecordSet elsewhere = Records(reserve: true);
+                elsewhere.Reservations[0].AccountKey = "other-account";
+                elsewhere.AdmissionCarriedAttemptId = retry.Decision.ExecutionAttemptId;
+                await database.Driver.CaptainSelections.CreateDecisionAsync(elsewhere, token).ConfigureAwait(false);
+                AssertEqual(1, (await database.Driver.CaptainSelections.ReadReservationsAsync("tenant-a", "host", "ClaudeCode", "account", token).ConfigureAwait(false)).Count,
+                    "a retry on another account leaves the earlier reservation in place");
+            });
+            Add("deleted_captain_reservation_settles_from_fresh_account_capture", async token =>
+            {
+                using TestDatabase database = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                TenantMetadata tenant = await database.Driver.Tenants.CreateAsync(new TenantMetadata("selection-deleted"), token).ConfigureAwait(false);
+                UserMaster owner = await database.Driver.Users.CreateAsync(new UserMaster(tenant.Id, "deleted@example.invalid", "fixture-password"), token).ConfigureAwait(false);
+                Captain captain = await database.Driver.Captains.CreateAsync(new Captain("selection-deleted") { TenantId = tenant.Id, UserId = owner.Id, Runtime = AgentRuntimeEnum.ClaudeCode }, token).ConfigureAwait(false);
+                string revision = UsageAccountResolver.ConfigurationRevision("host", captain.Runtime, null);
+                UsageAccountMembership member = await database.Driver.UsageMemberships.CreateAsync(new UsageAccountMembership { TenantId = tenant.Id, CaptainId = captain.Id,
+                    HostId = "host", Runtime = captain.Runtime, AccountKey = "account", ConfigurationRevision = revision }, token).ConfigureAwait(false);
+                UsageWindow window = new UsageWindow { Name = "five-hour", UsedPercent = 40 };
+                CaptainSelectionRecordSet records = Records(reserve: true, tenantId: tenant.Id, ownerId: owner.Id);
+                records.Candidates[0].CaptainId = captain.Id;
+                records.Reservations[0].CaptainId = captain.Id; records.Reservations[0].MembershipId = member.Id;
+                records.Reservations[0].WindowKey = UsageBudgetIdentity.WindowKey(window);
+                records.Reservations[0].Generation = UsageBudgetIdentity.ContinuousGeneration;
+                await database.Driver.CaptainSelections.CreateDecisionAsync(records, token).ConfigureAwait(false);
+                DateTime now = DateTime.UtcNow.AddSeconds(1);
+                UsageSelectionReservationReconciler reconciler = new UsageSelectionReservationReconciler(database.Driver);
+                AssertEqual(1, await reconciler.ReconcileAsync(now, token: token).ConfigureAwait(false), "stopped attempt becomes unsettled");
+                await database.Driver.Captains.DeleteAsync(tenant.Id, captain.Id, token).ConfigureAwait(false);
+                AssertNull(await database.Driver.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false));
+
+                DateTime after = now.AddSeconds(records.Policy.SettlementLagSeconds + 5);
+                UsageSnapshot snapshot = new UsageSnapshot { TenantId = tenant.Id, HostId = "host", Runtime = captain.Runtime, AccountKey = "account",
+                    Source = UsageCaptureSourceEnum.Pty, Status = UsageSnapshotStatusEnum.Ok, CapturedUtc = after, ReceivedUtc = after.AddMilliseconds(50),
+                    ProbeStartedUtc = after, WindowsJson = UsageWindowsJson.Serialize(new List<UsageWindow> { window }) };
+                await database.Driver.UsageSnapshots.CreateAsync(snapshot, new List<string>(), token).ConfigureAwait(false);
+                await database.Driver.UsageSnapshots.UpsertLatestStateAsync(new UsageLatestState { TenantId = tenant.Id, HostId = "host", Runtime = captain.Runtime,
+                    AccountKey = "account", LastGoodSnapshotId = snapshot.Id, LastGoodCapturedUtc = after, LastGoodReceivedUtc = snapshot.ReceivedUtc,
+                    LastGoodStatus = UsageSnapshotStatusEnum.Ok, LastGoodWindowsJson = snapshot.WindowsJson }, token).ConfigureAwait(false);
+                AssertEqual(1, await reconciler.ReconcileAsync(after.AddSeconds(2), token: token).ConfigureAwait(false), "a fresh capture of the same account settles a deleted captain's debt");
+                AssertEqual(0, (await database.Driver.CaptainSelections.ReadReservationsAsync(tenant.Id, "host", "ClaudeCode", "account", token).ConfigureAwait(false)).Count);
+            });
+            Add("zone_less_sqlite_timestamps_read_as_utc", token =>
+            {
+                // SQLite's datetime('now') stores UTC without a zone; reading it as host-local time shifted the default tenant (UT-015).
+                DateTime parsed = Armada.Core.Database.Sqlite.SqliteDatabaseDriver.FromIso8601("2026-11-04 16:50:46");
+                AssertEqual(DateTimeKind.Utc, parsed.Kind);
+                AssertEqual(new DateTime(2026, 11, 4, 16, 50, 46, DateTimeKind.Utc), parsed);
+                AssertEqual(new DateTime(2026, 11, 4, 16, 50, 46, DateTimeKind.Utc), Armada.Core.Database.Sqlite.SqliteDatabaseDriver.FromIso8601("2026-11-04T16:50:46.0000000Z"));
+                return Task.CompletedTask;
             });
             Add("load_reconciler_and_retention_cover_large_ledgers_in_bounded_passes", async token =>
             {

@@ -70,6 +70,16 @@ it('separates intended/reported models, keeps deleted captains unlinked and page
   await waitFor(() => expect(api.getCaptainSelectionCandidates).toHaveBeenCalledWith('csd_one', 'tenant', 2, 10, expect.any(AbortSignal)));
   expect(open).not.toHaveBeenCalled();
 });
+it('counts unlisted candidates by reason after the listed comparison rows', async () => {
+  api.getCaptainSelectionDecision.mockResolvedValue({ decision, policy: { mode: 'Enforce', strategy: 'MostRemainingAllowance', reservePercent: 10, perAttemptReservationPercent: 2 } as never,
+    candidates: rows, executionEvents: page([]), omittedCandidates: [{ reasonCode: 'BelowReserve', count: 812 }, { reasonCode: 'UsageStale', count: 187 }] });
+  await renderScreen(<CaptainSelectionSection missionId="msn_one" status="InProgress" onOpen={open} />);
+  await screen.findByText('runtime-model');
+  await fireEvent.press(screen.getByRole('button', { name: 'Compare captains' }));
+  expect(await screen.findByText('Other captains considered but not listed: 999')).toBeOnTheScreen();
+  expect(screen.getByText('Remaining allowance would cross the protected reserve.')).toBeOnTheScreen();
+  expect(screen.getByText('812')).toBeOnTheScreen();
+});
 it('filters history on the server and opens a retained decision', async () => {
   await renderScreen(<CaptainSelectionSection missionId="msn_one" status="Pending" onOpen={open} />);
   await screen.findByText('runtime-model');

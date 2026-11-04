@@ -139,8 +139,8 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 5), "handoff");
                     AssertEqual("msn_wait1", screen.DispatchedMission?.Id, "mission id read from the wrapped reply");
-                    AssertEqual("Mission created but could not be assigned to any captain.", screen.DispatchWarning, "warning kept");
-                    AssertTrue(host.WaitForText("could not be assigned to any captain"), "warning shown\n" + host.Screen());
+                    AssertEqual(Armada.Core.Services.UsageSelectionText.Get("usageSelection.missionWaiting"), screen.DispatchWarning, "a Pending mission shows the shared waiting message");
+                    AssertTrue(host.WaitForText("not assigned to a captain yet"), "warning shown\n" + host.Screen());
                     TuiCase.Contains(host.Screen(), "msn_wait1", "mission id shown");
                 }
             }));
@@ -296,7 +296,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
 
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 5), "dispatched");
-                    AssertTrue(host.WaitForText("could not be assigned"), "dispatch warning shown");
+                    AssertTrue(host.WaitForText("not assigned to a captain yet"), "dispatch warning shown");
                     AssertEqual(SetupWizardResultKindEnum.Info, screen.ResultKind, "info result");
                     AssertEqual("msn_wrapped", screen.DispatchedMission!.Id, "wrapped mission parsed");
                     AssertTrue(host.WaitForText("Open Workflow Profiles"), "profiles exist");

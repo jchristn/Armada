@@ -547,7 +547,7 @@ export default function SetupWizard({ onClose, onHighlightChange }: SetupWizardP
         description: dispatchForm.description.trim(),
         priority: dispatchForm.priority,
       });
-      const normalized = normalizeMissionResponse(response);
+      const normalized = normalizeMissionResponse(response, t('usageSelection.missionWaiting'));
       if (!normalized.mission) {
         setResult({ kind: 'error', message: t('Dispatch succeeded but no mission was returned.') });
         return;

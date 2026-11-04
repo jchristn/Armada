@@ -7583,6 +7583,12 @@
         "Captain Selection": "Selección de capitanes",
         "usageSelection.reason.routed": "Elegido por el orden de enrutamiento existente; Observar no cambia el enrutamiento.",
         "usageSelection.reason.fallback": "Un permiso de recuperación de un administrador permitió usar otro capitán en lugar del preferido.",
+        "usageSelection.redispatch": "Reintento automático",
+        "usageSelection.redispatchHint": "Armada volvió a despachar esta misión por sí misma tras un intento que no produjo trabajo o se interrumpió.",
+        "Server configuration and backups require a global administrator. Health is shown below.": "La configuración del servidor y las copias de seguridad requieren un administrador global. El estado se muestra a continuación.",
+        "usageSelection.missionWaiting": "Misión creada pero aún sin capitán asignado. Armada reintenta automáticamente; la sección Selección de capitanes de la misión explica cualquier espera.",
+        "usageSelection.omitted": "Otros capitanes evaluados pero no listados: {{count}}",
+        "usageSelection.omittedHint": "El historial lista los capitanes que explican una decisión y cuenta el resto por motivo. La vista previa muestra ahora todos los capitanes.",
         "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Cuando la captura automática no puede leer el uso, Armada puede abrir brevemente la CLI y leer su pantalla de uso."
       },
       "sections": {
@@ -14114,6 +14120,12 @@
         "Captain Selection": "舰长选择",
         "usageSelection.reason.routed": "由现有路由顺序选择；观察模式不会改变路由。",
         "usageSelection.reason.fallback": "管理员的恢复权限允许从首选舰长回退到其他舰长。",
+        "usageSelection.redispatch": "自动重试",
+        "usageSelection.redispatchHint": "此前的尝试未产生工作或被中断后，Armada 自动再次派发了此任务。",
+        "Server configuration and backups require a global administrator. Health is shown below.": "服务器配置和备份需要全局管理员。下方显示健康状态。",
+        "usageSelection.missionWaiting": "任务已创建，但尚未分配舰长。Armada 会自动重试；任务的“舰长选择”部分会说明任何选择等待的原因。",
+        "usageSelection.omitted": "已评估但未列出的其他舰长：{{count}}",
+        "usageSelection.omittedHint": "历史记录列出说明此决策的舰长，其余按原因计数。预览会显示当前所有舰长。",
         "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "当自动采集无法读取用量时，Armada 可以短暂打开 CLI 并读取其用量界面。"
       },
       "sections": {
@@ -20608,6 +20620,12 @@
         "Captain Selection": "艦長選擇",
         "usageSelection.reason.routed": "由現有路由順序選擇；觀察模式不會改變路由。",
         "usageSelection.reason.fallback": "管理員的復原權限允許從首選艦長改用其他艦長。",
+        "usageSelection.redispatch": "自動重試",
+        "usageSelection.redispatchHint": "先前的嘗試未產生工作或被中斷後，Armada 自動再次派發了此任務。",
+        "Server configuration and backups require a global administrator. Health is shown below.": "伺服器設定與備份需要全域管理員。下方顯示健康狀態。",
+        "usageSelection.missionWaiting": "任務已建立，但尚未指派艦長。Armada 會自動重試；任務的「艦長選擇」區段會說明任何選擇等待的原因。",
+        "usageSelection.omitted": "已評估但未列出的其他艦長：{{count}}",
+        "usageSelection.omittedHint": "歷史記錄列出說明此決策的艦長，其餘依原因計數。預覽會顯示目前所有艦長。",
         "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "當自動擷取無法讀取用量時，Armada 可以短暫開啟 CLI 並讀取其用量畫面。"
       },
       "sections": {}
@@ -27062,6 +27080,12 @@
         "Captain Selection": "艦長選擇",
         "usageSelection.reason.routed": "由現有路由次序揀選；觀察模式唔會改變路由。",
         "usageSelection.reason.fallback": "管理員嘅復原權限容許由首選艦長改用其他艦長。",
+        "usageSelection.redispatch": "自動重試",
+        "usageSelection.redispatchHint": "之前嘅嘗試冇產生工作或者被中斷之後，Armada 自動再派發呢個任務。",
+        "Server configuration and backups require a global administrator. Health is shown below.": "伺服器設定同備份需要全域管理員。下面顯示健康狀態。",
+        "usageSelection.missionWaiting": "任務已建立，但仲未指派艦長。Armada 會自動重試；任務嘅「艦長選擇」部分會解釋任何選擇等候嘅原因。",
+        "usageSelection.omitted": "已評估但冇列出嘅其他艦長：{{count}}",
+        "usageSelection.omittedHint": "歷史記錄列出解釋呢個決定嘅艦長，其餘按原因計數。預覽會顯示而家所有艦長。",
         "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "自動擷取讀唔到用量嘅時候，Armada 可以短暫打開 CLI 並讀取佢嘅用量畫面。"
       },
       "sections": {}
@@ -33532,6 +33556,12 @@
         "Captain Selection": "キャプテンの選択",
         "usageSelection.reason.routed": "既存のルーティング順で選ばれました。観察モードはルーティングを変更しません。",
         "usageSelection.reason.fallback": "管理者の復旧許可により、優先キャプテンからのフォールバックが許可されました。",
+        "usageSelection.redispatch": "自動再試行",
+        "usageSelection.redispatchHint": "作業を生まなかった、または中断された試行の後、Armada がこのミッションを自動的に再ディスパッチしました。",
+        "Server configuration and backups require a global administrator. Health is shown below.": "サーバー設定とバックアップにはグローバル管理者が必要です。ヘルス情報は下に表示されます。",
+        "usageSelection.missionWaiting": "ミッションは作成されましたが、まだキャプテンが割り当てられていません。Armada が自動的に再試行します。選択の待機理由はミッションのキャプテン選択セクションで確認できます。",
+        "usageSelection.omitted": "評価済みで一覧にないその他のキャプテン: {{count}}",
+        "usageSelection.omittedHint": "履歴には判断の根拠となるキャプテンを表示し、残りは理由ごとに件数で示します。プレビューでは現在のすべてのキャプテンを表示します。",
         "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "自動取得で使用量を読み取れない場合、Armada は CLI を短時間開いて使用量画面を読み取ることがあります。"
       },
       "sections": {}
@@ -39993,6 +40023,12 @@
         "Captain Selection": "Kapitänsauswahl",
         "usageSelection.reason.routed": "Durch die bestehende Routing-Reihenfolge gewählt; Beobachten ändert das Routing nicht.",
         "usageSelection.reason.fallback": "Eine Wiederherstellungsfreigabe eines Administrators erlaubte den Wechsel vom bevorzugten Kapitän.",
+        "usageSelection.redispatch": "Automatische Wiederholung",
+        "usageSelection.redispatchHint": "Armada hat diese Mission nach einem Versuch ohne Ergebnis oder nach einer Unterbrechung selbst erneut zugeteilt.",
+        "Server configuration and backups require a global administrator. Health is shown below.": "Serverkonfiguration und Sicherungen erfordern einen globalen Administrator. Der Zustand wird unten angezeigt.",
+        "usageSelection.missionWaiting": "Mission erstellt, aber noch keinem Kapitän zugewiesen. Armada versucht es automatisch erneut; der Abschnitt Kapitänsauswahl der Mission erklärt jede Auswahlwartezeit.",
+        "usageSelection.omitted": "Weitere geprüfte, nicht aufgeführte Kapitäne: {{count}}",
+        "usageSelection.omittedHint": "Der Verlauf listet die Kapitäne, die eine Entscheidung erklären, und zählt die übrigen nach Grund. Die Vorschau zeigt jetzt alle Kapitäne.",
         "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Wenn die automatische Erfassung die Nutzung nicht lesen kann, kann Armada die CLI kurz öffnen und ihre Nutzungsanzeige lesen."
       },
       "sections": {}
@@ -46454,6 +46490,12 @@
         "Captain Selection": "Sélection des capitaines",
         "usageSelection.reason.routed": "Choisi par l'ordre de routage existant ; le mode Observer ne modifie pas le routage.",
         "usageSelection.reason.fallback": "Une autorisation de récupération d'un administrateur a permis de remplacer le capitaine préféré.",
+        "usageSelection.redispatch": "Nouvelle tentative automatique",
+        "usageSelection.redispatchHint": "Armada a relancé cette mission d'elle-même après une tentative sans travail produit ou interrompue.",
+        "Server configuration and backups require a global administrator. Health is shown below.": "La configuration du serveur et les sauvegardes nécessitent un administrateur global. L'état est affiché ci-dessous.",
+        "usageSelection.missionWaiting": "Mission créée mais pas encore attribuée à un capitaine. Armada réessaie automatiquement ; la section Sélection du capitaine de la mission explique toute attente.",
+        "usageSelection.omitted": "Autres capitaines évalués mais non listés : {{count}}",
+        "usageSelection.omittedHint": "L'historique liste les capitaines qui expliquent une décision et compte les autres par motif. L'aperçu montre tous les capitaines actuels.",
         "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Lorsque la capture automatique ne peut pas lire l'utilisation, Armada peut ouvrir brièvement la CLI et lire son écran d'utilisation."
       },
       "sections": {}
@@ -52915,6 +52957,12 @@
         "Captain Selection": "Selezione dei capitani",
         "usageSelection.reason.routed": "Scelto dall'ordine di instradamento esistente; Osserva non modifica l'instradamento.",
         "usageSelection.reason.fallback": "Un'autorizzazione di ripristino di un amministratore ha consentito di sostituire il capitano preferito.",
+        "usageSelection.redispatch": "Nuovo tentativo automatico",
+        "usageSelection.redispatchHint": "Armada ha rilanciato questa missione da sola dopo un tentativo senza lavoro prodotto o interrotto.",
+        "Server configuration and backups require a global administrator. Health is shown below.": "La configurazione del server e i backup richiedono un amministratore globale. Lo stato è mostrato di seguito.",
+        "usageSelection.missionWaiting": "Missione creata ma non ancora assegnata a un capitano. Armada riprova automaticamente; la sezione Selezione del capitano della missione spiega ogni attesa.",
+        "usageSelection.omitted": "Altri capitani valutati ma non elencati: {{count}}",
+        "usageSelection.omittedHint": "La cronologia elenca i capitani che spiegano una decisione e conta gli altri per motivo. L'anteprima mostra ora tutti i capitani.",
         "When automatic capture cannot read usage, Armada may open the CLI briefly and read its usage screen.": "Quando l'acquisizione automatica non riesce a leggere l'utilizzo, Armada può aprire brevemente la CLI e leggerne la schermata di utilizzo."
       },
       "sections": {}

@@ -169,8 +169,8 @@ namespace Armada.Client
         /// </summary>
         /// <param name="data">data.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The created mission. The server wraps a mission no captain could take yet as
-        /// <c>{ Mission, Warning }</c>; this method unwraps it (use <see cref="DispatchMissionAsync"/> to keep the warning).</returns>
+        /// <returns>The created mission. Servers before v1.3.0 wrapped a mission no captain could take yet as
+        /// <c>{ Mission, Warning }</c>; this method reads both shapes (use <see cref="DispatchMissionAsync"/> to keep the warning).</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
         public async Task<Mission?> CreateMissionAsync(Mission data, CancellationToken token = default)
         {
@@ -218,8 +218,8 @@ namespace Armada.Client
         /// </summary>
         /// <param name="data">data.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>The created mission and, when no captain could take it yet, the server's warning (the server
-        /// replies with the bare mission or with <c>{ Mission, Warning }</c>; both are read).</returns>
+        /// <returns>The created mission and, when no captain could take it yet (status Pending), a warning. Both the
+        /// current bare Mission and the pre-v1.3.0 <c>{ Mission, Warning }</c> reply are read.</returns>
         /// <exception cref="ArmadaApiException">Thrown for a non-success response, timeout, or transport failure.</exception>
         public async Task<MissionDispatchResult?> DispatchMissionAsync(DispatchRequest data, CancellationToken token = default)
         {

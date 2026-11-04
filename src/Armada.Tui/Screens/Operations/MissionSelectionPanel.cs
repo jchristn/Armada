@@ -433,6 +433,12 @@ namespace Armada.Tui.Screens.Operations
             List<CaptainSelectionCandidateView> rows = Detail?.Candidates?.Objects ?? new List<CaptainSelectionCandidateView>();
             if (rows.Count == 0) { doc.Note("usageSelection.noCandidates"); return; }
             CandidateTable(doc, rows);
+            List<CaptainSelectionOmittedReason> omitted = Detail?.OmittedCandidates ?? new List<CaptainSelectionOmittedReason>();
+            if (omitted.Count == 0) return;
+            doc.Blank().Text(_Screen.Tr("usageSelection.omitted", LocalizationArgs.Of("count", omitted.Sum(row => row.Count))), doc.Theme.Accent.WithAttribute(CellAttributes.Bold, true));
+            foreach (CaptainSelectionOmittedReason row in omitted)
+                doc.Field(row.Count.ToString(CultureInfo.InvariantCulture), _Screen.Tr(Armada.Core.Services.UsageSelectionText.ReasonKey(row.ReasonCode)));
+            doc.Note("usageSelection.omittedHint");
         }
 
         private void PreviewTable(OpsDocument doc)
@@ -473,7 +479,7 @@ namespace Armada.Tui.Screens.Operations
                 body.Add(new List<string>
                 {
                     (index == _HistoryCursor ? "> " : "  ") + _Screen.Context.Loc.FormatDateTime(row.EvaluatedUtc),
-                    _Screen.Tr(OutcomeKey(row.Outcome)),
+                    _Screen.Tr(OutcomeKey(row.Outcome)) + (row.Trigger == CaptainSelectionTriggers.Redispatch ? " (" + _Screen.Tr("usageSelection.redispatch") + ")" : ""),
                     row.SelectedCaptainName ?? row.SelectedCaptainId ?? "-"
                 });
                 details.Add(_Screen.Tr(Armada.Core.Services.UsageSelectionText.ReasonKey(row.ReasonCode)));

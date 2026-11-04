@@ -22,3 +22,12 @@ Commit `857ddb210` (working tree clean), macOS 26.6.0, Arm64, 18 logical process
 2. **Budget missed at 1000 candidates.** Enforce p95 is 6.1 s and Observe 4.9 s against 1.2 s for Disabled. Server telemetry (`armada.selection.stage.duration`) from a diagnostic run attributes about 270 ms per admission to evidence reads and about 320 ms to the admission transaction. In isolation those take about 45 ms and 40 ms (policy evaluation is about 1 ms). The difference is contention: on SQLite every decision writes about 3,000 ledger rows (one candidate, window and reason row per captain) while dispatch holds its capacity lock and mission creation competes for the single writer. Multi-row INSERT batching was tried and was slower on SQLite (about 320 ms per decision), so it was not kept. Options for the owner: record a bounded candidate set per decision (the plan currently requires the complete comparison), move the ledger write out of the capacity lock, or run large fleets on a server database and benchmark there.
 3. **Mission creation is the throughput limit in every mode.** `POST /api/v1/missions` took 23.7 s p50 and 26.0 s p95 under 16 concurrent clients (Disabled included) because creation dispatches inline; admissions per second stay near 0.7. This is outside captain selection and belongs to the concurrency plan's stress work.
 4. **Harness note.** The Admiral's Prometheus exporter binds to `localhost` only, so the diagnostic scrape used `http://localhost:<port>/metrics` rather than `127.0.0.1`.
+
+## Round 2 (2026-11-04): bounded candidate history
+
+Decisions now store the selected, proposed and requested captains (plus the 25 nearest for a wait) and count the rest by
+reason. A 1000-candidate rerun on the same machine gave Enforce p50 701 ms, p95 777 ms and Observe p50 714 ms, p95 816 ms,
+both 200/200 admitted with no accounting violations, down from 6.1 s and 4.9 s. The run was stopped before the Disabled arm
+at the owner's request, so the 1000-candidate budget comparison is not recorded. The standard run is now capped at 10
+and 100 candidates; pass `--candidates 1000` to measure a larger fleet.
+

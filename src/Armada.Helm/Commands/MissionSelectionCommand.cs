@@ -1,8 +1,10 @@
 namespace Armada.Helm.Commands
 {
     using System;
+    using System.Collections.Generic;
     using System.ComponentModel;
     using System.Globalization;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Models;
@@ -32,7 +34,8 @@ namespace Armada.Helm.Commands
                 Table table = TableRenderer.CreateTable("Selection history");
                 table.AddColumn("Decision"); table.AddColumn("Time (UTC)"); table.AddColumn("Outcome"); table.AddColumn("Strategy"); table.AddColumn("Details");
                 foreach (CaptainSelectionDecisionView row in history.Objects)
-                    table.AddRow(Markup.Escape(row.Id), row.EvaluatedUtc.ToString("u", CultureInfo.InvariantCulture), Markup.Escape(row.Outcome),
+                    table.AddRow(Markup.Escape(row.Id), row.EvaluatedUtc.ToString("u", CultureInfo.InvariantCulture),
+                        Markup.Escape(row.Outcome + (row.Trigger == CaptainSelectionTriggers.Redispatch ? " (" + UsageSelectionText.Get("usageSelection.redispatch") + ")" : "")),
                         Markup.Escape(UsageSelectionText.ForStrategy(row.Strategy)), Markup.Escape(UsageSelectionText.ForReason(row.ReasonCode)));
                 AnsiConsole.Write(table);
                 return 0;
@@ -79,7 +82,18 @@ namespace Armada.Helm.Commands
             facts.AddRow("Details", Markup.Escape(decision.Mode == Armada.Core.Enums.UsageSelectionModeEnum.Observe && decision.Outcome == CaptainSelectionOutcomes.Admitted ? UsageSelectionText.Get("usageSelection.observeChoice") : UsageSelectionText.ForReason(decision.ReasonCode)));
             AnsiConsole.Write(facts);
             RenderCandidates(detail.Candidates);
+            RenderOmitted(detail.OmittedCandidates);
             return 0;
+        }
+
+        private static void RenderOmitted(List<CaptainSelectionOmittedReason>? omitted)
+        {
+            if (omitted == null || omitted.Count == 0) return;
+            int total = omitted.Sum(row => row.Count);
+            AnsiConsole.MarkupLine(Markup.Escape(UsageSelectionText.Get("usageSelection.omitted").Replace("{{count}}", total.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)));
+            foreach (CaptainSelectionOmittedReason row in omitted)
+                AnsiConsole.MarkupLine("  " + Markup.Escape(row.Count.ToString(CultureInfo.InvariantCulture).PadLeft(6) + "  " + UsageSelectionText.ForReason(row.ReasonCode)));
+            AnsiConsole.MarkupLine("[dim]" + Markup.Escape(UsageSelectionText.Get("usageSelection.omittedHint")) + "[/]");
         }
 
         /// <summary>One-line English summary of a mission's recovery permissions.</summary>

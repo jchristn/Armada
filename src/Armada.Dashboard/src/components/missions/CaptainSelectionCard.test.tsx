@@ -118,6 +118,34 @@ describe('mission captain selection', () => {
     expect(within(table).getByText('Effective headroom: 80%')).toBeInTheDocument();
     expect(screen.getByText('Protected reserve 10% · Estimate per attempt 2%')).toBeInTheDocument();
   });
+  it('counts unlisted candidates by reason only when the decision omitted some', async () => {
+    vi.mocked(getCaptainSelectionDecision).mockResolvedValue({ ...structuredClone(details),
+      omittedCandidates: [{ reasonCode: 'BelowReserve', count: 812 }, { reasonCode: 'UsageStale', count: 187 }] });
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Compare captains' }));
+    const summaryLine = await screen.findByText('Other captains considered but not listed: 999');
+    const list = summaryLine.closest('details')!;
+    expect(within(list).getByText('812')).toBeInTheDocument();
+    expect(within(list).getByText('Remaining allowance would cross the protected reserve.')).toBeInTheDocument();
+    expect(within(list).getByText('Usage is too old to authorize a known allowance.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+    expect(screen.queryByText(/Other captains considered/)).not.toBeInTheDocument();
+  });
+  it('marks an automatic retry in history', async () => {
+    vi.mocked(getCaptainSelectionHistory).mockResolvedValue({ success: true, objects: [{ ...decision, id: 'csd_retry', trigger: 'Redispatch' }, { ...decision, id: 'csd_first' }], pageNumber: 1, pageSize: 10, totalPages: 1, totalRecords: 2, totalMs: 1 });
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Compare captains' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+    const retry = await screen.findByText('Automatic retry');
+    expect(retry).toHaveAttribute('title', expect.stringContaining('dispatched this mission again by itself'));
+    expect(screen.getAllByText('Automatic retry')).toHaveLength(1);
+  });
+  it('shows no unlisted-candidate summary when every candidate is listed', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Compare captains' }));
+    await screen.findByRole('table', { name: 'Comparison' });
+    expect(screen.queryByText(/Other captains considered/)).not.toBeInTheDocument();
+  });
   it('keeps history filters across refresh and resets paging when the filter changes', async () => {
     mount(); await screen.findByText('runtime-model');
     fireEvent.click(screen.getByRole('button', { name: 'Compare captains' }));

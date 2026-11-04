@@ -105,13 +105,21 @@ A tenant or system administrator can grant two permissions on a Pending mission,
 - **Allow eligible fallback:** lets an explicitly preferred assignment move to another captain that still passes persona, tier, ownership, worker-envelope and capacity rules. Strict voyage assignments stay strict.
 - **Allow soft-reserve exception:** lets admission use the protected reserve. It does not bypass an exhausted account, a quota hold, a provider cooldown or unknown evidence.
 
+A mission pinned to one captain that cannot run says which permission would help: its waiting advice suggests fallback when other captains were excluded only for lacking that permission, and a soft-reserve exception when the pinned captain is below the reserve. Compare captains shows those captains' real headroom.
+
 Saves are revision-checked. A stale save returns a conflict, keeps your draft reason and asks you to refresh. Permission changes cannot alter running work. Each admitted decision keeps the exact permission revision, author, reason and time it used. Use the Dashboard, TUI (`a`), Mobile sheet, `armada mission selection-recovery`, `POST /api/v1/missions/{id}/captain-selection/recovery` or MCP `authorize_captain_selection_recovery`.
 
 ## Reset generations
 
 Each reservation belongs to a window generation. Only a window that its capture adapter declares `Fixed` and that reports an absolute reset time gets a fixed generation, named by its reset minute (for example `fixed:20261104T1500Z`). Claude five-hour and seven-day windows, Codex rate-limit windows and Gemini daily quotas qualify when the provider reports a reset time. Everything else (rate-limit headers, which are `Rolling`; interactive readings; older Harbor hosts; windows without a reset time) uses continuous accounting under the single `continuous` generation.
 
+An automatic retry (`Trigger` `Redispatch`) after an attempt that produced no work takes over that attempt's reservation on the same account window, keeping the larger amount, so the retry is not charged twice and cannot wait on its own reservation. After an Admiral restart the retry reserves again instead, which only over-reserves. A deleted captain's reservations stay bound to the account they reserved and settle from a fresh capture of that account that started after the execution ended.
+
 An ended reservation from an old fixed generation closes (Settled, reason `WindowReset`) only when the reset has passed, the execution ended before the reset, and a fresh capture of the same account, host and configuration that started after the reset reports the next generation. Running work keeps its reservation across a reset. Continuous reservations never close on a reset; they settle only through a qualifying post-execution capture.
+
+## Decision size
+
+A decision stores the captains that explain it: the one that ran, the one Observe proposed and the one the mission asked for, plus, for a wait, the 25 candidates nearest to eligibility. Every other evaluated captain is counted by owner and reason. This keeps admission cost flat on large fleets (a 1000-captain run admitted with p95 under 1 s in Enforce and Observe); preview still evaluates and lists every current captain.
 
 ## Retention
 
@@ -125,7 +133,7 @@ Counters reset when the Admiral restarts; the decision ledger is the audit recor
 
 ## Backup, upgrade and rollback
 
-Migrations 123 through 128 add the selection ledger. Back up the database and the protected settings and usage identity before upgrading. Rolling back to v1.2.0 requires restoring that pre-upgrade backup; do not point an older binary at an upgraded database. Follow [UPGRADING.md](../UPGRADING.md#v120-to-v130-development) for the post-upgrade checklist and the per-provider backup and restore steps.
+Migrations 123 through 129 add the selection ledger; 129 stores per-reason counts of candidates a decision did not list. Back up the database and the protected settings and usage identity before upgrading. Rolling back to v1.2.0 requires restoring that pre-upgrade backup; do not point an older binary at an upgraded database. Follow [UPGRADING.md](../UPGRADING.md#v120-to-v130-development) for the post-upgrade checklist and the per-provider backup and restore steps.
 
 ## Known limitations
 

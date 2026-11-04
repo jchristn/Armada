@@ -2,7 +2,7 @@
 
 ### v1.3.0 configurable captain selection
 
-`POST /api/v1/missions/{id}/captain-selection/recovery` authorizes or revokes mission-specific recovery permissions. It requires a tenant/system administrator with a user identity, a visible Pending mission, and `{ "expectedRevision": 0, "allowFallback": false, "reserveException": false, "reason": "Operator explanation" }`. Read the current revision from the selection summary first. A stale revision or already-admitted mission returns 409; viewers receive 403 and foreign resources remain 404. Every revision retains actor, reason and time. An admitted decision references its exact authorization, available as `recovery` in historical detail. Neither permission overrides hard quota, cooldown, strict routing, scope or capacity. Summary also returns role-aware `canManageRecovery`.
+`POST /api/v1/missions/{id}/captain-selection/recovery` authorizes or revokes mission-specific recovery permissions. It requires a tenant/system administrator with a user identity, a visible Pending mission, and `{ "ExpectedRevision": 0, "AllowFallback": false, "ReserveException": false, "Reason": "Operator explanation" }`. Read the current revision from the selection summary first. A stale revision or already-admitted mission returns 409; viewers receive 403 and foreign resources remain 404. Every revision retains actor, reason and time. An admitted decision references its exact authorization, available as `Recovery` in historical detail. Neither permission overrides hard quota, cooldown, strict routing, scope or capacity. Summary also returns role-aware `CanManageRecovery`.
 
 The live `UsageSelection` settings group supports `FirstAvailable`, `MostRemainingAllowance` and `MostUsedAllowance` strategies. GET settings reports the current revision/capabilities; PUT accepts `ExpectedUsageSelectionRevision` and returns 409 for stale revisions. Enforce is available as an explicit opt-in; Observe/FirstAvailable remains the default. New authenticated mission selection summary/history/preview and retained decision/candidate routes are documented in [live configuration and Observe history](usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md). Observe preserves actual legacy routing and records the configured strategy’s hypothetical choice. See the [enforcement and inspection guide](usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md) for operational behavior. Preview is read-only; internal account keys are excluded from selection DTOs.
 
@@ -3961,7 +3961,7 @@ stable identifiers; clients translate them for display.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/v1/missions/{id}/captain-selection` | Summary: current mode and strategy, the current admitted attempt, the latest retained decision, recovery permissions, and `canManageRecovery` |
+| GET | `/api/v1/missions/{id}/captain-selection` | Summary: current mode and strategy, the current admitted attempt, the latest retained decision, recovery permissions, and `CanManageRecovery` |
 | GET | `/api/v1/missions/{id}/captain-selection/history` | Paged decisions. Query: `pageNumber`, `pageSize` (1-1000, default 25), `trigger`, `outcome` (`Admitted`, `Waiting`), `from`, `to` (UTC, `[from,to)`) |
 | POST | `/api/v1/missions/{id}/captain-selection/history/enumerate` | Same as history with a JSON `CaptainSelectionHistoryQuery` body |
 | POST | `/api/v1/missions/{id}/captain-selection/preview` | Read-only evaluation of current state for a Pending mission. Query: `pageNumber`, `pageSize`. No capture, history write, claim or launch |
@@ -3970,8 +3970,9 @@ stable identifiers; clients translate them for display.
 | GET | `/api/v1/captain-selection-decisions/{id}/candidates` | Candidate page for a decision (same query as detail) |
 | POST | `/api/v1/captain-selection-decisions/{id}/candidates/enumerate` | Candidate page with a JSON paging body |
 
-A mission that has never recorded a decision returns `200` with `currentAttempt` and `latestDecision` set to null; no
-historical decision is invented. Preview returns `200` with a blocked `reasonCode` when scheduling cannot proceed, for
+Selection bodies follow the REST conventions above: PascalCase properties, string enums, null properties omitted, and
+the standard error envelope (`Error`, `Message`, `Data`). A mission that has never recorded a decision returns `200`
+without `CurrentAttempt` or `LatestDecision`; no historical decision is invented. Preview returns `200` with a blocked `ReasonCode` when scheduling cannot proceed, for
 example `MissionNotPending`, `BelowReserve` or `CandidateLimitExceeded`. A preview is not a promise of admission: actual
 admission re-checks placement, capacity and usage inside its transaction.
 
@@ -3979,43 +3980,51 @@ admission re-checks placement, capacity and usage inside its transaction.
 GET /api/v1/missions/msn_abc123/captain-selection
 
 {
-  "missionId": "msn_abc123",
-  "currentMode": "Enforce",
-  "currentStrategy": "MostRemainingAllowance",
-  "historyAvailable": true,
-  "canManageRecovery": false,
-  "recovery": null,
-  "currentAttempt": {
-    "id": "csd_abc123",
-    "outcome": "Admitted",
-    "selectedCaptainId": "cpt_abc123",
-    "selectedCaptainName": "claude-1",
-    "intendedModel": "claude-opus-5-5",
-    "reportedModel": null,
-    "reasonCode": "SelectedForHeadroom",
-    "evaluatedUtc": "2026-11-03T12:00:00Z"
+  "MissionId": "msn_abc123",
+  "CurrentMode": "Enforce",
+  "CurrentStrategy": "MostRemainingAllowance",
+  "HistoryAvailable": true,
+  "CanManageRecovery": false,
+  "Recovery": null,
+  "CurrentAttempt": {
+    "Id": "csd_abc123",
+    "Outcome": "Admitted",
+    "SelectedCaptainId": "cpt_abc123",
+    "SelectedCaptainName": "claude-1",
+    "IntendedModel": "claude-opus-5-5",
+    "ReportedModel": null,
+    "ReasonCode": "SelectedForHeadroom",
+    "EvaluatedUtc": "2026-11-03T12:00:00Z"
   },
-  "latestDecision": { "id": "csd_abc123" }
+  "LatestDecision": { "Id": "csd_abc123" }
 }
 ```
 
-`intendedModel` is the configured model at admission; `reportedModel` is set only when the runtime reports the model it
-actually used. `hypotheticalCaptainId` is present on every decision: in Observe it names the captain the configured
-strategy would have chosen, and in other modes it is null. Each decision also returns `trigger`, `mode`, `strategy`,
-`executionAttemptId`, `selectedCaptainAvailable`, `algorithmVersion`, `policyRevisionId` and `nextReconsiderUtc`.
-An admitted decision's `reasonCode` says what chose the captain: `SelectedByRouting` (Observe; routing is unchanged),
+`IntendedModel` is the configured model at admission; `ReportedModel` is set only when the runtime reports the model it
+actually used. In Observe, `HypotheticalCaptainId` names the captain the configured strategy would have chosen; other modes omit
+it. Each decision also returns `Trigger`, `Mode`, `Strategy`,
+`ExecutionAttemptId`, `SelectedCaptainAvailable`, `AlgorithmVersion`, `PolicyRevisionId` and `NextReconsiderUtc`.
+An admitted decision's `ReasonCode` says what chose the captain: `SelectedByRouting` (Observe; routing is unchanged),
 `SelectedForHeadroom` (the strategy's ranking), `AuthorizedFallback` or `AuthorizedReserveException` (an administrator's
 recovery permission). History filters accept `outcome` `Admitted` or `Waiting` and `trigger` `Dispatch`, `Repair` or
 `Waiting` in any letter case; other values return 400. Query-string `pageSize` outside 1..1000 returns 400, and a
 malformed JSON body returns 400.
 
+A decision stores the candidates that explain it, not every captain it evaluated. An admission stores the captain that
+ran, the captain Observe proposed and the captain the mission requested. A wait (or an Observe decision whose policy
+would wait) also stores the 25 candidates nearest to eligibility. Every other evaluated candidate is counted:
+decision detail returns `OmittedCandidates`, a list of `{ "ReasonCode": "BelowReserve", "Count": 812 }` entries,
+largest first. Counts follow the same visibility rule as candidate rows, so a caller never counts captains it cannot
+see. The candidate page and its `TotalRecords` cover stored rows only; preview still evaluates and pages every
+current captain.
+
 Recovery request body:
 
 ```json
-{ "expectedRevision": 0, "allowFallback": true, "reserveException": false, "reason": "Preferred captain is offline" }
+{ "ExpectedRevision": 0, "AllowFallback": true, "ReserveException": false, "Reason": "Preferred captain is offline" }
 ```
 
-`expectedRevision` is the revision in the summary's `recovery` (0 when none). The reason is required (1-512
+`ExpectedRevision` is the revision in the summary's `Recovery` (0 when none). The reason is required (1-512
 characters) and retained with the actor and time. Permissions affect future admissions only; running work continues.
 A fallback never bypasses a strict assignment, and a reserve exception never bypasses exhausted quota, a provider
 cooldown, capacity or eligibility.
@@ -4027,7 +4036,7 @@ cooldown, capacity or eligibility.
 | 401 | Missing or invalid credentials |
 | 403 | Authenticated but not allowed (for example a viewer posting recovery) |
 | 404 | Unknown mission or decision, or one the caller cannot see |
-| 409 | Stale `expectedRevision`, or the mission is no longer Pending |
+| 409 | Stale `ExpectedRevision`, or the mission is no longer Pending (`Data.Code` `RecoveryRevisionConflict`) |
 | 503 | Selection storage unavailable; retry later |
 
 After each committed change (admission, a new material waiting decision, or a recovery authorization) the Admiral

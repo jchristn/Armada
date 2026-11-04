@@ -4721,6 +4721,8 @@ export interface UsageSnapshotView {
   provider: string | null;
   accountKey: string | null;
   captainIds: string[];
+  /** Names of captainIds in the same order; null when a captain no longer exists. */
+  captainNames?: (string | null)[] | null;
   capturedUtc: string;
   status: UsageSnapshotStatus;
   errorCode: string | null;
@@ -4942,6 +4944,12 @@ export interface CaptainSelectionDecisionDetail {
   policy: UsageSelectionSettings;
   candidates: EnumerationResult<CaptainSelectionCandidateView>;
   executionEvents: EnumerationResult<{ eventKind: string; actualModel?: string | null; reportingSource?: string | null; occurredUtc: string }>;
+  /** Visible evaluated candidates counted by reason instead of stored individually, largest first. */
+  omittedCandidates?: CaptainSelectionOmittedReason[];
+}
+export interface CaptainSelectionOmittedReason {
+  reasonCode: string;
+  count: number;
 }
 export interface CaptainSelectionPreview {
   isPreview?: boolean;

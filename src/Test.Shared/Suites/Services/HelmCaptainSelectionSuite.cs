@@ -104,6 +104,53 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("decision_lists_omitted_candidates_by_reason", "mission selection --decision prints the listed comparison and counts unlisted candidates by reason", TestTags.Positive, async () =>
+            {
+                using (RecordingAdmiralStub stub = new RecordingAdmiralStub())
+                {
+                    CaptainSelectionDecisionDetail detail = new CaptainSelectionDecisionDetail
+                    {
+                        Decision = new CaptainSelectionDecisionView { Id = "csd_1", TenantId = "default", MissionId = "msn_1", Outcome = CaptainSelectionOutcomes.Admitted, Mode = UsageSelectionModeEnum.Enforce,
+                            SelectedCaptainId = "cpt_a", SelectedCaptainName = "Alpha", ReasonCode = UsageSelectionReasonCodes.SelectedForHeadroom, EvaluatedUtc = DateTime.UtcNow },
+                        Candidates = EnumerationResult<CaptainSelectionCandidateView>.Create(new EnumerationQuery { PageNumber = 1, PageSize = 10 }, new List<CaptainSelectionCandidateView>
+                            { new CaptainSelectionCandidateView { CaptainId = "cpt_a", CaptainName = "Alpha", Rank = 1, ActualSelection = true, AvailablePercent = 70 } }, 1),
+                        OmittedCandidates = new List<CaptainSelectionOmittedReason>
+                        {
+                            new CaptainSelectionOmittedReason { ReasonCode = UsageSelectionReasonCodes.BelowReserve, Count = 812 },
+                            new CaptainSelectionOmittedReason { ReasonCode = UsageSelectionReasonCodes.UsageStale, Count = 187 }
+                        }
+                    };
+                    stub.Replies["GET /api/v1/captain-selection-decisions/csd_1"] = StubAdmiralReply.Json(ArmadaJson.Serialize(detail));
+                    HelmCliRun run = await Run(stub, "mission", "selection", "msn_1", "--decision", "csd_1").ConfigureAwait(false);
+                    AssertEqual(0, run.ExitCode, run.StandardError + run.Output);
+                    AssertContains("Other captains considered but not listed: 999", run.Output, "omitted total");
+                    AssertContains("812", run.Output, "largest reason count");
+                    AssertContains("Remaining allowance would cross the protected reserve.", run.Output, "reason text");
+                }
+            }));
+
+            cases.Add(CaseAsync("server_errors_go_to_stderr_with_the_server_message", "A 404 or 409 prints the server's message on stderr, not raw JSON on stdout", TestTags.Negative, async () =>
+            {
+                using (RecordingAdmiralStub stub = new RecordingAdmiralStub())
+                {
+                    stub.Replies[Summary] = StubAdmiralReply.Json("{\"Error\":\"NotFound\",\"Message\":\"Mission not found.\",\"StatusCode\":404}", 404);
+                    HelmCliRun missing = await RunHandled(stub, "mission", "selection", "msn_1").ConfigureAwait(false);
+                    AssertTrue(missing.ExitCode != 0, "non-zero exit");
+                    AssertContains("Mission not found.", missing.StandardError, "server message on stderr");
+                    AssertContains("HTTP 404", missing.StandardError, "status on stderr");
+                    AssertFalse(missing.Output.Contains("Mission not found", StringComparison.Ordinal), "nothing on stdout: " + missing.Output);
+                    AssertFalse(missing.StandardError.Contains("{", StringComparison.Ordinal), "no raw JSON: " + missing.StandardError);
+
+                    stub.Replies[Summary] = StubAdmiralReply.Json(SummaryJson(canManage: true, revision: 2));
+                    stub.Replies["POST " + Recovery] = StubAdmiralReply.Json("{\"Error\":\"Conflict\",\"Message\":\"Recovery authorization changed. Refresh before retrying.\",\"Data\":{\"Code\":\"RecoveryRevisionConflict\"}}", 409);
+                    HelmCliRun conflict = await RunHandled(stub, "mission", "selection-recovery", "msn_1", "--allow-fallback", "--reason", "retry", "--yes").ConfigureAwait(false);
+                    AssertTrue(conflict.ExitCode != 0, "non-zero exit");
+                    AssertContains("Recovery authorization changed. Refresh before retrying.", conflict.StandardError);
+                    AssertContains("RecoveryRevisionConflict", conflict.StandardError);
+                    AssertFalse(conflict.StandardError.Contains("{\"", StringComparison.Ordinal), "no raw JSON: " + conflict.StandardError);
+                }
+            }));
+
             cases.Add(CaseAsync("unknown_options_are_rejected_before_any_request", "Strict parsing: an unknown option fails without calling the Admiral", TestTags.Negative, async () =>
             {
                 using (RecordingAdmiralStub stub = new RecordingAdmiralStub())
@@ -155,6 +202,12 @@ namespace Test.Shared.Suites.Services
         {
             List<string> all = new List<string>(args) { "--server", stub.BaseUrl, "--token", Token };
             return HelmCliHarness.RunCapturedAsync(all.ToArray());
+        }
+
+        private static Task<HelmCliRun> RunHandled(RecordingAdmiralStub stub, params string[] args)
+        {
+            List<string> all = new List<string>(args) { "--server", stub.BaseUrl, "--token", Token };
+            return HelmCliHarness.RunHandledAsync(all.ToArray());
         }
 
         private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)

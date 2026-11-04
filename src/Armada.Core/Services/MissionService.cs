@@ -300,9 +300,9 @@ namespace Armada.Core.Services
                 {
                     UsageSelectionSnapshot usage = await BuildUsageSelectionAsync(selection, _Settings.EffectiveUsageSelection.Copy(), token).ConfigureAwait(false);
                     if (usage.Evaluation.SelectedCaptainId == null)
-                        return new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain,
+                        return AddRecoveryAdvice(new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain,
                             SelectionReasonCode = usage.Evaluation.ReasonCode, Summary = "No captain currently satisfies the configured usage policy.",
-                            SelectionNextReconsiderUtc = usage.Evaluation.Candidates.FirstOrDefault()?.NextReconsiderUtc };
+                            SelectionNextReconsiderUtc = usage.Evaluation.Candidates.FirstOrDefault()?.NextReconsiderUtc }, mission, usage);
                     selection.Selected = selection.Visible.Single(c => c.Id == usage.Evaluation.SelectedCaptainId);
                 }
                 catch (System.Data.Common.DbException)
@@ -555,9 +555,9 @@ namespace Armada.Core.Services
                 {
                     UsageSelectionCandidateResult? blocked = usageSelection.Evaluation.Candidates.FirstOrDefault();
                     _UsageSelectionBlockers[mission.Id] = new UsageSelectionTransientBlocker { PolicyKey = UsagePolicyKey(), RetryUtc = DateTime.MinValue,
-                        Blocker = new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain,
+                        Blocker = AddRecoveryAdvice(new MissionAssignmentBlocker { Reason = MissionAssignmentBlockerReasonEnum.NoEligibleCaptain,
                             SelectionReasonCode = usageSelection.Evaluation.ReasonCode, Summary = "No captain currently satisfies the configured usage policy.",
-                            SelectionNextReconsiderUtc = blocked?.NextReconsiderUtc } };
+                            SelectionNextReconsiderUtc = blocked?.NextReconsiderUtc }, mission, usageSelection) };
                 }
                 _Logging.Warn(_Header + "no idle captains available for mission " + mission.Id +
                     (mission.Persona != null ? " (persona: " + mission.Persona + ")" : ""));
@@ -629,7 +629,9 @@ namespace Armada.Core.Services
             if (usageSelection != null)
             {
                 // Evidence and the actual compatibility choice commit with the slot, before any process/dock work.
-                CaptainSelectionRecordSet decision = UsageSelectionRecordBuilder.Build(usageSelection, mission, "Dispatch", admitted: true);
+                // An attempt after an earlier one ended without work or was interrupted is Armada's own retry.
+                string trigger = mission.NoOpRedispatchAttempts > 0 || mission.RedispatchAttempts > 0 ? CaptainSelectionTriggers.Redispatch : CaptainSelectionTriggers.Dispatch;
+                CaptainSelectionRecordSet decision = UsageSelectionRecordBuilder.Build(usageSelection, mission, trigger, admitted: true);
                 decision.AdmissionHostId = usageExecutionHost;
                 CaptainSelectionAdmissionReceipt receipt;
                 // A policy update that completed before this check makes this snapshot obsolete. An
@@ -649,6 +651,7 @@ namespace Armada.Core.Services
                 RecordAdmissionTelemetry(admissionStage, usageSelection, decision, receipt);
                 if (claimed)
                 {
+                    _NoOpRedispatchCarry.TryRemove(mission.Id, out _);
                     mission.UsageAdmissionExecutionKey = decision.Decision.ExecutionAttemptId;
                     NotifySelectionChanged(mission, decision.Decision.Id, CaptainSelectionOutcomes.Admitted);
                 }

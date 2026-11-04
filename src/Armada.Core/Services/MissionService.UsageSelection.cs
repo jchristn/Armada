@@ -14,6 +14,9 @@ namespace Armada.Core.Services
         /// <summary>Stable Admiral credential-host identity. Required for local usage enforcement; the server supplies its protected usage identity.</summary>
         public string? UsageSelectionLocalHostId { get; set; }
 
+        // Mission ID to the execution attempt whose reservation its pending no-op redispatch takes over.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _NoOpRedispatchCarry =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal);
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, UsageSelectionTransientBlocker> _UsageSelectionBlockers =
             new System.Collections.Concurrent.ConcurrentDictionary<string, UsageSelectionTransientBlocker>(StringComparer.Ordinal);
 
@@ -23,6 +26,21 @@ namespace Armada.Core.Services
             ArgumentNullException.ThrowIfNull(mission);
             _UsageSelectionBlockers.TryRemove(mission.Id, out _);
             NotifySelectionChanged(mission, null, CaptainSelectionOutcomes.RecoveryAuthorized);
+        }
+
+        // A mission pinned to a captain that cannot run now says what an administrator can authorize: fallback to another
+        // captain (when others were excluded only for needing that permission) or a soft-reserve exception for the pinned one.
+        private static MissionAssignmentBlocker AddRecoveryAdvice(MissionAssignmentBlocker blocker, Mission mission, UsageSelectionSnapshot usage)
+        {
+            if (usage.Settings.Mode != UsageSelectionModeEnum.Enforce || String.IsNullOrEmpty(mission.RequestedCaptainId)) return blocker;
+            if (mission.UsageRecovery?.AllowFallback != true && usage.Evaluation.Candidates.Any(c => c.ReasonCode == UsageSelectionReasonCodes.FallbackPermissionRequired))
+                blocker.Advice.Add(new AssignmentBlockerAdvice { Text = "An administrator can allow fallback to another eligible captain in this mission's captain-selection recovery permissions.",
+                    Action = AssignmentBlockerActionEnum.OpenMission, TargetType = "mission", TargetId = mission.Id });
+            UsageSelectionCandidateResult? pinned = usage.Evaluation.Candidates.FirstOrDefault(c => c.Candidate.CaptainId == mission.RequestedCaptainId);
+            if (mission.UsageRecovery?.ReserveException != true && pinned?.ReasonCode == UsageSelectionReasonCodes.BelowReserve)
+                blocker.Advice.Add(new AssignmentBlockerAdvice { Text = "An administrator can grant the requested captain a soft-reserve exception in this mission's captain-selection recovery permissions.",
+                    Action = AssignmentBlockerActionEnum.OpenMission, TargetType = "mission", TargetId = mission.Id });
+            return blocker;
         }
 
         private void NotifySelectionChanged(Mission mission, string? decisionId, string outcome)
@@ -264,7 +282,8 @@ namespace Armada.Core.Services
         private async Task<UsageSelectionSnapshot> BuildUsageSelectionAsync(CaptainAdmissionSelection selection, UsageSelectionSettings settings, CancellationToken token)
         {
             UsageSelectionSnapshot snapshot = new UsageSelectionSnapshot { Settings = settings, Recovery = selection.Mission.UsageRecovery, EvaluatedUtc = DateTime.UtcNow,
-                ActualCaptainId = selection.Selected?.Id, CaptureEnabled = _Settings.UsageCapture.EffectiveEnabled, Captains = selection.Visible.ToDictionary(c => c.Id, StringComparer.Ordinal) };
+                ActualCaptainId = selection.Selected?.Id, CaptureEnabled = _Settings.UsageCapture.EffectiveEnabled, Captains = selection.Visible.ToDictionary(c => c.Id, StringComparer.Ordinal),
+                CarriedExecutionAttemptId = _NoOpRedispatchCarry.TryGetValue(selection.Mission.Id, out string? carried) ? carried : null };
             if (selection.Visible.Count > settings.MaximumCandidates)
             {
                 snapshot.Evaluation = new UsageSelectionEvaluation { CandidateLimitExceeded = true, ReasonCode = UsageSelectionReasonCodes.CandidateLimitExceeded };
@@ -280,7 +299,7 @@ namespace Armada.Core.Services
                 {
                     List<string> batch = ids.Skip(offset).Take(1000).ToList();
                     evidence.AddRange(await _Database.CaptainSelections.ReadAccountEvidenceAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false));
-                    totals.AddRange(await _Database.CaptainSelections.ReadBudgetTotalsAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false));
+                    totals.AddRange(await _Database.CaptainSelections.ReadBudgetTotalsAsync(selection.Mission.TenantId!, batch, token, snapshot.CarriedExecutionAttemptId).ConfigureAwait(false));
                     foreach (KeyValuePair<string, DateTime> row in await _Database.CaptainSelections.ReadLastAssignedAsync(selection.Mission.TenantId!, batch, token).ConfigureAwait(false))
                         lastAssigned[row.Key] = row.Value;
                 }

@@ -37,6 +37,13 @@ function renderTable(props: { provider?: string; accountKey?: string; hostId?: s
 describe('AccountLimitsTable', () => {
   beforeEach(() => { vi.mocked(getUsageLatest).mockReset(); localStorage.clear(); });
 
+  it('names member captains when the server knows them and keeps the ID for a deleted one', async () => {
+    vi.mocked(getUsageLatest).mockResolvedValue(page([view({ captainNames: ['Ada', null] })]));
+    renderTable();
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Ada' })).toHaveAttribute('href', '/captains/cpt_a?section=usage'));
+    expect(screen.getByRole('link', { name: 'cpt_b' })).toHaveAttribute('href', '/captains/cpt_b?section=usage');
+  });
+
   it('lists one row per account with member captains linking to their usage section', async () => {
     vi.mocked(getUsageLatest).mockResolvedValue(page([view()]));
     renderTable({ provider: 'anthropic', hostId: 'hbr_laptop' });
@@ -44,7 +51,7 @@ describe('AccountLimitsTable', () => {
     expect(screen.getByRole('link', { name: 'cpt_b' })).toHaveAttribute('href', '/captains/cpt_b?section=usage');
     expect(getUsageLatest).toHaveBeenCalledWith({ provider: 'anthropic', accountKey: undefined, hostId: 'hbr_laptop', pageNumber: 1, pageSize: 25, sortBy: 'updated', sortDirection: 'descending' });
     const table = screen.getByRole('table', { name: 'Limits grouped by account and host' });
-    expect(within(table).getAllByRole('columnheader').map((header) => header.querySelector('.th-sort-label')?.textContent ?? header.textContent?.replace(/[⇅↕↑↓▲▼]/g, '').trim())).toEqual(['Captain ID', 'Host ID', 'Runtime', 'Limits', 'Updated', 'Interval']);
+    expect(within(table).getAllByRole('columnheader').map((header) => header.querySelector('.th-sort-label')?.textContent ?? header.textContent?.replace(/[⇅↕↑↓▲▼]/g, '').trim())).toEqual(['Captain', 'Host ID', 'Runtime', 'Limits', 'Updated', 'Interval']);
     expect(screen.getByRole('progressbar', { name: '5-hour limit usage' })).toHaveAttribute('aria-valuenow', '82');
     expect(screen.getByText('600s')).toBeInTheDocument();
     expect(screen.getByText('600s').closest('td')).toHaveAttribute('title', 'Every 600s (requested 300s)');

@@ -325,7 +325,7 @@ export function SetupWizard() {
       setBusy(true);
       const parsed = parseInt(dispatchForm.priority, 10);
       const response = await dispatchMission({ vesselId: activeVessel.id, title: dispatchForm.title.trim(), description: dispatchForm.description.trim(), priority: Number.isNaN(parsed) ? 100 : parsed });
-      const normalized = normalizeMissionResponse(response);
+      const normalized = normalizeMissionResponse(response, t('usageSelection.missionWaiting'));
       if (!normalized.mission) { setResult({ kind: 'error', message: t('Dispatch succeeded but no mission was returned.') }); return; }
       setMission(normalized.mission);
       setWarning(normalized.warning || '');

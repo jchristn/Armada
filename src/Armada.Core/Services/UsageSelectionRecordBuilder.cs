@@ -12,6 +12,9 @@ namespace Armada.Core.Services
     /// <summary>Creates structured immutable decision evidence from one scoped selection snapshot.</summary>
     internal static class UsageSelectionRecordBuilder
     {
+        /// <summary>Most candidates a wait stores individually, nearest to eligibility first; the rest are counted by reason.</summary>
+        internal const int MaximumStoredWaitingCandidates = 25;
+
         internal static CaptainSelectionRecordSet Build(UsageSelectionSnapshot snapshot, Mission mission, string trigger, bool admitted)
         {
             CaptainSelectionRecordSet records = new CaptainSelectionRecordSet
@@ -26,6 +29,7 @@ namespace Armada.Core.Services
                 records.AdmissionCaptainModel = selectedVersion.Model;
             }
             records.AdmissionRecoveryRevision = snapshot.Recovery?.Revision ?? 0;
+            records.AdmissionCarriedAttemptId = admitted ? snapshot.CarriedExecutionAttemptId : null;
             CaptainSelectionDecision decision = records.Decision;
             decision.TenantId = mission.TenantId!; decision.UserId = mission.UserId; decision.MissionId = mission.Id; decision.VoyageId = mission.VoyageId;
             decision.ExecutionAttemptId = decision.Id; decision.Trigger = trigger; decision.Mode = snapshot.Settings.Mode;
@@ -45,16 +49,32 @@ namespace Armada.Core.Services
                 records.Events.Add(new CaptainSelectionExecutionEvent { TenantId = mission.TenantId!, UserId = mission.UserId, DecisionId = decision.Id,
                     ExecutionAttemptId = decision.ExecutionAttemptId, EventKind = CaptainSelectionEventKinds.RecoveryAuthorizationApplied, ReportingSource = snapshot.Recovery.Id,
                     OccurredUtc = snapshot.EvaluatedUtc, FailureClassification = snapshot.Recovery.ReserveException ? "SoftReserveException" : snapshot.Recovery.AllowFallback ? "FallbackPermission" : "RecoveryPermissionsRevoked" });
+            HashSet<string> stored = StoredCaptainIds(snapshot, mission, admitted);
+            Dictionary<string, CaptainSelectionOmittedCandidates> omitted = new Dictionary<string, CaptainSelectionOmittedCandidates>(StringComparer.Ordinal);
             int rank = 0;
             foreach (UsageSelectionCandidateResult result in snapshot.Evaluation.Candidates)
             {
                 UsageSelectionCandidate input = result.Candidate;
                 Captain captain = snapshot.Captains[input.CaptainId];
+                rank++;
+                if (!stored.Contains(captain.Id))
+                {
+                    // Owner is part of the key so a scoped reader never counts a hidden peer's captains.
+                    string key = (captain.UserId ?? "") + "\n" + result.ReasonCode;
+                    if (!omitted.TryGetValue(key, out CaptainSelectionOmittedCandidates? count))
+                    {
+                        count = new CaptainSelectionOmittedCandidates { TenantId = mission.TenantId!, UserId = captain.UserId, DecisionId = decision.Id, ReasonCode = result.ReasonCode };
+                        omitted[key] = count;
+                        records.OmittedCandidates.Add(count);
+                    }
+                    count.CandidateCount++;
+                    continue;
+                }
                 snapshot.Evidence.TryGetValue(captain.Id, out UsageSelectionAccountEvidence? source);
                 CaptainSelectionCandidateRecord candidate = new CaptainSelectionCandidateRecord
                 {
                     TenantId = mission.TenantId!, UserId = captain.UserId, DecisionId = decision.Id, CaptainId = captain.Id,
-                    Provider = Label(input.Provider, 512), ConfiguredModel = Label(input.Model, 1024), CaptainName = Label(captain.Name, 1024), RoutingBucket = input.RoutingBucket, Rank = ++rank,
+                    Provider = Label(input.Provider, 512), ConfiguredModel = Label(input.Model, 1024), CaptainName = Label(captain.Name, 1024), RoutingBucket = input.RoutingBucket, Rank = rank,
                     Band = result.Band, NextReconsiderUtc = result.NextReconsiderUtc, PrimaryReasonCode = result.ReasonCode, Eligible = input.IneligibilityReason == null,
                     OccupiedSlots = input.OccupiedSlots, Capacity = input.Capacity, LastAssignedUtc = input.LastAssignedUtc,
                     MembershipId = source?.MembershipId, HostId = source?.HostId, Runtime = source?.Runtime.ToString(), AccountKey = source?.AccountKey,
@@ -106,6 +126,21 @@ namespace Armada.Core.Services
                         Finite(w.ActiveReservationPercent), Finite(w.UnsettledPercent) }).ToArray() }).ToArray() });
             decision.EvidenceFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint))).ToLowerInvariant();
             return records;
+        }
+
+        // An admission stores the captains that explain it: the one that ran, the one the policy proposed in Observe, and the
+        // one the mission asked for. A wait (actual, or proposed in Observe) also stores the candidates nearest to eligibility,
+        // because their rejection reasons are the explanation. Large fleets would otherwise write thousands of rows per decision.
+        private static HashSet<string> StoredCaptainIds(UsageSelectionSnapshot snapshot, Mission mission, bool admitted)
+        {
+            HashSet<string> stored = new HashSet<string>(StringComparer.Ordinal);
+            if (admitted && snapshot.ActualCaptainId != null) stored.Add(snapshot.ActualCaptainId);
+            if (snapshot.Evaluation.SelectedCaptainId != null) stored.Add(snapshot.Evaluation.SelectedCaptainId);
+            if (!String.IsNullOrEmpty(mission.RequestedCaptainId)) stored.Add(mission.RequestedCaptainId);
+            if (!admitted || snapshot.Evaluation.SelectedCaptainId == null)
+                foreach (UsageSelectionCandidateResult result in snapshot.Evaluation.Candidates.Take(MaximumStoredWaitingCandidates))
+                    stored.Add(result.Candidate.CaptainId);
+            return stored;
         }
 
         // An admitted decision states what actually chose the captain: routing in Observe, an authorized reserve exception,

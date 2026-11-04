@@ -68,14 +68,15 @@ export default function AccountLimitsTable({ provider, accountKey, hostId, refre
   const columns: DataTableColumn<UsageSnapshotView>[] = [
     {
       key: 'captains', sortKey: 'captainId',
-      label: t('Captain ID'),
+      label: t('Captain'),
       required: true,
       interactive: true,
       render: (view) => (
         <ul className="usage-member-list">
-          {(view.captainIds ?? []).map((id) => (
-            <li key={id}><span className="id-display"><Link to={captainUsagePath(id)} className="mono" title={t('Open this captain\'s usage section.')}>{id}</Link><CopyButton text={id} /></span></li>
-          ))}
+          {(view.captainIds ?? []).map((id, index) => {
+            const name = view.captainNames?.[index];
+            return <li key={id}><span className="id-display"><Link to={captainUsagePath(id)} className={name ? undefined : 'mono'} title={name ? `${id}. ${t('Open this captain\'s usage section.')}` : t('Open this captain\'s usage section.')}>{name || id}</Link><CopyButton text={id} /></span></li>;
+          })}
         </ul>
       ),
     },

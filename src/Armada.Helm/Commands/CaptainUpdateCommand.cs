@@ -5,6 +5,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Update an existing captain.
@@ -23,21 +24,21 @@ namespace Armada.Helm.Commands
 
             if (captain == null)
             {
-                AnsiConsole.MarkupLine($"[red]Captain not found:[/] {Markup.Escape(settings.Captain)}");
+                HelmConsole.Error.MarkupLine($"[red]Captain not found:[/] {Markup.Escape(settings.Captain)}");
                 return 1;
             }
 
             Captain? current = await GetAsync<Captain>("/api/v1/captains/" + captain.Id).ConfigureAwait(false);
             if (current == null)
             {
-                AnsiConsole.MarkupLine($"[red]Captain not found:[/] {Markup.Escape(captain.Id)}");
+                HelmConsole.Error.MarkupLine($"[red]Captain not found:[/] {Markup.Escape(captain.Id)}");
                 return 1;
             }
 
             AgentRuntimeEnum runtime = current.Runtime;
             if (settings.Runtime != null && !AgentRuntimeParser.TryParse(settings.Runtime, out runtime))
             {
-                AnsiConsole.MarkupLine("[red]" + Markup.Escape(AgentRuntimeParser.DescribeInvalid(settings.Runtime)) + "[/]");
+                HelmConsole.Error.MarkupLine("[red]" + Markup.Escape(AgentRuntimeParser.DescribeInvalid(settings.Runtime)) + "[/]");
                 return 1;
             }
 
@@ -58,7 +59,7 @@ namespace Armada.Helm.Commands
 
                 if (String.IsNullOrWhiteSpace(muxOptions.Endpoint))
                 {
-                    AnsiConsole.MarkupLine("[red]Mux captains require --mux-endpoint <name>.[/]");
+                    HelmConsole.Error.MarkupLine("[red]Mux captains require --mux-endpoint <name>.[/]");
                     return 1;
                 }
             }
@@ -67,7 +68,7 @@ namespace Armada.Helm.Commands
                 ? (settings.ModelEndpointId ?? current.ModelEndpointId)?.Trim() : null;
             if (runtime == AgentRuntimeEnum.ApiEndpoint && String.IsNullOrWhiteSpace(modelEndpointId))
             {
-                AnsiConsole.MarkupLine("[red]API captains require --model-endpoint <endpoint-id>.[/]");
+                HelmConsole.Error.MarkupLine("[red]API captains require --model-endpoint <endpoint-id>.[/]");
                 return 1;
             }
 
@@ -90,7 +91,7 @@ namespace Armada.Helm.Commands
             Captain? updated = await PutAsync<Captain>("/api/v1/captains/" + current.Id, body).ConfigureAwait(false);
             if (updated == null)
             {
-                AnsiConsole.MarkupLine($"[red]Failed to update captain:[/] {Markup.Escape(current.Id)}");
+                HelmConsole.Error.MarkupLine($"[red]Failed to update captain:[/] {Markup.Escape(current.Id)}");
                 return 1;
             }
 

@@ -238,6 +238,13 @@ describe('Settings > Server', () => {
     expect(screen.queryByTestId('settings-cli-ask-default')).toBeNull();
   });
 
+  it('a viewer sees an administrator notice, not a load failure, when settings return 403', async () => {
+    api.getSettings.mockRejectedValue(new client.ApiError('Forbidden', 403, null));
+    await renderW4Routes(ROUTES, '/server', 'user');
+    await waitFor(() => expect(screen.getByText('Server configuration and backups require a global administrator. Health is shown below.')).toBeTruthy());
+    expect(screen.queryByText(/Failed to load server settings/)).toBeNull();
+  });
+
   it('offers the setup wizard when the deployment has no captain', async () => {
     api.listCaptains.mockResolvedValue(page([]) as never);
     const h = await renderW4Routes(ROUTES, '/server');

@@ -47,7 +47,7 @@ namespace Armada.Core.Services
                     UsageSelectionCandidate? repairUsage = snapshot.Evaluation.Candidates.SingleOrDefault(c => c.Candidate.CaptainId == current.Id)?.Candidate;
                     if (snapshot.Settings.Mode == UsageSelectionModeEnum.Enforce && (String.IsNullOrWhiteSpace(executionHost)
                         || repairUsage?.IdentityVerified == true && repairUsage.ConfigurationMatches && snapshot.Evidence.TryGetValue(current.Id, out UsageSelectionAccountEvidence? observed) && observed.HostId != executionHost)) return false;
-                    CaptainSelectionRecordSet records = UsageSelectionRecordBuilder.Build(snapshot, mission, "Repair", admitted: true);
+                    CaptainSelectionRecordSet records = UsageSelectionRecordBuilder.Build(snapshot, mission, CaptainSelectionTriggers.Repair, admitted: true);
                     records.AdmissionHostId = executionHost;
                     using CaptainSelectionStage admissionStage = CaptainSelectionTelemetry.Stage("transaction", mission.Id);
                     CaptainSelectionAdmissionReceipt receipt = snapshot.Settings.Mode == UsageSelectionModeEnum.Enforce

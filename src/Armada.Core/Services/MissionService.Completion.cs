@@ -266,6 +266,9 @@ namespace Armada.Core.Services
             int maxAttempts = _Settings.MaxNoOpRedispatchAttempts;
             if (mission.NoOpRedispatchAttempts < maxAttempts)
             {
+                // The retry takes over this attempt's usage reservation instead of adding a second one (in memory only:
+                // after a restart the retry simply reserves again, which over-reserves but never under-reserves).
+                if (!String.IsNullOrEmpty(mission.UsageAdmissionExecutionKey)) _NoOpRedispatchCarry[mission.Id] = mission.UsageAdmissionExecutionKey;
                 mission.NoOpRedispatchAttempts++;
                 mission.Status = MissionStatusEnum.Pending;
                 mission.CaptainId = null;

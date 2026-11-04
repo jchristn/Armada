@@ -94,6 +94,7 @@ function CaptainSelectionBody({ missionId, status, revision, onOpen }: Selection
   useEffect(() => { void load(); return () => abort.current?.abort(); }, [load, revision]);
   const choose = (value: ViewMode) => { setView(value); setPage(1); setRecord(null); setExpanded(true); };
   const rows = view === 'history' ? history : candidates;
+  const omitted = view === 'comparison' && evidence && 'omittedCandidates' in evidence ? evidence.omittedCandidates ?? [] : [];
   return <Section title={t('usageSelection.title')}>
     <View style={styles.content}>
       <View style={styles.actions}>
@@ -134,7 +135,7 @@ function CaptainSelectionBody({ missionId, status, revision, onOpen }: Selection
           ]} />
           {history?.objects.map(row => <View key={row.id} style={[styles.item, { borderColor: colors.border }]}>
             <AppText variant="label">{t(row.outcome === 'Waiting' ? 'usageSelection.waiting' : 'usageSelection.admitted')} · {formatDateTime(row.evaluatedUtc)}</AppText>
-            <AppText variant="caption" muted>{t(selectionStrategyKey[row.strategy])}</AppText>
+            <AppText variant="caption" muted>{t(selectionStrategyKey[row.strategy])}{row.trigger === 'Redispatch' ? ' · ' + t('usageSelection.redispatch') : ''}</AppText>
             <AppText>{t(selectionReasonKey(row.reasonCode))}</AppText>
             <Button label={t('View')} variant="secondary" onPress={() => { setSelected(row); choose('comparison'); }} />
           </View>)}
@@ -149,6 +150,11 @@ function CaptainSelectionBody({ missionId, status, revision, onOpen }: Selection
           {row.nextReconsiderUtc ? <AppText variant="caption" muted>{t('usageSelection.reconsiderAt', { time: formatDateTime(row.nextReconsiderUtc) })}</AppText> : null}
         </View>)}
         {!busy && rows?.objects.length === 0 ? <AppText muted>{t(view === 'history' ? 'usageSelection.noMatchingHistory' : 'usageSelection.noCandidates')}</AppText> : null}
+        {view === 'comparison' && omitted.length > 0 ? <View style={[styles.item, { borderColor: colors.border }]} accessibilityRole="summary">
+          <AppText variant="label">{t('usageSelection.omitted', { count: omitted.reduce((sum, row) => sum + row.count, 0) })}</AppText>
+          <AppText variant="caption" muted>{t('usageSelection.omittedHint')}</AppText>
+          {omitted.map(row => <KeyValueRow key={row.reasonCode} label={t(selectionReasonKey(row.reasonCode))} value={String(row.count)} />)}
+        </View> : null}
         <View style={styles.actions}>
           <Button label={t('Previous')} variant="secondary" disabled={busy || page <= 1} onPress={() => setPage(page - 1)} />
           <AppText variant="caption">{page} / {Math.max(1, rows?.totalPages ?? 1)}</AppText>

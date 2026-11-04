@@ -40,6 +40,8 @@ namespace Test.Shared.Suites.Tui
                     TuiCase.Contains(frame, "opus-4", "intended model");
                     TuiCase.Contains(frame, "Beta captain / sonnet", "second candidate");
                     TuiCase.Contains(frame, "Fallback allowed", "recovery record");
+                    TuiCase.Contains(frame, "Other captains considered but not listed: 812", "omitted candidate total");
+                    TuiCase.Contains(frame, "Usage is too old to authorize a known allowance.", "omitted candidate reason");
                     AssertNotNull(screen.Selection.Detail, "decision detail loaded");
                     AssertTrue(stub.Saw("GET", "/api/v1/captain-selection-decisions/csd_current"), "the current attempt is opened");
                 }
@@ -173,7 +175,8 @@ namespace Test.Shared.Suites.Tui
             };
 
         private static CaptainSelectionDecisionDetail Detail(CaptainSelectionDecisionView decision)
-            => new CaptainSelectionDecisionDetail { Decision = decision, Policy = new Armada.Core.Settings.UsageSelectionSettings(), Candidates = Candidates() };
+            => new CaptainSelectionDecisionDetail { Decision = decision, Policy = new Armada.Core.Settings.UsageSelectionSettings(), Candidates = Candidates(),
+                OmittedCandidates = new List<CaptainSelectionOmittedReason> { new CaptainSelectionOmittedReason { ReasonCode = UsageSelectionReasonCodes.UsageStale, Count = 812 } } };
 
         private static EnumerationResult<CaptainSelectionCandidateView> Candidates()
             => EnumerationResult<CaptainSelectionCandidateView>.Create(new EnumerationQuery { PageNumber = 1, PageSize = 10 }, new List<CaptainSelectionCandidateView>

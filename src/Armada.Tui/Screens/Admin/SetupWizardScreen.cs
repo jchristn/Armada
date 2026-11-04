@@ -800,7 +800,7 @@ namespace Armada.Tui.Screens.Admin
                 }
 
                 DispatchedMission = response.Mission;
-                DispatchWarning = response.Warning ?? "";
+                DispatchWarning = response.Mission.Status == MissionStatusEnum.Pending ? Context.Loc.T("usageSelection.missionWaiting") : response.Warning ?? "";
                 if (DispatchWarning.Length > 0) SetResult(SetupWizardResultKindEnum.Info, DispatchWarning);
                 else SetResult(SetupWizardResultKindEnum.Success, Context.Loc.T("Dispatched mission \"{{title}}\".", LocalizationArgs.Of("title", response.Mission.Title)));
                 Advance(5);

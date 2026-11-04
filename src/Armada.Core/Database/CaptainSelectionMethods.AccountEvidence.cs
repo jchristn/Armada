@@ -13,12 +13,12 @@ namespace Armada.Core.Database
     internal sealed partial class CaptainSelectionMethods
     {
         /// <inheritdoc />
-        public Task<List<UsageSelectionBudgetTotals>> ReadBudgetTotalsAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default)
+        public Task<List<UsageSelectionBudgetTotals>> ReadBudgetTotalsAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default, string? carriedExecutionAttemptId = null)
         {
             Required(tenantId, nameof(tenantId)); ArgumentNullException.ThrowIfNull(captainIds);
             if (captainIds.Count > 1000) throw new ArgumentException("Budget evidence is read in batches of at most 1000 captains.", nameof(captainIds));
             if (captainIds.Count == 0) return Task.FromResult(new List<UsageSelectionBudgetTotals>());
-            return RunAsync(connection => ReadBudgetTotalsAsync(connection, null, tenantId, captainIds, token), token);
+            return RunAsync(connection => ReadBudgetTotalsAsync(connection, null, tenantId, captainIds, token, carriedExecutionAttemptId), token);
         }
 
         /// <inheritdoc />
@@ -61,16 +61,19 @@ namespace Armada.Core.Database
         }
 
         internal static async Task<List<UsageSelectionBudgetTotals>> ReadBudgetTotalsAsync(DbConnection connection, DbTransaction? transaction,
-            string tenantId, IReadOnlyList<string> captainIds, CancellationToken token)
+            string tenantId, IReadOnlyList<string> captainIds, CancellationToken token, string? carriedExecutionAttemptId = null)
         {
             string[] names = Enumerable.Range(0, captainIds.Count).Select(i => "@captain" + i).ToArray();
+            // A redispatch carries its earlier no-work attempt's reservation forward, so that reservation does not count against it.
+            string carried = String.IsNullOrEmpty(carriedExecutionAttemptId) ? "" : " AND (r.execution_attempt_id<>@carried OR r.state='Uncertain')";
             using DbCommand command = Command(connection, transaction, @"SELECT r.host_id,r.runtime,r.account_key,r.window_key,r.generation_key,
                 SUM(CASE WHEN r.state='Active' THEN r.reserved_percent ELSE 0 END) AS active_percent,
                 SUM(CASE WHEN r.state='Unsettled' THEN r.reserved_percent ELSE 0 END) AS unsettled_percent,
                 MAX(CASE WHEN r.state='Uncertain' THEN 1 ELSE 0 END) AS uncertain
-                FROM usage_budget_reservations r WHERE r.tenant_id=@tenant AND r.state IN ('Active','Unsettled','Uncertain')
+                FROM usage_budget_reservations r WHERE r.tenant_id=@tenant AND r.state IN ('Active','Unsettled','Uncertain')" + carried + @"
                 AND EXISTS (SELECT 1 FROM usage_account_memberships m WHERE m.tenant_id=r.tenant_id AND m.host_id=r.host_id AND m.runtime=r.runtime AND m.account_key=r.account_key AND m.effective_to_utc IS NULL AND m.captain_id IN ("
                 + String.Join(",", names) + ")) GROUP BY r.host_id,r.runtime,r.account_key,r.window_key,r.generation_key;");
+            if (carried.Length > 0) Add(command, "@carried", carriedExecutionAttemptId);
             command.CommandText += " SELECT DISTINCT m.host_id,m.runtime,m.account_key FROM usage_account_memberships m JOIN usage_untracked_executions u ON u.tenant_id=m.tenant_id"
                 + " AND ((u.account_key=m.account_key AND u.host_id=m.host_id AND u.runtime=m.runtime) OR ((u.account_key IS NULL OR u.account_attribution_verified=0) AND u.runtime=m.runtime))"
                 + " WHERE m.tenant_id=@tenant AND m.effective_to_utc IS NULL AND u.state IN ('Active','Unsettled','Uncertain') AND m.captain_id IN (" + String.Join(",", names) + ");";
@@ -105,10 +108,20 @@ namespace Armada.Core.Database
             return RunAsync(connection => ReadAccountEvidenceAsync(connection, null, tenantId, captainIds, token), token);
         }
 
+        /// <inheritdoc />
+        public Task<UsageSelectionAccountEvidence?> ReadMembershipEvidenceAsync(string tenantId, string membershipId, CancellationToken token = default)
+        {
+            Required(tenantId, nameof(tenantId)); Required(membershipId, nameof(membershipId));
+            return RunAsync(async connection =>
+                (await ReadAccountEvidenceAsync(connection, null, tenantId, Array.Empty<string>(), token, membershipId).ConfigureAwait(false)).FirstOrDefault(), token);
+        }
+
         internal static async Task<List<UsageSelectionAccountEvidence>> ReadAccountEvidenceAsync(DbConnection connection, DbTransaction? transaction,
-            string tenantId, IReadOnlyList<string> captainIds, CancellationToken token)
+            string tenantId, IReadOnlyList<string> captainIds, CancellationToken token, string? membershipId = null)
         {
             string[] names = Enumerable.Range(0, captainIds.Count).Select(i => "@captain" + i).ToArray();
+            // By captain: current memberships only. By membership: that membership even after it ended (a deleted captain's account).
+            string scope = membershipId != null ? "m.id=@membership" : "m.effective_to_utc IS NULL AND m.captain_id IN (" + String.Join(",", names) + ")";
             using DbCommand command = Command(connection, transaction, @"SELECT m.id AS membership_id,m.captain_id,m.host_id,m.runtime,m.account_key,m.provider,m.configuration_revision,m.effective_from_utc,
                 l.capture_context_key,l.last_good_snapshot_id,l.last_good_captured_utc,l.last_good_status,l.effective_interval_seconds,
                 s.source,s.windows_json,s.probe_started_utc,
@@ -116,8 +129,9 @@ namespace Armada.Core.Database
                 FROM usage_account_memberships m
                 LEFT JOIN usage_latest_state l ON l.tenant_id=m.tenant_id AND l.host_id=m.host_id AND l.runtime=m.runtime AND l.account_key=m.account_key AND l.expired_utc IS NULL
                 LEFT JOIN usage_snapshots s ON s.id=l.last_good_snapshot_id AND s.tenant_id=m.tenant_id AND s.host_id=m.host_id AND s.runtime=m.runtime AND s.account_key=m.account_key
-                WHERE m.tenant_id=@tenant AND m.effective_to_utc IS NULL AND m.captain_id IN (" + String.Join(",", names) + ") ORDER BY m.captain_id,m.effective_from_utc DESC,m.id DESC;");
+                WHERE m.tenant_id=@tenant AND " + scope + " ORDER BY m.captain_id,m.effective_from_utc DESC,m.id DESC;");
             Add(command, "@tenant", tenantId);
+            if (membershipId != null) Add(command, "@membership", membershipId);
             for (int index = 0; index < names.Length; index++) Add(command, names[index], captainIds[index]);
             List<UsageSelectionAccountEvidence> rows = new List<UsageSelectionAccountEvidence>();
             using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);

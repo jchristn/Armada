@@ -11,6 +11,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Run a fleet action over vessels.
@@ -42,13 +43,13 @@ namespace Armada.Helm.Commands
             bool followUp = !String.IsNullOrWhiteSpace(settings.FromRun);
             if (followUp && vesselIds.Count > 0)
             {
-                AnsiConsole.MarkupLine("[red]Use either --from-run or --vessel/--fleet, not both.[/]");
+                HelmConsole.Error.MarkupLine("[red]Use either --from-run or --vessel/--fleet, not both.[/]");
                 return 1;
             }
 
             if (!followUp && vesselIds.Count == 0)
             {
-                AnsiConsole.MarkupLine("[red]No target vessels.[/] Use [green]--vessel <id-or-name>[/] (repeatable), [green]--fleet <id>[/], or [green]--from-run <run-id>[/].");
+                HelmConsole.Error.MarkupLine("[red]No target vessels.[/] Use [green]--vessel <id-or-name>[/] (repeatable), [green]--fleet <id>[/], or [green]--from-run <run-id>[/].");
                 return 1;
             }
 
@@ -58,7 +59,7 @@ namespace Armada.Helm.Commands
                 int equals = pair.IndexOf('=');
                 if (equals < 1)
                 {
-                    AnsiConsole.MarkupLine("[red]Inputs take the form name=value:[/] " + Markup.Escape(pair));
+                    HelmConsole.Error.MarkupLine("[red]Inputs take the form name=value:[/] " + Markup.Escape(pair));
                     return 1;
                 }
 
@@ -73,7 +74,7 @@ namespace Armada.Helm.Commands
                 {
                     if (!Enum.TryParse(value, true, out FleetActionTargetStatusEnum status))
                     {
-                        AnsiConsole.MarkupLine("[red]Unknown target status:[/] " + Markup.Escape(value));
+                        HelmConsole.Error.MarkupLine("[red]Unknown target status:[/] " + Markup.Escape(value));
                         return 1;
                     }
 
@@ -100,7 +101,7 @@ namespace Armada.Helm.Commands
 
             if (result == null)
             {
-                AnsiConsole.MarkupLine("[red]The server returned no run.[/]");
+                HelmConsole.Error.MarkupLine("[red]The server returned no run.[/]");
                 return 1;
             }
 

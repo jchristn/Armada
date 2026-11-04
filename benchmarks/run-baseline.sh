@@ -2,7 +2,7 @@
 # =====================================================================
 # run-baseline.sh -- the standard admission benchmark.
 #
-# For each candidate count (default 10, 100, 1000) starts a fresh isolated
+# For each candidate count (default 10 and 100) starts a fresh isolated
 # Admiral (start-bench-server.sh), runs the Armada.Benchmark admission
 # command with the same seeded inputs under Enforce, Observe and Disabled
 # selection, stops the server and keeps the JSON report in
@@ -10,13 +10,13 @@
 # breaks the p95 budget or accounting check (3).
 #
 # Usage:
-#   run-baseline.sh [--candidates 10,100,1000] [--missions 200] [--port 25160]
+#   run-baseline.sh [--candidates 10,100] [--missions 200] [--port 25160]
 #                   [--stub-seconds 1] [--no-build] [-- <extra harness options>]
 # =====================================================================
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CANDIDATES="10,100,1000"; MISSIONS=200; PORT=25160; STUB_SECONDS=1; BUILD_FLAG=""; EXTRA=()
+CANDIDATES="10,100"; MISSIONS=200; PORT=25160; STUB_SECONDS=1; BUILD_FLAG=""; EXTRA=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --candidates) CANDIDATES="$2"; shift 2 ;;

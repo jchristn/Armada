@@ -12592,7 +12592,7 @@
           "required": false
         }
       ],
-      "description": "Read an immutable decision, recorded policy, scoped candidate page and runtime model evidence. tenantId override requires a global administrator.",
+      "description": "Read an immutable decision, recorded policy, scoped candidate page, per-reason counts of unlisted candidates and runtime model evidence. tenantId override requires a global administrator.",
       "experimental": false
     },
     {
@@ -25286,22 +25286,6 @@
           "short": null,
           "valueKind": "flag",
           "type": "Boolean",
-          "required": false
-        },
-        {
-          "kind": "option",
-          "name": "page",
-          "short": null,
-          "valueKind": "scalar",
-          "type": "Int32?",
-          "required": false
-        },
-        {
-          "kind": "option",
-          "name": "page-size",
-          "short": null,
-          "valueKind": "scalar",
-          "type": "Int32?",
           "required": false
         },
         {

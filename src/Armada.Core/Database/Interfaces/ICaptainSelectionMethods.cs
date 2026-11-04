@@ -28,8 +28,11 @@ namespace Armada.Core.Database.Interfaces
         Task<bool> TryRecordProviderCooldownAsync(UsageProviderCooldownRequest request, CancellationToken token = default);
         /// <summary>Batch current membership and latest-good evidence for a bounded set of captains in one tenant. Never resolves identity across hosts.</summary>
         Task<List<UsageSelectionAccountEvidence>> ReadAccountEvidenceAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default);
-        /// <summary>Batch SQL-aggregated reservations for the current verified accounts of a bounded captain set.</summary>
-        Task<List<UsageSelectionBudgetTotals>> ReadBudgetTotalsAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default);
+        /// <summary>
+        /// Batch SQL-aggregated reservations for the current verified accounts of a bounded captain set. A carried attempt's
+        /// Active and Unsettled reservations are left out: a redispatch carries them forward instead of counting them twice.
+        /// </summary>
+        Task<List<UsageSelectionBudgetTotals>> ReadBudgetTotalsAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default, string? carriedExecutionAttemptId = null);
         /// <summary>Batch the last mission-slot assignment time for a bounded captain set in one tenant. Captains never assigned are omitted.</summary>
         /// <exception cref="ArgumentException">The tenant is missing or more than 1000 captains are requested.</exception>
         Task<Dictionary<string, DateTime>> ReadLastAssignedAsync(string tenantId, IReadOnlyList<string> captainIds, CancellationToken token = default);
@@ -74,6 +77,13 @@ namespace Armada.Core.Database.Interfaces
         Task<List<CaptainSelectionWindowRecord>> ReadWindowsAsync(string tenantId, string decisionId, string candidateId, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default);
         /// <summary>Read immutable reasons of one authorized candidate.</summary>
         Task<List<CaptainSelectionReason>> ReadReasonsAsync(string tenantId, string decisionId, string candidateId, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default);
+        /// <summary>
+        /// Read the latest good capture of the account bound by one membership, even after the membership ended. Used to settle
+        /// a deleted captain's reservations from a fresh capture of the same account.
+        /// </summary>
+        Task<UsageSelectionAccountEvidence?> ReadMembershipEvidenceAsync(string tenantId, string membershipId, CancellationToken token = default);
+        /// <summary>Sum the visible per-reason counts of candidates the decision evaluated but did not store individually.</summary>
+        Task<List<CaptainSelectionOmittedReason>> ReadOmittedCandidatesAsync(string tenantId, string decisionId, string? ownerUserId = null, string? candidateOwnerUserId = null, CancellationToken token = default);
         /// <summary>Read a bounded page of execution evidence for an authorized decision, ordered oldest first.</summary>
         Task<EnumerationResult<CaptainSelectionExecutionEvent>> EnumerateExecutionEventsAsync(string tenantId, string decisionId, string? ownerUserId = null, int pageNumber = 1, int pageSize = 25, CancellationToken token = default);
         /// <summary>Read the latest actual model report for an authorized decision, preserving reporting provenance.</summary>

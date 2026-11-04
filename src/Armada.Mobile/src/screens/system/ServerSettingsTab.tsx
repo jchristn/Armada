@@ -2,7 +2,7 @@ import { UsageSelectionSettings } from '../usage/UsageSelectionSettings';
 import { UsageSettings } from '../usage/UsageSettings';
 import { useRouter, type Href } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { getHealth, getSettings, listCaptains, listFleets, listVessels } from '@dashboard/api/client';
+import { getHealth, getSettings, isApiStatus, listCaptains, listFleets, listVessels } from '@dashboard/api/client';
 import { mergeServerSettings, type HealthInfo, type ServerSettings } from '@dashboard/lib/serverSettings';
 import { useAuth } from '../../auth/AuthContext';
 import { DetailBody, DetailPending } from '../../components/resource/DetailParts';
@@ -22,6 +22,8 @@ import type { MobileServerSettings } from './settingsModel';
 interface ServerData {
   health: HealthInfo | null;
   settings: MobileServerSettings | null;
+  /** True when settings returned 403: the caller is not a global administrator. */
+  settingsForbidden?: boolean;
 }
 
 /** True when the deployment is missing a fleet, a vessel, or a captain (the dashboard then offers the setup wizard). */
@@ -50,18 +52,21 @@ export function ServerSettingsTab() {
   const [incomplete, setIncomplete] = useState(false);
 
   const { data, loading, refreshing, error, reload, refresh, setData } = useLoad<ServerData>(async () => {
-    const [h, s] = await Promise.all([getHealth().catch(() => null), getSettings().catch(() => null)]);
+    let forbidden = false;
+    // Server configuration is global-administrator only; a 403 is a permission boundary, not a failure.
+    const [h, s] = await Promise.all([getHealth().catch(() => null), getSettings().catch((failure: unknown) => { forbidden = isApiStatus(failure, 403); return null; })]);
     void setupIncomplete().then(setIncomplete);
     if (!h && !s) throw new Error(t('Failed to load server data.'));
     return {
       health: (h as unknown as HealthInfo | null) ?? null,
       settings: s ? (mergeServerSettings(s as unknown as ServerSettings) as MobileServerSettings) : null,
+      settingsForbidden: forbidden,
     };
   }, [], { fallbackError: t('Failed to load server data.') });
   useReloadOnFocus(reload);
 
   const onSaved = useCallback((settings: MobileServerSettings) => {
-    setData(data ? { ...data, settings } : { health: null, settings });
+    setData(data ? { ...data, settings, settingsForbidden: false } : { health: null, settings });
   }, [data, setData]);
   const onHealth = useCallback((health: HealthInfo) => {
     setData(data ? { ...data, health } : { health, settings: null });
@@ -80,7 +85,8 @@ export function ServerSettingsTab() {
       ) : null}
       {isAdmin && !proxyMode ? <UsageSettings /> : null}
       {isAdmin && !proxyMode ? <UsageSelectionSettings /> : null}
-      {!settings ? <Banner tone="danger" title={t('Failed to load server settings. Health data is available, but configuration and backup sections could not be loaded.')} /> : null}
+      {!settings && data.settingsForbidden ? <Banner tone="info" title={t('Server configuration and backups require a global administrator. Health is shown below.')} /> : null}
+      {!settings && !data.settingsForbidden ? <Banner tone="danger" title={t('Failed to load server settings. Health data is available, but configuration and backup sections could not be loaded.')} /> : null}
       {incomplete && isAdmin && !proxyMode ? (
         <>
           <Banner tone="info" title={t('Setup Wizard')} message={t('Configure Armada to dispatch one safe first mission.')} />

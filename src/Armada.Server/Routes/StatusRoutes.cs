@@ -505,10 +505,11 @@ namespace Armada.Server.Routes
                     body = JsonSerializer.Deserialize<SettingsUpdateRequest>(req.Http.Request.DataAsString, _jsonOptions)
                         ?? throw new JsonException("Settings object required.");
                 }
-                catch (JsonException)
+                catch (JsonException json)
                 {
+                    JsonValueError described = JsonValueErrorTranslator.Describe(json);
                     req.Http.Response.StatusCode = 400;
-                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = "Invalid settings JSON or field type." };
+                    return new ApiErrorResponse { Error = ApiResultEnum.BadRequest, Message = described.Message, Data = described };
                 }
                 catch (ArgumentException invalid)
                 {

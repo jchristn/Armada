@@ -10,6 +10,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Create a standalone mission.
@@ -54,7 +55,7 @@ namespace Armada.Helm.Commands
 
             if (created == null)
             {
-                AnsiConsole.MarkupLine("[red]Failed to create mission.[/]");
+                HelmConsole.Error.MarkupLine("[red]Failed to create mission.[/]");
                 return 1;
             }
 

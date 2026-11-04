@@ -11,6 +11,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Discover git repositories on the Admiral host and import them as vessels.
@@ -25,7 +26,7 @@ namespace Armada.Helm.Commands
             List<string> roots = (settings.Roots ?? new string[0]).Where(p => !string.IsNullOrWhiteSpace(p)).Select(ToAbsolute).ToList();
             if (directories.Count == 0 && roots.Count == 0)
             {
-                AnsiConsole.MarkupLine("[red]Provide at least one path or --root.[/]");
+                HelmConsole.Error.MarkupLine("[red]Provide at least one path or --root.[/]");
                 return 1;
             }
 
@@ -36,7 +37,7 @@ namespace Armada.Helm.Commands
                 Fleet? match = fleetResult?.Objects == null ? null : EntityResolver.ResolveFleet(fleetResult.Objects, fleetId);
                 if (match == null)
                 {
-                    AnsiConsole.MarkupLine($"[red]Fleet not found:[/] {Markup.Escape(fleetId)}");
+                    HelmConsole.Error.MarkupLine($"[red]Fleet not found:[/] {Markup.Escape(fleetId)}");
                     return 1;
                 }
 
@@ -51,7 +52,7 @@ namespace Armada.Helm.Commands
             VesselImportDiscoverResponse? discovered = await PostAsync<VesselImportDiscoverResponse>("/api/v1/vessels/import/discover", discoverBody).ConfigureAwait(false);
             if (discovered == null)
             {
-                AnsiConsole.MarkupLine("[red]Discovery returned no result.[/]");
+                HelmConsole.Error.MarkupLine("[red]Discovery returned no result.[/]");
                 return 1;
             }
 
@@ -107,7 +108,7 @@ namespace Armada.Helm.Commands
             {
                 if (String.IsNullOrWhiteSpace(settings.Captain))
                 {
-                    AnsiConsole.MarkupLine("[red]--categorize requires --captain <id>.[/]");
+                    HelmConsole.Error.MarkupLine("[red]--categorize requires --captain <id>.[/]");
                     return 1;
                 }
 
@@ -119,7 +120,7 @@ namespace Armada.Helm.Commands
                 {
                     if (!File.Exists(settings.PromptFile))
                     {
-                        AnsiConsole.MarkupLine($"[red]Prompt file not found:[/] {Markup.Escape(settings.PromptFile)}");
+                        HelmConsole.Error.MarkupLine($"[red]Prompt file not found:[/] {Markup.Escape(settings.PromptFile)}");
                         return 1;
                     }
 
@@ -132,7 +133,7 @@ namespace Armada.Helm.Commands
             VesselImportResponse? imported = await PostAsync<VesselImportResponse>("/api/v1/vessels/import", importBody).ConfigureAwait(false);
             if (imported == null)
             {
-                AnsiConsole.MarkupLine("[red]Import returned no result.[/]");
+                HelmConsole.Error.MarkupLine("[red]Import returned no result.[/]");
                 return 1;
             }
 

@@ -6,7 +6,7 @@ provisions captains and missions the way a client would and reads timings from t
 
 ## What it measures
 
-For each candidate count (10, 100 and 1000 captains by default) the standard run starts a fresh isolated Admiral and
+For each candidate count (10 and 100 captains by default; larger fleets with `--candidates`) the standard run starts a fresh isolated Admiral and
 submits the same batch of 200 missions under each selection mode, in this order: Enforce, Observe, Disabled. An
 unrecorded 20-mission Observe warmup runs first.
 
@@ -35,7 +35,7 @@ a 50 ms noise floor), with zero accounting violations. A broken budget exits 3.
 ## Running
 
 ```sh
-benchmarks/run-baseline.sh                         # 10, 100 and 1000 candidates, 200 missions per arm
+benchmarks/run-baseline.sh                         # 10 and 100 candidates, 200 missions per arm
 benchmarks/run-baseline.sh --candidates 10 --missions 50 --no-build
 dotnet src/Armada.Benchmark/bin/Release/net10.0/Armada.Benchmark.dll compare \
   benchmarks/baselines/admission-100.json benchmarks/results/admission-100.json

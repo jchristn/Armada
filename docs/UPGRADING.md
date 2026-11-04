@@ -6,6 +6,24 @@ This guide covers how an Armada Admiral moves its database forward between relea
 
 Migrations 123 through 128 add immutable selection history, capture timing, current-attempt correlation and operational uncertainty for unreserved work. Migration 127 adds immutable execution attribution, mission recovery authorizations and retained reconsideration deadlines. Migration 128 adds each captain's last assignment time, backfilled from existing mission assignments, so selection tie-breaking no longer depends on unrelated captain updates. Existing live executions are adopted before dispatch without reconstructing historical decisions. Observe/FirstAvailable remains the default; Enforce is opt-in. After an upgrade, inspect current captures and mission selection diagnostics before choosing stricter unknown-usage policy. See the [implementation and acceptance guide](usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md). Back up the database and protected settings/usage identity before upgrading; rollback requires restoring that backup. A populated v1.2.0-to-current release drill remains part of the final release plan.
 
+### Contract changes to act on in v1.3.0
+
+- `POST /api/v1/missions` always answers `201` with the Mission. A mission no captain can take yet stays `Pending` and
+  carries an `X-Armada-Warning` header; earlier versions wrapped it as `{ "Mission": ..., "Warning": ... }`. Read `Id`
+  from the body in both cases. The .NET clients, Helm, the TUI, the Dashboard and Mobile read both shapes. MCP
+  `create_mission` is unchanged.
+- The captain-selection REST routes now use the same PascalCase bodies and error envelope (`Error`, `Message`, `Data`)
+  as every other route. A stale recovery revision returns `409` with `Data.Code` `RecoveryRevisionConflict`.
+- Decision detail stores the candidates that explain a decision (the selected, proposed and requested captains, plus the
+  25 nearest to eligibility for a wait) and counts the rest by reason in `OmittedCandidates`. Decisions recorded before
+  the upgrade keep every candidate row. An automatic retry is recorded with `Trigger` `Redispatch`.
+- A request-body value that does not bind returns `400` with a message naming the field and what it accepts, and
+  `Data.Code` `InvalidJsonValue` (or `MalformedJson`) with `Data.Field`. Earlier messages named .NET types.
+- Helm writes errors and diagnostics to stderr and shows the server's own message. Scripts that parsed error text from
+  stdout must read stderr; exit codes are unchanged.
+- Migration 129 adds `captain_selection_omitted_candidates`. Migration 130 rewrites the SQLite default tenant's
+  timestamps as zone-qualified UTC; they were stored without a zone and read as local time.
+
 ## Supported upgrade paths
 
 Upgrade any 0.9.x release directly to 1.0. You do not need to step through intermediate builds: the Admiral applies every pending schema migration, in order, the first time the new version starts.

@@ -614,7 +614,8 @@ export async function fetchCatalog(url: string, init?: RequestInit): Promise<I18
 
 export function formatAbsoluteDateTime(locale: string, utc: string | null | undefined): string {
   if (!utc) return '';
-  return new Date(parseUtcMs(utc)).toLocaleString(locale);
+  // Times are shown in the viewer's zone, so the zone is named (for example "PST"); other clients print UTC.
+  return new Date(parseUtcMs(utc)).toLocaleString(locale, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'short' });
 }
 
 export function formatDateOnly(locale: string, utc: string | null | undefined): string {

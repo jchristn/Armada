@@ -10,6 +10,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Show the "needs you" inbox: items across the fleet awaiting a decision or intervention.
@@ -30,7 +31,7 @@ namespace Armada.Helm.Commands
 
             if (items == null)
             {
-                AnsiConsole.MarkupLine("[red]Unable to retrieve inbox.[/] Is the Admiral running?");
+                HelmConsole.Error.MarkupLine("[red]Unable to retrieve inbox.[/] Is the Admiral running?");
                 return 1;
             }
 

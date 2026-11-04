@@ -34,7 +34,7 @@ namespace Armada.Server.Mcp.Tools
                     CaptainSelectionToolArgs request = Read(args, options);
                     return await selections.HistoryAsync(McpToolHelpers.ResolveCallerContext(), request.MissionId ?? throw new ArgumentException("missionId is required."), request.Query ?? new CaptainSelectionHistoryQuery()).ConfigureAwait(false);
                 });
-            register("get_captain_selection_decision", "Read an immutable decision, recorded policy, scoped candidate page and runtime model evidence. tenantId override requires a global administrator.",
+            register("get_captain_selection_decision", "Read an immutable decision, recorded policy, scoped candidate page, per-reason counts of unlisted candidates and runtime model evidence. tenantId override requires a global administrator.",
                 new { type = "object", properties = new { decisionId = new { type = "string" }, tenantId = new { type = "string" }, pageNumber = new { type = "integer", minimum = 1 }, pageSize = new { type = "integer", minimum = 1, maximum = 1000 } }, required = new[] { "decisionId" } }, async args => {
                     if (selections == null) return (object)McpToolError.Unavailable("Selection service unavailable.");
                     CaptainSelectionToolArgs request = Read(args, options);

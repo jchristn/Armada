@@ -500,7 +500,9 @@ namespace Armada.Core.Database.Sqlite
         /// <returns>DateTime value.</returns>
         internal static DateTime FromIso8601(string value)
         {
-            return DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
+            // Every stored timestamp is UTC. Text without a zone (SQLite's datetime('now'), used by the default tenant seed)
+            // is UTC too, never the host's local time, or the value would shift by the host's UTC offset.
+            return DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
         }
 
         /// <summary>

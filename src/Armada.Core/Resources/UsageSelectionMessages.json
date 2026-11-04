@@ -127,5 +127,10 @@
   "usageSelection.reservations.estimate": "Estimated Armada reservations: {{active}} running, {{unsettled}} awaiting settlement (not provider usage)",
   "usageSelection.reservations.uncertain": "Some estimated usage on this account is not settled yet. Captain selection treats it as uncertain until a fresh capture.",
   "usageSelection.reason.routed": "Chosen by the existing routing order; Observe does not change routing.",
-  "usageSelection.reason.fallback": "An administrator's recovery permission allowed fallback from the preferred captain."
+  "usageSelection.reason.fallback": "An administrator's recovery permission allowed fallback from the preferred captain.",
+  "usageSelection.omitted": "Other captains considered but not listed: {{count}}",
+  "usageSelection.omittedHint": "History lists the captains that explain a decision and counts the rest by reason. Preview shows every captain now.",
+  "usageSelection.missionWaiting": "Mission created but not assigned to a captain yet. Armada retries automatically; the mission's Captain selection section explains any selection wait.",
+  "usageSelection.redispatch": "Automatic retry",
+  "usageSelection.redispatchHint": "Armada dispatched this mission again by itself after an attempt that produced no work or was interrupted."
 }

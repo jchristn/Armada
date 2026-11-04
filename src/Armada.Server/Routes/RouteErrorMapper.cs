@@ -2,6 +2,7 @@ namespace Armada.Server.Routes
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json;
     using WatsonWebserver;
     using WatsonWebserver.Core;
     using Armada.Core.Database;
@@ -237,11 +238,28 @@ namespace Armada.Server.Routes
                 badRequest.Data = CollectionLimitErrorDetail.FromException(limit);
                 throw badRequest;
             }
+            catch (JsonException json)
+            {
+                // A body value that does not bind says which field and what it accepts, never a .NET type name.
+                throw InvalidJson(json);
+            }
+            catch (WebserverException wrapped) when (wrapped.InnerException is JsonException json)
+            {
+                throw InvalidJson(json);
+            }
         }
 
         #endregion
 
         #region Private-Methods
+
+        private static WebserverException InvalidJson(JsonException json)
+        {
+            JsonValueError described = JsonValueErrorTranslator.Describe(json);
+            WebserverException badRequest = new WebserverException(ApiResultEnum.BadRequest, described.Message, json);
+            badRequest.Data = described;
+            return badRequest;
+        }
 
         private static ApiErrorResponse BlackBoxError(ApiRequest req, int status, ApiResultEnum result, string code, string message)
         {

@@ -70,7 +70,7 @@ namespace Armada.Server
         {
             ArgumentNullException.ThrowIfNull(query);
             query.Outcome = Canonical(query.Outcome, "outcome", CaptainSelectionOutcomes.Admitted, CaptainSelectionOutcomes.Waiting);
-            query.Trigger = Canonical(query.Trigger, "trigger", "Dispatch", "Repair", CaptainSelectionOutcomes.Waiting);
+            query.Trigger = Canonical(query.Trigger, "trigger", CaptainSelectionTriggers.Dispatch, CaptainSelectionTriggers.Redispatch, CaptainSelectionTriggers.Repair, CaptainSelectionTriggers.Waiting);
             if (query.FromUtc.HasValue && query.ToUtc.HasValue && query.FromUtc.Value >= query.ToUtc.Value) throw new ArgumentException("from must be earlier than to.");
             Mission mission = await MissionAsync(caller, missionId, token).ConfigureAwait(false);
             string? owner = Owner(caller);
@@ -103,7 +103,8 @@ namespace Armada.Server
                 foreach (CaptainSelectionExecutionEvent item in events.Objects) { item.ActualModel = null; item.ActualProvider = null; }
             return new CaptainSelectionDecisionDetail { Decision = view, Policy = policy.ToSettings(),
                 Recovery = await _Database.CaptainSelections.ReadDecisionRecoveryAsync(tenant, decision.Id, token).ConfigureAwait(false),
-                Candidates = await CandidatesCoreAsync(caller, decision, pageNumber, pageSize, token, policy).ConfigureAwait(false), ExecutionEvents = events };
+                Candidates = await CandidatesCoreAsync(caller, decision, pageNumber, pageSize, token, policy).ConfigureAwait(false), ExecutionEvents = events,
+                OmittedCandidates = await _Database.CaptainSelections.ReadOmittedCandidatesAsync(tenant, decision.Id, Owner(caller), Owner(caller), token).ConfigureAwait(false) };
         }
 
         /// <summary>Page only visible candidate comparisons; internal account and credential identifiers are omitted.</summary>

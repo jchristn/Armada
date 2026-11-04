@@ -14,6 +14,7 @@ import {
   downloadBackup,
   restoreBackup,
   getProxySessionContext,
+  isApiStatus,
   type ProxySessionContext,
   type RebuildStatus,
   type BranchInfo,
@@ -82,6 +83,7 @@ export default function Server() {
   const [proxyContext, setProxyContext] = useState<ProxySessionContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [settingsForbidden, setSettingsForbidden] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [revealedRemoteField, setRevealedRemoteField] = useState<RemoteSecretField | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -183,16 +185,19 @@ export default function Server() {
   const loadData = useCallback(async () => {
     try {
       setError('');
+      let forbidden = false;
       const [h, s, proxy] = await Promise.all([
         getHealth().catch(() => null),
-        getSettings().catch(() => null),
+        // Server configuration is global-administrator only; a 403 is a permission boundary, not a failure.
+        getSettings().catch((failure: unknown) => { forbidden = isApiStatus(failure, 403); return null; }),
         getProxySessionContext().catch(() => null),
       ]);
       if (h) setHealth(h as unknown as HealthInfo);
       if (s) setSettings(mergeServerSettings(s as unknown as ServerSettings));
       setProxyContext(proxy);
+      setSettingsForbidden(forbidden);
       if (!h && !s) setError(t('Failed to load server data.'));
-      else if (!s) setError(t('Failed to load server settings. Health data is available, but configuration and backup sections could not be loaded.'));
+      else if (!s && !forbidden) setError(t('Failed to load server settings. Health data is available, but configuration and backup sections could not be loaded.'));
     } catch {
       setError(t('Failed to load server data.'));
     } finally {
@@ -556,6 +561,12 @@ export default function Server() {
       />
 
       <ErrorModal error={error} onClose={() => setError('')} />
+
+      {settingsForbidden && (
+        <div className="alert alert-info" role="status" style={{ marginBottom: '1rem' }}>
+          {t('Server configuration and backups require a global administrator. Health is shown below.')}
+        </div>
+      )}
 
       {remoteProxyMode && (
         <div className="alert alert-warning" style={{ marginBottom: '1rem' }}>

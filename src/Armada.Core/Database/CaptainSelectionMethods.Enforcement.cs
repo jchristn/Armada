@@ -54,7 +54,7 @@ namespace Armada.Core.Database
             UsageSelectionAccountEvidence? source = after.Count == 1 ? after[0] : null;
             if (source?.MembershipId != recorded.MembershipId || source?.HostId != recorded.HostId || source?.AccountKey != recorded.AccountKey) return false;
 
-            List<UsageSelectionBudgetTotals> totals = await ReadBudgetTotalsAsync(connection, transaction, decision.TenantId, ids, token).ConfigureAwait(false);
+            List<UsageSelectionBudgetTotals> totals = await ReadBudgetTotalsAsync(connection, transaction, decision.TenantId, ids, token, records.AdmissionCarriedAttemptId).ConfigureAwait(false);
             UsageSelectionCandidate input = new UsageSelectionCandidate
             {
                 CaptainId = captain.Id,

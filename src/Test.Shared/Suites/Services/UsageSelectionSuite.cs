@@ -151,6 +151,20 @@ namespace Test.Shared.Suites.Services
                 a.IneligibilityReason = null; a.OccupiedSlots = 1; AssertNull(Evaluate(a).SelectedCaptainId);
                 a.OccupiedSlots = 0; a.Capacity = 0; AssertNull(Evaluate(a).SelectedCaptainId);
             });
+            Add("routing_blocked_captain_still_shows_its_headroom", () =>
+            {
+                // UT-008: a captain excluded only because fallback needs permission shows its real headroom, never Unknown,
+                // and stays blocked and unranked.
+                UsageSelectionCandidate pinned = Fresh("pinned", 95);
+                UsageSelectionCandidate spare = Fresh("spare", 40); spare.IneligibilityReason = UsageSelectionReasonCodes.FallbackPermissionRequired;
+                UsageSelectionEvaluation evaluation = Evaluate(pinned, spare);
+                UsageSelectionCandidateResult blocked = evaluation.Candidates.Single(c => c.Candidate.CaptainId == "spare");
+                AssertEqual(UsageSelectionBandEnum.Blocked, blocked.Band); AssertFalse(blocked.CanSelect);
+                AssertTrue(Math.Abs(60.0 - blocked.AvailablePercent!.Value) < 0.001, "headroom " + blocked.AvailablePercent);
+                AssertNull(evaluation.SelectedCaptainId);
+                spare.IdentityVerified = false;
+                AssertNull(Evaluate(pinned, spare).Candidates.Single(c => c.Candidate.CaptainId == "spare").AvailablePercent, "no headroom without verified evidence");
+            });
             Add("unknown_can_allow_deprioritized_or_wait", () =>
             {
                 UsageSelectionCandidate a = Fresh("a", 0); a.IdentityVerified = false;

@@ -111,7 +111,7 @@ export function UsageView({ captain }: { captain?: Captain }) {
             <KeyValueRow label={t('Last observed')} value={formatRelativeTime(observed)} />
             <KeyValueRow label={t('Requested interval')} value={t('{{seconds}}s', { seconds: formatNumber(view.requestedIntervalSeconds) })} />
             <KeyValueRow label={t('Effective interval')} value={t('{{seconds}}s', { seconds: formatNumber(view.effectiveIntervalSeconds) })} />
-            {!captain ? <KeyValueRow label={t('Captains')} value={view.captainIds.join(', ')} mono /> : null}
+            {!captain ? <KeyValueRow label={t('Captains')} value={view.captainIds.map((id, index) => view.captainNames?.[index] || id).join(', ')} mono={!view.captainNames?.some(Boolean)} /> : null}
             {admin && view.errorCode ? <KeyValueRow label={t('Error')} value={view.errorCode} mono /> : null}
           </View>
         </View>

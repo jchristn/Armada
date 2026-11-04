@@ -6,7 +6,7 @@ namespace Armada.Helm.Commands
     using Spectre.Console.Cli;
 
     /// <summary>Audited recovery permissions for one Pending mission's captain selection.</summary>
-    public sealed class MissionSelectionRecoverySettings : BaseSettings
+    public sealed class MissionSelectionRecoverySettings : OutputSettings
     {
         /// <summary>Mission identifier.</summary>
         [CommandArgument(0, "<mission>")]

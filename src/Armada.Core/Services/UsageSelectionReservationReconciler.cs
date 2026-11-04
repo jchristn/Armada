@@ -78,6 +78,24 @@ namespace Armada.Core.Services
                         evidence = await _Database.CaptainSelections.ReadAccountEvidenceAsync(row.TenantId, new[] { row.CaptainId }, token).ConfigureAwait(false);
                         evidenceByCaptain[captainKey] = evidence;
                     }
+                    if (!captains.TryGetValue(row.CaptainId, out Captain? captain))
+                    {
+                        captain = await _Database.Captains.ReadAsync(row.CaptainId, token).ConfigureAwait(false);
+                        captains[row.CaptainId] = captain;
+                    }
+                    // A deleted captain has no current membership. Its reservation stays bound to the account it reserved, so
+                    // a fresh capture of that same account (through the reservation's own membership) can still settle it.
+                    bool deletedCaptain = captain == null;
+                    if (deletedCaptain && evidence.Count == 0)
+                    {
+                        string membershipKey = row.TenantId + "\nmembership\n" + row.MembershipId;
+                        if (!evidenceByCaptain.TryGetValue(membershipKey, out evidence))
+                        {
+                            UsageSelectionAccountEvidence? ended = await _Database.CaptainSelections.ReadMembershipEvidenceAsync(row.TenantId, row.MembershipId, token).ConfigureAwait(false);
+                            evidence = ended == null ? new List<UsageSelectionAccountEvidence>() : new List<UsageSelectionAccountEvidence> { ended };
+                            evidenceByCaptain[membershipKey] = evidence;
+                        }
+                    }
                     // Reassignment, credential/config changes or ambiguous identity require operator-visible uncertainty,
                     // never settlement against a different account that happens to have the same captain name.
                     UsageSelectionAccountEvidence? account = evidence.Count == 1 ? evidence[0] : null;
@@ -96,19 +114,17 @@ namespace Armada.Core.Services
                     bool provesReset = identityProven && fixedReset && account!.ProbeStartedUtc >= resetUtc;
                     if ((provesExecution || provesReset) && account != null)
                     {
-                        if (!captains.TryGetValue(row.CaptainId, out Captain? captain))
-                        {
-                            captain = await _Database.Captains.ReadAsync(row.CaptainId, token).ConfigureAwait(false);
-                            captains[row.CaptainId] = captain;
-                        }
                         string? custom = captain?.UsageCaptureMode == UsageCaptureModeEnum.Custom ? account.ConfigurationRevision : null;
                         string? fingerprint = captain?.UsageCaptureMode == UsageCaptureModeEnum.Custom ? UsageAccountResolver.CommandFingerprint(captain.UsageCaptureCommand) : null;
                         string revision = UsageAccountResolver.ConfigurationRevision(account.HostId, account.Runtime, fingerprint);
                         string group = UsageAccountResolver.GroupKey(row.TenantId, account.HostId, account.Runtime, fingerprint);
-                        bool sameConfiguration = captain != null && captain.Runtime == account.Runtime && account.ConfigurationRevision == revision
+                        // A deleted captain's configuration can no longer be checked; the reservation's own membership already
+                        // proves the account, so the capture only has to be fresh and of the same window.
+                        bool sameConfiguration = deletedCaptain || captain!.Runtime == account.Runtime && account.ConfigurationRevision == revision
                             && account.CaptureContextKey == UsageAccountResolver.CaptureContextKey(group, revision);
                         List<UsageWindow> matches = UsageWindowsJson.Deserialize(account.WindowsJson)
-                            .Where(w => w != null && UsageBudgetIdentity.WindowKey(w, custom) == row.WindowKey).ToList();
+                            .Where(w => w != null && (UsageBudgetIdentity.WindowKey(w, custom) == row.WindowKey
+                                || deletedCaptain && UsageBudgetIdentity.WindowKey(w, account.ConfigurationRevision) == row.WindowKey)).ToList();
                         UsageWindow? window = matches.Count == 1 ? matches[0] : null;
                         bool valid = window != null && (window.UsedPercent.HasValue
                             ? Double.IsFinite(window.UsedPercent.Value) && window.UsedPercent >= 0

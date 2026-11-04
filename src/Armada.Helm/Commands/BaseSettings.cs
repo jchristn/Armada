@@ -14,24 +14,10 @@ namespace Armada.Helm.Commands
     using Armada.Helm.Infrastructure;
 
     /// <summary>
-    /// Base command settings with shared options.
+    /// Base command settings: the shared output options plus paging for commands that list results.
     /// </summary>
-    public class BaseSettings : TargetSettings
+    public class BaseSettings : OutputSettings
     {
-        /// <summary>
-        /// Output in JSON format for machine consumption.
-        /// </summary>
-        [Description("Output in JSON format")]
-        [CommandOption("--json")]
-        public bool Json { get; set; } = false;
-
-        /// <summary>
-        /// Verbose output.
-        /// </summary>
-        [Description("Verbose output")]
-        [CommandOption("--verbose")]
-        public bool Verbose { get; set; } = false;
-
         /// <summary>
         /// Page number for list commands (1-based).
         /// </summary>

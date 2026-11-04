@@ -103,7 +103,10 @@ export default function CaptainSelectionCard({ missionId, status, revision }: Ca
   ];
   const historyColumns: DataTableColumn<CaptainSelectionDecisionView>[] = [
     { key: 'time', label: t('Time'), required: true, className: 'selection-time-column', render: row => <span title={row.evaluatedUtc}>{formatDateTime(row.evaluatedUtc)}</span> },
-    { key: 'outcome', label: t('Status'), className: 'selection-status-column', render: row => <span className={`readiness-pill ${row.outcome === 'Waiting' ? 'warning' : 'ready'}`}>{t(row.outcome === 'Waiting' ? 'usageSelection.waiting' : 'usageSelection.admitted')}</span> },
+    { key: 'outcome', label: t('Status'), className: 'selection-status-column', render: row => <span className="selection-status-cell">
+      <span className={`readiness-pill ${row.outcome === 'Waiting' ? 'warning' : 'ready'}`}>{t(row.outcome === 'Waiting' ? 'usageSelection.waiting' : 'usageSelection.admitted')}</span>
+      {row.trigger === 'Redispatch' && <span className="text-dim selection-trigger" title={t('usageSelection.redispatchHint')}>{t('usageSelection.redispatch')}</span>}
+    </span> },
     { key: 'strategy', label: t('usageSelection.strategy'), className: 'selection-strategy-column', render: row => <span>{t(selectionStrategyKey[row.strategy])}</span> },
     { key: 'details', label: t('Details'), render: row => <span>{t(selectionReasonKey(row.reasonCode))}</span> },
     { key: 'actions', label: t('Actions'), fixed: true, className: 'selection-actions-column', render: row => <button type="button" className="btn btn-sm" onClick={() => {
@@ -113,6 +116,7 @@ export default function CaptainSelectionCard({ missionId, status, revision }: Ca
   ];
   const comparison = view === 'preview' ? preview?.candidates : detail?.candidates;
   const recorded = detail?.decision;
+  const omitted = detail?.omittedCandidates ?? [];
   return <section className="card captain-selection-card" aria-label={t('usageSelection.title')}>
     <header className="selection-heading"><div><h3 ref={selectionHeading} tabIndex={-1}>{t('usageSelection.title')}</h3>
       {summary && <div className="selection-meta text-dim"><span>{t(`usageSelection.${(latest?.mode ?? summary.currentMode).toLowerCase()}`)}</span><span>{t(selectionStrategyKey[latest?.strategy ?? summary.currentStrategy])}</span></div>}
@@ -164,6 +168,11 @@ export default function CaptainSelectionCard({ missionId, status, revision }: Ca
           pagination={{ pageNumber: candidatePage, pageSize: candidateSize, totalPages: comparison?.totalPages ?? 0, totalRecords: comparison?.totalRecords ?? 0,
             onPageChange: setCandidatePage, onPageSizeChange: size => { setCandidateSize(size); setCandidatePage(1); } }}
           autoRefresh={{ seconds: refreshSeconds, onChange: setRefreshSeconds }} onRefresh={load} refreshTitle="usageSelection.refresh" />
+        {view === 'comparison' && omitted.length > 0 && <details className="selection-omitted">
+          <summary>{t('usageSelection.omitted', { count: omitted.reduce((sum, row) => sum + row.count, 0) })}</summary>
+          <p className="text-dim">{t('usageSelection.omittedHint')}</p>
+          <ul>{omitted.map(row => <li key={row.reasonCode}><span className="selection-omitted-count">{row.count}</span><span>{t(selectionReasonKey(row.reasonCode))}</span></li>)}</ul>
+        </details>}
       </>}
     </div>}
     {recoveryOpen && status === 'Pending' && summary?.canManageRecovery && <SelectionRecoveryDialog key={missionId} missionId={missionId} current={summary.recovery} onClose={() => setRecoveryOpen(false)} onSaved={() => { void load().catch(() => {}); }} />}

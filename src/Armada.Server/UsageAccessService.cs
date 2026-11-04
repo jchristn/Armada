@@ -185,11 +185,33 @@ namespace Armada.Server
             int count = rows.Count;
             List<UsageSnapshotView> visible = ordered.Skip((query.PageNumber - 1) * query.PageSize).Take(query.PageSize).ToList();
             await AttachReservationEstimatesAsync(query.TenantId!, visible).ConfigureAwait(false);
+            await AttachCaptainNamesAsync(query.TenantId!, visible).ConfigureAwait(false);
             return new EnumerationResult<UsageSnapshotView> { TotalMs = Math.Round(timer.Elapsed.TotalMilliseconds, 2), Objects = visible, PageNumber = query.PageNumber, PageSize = query.PageSize, TotalRecords = count, TotalPages = (int)Math.Ceiling(count / (double)query.PageSize) };
         }
 
         // Reservation totals come from the same ledger selection reads, matched to each observed window by its budget
         // key (with or without the custom-capture configuration revision). Two batched reads cover the whole page.
+        // Member captains are listed by name; one read per distinct captain on the visible page.
+        private async Task AttachCaptainNamesAsync(string tenantId, List<UsageSnapshotView> rows)
+        {
+            Dictionary<string, string?> names = new Dictionary<string, string?>(StringComparer.Ordinal);
+            foreach (UsageSnapshotView row in rows)
+            {
+                List<string?> resolved = new List<string?>();
+                foreach (string id in row.CaptainIds)
+                {
+                    if (!names.TryGetValue(id, out string? name))
+                    {
+                        Captain? captain = await _Database.Captains.ReadAsync(tenantId, id).ConfigureAwait(false);
+                        name = captain?.Name;
+                        names[id] = name;
+                    }
+                    resolved.Add(name);
+                }
+                row.CaptainNames = resolved;
+            }
+        }
+
         private async Task AttachReservationEstimatesAsync(string tenantId, List<UsageSnapshotView> rows)
         {
             List<string> members = rows.SelectMany(row => row.CaptainIds).Distinct(StringComparer.Ordinal).ToList();

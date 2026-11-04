@@ -15,10 +15,13 @@ namespace Armada.Core.Database
     /// <summary>Structured selection history and budget lifecycle operations over provider-owned connections.</summary>
     internal sealed partial class CaptainSelectionMethods : ICaptainSelectionMethods
     {
+        /// <summary>Transition reason on a reservation an automatic redispatch took over.</summary>
+        internal const string CarriedToRedispatchReason = "CarriedToRedispatch";
+
         private readonly Func<DbConnection> _Factory;
         private readonly SqliteWriteGate? _Gate;
         private static readonly string[] _ChildTables = new[] { "captain_selection_execution_events", "usage_budget_reservations",
-            "captain_selection_windows", "captain_selection_candidate_reasons", "captain_selection_candidates" };
+            "captain_selection_windows", "captain_selection_candidate_reasons", "captain_selection_omitted_candidates", "captain_selection_candidates" };
 
         internal CaptainSelectionMethods(Func<DbConnection> factory, SqliteWriteGate? gate = null)
         {
@@ -144,8 +147,38 @@ namespace Armada.Core.Database
             foreach (CaptainSelectionCandidateRecord row in records.Candidates) await InsertCaptainSelectionCandidateRecordAsync(connection, transaction, row, token).ConfigureAwait(false);
             foreach (CaptainSelectionReason row in records.Reasons) await InsertCaptainSelectionReasonAsync(connection, transaction, row, token).ConfigureAwait(false);
             foreach (CaptainSelectionWindowRecord row in records.Windows) await InsertCaptainSelectionWindowRecordAsync(connection, transaction, row, token).ConfigureAwait(false);
+            foreach (CaptainSelectionOmittedCandidates row in records.OmittedCandidates) await InsertCaptainSelectionOmittedCandidatesAsync(connection, transaction, row, token).ConfigureAwait(false);
+            if (!String.IsNullOrEmpty(records.AdmissionCarriedAttemptId) && records.Decision.Outcome == CaptainSelectionOutcomes.Admitted && records.Reservations.Count > 0)
+                await CarryReservationsAsync(connection, transaction, records, token).ConfigureAwait(false);
             foreach (UsageBudgetReservation row in records.Reservations) await InsertUsageBudgetReservationAsync(connection, transaction, row, token).ConfigureAwait(false);
             foreach (CaptainSelectionExecutionEvent row in records.Events) await InsertCaptainSelectionExecutionEventAsync(connection, transaction, row, token).ConfigureAwait(false);
+        }
+
+        // An automatic redispatch after a no-work attempt takes over that attempt's reservation on the same account window
+        // instead of adding a second one: the new reservation keeps the larger amount and the old one is released. A row
+        // that changed concurrently is left alone and keeps counting, which only over-reserves.
+        private static async Task CarryReservationsAsync(DbConnection connection, DbTransaction transaction, CaptainSelectionRecordSet records, CancellationToken token)
+        {
+            List<UsageBudgetReservation> earlier = new List<UsageBudgetReservation>();
+            using (DbCommand read = Command(connection, transaction, "SELECT * FROM usage_budget_reservations WHERE tenant_id=@tenant AND mission_id=@mission AND execution_attempt_id=@carried AND state IN ('Active','Unsettled');"))
+            {
+                Add(read, "@tenant", records.Decision.TenantId); Add(read, "@mission", records.Decision.MissionId); Add(read, "@carried", records.AdmissionCarriedAttemptId);
+                using DbDataReader reader = await read.ExecuteReaderAsync(token).ConfigureAwait(false);
+                while (await reader.ReadAsync(token).ConfigureAwait(false)) earlier.Add(MapUsageBudgetReservation(reader));
+            }
+            DateTime now = DateTime.UtcNow;
+            foreach (UsageBudgetReservation next in records.Reservations)
+            {
+                UsageBudgetReservation? carried = earlier.FirstOrDefault(r => r.HostId == next.HostId && r.Runtime == next.Runtime && r.AccountKey == next.AccountKey
+                    && r.WindowKey == next.WindowKey && r.Generation == next.Generation);
+                if (carried == null) continue;
+                using DbCommand release = Command(connection, transaction, "UPDATE usage_budget_reservations SET state='Released',revision=revision+1,last_update_utc=@at,released_utc=@at,transition_reason=@reason"
+                    + " WHERE tenant_id=@tenant AND id=@id AND revision=@revision AND state=@state;");
+                Add(release, "@at", Utc(now)); Add(release, "@reason", CarriedToRedispatchReason); Add(release, "@tenant", carried.TenantId);
+                Add(release, "@id", carried.Id); Add(release, "@revision", carried.Revision); Add(release, "@state", carried.State.ToString());
+                if (await release.ExecuteNonQueryAsync(token).ConfigureAwait(false) == 1) next.ReservedPercent = Math.Max(next.ReservedPercent, carried.ReservedPercent);
+                earlier.Remove(carried);
+            }
         }
 
         private static void Validate(CaptainSelectionRecordSet records)
@@ -162,10 +195,13 @@ namespace Armada.Core.Database
                 throw new ArgumentException("Selection policy evidence must match its validated effective settings, mode and algorithm fingerprint.");
             if (decision.PolicyRevisionId != records.Policy.Id) throw new ArgumentException("Decision must reference the supplied policy revision.");
             if (records.Candidates.Count > records.Policy.MaximumCandidates) throw new ArgumentException("Decision candidates exceed the effective policy bound.");
-            if (decision.CandidateCount != records.Candidates.Count) throw new ArgumentException("Decision candidate count must match the complete supplied set.");
+            if (records.OmittedCandidates.Any(o => o.DecisionId != decision.Id || o.CandidateCount < 1 || String.IsNullOrWhiteSpace(o.ReasonCode)))
+                throw new ArgumentException("Omitted candidate counts must be positive, carry a reason and belong to the decision.");
+            if (decision.CandidateCount != records.Candidates.Count + records.OmittedCandidates.Sum(o => o.CandidateCount))
+                throw new ArgumentException("Decision candidate count must equal the stored candidates plus the omitted candidate counts.");
             HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
             List<CaptainSelectionRecord> rows = new List<CaptainSelectionRecord> { records.Policy, decision };
-            rows.AddRange(records.Candidates); rows.AddRange(records.Reasons); rows.AddRange(records.Windows); rows.AddRange(records.Reservations); rows.AddRange(records.Events);
+            rows.AddRange(records.Candidates); rows.AddRange(records.Reasons); rows.AddRange(records.Windows); rows.AddRange(records.OmittedCandidates); rows.AddRange(records.Reservations); rows.AddRange(records.Events);
             foreach (CaptainSelectionRecord row in rows)
             {
                 if (row == null || String.IsNullOrWhiteSpace(row.Id) || row.Id.Length > 64 || !ids.Add(row.Id) || row.TenantId != decision.TenantId)

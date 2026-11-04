@@ -39,6 +39,24 @@ Waiting diagnostics have [UX/layout validation evidence](docs/concurrency/WAITIN
 
 The admission segment has [UX/layout validation evidence](docs/concurrency/ADMISSION_VALIDATION.md) for the actual Dashboard at desktop, tablet and mobile widths.
 
+### Input from the usage-selection benchmark: mission-create latency (2026-11-04)
+
+The black-box admission benchmark (`benchmarks/`, 16 concurrent REST clients, one vessel, a 1-second stub agent) measured
+`POST /api/v1/missions` at about 15.6 s p50 and 16.3 s p95 (server log, 100 creates in the 1000-captain run), and about
+24 s p50 from the client in round 1. The same happens with captain selection Disabled, so it is not selection cost.
+
+- Creates complete at about one per second regardless of client count, so latency is queue depth times about 1 s.
+- `POST /api/v1/missions` returns only after `DispatchMissionAsync` has assigned a captain, provisioned the dock and
+  launched the agent. Dock provisioning holds `DockService._RepoProvisionLocks` (one per bare repository), and every git
+  call holds `GitService._RepoLocks` for the same repository, so all provisioning on one vessel is serial.
+- Each mission runs `git fetch` on the bare repository about three times (provision, completion diff and reclaim) under
+  that lock, plus worktree add, prune and remove.
+
+Suggested input for M3 onward, not done in the usage-selection plan: return from create once the mission is saved and
+admitted, and provision and launch in the background (the mission already reports Assigned and its dock); skip a fetch
+that ran within the last few seconds for the same repository; and measure whether `git worktree add` on one bare
+repository can run with bounded parallelism instead of one at a time.
+
 ### Related v1.3.0 usage-selection work
 
 [Usage-based captain selection and decision history](USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) extends the shared admission path with account headroom, atomic reservations and durable captain/model selection evidence. U0 and storage/configuration foundations are implemented; Observe dispatch and server history/preview are connected. Full U2 completion, enforcement and client/validation milestones remain in progress. Coordinate its transaction, verification/repair, waiting telemetry and client changes with M3–M11 here; it must preserve all existing concurrency gates and mission ownership invariants.

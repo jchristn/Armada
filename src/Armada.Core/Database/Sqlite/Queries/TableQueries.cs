@@ -259,7 +259,7 @@ namespace Armada.Core.Database.Sqlite.Queries
                     @"CREATE INDEX IF NOT EXISTS idx_credentials_bearer ON credentials(bearer_token);",
                     // Seed default tenant so FK constraints are satisfied for backfill
                     @"INSERT OR IGNORE INTO tenants (id, name, active, created_utc, last_update_utc)
-                      VALUES ('default', 'Default Tenant', 1, datetime('now'), datetime('now'));",
+                      VALUES ('default', 'Default Tenant', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));",
                     // Add tenant_id to existing tables
                     @"ALTER TABLE fleets ADD COLUMN tenant_id TEXT;",
                     @"ALTER TABLE vessels ADD COLUMN tenant_id TEXT;",
@@ -2830,7 +2830,9 @@ namespace Armada.Core.Database.Sqlite.Queries
                 Armada.Core.Database.UsageSelectionSchema.HistoryDisplayMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
                 Armada.Core.Database.UsageSelectionSchema.UntrackedExecutionMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
                 Armada.Core.Database.UsageSelectionSchema.RecoveryMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
-                Armada.Core.Database.UsageSelectionSchema.AssignmentTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite)
+                Armada.Core.Database.UsageSelectionSchema.AssignmentTimingMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.UsageSelectionSchema.OmittedCandidatesMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite),
+                Armada.Core.Database.UsageSelectionSchema.TenantTimestampMigration(Armada.Core.Enums.DatabaseTypeEnum.Sqlite)
 
             };
         }

@@ -9,9 +9,9 @@ namespace Armada.Helm.Infrastructure
     using Spectre.Console.Cli;
 
     /// <summary>
-    /// Renders an exception that escaped a CLI command. Targeting errors (<see cref="AdmiralTargetException"/>) and
-    /// 401/403 responses get a one-line explanation on stderr; anything else is rendered the way Spectre.Console.Cli
-    /// renders it by default.
+    /// Renders an exception that escaped a CLI command, always on stderr. Targeting errors
+    /// (<see cref="AdmiralTargetException"/>) and 401/403 responses get a one-line explanation with a hint; parse errors
+    /// render the way Spectre.Console.Cli renders them; anything else prints the server's or exception's message.
     /// </summary>
     public static class HelmErrorHandler
     {
@@ -65,20 +65,22 @@ namespace Armada.Helm.Infrastructure
                 return TargetErrorExitCode;
             }
 
+            // Diagnostics go to stderr so a script that reads stdout never parses an error as a result.
+            IAnsiConsole console = ErrorConsole(error);
             string? conversion = DescribeConversionFailure(exception.Message);
             if (conversion != null)
             {
-                AnsiConsole.MarkupLine("[red]Error:[/] " + Markup.Escape(conversion));
+                console.MarkupLine("[red]Error:[/] " + Markup.Escape(conversion));
                 return -1;
             }
 
             if (exception is CommandAppException app && app.Pretty != null)
             {
-                AnsiConsole.Write(app.Pretty);
+                console.Write(app.Pretty);
                 return -1;
             }
 
-            AnsiConsole.MarkupLine("[red]Error:[/] " + Markup.Escape(exception.Message));
+            console.MarkupLine("[red]Error:[/] " + Markup.Escape(inner.Message));
             return -1;
         }
 
@@ -111,6 +113,12 @@ namespace Armada.Helm.Infrastructure
                 expected = "a valid " + type + " value";
 
             return "Invalid value '" + value + "': expected " + expected + ". Run the command with --help to see each option's format.";
+        }
+
+        private static IAnsiConsole ErrorConsole(TextWriter error)
+        {
+            if (ReferenceEquals(error, Console.Error)) return HelmConsole.Error;
+            return AnsiConsole.Create(new AnsiConsoleSettings { Out = new AnsiConsoleOutput(error), Ansi = AnsiSupport.No, ColorSystem = ColorSystemSupport.NoColors });
         }
 
         private static Exception Unwrap(Exception exception)

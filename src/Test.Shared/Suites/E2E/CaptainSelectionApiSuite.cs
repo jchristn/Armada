@@ -189,9 +189,56 @@ namespace Test.Shared.Suites.E2E
                         response.EnsureSuccessStatusCode();
                         AssertEqual(1L, (await JsonHelper.DeserializeAsync<EnumerationResult<CaptainSelectionDecisionView>>(response).ConfigureAwait(false)).TotalRecords, "filters accept any letter case");
                     }
+                    using (HttpResponseMessage response = await server.Client.GetAsync(path + "/history?trigger=redispatch", token).ConfigureAwait(false))
+                        AssertStatusCode(HttpStatusCode.OK, response);
                     foreach (string query in new[] { "?outcome=Bogus", "?trigger=Nope", "?pageSize=0", "?pageSize=1001", "?pageNumber=0" })
                         using (HttpResponseMessage response = await server.Client.GetAsync(path + "/history" + query, token).ConfigureAwait(false))
                             AssertEqual(HttpStatusCode.BadRequest, response.StatusCode, "history" + query);
+
+                    // UT-014: a mission no captain can take yet is still the documented Mission body, with a warning header.
+                    using (HttpResponseMessage response = await server.Client.PostAsync("/api/v1/missions", JsonHelper.ToJsonContent(new { Title = "waits for a captain" }), token).ConfigureAwait(false))
+                    {
+                        AssertStatusCode(HttpStatusCode.Created, response);
+                        string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        Mission created = JsonHelper.Deserialize<Mission>(body);
+                        AssertFalse(String.IsNullOrEmpty(created.Id), "Id at the top level: " + body);
+                        AssertFalse(body.Contains("\"Warning\"", StringComparison.Ordinal), "no wrapper");
+                        AssertEqual(MissionStatusEnum.Pending, created.Status);
+                        AssertTrue(response.Headers.TryGetValues("X-Armada-Warning", out IEnumerable<string>? warning) && warning!.Single().Contains("not assigned to a captain yet", StringComparison.Ordinal), "warning header");
+                    }
+                    // UT-011: a wrongly typed value names the field and the accepted values.
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new { Mode = "Bogus" } }), token).ConfigureAwait(false))
+                    {
+                        AssertStatusCode(HttpStatusCode.BadRequest, response);
+                        string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        AssertContains("UsageSelection.Mode must be one of Disabled, Observe or Enforce.", body);
+                        AssertContains("InvalidJsonValue", body); AssertFalse(body.Contains("Armada.Core.Enums", StringComparison.Ordinal), "no type names");
+                    }
+                    using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { ExpectedUsageSelectionRevision = "x" }), token).ConfigureAwait(false))
+                    {
+                        string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        AssertContains("ExpectedUsageSelectionRevision must be a number.", body); AssertFalse(body.Contains("System.Nullable", StringComparison.Ordinal), "no type names");
+                    }
+
+                    // UT-006: the same PascalCase bodies and error envelope as every other route.
+                    using (HttpResponseMessage response = await server.Client.GetAsync(path, token).ConfigureAwait(false))
+                    {
+                        string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        AssertContains("\"HistoryAvailable\":", body, "summary is PascalCase"); AssertFalse(body.Contains("\"historyAvailable\"", StringComparison.Ordinal), "no camelCase summary");
+                    }
+                    using (HttpResponseMessage response = await server.Client.GetAsync(path + "/history", token).ConfigureAwait(false))
+                        AssertContains("\"Objects\":", await response.Content.ReadAsStringAsync(token).ConfigureAwait(false), "history page is PascalCase");
+                    using (HttpResponseMessage response = await server.Client.GetAsync("/api/v1/captain-selection-decisions/csd_nope?tenantId=" + Constants.DefaultTenantId, token).ConfigureAwait(false))
+                    {
+                        AssertStatusCode(HttpStatusCode.NotFound, response);
+                        AssertContains("\"Error\":\"NotFound\"", await response.Content.ReadAsStringAsync(token).ConfigureAwait(false), "standard error envelope");
+                    }
+                    using (HttpResponseMessage response = await server.Client.PostAsync(path + "/recovery", JsonHelper.ToJsonContent(new { ExpectedRevision = 99, AllowFallback = true, ReserveException = false, Reason = "stale revision" }), token).ConfigureAwait(false))
+                    {
+                        AssertStatusCode(HttpStatusCode.Conflict, response);
+                        string body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                        AssertContains("\"Error\":\"Conflict\"", body, "conflict envelope"); AssertContains("RecoveryRevisionConflict", body, "conflict code in Data");
+                    }
 
                     using (HttpResponseMessage response = await server.Client.PutAsync("/api/v1/settings", JsonHelper.ToJsonContent(new { UsageSelection = new UsageSelectionSettings { Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance, SettlementLagSeconds = 0 } }), token).ConfigureAwait(false))
                         AssertStatusCode(HttpStatusCode.OK, response);

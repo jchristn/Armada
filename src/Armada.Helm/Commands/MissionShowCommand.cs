@@ -46,7 +46,7 @@ namespace Armada.Helm.Commands
 
             if (mission == null)
             {
-                AnsiConsole.MarkupLine($"[red]Mission not found:[/] {Markup.Escape(settings.Id)}");
+                HelmConsole.Error.MarkupLine($"[red]Mission not found:[/] {Markup.Escape(settings.Id)}");
                 AnsiConsole.MarkupLine("List missions with [green]armada mission list[/].");
                 return 1;
             }

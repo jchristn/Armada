@@ -5,6 +5,7 @@ namespace Armada.Helm.Commands
     using Spectre.Console.Cli;
     using Armada.Core.Services;
     using Armada.Core.Settings;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Remove MCP integration for supported clients.
@@ -88,7 +89,7 @@ namespace Armada.Helm.Commands
                     }
                     catch (InvalidDataException ex)
                     {
-                        AnsiConsole.MarkupLine($"[red]{target.ClientName}[/]: not changed: {Markup.Escape(target.FilePath)}: {Markup.Escape(ex.Message)}");
+                        HelmConsole.Error.MarkupLine($"[red]{target.ClientName}[/]: not changed: {Markup.Escape(target.FilePath)}: {Markup.Escape(ex.Message)}");
                     }
                 }
                 else
