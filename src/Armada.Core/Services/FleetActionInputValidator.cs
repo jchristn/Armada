@@ -11,7 +11,10 @@ namespace Armada.Core.Services
     {
         private static readonly Regex Name = new(@"^[A-Za-z_][A-Za-z0-9_]*\z", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
         // Package identifiers are substituted into shell commands, so the allowed characters exclude every shell metacharacter.
-        private static readonly Regex Package = new(@"^[A-Za-z0-9@][A-Za-z0-9@/._+:-]{0,199}\z", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+        // The 200-character bound is checked separately: a counted repetition makes the NonBacktracking automaton exceed .NET 8's
+        // 1,000-node limit, which threw from this type's initializer on net8.0.
+        private static readonly Regex Package = new(@"^[A-Za-z0-9@][A-Za-z0-9@/._+:-]*\z", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+        private const int PackageMaxLength = 200;
         private static readonly Regex Semver = new(@"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\z", RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
         /// <summary>
@@ -71,7 +74,7 @@ namespace Armada.Core.Services
         private static void ValidateValue(FleetActionInput input, string value)
         {
             if (input.Type == "semver" && !Semver.IsMatch(value)) throw new ArgumentException("Input " + input.Name + " must be a semantic version (for example 1.2.3).");
-            if (input.Type == "package" && !Package.IsMatch(value)) throw new ArgumentException("Input " + input.Name + " must be a package identifier (letters, digits, and @ / . _ + : -; for example Newtonsoft.Json or @scope/name).");
+            if (input.Type == "package" && (value.Length > PackageMaxLength || !Package.IsMatch(value))) throw new ArgumentException("Input " + input.Name + " must be a package identifier (letters, digits, and @ / . _ + : -; for example Newtonsoft.Json or @scope/name).");
             if (input.Type == "enum" && !input.AllowedValues.Contains(value, StringComparer.Ordinal)) throw new ArgumentException("Input " + input.Name + " must be one of: " + String.Join(", ", input.AllowedValues));
         }
     }

@@ -347,7 +347,8 @@ namespace Test.Shared.Suites.Services
                 List<FleetActionInput> inputs = new List<FleetActionInput> { new FleetActionInput { Name = "package", Type = "package", Required = true } };
                 foreach (string ok in new[] { "Newtonsoft.Json", "@scope/name", "com.example:artifact", "github.com/org/repo", "left-pad", "c++utils" })
                     AssertEqual(ok, FleetActionInputValidator.Resolve(inputs, new Dictionary<string, string> { ["package"] = ok })["package"], ok);
-                foreach (string bad in new[] { "a;rm -rf /", "$(whoami)", "pkg name", "'quoted'", "a|b", "-flag", "a`b" })
+                AssertEqual(200, FleetActionInputValidator.Resolve(inputs, new Dictionary<string, string> { ["package"] = new string('a', 200) })["package"].Length, "200 characters is the limit");
+                foreach (string bad in new[] { "a;rm -rf /", "$(whoami)", "pkg name", "'quoted'", "a|b", "-flag", "a`b", new string('a', 201) })
                     AssertThrows<ArgumentException>(() => FleetActionInputValidator.Resolve(inputs, new Dictionary<string, string> { ["package"] = bad }));
                 return Task.CompletedTask;
             }));
