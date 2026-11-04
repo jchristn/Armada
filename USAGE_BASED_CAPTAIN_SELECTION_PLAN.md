@@ -330,10 +330,10 @@ CI runs the full suite on every push to every branch and PR, with server databas
 
 ### Developer commands and evidence
 
-Run from the repository root after the proposed suites exist. These are implementation-time commands, not tests run while writing this plan. Repeat the focused backend command for every supported target framework; use the existing provider harness for MySQL, PostgreSQL and SQL Server with isolated credentials supplied out of band.
+Run from the repository root. The selection suites below are implemented; the linked U3 record provides the completed wave’s exact commands and results. Repeat the focused backend command for every supported target framework; use the existing provider harness for MySQL, PostgreSQL and SQL Server with isolated credentials supplied out of band.
 
 ```sh
-ARMADA_TEST_SUITES=Services.UsageSelection,Database.CaptainSelection,E2E.CaptainSelection dotnet run --project src/Test.Automated -f net10.0 -- --results /tmp/armada-usage-selection-results.json
+ARMADA_TEST_SUITES=Services.UsageSelection,Database.CaptainSelection,Database.UsageEnforcement,E2E.CaptainSelectionApi dotnet run --project src/Test.Automated -f net10.0 -- --results /tmp/armada-usage-selection-results.json
 dotnet build src/Armada.sln --no-restore
 npm --prefix src/Armada.Dashboard run test:run
 npm --prefix src/Armada.Dashboard run build

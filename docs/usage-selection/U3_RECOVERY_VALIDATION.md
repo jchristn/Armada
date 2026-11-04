@@ -50,3 +50,19 @@ The browser review renders real Dashboard React/CSS with private fixture respons
 Authenticated REST, SDK, Core-client and MCP behavior is exercised against an isolated local server. The installed Postman CLI does not implement `status`; collection parsing and script compilation are separate from these real transport tests. No credentials or external workspace publication are involved.
 
 See [container evidence](container-validation.json) for platform digests and probe scope. Local probes verify the assemblies and new recovery content without networking or starting a server; both platform manifests are present. The user deployment was not restarted or changed.
+
+## Reproduce the checks
+
+Run from the repository root. The database script creates owned test containers and fixtures; do not point it at the user deployment.
+
+```sh
+ARMADA_TEST_SUITES=Services.UsageSelection,Database.CaptainSelection,Database.UsageEnforcement,Database.MigrationHygiene,E2E.CaptainSelectionApi,Services.CaptainAdmissionParity,Client.Coverage,E2E.McpTenantIsolation dotnet run --project src/Test.Automated -f net10.0
+scripts/common/run-db-parity-tests.sh --providers postgresql,mysql,sqlserver --suites Database.CaptainSelection,Database.CaptainConcurrency,Database.UsageEnforcement,Database.MigrationHygiene,Database.MissionDatabase
+npm --prefix src/Armada.Dashboard run test:run
+npm --prefix src/Armada.Dashboard run build
+npm --prefix src/Armada.Mobile run typecheck
+npm --prefix src/Armada.Mobile run lint
+npm --prefix src/Armada.Mobile run test:ci -- --runInBand --detectOpenHandles
+```
+
+For the complete .NET 10 regression, run `dotnet run --project src/Test.Automated -f net10.0` without a suite filter. Repeat the focused command with `-f net8.0` and add `Tui.Parity` to its filter to reproduce the 121-case supported-framework batch.
