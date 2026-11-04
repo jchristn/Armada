@@ -150,7 +150,7 @@ function CaptainSelectionBody({ missionId, status, revision, onOpen }: Selection
         </View>)}
         {!busy && rows?.objects.length === 0 ? <AppText muted>{t(view === 'history' ? 'usageSelection.noMatchingHistory' : 'usageSelection.noCandidates')}</AppText> : null}
         <View style={styles.actions}>
-          <Button label={t('Prev')} variant="secondary" disabled={busy || page <= 1} onPress={() => setPage(page - 1)} />
+          <Button label={t('Previous')} variant="secondary" disabled={busy || page <= 1} onPress={() => setPage(page - 1)} />
           <AppText variant="caption">{page} / {Math.max(1, rows?.totalPages ?? 1)}</AppText>
           <Button label={t('Next')} variant="secondary" disabled={busy || page >= (rows?.totalPages ?? 1)} onPress={() => setPage(page + 1)} />
           <Button label={t('View JSON')} variant="secondary" disabled={!rows} onPress={() => setJson(view === 'history' ? history : evidence)} />

@@ -117,7 +117,7 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
             <AppText variant="title" accessibilityRole="header" style={styles.flex}>{captain.name}</AppText>
             <TierBadge tier={captain.tier} />
             <StatusBadge label={captain.state} tone={statusTone(captain.state)} />
-            <AppText>{t('Active')}: {t(captain.active === false ? 'No' : 'Yes')}</AppText>
+            {captain.active === false ? <StatusBadge label={t('Inactive')} tone="skipped" /> : null}
           </View>
           {resource.error ? <Banner tone="danger" title={resource.error} /> : null}
           {captain.state === 'Quarantined' ? (
@@ -148,6 +148,7 @@ export function CaptainDetailScreen({ id, embedded, onRemoved }: CaptainDetailSc
           <Section title={t('Captain')}>
             <InfoRow label={t('ID')} value={captain.id} mono />
             <InfoRow label={t('Tenant ID')} value={captain.tenantId} mono />
+            <InfoRow label={t('Active')} value={t(captain.active === false ? 'No' : 'Yes')} />
             <InfoRow label={t('Runtime')} value={captain.runtime || 'ClaudeCode'} />
             <InfoRow label={t('Model')} value={captain.model || t('Runtime default')} />
             <InfoRow label={t('Reasoning effort')} value={captain.reasoningEffort ? t(captain.reasoningEffort) : t('Runtime default')} />

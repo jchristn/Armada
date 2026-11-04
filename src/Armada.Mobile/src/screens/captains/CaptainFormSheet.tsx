@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { StyleSheet } from 'react-native';
 import { createCaptain, enumerateModelEndpoints, setCaptainCliPermissionPolicy, updateCaptain } from '@dashboard/api/client';
 import { listAll } from '@dashboard/api/paging';
 import { supportsAutoApproveSwitch } from '@dashboard/lib/captainApproval';
@@ -22,7 +23,7 @@ import { SwitchField } from '../../build/fields';
 import { errorMessage } from '../../build/useLiveResource';
 import { useAuth } from '../../auth/AuthContext';
 import { CliPermissionPolicyField } from '../../components/cliPermissions/CliPermissionPolicyField';
-import { BottomSheet, Button, FormActions, TextField } from '../../components/ui';
+import { AppText, BottomSheet, Button, FormActions, TextField } from '../../components/ui';
 import { Banner } from '../../components/ui/Banner';
 import { SelectField, type SelectOption } from '../../components/ui/SelectSheet';
 import { useLocale } from '../../i18n/LocaleContext';
@@ -30,6 +31,7 @@ import { useNotifications } from '../../notifications/NotificationContext';
 import { UsageCaptureFields } from '../usage/UsageCaptureFields';
 import { buildUsageCapturePayload, usageCaptureFormFromCaptain, usageCaptureFormError, USAGE_CAPTURE_FORM_ERROR_TEXT } from '@dashboard/lib/usageCaptureForm';
 import { MuxFields } from './MuxFields';
+import { spacing } from '../../theme/typography';
 
 export interface CaptainFormSheetProps {
   open: boolean;
@@ -118,7 +120,6 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
         </FormActions>
       )}
     >
-      <UsageCaptureFields tenantId={captain?.tenantId ?? user?.tenant?.id} value={usage} onChange={setUsage} />
       {error ? <Banner tone="danger" title={error} testID="captain-form-error" /> : null}
       <TextField label={t('Name')} value={form.name} onChangeText={(v) => patch({ name: v })} autoCapitalize="none" testID="captain-form-name" />
       <SelectField label={t('Runtime')} value={form.runtime} options={runtimeOptions} onChange={(v) => patch({ runtime: v })} closeLabel={t('Close')} placeholder={t('Select runtime...')} testID="captain-form-runtime" />
@@ -193,6 +194,12 @@ export function CaptainFormSheet({ open, captain, onClose, onSaved }: CaptainFor
         numberOfLines={4}
         testID="captain-form-systemInstructions"
       />
+      <AppText variant="subheading" muted accessibilityRole="header" style={styles.group}>{t('Usage capture')}</AppText>
+      <UsageCaptureFields tenantId={captain?.tenantId ?? user?.tenant?.id} value={usage} onChange={setUsage} />
     </BottomSheet>
   );
 }
+
+const styles = StyleSheet.create({
+  group: { textTransform: 'uppercase', marginTop: spacing.md, marginBottom: spacing.sm },
+});

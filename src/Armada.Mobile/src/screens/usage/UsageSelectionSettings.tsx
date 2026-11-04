@@ -5,11 +5,12 @@ import { USAGE_SELECTION_NUMERIC_FIELDS, USAGE_SELECTION_STRATEGY_KEYS, usageSel
   type UsageSelectionNumericField } from '@dashboard/lib/usageSelectionForm';
 import type { CaptainSelectionStrategy, SettingsData, UsageSelectionSettings as Policy } from '@dashboard/types/models';
 import { useLiveResource } from '../../build/useLiveResource';
-import { AppText, Button, Section, TextField } from '../../components/ui';
+import { AppText, Button, TextField } from '../../components/ui';
 import { Disclosure } from '../../components/ui/Disclosure';
 import { SelectField } from '../../components/ui/SelectSheet';
 import { useLocale } from '../../i18n/LocaleContext';
 import { spacing } from '../../theme/typography';
+import { SettingsSection } from '../system/settingsParts';
 
 type Draft = Omit<Policy, UsageSelectionNumericField> & { values: Record<UsageSelectionNumericField, string> };
 
@@ -62,10 +63,11 @@ export function UsageSelectionSettings() {
       error={bad ? t('usageSelection.invalid') : null} testID={`usage-selection-${key}`}
       onChangeText={(value) => draft && setDraft({ ...draft, values: { ...draft.values, [key]: value } })} />;
   };
-  return <Section title={t('usageSelection.title')}>
+  return <SettingsSection title={t('usageSelection.title')} testID="settings-usage-selection">
     <View style={styles.content}>
       {resource.error ? <><AppText color="danger" accessibilityRole="alert">{t('usageSelection.loadFailed')}</AppText>
-        <Button label={t('Retry')} variant="secondary" onPress={() => void resource.reload()} /></> : null}
+        <Button label={t('Retry')} variant="secondary" style={styles.save} onPress={() => void resource.reload()} /></> : null}
+      {!draft && !resource.error && resource.loading ? <AppText muted>{t('Loading...')}</AppText> : null}
       {draft ? <>
         <AppText muted>{t(usageSelectionModeDescriptionKey(draft.mode))}</AppText>
         {readOnly ? <AppText muted>{t('usageSelection.environment')}</AppText> : null}
@@ -85,11 +87,11 @@ export function UsageSelectionSettings() {
           <View style={styles.content}>{USAGE_SELECTION_NUMERIC_FIELDS.map(field)}</View>
         </Disclosure>
         {policy && !valid ? <AppText color="danger" accessibilityRole="alert">{t('usageSelection.invalid')}</AppText> : null}
-        <Button label={t(busy ? 'Saving...' : 'usageSelection.save')} disabled={readOnly || busy || !valid} onPress={() => void save()} testID="usage-selection-save" />
-        {message ? <AppText color={message.error ? 'danger' : undefined} accessibilityRole={message.error ? 'alert' : undefined}>{message.text}</AppText> : null}
+        <Button label={t(busy ? 'Saving...' : 'usageSelection.save')} busy={busy} disabled={readOnly || busy || !valid} onPress={() => void save()} testID="usage-selection-save" style={styles.save} />
+        {message ? <AppText variant="caption" color={message.error ? 'danger' : 'textMuted'} accessibilityLiveRegion="polite" accessibilityRole={message.error ? 'alert' : undefined}>{message.text}</AppText> : null}
       </> : null}
     </View>
-  </Section>;
+  </SettingsSection>;
 }
 
-const styles = StyleSheet.create({ content: { gap: spacing.md } });
+const styles = StyleSheet.create({ content: { gap: spacing.md }, save: { marginBottom: 0, alignSelf: 'flex-start' } });

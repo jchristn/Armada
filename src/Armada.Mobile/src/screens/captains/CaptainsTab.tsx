@@ -8,7 +8,7 @@ import { ListPane } from '../../build/ListPane';
 import { MasterDetail, useSelection } from '../../build/MasterDetail';
 import { useLiveResource } from '../../build/useLiveResource';
 import { statusTone } from '../../components/ask/statusTone';
-import { AppText, BottomSheet, Button, ConfirmDialog, ListRow, StatusBadge, SwipeRow, type IconName } from '../../components/ui';
+import { AppText, BottomSheet, Button, ConfirmDialog, ListRow, Pager, StatusBadge, SwipeRow, type IconName } from '../../components/ui';
 import { SelectField, type SelectOption } from '../../components/ui/SelectSheet';
 import { useLocale } from '../../i18n/LocaleContext';
 import { planningHref } from '../../navigation/legacyRedirects';
@@ -212,7 +212,7 @@ export function CaptainsTab() {
         { key: 'new', icon: 'add', label: t('Create Captain'), onPress: () => setForm({ open: true, captain: null }) },
       ]}
       summary={resource.data ? t('{{count}} captains', { count: rows.length }) : null}
-      header={<><View><Button label={t('Previous')} disabled={usagePage === 0} onPress={() => setUsagePage(usagePage - 1)} /><Button label={t('Next')} disabled={(usagePage + 1) * 25 >= rows.length} onPress={() => setUsagePage(usagePage + 1)} /></View>{header}</>}
+      header={<><Pager page={usagePage + 1} pages={Math.ceil(rows.length / 25)} onChange={(next) => setUsagePage(next - 1)} testID="captains-pager" />{header}</>}
       emptyTitle={captains.length > 0 ? t('No captains match the current filters.') : t('No captains configured.')}
       emptyMessage={t('AI agent harness processes that execute missions. Monitor state, current mission, and captain lifecycle.')}
       emptyAction={captains.length > 0 ? undefined : { label: t('Create Captain'), onPress: () => setForm({ open: true, captain: null }) }}
