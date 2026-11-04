@@ -16,7 +16,7 @@ The Dashboard adds a shared-style verification explanation and two tests coverin
 
 A disposable local Admiral served the production Dashboard with a seeded failed, versioned check waiting on a disabled captain. Real REST reads report mission Verifying while the captain is Idle with zero active slots and an empty active-ID list. No response interception or model calls were used. Mission and captain details passed light/dark checks at 1440, 768 and 390 pixels (12 cases). The explanation wraps within its card, standard action buttons and shared breadcrumb ancestry remain aligned, and there is no document horizontal overflow. The owned fixture server was stopped after validation.
 
-See [measurements](verification-layout-results.json), [desktop](verification-mission-desktop.png) and [phone mission](verification-mission-mobile.png), and [phone captain capacity](verification-captain-mobile.png).
+See [measurements](verification-layout-results.json). Screenshots were reviewed locally and are not committed.
 
 ## Manual validation
 

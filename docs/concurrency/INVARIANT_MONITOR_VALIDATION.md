@@ -14,7 +14,7 @@ The .NET 10 run passes 333 regression cases, including Admiral lifecycle, depend
 
 A disposable local Admiral started with two fixture voyages awaiting Review on a vessel limited to one. Its actual startup health tick emitted an unknown-cause concurrency.limit_exceeded event. The production Dashboard fetched real REST data; no responses were intercepted. Activity > Events and Event Details were checked in light/dark at 1440, 768 and 390 pixels (12 cases). Shared breadcrumb ancestry, table overflow containment, wrapped message/payload and entity links were verified. No document horizontal overflow was measured. The fixture server was stopped after validation; no user Admiral or Harbor was changed.
 
-See [measurements](invariants-layout-results.json), [event list](invariants-events-desktop.png), and [phone detail](invariants-detail-mobile.png).
+See [measurements](invariants-layout-results.json). Screenshots were reviewed locally and are not committed.
 
 ## Manual validation
 

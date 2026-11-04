@@ -14,7 +14,7 @@ The .NET 10 regression run passes 235 tests across database slot transactions, c
 
 An isolated local Admiral served the production Dashboard and real REST-computed blockers for database-seeded fixture missions. No intercepted responses were used. Dependency and integration cards were checked in light and dark themes at 1440, 768 and 390 pixels (12 combinations). Their linked upstream/holding mission routes are present in every case, summaries wrap within their cards, shared breadcrumbs remain consistent, and no document-level horizontal overflow was measured. The integration card correctly says the next dispatch will block it. The disposable server was stopped after validation; no user server or Harbor was modified.
 
-See [measurements](readiness-layout-results.json), [integration desktop](readiness-integration-desktop.png), and [dependency phone](readiness-dependency-mobile.png).
+See [measurements](readiness-layout-results.json). Screenshots were reviewed locally and are not committed.
 
 ## Manual validation
 

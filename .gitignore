@@ -33,3 +33,5 @@ src/Armada.VSCode/dist/
 src/Armada.VSCode/.vscode-test/
 src/Armada.VSCode/*.vsix
 docs/usage-selection/screenshots/
+docs/concurrency/*.png
+docs/captain-usage-plan/mockups/*.png

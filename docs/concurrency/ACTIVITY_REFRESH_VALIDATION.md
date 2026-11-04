@@ -25,7 +25,7 @@ A disposable local Admiral served the actual production Dashboard, using its rea
 
 The first phone layout left the Token Usage page button on a row by itself; it was grouped with the display controls. Final screenshots show consistent shared control sizing, aligned filter actions, readable wrapping, stable breadcrumbs and no document-level horizontal overflow.
 
-See [measurements and request paths](activity-refresh-layout-results.json), [desktop overview](activity-refresh-overview-desktop.png), [phone overview](activity-refresh-overview-mobile.png), and [phone token usage](activity-refresh-tokens-mobile.png).
+See [measurements and request paths](activity-refresh-layout-results.json). Screenshots were reviewed locally and are not committed.
 
 ## Manual validation
 

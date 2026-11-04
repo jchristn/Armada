@@ -19,7 +19,7 @@ Reviewed the waiting card's visual hierarchy, readable setting labels, wrapping 
 
 Clicked the vessel remedy and verified the actual vessel edit modal opens. Captain edit, captain create and endpoint edit deep links were additionally checked at desktop and phone widths. All six forms open correctly, have no document-level horizontal overflow, and their Save/Cancel footers remain reachable and visible after scrolling. There is no page-level horizontal overflow in any checked page. Native clients use existing review routes rather than promising unsupported edit deep links.
 
-See [measurements](waiting-diagnostics-layout-results.json), [desktop](waiting-diagnostics-desktop.png), [mobile](waiting-diagnostics-mobile.png), and [captain editor](waiting-diagnostics-captain-editor.png).
+See [measurements](waiting-diagnostics-layout-results.json). Screenshots were reviewed locally and are not committed.
 
 ## Operator validation
 

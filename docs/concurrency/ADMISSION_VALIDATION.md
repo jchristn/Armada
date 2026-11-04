@@ -12,7 +12,7 @@ The v1.3.0 scheduling segment separates vessel checks from shared capacity claim
 
 A disposable local Admiral served the actual production dashboard. Synthetic database assignments supplied three active mission links and a lowered captain limit (3 running / limit 2); no agent processes were launched. Captains, captain detail and a pending mission were rendered at 1440, 768 and 390 pixels. The first-run wizard was dismissed before capturing the pages.
 
-Reviewed consistent global breadcrumbs, readable capacity/state labels, distinct active mission links, the waiting explanation and holding-mission links, action placement at the right of tables, wrapping at narrow widths, and existing button/card typography and spacing. All nine page/viewport combinations have no document-level horizontal overflow. Tables retain their own scrolling. See [measured results](admission-layout-results.json), [captain detail](captain-1440.png) and [pending mission on mobile](waiting-390.png).
+Reviewed consistent global breadcrumbs, readable capacity/state labels, distinct active mission links, the waiting explanation and holding-mission links, action placement at the right of tables, wrapping at narrow widths, and existing button/card typography and spacing. All nine page/viewport combinations have no document-level horizontal overflow. Tables retain their own scrolling. See [measured results](admission-layout-results.json). Screenshots were reviewed locally and are not committed.
 
 The synthetic over-limit assignments intentionally bypass admission to reproduce a previously lowered limit. These screenshots establish presentation of that state; scheduler behavior is established by the automated tests.
 

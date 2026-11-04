@@ -14,7 +14,7 @@ The .NET 10 broad regression passes 547 cases, including HTTP/git/process end-to
 
 An owned disposable local Admiral served actual authenticated mission detail responses, with two seeded capacity/routing cases. Startup recovery reset the initial synthetic assignments; fixtures were restored after startup for stable layout inspection. Both waiting cards were checked in light/dark themes at 1440, 768 and 390 pixels (12 cases). No API interception or model execution was used. Shared breadcrumbs, compact action links, spacing, wrapping and the captain links remain consistent with the existing Dashboard. No document horizontal overflow was measured. Desktop and phone screenshots were visually inspected.
 
-See [layout measurements](captain-admission-layout-results.json), [desktop waiting card](captain-admission-desktop.png), [phone persona exclusion](captain-admission-mobile.png), and [authenticated read-only evidence](captain-admission-read-only-results.json). REST checks confirm repeated reads leave mission routing preferences, versions, captain slots and event count unchanged. The owned server was stopped after validation; no user Admiral or Harbor was modified.
+See [layout measurements](captain-admission-layout-results.json) and [authenticated read-only evidence](captain-admission-read-only-results.json). Screenshots were reviewed locally and are not committed. REST checks confirm repeated reads leave mission routing preferences, versions, captain slots and event count unchanged. The owned server was stopped after validation; no user Admiral or Harbor was modified.
 
 ## Manual validation
 

@@ -8,7 +8,7 @@ All 1,856 Dashboard tests pass. Focused tests cover compact labels, disambiguati
 
 The production Dashboard was inspected in light and dark themes at 1440, 768 and 390 pixels. A disposable local server and intercepted synthetic chart response provided five populated series across three account/host sources; this validates rendering, not provider ingestion. All six cases have zero threshold guides, five grid lines, compact distinct labels and no document overflow. Desktop labels fit on one row; phone labels wrap readably. The chart retains its existing horizontal scrolling on small screens.
 
-See [measurements](limit-chart-layout-results.json), [desktop](limit-chart-desktop.png) and [phone](limit-chart-mobile.png).
+See [measurements](limit-chart-layout-results.json). Screenshots were reviewed locally and are not committed.
 
 ## Manual validation
 
