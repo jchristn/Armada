@@ -498,6 +498,14 @@ Update clients to use captain `ActiveMissionIds` and mission-owned docks/process
 
 Helm now uses strict parsing: an unknown option (`armada mission list --bogus`) or a stray extra argument fails with a non-zero exit before any request, where earlier versions ignored it. Check scripts that pass options a command does not define.
 
+**Usage selection after upgrading** (migrations 123 through 128, described [above](#v130-usage-selection-development-upgrades)):
+
+- The `UsageSelection` mode stays `Observe` with strategy `FirstAvailable`, so routing does not change. Enforce is never enabled by the upgrade.
+- Review the group in Server settings (Captain selection) or `GET /api/v1/settings`, especially `ReservePercent`, `PerAttemptReservationPercent`, `UnknownUsageBehavior` and `DecisionRetentionDays`.
+- If you run the bundled telemetry stack, open the **Armada Captain Selection** Grafana dashboard (uid `armada-captain-selection`) and check Observe divergence and waits before considering Enforce.
+- Decision history retention now runs on every provider, pruning decisions older than `DecisionRetentionDays` (default 90) in bounded batches.
+- See the [usage selection operator guide](usage-selection/OPERATIONS.md) for moving to Enforce and for known limitations.
+
 Back up before upgrading. Do not point v1.2.0 at a v1.3.0 database; restoring the pre-upgrade backup is required for rollback. Hierarchy execution, wait telemetry and final stress/release integration remain in the plan.
 
 The new `Concurrency` settings-file group carries defaults and bounds for later milestones. Setters clamp hard bounds; load/save normalizes captain defaults against `MaxCaptainConcurrency` independently of JSON property order. Negative vessel defaults clamp to 1; zero remains unlimited. The existing global `MaxConcurrentMissions` now clamps negative values to 1 and values over 10000 to 10000 instead of rejecting a negative settings file. Adjustment warnings name the supplied and effective values.

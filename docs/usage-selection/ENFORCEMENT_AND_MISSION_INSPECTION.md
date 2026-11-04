@@ -2,6 +2,8 @@
 
 This wave adds opt-in Enforce admission and operator inspection on `feature/v1.3.0`. Observe/FirstAvailable remains the default. The complete [implementation plan](../../USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) still tracks additional native operator surfaces, telemetry and release validation; those are not implied complete by these additions.
 
+For day-to-day operation (rollout from Observe to Enforce, every setting, waits, recovery, retention, telemetry and known limitations), see the [operator guide](OPERATIONS.md).
+
 ## Configure and test
 
 1. As global administrator, open Dashboard > Server > Captain selection. Choose Observe or Enforce and First available, Most remaining allowance, or Most used allowance. Save applies live with a revision check; concurrent editors must reload. Environment-supplied policy remains read-only.
@@ -18,7 +20,7 @@ This wave adds opt-in Enforce admission and operator inspection on `feature/v1.3
 
 The existing mobile mission overview includes Captain selection. Compare captains opens readable, stacked entries using native text and key/value controls, so a phone or enlarged text does not require a desktop-width table. History has server-side All/Admitted/Waiting filters, paging and retained-decision inspection. Preview displays its readiness reason even with no candidate rows. Refresh, navigation, pagination and JSON use existing native controls. Intended/runtime-reported models remain separate; deleted captain names remain plain text. Access revocation clears cached data and JSON. Queries are canceled when superseded; periodic refresh pauses while the screen is unfocused or the app is in the background.
 
-Native verification includes 1,392 assertions across 84 suites, type checking, native/shared lint and focused selection tests. Device/emulator visual review and full native recovery/settings parity remain U4/U5 checks; the browser screenshots in this wave are Dashboard evidence, not device screenshots.
+Native verification includes 1,392 assertions across 84 suites, type checking, native/shared lint and focused selection tests. Native recovery and settings parity were completed in U4. A device or simulator visual review is still a U5 check; the browser screenshots in this wave are Dashboard evidence, not device screenshots.
 
 ## Admission and accounting
 

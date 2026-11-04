@@ -1,0 +1,21 @@
+{
+  "dataDirectory": "__DATA_DIR__",
+  "databasePath": "__DATA_DIR__/armada.db",
+  "logDirectory": "__DATA_DIR__/logs",
+  "docksDirectory": "__DATA_DIR__/docks",
+  "reposDirectory": "__DATA_DIR__/repos",
+  "admiralPort": __PORT__,
+  "mcpPort": __MCP_PORT__,
+  "dataRetentionDays": 0,
+  "landingMode": "None",
+  "rest": { "hostname": "127.0.0.1", "ssl": false },
+  "database": { "type": "Sqlite", "filename": "__DATA_DIR__/armada.db" },
+  "repositoryHealth": { "intervalMinutes": 0 },
+  "usageCapture": {
+    "enabled": true,
+    "allowPtyFallback": false,
+    "maximumConcurrentProbes": 16,
+    "maximumConcurrentProbesPerHost": 16
+  },
+  "usageSelection": { "mode": "Observe", "strategy": "MostRemainingAllowance", "settlementLagSeconds": 0, "maximumCandidates": 1000 }
+}
