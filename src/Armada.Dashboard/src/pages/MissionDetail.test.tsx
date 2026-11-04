@@ -48,6 +48,7 @@ vi.mock('../context/NotificationContext', () => ({ useNotifications: () => ({ pu
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAdmin: true, isTenantAdmin: true }) }));
 vi.mock('../context/WebSocketContext', () => ({
   useWebSocket: () => ({ connected: true, reconnectCount: 0, send: vi.fn(), subscribe: () => () => {} }),
+  useCaptainSelectionRevision: () => 0,
 }));
 
 const emptyPage = { success: true, pageNumber: 1, pageSize: 1000, totalPages: 1, totalRecords: 0, totalMs: 1, objects: [] };

@@ -1251,9 +1251,9 @@
       "kind": "api",
       "key": "authorizeCaptainSelectionRecovery",
       "status": "implemented",
-      "mobile": "@dashboard/api/client.authorizeCaptainSelectionRecovery",
-      "workstream": "W0.6",
-      "notes": "Shared authenticated native transport; role-aware recovery screen workflow remains usage-selection U4."
+      "mobile": "src/screens/operations/mission/SelectionRecoverySheet.tsx",
+      "workstream": "U4",
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
     },
     {
       "kind": "api",
@@ -2637,7 +2637,7 @@
       "status": "implemented",
       "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
       "workstream": "U4",
-      "notes": "Mission selection summary, paged history/comparison and read-only preview; recovery mutations remain in the usage-selection plan"
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
     },
     {
       "kind": "api",
@@ -2645,7 +2645,7 @@
       "status": "implemented",
       "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
       "workstream": "U4",
-      "notes": "Mission selection summary, paged history/comparison and read-only preview; recovery mutations remain in the usage-selection plan"
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
     },
     {
       "kind": "api",
@@ -2653,7 +2653,7 @@
       "status": "implemented",
       "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
       "workstream": "U4",
-      "notes": "Mission selection summary, paged history/comparison and read-only preview; recovery mutations remain in the usage-selection plan"
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
     },
     {
       "kind": "api",
@@ -2661,7 +2661,7 @@
       "status": "implemented",
       "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
       "workstream": "U4",
-      "notes": "Mission selection summary, paged history/comparison and read-only preview; recovery mutations remain in the usage-selection plan"
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
     },
     {
       "kind": "api",
@@ -4037,7 +4037,7 @@
       "status": "implemented",
       "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
       "workstream": "U4",
-      "notes": "Mission selection summary, paged history/comparison and read-only preview; recovery mutations remain in the usage-selection plan"
+      "notes": "Mission Captain Selection section: summary, paged history/comparison, read-only preview, administrator recovery permissions and live captain-selection.changed reload"
     },
     {
       "kind": "api",
@@ -4934,6 +4934,14 @@
       "mobile": "AskContext, useAskConversation",
       "workstream": "W1.1",
       "notes": "thread list and activity (AskContext); open conversation (useAskConversation, shared lib/askEvents)"
+    },
+    {
+      "kind": "event",
+      "key": "captain-selection.changed",
+      "status": "implemented",
+      "mobile": "src/screens/operations/mission/CaptainSelectionSection.tsx",
+      "workstream": "U4",
+      "notes": "re-reads the focused mission's authorized selection evidence; the event carries no evidence"
     },
     {
       "kind": "event",

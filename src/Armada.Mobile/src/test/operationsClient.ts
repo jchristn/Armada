@@ -5,7 +5,7 @@
  *   jest.mock('@dashboard/api/client', () => require('../test/operationsClient').operationsClientMockFactory());
  */
 const OPERATIONS_CALLS = [
-  'getCaptainSelection', 'getCaptainSelectionHistory', 'getCaptainSelectionDecision', 'getCaptainSelectionCandidates', 'previewCaptainSelection',
+  'authorizeCaptainSelectionRecovery', 'getCaptainSelection', 'getCaptainSelectionHistory', 'getCaptainSelectionDecision', 'getCaptainSelectionCandidates', 'previewCaptainSelection',
   'getStatus', 'getHealth', 'getDoctor', 'getSettings',
   'listMissions', 'listMissionSummaries', 'getMission', 'getMissionHistory', 'getTokenUsage', 'getMissionLandingPreview',
   'getMissionGitHubPullRequest', 'enumerateMissionPullRequestReviews', 'enumerateMissionPullRequestChecks', 'createMission', 'updateMission', 'deleteMission', 'purgeMission', 'dispatchMission',

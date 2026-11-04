@@ -9,6 +9,8 @@ import { AppText, Button, IconButton, KeyValueRow, Section, SegmentedControl } f
 import { useLocale } from '../../../i18n/LocaleContext';
 import { useTheme } from '../../../theme/ThemeContext';
 import { spacing } from '../../../theme/typography';
+import { useSocket } from '../../../socket/SocketContext';
+import { SelectionRecoverySheet } from './SelectionRecoverySheet';
 
 type ViewMode = 'comparison' | 'history' | 'preview';
 /** Mission-owned inspection with shared native controls; retained names never create dead captain links. */
@@ -32,6 +34,8 @@ function CaptainSelectionBody({ missionId, status, revision, onOpen }: Selection
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [json, setJson] = useState<unknown>(null);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const { subscribe } = useSocket();
   const abort = useRef<AbortController | null>(null);
   const loading = useRef(false);
   const focused = useRef(true);
@@ -81,6 +85,11 @@ function CaptainSelectionBody({ missionId, status, revision, onOpen }: Selection
     }, 15000);
     return () => { clearInterval(timer); focused.current = false; loading.current = false; abort.current?.abort(); };
   }, []));
+  // captain-selection.changed carries identifiers only; re-read authorized evidence for this mission while focused.
+  useEffect(() => subscribe((msg) => {
+    const data = msg.data as { missionId?: unknown } | undefined;
+    if (msg.type === 'captain-selection.changed' && data?.missionId === missionId && focused.current && !loading.current) void reload.current();
+  }), [subscribe, missionId]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch scoped evidence when its query or mission revision changes
   useEffect(() => { void load(); return () => abort.current?.abort(); }, [load, revision]);
   const choose = (value: ViewMode) => { setView(value); setPage(1); setRecord(null); setExpanded(true); };
@@ -90,6 +99,7 @@ function CaptainSelectionBody({ missionId, status, revision, onOpen }: Selection
       <View style={styles.actions}>
         <Button label={t('usageSelection.compare')} variant="secondary" onPress={() => { setExpanded(!expanded); setView('comparison'); setPage(1); }} />
         {status === 'Pending' ? <Button label={t('usageSelection.preview')} variant="secondary" onPress={() => choose('preview')} /> : null}
+        {summary?.canManageRecovery && status === 'Pending' ? <Button label={t('usageSelection.recovery.title')} variant="secondary" onPress={() => setRecoveryOpen(true)} testID="selection-recovery-open" /> : null}
         <IconButton icon="refresh" label={t('usageSelection.refresh')} onPress={() => void load()} />
       </View>
       {error ? <AppText color="danger" accessibilityRole="alert">{t('usageSelection.historyLoadFailed')}</AppText> : null}
@@ -105,6 +115,12 @@ function CaptainSelectionBody({ missionId, status, revision, onOpen }: Selection
         <AppText>{t(latest.mode === 'Observe' && latest.outcome === 'Admitted' ? 'usageSelection.observeChoice' : selectionReasonKey(latest.reasonCode))}</AppText>
         <AppText variant="caption" muted>{formatDateTime(latest.evaluatedUtc)}</AppText>
       </> : null}
+      {summary?.recovery ? <View style={[styles.item, { borderColor: colors.border }]}>
+        <AppText variant="label">{t('usageSelection.recovery.title')} · {t('usageSelection.recovery.record', { revision: summary.recovery.revision })}</AppText>
+        <AppText>{t(summary.recovery.allowFallback ? 'usageSelection.recovery.fallbackOn' : 'usageSelection.recovery.fallbackOff')}</AppText>
+        <AppText>{t(summary.recovery.reserveException ? 'usageSelection.recovery.reserveOn' : 'usageSelection.recovery.reserveOff')}</AppText>
+        <AppText selectable variant="caption" muted>{summary.recovery.reason}</AppText>
+      </View> : null}
       {expanded ? <>
         <SegmentedControl label={t('usageSelection.inspectionView')} value={view} onChange={choose} options={[
           { value: 'comparison', label: t('usageSelection.comparison') }, { value: 'history', label: t('History') },
@@ -142,6 +158,7 @@ function CaptainSelectionBody({ missionId, status, revision, onOpen }: Selection
       </> : null}
     </View>
     <JsonSheet open={json != null} title={t('usageSelection.title')} data={json} onClose={() => setJson(null)} />
+    <SelectionRecoverySheet open={recoveryOpen} missionId={missionId} current={summary?.recovery} onClose={() => setRecoveryOpen(false)} onSaved={() => void load()} />
   </Section>;
 }
 const styles = StyleSheet.create({

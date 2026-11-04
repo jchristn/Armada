@@ -92,3 +92,37 @@ it('shows a blocked read-only preview and clears evidence after access is revoke
   await screen.findByRole('alert');
   expect(screen.queryByText('runtime-model')).toBeNull();
 });
+it('reloads on a matching captain-selection event only', async () => {
+  const { socket } = await renderScreen(<CaptainSelectionSection missionId="msn_one" status="Pending" onOpen={open} />);
+  await screen.findByText('runtime-model');
+  await act(async () => { socket.open(); });
+  const before = api.getCaptainSelection.mock.calls.length;
+  await act(async () => { socket.message({ type: 'captain-selection.changed', data: { missionId: 'msn_other', outcome: 'Waiting' } }); });
+  expect(api.getCaptainSelection).toHaveBeenCalledTimes(before);
+  await act(async () => { socket.message({ type: 'captain-selection.changed', data: { missionId: 'msn_one', decisionId: 'csd_two', outcome: 'Admitted' } }); });
+  await waitFor(() => expect(api.getCaptainSelection.mock.calls.length).toBeGreaterThan(before));
+});
+it('lets an administrator save audited recovery permissions and keeps the draft on conflict', async () => {
+  const recovery = { id: 'ura_one', missionId: 'msn_one', actorUserId: 'admin', reason: 'Earlier approval', revision: 2, allowFallback: true, reserveException: false, createdUtc: decision.evaluatedUtc };
+  api.getCaptainSelection.mockResolvedValue({ missionId: 'msn_one', currentMode: 'Enforce', currentStrategy: 'MostRemainingAllowance', historyAvailable: true,
+    currentAttempt: decision, latestDecision: decision, canManageRecovery: true, recovery });
+  api.authorizeCaptainSelectionRecovery.mockRejectedValueOnce(new client.ApiError('Conflict', 409, null))
+    .mockResolvedValueOnce({ ...recovery, revision: 3, reserveException: true, reason: 'Operator approved' });
+  await renderScreen(<CaptainSelectionSection missionId="msn_one" status="Pending" onOpen={open} />);
+  expect(await screen.findByText('Fallback allowed')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByTestId('selection-recovery-open'));
+  expect(screen.getByTestId('selection-recovery-save')).toBeDisabled();
+  await fireEvent(screen.getByTestId('selection-recovery-reserve'), 'valueChange', true);
+  await fireEvent.changeText(screen.getByTestId('selection-recovery-reason'), 'Operator approved');
+  await fireEvent.press(screen.getByTestId('selection-recovery-save'));
+  expect(await screen.findByText('Permissions changed or this mission is no longer Pending. Refresh before retrying.')).toBeOnTheScreen();
+  expect(screen.getByTestId('selection-recovery-reason').props.value).toBe('Operator approved');
+  await fireEvent.press(screen.getByTestId('selection-recovery-refresh'));
+  await fireEvent.press(await screen.findByTestId('selection-recovery-save'));
+  await waitFor(() => expect(api.authorizeCaptainSelectionRecovery).toHaveBeenLastCalledWith('msn_one', { expectedRevision: 2, allowFallback: true, reserveException: false, reason: 'Operator approved' }));
+});
+it('hides recovery permissions from viewers', async () => {
+  await renderScreen(<CaptainSelectionSection missionId="msn_one" status="Pending" onOpen={open} />);
+  await screen.findByText('runtime-model');
+  expect(screen.queryByTestId('selection-recovery-open')).toBeNull();
+});

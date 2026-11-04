@@ -4879,6 +4879,14 @@
     },
     {
       "kind": "event",
+      "key": "captain-selection.changed",
+      "status": "implemented",
+      "tui": "MissionSelectionPanel",
+      "workstream": "U4",
+      "notes": "reloads the mission's Captain Selection tab for a matching mission id; carries no evidence"
+    },
+    {
+      "kind": "event",
       "key": "captain.changed",
       "status": "implemented",
       "tui": "NotificationService",
@@ -4908,14 +4916,6 @@
       "tui": "NotificationService",
       "workstream": "W1.10",
       "notes": "toast and notification history; approvals queue (reviews, landings, stalls, deployment approvals)"
-    },
-    {
-      "kind": "event",
-      "key": "captain-selection.changed",
-      "status": "implemented",
-      "tui": "MissionSelectionPanel",
-      "workstream": "U4",
-      "notes": "reloads the mission's Captain Selection tab for a matching mission id; carries no evidence"
     },
     {
       "kind": "event",

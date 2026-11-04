@@ -31,7 +31,7 @@ export default function SelectionRecoveryDialog({ missionId, current, onClose, o
         onSaved(); onClose();
       } catch (failure) {
         if ([401, 403, 404].some(code => isApiStatus(failure, code))) { onSaved(); onClose(); }
-        else { setConflict(isApiStatus(failure, 409)); setError(isApiStatus(failure, 409) ? t('usageSelection.recovery.conflict') : apiErrorMessage(failure, t('usageSelection.saveFailed'))); }
+        else { setConflict(isApiStatus(failure, 409)); setError(isApiStatus(failure, 409) ? t('usageSelection.recovery.conflict') : apiErrorMessage(failure, t('usageSelection.recovery.saveFailed'))); }
       } finally { setBusy(false); }
     }}>
       {error && <div className="selection-recovery-conflict"><p className="usage-form-error" role="alert">{error}</p>
