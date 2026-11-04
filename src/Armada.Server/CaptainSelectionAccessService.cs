@@ -53,7 +53,7 @@ namespace Armada.Server
                 throw new UnauthorizedAccessException("Captain-selection recovery requires a tenant or system administrator.");
             UsageSelectionRecovery recovery = await _Database.CaptainSelections.TryAuthorizeRecoveryAsync(mission.TenantId!, mission.Id, caller.UserId, request, token).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("Recovery authorization changed or the mission is no longer Pending. Refresh before retrying.");
-            _Missions.ReconsiderCaptainSelection(mission.Id);
+            _Missions.ReconsiderCaptainSelection(mission);
             return recovery;
         }
 

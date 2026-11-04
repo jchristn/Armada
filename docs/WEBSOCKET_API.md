@@ -40,6 +40,7 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
   - [status.snapshot](#statussnapshot)
   - [mission.changed](#missionchanged)
   - [mission.activity](#missionactivity)
+  - [captain-selection.changed](#captain-selectionchanged)
   - [mission.status_changed](#missionstatus_changed)
   - [voyage.changed](#voyagechanged)
   - [captain.changed](#captainchanged)
@@ -394,6 +395,36 @@ a second per mission (the newest wins). Not recorded as an event.
 | `data.activity.timestampUtc` | string | When it was observed |
 
 ---
+
+
+### captain-selection.changed
+
+Broadcast to the mission's tenant, the same recipients as `mission.changed`, after a captain-selection change commits:
+an admitted dispatch or repair attempt, a new materially different waiting decision, or an administrator recovery
+authorization. Repeated waiting evaluations with unchanged evidence do not broadcast. The event is an invalidation
+signal only. It never carries candidates, usage percentages or account identity; clients re-fetch
+`GET /api/v1/missions/{id}/captain-selection` (or the MCP `get_captain_selection` tool), which applies the caller's
+authorization. Not recorded as an event.
+
+```json
+{
+  "type": "captain-selection.changed",
+  "data": {
+    "missionId": "msn_abc123def456ghi789jk",
+    "voyageId": "vyg_abc123def456ghi789jk",
+    "decisionId": "csd_abc123def456ghi789jk",
+    "outcome": "Admitted"
+  },
+  "timestamp": "2026-03-07T12:35:00.100Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.missionId` | string | Mission ID |
+| `data.voyageId` | string \| null | Parent voyage ID |
+| `data.decisionId` | string \| null | Recorded decision ID, or null for `RecoveryAuthorized` |
+| `data.outcome` | string | `Admitted`, `Waiting` or `RecoveryAuthorized` |
 
 ### mission.status_changed
 

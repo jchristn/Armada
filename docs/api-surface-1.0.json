@@ -18365,6 +18365,19 @@
         "generic": false
       },
       {
+        "type": "captain-selection.changed",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": null,
+        "fields": [
+          "missionId",
+          "voyageId",
+          "decisionId",
+          "outcome"
+        ],
+        "generic": false
+      },
+      {
         "type": "captain.batch_deleted",
         "scope": "tenant",
         "hasMessage": true,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, getCaptainSelection, getCaptainSelectionHistory, getCaptainSelectionDecision, previewCaptainSelection } from '../../api/client';
 import { useLocale } from '../../context/LocaleContext';
+import { useCaptainSelectionRevision } from '../../context/WebSocketContext';
 import { selectionOutcomeKey, selectionReasonKey, selectionStrategyKey } from '../../lib/usageSelection';
 import type { CaptainSelectionCandidateView, CaptainSelectionDecisionDetail, CaptainSelectionDecisionView, CaptainSelectionPreview, CaptainSelectionSummary, EnumerationResult } from '../../types/models';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
@@ -16,6 +17,7 @@ type View = 'comparison' | 'history' | 'preview';
 /** Mission-owned selection inspection. No new route; all tables and refresh controls reuse dashboard components. */
 export default function CaptainSelectionCard({ missionId, status, revision }: CaptainSelectionCardProps) {
   const { t, locale, formatDateTime } = useLocale();
+  const selectionRevision = useCaptainSelectionRevision(missionId);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [summary, setSummary] = useState<CaptainSelectionSummary | null>(null);
   const [history, setHistory] = useState<EnumerationResult<CaptainSelectionDecisionView> | null>(null);
@@ -74,7 +76,7 @@ export default function CaptainSelectionCard({ missionId, status, revision }: Ca
   useEffect(() => {
     void load().catch(() => {});
     return () => request.current?.abort();
-  }, [load, revision]);
+  }, [load, revision, selectionRevision]);
   useEffect(() => {
     if (refreshSeconds <= 0) return;
     const timer = setInterval(() => { if (!document.hidden && !loading.current) void load().catch(() => {}); }, refreshSeconds * 1000);

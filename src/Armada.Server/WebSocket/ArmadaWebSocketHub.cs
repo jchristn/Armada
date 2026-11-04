@@ -398,6 +398,23 @@ namespace Armada.Server.WebSocket
         }
 
         /// <summary>
+        /// Broadcast that a mission's captain-selection state changed, scoped like <c>mission.changed</c>. The payload
+        /// carries identifiers and the stable outcome only; clients re-fetch authorized detail through REST or MCP.
+        /// </summary>
+        /// <param name="change">Committed selection change.</param>
+        public void BroadcastCaptainSelectionChange(CaptainSelectionChange change)
+        {
+            if (change == null || String.IsNullOrEmpty(change.MissionId)) return;
+            BroadcastToTenant(change.TenantId, "captain-selection.changed", new
+            {
+                missionId = change.MissionId,
+                voyageId = change.VoyageId,
+                decisionId = change.DecisionId,
+                outcome = change.Outcome
+            });
+        }
+
+        /// <summary>
         /// Broadcast a running mission's latest captain activity (a tool call, text, or reasoning from its runtime's
         /// structured output) to the mission's tenant as <c>mission.activity</c>. The caller throttles it.
         /// </summary>

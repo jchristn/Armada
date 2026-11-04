@@ -256,9 +256,17 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(mode == UsageSelectionModeEnum.Observe ? proposed.Id : null, committed.HypotheticalCaptainId);
                     h.Launches++; return 8001;
                 };
+                List<CaptainSelectionChange> changes = new List<CaptainSelectionChange>();
+                h.Service.OnCaptainSelectionChanged = changes.Add;
                 AssertTrue(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
                 AssertEqual(1, h.Launches);
                 CaptainSelectionDecision decision = (await h.Db.CaptainSelections.ReadCurrentDecisionAsync(tenant.Id, h.Mission.Id))!;
+                CaptainSelectionChange change = changes.Single();
+                AssertEqual(h.Mission.Id, change.MissionId); AssertEqual(tenant.Id, change.TenantId);
+                AssertEqual(decision.Id, change.DecisionId); AssertEqual(CaptainSelectionOutcomes.Admitted, change.Outcome);
+                h.Service.ReconsiderCaptainSelection(h.Mission);
+                AssertEqual(CaptainSelectionOutcomes.RecoveryAuthorized, changes.Last().Outcome, "recovery invalidates without a decision");
+                AssertNull(changes.Last().DecisionId);
                 AssertEqual(actualCaptain.Id, decision.SelectedCaptainId); AssertEqual(mode == UsageSelectionModeEnum.Observe ? proposed.Id : null, decision.HypotheticalCaptainId);
                 AssertEqual(2, decision.CandidateCount);
                 EnumerationResult<CaptainSelectionExecutionEvent> executionEvents = await h.Db.CaptainSelections.EnumerateExecutionEventsAsync(tenant.Id, decision.Id);

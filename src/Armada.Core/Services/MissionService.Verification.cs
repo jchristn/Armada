@@ -52,6 +52,7 @@ namespace Armada.Core.Services
                     CaptainSelectionAdmissionReceipt receipt = snapshot.Settings.Mode == UsageSelectionModeEnum.Enforce
                         ? await _Database.CaptainSelections.TryAdmitEnforcedRepairAsync(records, mission.LastUpdateUtc, _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false)
                         : await _Database.CaptainSelections.TryAdmitObservedRepairAsync(records, mission.LastUpdateUtc, _Settings.Concurrency.MaxCaptainConcurrency, token).ConfigureAwait(false);
+                    if (receipt.Claimed) NotifySelectionChanged(mission, records.Decision.Id, CaptainSelectionOutcomes.Admitted);
                     return receipt.Claimed;
                 }
                 return await _Database.CaptainSelections.TryAdmitLegacyRepairAsync(current.Id, mission.Id, mission.LastUpdateUtc, mission.AssignedHarborId ?? UsageSelectionLocalHostId,

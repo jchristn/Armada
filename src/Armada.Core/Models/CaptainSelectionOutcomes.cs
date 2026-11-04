@@ -11,5 +11,8 @@ namespace Armada.Core.Models
 
         /// <summary>Observe mode only: the hypothetical enforced evaluation would have selected a captain.</summary>
         public const string Selected = "Selected";
+
+        /// <summary>Invalidation-only kind: an administrator recovery authorization changed; no decision was recorded.</summary>
+        public const string RecoveryAuthorized = "RecoveryAuthorized";
     }
 }

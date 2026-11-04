@@ -137,7 +137,7 @@ namespace Armada.Core.Database
                 if (source.DecisionId != null)
                     await InsertCaptainSelectionExecutionEventAsync(connection, transaction, new CaptainSelectionExecutionEvent { TenantId = tenantId,
                         UserId = (await ReadAttemptAsync(connection, transaction, tenantId, key!, token).ConfigureAwait(false))?.UserId,
-                        DecisionId = source.DecisionId, ExecutionAttemptId = key!, EventKind = release ? "ProvenUnstarted" : "LaunchAttempted", OccurredUtc = now, ReportingSource = "AdmissionLifecycle" }, token).ConfigureAwait(false);
+                        DecisionId = source.DecisionId, ExecutionAttemptId = key!, EventKind = release ? CaptainSelectionEventKinds.ProvenUnstarted : CaptainSelectionEventKinds.LaunchAttempted, OccurredUtc = now, ReportingSource = "AdmissionLifecycle" }, token).ConfigureAwait(false);
                 await transaction.CommitAsync(token).ConfigureAwait(false); return true;
             }, token, write: true);
         }

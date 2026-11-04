@@ -51,6 +51,12 @@ namespace Armada.Core.Services
         public Func<Mission, Captain, Task<bool>>? CanAssignMissionAsync { get; set; }
 
         /// <summary>
+        /// Invoked after a captain-selection decision commits (admission, repair or a new material waiting state).
+        /// Best effort: exceptions are logged and never affect admission.
+        /// </summary>
+        public Action<CaptainSelectionChange>? OnCaptainSelectionChanged { get; set; }
+
+        /// <summary>
         /// Chooses where a mission's dock is created before it is provisioned: on a Harbor that can serve the vessel, on
         /// the Admiral's host, or nowhere yet (the mission stays Pending). When null every dock is created on the
         /// Admiral's host.
@@ -631,13 +637,17 @@ namespace Armada.Core.Services
                 try { receipt = usageSelection.Settings.Mode == UsageSelectionModeEnum.Enforce
                     ? await _Database.CaptainSelections.TryAdmitEnforcedAsync(decision, ceiling: _Settings.Concurrency.MaxCaptainConcurrency, token: token).ConfigureAwait(false)
                     : await _Database.CaptainSelections.TryAdmitObservedAsync(decision, ceiling: _Settings.Concurrency.MaxCaptainConcurrency, token: token).ConfigureAwait(false); }
-                catch (System.Data.Common.DbException)
+                catch (Exception ex) when (ex is System.Data.Common.DbException || TransientDatabaseError.IsTransient(ex))
                 {
-                    UsageWait(mission, "SelectionPersistenceUnavailable", "Selection admission could not be confirmed. Armada will reconcile the recorded attempt before starting any process.");
+                    UsageWait(mission, UsageSelectionReasonCodes.SelectionPersistenceUnavailable, "Selection admission could not be confirmed. Armada will reconcile the recorded attempt before starting any process.");
                     return false;
                 }
                 claimed = receipt.Claimed;
-                if (claimed) mission.UsageAdmissionExecutionKey = decision.Decision.ExecutionAttemptId;
+                if (claimed)
+                {
+                    mission.UsageAdmissionExecutionKey = decision.Decision.ExecutionAttemptId;
+                    NotifySelectionChanged(mission, decision.Decision.Id, CaptainSelectionOutcomes.Admitted);
+                }
                 // A replay is recovered by the normal mission-owned lifecycle, never launched a second time here.
                 if (receipt.AlreadyCommitted) return false;
             }

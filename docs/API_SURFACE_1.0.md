@@ -28,7 +28,7 @@ administrator).
 | MCP tools | 271 | 8 |
 | WebSocket endpoints | 2 | 1 |
 | WebSocket commands | 65 | 0 |
-| WebSocket event types | 77 | 0 |
+| WebSocket event types | 78 | 0 |
 | CLI commands | 98 | 0 |
 | Settings keys | 350 | 12 |
 
@@ -893,6 +893,7 @@ Generic events carry a `message` and the payload `{ entityType, entityId, captai
 | `blackbox.recovery_run` | tenant | `BlackBoxRecoveryRunPayload` + `entryId`, `pathId`, `recommendationId`, `dryRun`, `succeeded`, `stepsRun`, `stepsFailed`, `userId` |
 | `blackbox.resolved` | tenant | `BlackBoxResolvedPayload` + `entryId`, `missionId`, `voyageId`, `resolution` |
 | `blackbox.storage_fallback` | tenant | `BlackBoxStorageFallbackPayload` + `entryId`, `from`, `to`, `error` |
+| `captain-selection.changed` | tenant | `missionId`, `voyageId`, `decisionId`, `outcome` |
 | `captain.batch_deleted` | tenant | generic |
 | `captain.changed` | tenant | `id`, `name`, `state` |
 | `captain.launched` | tenant | generic |

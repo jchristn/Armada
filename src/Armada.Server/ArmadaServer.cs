@@ -803,6 +803,7 @@ namespace Armada.Server
             _WebSocketHub.MissionActivityLookup = _AgentLifecycle.MissionActivity.Get;
             _MissionLanding.SetWebSocketHub(_WebSocketHub);
             missionService.OnReviewRequested = _WebSocketHub.BroadcastApprovalNeeded;
+            missionService.OnCaptainSelectionChanged = _WebSocketHub.BroadcastCaptainSelectionChange;
             _CheckRunService.OnCheckRunChanged = _WebSocketHub.BroadcastCheckRunChange;
             _ObjectiveService.OnObjectiveChanged = _WebSocketHub.BroadcastObjectiveChange;
             _DeploymentService.OnDeploymentChanged = _WebSocketHub.BroadcastDeploymentChange;

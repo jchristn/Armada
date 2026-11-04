@@ -100,3 +100,25 @@ export function useUsageRevision(): number {
   const ctx = useContext(WebSocketContext);
   return ctx?.usageRevision ?? 0;
 }
+
+/** Mission-scoped captain-selection invalidation event name. */
+export const CAPTAIN_SELECTION_CHANGED_EVENT = 'captain-selection.changed';
+
+/**
+ * Refetch key for one mission's captain-selection views. Increments on a matching `captain-selection.changed`
+ * event and on reconnect; 0 outside a provider. The event carries no evidence, so callers always re-read it.
+ */
+export function useCaptainSelectionRevision(missionId: string): number {
+  const ctx = useContext(WebSocketContext);
+  const [revision, setRevision] = useState(0);
+  const subscribe = ctx?.subscribe;
+  useEffect(() => {
+    if (!subscribe) return undefined;
+    return subscribe((msg) => {
+      if (msg.type !== CAPTAIN_SELECTION_CHANGED_EVENT) return;
+      const data = msg.data as { missionId?: unknown } | undefined;
+      if (data?.missionId === missionId) setRevision((value) => value + 1);
+    });
+  }, [subscribe, missionId]);
+  return revision + (ctx?.reconnectCount ?? 0);
+}

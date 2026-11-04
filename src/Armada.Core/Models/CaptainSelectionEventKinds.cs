@@ -3,6 +3,9 @@ namespace Armada.Core.Models
     /// <summary>Stable persisted execution event kinds. Values are stored and returned verbatim; never rename them.</summary>
     public static class CaptainSelectionEventKinds
     {
+        /// <summary>Durable marker written before the launcher is called; after it, the attempt may have consumed allowance.</summary>
+        public const string LaunchAttempted = "LaunchAttempted";
+
         /// <summary>The admitted attempt's process launched.</summary>
         public const string ExecutionStarted = "ExecutionStarted";
 

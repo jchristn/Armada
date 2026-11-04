@@ -8,8 +8,10 @@ namespace Armada.Core.Services.Interfaces
     /// </summary>
     public interface IMissionService
     {
-        /// <summary>Invalidate a mission's transient selection retry after an authorized recovery revision.</summary>
-        void ReconsiderCaptainSelection(string missionId);
+        /// <summary>Invalidate a mission's transient selection retry after an authorized recovery revision and notify clients.</summary>
+        /// <param name="mission">The mission whose recovery authorization changed.</param>
+        /// <exception cref="ArgumentNullException">Mission is null.</exception>
+        void ReconsiderCaptainSelection(Mission mission);
 
         /// <summary>
         /// Delegate invoked synchronously at completion to capture the diff before the worktree can be reclaimed.

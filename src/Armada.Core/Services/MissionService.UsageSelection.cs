@@ -18,10 +18,25 @@ namespace Armada.Core.Services
             new System.Collections.Concurrent.ConcurrentDictionary<string, UsageSelectionTransientBlocker>(StringComparer.Ordinal);
 
         /// <inheritdoc />
-        public void ReconsiderCaptainSelection(string missionId)
+        public void ReconsiderCaptainSelection(Mission mission)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(missionId);
-            _UsageSelectionBlockers.TryRemove(missionId, out _);
+            ArgumentNullException.ThrowIfNull(mission);
+            _UsageSelectionBlockers.TryRemove(mission.Id, out _);
+            NotifySelectionChanged(mission, null, CaptainSelectionOutcomes.RecoveryAuthorized);
+        }
+
+        private void NotifySelectionChanged(Mission mission, string? decisionId, string outcome)
+        {
+            if (OnCaptainSelectionChanged == null || String.IsNullOrEmpty(mission.TenantId)) return;
+            try
+            {
+                OnCaptainSelectionChanged(new CaptainSelectionChange { TenantId = mission.TenantId, MissionId = mission.Id,
+                    VoyageId = mission.VoyageId, DecisionId = decisionId, Outcome = outcome });
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "selection change notification failed for mission " + mission.Id + ": " + ex.Message);
+            }
         }
 
         private string UsagePolicyKey() => System.Text.Json.JsonSerializer.Serialize(_Settings.EffectiveUsageSelection);
@@ -130,7 +145,8 @@ namespace Armada.Core.Services
                 if (previous == null || previous.EvidenceFingerprint != waiting.Decision.EvidenceFingerprint || previous.Outcome != CaptainSelectionOutcomes.Waiting)
                 {
                     waiting.Decision.PreviousDecisionId = previous?.Id;
-                    await _Database.CaptainSelections.CreateDecisionAsync(waiting, token).ConfigureAwait(false);
+                    CaptainSelectionDecision stored = await _Database.CaptainSelections.CreateDecisionAsync(waiting, token).ConfigureAwait(false);
+                    NotifySelectionChanged(mission, stored.Id, CaptainSelectionOutcomes.Waiting);
                 }
                 return true;
             }
