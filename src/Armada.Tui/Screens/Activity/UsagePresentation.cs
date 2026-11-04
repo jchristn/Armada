@@ -35,7 +35,14 @@ namespace Armada.Tui.Screens.Activity
                     doc.Field(window.Name, percent.HasValue ? percent.Value.ToString("0.#", System.Globalization.CultureInfo.CurrentCulture) + "% " + doc.Loc.T(label) : doc.Loc.T("Unknown"), percent >= 90 ? doc.Theme.Error : percent >= 75 ? doc.Theme.Warning : null);
                     if (window.ResetsUtc.HasValue) doc.Field("Resets", doc.Loc.FormatDateTime(window.ResetsUtc.Value));
                     if (window.CoverageNote != null) doc.Field("Estimated", window.CoverageNote);
+                    UsageReservationEstimate? estimate = view.ReservationEstimates.FirstOrDefault(e => e.WindowName == window.Name && e.Model == window.Model
+                        && e.WindowMinutes == window.WindowMinutes && (e.ActivePercent > 0 || e.UnsettledPercent > 0));
+                    if (estimate != null)
+                        doc.Text("  " + doc.Loc.T("usageSelection.reservations.estimate", LocalizationArgs.Of(
+                            "active", estimate.ActivePercent.ToString("0.#", System.Globalization.CultureInfo.CurrentCulture) + "%",
+                            "unsettled", estimate.UnsettledPercent.ToString("0.#", System.Globalization.CultureInfo.CurrentCulture) + "%")), doc.Theme.Muted);
                 }
+                if (view.ReservationUncertain) doc.Text(doc.Loc.T("usageSelection.reservations.uncertain"), doc.Theme.Muted);
                 doc.Field("Captains", String.Join(", ", view.CaptainIds));
                 if (view.CapabilityReason != null) doc.Field("Unsupported", view.CapabilityReason);
                 if (view.ErrorCode != null) doc.Field("Capture failed", view.ErrorCode);

@@ -51,6 +51,23 @@ describe('AccountLimitsTable', () => {
     expect(screen.queryByText('acct_1234567890abcdef')).not.toBeInTheDocument();
   });
 
+  it('shows Armada reservation estimates beside, never inside, observed usage', async () => {
+    vi.mocked(getUsageLatest).mockResolvedValue(page([view({
+      reservationEstimates: [{ windowName: '5h', windowMinutes: 300, model: null, activePercent: 4, unsettledPercent: 2 }], reservationUncertain: true,
+    })]));
+    renderTable();
+    expect(await screen.findByText('Estimated Armada reservations: 4% running, 2% awaiting settlement (not provider usage)')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: '5-hour limit usage' })).toHaveAttribute('aria-valuenow', '82');
+    expect(screen.getByText(/Captain selection treats it as uncertain until a fresh capture/)).toBeInTheDocument();
+  });
+
+  it('omits the estimate line when nothing is reserved', async () => {
+    vi.mocked(getUsageLatest).mockResolvedValue(page([view({ reservationEstimates: [] })]));
+    renderTable();
+    await screen.findByRole('progressbar', { name: '5-hour limit usage' });
+    expect(screen.queryByText(/Estimated Armada reservations/)).not.toBeInTheDocument();
+  });
+
   it('copies the captain and host IDs from their cells', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });

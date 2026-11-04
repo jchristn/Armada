@@ -1,4 +1,4 @@
-import type { Captain, UsageSnapshotView, UsageWindow } from '../types/models';
+import type { Captain, UsageReservationEstimate, UsageSnapshotView, UsageWindow } from '../types/models';
 
 /** Distinct presentation states. Each one has its own text and next action; none of them is rendered as zero usage. */
 export type UsageDisplayKind =
@@ -137,3 +137,9 @@ export function captainUsagePath(captainId: string): string {
 }
 
 export const CAPTAIN_USAGE_SECTION_ID = 'captain-usage';
+
+/** Armada's reservation estimate for one observed window of an account row, or undefined when none is recorded. */
+export function reservationEstimateFor(view: Pick<UsageSnapshotView, 'reservationEstimates'>, limit: Pick<UsageWindow, 'name' | 'model' | 'windowMinutes'>): UsageReservationEstimate | undefined {
+  return (view.reservationEstimates ?? []).find((estimate) => estimate.windowName === limit.name && (estimate.model ?? null) === (limit.model ?? null)
+    && (estimate.windowMinutes ?? null) === (limit.windowMinutes ?? null) && (estimate.activePercent > 0 || estimate.unsettledPercent > 0));
+}

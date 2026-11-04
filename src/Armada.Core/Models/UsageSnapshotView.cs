@@ -46,5 +46,16 @@ namespace Armada.Core.Models
         public int EffectiveIntervalSeconds { get; set; } = 300;
         /// <summary>CapabilityReason: account usage contract.</summary>
         public string? CapabilityReason { get; set; }
+        /// <summary>
+        /// Armada's estimated reservations per observed window (latest reads only), kept separate from observed usage.
+        /// Empty when nothing is reserved or estimated.
+        /// </summary>
+        [CollectionBound(32)]
+        public List<UsageReservationEstimate> ReservationEstimates { get; set; } = new List<UsageReservationEstimate>();
+        /// <summary>
+        /// True when the account has estimated consumption that could not be settled or attributed (uncertain debt or an
+        /// untracked execution); selection treats the account's evidence as uncertain until a fresh capture settles it.
+        /// </summary>
+        public bool ReservationUncertain { get; set; }
     }
 }

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getUsageLatest } from '../../api/client';
 import { useLocale } from '../../context/LocaleContext';
 import { useUsageRevision } from '../../context/WebSocketContext';
-import { captainUsagePath, viewKind } from '../../lib/usage';
+import { captainUsagePath, reservationEstimateFor, viewKind } from '../../lib/usage';
 import type { EnumerationResult, UsageSnapshotView } from '../../types/models';
 import DataTable, { type DataTableColumn } from '../shared/DataTable';
 import UsageState from './UsageState';
@@ -99,8 +99,10 @@ export default function AccountLimitsTable({ provider, accountKey, hostId, refre
         return (
           <div className="usage-limits-bars">
             {view.windows.map((window) => (
-              <UsageWindowBar key={`${window.name}-${window.model ?? ''}`} window={window} stale={kind === 'stale' || kind === 'failed'} />
+              <UsageWindowBar key={`${window.name}-${window.model ?? ''}`} window={window} stale={kind === 'stale' || kind === 'failed'}
+                estimate={reservationEstimateFor(view, window)} />
             ))}
+            {view.reservationUncertain && <p className="text-dim usage-window-estimate">{t('usageSelection.reservations.uncertain')}</p>}
           </div>
         );
       },

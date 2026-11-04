@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { usageWindowLabel } from '@dashboard/lib/usageWindowLabel';
 import { ApiError, captureCaptainUsage, getUsageLatest } from '@dashboard/api/client';
-import { accountAlias, captainCaptureActive, USAGE_KIND_HINT, USAGE_KIND_TEXT, USAGE_LEVEL_TEXT, usageLevel, viewKind } from '@dashboard/lib/usage';
+import { accountAlias, captainCaptureActive, reservationEstimateFor, USAGE_KIND_HINT, USAGE_KIND_TEXT, USAGE_LEVEL_TEXT, usageLevel, viewKind } from '@dashboard/lib/usage';
 import type { Captain, UsageSnapshotView } from '@dashboard/types/models';
 import { useLiveResource } from '../../build/useLiveResource';
 import { useAuth } from '../../auth/AuthContext';
@@ -60,7 +60,10 @@ export function UsageView({ captain }: { captain?: Captain }) {
           {window.usedPercent != null ? <StatusBadge label={t(USAGE_LEVEL_TEXT[usageLevel(window.usedPercent)])} tone={window.usedPercent >= 90 ? 'error' : window.usedPercent >= 75 ? 'warning' : 'success'} /> : null}
           {window.resetsUtc ? <AppText>{t('Resets')}: {formatDateTime(window.resetsUtc)}</AppText> : null}
           {window.coverageNote ? <AppText>{window.coverageNote}</AppText> : null}
+          {reservationEstimateFor(view, window) ? <AppText muted>{t('usageSelection.reservations.estimate', {
+            active: `${formatNumber(reservationEstimateFor(view, window)!.activePercent)}%`, unsettled: `${formatNumber(reservationEstimateFor(view, window)!.unsettledPercent)}%` })}</AppText> : null}
         </View>)}
+        {view.reservationUncertain ? <AppText muted>{t('usageSelection.reservations.uncertain')}</AppText> : null}
         <AppText>{t('Captains')}: {view.captainIds.join(', ')}</AppText>
         {view.capabilityReason ? <AppText>{view.capabilityReason}</AppText> : null}
         {(isAdmin || isTenantAdmin) && view.errorCode ? <AppText>{view.errorCode}</AppText> : null}

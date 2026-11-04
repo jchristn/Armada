@@ -1,5 +1,5 @@
 import { useLocale } from '../../context/LocaleContext';
-import type { UsageWindow } from '../../types/models';
+import type { UsageReservationEstimate, UsageWindow } from '../../types/models';
 import { usageWindowLabel } from '../../lib/usageWindowLabel';
 import { USAGE_LEVEL_TEXT, usageLevel } from '../../lib/usage';
 
@@ -7,15 +7,18 @@ interface UsageWindowBarProps {
   window: UsageWindow;
   /** The observation is stale or failed: the bar keeps its value but is not presented as fresh. */
   stale?: boolean;
+  /** Armada's estimated reservation for this window, shown as its own line and never added to the bar. */
+  estimate?: UsageReservationEstimate | null;
 }
 
 /** One limit window: label, percentage text, level text, progress bar and exact reset with countdown. */
-export default function UsageWindowBar({ window, stale = false }: UsageWindowBarProps) {
+export default function UsageWindowBar({ window, stale = false, estimate = null }: UsageWindowBarProps) {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
   const known = window.usedPercent !== null && window.usedPercent !== undefined && !Number.isNaN(window.usedPercent);
   const percent = known ? Math.max(0, Math.min(100, window.usedPercent as number)) : 0;
   const level = known ? usageLevel(window.usedPercent as number) : 'normal';
   const label = usageWindowLabel(window, t);
+  const points = (value: number) => `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)}%`;
   const percentText = known ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(window.usedPercent as number)}%` : t('Unknown');
   return (
     <div className={`usage-window${stale ? ' usage-window-stale' : ''}`}>
@@ -48,6 +51,11 @@ export default function UsageWindowBar({ window, stale = false }: UsageWindowBar
           : t('Reset time not reported')}
         {window.coverageNote && <span> - {window.coverageNote}</span>}
       </div>
+      {estimate && (estimate.activePercent > 0 || estimate.unsettledPercent > 0) && (
+        <div className="usage-window-meta usage-window-estimate text-dim">
+          {t('usageSelection.reservations.estimate', { active: points(estimate.activePercent), unsettled: points(estimate.unsettledPercent) })}
+        </div>
+      )}
     </div>
   );
 }

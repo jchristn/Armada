@@ -7555,7 +7555,9 @@
         "usageSelection.recovery.permissions": "Permisos",
         "usageSelection.numberRange": "Introduzca un número entre {{min}} y {{max}}.",
         "usageSelection.save": "Guardar la configuración de selección de capitán",
-        "usageSelection.conflict": "Otro administrador cambió esta configuración. Actualice antes de volver a guardar."
+        "usageSelection.conflict": "Otro administrador cambió esta configuración. Actualice antes de volver a guardar.",
+        "usageSelection.reservations.estimate": "Reservas estimadas de Armada: {{active}} en ejecución, {{unsettled}} pendientes de liquidar (no es uso del proveedor)",
+        "usageSelection.reservations.uncertain": "Parte del uso estimado de esta cuenta aún no se ha liquidado. La selección de capitán lo trata como incierto hasta una nueva captura."
       },
       "sections": {
         "OPERATIONS": "OPERACIONES",
@@ -14058,7 +14060,9 @@
         "usageSelection.recovery.permissions": "权限",
         "usageSelection.numberRange": "请输入 {{min}} 到 {{max}} 之间的数字。",
         "usageSelection.save": "保存舰长选择设置",
-        "usageSelection.conflict": "另一位管理员更改了这些设置。请刷新后再保存。"
+        "usageSelection.conflict": "另一位管理员更改了这些设置。请刷新后再保存。",
+        "usageSelection.reservations.estimate": "Armada 预估预留：运行中 {{active}}，待结算 {{unsettled}}（非提供商用量）",
+        "usageSelection.reservations.uncertain": "此账户的部分预估用量尚未结算。在新的采集之前，舰长选择会将其视为不确定。"
       },
       "sections": {
         "OPERATIONS": "操作",
@@ -20524,7 +20528,9 @@
         "usageSelection.recovery.permissions": "權限",
         "usageSelection.numberRange": "請輸入 {{min}} 到 {{max}} 之間的數字。",
         "usageSelection.save": "儲存艦長選擇設定",
-        "usageSelection.conflict": "另一位管理員變更了這些設定。請重新整理後再儲存。"
+        "usageSelection.conflict": "另一位管理員變更了這些設定。請重新整理後再儲存。",
+        "usageSelection.reservations.estimate": "Armada 預估預留：執行中 {{active}}，待結算 {{unsettled}}（非供應商用量）",
+        "usageSelection.reservations.uncertain": "此帳戶的部分預估用量尚未結算。在新的擷取之前，艦長選擇會將其視為不確定。"
       },
       "sections": {}
     },
@@ -26950,7 +26956,9 @@
         "usageSelection.recovery.permissions": "權限",
         "usageSelection.numberRange": "請輸入 {{min}} 至 {{max}} 之間嘅數字。",
         "usageSelection.save": "儲存艦長揀選設定",
-        "usageSelection.conflict": "另一位管理員改咗呢啲設定。請重新整理之後再儲存。"
+        "usageSelection.conflict": "另一位管理員改咗呢啲設定。請重新整理之後再儲存。",
+        "usageSelection.reservations.estimate": "Armada 預計預留：運行中 {{active}}，等緊結算 {{unsettled}}（唔係供應商用量）",
+        "usageSelection.reservations.uncertain": "呢個帳戶有部分預計用量未結算。喺新嘅擷取之前，艦長揀選會當佢係唔確定。"
       },
       "sections": {}
     },
@@ -33392,7 +33400,9 @@
         "usageSelection.recovery.permissions": "権限",
         "usageSelection.numberRange": "{{min}} から {{max}} までの数値を入力してください。",
         "usageSelection.save": "キャプテン選択の設定を保存",
-        "usageSelection.conflict": "別の管理者がこの設定を変更しました。再読み込みしてから保存してください。"
+        "usageSelection.conflict": "別の管理者がこの設定を変更しました。再読み込みしてから保存してください。",
+        "usageSelection.reservations.estimate": "Armada の推定予約: 実行中 {{active}}、精算待ち {{unsettled}}（プロバイダーの使用量ではありません）",
+        "usageSelection.reservations.uncertain": "このアカウントの推定使用量の一部はまだ精算されていません。新しい取得まで、キャプテン選択は不確定として扱います。"
       },
       "sections": {}
     },
@@ -39825,7 +39835,9 @@
         "usageSelection.recovery.permissions": "Berechtigungen",
         "usageSelection.numberRange": "Geben Sie eine Zahl von {{min}} bis {{max}} ein.",
         "usageSelection.save": "Einstellungen der Kapitänsauswahl speichern",
-        "usageSelection.conflict": "Ein anderer Administrator hat diese Einstellungen geändert. Aktualisieren Sie, bevor Sie erneut speichern."
+        "usageSelection.conflict": "Ein anderer Administrator hat diese Einstellungen geändert. Aktualisieren Sie, bevor Sie erneut speichern.",
+        "usageSelection.reservations.estimate": "Geschätzte Armada-Reservierungen: {{active}} laufend, {{unsettled}} offen zur Abrechnung (keine Anbieternutzung)",
+        "usageSelection.reservations.uncertain": "Ein Teil der geschätzten Nutzung dieses Kontos ist noch nicht abgerechnet. Die Kapitänsauswahl behandelt sie bis zu einer neuen Erfassung als unsicher."
       },
       "sections": {}
     },
@@ -46258,7 +46270,9 @@
         "usageSelection.recovery.permissions": "Autorisations",
         "usageSelection.numberRange": "Saisissez un nombre entre {{min}} et {{max}}.",
         "usageSelection.save": "Enregistrer les paramètres de sélection du capitaine",
-        "usageSelection.conflict": "Un autre administrateur a modifié ces paramètres. Actualisez avant d'enregistrer à nouveau."
+        "usageSelection.conflict": "Un autre administrateur a modifié ces paramètres. Actualisez avant d'enregistrer à nouveau.",
+        "usageSelection.reservations.estimate": "Réservations estimées par Armada : {{active}} en cours, {{unsettled}} en attente de régularisation (pas l'usage du fournisseur)",
+        "usageSelection.reservations.uncertain": "Une partie de l'usage estimé de ce compte n'est pas encore régularisée. La sélection du capitaine la considère incertaine jusqu'à une nouvelle capture."
       },
       "sections": {}
     },
@@ -52691,7 +52705,9 @@
         "usageSelection.recovery.permissions": "Permessi",
         "usageSelection.numberRange": "Inserisci un numero da {{min}} a {{max}}.",
         "usageSelection.save": "Salva le impostazioni di selezione del capitano",
-        "usageSelection.conflict": "Un altro amministratore ha modificato queste impostazioni. Aggiorna prima di salvare di nuovo."
+        "usageSelection.conflict": "Un altro amministratore ha modificato queste impostazioni. Aggiorna prima di salvare di nuovo.",
+        "usageSelection.reservations.estimate": "Prenotazioni stimate da Armada: {{active}} in esecuzione, {{unsettled}} in attesa di conguaglio (non è l'uso del fornitore)",
+        "usageSelection.reservations.uncertain": "Parte dell'uso stimato di questo account non è ancora conguagliata. La selezione del capitano la considera incerta fino a una nuova acquisizione."
       },
       "sections": {}
     }

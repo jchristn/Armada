@@ -9610,6 +9610,7 @@ details.readiness-issue-collapsible { padding-top: 0.45rem; padding-bottom: 0.45
 .usage-window-name { font-weight: 600; overflow-wrap: anywhere; }
 .usage-window-value { font-variant-numeric: tabular-nums; }
 .usage-window-meta { font-size: 0.8125rem; }
+.usage-window-estimate { margin: 0.15rem 0 0; font-style: italic; overflow-wrap: anywhere; }
 .usage-bar { position: relative; height: 0.5rem; border-radius: 999px; background: var(--bg-hover); border: 1px solid var(--border); overflow: hidden; }
 .usage-bar-fill { display: block; height: 100%; background: var(--green); }
 .usage-bar-warning .usage-bar-fill { background: var(--yellow); }

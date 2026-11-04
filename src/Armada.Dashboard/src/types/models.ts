@@ -4728,6 +4728,19 @@ export interface UsageSnapshotView {
   requestedIntervalSeconds: number;
   effectiveIntervalSeconds: number;
   capabilityReason: string | null;
+  /** Armada's estimated reservations per observed window (latest reads); never part of observed usage. */
+  reservationEstimates?: UsageReservationEstimate[];
+  /** Estimated consumption could not be settled or attributed yet; selection treats the account as uncertain. */
+  reservationUncertain?: boolean;
+}
+
+/** Armada's estimated reservation against one observed window (UsageReservationEstimate.cs). */
+export interface UsageReservationEstimate {
+  windowName: string;
+  windowMinutes?: number | null;
+  model?: string | null;
+  activePercent: number;
+  unsettledPercent: number;
 }
 
 export interface UsageCaptureReceipt {

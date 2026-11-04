@@ -184,7 +184,44 @@ namespace Armada.Server
                 : rows.OrderByDescending(key).ThenBy(row => row.AccountId, StringComparer.Ordinal);
             int count = rows.Count;
             List<UsageSnapshotView> visible = ordered.Skip((query.PageNumber - 1) * query.PageSize).Take(query.PageSize).ToList();
+            await AttachReservationEstimatesAsync(query.TenantId!, visible).ConfigureAwait(false);
             return new EnumerationResult<UsageSnapshotView> { TotalMs = Math.Round(timer.Elapsed.TotalMilliseconds, 2), Objects = visible, PageNumber = query.PageNumber, PageSize = query.PageSize, TotalRecords = count, TotalPages = (int)Math.Ceiling(count / (double)query.PageSize) };
+        }
+
+        // Reservation totals come from the same ledger selection reads, matched to each observed window by its budget
+        // key (with or without the custom-capture configuration revision). Two batched reads cover the whole page.
+        private async Task AttachReservationEstimatesAsync(string tenantId, List<UsageSnapshotView> rows)
+        {
+            List<string> members = rows.SelectMany(row => row.CaptainIds).Distinct(StringComparer.Ordinal).ToList();
+            if (members.Count == 0) return;
+            List<UsageSelectionBudgetTotals> totals = new List<UsageSelectionBudgetTotals>();
+            List<UsageSelectionAccountEvidence> evidence = new List<UsageSelectionAccountEvidence>();
+            for (int offset = 0; offset < members.Count; offset += 1000)
+            {
+                List<string> batch = members.Skip(offset).Take(1000).ToList();
+                totals.AddRange(await _Database.CaptainSelections.ReadBudgetTotalsAsync(tenantId, batch).ConfigureAwait(false));
+                evidence.AddRange(await _Database.CaptainSelections.ReadAccountEvidenceAsync(tenantId, batch).ConfigureAwait(false));
+            }
+
+            foreach (UsageSnapshotView row in rows)
+            {
+                bool Same(string host, string runtime, string account) => host == row.HostId && runtime == row.Runtime.ToString() && account == row.AccountKey;
+                List<UsageSelectionBudgetTotals> account = totals.Where(t => Same(t.HostId, t.Runtime, t.AccountKey))
+                    .DistinctBy(t => t.WindowKey + ":" + t.Generation).ToList();
+                if (account.Count == 0) continue;
+                row.ReservationUncertain = account.Any(t => t.HasUncertainDebt);
+                List<string?> revisions = evidence.Where(e => Same(e.HostId, e.Runtime.ToString(), e.AccountKey)).Select(e => e.ConfigurationRevision).Distinct().ToList();
+                foreach (UsageWindow window in row.Windows)
+                {
+                    HashSet<string> keys = new HashSet<string>(StringComparer.Ordinal) { UsageBudgetIdentity.WindowKey(window) };
+                    foreach (string? revision in revisions) if (revision != null) keys.Add(UsageBudgetIdentity.WindowKey(window, revision));
+                    double active = account.Where(t => keys.Contains(t.WindowKey)).Sum(t => t.ActivePercent);
+                    double unsettled = account.Where(t => keys.Contains(t.WindowKey)).Sum(t => t.UnsettledPercent);
+                    if (active <= 0 && unsettled <= 0) continue;
+                    row.ReservationEstimates.Add(new UsageReservationEstimate { WindowName = window.Name, WindowMinutes = window.WindowMinutes, Model = window.Model,
+                        ActivePercent = Math.Round(active, 3), UnsettledPercent = Math.Round(unsettled, 3) });
+                }
+            }
         }
 
         /// <summary>SeriesAsync: account usage contract.</summary>

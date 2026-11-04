@@ -123,5 +123,7 @@
   "usageSelection.recovery.permissions": "Permissions",
   "usageSelection.numberRange": "Enter a number from {{min}} to {{max}}.",
   "usageSelection.save": "Save captain selection settings",
-  "usageSelection.conflict": "Another administrator changed these settings. Refresh before saving again."
+  "usageSelection.conflict": "Another administrator changed these settings. Refresh before saving again.",
+  "usageSelection.reservations.estimate": "Estimated Armada reservations: {{active}} running, {{unsettled}} awaiting settlement (not provider usage)",
+  "usageSelection.reservations.uncertain": "Some estimated usage on this account is not settled yet. Captain selection treats it as uncertain until a fresh capture."
 }

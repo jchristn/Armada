@@ -19,7 +19,7 @@ The required v1.3.0 deliverable comprises U0 through U6 below: observation mode,
 - [x] U2 complete (`048629f8a`, build-all v1.3.0 successful): Observe dispatch/repair, bounded evidence loading, scoped history/preview/client inspection, restart/raw-capture pruning and responsive comparison pass. Preview mirrors retry/placement-policy readiness without provisioning a dock; a proposed choice is never labeled an admitted execution.
 - [x] U3 complete (`a15a707f0`, snapshot ownership follow-up `c1526497f`): atomic admission/repair, account-wide cooldowns, owned-receipt cleanup, settlement/restart guards and audited recovery permissions. All four providers, Dashboard recovery UX, full regression and build-all v1.3.0 pass. See [U3 validation](docs/usage-selection/U3_RECOVERY_VALIDATION.md). Correction from the takeover review: every reservation uses the single `continuous` window generation. Provider adapters do not yet declare fixed versus rolling reset semantics, so old-window debt is held until a post-execution capture settles it, never closed by a reset. This is conservative but incomplete; see the U5 open item.
 - [x] Takeover review remediation (2026-11-03), detailed below: real captain assignment time (migration 128), broader persistence-failure handling, deterministic blocker eviction, stable outcome/event/reason constants, readable policy and enforcement validator, committed review screenshots removed. All four providers pass.
-- [ ] U4 in progress (2026-11-03). Done: WebSocket invalidation (`26931c6f3`), TUI Captain Selection tab (`c83926ce8`), Mobile recovery and live reload (`445883f15`), Helm `mission selection-recovery` and REST/MCP reference sections (`7864c8232`), Events and Needs You. Open: native selection settings, richer reservation/wait views, and the cross-surface UX pass. Details in the U4 record below.
+- [ ] U4 in progress (2026-11-03). Done: WebSocket invalidation (`26931c6f3`), TUI Captain Selection tab (`c83926ce8`), Mobile recovery and live reload (`445883f15`), Helm `mission selection-recovery` and REST/MCP reference sections (`7864c8232`), Events and Needs You. Done since: native selection settings (`0a487e74a`) and reservation estimates. Open: the cross-surface UX pass. Details in the U4 record below.
 - [ ] U5 observability, provider/stress and simulated-user validation.
 - [ ] U6 final release integration and handoff.
 
@@ -288,9 +288,9 @@ Every unchecked task is future work. Each milestone ends with recorded automated
 ### U4. Complete operator/client surfaces
 
 - [x] Events/Needs You: each material waiting decision records `mission.selection_waiting`; Pending missions waiting 15+ minutes in Enforce for an operator-actionable reason appear once as the `selection_blocked` inbox kind (Dashboard, Mobile, TUI inbox). Reserve, quota, cooldown and capacity waits stay out of Needs You.
-- [ ] Dashboard reservation/wait views: show estimated Armada reservations separately from observed usage on Activity > Captain Usage, with a scoped read API.
+- [x] Reservation views: `GET /api/v1/usage/latest` rows carry `reservationEstimates` (active and unsettled points per observed window) and `reservationUncertain`, read from the same ledger in two batched queries per page. Dashboard Account Limits, Mobile usage and the TUI usage panel show the estimate as its own line, never inside the observed bar.
 - [x] Native inspection/recovery and Helm mutations: TUI Captain Selection tab (summary, comparison, history, preview, JSON, recovery), Mobile recovery sheet, `armada mission selection-recovery`. `captain-selection.changed` invalidation connected on Dashboard, TUI and Mobile; parity inventories updated.
-- [ ] Native selection settings (TUI/Mobile) for global administrators, matching the Dashboard panel.
+- [x] Native selection settings: TUI Server settings **Captain selection** group and Mobile Server settings section, sharing `lib/usageSelectionForm.ts` with the Dashboard; environment overrides read-only; stale revision reported as a settings conflict.
 - [x] Translations (semantic keys, all locales), REST/MCP/WebSocket references, API surface baseline. Postman and OpenAPI examples for the new mutation paths remain to verify.
 - [ ] Cross-surface UX/usability/aesthetic pass over every usable product surface (Dashboard, TUI, Mobile, Helm, Harbor, Proxy portal, VS Code extension), with findings fixed and recorded.
 - [ ] Exit: each supported client can inspect a selection/wait, understand stale/shared evidence and operate the permitted recovery/settings workflow. No orphan UI or JSON-only configuration.
@@ -409,5 +409,8 @@ Evidence: `dotnet build src/Armada.sln` clean (0 warnings). On .NET 10/SQLite, t
 - [x] Mobile recovery sheet with conflict-preserving draft; 3 new native cases (1,395 total).
 - [x] Helm `armada mission selection-recovery` with revision read, refusal before write and confirmation; `mission selection` prints recovery permissions. 4 Helm cases.
 - [x] `mission.selection_waiting` events and the `selection_blocked` inbox kind via `ICaptainSelectionMethods.EnumerateActionableWaitsAsync` (latest-decision, Enforce-only, reason filter, tenant/owner scope in SQL). Database and dispatch-level tests cover deduplication, scope and exclusion of self-resolving waits.
+- [x] Native selection settings (TUI group with inline cross-field error and override lock; Mobile section) and the TUI settings Save-label fix. 3 TUI and 4 native cases.
+- [x] Reservation estimates on latest usage rows (server, Dashboard, Mobile, TUI); usage, contract and enforcement suites 190/190.
+- [ ] Observed flake: `useHealthEvaluation` "tracks a started (202) job" failed once under full Dashboard load and passed on three isolated runs and a full rerun. Pre-existing; not related to selection.
 - [x] Verification so far: Dashboard 1,898/1,898; native 1,395/1,395 with type check and lint; focused .NET suites (selection, enforcement, parity, TUI, Helm, API contract) pass.
 

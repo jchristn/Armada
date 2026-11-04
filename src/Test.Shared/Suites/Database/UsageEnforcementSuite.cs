@@ -312,6 +312,23 @@ namespace Test.Shared.Suites.Database
                 AssertEqual(0L, (await fixture.Database.CaptainSelections.EnumerateActionableWaitsAsync(fixture.Tenant.Id, null, UsageSelectionReasonCodes.OperatorActionable, cutoff, token: token).ConfigureAwait(false)).TotalRecords, "latest decision is too recent");
                 AssertEqual(0, (await fixture.Database.CaptainSelections.EnumerateActionableWaitsAsync(fixture.Tenant.Id, null, new List<string>(), cutoff, token: token).ConfigureAwait(false)).Objects.Count, "no reasons, no items");
             });
+            Add("latest_usage_reports_reservations_separately_from_observed_usage", async token =>
+            {
+                using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(20, token).ConfigureAwait(false);
+                Armada.Server.UsageAccessService access = new Armada.Server.UsageAccessService(fixture.Database, null!, null!);
+                AuthContext owner = AuthContext.Authenticated(fixture.Tenant.Id, fixture.Owner.Id, false, false, "Session");
+                UsageSnapshotView before = (await access.LatestAsync(owner, new UsageQuery()).ConfigureAwait(false)).Objects.Single();
+                AssertEqual(0, before.ReservationEstimates.Count, "nothing reserved yet");
+                CaptainSelectionRecordSet admitted = await fixture.RecordsAsync(0, token: token).ConfigureAwait(false);
+                AssertTrue((await fixture.Database.CaptainSelections.TryAdmitEnforcedAsync(admitted, token: token).ConfigureAwait(false)).Claimed);
+                UsageSnapshotView after = (await access.LatestAsync(owner, new UsageQuery()).ConfigureAwait(false)).Objects.Single();
+                UsageReservationEstimate estimate = after.ReservationEstimates.Single();
+                AssertEqual("five-hour", estimate.WindowName);
+                AssertEqual(fixture.Policy.PerAttemptReservationPercent, estimate.ActivePercent, "one attempt's reservation");
+                AssertEqual(0.0, estimate.UnsettledPercent);
+                AssertEqual(20.0, after.Windows.Single().UsedPercent, "observed usage is never inflated by estimates");
+                AssertFalse(after.ReservationUncertain);
+            });
             Add("disabled_execution_preserves_uncertainty_until_proven_post_exit_capture", async token =>
             {
                 using UsageEnforcementFixture fixture = await UsageEnforcementFixture.CreateAsync(20, token).ConfigureAwait(false);
