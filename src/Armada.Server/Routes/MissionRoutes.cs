@@ -384,7 +384,8 @@ namespace Armada.Server.Routes
                     try { mission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelope(envelopeVessel?.WorkerEnvelope, mission.WorkerEnvelope); }
                     catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
                 }
-                mission = await _admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
+                try { mission = await _admiral.DispatchMissionAsync(mission).ConfigureAwait(false); }
+                catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
                 req.Http.Response.StatusCode = 201;
                 // Always the documented Mission body. The mission is saved even when no captain can take it yet, so this
                 // stays a 2xx (an error would invite a duplicate retry); the header and the Pending status say it waits.
@@ -701,7 +702,10 @@ namespace Armada.Server.Routes
 
                 // Merge only metadata fields onto the existing record; operational, ownership, and timestamp fields
                 // are preserved (shared with the WebSocket update_mission command).
+                string? previousParent = existing.ParentMissionId;
                 existing = EntityUpdateMerger.MergeMission(existing, incoming);
+                try { await new MissionHierarchyValidator(_database, _settings).NormalizeAsync(existing, true, previousParent).ConfigureAwait(false); }
+                catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
                 if (incoming.WorkerEnvelope != null)
                 {
                     // Omitted or null keeps the stored envelope; {} clears it. A change is validated like dispatch (400)
@@ -976,6 +980,29 @@ namespace Armada.Server.Routes
                         : await _database.Missions.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (mission == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
 
+                // D17: a parent with unfinished descendants is purged only with cascade=true, which purges the subtree too.
+                MissionHierarchyValidator hierarchy = new MissionHierarchyValidator(_database, _settings);
+                bool cascade = String.Equals(req.Query.GetValueOrDefault("cascade"), "true", StringComparison.OrdinalIgnoreCase);
+                List<Mission> unfinished = await hierarchy.UnfinishedDescendantsAsync(mission).ConfigureAwait(false);
+                if (unfinished.Count > 0 && !cascade)
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Mission " + id + " has " + unfinished.Count
+                        + " unfinished descendant mission(s), for example '" + unfinished[0].Title + "'. Finish or cancel them, or purge with cascade=true to delete the subtree.",
+                        Data = new { Code = "HierarchyHasUnfinishedDescendants", Count = unfinished.Count } };
+                }
+                if (cascade)
+                {
+                    List<Mission> subtree = await hierarchy.AllDescendantsAsync(mission).ConfigureAwait(false);
+                    subtree.Reverse();
+                    foreach (Mission descendant in subtree)
+                    {
+                        await _database.Missions.DeleteAsync(descendant.Id).ConfigureAwait(false);
+                        await CascadeCleanup.RemoveEventsForMissionAsync(_database, descendant.Id).ConfigureAwait(false);
+                        if (BlackBoxHooks != null) await BlackBoxHooks.OnMissionDeletedAsync(descendant.Id).ConfigureAwait(false);
+                    }
+                }
+
                 if (ctx.IsAdmin)
                     await _database.Missions.DeleteAsync(id).ConfigureAwait(false);
                 else if (ctx.IsTenantAdmin)
@@ -995,8 +1022,9 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Permanently delete a mission")
-                .WithDescription("Permanently deletes a mission from the database. This cannot be undone.")
+                .WithDescription("Permanently deletes a mission from the database. This cannot be undone. A hierarchy parent with unfinished descendants returns 409 unless cascade=true, which also deletes its subtree.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("cascade", "true also deletes the mission's descendants", false))
                 .WithResponse(200, OpenApiJson.For<object>("Deleted mission"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));

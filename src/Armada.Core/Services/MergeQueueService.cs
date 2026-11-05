@@ -465,6 +465,14 @@ namespace Armada.Core.Services
             try
             {
                 Mission? mission = await ReadMissionAsync(entry.MissionId, entry.TenantId, token).ConfigureAwait(false);
+                // A hierarchy child lands after its parent (section 7.4): its entry stays queued until the parent's
+                // terminal stage has landed.
+                string? parentWait = await ParentLandingWaitAsync(mission, token).ConfigureAwait(false);
+                if (parentWait != null)
+                {
+                    await WaitForHarborAsync(entry, parentWait, token).ConfigureAwait(false);
+                    return;
+                }
                 Dock? dock = await FindBranchDockAsync(entry, mission, token).ConfigureAwait(false);
                 if (IsWaitingOnHarbor(dock))
                 {
@@ -566,7 +574,7 @@ namespace Armada.Core.Services
                 // Record the target commit this entry integrates against, then merge the entry's branch.
                 targetCommit = await ResolveHeadAsync(host, integrationPath).ConfigureAwait(false);
                 step = MergeQueueFailureStepEnum.Merge;
-                MergeQueueMergeResult merge = await MergeBranchAsync(host, integrationPath, entry.BranchName, token).ConfigureAwait(false);
+                MergeQueueMergeResult merge = await MergeBranchAsync(host, integrationPath, await LandingRefAsync(entry, token).ConfigureAwait(false), token).ConfigureAwait(false);
                 if (!merge.Merged)
                 {
                     MissionFailureKindEnum mergeKind = MergeQueueFailureClassifier.ClassifyMerge(merge.ConflictedFiles.Count);
@@ -799,6 +807,40 @@ namespace Armada.Core.Services
                     _Logging.Warn(_Header + "OnMissionReconciled callback failed for " + mission.Id + ": " + ex.Message);
                 }
             }
+        }
+
+        // The parent's entry of a ContinueParent chain lands the commit its handoff produced, not the shared branch head,
+        // which may already carry the child's unfinished work. Any other entry lands its branch.
+        private async Task<string> LandingRefAsync(MergeEntry entry, CancellationToken token)
+        {
+            Mission? mission = await ReadMissionAsync(entry.MissionId, entry.TenantId, token).ConfigureAwait(false);
+            if (mission == null || String.IsNullOrWhiteSpace(mission.CommitHash) || String.IsNullOrEmpty(mission.VoyageId)) return entry.BranchName;
+            List<Mission> voyage = await _Database.Missions.EnumerateByVoyageAsync(mission.VoyageId!, token).ConfigureAwait(false);
+            bool shared = voyage.Any(m => m.Id != mission.Id && m.BranchStrategy == MissionBranchStrategyEnum.ContinueParent
+                && String.Equals(m.BranchName, entry.BranchName, StringComparison.Ordinal)
+                && m.Status != MissionStatusEnum.Complete && m.Status != MissionStatusEnum.Cancelled && m.Status != MissionStatusEnum.Failed);
+            if (!shared) return entry.BranchName;
+            _Logging.Info(_Header + "entry " + entry.Id + " lands mission commit " + mission.CommitHash + " instead of " + entry.BranchName + ", which a continuing child shares");
+            return mission.CommitHash!;
+        }
+
+        private async Task<string?> ParentLandingWaitAsync(Mission? mission, CancellationToken token)
+        {
+            if (mission == null || String.IsNullOrEmpty(mission.ParentMissionId)) return null;
+            Mission? parent = await ReadMissionAsync(mission.ParentMissionId, mission.TenantId, token).ConfigureAwait(false);
+            if (parent == null) return null;
+            Mission terminal = parent;
+            if (!String.IsNullOrEmpty(parent.VoyageId))
+            {
+                List<Mission> voyage = await _Database.Missions.EnumerateByVoyageAsync(parent.VoyageId!, token).ConfigureAwait(false);
+                HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal) { terminal.Id };
+                for (Mission? next = voyage.Where(m => m.DependsOnMissionId == terminal.Id).OrderBy(m => m.CreatedUtc).FirstOrDefault();
+                    next != null && seen.Add(next.Id);
+                    next = voyage.Where(m => m.DependsOnMissionId == terminal.Id).OrderBy(m => m.CreatedUtc).FirstOrDefault())
+                    terminal = next;
+            }
+            if (terminal.Status == MissionStatusEnum.Complete) return null;
+            return "WaitingForParentLanding: parent mission '" + parent.Title + "' (" + terminal.Id + ") is " + terminal.Status + "; this entry lands after it.";
         }
 
         private async Task<MergeQueueMergeResult> MergeBranchAsync(MergeQueueHost host, string worktreePath, string branchName, CancellationToken token)

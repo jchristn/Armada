@@ -74,13 +74,16 @@ namespace Armada.Core.Services
         /// <param name="branchName">Mission branch.</param>
         /// <param name="dockName">Dock folder name (the mission identifier).</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="baseBranch">Start point for a new branch, or null for the vessel default.</param>
         /// <returns>The result, or null when the Harbor did not answer in time.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the Harbor is not connected or does not host docks.</exception>
-        public Task<HarborDockResult?> ProvisionAsync(string harborId, Vessel vessel, string branchName, string dockName, CancellationToken token = default)
+        public Task<HarborDockResult?> ProvisionAsync(string harborId, Vessel vessel, string branchName, string dockName, CancellationToken token = default, string? baseBranch = null)
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
             HarborDockRequest request = NewRequest(HarborDockOperationEnum.Provision, vessel);
             request.BranchName = branchName;
+            // A new branch starts at DefaultBranch on the Harbor; a forking hierarchy child starts at its parent's branch.
+            if (!String.IsNullOrWhiteSpace(baseBranch)) request.DefaultBranch = baseBranch!;
             request.DockName = dockName;
             return Harbors.SendDockAsync(harborId, request, ProvisionTimeoutMs, token);
         }

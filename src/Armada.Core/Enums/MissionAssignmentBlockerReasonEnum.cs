@@ -105,6 +105,8 @@ namespace Armada.Core.Enums
         /// <summary>All eligible inference endpoint capacity is occupied.</summary>
         EndpointMissionLimit,
         /// <summary>An eligible endpoint is disabled, unhealthy or temporarily circuit-broken.</summary>
-        EndpointUnavailable
+        EndpointUnavailable,
+        /// <summary>The mission's hierarchy parent (its terminal pipeline stage) has not finished.</summary>
+        ParentNotFinished
     }
 }

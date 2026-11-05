@@ -18,6 +18,9 @@ namespace Armada.Core.Services
                 if (dependencyBlocker != null) return (dependencyBlocker, null);
             }
 
+            HierarchyReadiness hierarchy = await EvaluateParentReadinessAsync(mission, token).ConfigureAwait(false);
+            if (hierarchy.Blocker != null) return (hierarchy.Blocker, null);
+
             IntegrationBarrierState barrier = await EvaluateIntegrationBarrierAsync(mission, token).ConfigureAwait(false);
             if (barrier.FailedMission != null)
             {

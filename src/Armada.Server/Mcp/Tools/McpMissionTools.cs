@@ -163,7 +163,8 @@ namespace Armada.Server.Mcp.Tools
                             return (object)McpToolError.InvalidArgument(ex.Message);
                         }
                     }
-                    mission = await admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
+                    try { mission = await admiral.DispatchMissionAsync(mission).ConfigureAwait(false); }
+                    catch (ArgumentException ex) { return (object)McpToolError.InvalidArgument(ex.Message); }
                     if (mission.Status == Armada.Core.Enums.MissionStatusEnum.Pending)
                     {
                         return (object)new
@@ -225,8 +226,11 @@ namespace Armada.Server.Mcp.Tools
                         mission.BranchName = request.BranchName;
                     if (request.PrUrl != null)
                         mission.PrUrl = request.PrUrl;
+                    string? previousParent = mission.ParentMissionId;
                     if (request.ParentMissionId != null)
-                        mission.ParentMissionId = request.ParentMissionId;
+                        mission.ParentMissionId = request.ParentMissionId.Length == 0 ? null : request.ParentMissionId;
+                    try { await new MissionHierarchyValidator(database, settings ?? new ArmadaSettings()).NormalizeAsync(mission, true, previousParent).ConfigureAwait(false); }
+                    catch (ArgumentException ex) { return (object)McpToolError.InvalidArgument(ex.Message); }
                     if (request.Persona != null)
                         mission.Persona = request.Persona;
                     if (!String.IsNullOrWhiteSpace(request.Mode) && Enum.TryParse<MissionModeEnum>(request.Mode.Trim(), true, out MissionModeEnum updatedMode))
@@ -301,6 +305,11 @@ namespace Armada.Server.Mcp.Tools
                     string missionId = request.MissionId;
                     Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                     if (mission == null) return (object)McpToolError.NotFound("Mission not found");
+                    // D17: a parent with unfinished descendants is not purged (REST offers cascade=true for the subtree).
+                    List<Mission> unfinished = await new MissionHierarchyValidator(database, settings ?? new ArmadaSettings()).UnfinishedDescendantsAsync(mission).ConfigureAwait(false);
+                    if (unfinished.Count > 0)
+                        return (object)McpToolError.Conflict("Mission " + missionId + " has " + unfinished.Count + " unfinished descendant mission(s), for example '"
+                            + unfinished[0].Title + "'. Finish or cancel them first.", "HierarchyHasUnfinishedDescendants");
 
                     // Clean up associated dock/worktree if present
                     if (!String.IsNullOrEmpty(mission.DockId))

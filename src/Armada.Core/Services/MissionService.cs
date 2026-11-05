@@ -407,7 +407,7 @@ namespace Armada.Core.Services
             {
                 try
                 {
-                    return await TryAssignOnceAsync(mission, vessel, launchInBackground, token).ConfigureAwait(false);
+                    return await TryAssignAsync(mission, vessel, launchInBackground, singleAttempt: true, token).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (TransientDatabaseError.IsTransient(ex) && !token.IsCancellationRequested)
                 {
@@ -421,7 +421,8 @@ namespace Armada.Core.Services
             }
         }
 
-        private async Task<bool> TryAssignOnceAsync(Mission mission, Vessel vessel, bool launchInBackground, CancellationToken token)
+        // One admission attempt. Named TryAssignAsync so failure records keep their original origin (CallerMemberName).
+        private async Task<bool> TryAssignAsync(Mission mission, Vessel vessel, bool launchInBackground, bool singleAttempt, CancellationToken token)
         {
 
             if (!_InFlightAssignments.TryAdd(mission.Id, 0))
@@ -520,6 +521,9 @@ namespace Armada.Core.Services
             {
                 if (readiness.FailedSlice != null)
                     await CancelIntegrationForFailedSliceAsync(mission, readiness.FailedSlice, token).ConfigureAwait(false);
+                else if (readiness.Blocker.Reason == MissionAssignmentBlockerReasonEnum.ParentNotFinished
+                    && (await EvaluateParentReadinessAsync(mission, token).ConfigureAwait(false)).FailedParent is Mission failedParent)
+                    await CancelDescendantsForFailedParentAsync(mission, failedParent, token).ConfigureAwait(false);
                 else
                     _Logging.Debug(_Header + "mission " + mission.Id + " waits: " + readiness.Blocker.Summary);
                 return false;
@@ -644,6 +648,14 @@ namespace Armada.Core.Services
 
             _PlacementWaitReasons.TryRemove(mission.Id, out string? _);
 
+            // A hierarchy child continues its parent's branch or forks from its head (D16), decided when it starts.
+            if (!String.IsNullOrEmpty(mission.ParentMissionId) && String.IsNullOrEmpty(mission.DependsOnMissionId)
+                && String.IsNullOrEmpty(mission.BranchName) && String.IsNullOrEmpty(mission.BaseBranchName))
+            {
+                HierarchyReadiness hierarchy = await EvaluateParentReadinessAsync(mission, token).ConfigureAwait(false);
+                if (hierarchy.ParentTerminal != null) await ApplyHierarchyBranchAsync(mission, hierarchy.ParentTerminal, token).ConfigureAwait(false);
+            }
+
             // Missions with an existing branch continue work on that branch. This covers
             // downstream pipeline stages, review rework loops, and resumed missions.
             bool preserveExistingBranch = !String.IsNullOrEmpty(mission.BranchName);
@@ -748,9 +760,9 @@ namespace Armada.Core.Services
                 {
                     _Logging.Debug(_Header + "provisioning dock for mission " + mission.Id + " on vessel " + vessel.Id + " with captain " + captain.Id);
                     if (placement.HarborId != null)
-                        dock = await _Docks.ProvisionOnHarborAsync(vessel, captain, branchName, mission.Id, placement.HarborId, token).ConfigureAwait(false);
+                        dock = await _Docks.ProvisionOnHarborAsync(vessel, captain, branchName, mission.Id, placement.HarborId, mission.BaseBranchName, token).ConfigureAwait(false);
                     else
-                        dock = await _Docks.ProvisionAsync(vessel, captain, branchName, mission.Id, token).ConfigureAwait(false);
+                        dock = await _Docks.ProvisionAsync(vessel, captain, branchName, mission.Id, mission.BaseBranchName, token).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (!(ex is OperationCanceledException && token.IsCancellationRequested))
                 {

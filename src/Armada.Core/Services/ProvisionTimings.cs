@@ -13,11 +13,12 @@ namespace Armada.Core.Services
         internal long CleanupMs { get; set; }
         internal long WorktreeMs { get; set; }
         internal long RecordMs { get; set; }
+        internal bool PreparationReused { get; set; }
 
         /// <summary>Compact one-line form for the log.</summary>
         /// <returns>Text.</returns>
         public override string ToString()
-            => String.Format(CultureInfo.InvariantCulture, "lock-wait {0}, repo-check {1}, fetch {2}, prune {3}, cleanup {4}, worktree {5}, record {6}",
-                LockWaitMs, RepositoryCheckMs, FetchMs, PruneMs, CleanupMs, WorktreeMs, RecordMs);
+            => String.Format(CultureInfo.InvariantCulture, "lock-wait {0}, repo-check {1}, fetch {2}, prune {3}, cleanup {4}, worktree {5}, record {6}{7}",
+                LockWaitMs, RepositoryCheckMs, FetchMs, PruneMs, CleanupMs, WorktreeMs, RecordMs, PreparationReused ? " (preparation reused)" : "");
     }
 }

@@ -29,6 +29,11 @@ namespace Armada.Core.Services
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _RepoProvisionLocks =
             new System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
 
+        // Repository preparation (clone check, default branch, fetch, prune) reused for this long after it last ran.
+        private static readonly TimeSpan _PreparationReuse = TimeSpan.FromSeconds(5);
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _RecentPreparations =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DockProvisionFailure> _ProvisionFailures =
             new System.Collections.Concurrent.ConcurrentDictionary<string, DockProvisionFailure>(StringComparer.Ordinal);
 
@@ -62,7 +67,11 @@ namespace Armada.Core.Services
         #region Public-Methods
 
         /// <inheritdoc />
-        public async Task<Dock?> ProvisionAsync(Vessel vessel, Captain captain, string branchName, string? missionId = null, CancellationToken token = default)
+        public Task<Dock?> ProvisionAsync(Vessel vessel, Captain captain, string branchName, string? missionId = null, CancellationToken token = default)
+            => ProvisionAsync(vessel, captain, branchName, missionId, null, token);
+
+        /// <inheritdoc />
+        public async Task<Dock?> ProvisionAsync(Vessel vessel, Captain captain, string branchName, string? missionId, string? baseBranch, CancellationToken token = default)
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
             if (captain == null) throw new ArgumentNullException(nameof(captain));
@@ -89,63 +98,71 @@ namespace Armada.Core.Services
                 repoLockAcquired = true;
                 timings.LockWaitMs = phase.ElapsedMilliseconds; phase.Restart();
 
-                // Ensure bare clone exists. If the directory exists but isn't a valid repo
-                // (e.g. leftover from a failed clone/seed), remove it and re-clone.
-                if (Directory.Exists(repoPath) && !await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
+                // A burst of missions on one repository needs the clone checked, fetched and pruned once, not once per
+                // mission: this work runs under the repository lock and was about half of each provisioning.
+                string preparationKey = normalizedRepoPath + "\n" + vessel.DefaultBranch + "\n" + vessel.RepoUrl;
+                if (!RecentlyPrepared(preparationKey))
                 {
-                    if (!ManagedPaths.IsStrictlyUnder(repoPath, _Settings.ReposDirectory))
-                        throw new InvalidOperationException("Vessel " + vessel.Name + " LocalPath " + repoPath + " exists but is not a git repository, and it is outside the managed repos directory, so Armada will not remove it.");
-                    _Logging.Warn(_Header + "removing corrupt/incomplete repo directory: " + repoPath);
-                    await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false);
-                }
+                    // Ensure bare clone exists. If the directory exists but isn't a valid repo
+                    // (e.g. leftover from a failed clone/seed), remove it and re-clone.
+                    if (Directory.Exists(repoPath) && !await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
+                    {
+                        if (!ManagedPaths.IsStrictlyUnder(repoPath, _Settings.ReposDirectory))
+                            throw new InvalidOperationException("Vessel " + vessel.Name + " LocalPath " + repoPath + " exists but is not a git repository, and it is outside the managed repos directory, so Armada will not remove it.");
+                        _Logging.Warn(_Header + "removing corrupt/incomplete repo directory: " + repoPath);
+                        await ForceRemoveDirectoryAsync(repoPath, token).ConfigureAwait(false);
+                    }
 
-                if (!await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
-                {
-                    if (String.IsNullOrEmpty(vessel.RepoUrl))
-                        throw new InvalidOperationException("Vessel " + vessel.Name + " has no remote URL configured");
-                    await _Git.CloneBareAsync(vessel.RepoUrl, repoPath, token).ConfigureAwait(false);
-                    vessel.LocalPath = repoPath;
-                    await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
-                }
+                    if (!await _Git.IsRepositoryAsync(repoPath, token).ConfigureAwait(false))
+                    {
+                        if (String.IsNullOrEmpty(vessel.RepoUrl))
+                            throw new InvalidOperationException("Vessel " + vessel.Name + " has no remote URL configured");
+                        await _Git.CloneBareAsync(vessel.RepoUrl, repoPath, token).ConfigureAwait(false);
+                        vessel.LocalPath = repoPath;
+                        await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
+                    }
 
-                // Ensure the configured default branch exists locally. Missing configured branches
-                // in non-empty repos should be created from the remote/default history rather than
-                // being treated as an empty repository.
-                bool hasDefaultBranch = await _Git.EnsureLocalBranchAsync(repoPath, vessel.DefaultBranch, token).ConfigureAwait(false);
-                if (!hasDefaultBranch)
-                {
-                    _Logging.Info(_Header + "bare repo for " + vessel.Name + " has no usable branch history for " + vessel.DefaultBranch + " -- seeding initial commit");
-                    await SeedEmptyRepoAsync(vessel, repoPath, token).ConfigureAwait(false);
-                }
-                else if (String.IsNullOrEmpty(vessel.LocalPath))
-                {
-                    _Logging.Info(_Header + "bare repo exists but vessel LocalPath is empty for " + vessel.Name + ", updating to " + repoPath);
-                    vessel.LocalPath = repoPath;
-                    await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
-                }
+                    // Ensure the configured default branch exists locally. Missing configured branches
+                    // in non-empty repos should be created from the remote/default history rather than
+                    // being treated as an empty repository.
+                    bool hasDefaultBranch = await _Git.EnsureLocalBranchAsync(repoPath, vessel.DefaultBranch, token).ConfigureAwait(false);
+                    if (!hasDefaultBranch)
+                    {
+                        _Logging.Info(_Header + "bare repo for " + vessel.Name + " has no usable branch history for " + vessel.DefaultBranch + " -- seeding initial commit");
+                        await SeedEmptyRepoAsync(vessel, repoPath, token).ConfigureAwait(false);
+                    }
+                    else if (String.IsNullOrEmpty(vessel.LocalPath))
+                    {
+                        _Logging.Info(_Header + "bare repo exists but vessel LocalPath is empty for " + vessel.Name + ", updating to " + repoPath);
+                        vessel.LocalPath = repoPath;
+                        await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
+                    }
 
-                timings.RepositoryCheckMs = phase.ElapsedMilliseconds; phase.Restart();
-                // Fetch latest from remote to ensure worktrees branch from current main
-                if (!String.IsNullOrEmpty(vessel.RepoUrl))
-                {
+                    timings.RepositoryCheckMs = phase.ElapsedMilliseconds; phase.Restart();
+                    // Fetch latest from remote to ensure worktrees branch from current main
+                    if (!String.IsNullOrEmpty(vessel.RepoUrl))
+                    {
+                        try
+                        {
+                            await _Git.FetchAsync(repoPath, token).ConfigureAwait(false);
+                        }
+                        catch (Exception fetchEx)
+                        {
+                            _Logging.Warn(_Header + "fetch failed for " + vessel.Name + ", continuing with local state: " + fetchEx.Message);
+                        }
+                    }
+
+                    timings.FetchMs = phase.ElapsedMilliseconds; phase.Restart();
+                    // Prune stale worktree registrations (handles "missing but registered" entries)
                     try
                     {
-                        await _Git.FetchAsync(repoPath, token).ConfigureAwait(false);
+                        await _Git.PruneWorktreesAsync(repoPath, token).ConfigureAwait(false);
                     }
-                    catch (Exception fetchEx)
-                    {
-                        _Logging.Warn(_Header + "fetch failed for " + vessel.Name + ", continuing with local state: " + fetchEx.Message);
-                    }
+                    catch { }
+                    timings.PruneMs = phase.ElapsedMilliseconds; phase.Restart();
+                    _RecentPreparations[preparationKey] = DateTime.UtcNow;
                 }
-
-                timings.FetchMs = phase.ElapsedMilliseconds; phase.Restart();
-                // Prune stale worktree registrations (handles "missing but registered" entries)
-                try
-                {
-                    await _Git.PruneWorktreesAsync(repoPath, token).ConfigureAwait(false);
-                }
-                catch { }
-                timings.PruneMs = phase.ElapsedMilliseconds; phase.Restart();
+                else timings.PreparationReused = true;
 
                 // Clean up stale worktree directories under this vessel's dock directory.
                 // Only removes directories that are NOT associated with any active dock record.
@@ -238,7 +255,7 @@ namespace Armada.Core.Services
                 // instead of recreating it so downstream pipeline stages and retries preserve work.
                 step = BlackBoxStepEnum.WorktreeCreate;
                 timings.CleanupMs = phase.ElapsedMilliseconds; phase.Restart();
-                await _Git.CreateWorktreeAsync(repoPath, worktreePath, branchName, vessel.DefaultBranch, token).ConfigureAwait(false);
+                await _Git.CreateWorktreeAsync(repoPath, worktreePath, branchName, String.IsNullOrWhiteSpace(baseBranch) ? vessel.DefaultBranch : baseBranch!, token).ConfigureAwait(false);
                 timings.WorktreeMs = phase.ElapsedMilliseconds; phase.Restart();
 
                 step = BlackBoxStepEnum.StartCommitRecord;
@@ -277,6 +294,7 @@ namespace Armada.Core.Services
             catch (Exception ex)
             {
                 _Logging.Warn(_Header + "provisioning failed for vessel " + vessel.Id + " captain " + captain.Id + " repo " + (vessel.RepoUrl ?? "unknown") + ": " + ex.ToString());
+                _RecentPreparations.TryRemove(normalizedRepoPath + "\n" + vessel.DefaultBranch + "\n" + vessel.RepoUrl, out _);
                 if (!String.IsNullOrEmpty(missionId))
                 {
                     _ProvisionFailures[missionId] = new DockProvisionFailure
@@ -305,7 +323,11 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, CancellationToken token = default)
+        public Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, CancellationToken token = default)
+            => ProvisionOnHarborAsync(vessel, captain, branchName, missionId, harborId, null, token);
+
+        /// <inheritdoc />
+        public async Task<Dock> ProvisionOnHarborAsync(Vessel vessel, Captain captain, string branchName, string missionId, string harborId, string? baseBranch, CancellationToken token = default)
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
             if (captain == null) throw new ArgumentNullException(nameof(captain));
@@ -323,7 +345,7 @@ namespace Armada.Core.Services
             Armada.Core.Harbor.HarborDockResult? result;
             try
             {
-                result = await client.ProvisionAsync(harborId, vessel, branchName, missionId + "_" + dock.Id, token).ConfigureAwait(false);
+                result = await client.ProvisionAsync(harborId, vessel, branchName, missionId + "_" + dock.Id, token, baseBranch).ConfigureAwait(false);
             }
             catch (InvalidOperationException ex)
             {
@@ -686,6 +708,9 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private static bool RecentlyPrepared(string key)
+            => _RecentPreparations.TryGetValue(key, out DateTime prepared) && DateTime.UtcNow - prepared < _PreparationReuse;
 
         private async Task<DockLeaseState> ReadLeaseAsync(Dock dock, CancellationToken token)
         {

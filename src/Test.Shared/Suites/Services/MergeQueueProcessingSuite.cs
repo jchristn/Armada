@@ -58,6 +58,56 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("child_entry_waits_for_parent_landing", "A hierarchy child's entry stays queued until its parent lands (section 7.4)", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    repos.PushBranch("feature/child", "child.txt", "child change\n");
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    Vessel vessel = await EnsureVesselAsync(testDb.Driver, repos).ConfigureAwait(false);
+                    Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("tree") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
+                    Mission parent = await testDb.Driver.Missions.CreateAsync(new Mission("Parent") { VesselId = vessel.Id, VoyageId = voyage.Id, Status = MissionStatusEnum.WorkProduced }).ConfigureAwait(false);
+                    Mission child = await testDb.Driver.Missions.CreateAsync(new Mission("Child") { VesselId = vessel.Id, VoyageId = voyage.Id, ParentMissionId = parent.Id, Depth = 1,
+                        BranchStrategy = MissionBranchStrategyEnum.ForkFromParent, Status = MissionStatusEnum.WorkProduced }).ConfigureAwait(false);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/child", child.Id, null).ConfigureAwait(false);
+
+                    MergeEntry? waiting = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+                    AssertEqual(MergeStatusEnum.Queued, waiting!.Status, "the child waits");
+                    AssertContains("WaitingForParentLanding", waiting.TestOutput ?? "");
+                    AssertFalse(repos.OriginHasFile("main", "child.txt"));
+
+                    parent.Status = MissionStatusEnum.Complete;
+                    await testDb.Driver.Missions.UpdateAsync(parent).ConfigureAwait(false);
+                    MergeEntry? landed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+                    AssertEqual(MergeStatusEnum.Landed, landed!.Status, "the child lands once the parent has; output: " + landed.TestOutput);
+                }
+            }));
+
+            cases.Add(CaseAsync("parent_lands_its_handoff_commit_not_the_shared_head", "A parent whose branch a continuing child extends lands its own commit, not the child's work", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    MergeQueueRepoSet repos = MergeQueueRepoSet.Create();
+                    repos.PushBranch("feature/shared", "parent.txt", "parent change\n");
+                    string handoff = repos.VesselHead("feature/shared");
+                    repos.ExtendBranch("feature/shared", "child.txt", "unfinished child work\n");
+                    MergeQueueService queue = CreateQueue(testDb.Driver);
+                    Vessel vessel = await EnsureVesselAsync(testDb.Driver, repos).ConfigureAwait(false);
+                    Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("chain") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
+                    Mission parent = await testDb.Driver.Missions.CreateAsync(new Mission("Parent") { VesselId = vessel.Id, VoyageId = voyage.Id, Status = MissionStatusEnum.WorkProduced,
+                        BranchName = "feature/shared", CommitHash = handoff }).ConfigureAwait(false);
+                    await testDb.Driver.Missions.CreateAsync(new Mission("Child") { VesselId = vessel.Id, VoyageId = voyage.Id, ParentMissionId = parent.Id, Depth = 1,
+                        BranchStrategy = MissionBranchStrategyEnum.ContinueParent, BranchName = "feature/shared", Status = MissionStatusEnum.InProgress }).ConfigureAwait(false);
+                    MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/shared", parent.Id, null).ConfigureAwait(false);
+
+                    MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
+                    AssertEqual(MergeStatusEnum.Landed, processed!.Status, "output: " + processed.TestOutput);
+                    AssertTrue(repos.OriginHasFile("main", "parent.txt"), "the parent's work lands");
+                    AssertFalse(repos.OriginHasFile("main", "child.txt"), "the child's unfinished work on the shared branch does not");
+                }
+            }));
+
             cases.Add(CaseAsync("conflict_fails_entry_and_mission", "Merge conflict fails the entry and marks the mission LandingFailed", TestTags.Negative, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))

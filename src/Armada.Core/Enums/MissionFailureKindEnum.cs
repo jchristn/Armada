@@ -102,6 +102,12 @@ namespace Armada.Core.Enums
         /// contradictory brief) and left no work on its branch. Not a model failure and not re-dispatched: a person
         /// resolves the blocker, then restarts the mission.
         /// </summary>
-        Blocked
+        Blocked,
+
+        /// <summary>
+        /// Cancelled because a hierarchy ancestor failed, was cancelled, or failed to land. Restarting that ancestor puts
+        /// the mission back to Pending.
+        /// </summary>
+        ParentFailed
     }
 }

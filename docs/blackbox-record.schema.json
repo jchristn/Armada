@@ -266,6 +266,7 @@
             "OperatorAction",
             "InvalidOutput",
             "Blocked",
+            "ParentFailed",
             null
           ]
         },
@@ -648,6 +649,7 @@
             "OperatorAction",
             "InvalidOutput",
             "Blocked",
+            "ParentFailed",
             null
           ]
         },
@@ -710,6 +712,7 @@
             "OperatorAction",
             "InvalidOutput",
             "Blocked",
+            "ParentFailed",
             null
           ]
         },
@@ -1496,6 +1499,7 @@
             "OperatorAction",
             "InvalidOutput",
             "Blocked",
+            "ParentFailed",
             null
           ]
         },
@@ -2082,6 +2086,7 @@
             "OperatorAction",
             "InvalidOutput",
             "Blocked",
+            "ParentFailed",
             null
           ]
         },
@@ -2552,6 +2557,7 @@
             "OperatorAction",
             "InvalidOutput",
             "Blocked",
+            "ParentFailed",
             null
           ]
         },
@@ -4858,6 +4864,7 @@
             "OperatorAction",
             "InvalidOutput",
             "Blocked",
+            "ParentFailed",
             null
           ]
         },

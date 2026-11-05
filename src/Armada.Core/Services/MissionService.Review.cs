@@ -174,6 +174,16 @@ namespace Armada.Core.Services
             if (!String.IsNullOrEmpty(mission.VoyageId))
                 await ReopenVoyageAndRestoreDependentsAsync(mission, new HashSet<string>(StringComparer.Ordinal) { mission.Id }, token).ConfigureAwait(false);
 
+            // D18: restarting a parent brings back the descendants that were cancelled only because it failed.
+            Mission root = mission;
+            for (int hops = 0; !String.IsNullOrEmpty(root.DependsOnMissionId) && hops < 32; hops++)
+            {
+                Mission? upstream = await _Database.Missions.ReadAsync(root.DependsOnMissionId!, token).ConfigureAwait(false);
+                if (upstream == null) break;
+                root = upstream;
+            }
+            await RestoreDescendantsCancelledForParentAsync(root, token).ConfigureAwait(false);
+
             _Logging.Info(_Header + "restarted mission " + mission.Id + (keptBranch != null ? " on branch " + keptBranch : ""));
             return await TryDispatchRestartedMissionAsync(mission, token).ConfigureAwait(false);
         }

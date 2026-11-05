@@ -23,6 +23,8 @@ namespace Test.Shared.Infrastructure
         // Call tracking
         public List<string> CloneCalls { get; } = new List<string>();
         public List<string> WorktreeCalls { get; } = new List<string>();
+        /// <summary>Base branch of every created worktree, in call order.</summary>
+        public List<string> WorktreeBases { get; } = new List<string>();
         public List<string> DeleteBranchCalls { get; } = new List<string>();
         public List<string> RemoveWorktreeCalls { get; } = new List<string>();
         public List<string> MergeBranchCalls { get; } = new List<string>();
@@ -85,6 +87,7 @@ namespace Test.Shared.Infrastructure
             if (ShouldThrowOnWorktree) throw new InvalidOperationException("Simulated worktree failure");
             ExistingBranches.Add(branchName);
             WorktreeCalls.Add(worktreePath);
+            WorktreeBases.Add(baseBranch);
             OperationCalls.Add("create-worktree:" + worktreePath);
             return Task.CompletedTask;
         }

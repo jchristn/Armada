@@ -276,6 +276,9 @@ namespace Armada.Core.Services
             // Verify vessel exists
             Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
             if (vessel == null) throw new KeyNotFoundException("Vessel not found: " + vesselId);
+            // Resolve Key/ParentKey links before anything is written, so a bad tree creates nothing.
+            MissionHierarchyPlan hierarchy = MissionHierarchyPlan.Resolve(missionDescriptions, _Settings.Concurrency.MaxHierarchyDepth);
+            Dictionary<int, Mission> hierarchyRoots = new Dictionary<int, Mission>();
             if (selectedPlaybooks != null && selectedPlaybooks.Count > 0 && !String.IsNullOrEmpty(vessel.TenantId))
             {
                 await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, selectedPlaybooks, token).ConfigureAwait(false);
@@ -302,9 +305,11 @@ namespace Armada.Core.Services
             // Create missions
             List<MissionOverlapWarning> voyageWarnings = new List<MissionOverlapWarning>();
             List<BriefLintFinding> voyageLint = new List<BriefLintFinding>();
-            foreach (MissionDescription md in missionDescriptions)
+            for (int descriptionIndex = 0; descriptionIndex < missionDescriptions.Count; descriptionIndex++)
             {
+                MissionDescription md = missionDescriptions[descriptionIndex];
                 Mission mission = new Mission(md.Title, md.Description);
+                ApplyHierarchy(mission, md, hierarchy, hierarchyRoots, descriptionIndex);
                 mission.TenantId = vessel.TenantId;
                 mission.UserId = vessel.UserId;
                 mission.VoyageId = voyage.Id;
@@ -324,6 +329,7 @@ namespace Armada.Core.Services
                 mission.Mode = md.Mode;
                 MissionDispatchAdvice? advice = await AdviseDispatchAsync(mission, vessel, token).ConfigureAwait(false);
                 mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                hierarchyRoots[descriptionIndex] = mission;
                 ApplyDispatchAdvice(mission, advice, voyageWarnings, voyageLint);
                 await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
                 _Logging.Info(_Header + "created mission " + mission.Id + ": " + md.Title);
@@ -393,6 +399,9 @@ namespace Armada.Core.Services
             // Verify vessel exists
             Vessel? vessel = await _Database.Vessels.ReadAsync(vesselId, token).ConfigureAwait(false);
             if (vessel == null) throw new KeyNotFoundException("Vessel not found: " + vesselId);
+            // Resolve Key/ParentKey links before anything is written, so a bad tree creates nothing.
+            MissionHierarchyPlan hierarchy = MissionHierarchyPlan.Resolve(missionDescriptions, _Settings.Concurrency.MaxHierarchyDepth);
+            Dictionary<int, Mission> hierarchyRoots = new Dictionary<int, Mission>();
             if (selectedPlaybooks != null && selectedPlaybooks.Count > 0 && !String.IsNullOrEmpty(vessel.TenantId))
             {
                 await _Playbooks.ResolveSelectionsAsync(vessel.TenantId, selectedPlaybooks, token).ConfigureAwait(false);
@@ -437,8 +446,9 @@ namespace Armada.Core.Services
             List<MissionOverlapWarning> voyageWarnings = new List<MissionOverlapWarning>();
             List<BriefLintFinding> voyageLint = new List<BriefLintFinding>();
 
-            foreach (MissionDescription md in missionDescriptions)
+            for (int descriptionIndex = 0; descriptionIndex < missionDescriptions.Count; descriptionIndex++)
             {
+                MissionDescription md = missionDescriptions[descriptionIndex];
                 string? previousMissionId = null;
 
                 // Use a short base title (first 60 chars of the mission title)
@@ -459,6 +469,8 @@ namespace Armada.Core.Services
                     mission.IsEvaluation = voyage.IsEvaluation;
                     mission.Persona = stagePersonaName;
                     mission.DependsOnMissionId = previousMissionId;
+                    // Every stage carries its logical mission's parent so the tree shows it (D14); only the root waits on it.
+                    ApplyHierarchy(mission, md, hierarchy, hierarchyRoots, descriptionIndex);
                     mission.RequiresReview = stage.RequiresReview;
                     mission.ReviewDenyAction = stage.ReviewDenyAction;
                     mission.Mode = md.Mode;
@@ -472,6 +484,7 @@ namespace Armada.Core.Services
                     // but won't be assigned until their dependency completes. The first stage is checked for overlaps.
                     MissionDispatchAdvice? advice = previousMissionId == null ? await AdviseDispatchAsync(mission, vessel, token).ConfigureAwait(false) : null;
                     mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
+                    if (previousMissionId == null) hierarchyRoots[descriptionIndex] = mission;
                     ApplyDispatchAdvice(mission, advice, voyageWarnings, voyageLint);
                     await PersistMissionPlaybooksAsync(mission, voyage.SelectedPlaybooks, token).ConfigureAwait(false);
                     _Logging.Info(_Header + "created pipeline mission " + mission.Id + ": " + mission.Title +
@@ -529,6 +542,7 @@ namespace Armada.Core.Services
             mission.BriefLintWarnings = null;
             Vessel? dispatchVessel = String.IsNullOrEmpty(mission.VesselId) ? null : await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
             mission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelope(dispatchVessel?.WorkerEnvelope, mission.WorkerEnvelope);
+            await new MissionHierarchyValidator(_Database, _Settings).NormalizeAsync(mission, false, null, token).ConfigureAwait(false);
             MissionDispatchAdvice? advice = dispatchVessel != null ? await AdviseDispatchAsync(mission, dispatchVessel, token).ConfigureAwait(false) : null;
             mission = await _Database.Missions.CreateAsync(mission, token).ConfigureAwait(false);
             await PersistMissionPlaybooksAsync(mission, mission.SelectedPlaybooks, token).ConfigureAwait(false);
@@ -560,6 +574,15 @@ namespace Armada.Core.Services
 
             ApplyDispatchAdvice(mission, advice, null, null);
             return mission;
+        }
+
+        private static void ApplyHierarchy(Mission mission, MissionDescription md, MissionHierarchyPlan hierarchy, Dictionary<int, Mission> roots, int index)
+        {
+            int parentIndex = hierarchy.ParentOf(index);
+            if (parentIndex < 0) return;
+            mission.ParentMissionId = roots[parentIndex].Id;
+            mission.Depth = hierarchy.DepthOf(index);
+            if (md.BranchStrategy.HasValue && md.BranchStrategy.Value != MissionBranchStrategyEnum.New) mission.BranchStrategy = md.BranchStrategy.Value;
         }
 
         private async Task<MissionDispatchAdvice?> AdviseDispatchAsync(Mission mission, Vessel vessel, CancellationToken token)
