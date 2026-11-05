@@ -141,7 +141,7 @@ namespace Test.Shared.Suites.Upgrade
                 StyleGuide = "Upgrade test style guide."
             }).ConfigureAwait(false);
             _Seed.VesselId = vessel.Id;
-            Vessel loose = await SendAsync<Vessel>(api, HttpMethod.Post, "/api/v1/vessels", new { Name = "upgrade-loose-vessel", RepoUrl = "https://example.invalid/loose.git", DefaultBranch = "main" }).ConfigureAwait(false);
+            Vessel loose = await SendAsync<Vessel>(api, HttpMethod.Post, "/api/v1/vessels", new { Name = "upgrade-loose-vessel", RepoUrl = "https://example.invalid/loose.git", DefaultBranch = "main", AllowConcurrentMissions = true }).ConfigureAwait(false);
             _Seed.LooseVesselId = loose.Id;
 
             // One mission per status, reached through the baseline's status transitions.
@@ -453,6 +453,12 @@ namespace Test.Shared.Suites.Upgrade
             AssertTrue(fleetVessels.Objects.Any(v => v.Id == _Seed.VesselId), "fleet's vessels page includes its vessel via API");
             Vessel vessel = await GetAsync<Vessel>(api, "/api/v1/vessels/" + _Seed.VesselId).ConfigureAwait(false);
             AssertEqual(_Seed.VesselName, vessel.Name, "vessel via API");
+            // Migration 117: the v1.2 flag becomes numeric limits (false 1/1, true 0/0); migration 118: a CLI captain has one slot.
+            AssertEqual(1, vessel.MaxParallelVoyages, "a serial v1.2 vessel keeps one voyage at a time");
+            AssertEqual(1, vessel.MaxParallelMissionsPerVoyage, "a serial v1.2 vessel keeps one mission at a time");
+            Vessel loose = await GetAsync<Vessel>(api, "/api/v1/vessels/" + _Seed.LooseVesselId).ConfigureAwait(false);
+            AssertEqual(0, loose.MaxParallelVoyages, "a concurrent v1.2 vessel becomes unlimited");
+            AssertEqual(0, loose.MaxParallelMissionsPerVoyage, "a concurrent v1.2 vessel becomes unlimited");
             foreach (string missionId in _Seed.MissionStatuses.Keys)
             {
                 Mission mission = await GetAsync<Mission>(api, "/api/v1/missions/" + missionId).ConfigureAwait(false);
@@ -461,7 +467,8 @@ namespace Test.Shared.Suites.Upgrade
 
             await GetAsync<Voyage>(api, "/api/v1/voyages/" + _Seed.VoyageId).ConfigureAwait(false);
             foreach (string entryId in _Seed.MergeEntryStatuses.Keys) await GetAsync<MergeEntry>(api, "/api/v1/merge-queue/" + entryId).ConfigureAwait(false);
-            await GetAsync<Captain>(api, "/api/v1/captains/" + _Seed.CaptainId).ConfigureAwait(false);
+            Captain upgradedCaptain = await GetAsync<Captain>(api, "/api/v1/captains/" + _Seed.CaptainId).ConfigureAwait(false);
+            AssertEqual(1, upgradedCaptain.MaxConcurrency, "a Claude Code captain runs one mission");
             await GetAsync<Objective>(api, "/api/v1/objectives/" + _Seed.ObjectiveId).ConfigureAwait(false);
 
             // Usage selection after upgrade: Observe/FirstAvailable defaults, a readable revision, and pre-upgrade missions
