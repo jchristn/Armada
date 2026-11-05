@@ -40,6 +40,8 @@
   <!-- Keep SqlClient's PKCS dependency on the latest patched release for both target frameworks. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <!-- Histogram bucket advice (InstrumentAdvice) ships in the in-box library from .NET 9. -->
+    <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">

@@ -60,6 +60,22 @@ namespace Armada.Core.Services.Interfaces
         /// <returns>True when the mission was admitted (and, without background launch, launched).</returns>
         Task<bool> TryAssignAsync(Mission mission, Vessel vessel, bool launchInBackground, CancellationToken token = default);
 
+        /// <summary>
+        /// Close wait intervals that a previous Admiral process left open. Call once at startup, before dispatch.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of intervals closed.</returns>
+        Task<int> CloseInterruptedWaitsAsync(CancellationToken token = default) => Task.FromResult(0);
+
+        /// <summary>
+        /// Close tracked waits for missions that are no longer Pending, given a Pending snapshot taken at
+        /// <paramref name="snapshotUtc"/>.
+        /// </summary>
+        /// <param name="pendingMissionIds">Ids of the missions Pending in the snapshot.</param>
+        /// <param name="snapshotUtc">When the snapshot was read.</param>
+        /// <param name="token">Cancellation token.</param>
+        Task ReconcileWaitsAsync(IEnumerable<string> pendingMissionIds, DateTime snapshotUtc, CancellationToken token = default) => Task.CompletedTask;
+
         /// <summary>Read-only authorized-mission preview of configurable captain selection; no claims, probes or history writes.</summary>
         Task<CaptainSelectionPreview> PreviewCaptainSelectionAsync(Mission mission, int pageNumber = 1, int pageSize = 25, CancellationToken token = default);
 

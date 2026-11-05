@@ -542,6 +542,18 @@ namespace Test.Shared.Suites.Services
                 AssertNotNull(ArmadaMetrics.MergeEntriesProcessed);
                 AssertNotNull(ArmadaMetrics.MissionsFailed);
                 AssertNotNull(ArmadaMetrics.MissionRuntimeExceeded);
+                AssertNotNull(ArmadaMetrics.SlotWaitSeconds);
+                AssertNotNull(ArmadaMetrics.QueueSeconds);
+                AssertNotNull(ArmadaMetrics.GateWaitSeconds);
+                AssertNotNull(ArmadaMetrics.AdmissionLockWaitSeconds);
+                AssertNotNull(ArmadaMetrics.MissionsStarving);
+                AssertNotNull(ArmadaMetrics.MissionsWaiting);
+                AssertNotNull(ArmadaMetrics.MissionsActive);
+                AssertNotNull(ArmadaMetrics.CaptainSlotsInUse);
+                AssertNotNull(ArmadaMetrics.CaptainSlotsTotal);
+                AssertNotNull(ArmadaMetrics.VesselVoyageSlotsInUse);
+                AssertNotNull(ArmadaMetrics.VesselVoyageSlotsTotal);
+                AssertNotNull(ArmadaMetrics.VesselsUnlimited);
                 // Emitting must be safe with no subscriber attached.
                 ArmadaMetrics.CaptainStalls.Add(1);
                 ArmadaMetrics.HandoffsRedriven.Add(2);

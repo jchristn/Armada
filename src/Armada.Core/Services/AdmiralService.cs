@@ -926,7 +926,10 @@ namespace Armada.Core.Services
             await RunHealthPhaseAsync("admission readiness snapshot", async () =>
             {
                 bool capacity = await SchedulerAllowsAdmissionObservationAsync(token).ConfigureAwait(false);
+                DateTime snapshotUtc = DateTime.UtcNow;
                 dispatchSnapshot = await _Database.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending, token).ConfigureAwait(false);
+                // Missions that left Pending outside admission (cancelled, deleted, assigned directly) close their waits here.
+                await _Missions.ReconcileWaitsAsync(dispatchSnapshot.Select(m => m.Id), snapshotUtc, token).ConfigureAwait(false);
                 admissionWindow = await _AdmissionStuck.CaptureAsync(() => capacity, _Missions.IsAdmissionReadyForMonitoringAsync, token, dispatchSnapshot).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
             bool dispatchCompleted = false;
@@ -953,6 +956,9 @@ namespace Armada.Core.Services
                 await RunHealthPhaseAsync("escalation rules", () => _Escalation.EvaluateAsync(token), token).ConfigureAwait(false);
             }
         }
+
+        /// <inheritdoc />
+        public Task<int> CloseInterruptedWaitsAsync(CancellationToken token = default) => _Missions.CloseInterruptedWaitsAsync(token);
 
         /// <inheritdoc />
         public async Task CleanupStaleCaptainsAsync(CancellationToken token = default)

@@ -69,9 +69,53 @@ as `armada_*_total` series:
 | `armada_health_evaluations_total`       | Vessel health evaluations, one per vessel; label `outcome` (Succeeded, Failed, Cancelled) |
 | `armada_vessel_import_items_total`      | Vessel import items processed; label `outcome` (Created, SkippedExisting, SkippedNotSelected, Failed) |
 
-Concurrency overrun monitoring runs after slot reconciliation on each health tick. Gates are `captain` (reserved mission slots), `vessel_voyages` (sticky occupied groups), `voyage_missions` (the busiest running group on a vessel), `global`, `runtime` and `endpoint`. Causes are `limit_lowered` for an observed reduction draining without growth, `unexpected` for an overrun/growth unexplained by observed limit changes, and `unknown` for startup or ambiguous ordering between samples. Initial over-capacity observations are not proof of an admission bug. The counter increments only when an overrun's count, limit or cause changes, not on every tick; it is not a current-overrun gauge. Filter `cause="unexpected"` for unexplained observations and inspect Activity > Events for entity context. IDs and names never appear in metric labels. Events do not expose mission/voyage IDs from shared resources. Runtime settings use the strictest positive duplicate setting, and endpoint aliases share usage by normalized base URL, matching admission. Aliases with different configured limits remain unknown because their shared usage may be legitimate. Aggregate events are admin-only. Global occupancy uses one SQL count of Assigned/InProgress, without loading artifacts. Wait-time metrics and full provider/load validation remain planned.
+Concurrency overrun monitoring runs after slot reconciliation on each health tick. Gates are `captain` (reserved mission slots), `vessel_voyages` (sticky occupied groups), `voyage_missions` (the busiest running group on a vessel), `global`, `runtime` and `endpoint`. Causes are `limit_lowered` for an observed reduction draining without growth, `unexpected` for an overrun/growth unexplained by observed limit changes, and `unknown` for startup or ambiguous ordering between samples. Initial over-capacity observations are not proof of an admission bug. The counter increments only when an overrun's count, limit or cause changes, not on every tick; it is not a current-overrun gauge. Filter `cause="unexpected"` for unexplained observations and inspect Activity > Events for entity context. IDs and names never appear in metric labels. Events do not expose mission/voyage IDs from shared resources. Runtime settings use the strictest positive duplicate setting, and endpoint aliases share usage by normalized base URL, matching admission. Aliases with different configured limits remain unknown because their shared usage may be legitimate. Aggregate events are admin-only. Global occupancy uses one SQL count of Assigned/InProgress, without loading artifacts. Wait-time metrics are described under "Mission wait time" below.
 
 Stuck admission is an observational investigation signal, not an automatic remediation or proof of continuous availability. At most 64 Pending missions are sampled per tick, retaining a batch for three ticks and rotating thereafter. A mission must be the same version, Pending and ready before and after successful dispatch opportunities; observed memory/global deferrals, policy/placement waits, in-flight work and known preparation/launch failures reset/exclude observations. Duplicate warnings are suppressed until an observed episode clears or the mission version changes. Large queues take multiple windows to cover. Routing/preflight probes do not persist preferences, provision docks or launch agents.
+
+### Mission wait time
+
+Each time admission is attempted for a Pending mission, Armada records the gate it stopped at in
+`mission_wait_intervals`. One interval stays open per mission. It closes when the gate changes, when the mission is
+assigned, or when it leaves Pending (the health tick closes waits for missions cancelled or deleted elsewhere). Gates
+are only observed when admission runs, so timings are accurate to one scheduler tick (`HeartbeatIntervalSeconds`)
+plus direct dispatch calls. At Admiral startup, intervals the previous process left open end at the restart time with
+detail `admiral restart`; the next evaluation opens fresh ones. A mission's `ReadyUtc` is its first capacity-gate
+observation (voyage, mission, branch, global, captain, endpoint, runtime or placement slot), or its assignment time
+when it was admitted on first sight. `AssignedUtc` is stamped at assignment.
+
+| Prometheus series | Type | Labels | Meaning |
+|---|---|---|---|
+| `armada_missions_slot_wait_seconds` | histogram | `gate_last`, `persona` | Assignment minus `ReadyUtc`; `gate_last` is the last capacity gate, or `None` |
+| `armada_missions_queue_seconds` | histogram | `persona` | Time Pending before assignment (from creation, or from the first wait after a re-pend) |
+| `armada_missions_gate_wait_seconds` | histogram | `gate` | One observation per closed interval |
+| `armada_admission_lock_wait_seconds` | histogram | `lock` (`vessel`, `capacity`) | Time to acquire an admission lock |
+| `armada_admission_lock_timeouts_total` | counter | `gate` (`vessel`, `capacity`) | Admission lock waits that timed out |
+| `armada_missions_starving_total` | counter | `gate` | Missions waiting longer than `Concurrency.StarvationWarningMinutes`, once per wait; also a `mission.starving` event |
+| `armada_missions_waiting` | gauge | `gate` | Pending missions by current gate |
+| `armada_missions_active` | gauge | `runtime` | Missions holding captain slots |
+| `armada_captains_slots_in_use` / `armada_captains_slots_total` | gauges | `runtime` | Occupied and configured captain slots (inactive captains count 0) |
+| `armada_vessels_voyage_slots_in_use` / `armada_vessels_voyage_slots_total` | gauges | none | Summed over vessels with a voyage limit |
+| `armada_vessels_unlimited` | gauge | none | Vessels with no voyage limit |
+
+Wait histograms use buckets of 1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600 and 7200 seconds. Gauges read a snapshot the
+concurrency monitor refreshes each health tick; scraping never queries the database. `persona` is the mission's
+persona name (`none` when unset). Per-vessel, per-captain and per-mission waits are served by the REST API, not
+Prometheus labels.
+
+Example alerts:
+
+```yaml
+- alert: ArmadaConcurrencyLimitViolation
+  expr: increase(armada_concurrency_limit_violations_total{cause="unexpected"}[15m]) > 0
+  labels: { severity: warning }
+  annotations: { summary: "A capacity limit was exceeded without an observed limit reduction" }
+- alert: ArmadaSlotWaitHigh
+  expr: histogram_quantile(0.95, sum by (le) (rate(armada_missions_slot_wait_seconds_bucket[1h]))) > 1800
+  for: 1h
+  labels: { severity: info }
+  annotations: { summary: "Missions wait more than 30 minutes for a slot at p95; add captain slots or raise vessel limits" }
+```
 
 Two histograms cover the slow paths: `armada_fleet_action_target_duration_seconds` (label `kind`) and
 `armada_health_criterion_duration_seconds` (label `criterion`). Labels stay low-cardinality on purpose:
@@ -92,7 +136,7 @@ meters, so whichever of those emit are exported alongside these.
 - **loki** (loopback port `3100`) receives background logs through the collector.
 - **grafana** (loopback port `3001`, username `admin`, configured password) includes
   Prometheus, Loki and Tempo datasources and the Reliability, Fleet Operations,
-  Storage, Usage and Captain Selection dashboards.
+  Storage, Usage, Captain Selection and Concurrency dashboards.
 
 Bring everything up with:
 
@@ -114,6 +158,7 @@ Config files live under `docker/armada/observability/`:
 - `grafana/dashboards/armada-fleet-operations.json` -- fleet actions, vessel health, and vessel import
 - `grafana/dashboards/armada-usage.json` -- usage capture operations
 - `grafana/dashboards/armada-captain-selection.json` -- captain selection, admission and reservations
+- `grafana/dashboards/armada-concurrency.json` -- slot wait, waits by gate, slot utilization, admission locks and limit violations
 
 ## Local (non-Docker) use
 

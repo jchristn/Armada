@@ -250,6 +250,13 @@ namespace Armada.Core.Services.Interfaces
         Task CleanupStaleCaptainsAsync(CancellationToken token = default);
 
         /// <summary>
+        /// Close mission wait intervals a previous Admiral process left open, ending them at this restart.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The number of intervals closed.</returns>
+        Task<int> CloseInterruptedWaitsAsync(CancellationToken token = default) => Task.FromResult(0);
+
+        /// <summary>
         /// Handle an agent process exit detected via the OnProcessExited event.
         /// Transitions the mission to the appropriate state, releases the captain,
         /// and reclaims the dock.

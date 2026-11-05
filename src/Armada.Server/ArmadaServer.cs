@@ -2447,6 +2447,17 @@ namespace Armada.Server
 
         private async Task HealthCheckLoopAsync(CancellationToken token)
         {
+            // Waits a previous server run left open end at this restart; the next evaluation opens fresh ones.
+            try
+            {
+                int closed = await _Admiral.CloseInterruptedWaitsAsync(token).ConfigureAwait(false);
+                if (closed > 0) _Logging.Info(_Header + "closed " + closed + " mission wait interval(s) left open by the previous run");
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "closing interrupted mission waits failed: " + ex.Message);
+            }
+
             // Reset captains left in Working state with dead processes from previous server run
             try
             {

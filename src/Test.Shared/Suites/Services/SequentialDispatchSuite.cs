@@ -109,9 +109,110 @@ namespace Test.Shared.Suites.Services
                 for (int i = 0; i < 100 && (await db.Missions.ReadAsync(work.Missions[1].Id))!.Status != MissionStatusEnum.Pending; i++) await Task.Delay(20);
                 AssertEqual(MissionStatusEnum.Pending, (await db.Missions.ReadAsync(work.Missions[1].Id))!.Status, "a failed background launch rolls back");
                 AssertEqual(0, (await db.Captains.ReadAsync(work.Captains[0].Id))!.ActiveMissionCount, "and releases the captain");
+                // Failure handling continues after the rollback; let it finish before the next case resets the shared database.
+                AssertTrue(await services.Missions.WaitForBackgroundLaunchesAsync(TimeSpan.FromSeconds(30)), "background launches drain");
             }));
 
             // Section 15 scheduler matrix rows not covered elsewhere.
+            cases.Add(CaseAsync("wait_telemetry_gate_and_slot_wait", "A capacity wait opens one interval, closes at assignment and records gate, slot and queue time", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = fixture.Driver;
+                ServiceSet services = CreateServices(CreateLogging(), db, CreateSettings(), new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 1, missionCount: 2);
+                string persona = "WaitProbe" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                Mission waiting = work.Missions[1];
+                waiting.Persona = persona;
+                await db.Missions.UpdateAsync(waiting);
+                List<string> gateWaits = new List<string>();
+                List<string> slotWaits = new List<string>();
+                List<string> queueWaits = new List<string>();
+                Dictionary<string, int> waitingGauge = new Dictionary<string, int>();
+                using System.Diagnostics.Metrics.MeterListener listener = new System.Diagnostics.Metrics.MeterListener();
+                listener.InstrumentPublished = (instrument, l) =>
+                {
+                    if (instrument.Meter.Name == Armada.Core.ArmadaMetrics.MeterName && (instrument.Name.StartsWith("armada.missions.", StringComparison.Ordinal))) l.EnableMeasurementEvents(instrument);
+                };
+                listener.SetMeasurementEventCallback<double>((instrument, value, tags, state) =>
+                {
+                    Dictionary<string, string> labels = new Dictionary<string, string>();
+                    foreach (KeyValuePair<string, object?> tag in tags) labels[tag.Key] = tag.Value?.ToString() ?? "";
+                    lock (gateWaits)
+                    {
+                        if (instrument.Name == "armada.missions.gate_wait_seconds") gateWaits.Add(labels["gate"]);
+                        else if (instrument.Name == "armada.missions.slot_wait_seconds" && labels["persona"] == persona) slotWaits.Add(labels["gate_last"]);
+                        else if (instrument.Name == "armada.missions.queue_seconds" && labels["persona"] == persona) queueWaits.Add(persona);
+                    }
+                });
+                listener.SetMeasurementEventCallback<int>((instrument, value, tags, state) =>
+                {
+                    if (instrument.Name != "armada.missions.waiting") return;
+                    foreach (KeyValuePair<string, object?> tag in tags) lock (waitingGauge) waitingGauge[tag.Value?.ToString() ?? ""] = value;
+                });
+                listener.Start();
+
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[0], work.Vessel));
+                AssertFalse(await services.Missions.TryAssignAsync(waiting, work.Vessel), "the only slot is taken");
+                AssertFalse(await services.Missions.TryAssignAsync(waiting, work.Vessel), "a repeat observation of the same gate");
+                List<MissionWaitInterval> open = await db.MissionWaitIntervals.EnumerateByMissionAsync(waiting.Id);
+                AssertEqual(1, open.Count, "the same gate keeps one interval open");
+                AssertNull(open[0].EndedUtc);
+                MissionWaitGateEnum gate = open[0].Gate;
+                AssertTrue(gate == MissionWaitGateEnum.VoyageMissionSlot || gate == MissionWaitGateEnum.CaptainSlot, "a capacity gate, got " + gate);
+                AssertEqual(work.Vessel.Id, open[0].VesselId);
+                listener.RecordObservableInstruments();
+                lock (waitingGauge) AssertTrue(waitingGauge.TryGetValue(gate.ToString(), out int count) && count >= 1, "the waiting gauge counts the mission");
+
+                await CompleteAsync(db, (await db.Missions.ReadAsync(work.Missions[0].Id))!);
+                AssertTrue(await services.Missions.TryAssignAsync(waiting, work.Vessel), "the freed slot admits the waiting mission");
+                List<MissionWaitInterval> closed = await db.MissionWaitIntervals.EnumerateByMissionAsync(waiting.Id);
+                AssertEqual(1, closed.Count);
+                AssertNotNull(closed[0].EndedUtc, "assignment closes the interval");
+                Mission assigned = (await db.Missions.ReadAsync(waiting.Id))!;
+                AssertNotNull(assigned.ReadyUtc);
+                AssertNotNull(assigned.AssignedUtc);
+                AssertTrue(assigned.ReadyUtc!.Value <= assigned.AssignedUtc!.Value.AddMilliseconds(1), "ready precedes assignment");
+                AssertTrue(Math.Abs((assigned.ReadyUtc.Value - closed[0].StartedUtc).TotalSeconds) < 1, "ready is the first capacity observation");
+                lock (gateWaits)
+                {
+                    AssertTrue(gateWaits.Contains(gate.ToString()), "the closed interval is observed by gate");
+                    AssertEqual(1, slotWaits.Count, "one slot wait for the mission");
+                    AssertEqual(gate.ToString(), slotWaits[0], "slot wait is labeled with the last capacity gate");
+                    AssertEqual(1, queueWaits.Count, "one queue time for the mission");
+                }
+            }));
+
+            cases.Add(CaseAsync("wait_telemetry_restart_and_reconcile", "Restart closes earlier open intervals only, and a mission leaving Pending closes its wait", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = fixture.Driver;
+                ArmadaSettings settings = CreateSettings();
+                ServiceSet before = CreateServices(CreateLogging(), db, settings, new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 0, missionCount: 2);
+                AssertFalse(await before.Missions.TryAssignAsync(work.Missions[0], work.Vessel), "no captain exists");
+                AssertNull((await db.MissionWaitIntervals.EnumerateByMissionAsync(work.Missions[0].Id)).Single().EndedUtc);
+
+                await Task.Delay(20);
+                ServiceSet after = CreateServices(CreateLogging(), db, settings, new StubGitService());
+                await Task.Delay(20);
+                AssertFalse(await after.Missions.TryAssignAsync(work.Missions[1], work.Vessel), "a wait opened by the new process");
+                AssertTrue(await after.Missions.CloseInterruptedWaitsAsync() >= 1);
+                MissionWaitInterval interrupted = (await db.MissionWaitIntervals.EnumerateByMissionAsync(work.Missions[0].Id)).Single();
+                AssertNotNull(interrupted.EndedUtc, "the previous process's wait ends at the restart");
+                AssertEqual("admiral restart", interrupted.Detail);
+                AssertNull((await db.MissionWaitIntervals.EnumerateByMissionAsync(work.Missions[1].Id)).Single().EndedUtc, "the new process's wait stays open");
+
+                AssertFalse(await after.Missions.TryAssignAsync(work.Missions[0], work.Vessel), "the restarted mission waits again");
+                AssertEqual(2, (await db.MissionWaitIntervals.EnumerateByMissionAsync(work.Missions[0].Id)).Count, "a fresh interval opens after the restart");
+
+                Mission cancelled = (await db.Missions.ReadAsync(work.Missions[1].Id))!;
+                cancelled.Status = MissionStatusEnum.Cancelled;
+                await db.Missions.UpdateAsync(cancelled);
+                await after.Missions.ReconcileWaitsAsync(new string[] { work.Missions[0].Id }, DateTime.UtcNow.AddSeconds(1));
+                AssertNotNull((await db.MissionWaitIntervals.EnumerateByMissionAsync(work.Missions[1].Id)).Single().EndedUtc, "leaving Pending closes the wait");
+                AssertNull((await db.MissionWaitIntervals.EnumerateByMissionAsync(work.Missions[0].Id)).Last().EndedUtc, "a still-Pending mission keeps its wait");
+            }));
+
             cases.Add(CaseAsync("matrix_vessel_one_by_one", "Vessel 1x1 runs a voyage of three one at a time and reports VoyageMissionLimit", TestTags.Positive, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();

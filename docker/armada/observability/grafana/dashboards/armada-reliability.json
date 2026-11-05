@@ -87,6 +87,16 @@
         { "expr": "sum(rate(armada_missions_failed_total[5m])) * 60", "legendFormat": "missions failed", "refId": "A" },
         { "expr": "sum(rate(armada_mergequeue_processed_total[5m])) * 60", "legendFormat": "merge processed", "refId": "B" }
       ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Concurrency limit violations (per 5m, expect 0)",
+      "datasource": { "type": "prometheus", "uid": "armada-prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (gate, cause) (increase(armada_concurrency_limit_violations_total[5m]))", "legendFormat": "{{gate}} {{cause}}", "refId": "A" }
+      ]
     }
   ]
 }

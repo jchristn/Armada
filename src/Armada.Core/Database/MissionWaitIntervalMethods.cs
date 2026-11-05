@@ -46,6 +46,8 @@ namespace Armada.Core.Database
             }, token);
         public Task<int> CloseOpenAsync(string missionId, DateTime endedUtc, CancellationToken token = default)
             => Run(async c => { using DbCommand cmd = c.CreateCommand(); cmd.CommandText = "UPDATE mission_wait_intervals SET ended_utc=@ended WHERE mission_id=@mission AND ended_utc IS NULL AND started_utc<=@ended;"; Add(cmd, "@mission", missionId); Add(cmd, "@ended", Date(c, endedUtc)); return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false); }, token);
+        public Task<int> CloseAllOpenAsync(DateTime endedUtc, DateTime startedBeforeUtc, string detail, CancellationToken token = default)
+            => Run(async c => { using DbCommand cmd = c.CreateCommand(); cmd.CommandText = "UPDATE mission_wait_intervals SET ended_utc=@ended,detail=@detail WHERE ended_utc IS NULL AND started_utc<@before AND started_utc<=@ended;"; Add(cmd, "@ended", Date(c, endedUtc)); Add(cmd, "@before", Date(c, startedBeforeUtc)); Add(cmd, "@detail", detail); return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false); }, token);
         public Task<int> DeleteExpiredAsync(DateTime cutoffUtc, CancellationToken token = default)
             => Run(async c => { using DbCommand cmd = c.CreateCommand(); cmd.CommandText = "DELETE FROM mission_wait_intervals WHERE ended_utc<@cutoff;"; Add(cmd, "@cutoff", Date(c, cutoffUtc)); return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false); }, token);
     }

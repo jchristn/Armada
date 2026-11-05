@@ -138,6 +138,12 @@ namespace Armada.Core.Services
         /// race on the same mission.
         /// </summary>
         private const int _TransientAssignmentAttempts = 3;
+        private readonly MissionWaitTracker _WaitTracker;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Task> _BackgroundLaunches =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, Task>(StringComparer.Ordinal);
+        // The gate each failed admission attempt stopped at, recorded by the public wrapper once the locks are released.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, MissionWaitObservation> _AttemptWaits =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, MissionWaitObservation>(StringComparer.Ordinal);
         private System.Collections.Concurrent.ConcurrentDictionary<string, byte> _InFlightAssignments =
             new System.Collections.Concurrent.ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
 
@@ -238,6 +244,7 @@ namespace Armada.Core.Services
             _Captains = captains ?? throw new ArgumentNullException(nameof(captains));
             _PromptTemplates = promptTemplates;
             _DefinitionOfDone = definitionOfDone;
+            _WaitTracker = new MissionWaitTracker(_Database, _Settings, _Logging);
         }
 
         #endregion
@@ -407,7 +414,9 @@ namespace Armada.Core.Services
             {
                 try
                 {
-                    return await TryAssignAsync(mission, vessel, launchInBackground, singleAttempt: true, token).ConfigureAwait(false);
+                    bool assigned = await TryAssignAsync(mission, vessel, launchInBackground, singleAttempt: true, token).ConfigureAwait(false);
+                    await RecordAttemptWaitAsync(mission.Id, token).ConfigureAwait(false);
+                    return assigned;
                 }
                 catch (Exception ex) when (TransientDatabaseError.IsTransient(ex) && !token.IsCancellationRequested)
                 {
@@ -437,7 +446,9 @@ namespace Armada.Core.Services
             try
             {
                 TimeSpan admissionTimeout = TimeSpan.FromSeconds(_Settings.Concurrency.AdmissionLockTimeoutSeconds);
+                long vesselLockStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 vesselAdmission = await _VesselAdmissionLocks.TryEnterAsync(vessel.Id, admissionTimeout, token).ConfigureAwait(false);
+                ArmadaMetrics.AdmissionLockWaitSeconds.Record(System.Diagnostics.Stopwatch.GetElapsedTime(vesselLockStart).TotalSeconds, new KeyValuePair<string, object?>("lock", "vessel"));
                 if (vesselAdmission == null)
                 {
                     ArmadaMetrics.AdmissionLockTimeouts.Add(1, new KeyValuePair<string, object?>("gate", "vessel"));
@@ -463,6 +474,7 @@ namespace Armada.Core.Services
                 {
                     _Logging.Debug(_Header + "mission " + mission.Id + " is " + mission.Status +
                         " in the database -- skipping assignment");
+                    NoteLeftPending(mission);
                     return false;
                 }
 
@@ -470,6 +482,7 @@ namespace Armada.Core.Services
                     && !await HasUntriedIdleCaptainAsync(mission, backoff, token).ConfigureAwait(false))
                 {
                     _Logging.Debug(_Header + "mission " + mission.Id + " backing off after " + backoff.Count + " failed launch(es) until " + backoff.NextAttemptUtc.ToString("o"));
+                    NoteWait(mission, MissionWaitGateEnum.LaunchBackoff, backoff.Count + " failed launch(es)");
                     return false;
                 }
 
@@ -503,6 +516,7 @@ namespace Armada.Core.Services
                             context.Voyage = voyage;
                             context.Vessel = vessel;
                         }, token).ConfigureAwait(false);
+                        NoteLeftPending(mission);
                         return false;
                     }
                 }
@@ -513,6 +527,7 @@ namespace Armada.Core.Services
                         " uses the same path for LocalPath and WorkingDirectory (" +
                         (vessel.WorkingDirectory ?? vessel.LocalPath ?? "unknown") +
                         ") -- skipping mission assignment because dock provisioning requires a separate bare repository path");
+                    NoteWait(mission, MissionWaitGateEnum.Other, "VesselMisconfigured");
                     return false;
                 }
 
@@ -520,12 +535,21 @@ namespace Armada.Core.Services
             if (readiness.Blocker != null)
             {
                 if (readiness.FailedSlice != null)
+                {
                     await CancelIntegrationForFailedSliceAsync(mission, readiness.FailedSlice, token).ConfigureAwait(false);
+                    NoteLeftPending(mission);
+                }
                 else if (readiness.Blocker.Reason == MissionAssignmentBlockerReasonEnum.ParentNotFinished
                     && (await EvaluateParentReadinessAsync(mission, token).ConfigureAwait(false)).FailedParent is Mission failedParent)
+                {
                     await CancelDescendantsForFailedParentAsync(mission, failedParent, token).ConfigureAwait(false);
+                    NoteLeftPending(mission);
+                }
                 else
+                {
                     _Logging.Debug(_Header + "mission " + mission.Id + " waits: " + readiness.Blocker.Summary);
+                    NoteWait(mission, readiness.Blocker);
+                }
                 return false;
             }
 
@@ -533,19 +557,24 @@ namespace Armada.Core.Services
             if (admission != null)
             {
                 _Logging.Debug(_Header + "mission " + mission.Id + " waits: " + admission.Summary);
+                NoteWait(mission, admission);
                 return false;
             }
 
             // Only shared capacity checks and the claim serialize across vessels. Vessel gates
             // above run independently, so a blocked voyage cannot stall unrelated vessels.
-            if (!await _CapacityLock.WaitAsync(admissionTimeout, token).ConfigureAwait(false))
+            long capacityLockStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            bool capacityEntered = await _CapacityLock.WaitAsync(admissionTimeout, token).ConfigureAwait(false);
+            ArmadaMetrics.AdmissionLockWaitSeconds.Record(System.Diagnostics.Stopwatch.GetElapsedTime(capacityLockStart).TotalSeconds, new KeyValuePair<string, object?>("lock", "capacity"));
+            if (!capacityEntered)
             {
                 ArmadaMetrics.AdmissionLockTimeouts.Add(1, new KeyValuePair<string, object?>("gate", "capacity"));
                 _Logging.Warn(_Header + "capacity admission lock timed out for mission " + mission.Id + "; retrying next dispatch cycle");
                 return false;
             }
             capacityHeld = true;
-            if (await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false) != null) return false;
+            MissionAssignmentBlocker? globalBlocker = await EvaluateGlobalAdmissionAsync(token).ConfigureAwait(false);
+            if (globalBlocker != null) { NoteWait(mission, globalBlocker); return false; }
 
             // Resolve the mission's preferred captain + fallback tier (per-persona default / voyage override)
             // before assignment, so per-step captain selection applies to every mission of a step, including
@@ -553,7 +582,8 @@ namespace Armada.Core.Services
             await ResolvePreferredCaptainAsync(mission, token).ConfigureAwait(false);
 
             // Find an idle captain: the preferred captain when idle, otherwise fall back by persona/tier.
-            if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled && UsageRetryPending(mission)) return false;
+            if (_Settings.EffectiveUsageSelection.Mode != UsageSelectionModeEnum.Disabled && UsageRetryPending(mission))
+            { NoteWait(mission, MissionWaitGateEnum.CaptainSlot, "UsageRetryPending"); return false; }
             CaptainAdmissionSelection captainSelection = await SelectCaptainAdmissionAsync(mission, token, recordEnvelope: true).ConfigureAwait(false);
             Captain? captain = captainSelection.Selected;
             UsageSelectionSnapshot? usageSelection = null;
@@ -580,7 +610,8 @@ namespace Armada.Core.Services
                     return false;
                 }
                 _UsageSelectionBlockers.TryRemove(mission.Id, out _);
-                if (captain == null && !await RecordUsageSelectionWaitAsync(usageSelection, mission, token).ConfigureAwait(false)) return false;
+                if (captain == null && !await RecordUsageSelectionWaitAsync(usageSelection, mission, token).ConfigureAwait(false))
+                { NoteWait(mission, MissionWaitGateEnum.CaptainSlot, usageSelection.Evaluation.ReasonCode); return false; }
             }
             if (captain == null)
             {
@@ -594,6 +625,9 @@ namespace Armada.Core.Services
                 }
                 _Logging.Warn(_Header + "no idle captains available for mission " + mission.Id +
                     (mission.Persona != null ? " (persona: " + mission.Persona + ")" : ""));
+                if (captainSelection.RoutingEligible.Count > 0 && captainSelection.CapacityExclusions.TryGetValue(captainSelection.RoutingEligible[0].Id, out MissionAssignmentBlocker? capacityBlocker))
+                    NoteWait(mission, capacityBlocker);
+                else NoteWait(mission, MissionWaitGateEnum.CaptainSlot, usageSelection?.Evaluation.ReasonCode);
                 return false;
             }
 
@@ -607,6 +641,7 @@ namespace Armada.Core.Services
                 {
                     if (usageSelection != null) await RecordUsageSelectionWaitAsync(usageSelection, mission, token, "PlacementWaiting").ConfigureAwait(false);
                     _Logging.Info(_Header + "deferring mission " + mission.Id + ": launch policy requires the requesting user's Harbor to be connected and eligible, and none is yet");
+                    NoteWait(mission, MissionWaitGateEnum.Placement, "HarborRequired");
                     return false;
                 }
             }
@@ -632,6 +667,7 @@ namespace Armada.Core.Services
                         _Logging.Warn(_Header + "mission " + mission.Id + " waits: " + placement.Reason);
                     }
 
+                    NoteWait(mission, MissionWaitGateEnum.Placement, placement.Reason);
                     return false;
                 }
             }
@@ -713,12 +749,17 @@ namespace Armada.Core.Services
             mission.CaptainId = captain.Id;
             mission.Status = MissionStatusEnum.Assigned;
             mission.LastUpdateUtc = DateTime.UtcNow;
+            DateTime? previousReadyUtc = mission.ReadyUtc;
+            DateTime? previousAssignedUtc = mission.AssignedUtc;
+            AssignmentWaitTiming waitTiming = await _WaitTracker.PrepareAssignmentAsync(mission, token).ConfigureAwait(false);
             bool assignmentRecorded = await _Database.Missions.TryUpdateIfStatusAsync(mission, new MissionStatusEnum[] { MissionStatusEnum.Assigned }, token).ConfigureAwait(false);
             if (!assignmentRecorded)
             {
                 // Someone else moved the mission (cancelled, or assigned by another caller) after it was read.
                 _Logging.Info(_Header + "mission " + mission.Id + " left Pending before its assignment was recorded; releasing captain " + captain.Id);
                 await _Database.Captains.TryReleaseFromMissionAsync(captain.Id, mission.Id, CancellationToken.None).ConfigureAwait(false);
+                mission.ReadyUtc = previousReadyUtc;
+                mission.AssignedUtc = previousAssignedUtc;
                 return false;
             }
 
@@ -726,6 +767,8 @@ namespace Armada.Core.Services
             capacityHeld = false;
             vesselAdmission.Dispose();
             vesselAdmission = null;
+            try { await _WaitTracker.CompleteAssignmentAsync(mission, waitTiming, token).ConfigureAwait(false); }
+            catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "could not close the wait of mission " + mission.Id + ": " + ex.Message); }
 
             if (launchInBackground)
             {
@@ -734,12 +777,14 @@ namespace Armada.Core.Services
                 // missions' git work. A failure still rolls back to Pending and the next dispatch cycle retries.
                 launchDeferred = true;
                 string deferredMissionId = mission.Id;
-                _ = Task.Run(async () =>
+                Task background = Task.Run(async () =>
                 {
                     try { await ProvisionAndLaunchAsync(CancellationToken.None).ConfigureAwait(false); }
                     catch (Exception ex) { _Logging.Warn(_Header + "background launch of mission " + deferredMissionId + " failed: " + ex.Message); }
                     finally { _InFlightAssignments.TryRemove(deferredMissionId, out _); }
                 });
+                _BackgroundLaunches[deferredMissionId] = background;
+                _ = background.ContinueWith(_ => _BackgroundLaunches.TryRemove(new KeyValuePair<string, Task>(deferredMissionId, background)), TaskScheduler.Default);
                 return true;
             }
             return await ProvisionAndLaunchAsync(token).ConfigureAwait(false);

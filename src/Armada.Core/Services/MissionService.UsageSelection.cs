@@ -67,6 +67,7 @@ namespace Armada.Core.Services
 
         private void UsageWait(Mission mission, string code, string summary)
         {
+            NoteWait(mission, MissionWaitGateEnum.CaptainSlot, code);
             if (_UsageSelectionBlockers.Count >= _MaxEnvelopeDecisionsTracked)
             {
                 // Evict the blocker whose retry is due soonest; it is the least valuable to keep.

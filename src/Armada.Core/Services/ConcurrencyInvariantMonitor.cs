@@ -27,6 +27,15 @@ namespace Armada.Core.Services
             {
                 HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
                 List<Captain> captains = await _Database.Captains.EnumerateAsync(token).ConfigureAwait(false);
+                ConcurrencyGaugeSnapshot gauges = new ConcurrencyGaugeSnapshot();
+                foreach (Captain captain in captains)
+                {
+                    string runtimeName = captain.Runtime.ToString();
+                    gauges.ActiveByRuntime[runtimeName] = (gauges.ActiveByRuntime.TryGetValue(runtimeName, out int active) ? active : 0) + captain.ActiveMissionCount;
+                    gauges.SlotsInUseByRuntime[runtimeName] = (gauges.SlotsInUseByRuntime.TryGetValue(runtimeName, out int used) ? used : 0) + ConcurrencyCapacityPolicy.Occupancy(captain);
+                    int slots = captain.Active ? ConcurrencyClamp.CaptainLimit(captain.MaxConcurrency, _Settings.Concurrency.MaxCaptainConcurrency) : 0;
+                    gauges.SlotsTotalByRuntime[runtimeName] = (gauges.SlotsTotalByRuntime.TryGetValue(runtimeName, out int total) ? total : 0) + slots;
+                }
                 foreach (Captain captain in captains)
                     await ObserveAsync("captain", captain.Id, captain.Name, captain.ActiveMissionCount,
                         ConcurrencyClamp.CaptainLimit(captain.MaxConcurrency, _Settings.Concurrency.MaxCaptainConcurrency),
@@ -59,7 +68,10 @@ namespace Armada.Core.Services
                         await _Database.Missions.EnumerateAdmissionSnapshotsAsync(vessel.Id, token).ConfigureAwait(false));
                     Dictionary<string, MissionAdmissionSnapshot> byId = missions.GroupBy(m => m.Id).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
                     var groups = missions.GroupBy(m => VoyageSlotPolicy.Group(m, byId)).ToList();
-                    await ObserveAsync("vessel_voyages", vessel.Id, vessel.Name, groups.Count(g => VoyageSlotPolicy.Admitted(g)),
+                    int heldVoyageSlots = groups.Count(g => VoyageSlotPolicy.Admitted(g));
+                    if (vessel.MaxParallelVoyages > 0) { gauges.VoyageSlotsInUse += heldVoyageSlots; gauges.VoyageSlotsTotal += vessel.MaxParallelVoyages; }
+                    else gauges.UnlimitedVessels++;
+                    await ObserveAsync("vessel_voyages", vessel.Id, vessel.Name, heldVoyageSlots,
                         vessel.MaxParallelVoyages, "vessel", vessel.TenantId, vessel.UserId, seen, token).ConfigureAwait(false);
                     // Report the busiest group once per vessel. Do not expose another user's voyage/mission IDs
                     // through events on a shared vessel, and keep event volume bounded by captains + vessels.
@@ -68,6 +80,7 @@ namespace Armada.Core.Services
                         vessel.MaxParallelMissionsPerVoyage, "vessel", vessel.TenantId, vessel.UserId, seen, token).ConfigureAwait(false);
                 }
                 foreach (string key in _Previous.Keys.Where(key => !seen.Contains(key)).ToList()) _Previous.Remove(key);
+                ConcurrencyGaugeState.Publish(gauges);
             }
             finally { _Gate.Release(); }
         }
