@@ -1,6 +1,6 @@
 # Usage-based captain selection: operator guide (v1.3.0)
 
-This guide is for operators running an Admiral with usage-based captain selection. It covers rollout from Observe to Enforce, every `UsageSelection` setting, how to read waits, recovery permissions, reset generations, retention, telemetry and known limitations. For the admission model and acceptance steps, see [Usage enforcement and mission inspection](ENFORCEMENT_AND_MISSION_INSPECTION.md). The design and delivery record is the [implementation plan](../../USAGE_BASED_CAPTAIN_SELECTION_PLAN.md).
+This guide is for operators running an Admiral with usage-based captain selection. It covers rollout from Observe to Enforce, every `UsageSelection` setting, how to read waits, recovery permissions, reset generations, retention, telemetry and known limitations. For the admission model and acceptance steps, see [Usage enforcement and mission inspection](ENFORCEMENT_AND_MISSION_INSPECTION.md). The design and delivery record is the [implementation plan](../../archive/USAGE_BASED_CAPTAIN_SELECTION_PLAN.md).
 
 ## Modes and strategies
 

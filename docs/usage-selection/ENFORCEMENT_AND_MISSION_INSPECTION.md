@@ -1,6 +1,6 @@
 # Usage enforcement and mission inspection (v1.3.0)
 
-This wave adds opt-in Enforce admission and operator inspection on `feature/v1.3.0`. Observe/FirstAvailable remains the default. The complete [implementation plan](../../USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) still tracks additional native operator surfaces, telemetry and release validation; those are not implied complete by these additions.
+This wave adds opt-in Enforce admission and operator inspection on `feature/v1.3.0`. Observe/FirstAvailable remains the default. The complete [implementation plan](../../archive/USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) still tracks additional native operator surfaces, telemetry and release validation; those are not implied complete by these additions.
 
 For day-to-day operation (rollout from Observe to Enforce, every setting, waits, recovery, retention, telemetry and known limitations), see the [operator guide](OPERATIONS.md).
 

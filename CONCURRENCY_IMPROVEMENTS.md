@@ -70,9 +70,22 @@ Still suggested for M3 onward: skip a fetch
 that ran within the last few seconds for the same repository; and measure whether `git worktree add` on one bare
 repository can run with bounded parallelism instead of one at a time.
 
+### Usage-based captain selection follow-ups
+
+The [usage-based captain selection plan](archive/USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) is complete and archived. Its
+remaining integration work lands with M3 to M11 here:
+
+- [ ] M3: run the enforced stress (`Services.UsageSelectionStress`) on all four providers with the scheduler matrix; parallelize per-repository dock provisioning, which bounds throughput (missions now wait as Assigned while their dock is queued).
+- [ ] M4: no selection decision for a mission blocked on its parent; child and rescue missions keep the right trigger, owner and reservation handling.
+- [ ] M5: selection waits (below reserve, fallback permission needed) feed `MissionWaitTracker` and the wait dashboards beside Armada Captain Selection.
+- [ ] M6: the editable `Concurrency` settings group follows the `UsageSelection` group's revision and partial-update rules; regenerate the API surface.
+- [ ] M7: persona and model requirements from architect plans go through selection routing.
+- [ ] M8 to M10: tree, wait and concurrency views show selection waits and "Automatic retry" like the selection card.
+- [ ] M11: one combined CHANGELOG/UPGRADING story; skip a recent duplicate fetch and move the dispatch advisor's overlap analysis off the create path.
+
 ### Related v1.3.0 usage-selection work
 
-[Usage-based captain selection and decision history](USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) extends the shared admission path with account headroom, atomic reservations and durable captain/model selection evidence. U0 and storage/configuration foundations are implemented; Observe dispatch and server history/preview are connected. Full U2 completion, enforcement and client/validation milestones remain in progress. Coordinate its transaction, verification/repair, waiting telemetry and client changes with M3–M11 here; it must preserve all existing concurrency gates and mission ownership invariants.
+[Usage-based captain selection and decision history](archive/USAGE_BASED_CAPTAIN_SELECTION_PLAN.md) extends the shared admission path with account headroom, atomic reservations and durable captain/model selection evidence. U0 and storage/configuration foundations are implemented; Observe dispatch and server history/preview are connected. Full U2 completion, enforcement and client/validation milestones remain in progress. Coordinate its transaction, verification/repair, waiting telemetry and client changes with M3–M11 here; it must preserve all existing concurrency gates and mission ownership invariants.
 
 ### Segment completion requirements
 
