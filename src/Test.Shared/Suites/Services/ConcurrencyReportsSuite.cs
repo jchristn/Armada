@@ -86,7 +86,15 @@ namespace Test.Shared.Suites.Services
             Voyage voyage = await db.Voyages.CreateAsync(new Voyage("filters")).ConfigureAwait(false);
             Mission root = await db.Missions.CreateAsync(new Mission("root") { VesselId = vessel.Id, VoyageId = voyage.Id }).ConfigureAwait(false);
             Mission stage = await db.Missions.CreateAsync(new Mission("[Judge] root") { VesselId = vessel.Id, VoyageId = voyage.Id, DependsOnMissionId = root.Id }).ConfigureAwait(false);
-            Mission child = await db.Missions.CreateAsync(new Mission("child") { VesselId = vessel.Id, VoyageId = voyage.Id, ParentMissionId = root.Id, Depth = 1 }).ConfigureAwait(false);
+            DateTime ready = DateTime.UtcNow.AddMinutes(-9);
+            Mission child = await db.Missions.CreateAsync(new Mission("child") { VesselId = vessel.Id, VoyageId = voyage.Id, ParentMissionId = root.Id, Depth = 1,
+                BranchStrategy = MissionBranchStrategyEnum.ForkFromParent, ReadyUtc = ready, AssignedUtc = ready.AddMinutes(4), WaitForVoyageWorkers = true }).ConfigureAwait(false);
+            MissionSummary childSummary = (await db.Missions.EnumerateSummariesByVoyageAsync(voyage.Id).ConfigureAwait(false)).Single(m => m.Id == child.Id);
+            AssertEqual(1, childSummary.Depth, "summaries carry depth");
+            AssertEqual(MissionBranchStrategyEnum.ForkFromParent, childSummary.BranchStrategy, "summaries carry the branch strategy");
+            AssertTrue(childSummary.WaitForVoyageWorkers, "summaries carry the integration flag");
+            AssertTrue(childSummary.ReadyUtc.HasValue && Math.Abs((childSummary.ReadyUtc.Value - ready).TotalSeconds) < 2, "summaries carry ReadyUtc");
+            AssertTrue(childSummary.AssignedUtc.HasValue && Math.Abs((childSummary.AssignedUtc.Value - ready.AddMinutes(4)).TotalSeconds) < 2, "summaries carry AssignedUtc");
             Mission other = await db.Missions.CreateAsync(new Mission("other") { VesselId = vessel.Id, VoyageId = voyage.Id }).ConfigureAwait(false);
             await db.MissionWaitIntervals.CreateAsync(new MissionWaitInterval { MissionId = child.Id, VesselId = vessel.Id, Gate = MissionWaitGateEnum.Parent, StartedUtc = DateTime.UtcNow.AddMinutes(-2) }).ConfigureAwait(false);
             await db.MissionWaitIntervals.CreateAsync(new MissionWaitInterval { MissionId = other.Id, VesselId = vessel.Id, Gate = MissionWaitGateEnum.CaptainSlot, StartedUtc = DateTime.UtcNow.AddMinutes(-1) }).ConfigureAwait(false);

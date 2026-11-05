@@ -1,3 +1,4 @@
+import VesselConcurrencyCard from '../components/vessels/VesselConcurrencyCard';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { getVessel, listFleets, listMissionSummaries, listPipelines, createVessel, deleteVessel, getVesselReadiness, getVesselLandingPreview } from '../api/client';
@@ -440,6 +441,7 @@ export default function VesselDetail() {
         </div>
       )}
 
+      <VesselConcurrencyCard vesselId={vessel.id} />
       <VesselReservationsCard vesselId={vessel.id} serializeOverlappingMissions={vessel.serializeOverlappingMissions} />
       <VesselBlackBoxDoctorCard vesselId={vessel.id} onApplied={() => { void load(); }} />
 

@@ -499,6 +499,15 @@ export interface MissionSummary {
   status: string;
   priority: number;
   parentMissionId: string | null;
+  /** Branch relationship to the parent, as recorded at assignment. */
+  branchStrategy?: 'New' | 'ContinueParent' | 'ForkFromParent';
+  /** Depth in the mission hierarchy (0 for a top-level logical mission). */
+  depth?: number;
+  /** First held back only by capacity (or assignment time when admitted on first sight). */
+  readyUtc?: string | null;
+  assignedUtc?: string | null;
+  /** True for an integration mission that waits for every other pipeline. */
+  waitForVoyageWorkers?: boolean;
   persona: string | null;
   dependsOnMissionId: string | null;
   branchName: string | null;

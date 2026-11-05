@@ -9967,3 +9967,22 @@ a.btn:hover { text-decoration: none; }
 .selection-omitted ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .25rem; }
 .selection-omitted li { display: grid; grid-template-columns: minmax(3.5rem, max-content) 1fr; gap: .75rem; align-items: baseline; overflow-wrap: anywhere; }
 .selection-omitted-count { font-variant-numeric: tabular-nums; font-weight: 600; text-align: end; }
+
+/* Voyage mission tree */
+.mission-tree, .mission-tree-children { list-style: none; margin: 0; padding: 0; }
+.mission-tree-children { margin-left: 0.75rem; padding-left: 0.85rem; border-left: 2px solid var(--border); }
+.mission-tree-node { padding: 0.35rem 0; }
+.mission-tree-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; min-width: 0; }
+.mission-tree-title { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mission-tree-branch { font-size: 0.75rem; color: var(--text-dim); border: 1px solid var(--border); border-radius: 999px; padding: 0.05rem 0.5rem; white-space: nowrap; }
+.mission-tree-stages { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+.mission-tree-stage-step { display: inline-flex; align-items: center; gap: 0.25rem; }
+.mission-tree-stage { text-decoration: none; font-size: 0.72rem; }
+@media (max-width: 600px) {
+  .mission-tree-children { margin-left: 0.35rem; padding-left: 0.6rem; }
+  .mission-tree-title { white-space: normal; }
+}
+.mission-hierarchy-path { display: flex; flex-wrap: wrap; gap: 0.15rem; align-items: center; overflow-wrap: anywhere; }
+.mission-hierarchy-children { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+.mission-hierarchy-children a, .mission-hierarchy-path a { text-decoration: none; }
+.mission-hierarchy-children li { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; min-width: 0; }

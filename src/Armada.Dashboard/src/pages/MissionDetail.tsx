@@ -44,6 +44,8 @@ import Button from '../components/shared/Button';
 import CaptainRef from '../components/shared/CaptainRef';
 import CaptainSelectionCard from '../components/missions/CaptainSelectionCard';
 import AssignmentBlockerCard from '../components/missions/AssignmentBlockerCard';
+import MissionWaitsCard from '../components/missions/MissionWaitsCard';
+import MissionHierarchyCard from '../components/missions/MissionHierarchyCard';
 import VerificationStatusCard from '../components/missions/VerificationStatusCard';
 import BlackBoxPanel from '../components/blackbox/BlackBoxPanel';
 import BranchesModal from '../components/vessels/BranchesModal';
@@ -507,6 +509,8 @@ export default function MissionDetail() {
         <AssignmentBlockerCard blocker={mission.assignmentBlocker} />
       )}
       <CaptainSelectionCard missionId={mission.id} status={mission.status} revision={mission.lastUpdateUtc} />
+      <MissionWaitsCard missionId={mission.id} revision={mission.lastUpdateUtc} readyUtc={mission.readyUtc} assignedUtc={mission.assignedUtc} />
+      <MissionHierarchyCard mission={mission} />
 
       {showManualMerge && mission.vesselId && (
         <BranchesModal
@@ -870,7 +874,7 @@ export default function MissionDetail() {
           </div>
         )}
         <div className="detail-field">
-          <span className="detail-label" title={t('Mission that created this one as a sub-task, for example an architect mission that planned it.')}>{t('Parent Mission')}</span>
+          <span className="detail-label" title={t('Mission this one builds on: it starts after the parent\'s last stage finishes, on the parent\'s result.')}>{t('Parent Mission')}</span>
           {mission.parentMissionId
             ? <Link to={`/missions/${mission.parentMissionId}`} className="mono">{mission.parentMissionId}</Link>
             : <span>-</span>}

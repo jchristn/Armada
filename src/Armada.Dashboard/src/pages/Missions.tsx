@@ -1,3 +1,4 @@
+import { formatWaitDuration, slotWaitSeconds } from '../lib/missionWaits';
 import { useDuplicateRequest } from '../lib/useDuplicateRequest';
 import { duplicateDisplayName, buildMissionDuplicatePayload } from '../lib/duplicates';
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -340,7 +341,17 @@ export default function Missions() {
       key: 'status', label: t('Status'), sortKey: 'status', headerTitle: t('Lifecycle state: Pending waits for a captain, InProgress is running, WorkProduced awaits landing, then Complete, Failed or Cancelled. Click to sort.'), cellClassName: 'cell-nowrap',
       clearFilter: () => setColFilters(f => ({ ...f, status: '' })),
       filter: <input type="text" className="col-filter" aria-label={t('Filter by status')} title={t('Show only missions on this page whose status contains this text, for example Failed.')} value={colFilters.status} onChange={e => setColFilters(f => ({ ...f, status: e.target.value }))} placeholder={t('Search...')} />,
-      render: (m) => <StatusBadge status={m.status} />,
+      render: (m) => {
+        const waited = slotWaitSeconds(m.readyUtc, m.assignedUtc);
+        return <>
+          <StatusBadge status={m.status} />
+          {waited !== null && waited >= 60 && (
+            <div className="text-dim" style={{ fontSize: 11 }} title={t('Time this mission waited for a free slot before a captain took it.')}>
+              {t('waited {{duration}}', { duration: formatWaitDuration(waited) })}
+            </div>
+          )}
+        </>;
+      },
     },
     { key: 'priority', label: t('Priority'), sortKey: 'priority', headerTitle: t('Dispatch order. Lower numbers are assigned to a captain first; the default is 100. Click to sort.'), render: (m) => m.priority },
     {

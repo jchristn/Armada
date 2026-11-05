@@ -18,6 +18,7 @@ import { listAll } from '../api/paging';
 import type { Voyage, VoyageProgress, Mission, Vessel, Captain, MissionPlaybookSnapshot, SelectedPlaybook, CaptainAssignmentOverride } from '../types/models';
 import CaptainRef from '../components/shared/CaptainRef';
 import BlackBoxPanel from '../components/blackbox/BlackBoxPanel';
+import VoyageMissionTree from '../components/missions/VoyageMissionTree';
 import VoyageCascadeGraph from '../components/blackbox/VoyageCascadeGraph';
 import { DispatchWarningsBanner } from '../components/blackbox/DispatchWarnings';
 import { dispatchWarningsFromState } from '../lib/dispatchPreview';
@@ -414,6 +415,11 @@ export default function VoyageDetail() {
           </div>
         </div>
       )}
+
+      <VoyageMissionTree
+        voyageId={voyage.id}
+        missionLimit={detail?.vesselId ? vessels.find(v => v.id === detail.vesselId)?.maxParallelMissionsPerVoyage : undefined}
+      />
 
       {/* Missions table */}
       <h3 style={{ marginBottom: 12 }}>{t('Missions')}</h3>
