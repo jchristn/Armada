@@ -237,6 +237,31 @@ namespace Test.Shared.Suites.Services
                 AssertFalse(await h.Service.TryAssignAsync(h.Mission, h.Vessel));
                 AssertTrue((await h.Db.Events.EnumerateByMissionAsync(h.Mission.Id)).Any(e => e.EventType == WorkerEnvelopeRules.EventType));
             });
+            Add("parent_blocked_mission_records_no_selection_decision", async () =>
+            {
+                using Harness h = await Harness.CreateAsync();
+                TenantMetadata tenant = await h.Db.Tenants.CreateAsync(new TenantMetadata("parent-wait"));
+                UserMaster owner = await h.Db.Users.CreateAsync(new UserMaster(tenant.Id, "parent@example.invalid", "fixture-password"));
+                h.Settings.UsageSelection.Mode = UsageSelectionModeEnum.Observe;
+                await h.Db.Captains.CreateAsync(new Captain("ready") { TenantId = tenant.Id, UserId = owner.Id, Model = "opus" });
+                Mission parent = await h.Db.Missions.CreateAsync(new Mission("parent", "first") { TenantId = tenant.Id, UserId = owner.Id, VesselId = h.Vessel.Id, Status = MissionStatusEnum.InProgress });
+                h.Mission.TenantId = tenant.Id; h.Mission.UserId = owner.Id; h.Mission.ParentMissionId = parent.Id;
+                await h.Db.Missions.UpdateAsync(h.Mission);
+                h.Captains.OnLaunchAgent = (_, _, _) => { h.Launches++; return Task.FromResult(8001); };
+
+                AssertFalse(await h.Service.TryAssignAsync(h.Mission, h.Vessel), "a child waits for its parent");
+                AssertEqual(MissionAssignmentBlockerReasonEnum.ParentNotFinished, (await h.ReadOnlyBlocker()).Reason);
+                AssertEqual(0L, (await h.Db.CaptainSelections.EnumerateByMissionAsync(tenant.Id, h.Mission.Id)).TotalRecords, "the parent gate runs before captain selection, so no decision is recorded");
+                AssertEqual(0, h.Launches);
+
+                parent.Status = MissionStatusEnum.Complete; await h.Db.Missions.UpdateAsync(parent);
+                Mission child = (await h.Db.Missions.ReadAsync(h.Mission.Id))!;
+                AssertTrue(await h.Service.TryAssignAsync(child, h.Vessel), "the child is admitted once its parent finished");
+                EnumerationResult<CaptainSelectionDecision> history = await h.Db.CaptainSelections.EnumerateByMissionAsync(tenant.Id, h.Mission.Id);
+                AssertEqual(1L, history.TotalRecords, "one decision, for the admission itself");
+                CaptainSelectionDecision decision = (await h.Db.CaptainSelections.ReadCurrentDecisionAsync(tenant.Id, h.Mission.Id, owner.Id))!;
+                AssertEqual("Dispatch", decision.Trigger);
+            });
             foreach (UsageSelectionModeEnum mode in new[] { UsageSelectionModeEnum.Observe, UsageSelectionModeEnum.Enforce })
             foreach (CaptainSelectionStrategyEnum strategy in Enum.GetValues<CaptainSelectionStrategyEnum>())
             Add("scoped_dispatch_" + mode + "_" + strategy, async () =>
