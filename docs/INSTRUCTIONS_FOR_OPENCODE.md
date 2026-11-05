@@ -179,6 +179,26 @@ create_mission({
 })
 ```
 
+#### Dispatching a Mission Tree
+
+When one mission needs code that another mission produces, dispatch both in one call and link them with `key` and `parentKey` instead of splitting them across voyages. A child starts only after its parent finishes, on the parent's result: the first child continues the parent's branch and later children fork from it (`branchStrategy` `ContinueParent` or `ForkFromParent` overrides this). Missions without a `parentKey` are siblings and can run in parallel. A `parentKey` must name an earlier mission in the same call; an unknown or later key is rejected and nothing is created. Use `parentKey` only for a real dependency, and keep trees shallow (the default depth limit is 4).
+
+Give every mission `ownedPaths`, the files or directories (trailing `/`) it may change. Missions that can run at the same time must not own the same file; shared files such as lockfiles, project files and barrel exports belong to one mission, usually the parent. Captains see their owned paths and their running siblings' paths in their instructions.
+
+```
+dispatch({
+  title: "Add caching",
+  vesselId: "vsl_abc123",
+  missions: [
+    { key: "svc", title: "Add CacheService", description: "...", ownedPaths: ["src/Services/CacheService.cs", "src/Armada.csproj"] },
+    { key: "mw", parentKey: "svc", title: "Add caching middleware", description: "...", ownedPaths: ["src/Middleware/CacheMiddleware.cs"] },
+    { key: "docs", title: "Document cache settings", description: "...", ownedPaths: ["docs/CACHING.md"] }
+  ]
+})
+```
+
+Before adding more work, check capacity. `vessel_concurrency({ vesselId })` returns the voyage slots in use against `MaxParallelVoyages`, the voyages holding them, the missions waiting and on which gate, and recent slot wait times. `voyage_tree({ voyageId })` shows the voyage as logical missions with their stages and children. Each running mission takes one captain slot: a CLI captain has one, so N parallel missions need N captains, while an endpoint or Mux captain has several. Splitting a request into more parallel missions than the vessel's `MaxParallelMissionsPerVoyage` or the free captain slots allow only makes the extra missions wait. `mission_status({ missionId, includeWaits: true })` shows why and how long a mission waited. See [SCHEDULING.md](SCHEDULING.md#capacity).
+
 ### 4. Monitor
 
 ```
@@ -283,14 +303,16 @@ Boolean include flags (all default to `false`): `includeDescription` (missions, 
 | `add_vessel` | `name` (required), `repoUrl` (required), `fleetId` (required), `defaultBranch` (default: "main"), `workingDirectory`, `projectContext`, `styleGuide`, `maxParallelVoyages` (default 1), `maxParallelMissionsPerVoyage` (default 4), `autoApprove`, `enableModelContext`, `defaultPipelineId`, `gitHubTokenOverride` | Register a new git repo |
 | `update_vessel` | `vesselId` (required), plus any `add_vessel` field, `clearAutoApprove`, `modelContext`, and the auto-land (`autoLand*`) and Definition-of-Done (`definitionOfDone*`) settings | Update vessel |
 | `update_vessel_context` | `vesselId` (required), `projectContext`, `styleGuide`, `modelContext` | Update only the vessel's context fields |
+| `vessel_concurrency` | `vesselId` (required) | Voyage slots in use, the voyages holding them, waiting missions by gate, and slot wait p50/p95/max over 24 hours and 7 days |
 | `delete_vessel` | `vesselId` (required) | Delete vessel |
 
 ### Voyages
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `dispatch` | `title` (required), `vesselId`, `missions` (array of {title, description}), `description`, `pipeline` (name) or `pipelineId`, `objectiveId`, `selectedPlaybooks`, `captainAssignments` | Dispatch a voyage with missions -- the primary way to create work. `vesselId` and `missions` are needed to create work; without either, an empty voyage is created. |
+| `dispatch` | `title` (required), `vesselId`, `missions` (array of {title, description, key, parentKey, branchStrategy, ownedPaths}), `description`, `pipeline` (name) or `pipelineId`, `objectiveId`, `selectedPlaybooks`, `captainAssignments` | Dispatch a voyage with missions -- the primary way to create work. `vesselId` and `missions` are needed to create work; without either, an empty voyage is created. |
 | `voyage_status` | `voyageId` (required), `summary` (default true) | Get voyage status: the voyage with mission counts by status. Missions are not embedded; page them with `enumerate` (`entityType: "missions"`, `voyageId`). |
+| `voyage_tree` | `voyageId` (required) | The voyage's missions as logical missions with their pipeline stages and children (at most 1000 missions) |
 | `cancel_voyage` | `voyageId` (required) | Cancel voyage and all pending missions |
 | `purge_voyage` | `voyageId` (required) | Permanently delete voyage and all missions (cannot be undone) |
 
@@ -298,7 +320,7 @@ Boolean include flags (all default to `false`): `includeDescription` (missions, 
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `mission_status` | `missionId` (required) | Get mission details |
+| `mission_status` | `missionId` (required), `includeWaits` | Get mission details; `includeWaits` adds its 100 most recent wait intervals |
 | `create_mission` | `title` (required), `description` (required), `vesselId` (required), `voyageId`, `persona`, `mode` (Implementation/Audit/Research), `tier` (Economy/Standard/Premium), `selectedPlaybooks` | Create and dispatch a standalone mission |
 | `update_mission` | `missionId` (required), `title`, `description`, `vesselId`, `voyageId`, `priority`, `branchName`, `prUrl`, `parentMissionId`, `persona`, `mode` | Update mission metadata |
 | `cancel_mission` | `missionId` (required) | Cancel a mission (stops its agent first; refused with `Conflict` when the stop is not confirmed) |

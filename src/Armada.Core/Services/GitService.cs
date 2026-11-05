@@ -28,6 +28,13 @@ namespace Armada.Core.Services
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _RepoLocks =
             new System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
 
+        // One fetch at a time per repository, and the Stopwatch timestamp at which the last successful one started. A
+        // caller whose request predates that start skips its own fetch: the refs it would get are no newer.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _FetchLocks =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> _FetchStarted =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+
         private string _Header = "[GitService] ";
         private LoggingModule _Logging;
         private IHostCommandExecutor? _Commands = null;
@@ -249,51 +256,35 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// Fetch latest changes from remote.
+        /// Fetch latest changes from remote. Fetches of one repository run one at a time, and a caller that was waiting
+        /// while a fetch started after its request skips its own, since that fetch already brought the refs up to date.
         /// </summary>
+        /// <param name="repoPath">Repository path.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <exception cref="ArgumentNullException">Thrown when repoPath is null or empty.</exception>
         public async Task FetchAsync(string repoPath, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(repoPath)) throw new ArgumentNullException(nameof(repoPath));
 
-            // Ensure the fetch refspec is configured (bare repos cloned before the fix may lack it)
+            long requested = System.Diagnostics.Stopwatch.GetTimestamp();
+            string key = Path.GetFullPath(repoPath);
+            SemaphoreSlim fetchLock = _FetchLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+            await fetchLock.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                string currentRefspec = await RunGitAsync(repoPath, "config", "--get", "remote.origin.fetch").ConfigureAwait(false);
-                if (String.IsNullOrWhiteSpace(currentRefspec) || !String.Equals(currentRefspec.Trim(), _SafeFetchRefspec, StringComparison.Ordinal))
+                if (_FetchStarted.TryGetValue(key, out long started) && started > requested)
                 {
-                    await EnsureSafeFetchRefspecAsync(repoPath).ConfigureAwait(false);
+                    _Logging.Debug(_Header + "fetch skipped, a fetch that started after this request just finished: " + repoPath);
+                    return;
                 }
-            }
-            catch
-            {
-                // Config key missing entirely — set it
-                await EnsureSafeFetchRefspecAsync(repoPath).ConfigureAwait(false);
-            }
 
-            // Prune stale worktree registrations before fetching to avoid
-            // "refusing to fetch into branch checked out at ..." errors
-            // from worktrees that no longer exist on disk.
-            try
-            {
-                await RunGitAsync(repoPath, "worktree", "prune").ConfigureAwait(false);
+                long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                await FetchCoreAsync(repoPath).ConfigureAwait(false);
+                _FetchStarted[key] = start;
             }
-            catch
+            finally
             {
-                // Best effort — don't let prune failure block fetch
-            }
-
-            _Logging.Debug(_Header + "fetching: " + repoPath);
-            try
-            {
-                await RunGitAsync(repoPath, "fetch", "--all", "--prune").ConfigureAwait(false);
-            }
-            catch (GitCommandException ex)
-            {
-                // Some remote's configured refspec could not be applied (for example a refspec that targets a
-                // branch checked out in a worktree). Fetch origin with an explicit remote-tracking refspec,
-                // which never writes to refs/heads and so cannot be refused for a checked-out branch.
-                _Logging.Warn(_Header + "full fetch failed (exit " + ex.ExitCode + "), fetching origin into remote-tracking refs: " + ex.StandardError.Trim());
-                await RunGitAsync(repoPath, "fetch", "--prune", "origin", _SafeFetchRefspec).ConfigureAwait(false);
+                fetchLock.Release();
             }
         }
 
@@ -1674,6 +1665,50 @@ namespace Armada.Core.Services
         #endregion
 
         #region Private-Methods
+
+        private async Task FetchCoreAsync(string repoPath)
+        {
+            // Ensure the fetch refspec is configured (bare repos cloned before the fix may lack it)
+            try
+            {
+                string currentRefspec = await RunGitAsync(repoPath, "config", "--get", "remote.origin.fetch").ConfigureAwait(false);
+                if (String.IsNullOrWhiteSpace(currentRefspec) || !String.Equals(currentRefspec.Trim(), _SafeFetchRefspec, StringComparison.Ordinal))
+                {
+                    await EnsureSafeFetchRefspecAsync(repoPath).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                // Config key missing entirely — set it
+                await EnsureSafeFetchRefspecAsync(repoPath).ConfigureAwait(false);
+            }
+
+            // Prune stale worktree registrations before fetching to avoid
+            // "refusing to fetch into branch checked out at ..." errors
+            // from worktrees that no longer exist on disk.
+            try
+            {
+                await RunGitAsync(repoPath, "worktree", "prune").ConfigureAwait(false);
+            }
+            catch
+            {
+                // Best effort — don't let prune failure block fetch
+            }
+
+            _Logging.Debug(_Header + "fetching: " + repoPath);
+            try
+            {
+                await RunGitAsync(repoPath, "fetch", "--all", "--prune").ConfigureAwait(false);
+            }
+            catch (GitCommandException ex)
+            {
+                // Some remote's configured refspec could not be applied (for example a refspec that targets a
+                // branch checked out in a worktree). Fetch origin with an explicit remote-tracking refspec,
+                // which never writes to refs/heads and so cannot be refused for a checked-out branch.
+                _Logging.Warn(_Header + "full fetch failed (exit " + ex.ExitCode + "), fetching origin into remote-tracking refs: " + ex.StandardError.Trim());
+                await RunGitAsync(repoPath, "fetch", "--prune", "origin", _SafeFetchRefspec).ConfigureAwait(false);
+            }
+        }
 
         private static List<long> ParseUnixSecondsLines(string output)
         {

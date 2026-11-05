@@ -5,7 +5,7 @@ chain work through multi-stage pipelines, and customize every prompt the system 
 
 ---
 
-For an assessment of how the default prompts support less capable downstream models and tool-limited captains, see [Prompt and Handoff Improvements](../PROMPT_AND_HANDOFF_IMPROVEMENTS.md).
+For an assessment of how the default prompts support less capable downstream models and tool-limited captains, see [Prompt and Handoff Improvements](../archive/PROMPT_AND_HANDOFF_IMPROVEMENTS.md).
 
 ## Ordered captain priorities
 

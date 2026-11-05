@@ -32,6 +32,12 @@ namespace Armada.Core.BlackBox
         public TimeSpan TrackedFilesLifetime { get; set; } = TimeSpan.FromMinutes(5);
 
         /// <summary>
+        /// How long the paths changed on an active mission's branch are reused. Default 30 seconds: a burst of creates on
+        /// one vessel reads each branch once instead of queueing git work behind dock provisioning on every create.
+        /// </summary>
+        public TimeSpan BranchPathsLifetime { get; set; } = TimeSpan.FromSeconds(30);
+
+        /// <summary>
         /// Test hook: supplies a vessel's tracked files instead of git (null result means unknown).
         /// </summary>
         public Func<Vessel, IReadOnlyList<string>?>? TrackedFilesOverride { get; set; } = null;
@@ -46,6 +52,8 @@ namespace Armada.Core.BlackBox
         private readonly VesselGitInspector _Inspector;
         private readonly LoggingModule _Logging;
         private readonly ConcurrentDictionary<string, VesselTrackedFiles> _Tracked = new ConcurrentDictionary<string, VesselTrackedFiles>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, CachedBranchPaths> _BranchPaths = new ConcurrentDictionary<string, CachedBranchPaths>(StringComparer.Ordinal);
+        private const int _MaxCachedBranches = 1024;
 
         #endregion
 
@@ -128,10 +136,20 @@ namespace Armada.Core.BlackBox
                 {
                     foreach (string p in BlackBoxForensics.DiffPaths(mission.DiffSnapshot)) set.Likely.AddFile(p);
                 }
-                else if (!String.IsNullOrEmpty(mission.BranchName) && GitRevisionNames.IsSafeBranchName(mission.BranchName) && lookups < BlackBoxInsightLimits.MaxBranchLookups)
+                else if (!String.IsNullOrEmpty(mission.BranchName) && GitRevisionNames.IsSafeBranchName(mission.BranchName))
                 {
-                    lookups++;
-                    foreach (string p in await BranchPathsAsync(vessel, dock, mission, token).ConfigureAwait(false)) set.Likely.AddFile(p);
+                    string cacheKey = mission.Id + "\n" + mission.BranchName;
+                    if (_BranchPaths.TryGetValue(cacheKey, out CachedBranchPaths? cachedPaths) && DateTime.UtcNow - cachedPaths.ReadUtc < BranchPathsLifetime)
+                    {
+                        foreach (string p in cachedPaths.Paths) set.Likely.AddFile(p);
+                    }
+                    else if (lookups < BlackBoxInsightLimits.MaxBranchLookups)
+                    {
+                        lookups++;
+                        List<string> branchPaths = await BranchPathsAsync(vessel, dock, mission, token).ConfigureAwait(false);
+                        CacheBranchPaths(cacheKey, branchPaths);
+                        foreach (string p in branchPaths) set.Likely.AddFile(p);
+                    }
                 }
                 context.ActiveMissions.Add(set);
             }
@@ -364,6 +382,20 @@ namespace Armada.Core.BlackBox
             }
             if (missions.Count > BlackBoxInsightLimits.MaxActiveMissions) context.ActiveMissionsTruncated = true;
             return missions.OrderByDescending(m => m.CreatedUtc).ThenByDescending(m => m.Id, StringComparer.Ordinal).Take(BlackBoxInsightLimits.MaxActiveMissions).ToList();
+        }
+
+        private void CacheBranchPaths(string key, List<string> paths)
+        {
+            if (_BranchPaths.Count >= _MaxCachedBranches)
+            {
+                DateTime cutoff = DateTime.UtcNow - BranchPathsLifetime;
+                foreach (KeyValuePair<string, CachedBranchPaths> entry in _BranchPaths)
+                {
+                    if (entry.Value.ReadUtc < cutoff) _BranchPaths.TryRemove(entry.Key, out _);
+                }
+                if (_BranchPaths.Count >= _MaxCachedBranches) _BranchPaths.Clear();
+            }
+            _BranchPaths[key] = new CachedBranchPaths { Paths = paths, ReadUtc = DateTime.UtcNow };
         }
 
         private async Task<List<string>> BranchPathsAsync(Vessel vessel, Dock? dock, Mission mission, CancellationToken token)

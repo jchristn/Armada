@@ -221,7 +221,7 @@ Armada and not only the model. The tasks below are the template each code pack i
 | Write tests for an untested method, including negative paths | Test Engineer | Tests plus mutation check |
 | Review a diff with three seeded defects (negative control) | Judge | Findings matched against the seeded set; false positives count |
 | Review a correct diff (positive control) | Judge | A PASS with no invented blocking findings |
-| Turn a feature request into an `armada-plan` | Architect | Schema check, then the evaluator grades it |
+| Turn a feature request into an `armada-plan` (contract v4: `parent` links, `ownedPaths`) | Architect | Schema check with the dispatch parser (a v4 plan whose parallel missions own the same paths fails), then the evaluator grades it |
 | Lint a diff with seeded style violations | Linter | Matched against the seeded set |
 | Summarize a voyage | Recorder | Evaluator grades it |
 

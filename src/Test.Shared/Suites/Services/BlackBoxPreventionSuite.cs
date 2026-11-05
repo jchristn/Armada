@@ -2,6 +2,8 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
+    using System.IO;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -110,6 +112,46 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, excluded.WarningCount, "the excluded mission is not compared");
                 MissionOverlapPreview quiet = await bb.Insights.Service.PreviewOverlapAsync(BlackBoxTestKit.Admin(), vessel.Id, new MissionOverlapPreviewRequest { Description = "Touch only lib/other.cs" }).ConfigureAwait(false);
                 AssertEqual(0, quiet.WarningCount, "no overlap");
+            }));
+
+            cases.Add(Case("branch_paths_are_reused_within_their_lifetime", "An active mission's branch paths are read from git once and reused within BranchPathsLifetime, then read again", TestTags.Positive, async () =>
+            {
+                using TestDatabase t = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                using BlackBoxRuntime bb = BlackBoxTestKit.Runtime(t.Driver);
+                bb.Insights.Analyzer.TrackedFilesOverride = v => new List<string> { "README.md" };
+                string repo = TestGitRepoHelper.CreateWorkingRepoCopy();
+                try
+                {
+                    string defaultBranch = (await GitAsync(repo, "rev-parse", "--abbrev-ref", "HEAD").ConfigureAwait(false)).Trim();
+                    await GitAsync(repo, "checkout", "-b", "armada/cache").ConfigureAwait(false);
+                    Directory.CreateDirectory(Path.Combine(repo, "src"));
+                    await File.WriteAllTextAsync(Path.Combine(repo, "src", "cached.cs"), "class Cached { }\n").ConfigureAwait(false);
+                    await GitAsync(repo, "add", "-A").ConfigureAwait(false);
+                    await GitAsync(repo, "commit", "-m", "Branch change").ConfigureAwait(false);
+                    await GitAsync(repo, "checkout", defaultBranch).ConfigureAwait(false);
+
+                    Vessel vessel = new Vessel("bb-cache-" + Suffix(), "https://example.invalid/cache.git") { LocalPath = repo, DefaultBranch = defaultBranch };
+                    vessel = await t.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                    Mission active = await ActiveMissionAsync(t.Driver, vessel, "Branch work", "Work on the branch", MissionStatusEnum.InProgress, -5).ConfigureAwait(false);
+                    active.BranchName = "armada/cache";
+                    await t.Driver.Missions.UpdateAsync(active).ConfigureAwait(false);
+
+                    VesselOverlapContext first = await bb.Insights.Analyzer.LoadAsync(vessel, null).ConfigureAwait(false);
+                    AssertTrue(first.ActiveMissions.Single().Likely.Files.Contains("src/cached.cs"), "the branch's changed path is read from git");
+
+                    await GitAsync(repo, "branch", "-D", "armada/cache").ConfigureAwait(false);
+                    VesselOverlapContext cached = await bb.Insights.Analyzer.LoadAsync(vessel, null).ConfigureAwait(false);
+                    AssertTrue(cached.ActiveMissions.Single().Likely.Files.Contains("src/cached.cs"), "within the lifetime the cached paths are reused without git");
+
+                    bb.Insights.Analyzer.BranchPathsLifetime = TimeSpan.Zero;
+                    VesselOverlapContext expired = await bb.Insights.Analyzer.LoadAsync(vessel, null).ConfigureAwait(false);
+                    AssertFalse(expired.ActiveMissions.Single().Likely.Files.Contains("src/cached.cs"), "after the lifetime the branch is read again (now gone)");
+                }
+                finally
+                {
+                    try { Directory.Delete(repo, true); }
+                    catch { }
+                }
             }));
 
             cases.Add(Case("preview_refusals", "Preview refuses an empty request, an unknown or foreign vessel, and an unauthenticated caller", TestTags.Negative, async () =>
@@ -316,6 +358,19 @@ namespace Test.Shared.Suites.Services
             Mission m = new Mission(title, description);
             m.VesselId = vessel.Id;
             return m;
+        }
+
+        private static async Task<string> GitAsync(string workingDirectory, params string[] args)
+        {
+            ProcessStartInfo startInfo = new ProcessStartInfo { FileName = "git", WorkingDirectory = workingDirectory, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+            foreach (string arg in args) startInfo.ArgumentList.Add(arg);
+            using Process process = new Process { StartInfo = startInfo };
+            process.Start();
+            string stdout = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
+            string stderr = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
+            await process.WaitForExitAsync().ConfigureAwait(false);
+            if (process.ExitCode != 0) throw new InvalidOperationException("git " + String.Join(" ", args) + " failed (exit " + process.ExitCode + "): " + stderr.Trim());
+            return stdout;
         }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, string tag, Func<Task> body)

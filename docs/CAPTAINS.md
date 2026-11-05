@@ -1,8 +1,12 @@
 # Captain Support Matrix
 
-## v1.3.0 development: captain capacity
+## Captain capacity
 
-Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The legacy singular mission/dock fields remain until migration 121; use active mission IDs to find each mission’s dock and process. See [testing](CONCURRENCY_TESTING.md).
+Since v1.3.0 a captain runs up to `MaxConcurrency` (JSON `maxConcurrency`) missions at once, one per slot. Create and update clamp it to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). The default depends on the runtime: 4 for ApiEndpoint and Mux and 1 for every other runtime (the CLI runtimes and Custom), unless the server's `Concurrency.DefaultCliCaptainMaxConcurrency` or `DefaultEndpointCaptainMaxConcurrency` say otherwise. Updates that omit it keep the current value, and changing the runtime alone does not rewrite it. Lowering it does not stop running work; the captain takes no new mission until it is below the new limit.
+
+REST, MCP and WebSocket return the server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace them. The singular `CurrentMissionId` and `CurrentDockId` fields were removed: use `ActiveMissionIds`, and each mission's own `DockId` and `ProcessId`.
+
+A captain takes a new mission only when it is active, has a free slot, holds no exclusive session, and is `Idle` or `Working`. Planning, Refining and Analyzing are exclusive: they start only on a captain with no active missions, and the captain takes no missions while in them. A `Stopping` or `Quarantined` captain takes no new missions; missions already running on it continue. A stalled mission is handled on its own, and the captain becomes `Stalled` (and takes nothing new) only when all of its active missions are stalled. Routing prefers the eligible captain with the fewest active missions (see [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md#busy-classes-and-exhausted-hierarchies)). For how slots combine with vessel, endpoint, runtime and global limits, see [SCHEDULING.md](SCHEDULING.md#capacity). See also [testing](CONCURRENCY_TESTING.md).
 
 A captain is whatever actually does the work on a mission: a coding-agent CLI that Armada launches as a child
 process, or an in-process loop that talks to an inference endpoint directly. Armada ships eight runtimes. They are not

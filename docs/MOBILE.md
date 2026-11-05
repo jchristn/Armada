@@ -39,6 +39,19 @@ the top proposed change filled in (nothing is sent until you press Send), and **
 a mission brief. Outside handoff and landing the section is one line saying why no Armada change is suggested. See
 "Resilience bias" in [BLACKBOX.md](BLACKBOX.md).
 
+Concurrency and mission hierarchy (v1.3.0) appear on the detail screens. A voyage with parent links or pipeline
+stages has a **Mission Tree** section: one row per logical mission, indented under its parent, with its pipeline
+stages and a continues parent, forks from parent or integration marker on the caption line, and the running count
+against the vessel's per-voyage limit; rows open the mission and the section refreshes on mission and voyage events.
+A mission has a **Wait Time** section (the summary line, the slot wait, and the last 5 waits with readable reasons)
+and a **Children (N)** section listing its child missions with branch markers (the first 50). A vessel has a
+**Concurrency** section: voyage slots in use against the limit (a **Full** badge when full), running missions, slot
+wait over 24 hours and 7 days, and up to 10 waiting missions. The vessel form has **Parallel voyages** and **Parallel
+missions per voyage** (0 means unlimited), and the captain form has **Maximum concurrent missions**. The setup
+wizard's captain step asks **How many missions should run at once?**: a CLI runtime creates that many single-slot
+captains and a Mux runtime creates one captain with that many slots (the button reads **Create N
+Captains**). See [SCHEDULING.md](SCHEDULING.md#capacity).
+
 On a tablet (768 dp and wider) the tabs become the dashboard's sidebar and lists open their detail side by side.
 Links work both ways: `armada://` links and pasted dashboard URLs (`https://admiral.example.com/dashboard/missions/msn_...`)
 open the same screen in the app, and every screen can open its page on the web dashboard.

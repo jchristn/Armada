@@ -16,9 +16,9 @@ Mission metadata adds `RescueOfMissionId`, `BranchStrategy`, `BaseBranchName`, `
 This is an owner-approved compatibility exception for v1.3.0; see [compatibility](COMPATIBILITY.md#v130-concurrency-exception) and [upgrade guidance](UPGRADING.md#v120-to-v130-development). Back up before upgrading and restore that backup before running an older release.
 
 
-## v1.3.0 development: parallelization and concurrency
+## v1.3.0: parallelization and concurrency
 
-Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The singular mission/dock fields are removed by migration 121; use active mission IDs to find each mission’s dock and process. Admission serializes vessel checks separately from shared capacity claims, with bounded lock waits. A lock timeout leaves the mission Pending for retry; no new endpoint or request field is needed. Equivalent captains with fewer occupied slots are preferred after explicit/persona/tier routing. See [testing](CONCURRENCY_TESTING.md).
+Captain create/update accepts `MaxConcurrency` (JSON `maxConcurrency`), clamped to 1..`Concurrency.MaxCaptainConcurrency` (hard ceiling 256). Creation defaults to 1 for CLI runtimes and 4 for ApiEndpoint/Mux, or configured server defaults. Updates that omit it preserve the current value. Lowering it does not stop running work. REST, MCP and WebSocket return server-owned `ActiveMissionCount`, `ActiveMissionIds` and `CurrentSessionId`; client writes cannot replace these ownership fields. Planning/refinement/analysis are exclusive, and a quarantined captain accepts no new missions while existing work continues. The singular `CurrentMissionId` and `CurrentDockId` fields were removed in migration 121; use active mission IDs to find each mission’s dock and process. Admission serializes vessel checks separately from shared capacity claims, with bounded lock waits. A lock timeout leaves the mission Pending for retry; no new endpoint or request field is needed. Equivalent captains with fewer occupied slots are preferred after explicit/persona/tier routing. See [testing](CONCURRENCY_TESTING.md).
 
 **Version:** 1.3.0
 **Base URL:** `http://localhost:7890`
@@ -1299,7 +1299,7 @@ Each result has a `Status` of `Pass`, `Warn`, or `Fail`. Stalled-captain and fai
 
 Returns current server settings including ports, agent configuration, system paths, and remote-control tunnel configuration. `LandingMode` is the global (default) landing mode, `MergeAndPush` unless changed (see [MERGING.md](MERGING.md#landing-mode)). `RemoteControl.Password` is always returned as `********`, and `RemoteControl.EnrollmentToken` is returned as `********` when set.
 
-**v1.3.0 development:** the new `Concurrency` group is currently settings-file configuration only. It is not part of this response or the editable `PUT /api/v1/settings` body yet. Its defaults and captain ceiling apply to creation/admission; vessel and captain gates are active. Hierarchy settings prepare a later milestone. See [implementation progress](../CONCURRENCY_IMPROVEMENTS.md#implementation-progress-v130).
+The `Concurrency` group and `ConcurrencyRevision` are part of this response and editable through `PUT /api/v1/settings`; see [v1.3.0 mission tree, waits and concurrency](#v130-mission-tree-waits-and-concurrency).
 
 **Permission:** AdminOnly
 
@@ -12839,7 +12839,7 @@ await client.UpdatePersonaAsync(persona.Name, persona);
 
 ### Persona prompt improvements
 
-The default persona guidance and additive replication procedure are documented in [Prompt and Handoff Improvements](../PROMPT_AND_HANDOFF_IMPROVEMENTS.md). Live prompt-template edits apply when future mission instructions are generated; they do not rewrite in-flight briefs. No request fields, output signals, plan schema, or endpoints change. Embedded defaults in upgraded builds include the guidance; startup upgrades only recognized untouched previous defaults and retains operator-edited templates.
+The default persona guidance and additive replication procedure are documented in [Prompt and Handoff Improvements](../archive/PROMPT_AND_HANDOFF_IMPROVEMENTS.md). Live prompt-template edits apply when future mission instructions are generated; they do not rewrite in-flight briefs. No request fields, output signals, plan schema, or endpoints change. Embedded defaults in upgraded builds include the guidance; startup upgrades only recognized untouched previous defaults and retains operator-edited templates.
 
 ### POST /api/v1/activity/synthetic
 

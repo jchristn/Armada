@@ -390,6 +390,44 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("fetch_async_concurrent_callers_share_a_fetch_and_later_fetches_stay_fresh", "FetchAsync ConcurrentCallers ShareAFetch AndLaterFetchesStayFresh", TestTags.Positive, async () =>
+            {
+                GitService service = CreateService();
+                string rootDir = TestTemp.NewDirectory("gitservice");
+                string sourceDir = TestGitRepoHelper.CreateWorkingRepoCopy();
+                string bareDir = Path.Combine(rootDir, "bare.git");
+
+                try
+                {
+                    await service.CloneBareAsync(sourceDir, bareDir).ConfigureAwait(false);
+                    await File.WriteAllTextAsync(Path.Combine(sourceDir, "README.md"), "hello\nfirst change\n").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "commit", "-am", "First change").ConfigureAwait(false);
+                    string first = (await RunGitAsync(sourceDir, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();
+
+                    List<Task> fetches = new List<Task>();
+                    for (int i = 0; i < 8; i++) fetches.Add(service.FetchAsync(bareDir));
+                    await Task.WhenAll(fetches).ConfigureAwait(false);
+                    string tracked = (await RunGitAsync(bareDir, "rev-parse", "refs/remotes/origin/main").ConfigureAwait(false)).Trim();
+                    AssertEqual(first, tracked, "Every concurrent caller should finish with the remote's latest commit");
+
+                    await File.WriteAllTextAsync(Path.Combine(sourceDir, "README.md"), "hello\nsecond change\n").ConfigureAwait(false);
+                    await RunGitAsync(sourceDir, "commit", "-am", "Second change").ConfigureAwait(false);
+                    string second = (await RunGitAsync(sourceDir, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();
+
+                    await service.FetchAsync(bareDir).ConfigureAwait(false);
+                    tracked = (await RunGitAsync(bareDir, "rev-parse", "refs/remotes/origin/main").ConfigureAwait(false)).Trim();
+                    AssertEqual(second, tracked, "A fetch requested after the previous one finished must run, not reuse it");
+                }
+                finally
+                {
+                    if (Directory.Exists(rootDir))
+                    {
+                        try { Directory.Delete(rootDir, true); }
+                        catch { }
+                    }
+                }
+            }));
+
             cases.Add(CaseAsync("diff_async_no_merge_base_falls_back_to_two_dot_diff", "DiffAsync NoMergeBase FallsBackToTwoDotDiff", TestTags.Positive, async () =>
             {
                 GitService service = CreateService();

@@ -85,7 +85,7 @@ time you sign in to an empty Armada (and later from Dashboard, Setup Wizard).
    one. Leave Landing Mode on None if you would rather review the branch yourself; the mission then stops at
    WorkProduced with its branch kept for you. Select Register Vessel.
 5. **Captain:** the runtime defaults to Claude Code. Pick another runtime if that is the CLI you have installed and
-   signed in, then select Create Captain.
+   signed in. Leave "How many missions should run at once?" at 1 for this first mission, then select Create Captain.
 6. **Dispatch:** the default mission only inspects the repository. For a first landed change, replace it with
    something small, for example "Append the line 'Armada was here.' to README.md and commit the change." Select
    Dispatch Mission.
@@ -238,6 +238,8 @@ Now three agents work simultaneously on non-overlapping parts of the codebase:
 > 3. "Test suite. Create tests/test_books.py with pytest tests using FastAPI TestClient. Test: create a book, get it by ID, list all books, update a book, delete a book, get a missing book returns 404. Create tests/test_search.py testing search by title, search by author, and empty results. Import the app from src/main.py."
 
 Three captains spin up in isolated worktrees, each working on their own files.
+
+Each running mission takes one captain slot. A CLI captain such as Claude Code has one slot, so three parallel missions need three CLI captains; with fewer, the rest wait as Pending until a slot frees. An `ApiEndpoint` or `Mux` captain has four slots by default and can run several missions at once. The vessel's per-voyage limit (`MaxParallelMissionsPerVoyage`, default 4) also applies. See [SCHEDULING.md](docs/SCHEDULING.md#capacity).
 
 ## Monitor progress
 

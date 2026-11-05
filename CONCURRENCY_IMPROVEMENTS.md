@@ -92,6 +92,8 @@ Captain usage management and the mobile applications shipped in v1.2.0. This pla
   - UX pass: every row is at least the minimum touch height, uses the house hairline separators and status badges, and its accessibility label reads everything it shows (the test audit caught two rows that did not and they were fixed). A device capture waits for the Mobile e2e run and the owner's device review.
   - Tests: `concurrencySections` (4) and a wizard case; the phone deep-link test now allows only the parent-filtered Children query. All Mobile tests pass (1414).
 - [ ] M11: final integration, release documentation, migration/upgrade validation, and the complete concurrency stress matrix.
+  - [x] Reference docs (2026-11-05): MESSAGE_TEMPLATES (the four placeholders), MODEL_GUIDANCE, MODEL_HETEROGENEITY and TESTING_PIPELINES (plan v4, hierarchy, slot troubleshooting), every INSTRUCTIONS_FOR_* and *_AS_ORCHESTRATOR guide ("Dispatching a Mission Tree" with Key/ParentKey, owned paths, `voyage_tree` and `vessel_concurrency`), TUI and MOBILE (the new screens), PERSONAS (4.2 and 5.2), CAPTAINS and CAPTAIN_ROUTING (slots, defaults, which states take work, the fewest-active tie-break the code applies), FAST_TRACK_SETUP and GETTING_STARTED (slots and captains), REST/MCP/WEBSOCKET development banners rewritten as release text, and the broken PROMPT_AND_HANDOFF_IMPROVEMENTS links pointed at archive/.
+  - [ ] SCHEDULING (Capacity, gate order, deadlock and starvation), PIPELINES (hierarchy, contract v4), UPGRADING, CHANGELOG, DEPRECATION, README, decisions and .okf terms.
 
 Migration 117 preserves existing vessel admission behavior. Migration 118 changes existing ApiEndpoint/Mux captains to concurrency 4 and CLI captains to 1; set endpoint-backed captains to 1 to retain serial operation. The existing global `MaxConcurrentMissions` settings-file guard now clamps negative input to 1 (not unlimited) and values above 10000 to 10000.
 
@@ -141,7 +143,8 @@ remaining integration work lands with M3 to M11 here:
 - [x] M6: the editable `Concurrency` settings group follows the `UsageSelection` group's revision and partial-update rules; regenerate the API surface.
 - [x] M7: persona and model requirements from architect plans go through selection routing (verified: the Worker envelope filters captains before usage ranking; `enforce_honors_architect_slice_requirements`).
 - [x] M8 to M10: tree, wait and concurrency views show selection waits and "Automatic retry" like the selection card.
-- [ ] M11: one combined CHANGELOG/UPGRADING story; skip a recent duplicate fetch and move the dispatch advisor's overlap analysis off the create path.
+- [ ] M11: one combined CHANGELOG/UPGRADING story.
+- [x] M11 create-path git work (2026-11-05): `GitService.FetchAsync` runs one fetch at a time per repository, and a caller that waited while a fetch started after its request skips its own (refs are never older than a fetch of its own would give; a later request always fetches). The dispatch advisor's overlap analysis reuses each active mission's branch paths for `BranchPathsLifetime` (30 s), so a burst of creates on one vessel reads each branch once instead of queueing merge-base and commit-range calls behind dock provisioning on every create; tracked files were already cached for 5 minutes. The analysis stays on the create path because `SerializeOverlappingMissions` may set the dependency before the mission is saved and the create response carries its warnings; a branch commit made within the last 30 s can be missing from an overlap warning, which is advisory. Tests: `fetch_async_concurrent_callers_share_a_fetch_and_later_fetches_stay_fresh`, `branch_paths_are_reused_within_their_lifetime`.
 
 ### Related v1.3.0 usage-selection work
 
