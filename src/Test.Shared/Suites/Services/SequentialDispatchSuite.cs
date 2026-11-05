@@ -84,6 +84,33 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(busy[0].Id, (await db.Missions.ReadAsync(work.Missions[2].Id))!.CaptainId);
             }));
 
+            cases.Add(CaseAsync("background_launch_returns_after_admission", "A background launch returns once the mission is Assigned; a launch failure rolls back to Pending", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = fixture.Driver;
+                ServiceSet services = CreateServices(CreateLogging(), db, CreateSettings(), new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 1, missionCount: 2);
+                TaskCompletionSource<int> release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+                services.Captains.OnLaunchAgent = (_, _, _) => release.Task;
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[0], work.Vessel, true), "admitted");
+                Mission admitted = (await db.Missions.ReadAsync(work.Missions[0].Id))!;
+                AssertEqual(MissionStatusEnum.Assigned, admitted.Status, "returned before the launch finished");
+                AssertEqual(work.Captains[0].Id, admitted.CaptainId);
+                AssertFalse(await services.Missions.TryAssignAsync(work.Missions[0], work.Vessel, true), "an in-flight launch is not admitted twice");
+                release.SetResult(4242);
+                for (int i = 0; i < 100 && (await db.Missions.ReadAsync(admitted.Id))!.Status != MissionStatusEnum.InProgress; i++) await Task.Delay(20);
+                Mission launched = (await db.Missions.ReadAsync(admitted.Id))!;
+                AssertEqual(MissionStatusEnum.InProgress, launched.Status); AssertEqual(4242, launched.ProcessId);
+
+                launched.Status = MissionStatusEnum.Complete; launched.ProcessId = null; await db.Missions.UpdateAsync(launched);
+                AssertTrue(await db.Captains.TryReleaseFromMissionAsync(work.Captains[0].Id, launched.Id));
+                services.Captains.OnLaunchAgent = (_, _, _) => throw new InvalidOperationException("launch failed");
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[1], work.Vessel, true), "admitted before the failing launch");
+                for (int i = 0; i < 100 && (await db.Missions.ReadAsync(work.Missions[1].Id))!.Status != MissionStatusEnum.Pending; i++) await Task.Delay(20);
+                AssertEqual(MissionStatusEnum.Pending, (await db.Missions.ReadAsync(work.Missions[1].Id))!.Status, "a failed background launch rolls back");
+                AssertEqual(0, (await db.Captains.ReadAsync(work.Captains[0].Id))!.ActiveMissionCount, "and releases the captain");
+            }));
+
             cases.Add(CaseAsync("two_hundred_missions_mixed_limits", "200 missions across five vessels and ten captains make progress without exceeding mixed limits", TestTags.Positive, async () =>
             {
                 using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();

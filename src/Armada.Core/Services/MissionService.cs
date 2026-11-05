@@ -391,7 +391,11 @@ namespace Armada.Core.Services
         }
 
         /// <inheritdoc />
-        public async Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default)
+        public Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default)
+            => TryAssignAsync(mission, vessel, false, token);
+
+        /// <inheritdoc />
+        public async Task<bool> TryAssignAsync(Mission mission, Vessel vessel, bool launchInBackground, CancellationToken token = default)
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
@@ -404,6 +408,7 @@ namespace Armada.Core.Services
 
             IDisposable? vesselAdmission = null;
             bool capacityHeld = false;
+            bool launchDeferred = false;
             try
             {
                 TimeSpan admissionTimeout = TimeSpan.FromSeconds(_Settings.Concurrency.AdmissionLockTimeoutSeconds);
@@ -686,6 +691,25 @@ namespace Armada.Core.Services
             vesselAdmission.Dispose();
             vesselAdmission = null;
 
+            if (launchInBackground)
+            {
+                // The mission is saved and admitted: it is Assigned and its captain slot is claimed. Dock provisioning and
+                // launch are serialized per repository, so a create request returns now instead of queueing behind other
+                // missions' git work. A failure still rolls back to Pending and the next dispatch cycle retries.
+                launchDeferred = true;
+                string deferredMissionId = mission.Id;
+                _ = Task.Run(async () =>
+                {
+                    try { await ProvisionAndLaunchAsync(CancellationToken.None).ConfigureAwait(false); }
+                    catch (Exception ex) { _Logging.Warn(_Header + "background launch of mission " + deferredMissionId + " failed: " + ex.Message); }
+                    finally { _InFlightAssignments.TryRemove(deferredMissionId, out _); }
+                });
+                return true;
+            }
+            return await ProvisionAndLaunchAsync(token).ConfigureAwait(false);
+
+            async Task<bool> ProvisionAndLaunchAsync(CancellationToken token)
+            {
             captain.State = CaptainStateEnum.Working;
             captain = captain.ForMission(mission);
             captain.LastHeartbeatUtc = DateTime.UtcNow;
@@ -899,11 +923,12 @@ namespace Armada.Core.Services
             _Logging.Info(_Header + "assigned mission " + mission.Id + " to captain " + captain.Id + " at " + dock.WorktreePath);
             return true;
             }
+            }
             finally
             {
                 if (capacityHeld) _CapacityLock.Release();
                 vesselAdmission?.Dispose();
-                _InFlightAssignments.TryRemove(mission.Id, out _);
+                if (!launchDeferred) _InFlightAssignments.TryRemove(mission.Id, out _);
             }
         }
 

@@ -332,6 +332,8 @@ namespace Armada.Server
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);
             AdmiralService admiralService = new AdmiralService(_Logging, _Database, _Settings, captainService, missionService, voyageService, dockService, escalationService);
+            // Create requests return once the mission is admitted; dock provisioning and launch continue in the background.
+            admiralService.LaunchCreatedMissionsInBackground = true;
             _Admiral = admiralService;
             _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
             _JobService = new Armada.Core.Services.JobService(_Database, _Logging);

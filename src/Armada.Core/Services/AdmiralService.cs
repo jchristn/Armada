@@ -62,6 +62,13 @@ namespace Armada.Core.Services
         /// <inheritdoc />
         public Func<Voyage, Task>? OnVoyageComplete { get; set; }
 
+        /// <summary>
+        /// When true, <see cref="DispatchMissionAsync"/> returns once a created mission is admitted (Assigned) and its dock
+        /// is provisioned and its agent launched in the background, so API callers do not wait on per-repository git work.
+        /// Off by default; the Admiral server turns it on.
+        /// </summary>
+        public bool LaunchCreatedMissionsInBackground { get; set; }
+
         /// <inheritdoc />
         public Func<Mission, Task<bool>>? OnReconcilePullRequest { get; set; }
 
@@ -531,7 +538,7 @@ namespace Armada.Core.Services
                 Vessel? vessel = dispatchVessel;
                 if (vessel != null)
                 {
-                    bool assigned = await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
+                    bool assigned = await _Missions.TryAssignAsync(mission, vessel, LaunchCreatedMissionsInBackground, token).ConfigureAwait(false);
 
                     // Re-read mission from database to get updated status
                     Mission? refreshed = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);

@@ -48,6 +48,18 @@ namespace Armada.Core.Services.Interfaces
         /// <param name="token">Cancellation token.</param>
         Task<bool> TryAssignAsync(Mission mission, Vessel vessel, CancellationToken token = default);
 
+        /// <summary>
+        /// Try to assign a mission to an available captain. With <paramref name="launchInBackground"/>, returns once the
+        /// mission is admitted (Assigned, captain slot claimed) and provisions the dock and launches the agent in the
+        /// background; a failure there rolls the mission back to Pending for the next dispatch cycle.
+        /// </summary>
+        /// <param name="mission">Mission to assign.</param>
+        /// <param name="vessel">Target vessel.</param>
+        /// <param name="launchInBackground">Return after admission instead of after launch.</param>
+        /// <param name="token">Cancellation token for admission; the background launch is not cancelled by it.</param>
+        /// <returns>True when the mission was admitted (and, without background launch, launched).</returns>
+        Task<bool> TryAssignAsync(Mission mission, Vessel vessel, bool launchInBackground, CancellationToken token = default);
+
         /// <summary>Read-only authorized-mission preview of configurable captain selection; no claims, probes or history writes.</summary>
         Task<CaptainSelectionPreview> PreviewCaptainSelectionAsync(Mission mission, int pageNumber = 1, int pageSize = 25, CancellationToken token = default);
 

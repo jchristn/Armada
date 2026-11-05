@@ -45,7 +45,16 @@ namespace Test.Shared.Suites.E2E
                             string body = await response.Content.ReadAsStringAsync(ct);
                             Mission mission = JsonHelper.Deserialize<MissionCreateResponse>(body).Mission ?? JsonHelper.Deserialize<Mission>(body);
                             missionIds.Add(mission.Id);
-                            missions.Add(await Get<Mission>(client, "/api/v1/missions/" + mission.Id));
+                            AssertTrue(mission.Status == MissionStatusEnum.Assigned || mission.Status == MissionStatusEnum.InProgress || mission.Status == MissionStatusEnum.Pending,
+                                "create returns once the mission is admitted: " + mission.Status);
+                        }
+                        // Create returns after admission; dock provisioning and launch finish in the background.
+                        for (int attempt = 0; attempt < 100; attempt++)
+                        {
+                            missions.Clear();
+                            foreach (string id in missionIds) missions.Add(await Get<Mission>(client, "/api/v1/missions/" + id));
+                            if (missions.Count(m => m.Status == MissionStatusEnum.InProgress) == 3) break;
+                            await Task.Delay(100, ct);
                         }
                         AssertEqual(3, missions.Count(m => m.Status == MissionStatusEnum.InProgress));
                         AssertEqual(1, missions.Count(m => m.Status == MissionStatusEnum.Pending));
