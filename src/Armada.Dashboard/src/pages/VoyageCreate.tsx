@@ -13,7 +13,7 @@ import { useNotifications } from '../context/NotificationContext';
 import PlaybookSelector from '../components/shared/PlaybookSelector';
 import { sortByName } from '../lib/sortByName';
 import { findLandingMode, getVoyageLandingModes } from '../lib/vesselForm';
-import { buildVoyageCreateRequest, newVoyageMissionRow, validateVoyageForm, type VoyageMissionRow } from '../lib/voyageForm';
+import { buildVoyageCreateRequest, newVoyageMissionRow, removeVoyageMissionRow, validateVoyageForm, type VoyageMissionRow } from '../lib/voyageForm';
 
 export default function VoyageCreate() {
   const { t } = useLocale();
@@ -48,8 +48,11 @@ export default function VoyageCreate() {
   }
 
   function removeMission(index: number) {
-    setMissions(m => m.filter((_, i) => i !== index));
+    setMissions(m => removeVoyageMissionRow(m, index));
   }
+
+  // A child's row shows which mission it builds on, by number and title.
+  const rowLabel = (row: VoyageMissionRow, index: number) => t('Mission {{index}}', { index: index + 1 }) + (row.title.trim() ? ': ' + row.title.trim() : '');
 
   function updateMission(index: number, field: keyof VoyageMissionRow, value: string | number) {
     setMissions(m => m.map((row, i) => i === index ? { ...row, [field]: value } : row));
@@ -173,6 +176,34 @@ export default function VoyageCreate() {
                 <textarea value={m.description} onChange={e => updateMission(i, 'description', e.target.value)} title={t('Instructions the captain works from: what to change, where, and how to know it is done. Markdown is fine.')}
                   rows={2} placeholder={t('Detailed instructions for the AI captain...')} style={{ marginTop: 2, fontSize: 13 }} />
               </label>
+              <div className="voyage-mission-hierarchy">
+                {i > 0 && (
+                  <label>
+                    <span title={t('Pick an earlier mission when this one needs its code. It starts after that mission finishes and works from its result. Leave blank to run in parallel.')}>{t('Builds on')}</span>
+                    <select value={m.parentKey || ''} onChange={e => { updateMission(i, 'parentKey', e.target.value); if (!e.target.value) updateMission(i, 'branchStrategy', ''); }}
+                      title={t('Pick an earlier mission when this one needs its code. It starts after that mission finishes and works from its result. Leave blank to run in parallel.')}>
+                      <option value="">{t('Nothing (runs in parallel)')}</option>
+                      {missions.slice(0, i).map((row, j) => <option key={row.key || j} value={row.key}>{rowLabel(row, j)}</option>)}
+                    </select>
+                  </label>
+                )}
+                {m.parentKey && (
+                  <label>
+                    <span title={t('Whether this mission continues its parent\'s branch or starts a new branch from it. Default: the first child continues, later ones fork.')}>{t('Branch')}</span>
+                    <select value={m.branchStrategy || ''} onChange={e => updateMission(i, 'branchStrategy', e.target.value)}
+                      title={t('Whether this mission continues its parent\'s branch or starts a new branch from it. Default: the first child continues, later ones fork.')}>
+                      <option value="">{t('Default (first child continues, later ones fork)')}</option>
+                      <option value="ContinueParent">{t('Continue the parent\'s branch')}</option>
+                      <option value="ForkFromParent">{t('Fork from the parent\'s branch')}</option>
+                    </select>
+                  </label>
+                )}
+                <label className="voyage-mission-owned">
+                  <span title={t('Files or directories this mission may change, comma-separated (a trailing / means a directory). Missions that run at the same time should not share files.')}>{t('Owned paths (optional)')}</span>
+                  <input value={m.ownedPaths || ''} onChange={e => updateMission(i, 'ownedPaths', e.target.value)} placeholder={t('src/Billing/, docs/billing.md')}
+                    title={t('Files or directories this mission may change, comma-separated (a trailing / means a directory). Missions that run at the same time should not share files.')} />
+                </label>
+              </div>
               <DispatchPreview compact vesselId={vesselId} title={m.title} description={m.description} enabled={!submitting} />
             </div>
           ))}

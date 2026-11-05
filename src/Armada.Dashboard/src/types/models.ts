@@ -2868,6 +2868,13 @@ export interface DispatchRequest {
   title: string;
   description?: string;
   priority?: number;
+  /** Names this mission so a later one in the same voyage request can build on it. */
+  key?: string;
+  /** Key of an earlier mission in the request that this one builds on. */
+  parentKey?: string;
+  branchStrategy?: 'New' | 'ContinueParent' | 'ForkFromParent';
+  /** Files or directories this mission may change. */
+  ownedPaths?: string[];
 }
 
 export interface PlanningSessionCreateRequest {

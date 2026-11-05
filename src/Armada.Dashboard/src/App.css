@@ -10003,3 +10003,7 @@ a.btn:hover { text-decoration: none; }
 .concurrency-legend li, .concurrency-tooltip span { display: inline-flex; align-items: center; gap: 0.3rem; }
 .concurrency-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .concurrency-tooltip { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.8rem; min-height: 1.4rem; }
+.voyage-mission-hierarchy { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 12px; margin-top: 8px; }
+.voyage-mission-hierarchy label { display: block; }
+.voyage-mission-hierarchy label > span { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.voyage-mission-hierarchy select, .voyage-mission-hierarchy input { margin-top: 2px; font-size: 13px; }
