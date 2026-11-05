@@ -56,6 +56,7 @@ namespace Test.Shared.Suites.E2E
                             Missions = Enumerable.Range(0, 3).Select(i => new { Title = "Task " + i, Description = "Concurrency smoke test; no provider calls" }).ToArray()
                         });
                         voyageIds.Add(first.Id);
+                        await E2eBackgroundLaunch.SettleAsync(client, ct);
                         EnumerationResult<Mission> firstMissions = await Get<EnumerationResult<Mission>>(client, "/api/v1/missions?voyageId=" + first.Id);
                         AssertEqual(2, firstMissions.Objects.Count(m => m.Status == MissionStatusEnum.InProgress), "two actual agent processes run concurrently");
                         Mission waiting = firstMissions.Objects.Single(m => m.Status == MissionStatusEnum.Pending);
@@ -73,6 +74,7 @@ namespace Test.Shared.Suites.E2E
                         using (HttpResponseMessage cancelled = await client.DeleteAsync("/api/v1/missions/" + running.Id, ct))
                             cancelled.EnsureSuccessStatusCode();
                         await fx.Server.Admiral.HealthCheckAsync(ct);
+                        await E2eBackgroundLaunch.SettleAsync(client, ct);
                         waiting = await Get<Mission>(client, "/api/v1/missions/" + waiting.Id);
                         AssertEqual(MissionStatusEnum.InProgress, waiting.Status, "cancelling one running mission frees its slot for the waiting mission");
                         firstMissions = await Get<EnumerationResult<Mission>>(client, "/api/v1/missions?voyageId=" + first.Id);
@@ -93,6 +95,7 @@ namespace Test.Shared.Suites.E2E
                         using HttpResponseMessage updated = await client.PutAsync("/api/v1/vessels/" + vessel.Id, JsonHelper.ToJsonContent(vessel), ct);
                         updated.EnsureSuccessStatusCode();
                         await fx.Server.Admiral.HealthCheckAsync(ct);
+                        await E2eBackgroundLaunch.SettleAsync(client, ct);
                         DateTime deadline = DateTime.UtcNow.AddSeconds(20);
                         do
                         {

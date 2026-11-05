@@ -52,8 +52,21 @@ The black-box admission benchmark (`benchmarks/`, 16 concurrent REST clients, on
 - Each mission runs `git fetch` on the bare repository about three times (provision, completion diff and reclaim) under
   that lock, plus worktree add, prune and remove.
 
-Suggested input for M3 onward, not done in the usage-selection plan: return from create once the mission is saved and
-admitted, and provision and launch in the background (the mission already reports Assigned and its dock); skip a fetch
+Done 2026-11-04 (`c9c019c49`): create returns once the mission is saved and admitted, and the Admiral provisions and
+launches in the background (`AdmiralService.LaunchInBackground`, also used by voyage dispatch and the health-check retry; a failure rolls back to Pending).
+Measured after the change (benchmark, 10 captains, 16 clients): server-side create p50 7.2 s (was 15.6 s), throughput
+unchanged at about 0.7 missions per second. Two findings for M3:
+
+- Throughput is still bound by dock provisioning, one at a time per bare repository (about 1.1 s each). Admitted missions
+  now wait as Assigned, holding their captain slot and usage reservation, for up to about 50 s before their dock is
+  created. The client-side admission time in the benchmark now includes that queue, which creates used to hide.
+- The remaining create time is the dispatch advisor's overlap analysis (`BlackBoxDispatchAdvisor` loads
+  `VesselOverlapContext`), which runs git work on the same repository and queues behind provisioning.
+- Running a long health-check dispatch used to delay usage capture, which ran in the same loop; with every account's
+  evidence stale, Enforce admitted Unknown candidates under `AllowDeprioritized`. Usage capture now has its own loop,
+  and the health check dispatches with background launch too.
+
+Still suggested for M3 onward: skip a fetch
 that ran within the last few seconds for the same repository; and measure whether `git worktree add` on one bare
 repository can run with bounded parallelism instead of one at a time.
 

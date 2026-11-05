@@ -3448,7 +3448,10 @@ Create and dispatch a new mission. If a `VesselId` is provided, the Admiral will
 | `Mode` | string | no | Execution mode: `Implementation` (default), `Audit`, or `Research`. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success rather than a no-op failure. |
 | `SelectedPlaybooks` | array | no | Ordered [SelectedPlaybook](#selectedplaybook) rows for this standalone mission |
 
-**Response:** `201 Created` - [Mission](#mission)
+**Response:** `201 Created` - [Mission](#mission). The response arrives once the mission is admitted: with a vessel it is
+usually `Assigned` while the Admiral provisions the dock and launches the agent in the background; poll the mission (or
+watch `mission.status_changed`) for `InProgress`. A failed launch returns it to `Pending`. A mission no captain can take
+yet stays `Pending` and the response carries an `X-Armada-Warning` header.
 
 ```bash
 curl -X POST http://localhost:7890/api/v1/missions \

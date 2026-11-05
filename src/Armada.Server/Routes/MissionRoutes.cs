@@ -395,7 +395,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Create a mission")
-                .WithDescription("Creates and dispatches a new mission and always returns 201 with the Mission. If a vesselId is provided, the Admiral assigns a captain and sets up a worktree. A mission no captain can take yet stays Pending, is retried automatically and carries an X-Armada-Warning header; GET /api/v1/missions/{id}/captain-selection explains a captain-selection wait.")
+                .WithDescription("Creates and dispatches a new mission and always returns 201 with the Mission. If a vesselId is provided, the Admiral admits it to a captain (status Assigned) and sets up the worktree and launches the agent in the background; poll for InProgress. A mission no captain can take yet stays Pending, is retried automatically and carries an X-Armada-Warning header; GET /api/v1/missions/{id}/captain-selection explains a captain-selection wait.")
                 .WithRequestBody(OpenApiJson.BodyFor<Mission>("Mission data", true))
                 .WithResponse(201, OpenApiJson.For<Mission>("Created mission"))
                 .WithSecurity("ApiKey"));

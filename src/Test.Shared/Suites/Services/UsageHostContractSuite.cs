@@ -493,7 +493,7 @@ namespace Test.Shared.Suites.Services
                 return Task.CompletedTask;
             }));
 
-            cases.Add(CaseAsync("production_server_ticks_the_scheduler_while_capture_is_disabled", "The production health loop ticks the usage scheduler even while capture is disabled, so the switch cancels in-flight work", TestTags.Positive, () =>
+            cases.Add(CaseAsync("production_server_ticks_the_scheduler_while_capture_is_disabled", "The production capture loop ticks the usage scheduler even while capture is disabled, so the switch cancels in-flight work", TestTags.Positive, () =>
             {
                 string source = File.ReadAllText(Path.Combine(DashboardSource.RepoRoot(), "src", "Armada.Server", "ArmadaServer.cs"));
 
@@ -503,13 +503,16 @@ namespace Test.Shared.Suites.Services
                 // the process restarts, and a late answer is only discarded at commit time.
                 AssertEqual(1, CountOccurrences(source, "_UsageCaptureScheduler.TickAsync("), "the scheduler is ticked from exactly one production site");
 
-                int loopStart = source.IndexOf("private async Task HealthCheckLoopAsync", StringComparison.Ordinal);
-                AssertTrue(loopStart >= 0, "the health check loop exists");
+                // Capture has its own loop so a long health-check dispatch cannot leave usage evidence stale.
+                AssertTrue(source.Contains("_UsageCaptureTask = UsageCaptureLoopAsync(_TokenSource.Token);", StringComparison.Ordinal), "the capture loop starts with the server");
+                int loopStart = source.IndexOf("private async Task UsageCaptureLoopAsync", StringComparison.Ordinal);
+                AssertTrue(loopStart >= 0, "the usage capture loop exists");
                 string loop = source.Substring(loopStart);
                 int tick = loop.IndexOf("_UsageCaptureScheduler.TickAsync(", StringComparison.Ordinal);
-                AssertTrue(tick > 0, "the health check loop ticks the usage capture scheduler");
+                AssertTrue(tick > 0, "the usage capture loop ticks the usage capture scheduler");
+                AssertTrue(tick < loop.IndexOf("private async Task HealthCheckLoopAsync", StringComparison.Ordinal), "the tick is inside the capture loop");
 
-                AssertTrue(source.Contains("await _UsageCaptureScheduler.TickAsync(token).ConfigureAwait(false);", StringComparison.Ordinal), "the tick is awaited on the health loop's token");
+                AssertTrue(source.Contains("await _UsageCaptureScheduler.TickAsync(token).ConfigureAwait(false);", StringComparison.Ordinal), "the tick is awaited on the loop's token");
 
                 // The statement's own guard scope: nothing between the tick's try block and the call may
                 // consult the capture switch.

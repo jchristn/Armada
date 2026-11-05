@@ -240,6 +240,7 @@ namespace Armada.Server
 
         private CancellationTokenSource _TokenSource = new CancellationTokenSource();
         private Task _HealthCheckTask = null!;
+        private Task _UsageCaptureTask = Task.CompletedTask;
         private Task? _McpListenTask = null;
         private int _HealthCheckCycles = 0;
         private DateTime _StartUtc = DateTime.UtcNow;
@@ -332,8 +333,9 @@ namespace Armada.Server
             IVoyageService voyageService = new VoyageService(_Logging, _Database);
             IEscalationService escalationService = new EscalationService(_Logging, _Database, _Settings);
             AdmiralService admiralService = new AdmiralService(_Logging, _Database, _Settings, captainService, missionService, voyageService, dockService, escalationService);
-            // Create requests return once the mission is admitted; dock provisioning and launch continue in the background.
-            admiralService.LaunchCreatedMissionsInBackground = true;
+            // Dispatch returns once a mission is admitted; dock provisioning and launch continue in the background, so neither
+            // create requests nor the health check wait on per-repository git work.
+            admiralService.LaunchInBackground = true;
             _Admiral = admiralService;
             _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
             _JobService = new Armada.Core.Services.JobService(_Database, _Logging);
@@ -1051,6 +1053,9 @@ namespace Armada.Server
 
             // Start health check loop
             _HealthCheckTask = HealthCheckLoopAsync(_TokenSource.Token);
+            // Usage capture runs on its own loop: captures must stay fresh even while a health check is busy, because
+            // captain selection treats stale usage as unknown.
+            _UsageCaptureTask = UsageCaptureLoopAsync(_TokenSource.Token);
         }
 
         /// <summary>
@@ -2422,6 +2427,24 @@ namespace Armada.Server
             return null;
         }
 
+        // Usage capture scheduler: rebuild the groups and start the due captures. Every attempt is its own dedicated
+        // UsageProbe job, never a captain launch slot or state change. The tick is unconditional: a tick that observes the
+        // switch turned off invalidates the generation and cancels the probes it still has in flight, which a call skipped
+        // while capture is disabled could never do.
+        private async Task UsageCaptureLoopAsync(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(_Settings.HeartbeatIntervalSeconds * 1000, token).ConfigureAwait(false);
+                    await _UsageCaptureScheduler.TickAsync(token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
+                catch (Exception usageEx) { _Logging.Warn(_Header + "usage capture scheduling error: " + usageEx.Message); }
+            }
+        }
+
         private async Task HealthCheckLoopAsync(CancellationToken token)
         {
             // Reset captains left in Working state with dead processes from previous server run
@@ -2458,17 +2481,6 @@ namespace Armada.Server
                     // Drive the merge queue so auto-enqueued entries land without a manual trigger.
                     try { await _MergeQueue.ProcessQueueAsync(token).ConfigureAwait(false); }
                     catch (Exception mqEx) { _Logging.Warn(_Header + "merge queue processing error: " + mqEx.Message); }
-
-                    // Usage capture scheduler: rebuild the groups and start the due captures. Every attempt
-                    // is its own dedicated UsageProbe job, never a captain launch slot or state change. The
-                    // tick is unconditional: a tick that observes the switch turned off invalidates the
-                    // generation and cancels the probes it still has in flight, which a call skipped while
-                    // capture is disabled could never do.
-                    try
-                    {
-                        await _UsageCaptureScheduler.TickAsync(token).ConfigureAwait(false);
-                    }
-                    catch (Exception usageEx) when (!(usageEx is OperationCanceledException)) { _Logging.Warn(_Header + "usage capture scheduling error: " + usageEx.Message); }
 
                     // Harbor metrics: links closed past the reconnect grace become disconnects; idle minute samples are written.
                     try { await _HarborMetricsRecorder.SweepAsync(token).ConfigureAwait(false); }

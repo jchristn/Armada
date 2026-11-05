@@ -63,11 +63,12 @@ namespace Armada.Core.Services
         public Func<Voyage, Task>? OnVoyageComplete { get; set; }
 
         /// <summary>
-        /// When true, <see cref="DispatchMissionAsync"/> returns once a created mission is admitted (Assigned) and its dock
-        /// is provisioned and its agent launched in the background, so API callers do not wait on per-repository git work.
-        /// Off by default; the Admiral server turns it on.
+        /// When true, every dispatch the Admiral starts (mission and voyage creation and the health-check retry of Pending
+        /// work) returns once a mission is admitted (Assigned); its dock is provisioned and its agent launched in the
+        /// background. Callers and the health check then never wait on per-repository git work. Off by default; the
+        /// Admiral server turns it on.
         /// </summary>
-        public bool LaunchCreatedMissionsInBackground { get; set; }
+        public bool LaunchInBackground { get; set; }
 
         /// <inheritdoc />
         public Func<Mission, Task<bool>>? OnReconcilePullRequest { get; set; }
@@ -328,7 +329,7 @@ namespace Armada.Core.Services
                 _Logging.Info(_Header + "created mission " + mission.Id + ": " + md.Title);
 
                 // Try to auto-assign
-                await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
+                await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);
             }
 
             // Update voyage status - only transition to InProgress if at least one mission was assigned
@@ -481,7 +482,7 @@ namespace Armada.Core.Services
                     // overlapping mission waits for it like any dependent mission.
                     if (previousMissionId == null)
                     {
-                        await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
+                        await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);
                     }
 
                     previousMissionId = mission.Id;
@@ -538,7 +539,7 @@ namespace Armada.Core.Services
                 Vessel? vessel = dispatchVessel;
                 if (vessel != null)
                 {
-                    bool assigned = await _Missions.TryAssignAsync(mission, vessel, LaunchCreatedMissionsInBackground, token).ConfigureAwait(false);
+                    bool assigned = await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);
 
                     // Re-read mission from database to get updated status
                     Mission? refreshed = await _Database.Missions.ReadAsync(mission.Id, token).ConfigureAwait(false);
@@ -2514,7 +2515,7 @@ namespace Armada.Core.Services
                     Vessel? vessel = await _Database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
                     if (vessel == null) continue;
 
-                    bool assigned = await _Missions.TryAssignAsync(mission, vessel, token).ConfigureAwait(false);
+                    bool assigned = await _Missions.TryAssignAsync(mission, vessel, LaunchInBackground, token).ConfigureAwait(false);
                     if (!assigned)
                     {
                         string reason = await DescribePendingReasonAsync(mission, token).ConfigureAwait(false);

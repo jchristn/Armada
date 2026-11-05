@@ -84,6 +84,7 @@ namespace Test.Shared.Suites.E2E
                         using (HttpResponseMessage response = await client.DeleteAsync("/api/v1/missions/" + cancelled.Id, ct)) response.EnsureSuccessStatusCode();
                         AssertEqual(2, (await Get<Captain>(client, "/api/v1/captains/" + captain.Id)).ActiveMissionCount, "duplicate cancel cannot release another slot");
                         await fx.Server.Admiral.HealthCheckAsync(ct);
+                        await E2eBackgroundLaunch.SettleAsync(client, ct);
                         pending = await Get<Mission>(client, "/api/v1/missions/" + pending.Id);
                         AssertEqual(MissionStatusEnum.InProgress, pending.Status);
                         AssertEqual(captain.Id, pending.CaptainId);

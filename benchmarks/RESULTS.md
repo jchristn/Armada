@@ -31,3 +31,14 @@ both 200/200 admitted with no accounting violations, down from 6.1 s and 4.9 s. 
 at the owner's request, so the 1000-candidate budget comparison is not recorded. The standard run is now capped at 10
 and 100 candidates; pass `--candidates 1000` to measure a larger fleet.
 
+## Round 3 (2026-11-04): background launch
+
+Mission create now returns after admission and provisions the dock and launches the agent in the background. Server-side
+create p50 dropped from about 15.6 s to 7.2 s at 16 clients, but throughput stays at about 0.7 per second (10 captains)
+because dock provisioning is serialized per repository. Client-side admission latency is no longer comparable with
+rounds 1 and 2: creates no longer throttle the clients, so 200 missions queue at once and the measured time includes that
+queue (p50 about 120 s in every arm). The arms remain comparable with each other: Enforce, Observe and Disabled were within
+the budget, with no accounting violations after usage capture moved to its own loop. A first run before that move
+recorded one violation: captures went stale behind a long health-check dispatch, and Enforce admitted Unknown candidates
+as `AllowDeprioritized` allows.
+

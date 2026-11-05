@@ -12,6 +12,9 @@ Migrations 123 through 128 add immutable selection history, capture timing, curr
   carries an `X-Armada-Warning` header; earlier versions wrapped it as `{ "Mission": ..., "Warning": ... }`. Read `Id`
   from the body in both cases. The .NET clients, Helm, the TUI, the Dashboard and Mobile read both shapes. MCP
   `create_mission` is unchanged.
+- Mission create (REST, MCP and WebSocket) now returns once the mission is admitted, usually `Assigned`, and
+  provisions the dock and launches the agent in the background. Poll the mission, or watch `mission.status_changed`,
+  for `InProgress` instead of expecting it in the create response. A failed launch returns the mission to `Pending`.
 - The captain-selection REST routes now use the same PascalCase bodies and error envelope (`Error`, `Message`, `Data`)
   as every other route. A stale recovery revision returns `409` with `Data.Code` `RecoveryRevisionConflict`.
 - Decision detail stores the candidates that explain a decision (the selected, proposed and requested captains, plus the
