@@ -81,10 +81,13 @@ namespace Armada.Core.Services
             BlackBoxStepEnum step = BlackBoxStepEnum.DockProvision;
             if (!String.IsNullOrEmpty(missionId)) _ProvisionFailures.TryRemove(missionId, out DockProvisionFailure? _);
 
+            System.Diagnostics.Stopwatch phase = System.Diagnostics.Stopwatch.StartNew();
+            ProvisionTimings timings = new ProvisionTimings();
             try
             {
                 await repoLock.WaitAsync(token).ConfigureAwait(false);
                 repoLockAcquired = true;
+                timings.LockWaitMs = phase.ElapsedMilliseconds; phase.Restart();
 
                 // Ensure bare clone exists. If the directory exists but isn't a valid repo
                 // (e.g. leftover from a failed clone/seed), remove it and re-clone.
@@ -121,6 +124,7 @@ namespace Armada.Core.Services
                     await _Database.Vessels.UpdateAsync(vessel, token).ConfigureAwait(false);
                 }
 
+                timings.RepositoryCheckMs = phase.ElapsedMilliseconds; phase.Restart();
                 // Fetch latest from remote to ensure worktrees branch from current main
                 if (!String.IsNullOrEmpty(vessel.RepoUrl))
                 {
@@ -134,12 +138,14 @@ namespace Armada.Core.Services
                     }
                 }
 
+                timings.FetchMs = phase.ElapsedMilliseconds; phase.Restart();
                 // Prune stale worktree registrations (handles "missing but registered" entries)
                 try
                 {
                     await _Git.PruneWorktreesAsync(repoPath, token).ConfigureAwait(false);
                 }
                 catch { }
+                timings.PruneMs = phase.ElapsedMilliseconds; phase.Restart();
 
                 // Clean up stale worktree directories under this vessel's dock directory.
                 // Only removes directories that are NOT associated with any active dock record.
@@ -231,7 +237,9 @@ namespace Armada.Core.Services
                 // Create worktree. If the branch already exists, GitService will attach to it
                 // instead of recreating it so downstream pipeline stages and retries preserve work.
                 step = BlackBoxStepEnum.WorktreeCreate;
+                timings.CleanupMs = phase.ElapsedMilliseconds; phase.Restart();
                 await _Git.CreateWorktreeAsync(repoPath, worktreePath, branchName, vessel.DefaultBranch, token).ConfigureAwait(false);
+                timings.WorktreeMs = phase.ElapsedMilliseconds; phase.Restart();
 
                 step = BlackBoxStepEnum.StartCommitRecord;
                 string? headCommit = await _Git.GetHeadCommitHashAsync(worktreePath, token).ConfigureAwait(false);
@@ -261,7 +269,9 @@ namespace Armada.Core.Services
                 }
 
                 ArmadaMetrics.DocksProvisioned.Add(1);
+                timings.RecordMs = phase.ElapsedMilliseconds;
                 _Logging.Info(_Header + "provisioned dock " + dock.Id + " at " + worktreePath);
+                _Logging.Debug(_Header + "dock " + dock.Id + " provisioning ms: " + timings);
                 return dock;
             }
             catch (Exception ex)

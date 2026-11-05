@@ -507,6 +507,8 @@ namespace Test.Shared.Suites.Services
             foreach (bool privateOwner in new[] { false, true })
                 cases.Add(CaseAsync("planning_owner_reference_" + privateOwner, "Waiting diagnostics follow actual planning ownership without exposing private sessions", TestTags.Positive, async () =>
                 {
+                    // Planning sessions exist only on SQLite-backed deployments; the server providers reject the entity.
+                    if (!TestDatabaseConfig.IsSqlite) return;
                     using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
                     Harness h = await BuildHarnessAsync(testDb.Driver);
                     TenantMetadata tenant = await testDb.Driver.Tenants.CreateAsync(new TenantMetadata("Ownership privacy"));

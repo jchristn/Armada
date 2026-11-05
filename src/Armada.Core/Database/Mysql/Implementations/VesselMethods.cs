@@ -849,6 +849,18 @@ namespace Armada.Core.Database.Mysql.Implementations
             vessel.MaxParallelVoyages = Convert.ToInt32(reader["max_parallel_voyages"]);
             vessel.MaxParallelMissionsPerVoyage = Convert.ToInt32(reader["max_parallel_missions_per_voyage"]);
             try { vessel.SecretScanEnabled = Convert.ToInt64(reader["secret_scan_enabled"]) == 1; } catch { }
+            // Branch policy (protected patterns, release/hotfix prefixes, PR/merge-queue requirements), as on the other providers.
+            try
+            {
+                string? protectedPatternsJson = NullableString(reader["protected_branch_patterns_json"]);
+                if (!String.IsNullOrWhiteSpace(protectedPatternsJson))
+                    vessel.ProtectedBranchPatterns = JsonSerializer.Deserialize<List<string>>(protectedPatternsJson) ?? new List<string>();
+            }
+            catch { }
+            try { vessel.ReleaseBranchPrefix = NullableString(reader["release_branch_prefix"]) ?? "release/"; } catch { vessel.ReleaseBranchPrefix = "release/"; }
+            try { vessel.HotfixBranchPrefix = NullableString(reader["hotfix_branch_prefix"]) ?? "hotfix/"; } catch { vessel.HotfixBranchPrefix = "hotfix/"; }
+            try { vessel.RequirePullRequestForProtectedBranches = Convert.ToInt64(reader["require_pull_request_for_protected_branches"]) == 1; } catch { }
+            try { vessel.RequireMergeQueueForReleaseBranches = Convert.ToInt64(reader["require_merge_queue_for_release_branches"]) == 1; } catch { }
             try
             {
                 string? protectedPathJson = NullableString(reader["protected_path_patterns_json"]);

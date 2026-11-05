@@ -208,6 +208,8 @@ namespace Test.Shared.Suites.Services
             });
             Add("recall_releases_exclusive_owner_and_retained_verification", async () =>
             {
+                // Recall of a planning owner needs planning sessions, which exist only on SQLite-backed deployments.
+                if (!TestDatabaseConfig.IsSqlite) return;
                 using Harness h = await Harness.CreateAsync(); Mission verify = await h.MarkVerifyingAsync();
                 AssertTrue(await h.Db.Captains.TryClaimExclusiveAsync(h.Captain.Id, "session", CaptainStateEnum.Planning));
                 Captain owner = (await h.Db.Captains.ReadAsync(h.Captain.Id))!;
@@ -220,6 +222,8 @@ namespace Test.Shared.Suites.Services
             });
             Add("recall_releases_exclusive_owner_without_a_mission", async () =>
             {
+                // Recall of a planning owner needs planning sessions, which exist only on SQLite-backed deployments.
+                if (!TestDatabaseConfig.IsSqlite) return;
                 using Harness h = await Harness.CreateAsync();
                 Captain captain = await CaptainAssignmentFixture.CreateAsync(h.Db, new Captain("exclusive refiner"));
                 AssertTrue(await h.Db.Captains.TryClaimExclusiveAsync(captain.Id, "session", CaptainStateEnum.Refining));

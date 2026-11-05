@@ -137,6 +137,7 @@ namespace Armada.Core.Services
         /// Prevents duplicate provisioning/launch when multiple dispatch paths
         /// race on the same mission.
         /// </summary>
+        private const int _TransientAssignmentAttempts = 3;
         private System.Collections.Concurrent.ConcurrentDictionary<string, byte> _InFlightAssignments =
             new System.Collections.Concurrent.ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
 
@@ -399,6 +400,29 @@ namespace Armada.Core.Services
         {
             if (mission == null) throw new ArgumentNullException(nameof(mission));
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
+            // A server database can pick an admission read or write as a deadlock victim under concurrent dispatch. Every
+            // admission write is its own atomic statement or transaction, so a retry re-reads current state; after that
+            // the mission stays Pending for the next dispatch cycle instead of failing the caller.
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    return await TryAssignOnceAsync(mission, vessel, launchInBackground, token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (TransientDatabaseError.IsTransient(ex) && !token.IsCancellationRequested)
+                {
+                    if (attempt >= _TransientAssignmentAttempts)
+                    {
+                        _Logging.Warn(_Header + "assignment of mission " + mission.Id + " hit a transient database error " + attempt + " times; retrying next dispatch cycle: " + ex.Message);
+                        return false;
+                    }
+                    await Task.Delay(TimeSpan.FromMilliseconds(25 * attempt + Random.Shared.Next(0, 50)), token).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private async Task<bool> TryAssignOnceAsync(Mission mission, Vessel vessel, bool launchInBackground, CancellationToken token)
+        {
 
             if (!_InFlightAssignments.TryAdd(mission.Id, 0))
             {

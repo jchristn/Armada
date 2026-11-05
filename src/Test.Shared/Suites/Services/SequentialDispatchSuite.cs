@@ -111,6 +111,194 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(0, (await db.Captains.ReadAsync(work.Captains[0].Id))!.ActiveMissionCount, "and releases the captain");
             }));
 
+            // Section 15 scheduler matrix rows not covered elsewhere.
+            cases.Add(CaseAsync("matrix_vessel_one_by_one", "Vessel 1x1 runs a voyage of three one at a time and reports VoyageMissionLimit", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = testDb.Driver;
+                ServiceSet services = CreateServices(CreateLogging(), db, CreateSettings(), new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 3, missionCount: 3);
+                work.Vessel.MaxParallelVoyages = 1; work.Vessel.MaxParallelMissionsPerVoyage = 1; await db.Vessels.UpdateAsync(work.Vessel);
+                await Task.WhenAll(work.Missions.Select(m => Task.Run(() => services.Missions.TryAssignAsync(m, work.Vessel))));
+                AssertEqual(1, (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress)).Count, "one at a time");
+                Mission waiting = (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending)).First();
+                AssertEqual(MissionAssignmentBlockerReasonEnum.VoyageMissionLimit, (await services.Missions.GetAssignmentBlockerAsync(waiting))!.Reason);
+                Mission running = (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress)).Single();
+                await CompleteAsync(db, running);
+                AssertTrue(await services.Missions.TryAssignAsync(waiting, work.Vessel), "the next mission takes the freed slot");
+            }));
+
+            cases.Add(CaseAsync("matrix_vessel_two_by_two_three_voyages", "Vessel 2x2 runs two voyages with at most two missions each; the third voyage waits and is admitted first-in-first-out", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = testDb.Driver;
+                ServiceSet services = CreateServices(CreateLogging(), db, CreateSettings(), new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 9, missionCount: 3);
+                work.Vessel.MaxParallelVoyages = 2; work.Vessel.MaxParallelMissionsPerVoyage = 2; await db.Vessels.UpdateAsync(work.Vessel);
+                List<Voyage> voyages = new List<Voyage> { work.Voyage };
+                List<Mission> missions = new List<Mission>(work.Missions);
+                for (int v = 1; v < 3; v++)
+                {
+                    Voyage voyage = await db.Voyages.CreateAsync(new Voyage("voyage-" + v) { Status = VoyageStatusEnum.InProgress, CreatedUtc = DateTime.UtcNow.AddSeconds(v) });
+                    voyages.Add(voyage);
+                    for (int i = 0; i < 3; i++) missions.Add(await db.Missions.CreateAsync(new Mission("v" + v + "-m" + i) { VesselId = work.Vessel.Id, VoyageId = voyage.Id }));
+                }
+                foreach (Mission mission in missions) await services.Missions.TryAssignAsync(mission, work.Vessel);
+                List<Mission> running = await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress);
+                AssertEqual(4, running.Count, "two voyages, two missions each");
+                AssertEqual(2, running.Select(m => m.VoyageId).Distinct().Count());
+                AssertTrue(running.All(m => m.VoyageId != voyages[2].Id), "the third voyage waits");
+                Mission third = missions.First(m => m.VoyageId == voyages[2].Id);
+                AssertEqual(MissionAssignmentBlockerReasonEnum.VesselVoyageLimit, (await services.Missions.GetAssignmentBlockerAsync(third))!.Reason);
+                foreach (Mission mission in missions.Where(m => m.VoyageId == voyages[0].Id))
+                {
+                    Mission current = (await db.Missions.ReadAsync(mission.Id))!;
+                    if (current.Status == MissionStatusEnum.InProgress) await CompleteAsync(db, current);
+                    else { current.Status = MissionStatusEnum.Cancelled; await db.Missions.UpdateAsync(current); }
+                }
+                voyages[0].Status = VoyageStatusEnum.Complete; await db.Voyages.UpdateAsync(voyages[0]);
+                AssertTrue(await services.Missions.TryAssignAsync(third, work.Vessel), "the waiting voyage is admitted once a slot frees");
+            }));
+
+            cases.Add(CaseAsync("matrix_unlimited_vessel_uses_captain_and_global_caps", "Vessel 0x0 is limited only by captain and global caps", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = testDb.Driver;
+                ArmadaSettings settings = CreateSettings(); settings.MaxConcurrentMissions = 3;
+                ServiceSet services = CreateServices(CreateLogging(), db, settings, new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 5, missionCount: 8);
+                work.Vessel.MaxParallelVoyages = 0; work.Vessel.MaxParallelMissionsPerVoyage = 0; await db.Vessels.UpdateAsync(work.Vessel);
+                foreach (Mission mission in work.Missions) await services.Missions.TryAssignAsync(mission, work.Vessel);
+                AssertEqual(3, (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress)).Count, "the global cap binds, not the vessel");
+                Mission waiting = (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending)).First();
+                AssertEqual(MissionAssignmentBlockerReasonEnum.GlobalMissionLimit, (await services.Missions.GetAssignmentBlockerAsync(waiting))!.Reason);
+            }));
+
+            cases.Add(CaseAsync("matrix_captain_concurrency_two", "One captain with MaxConcurrency 2 on a 1x4 vessel runs two of four and reports CaptainConcurrencyLimit", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = testDb.Driver;
+                ServiceSet services = CreateServices(CreateLogging(), db, CreateSettings(), new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 1, missionCount: 4);
+                work.Vessel.MaxParallelVoyages = 1; work.Vessel.MaxParallelMissionsPerVoyage = 4; await db.Vessels.UpdateAsync(work.Vessel);
+                work.Captains[0].MaxConcurrency = 2; await CaptainAssignmentFixture.UpdateAsync(db, work.Captains[0], updateConcurrency: true);
+                await Task.WhenAll(work.Missions.Select(m => Task.Run(() => services.Missions.TryAssignAsync(m, work.Vessel))));
+                AssertEqual(2, (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress)).Count);
+                Mission waiting = (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending)).First();
+                AssertEqual(MissionAssignmentBlockerReasonEnum.CaptainConcurrencyLimit, (await services.Missions.GetAssignmentBlockerAsync(waiting))!.Reason);
+            }));
+
+            cases.Add(CaseAsync("matrix_endpoint_cap_shared_by_two_captains", "An endpoint cap of 3 shared by two captains at concurrency 4 admits at most 3 across both", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = testDb.Driver;
+                ServiceSet services = CreateServices(CreateLogging(), db, CreateSettings(), new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 2, missionCount: 8);
+                work.Vessel.MaxParallelVoyages = 0; work.Vessel.MaxParallelMissionsPerVoyage = 0; await db.Vessels.UpdateAsync(work.Vessel);
+                ModelEndpoint endpoint = await db.ModelEndpoints.CreateAsync(new ModelEndpoint { Name = "Shared", BaseUrl = "http://127.0.0.1:19898/v1", Kind = ModelEndpointKindEnum.Inference,
+                    InferenceOptions = new InferenceOptions { MaxConcurrentMissions = 3 } });
+                foreach (Captain captain in work.Captains)
+                { captain.Runtime = AgentRuntimeEnum.ApiEndpoint; captain.ModelEndpointId = endpoint.Id; captain.MaxConcurrency = 4; await CaptainAssignmentFixture.UpdateAsync(db, captain, updateConcurrency: true); }
+                await Task.WhenAll(work.Missions.Select(m => Task.Run(() => services.Missions.TryAssignAsync(m, work.Vessel))));
+                AssertEqual(3, (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress)).Count, "the endpoint cap binds across both captains");
+                Mission waiting = (await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.Pending)).First();
+                AssertEqual(MissionAssignmentBlockerReasonEnum.EndpointMissionLimit, (await services.Missions.GetAssignmentBlockerAsync(waiting))!.Reason);
+            }));
+
+            cases.Add(CaseAsync("matrix_landing_failed_releases_voyage_slot", "A voyage in Review holds its slot; LandingFailed releases it", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = testDb.Driver;
+                ServiceSet services = CreateServices(CreateLogging(), db, CreateSettings(), new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 2, missionCount: 1);
+                work.Vessel.MaxParallelVoyages = 1; work.Vessel.MaxParallelMissionsPerVoyage = 1; await db.Vessels.UpdateAsync(work.Vessel);
+                Voyage other = await db.Voyages.CreateAsync(new Voyage("other") { Status = VoyageStatusEnum.InProgress });
+                Mission waiting = await db.Missions.CreateAsync(new Mission("other work") { VesselId = work.Vessel.Id, VoyageId = other.Id });
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[0], work.Vessel));
+                Mission held = (await db.Missions.ReadAsync(work.Missions[0].Id))!;
+                held.Status = MissionStatusEnum.Review; held.ProcessId = null; await db.Missions.UpdateAsync(held);
+                await db.Captains.TryReleaseFromMissionAsync(held.CaptainId!, held.Id);
+                AssertFalse(await services.Missions.TryAssignAsync(waiting, work.Vessel), "Review holds the voyage slot");
+                MissionAssignmentBlocker blocker = (await services.Missions.GetAssignmentBlockerAsync(waiting))!;
+                AssertEqual(MissionAssignmentBlockerReasonEnum.VesselVoyageLimit, blocker.Reason);
+                held.Status = MissionStatusEnum.LandingFailed; await db.Missions.UpdateAsync(held);
+                AssertTrue(await services.Missions.TryAssignAsync(waiting, work.Vessel), "LandingFailed releases the slot");
+            }));
+
+            cases.Add(CaseAsync("matrix_quarantined_captain_keeps_running_work", "A quarantined captain's two running missions continue and it takes no new work", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = testDb.Driver;
+                ServiceSet services = CreateServices(CreateLogging(), db, CreateSettings(), new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 1, missionCount: 3);
+                work.Vessel.MaxParallelVoyages = 0; work.Vessel.MaxParallelMissionsPerVoyage = 0; await db.Vessels.UpdateAsync(work.Vessel);
+                work.Captains[0].MaxConcurrency = 3; await CaptainAssignmentFixture.UpdateAsync(db, work.Captains[0], updateConcurrency: true);
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[0], work.Vessel));
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[1], work.Vessel));
+                Captain captain = (await db.Captains.ReadAsync(work.Captains[0].Id))!;
+                captain.QuarantineUntilUtc = DateTime.UtcNow.AddHours(1); captain.QuarantineReason = "test"; await CaptainAssignmentFixture.UpdateAsync(db, captain);
+                AssertFalse(await services.Missions.TryAssignAsync(work.Missions[2], work.Vessel), "no new admission while quarantined");
+                List<Mission> running = await db.Missions.EnumerateByStatusAsync(MissionStatusEnum.InProgress);
+                AssertEqual(2, running.Count, "running work is not preempted");
+                AssertEqual(2, (await db.Captains.ReadAsync(captain.Id))!.ActiveMissionCount);
+            }));
+
+            cases.Add(CaseAsync("race_claim_without_status_update_is_reconciled", "A claim that landed without its mission update (Admiral killed mid-assignment) is reconciled and the mission is assignable", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = testDb.Driver;
+                ServiceSet services = CreateServices(CreateLogging(), db, CreateSettings(), new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 1, missionCount: 1);
+                // The claim commits the slot and Assigned together; the crash lands before any dock or process exists.
+                AssertTrue(await db.Captains.TryClaimAsync(work.Captains[0].Id, work.Missions[0].Id, null), "the slot claim succeeded");
+                Mission orphan = (await db.Missions.ReadAsync(work.Missions[0].Id))!;
+                AssertNull(orphan.ProcessId); AssertNull(orphan.DockId);
+                AdmiralService restarted = new AdmiralService(CreateLogging(), db, CreateSettings(), services.Captains, services.Missions, new VoyageService(CreateLogging(), db), services.Docks);
+                restarted.OnIsProcessTracked = _ => false;
+                await restarted.CleanupStaleCaptainsAsync();
+                await db.Captains.ReconcileMissionSlotsAsync();
+                Mission recovered = (await db.Missions.ReadAsync(orphan.Id))!;
+                Captain captain = (await db.Captains.ReadAsync(work.Captains[0].Id))!;
+                AssertTrue(recovered.Status == MissionStatusEnum.Pending || recovered.Status == MissionStatusEnum.InProgress,
+                    "restart recovery returns the orphan to Pending or relaunches it, never leaves it Assigned without a process: " + recovered.Status);
+                if (recovered.Status == MissionStatusEnum.Pending)
+                {
+                    AssertEqual(0, captain.ActiveMissionCount, "the orphan's slot is released");
+                    AssertTrue(await services.Missions.TryAssignAsync(recovered, work.Vessel), "the mission is assignable again");
+                }
+                else AssertEqual(1, captain.ActiveMissionCount, "a relaunched orphan holds exactly one slot");
+            }));
+
+            cases.Add(CaseAsync("race_admission_lock_timeout_counts_and_returns", "A slow admission holding the vessel lock times out the next dispatch, which returns and counts the timeout", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = testDb.Driver;
+                ArmadaSettings settings = CreateSettings(); settings.Concurrency.AdmissionLockTimeoutSeconds = 1;
+                ServiceSet services = CreateServices(CreateLogging(), db, settings, new StubGitService());
+                TestFixture work = await SetupFixtureAsync(db, captainCount: 2, missionCount: 2);
+                work.Vessel.MaxParallelVoyages = 0; work.Vessel.MaxParallelMissionsPerVoyage = 0; await db.Vessels.UpdateAsync(work.Vessel);
+                long timeouts = 0;
+                using System.Diagnostics.Metrics.MeterListener listener = new System.Diagnostics.Metrics.MeterListener();
+                listener.InstrumentPublished = (instrument, l) => { if (instrument.Name == "armada.admission.lock_timeouts") l.EnableMeasurementEvents(instrument); };
+                listener.SetMeasurementEventCallback<long>((instrument, value, tags, state) => Interlocked.Add(ref timeouts, value));
+                listener.Start();
+                TaskCompletionSource<bool> release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                TaskCompletionSource<bool> entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                // The launch-policy hook runs inside admission, so blocking it holds the vessel and capacity locks like a slow database.
+                services.Missions.CanAssignMissionAsync = async (_, _) => { entered.TrySetResult(true); await release.Task; return true; };
+                Task<bool> slow = Task.Run(() => services.Missions.TryAssignAsync(work.Missions[0], work.Vessel));
+                await entered.Task;
+                System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+                AssertFalse(await services.Missions.TryAssignAsync(work.Missions[1], work.Vessel), "the contended dispatch gives up");
+                AssertTrue(watch.Elapsed < TimeSpan.FromSeconds(10), "it returns after the lock timeout, not after the slow admission");
+                listener.RecordObservableInstruments();
+                AssertTrue(Interlocked.Read(ref timeouts) >= 1, "the timeout is counted");
+                release.SetResult(true);
+                AssertTrue(await slow, "the slow admission still completes");
+                services.Missions.CanAssignMissionAsync = null;
+                AssertTrue(await services.Missions.TryAssignAsync(work.Missions[1], work.Vessel), "the timed-out mission is assigned on the next pass");
+            }));
+
             cases.Add(CaseAsync("two_hundred_missions_mixed_limits", "200 missions across five vessels and ten captains make progress without exceeding mixed limits", TestTags.Positive, async () =>
             {
                 using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
@@ -728,6 +916,14 @@ namespace Test.Shared.Suites.Services
             LoggingModule logging = new LoggingModule();
             logging.Settings.EnableConsole = false;
             return logging;
+        }
+
+        private static async Task CompleteAsync(DatabaseDriver db, Mission mission)
+        {
+            mission.Status = MissionStatusEnum.Complete;
+            mission.ProcessId = null;
+            await db.Missions.UpdateAsync(mission);
+            if (mission.CaptainId != null) await db.Captains.TryReleaseFromMissionAsync(mission.CaptainId, mission.Id);
         }
 
         private static ArmadaSettings CreateSettings()
