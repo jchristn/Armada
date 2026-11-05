@@ -78,7 +78,7 @@ describe('mission waits and hierarchy', () => {
     expect(await screen.findByText('Waited 8m before starting (Parent mission 5m, Captain slot 3m)')).toBeInTheDocument();
     expect(screen.getByText('Slot wait 3m')).toBeInTheDocument();
     expect(screen.getByText('Wait history (2)')).toBeInTheDocument();
-    expect(screen.getByText('ParentNotFinished')).toBeInTheDocument();
+    expect(screen.getByTitle('ParentNotFinished')).toBeInTheDocument();
   });
 
   it('hides the waits card when nothing was recorded', async () => {

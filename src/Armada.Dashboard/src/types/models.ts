@@ -445,7 +445,11 @@ export type MissionAssignmentBlockerReason =
   | 'EndpointUnavailable'
   | 'NoCaptains'
   | 'NoIdleCaptain'
-  | 'NoEligibleCaptain';
+  | 'NoEligibleCaptain'
+  | 'LaunchFailing'
+  | 'PlacementWaiting'
+  | 'BranchInUse'
+  | 'ParentNotFinished';
 
 export interface MissionAssignmentCaptainStatus {
   captainId: string;

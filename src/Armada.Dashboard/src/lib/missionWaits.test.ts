@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatWaitDuration, slotWaitSeconds, summarizeWaits, waitBreakdown, waitGateLabel } from './missionWaits';
+import { formatWaitDuration, slotWaitSeconds, summarizeWaits, waitBreakdown, waitDetailText, waitGateLabel } from './missionWaits';
 import type { MissionWaitInterval } from '../types/models';
 
 function interval(gate: MissionWaitInterval['gate'], start: string, end: string | null): MissionWaitInterval {
@@ -60,5 +60,14 @@ describe('slotWaitSeconds and labels', () => {
     expect(waitGateLabel('VoyageMissionSlot')).toBe('Voyage mission slot');
     expect(waitGateLabel('FutureGate')).toBe('FutureGate');
     expect(waitGateLabel(null)).toBe('Other');
+  });
+});
+
+describe('waitDetailText', () => {
+  it('maps selection reasons and blocker reasons and keeps other text', () => {
+    expect(waitDetailText('BelowReserve')).toBe('usageSelection.reason.reserve');
+    expect(waitDetailText('Something custom')).toBe('Something custom');
+    expect(waitDetailText(null)).toBeNull();
+    expect(waitGateLabel('LaunchBackoff')).toBe('Automatic retry');
   });
 });

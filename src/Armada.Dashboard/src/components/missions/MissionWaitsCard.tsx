@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getMissionWaits } from '../../api/client';
 import type { MissionWaitInterval } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
-import { formatWaitDuration, slotWaitSeconds, summarizeWaits, waitBreakdown, waitGateLabel } from '../../lib/missionWaits';
+import { formatWaitDuration, slotWaitSeconds, summarizeWaits, waitBreakdown, waitDetailText, waitGateLabel } from '../../lib/missionWaits';
 
 interface MissionWaitsCardProps {
   missionId: string;
@@ -66,7 +66,7 @@ export default function MissionWaitsCard({ missionId, revision, readyUtc, assign
                   <td>{w.endedUtc
                     ? formatWaitDuration((Date.parse(w.endedUtc) - Date.parse(w.startedUtc)) / 1000)
                     : <span title={t('Still waiting on this gate.')}>{t('{{duration}} (ongoing)', { duration: formatWaitDuration((Date.now() - Date.parse(w.startedUtc)) / 1000) })}</span>}</td>
-                  <td className="text-dim">{w.detail || '-'}</td>
+                  <td className="text-dim" title={w.detail || undefined}>{w.detail ? t(waitDetailText(w.detail)!) : '-'}</td>
                 </tr>
               ))}
             </tbody>

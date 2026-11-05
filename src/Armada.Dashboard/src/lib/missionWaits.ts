@@ -1,4 +1,6 @@
 import type { MissionWaitGate, MissionWaitInterval } from '../types/models';
+import { selectionReasons } from './usageSelection';
+import { ASSIGNMENT_BLOCKER_TITLES } from './missionActions';
 
 /** Display names for scheduling gates (MissionWaitGateEnum). */
 export const WAIT_GATE_LABELS: Record<MissionWaitGate, string> = {
@@ -14,7 +16,7 @@ export const WAIT_GATE_LABELS: Record<MissionWaitGate, string> = {
   RuntimeSlot: 'Runtime slot',
   GlobalSlot: 'Global mission limit',
   Placement: 'Harbor placement',
-  LaunchBackoff: 'Launch retry',
+  LaunchBackoff: 'Automatic retry',
   Other: 'Other',
 };
 
@@ -99,4 +101,15 @@ export function slotWaitSeconds(readyUtc: string | null | undefined, assignedUtc
   const assigned = Date.parse(assignedUtc);
   if (Number.isNaN(ready) || Number.isNaN(assigned)) return null;
   return Math.max(0, (assigned - ready) / 1000);
+}
+
+/**
+ * Readable text for a wait's recorded detail: a captain-selection reason code reads as the selection card does, an
+ * assignment blocker reason as its title; anything else is shown as recorded. Returns the translation key or text.
+ */
+export function waitDetailText(detail: string | null | undefined): string | null {
+  if (!detail) return null;
+  if (selectionReasons[detail]) return selectionReasons[detail];
+  const title = (ASSIGNMENT_BLOCKER_TITLES as Record<string, string>)[detail];
+  return title ?? detail;
 }

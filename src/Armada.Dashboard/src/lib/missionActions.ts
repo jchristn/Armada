@@ -152,6 +152,10 @@ export const ASSIGNMENT_BLOCKER_TITLES: Record<MissionAssignmentBlockerReason, s
   NoCaptains: 'No captains',
   NoIdleCaptain: 'Waiting for a captain',
   NoEligibleCaptain: 'No captain can take this mission',
+  LaunchFailing: 'Captain launch is failing; retrying automatically',
+  PlacementWaiting: 'Waiting for a host to run the mission',
+  BranchInUse: 'Its branch is in use by another mission',
+  ParentNotFinished: 'Waiting for the parent mission to finish',
 };
 
 export function assignmentBlockerTitle(reason: string): string {

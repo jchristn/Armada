@@ -4,7 +4,7 @@ import { getVesselConcurrency } from '../../api/client';
 import type { SlotWaitStatistics, VesselConcurrency } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import RefreshButton from '../shared/RefreshButton';
-import { formatWaitDuration, waitGateLabel } from '../../lib/missionWaits';
+import { formatWaitDuration, waitDetailText, waitGateLabel } from '../../lib/missionWaits';
 
 interface VesselConcurrencyCardProps {
   vesselId: string;
@@ -98,7 +98,7 @@ export default function VesselConcurrencyCard({ vesselId }: VesselConcurrencyCar
                 {report.waiting.map(w => (
                   <tr key={w.missionId}>
                     <td><Link to={`/missions/${encodeURIComponent(w.missionId)}`} title={w.title}>{w.title}</Link></td>
-                    <td title={w.detail || undefined}>{t(waitGateLabel(w.gate))}</td>
+                    <td title={w.detail ? t(waitDetailText(w.detail)!) : undefined}>{t(waitGateLabel(w.gate))}</td>
                     <td>{formatWaitDuration(w.waitedSeconds)}</td>
                   </tr>
                 ))}

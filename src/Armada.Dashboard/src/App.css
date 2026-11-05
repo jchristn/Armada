@@ -9984,7 +9984,6 @@ a.btn:hover { text-decoration: none; }
 }
 .mission-hierarchy-path { display: flex; flex-wrap: wrap; gap: 0.15rem; align-items: center; overflow-wrap: anywhere; }
 .mission-hierarchy-children { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
-.mission-hierarchy-children a, .mission-hierarchy-path a { text-decoration: none; }
 .mission-hierarchy-children li { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; min-width: 0; }
 
 /* Activity > Concurrency (palette validated: light #ffffff, dark #111827; light contrast relief is the legend and table) */
