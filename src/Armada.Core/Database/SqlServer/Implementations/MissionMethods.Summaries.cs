@@ -533,6 +533,17 @@ LEN(COALESCE(agent_output, '')) AS agent_output_length";
                 conditions.Add("captain_id = @captain_id");
                 cmd.Parameters.AddWithValue("@captain_id", query.CaptainId);
             }
+            if (!String.IsNullOrEmpty(query.ParentMissionId))
+            {
+                conditions.Add("parent_mission_id = @parent_mission_id");
+                cmd.Parameters.AddWithValue("@parent_mission_id", query.ParentMissionId);
+            }
+            if (query.RootsOnly == true) conditions.Add("parent_mission_id IS NULL AND depends_on_mission_id IS NULL");
+            if (query.WaitingGate.HasValue)
+            {
+                conditions.Add("status = 'Pending' AND id IN (SELECT mission_id FROM mission_wait_intervals WHERE ended_utc IS NULL AND gate = @waiting_gate)");
+                cmd.Parameters.AddWithValue("@waiting_gate", query.WaitingGate.Value.ToString());
+            }
         }
 
         private static void AddParameters(SqlCommand cmd, IEnumerable<KeyValuePair<string, object?>> parameters)

@@ -970,7 +970,7 @@ namespace Armada.Core.Settings
             set => _Push = value ?? new PushSettings();
         }
 
-        /// <summary>v1.3 concurrency configuration foundation. New admission gates are not yet active.</summary>
+        /// <summary>v1.3 concurrency defaults and bounds: vessel and captain slot defaults, hierarchy depth, starvation, admission lock timeout and wait retention.</summary>
         public ConcurrencySettings Concurrency
         {
             get => _Concurrency;
@@ -978,6 +978,14 @@ namespace Armada.Core.Settings
         }
 
         private ConcurrencySettings _Concurrency = new ConcurrencySettings();
+        private long _ConcurrencyRevision;
+
+        /// <summary>Persisted optimistic-update revision of <see cref="Concurrency"/>. Zero means no API update has been recorded.</summary>
+        public long ConcurrencyRevision
+        {
+            get => System.Threading.Interlocked.Read(ref _ConcurrencyRevision);
+            set => System.Threading.Interlocked.Exchange(ref _ConcurrencyRevision, Math.Max(0, value));
+        }
         private readonly List<string> _ConcurrencyWarnings = new List<string>();
 
         /// <summary>Usage-aware selection policy. Defaults to Observe/FirstAvailable; null restores defaults. A complete group is validated before replacement.</summary>

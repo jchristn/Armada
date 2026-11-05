@@ -5,6 +5,20 @@ namespace Armada.Core.Services
 
     public partial class MissionService
     {
+        /// <summary>Called after a <c>mission.starving</c> event is recorded, for live delivery.</summary>
+        public Action<ArmadaEvent>? OnConcurrencyEvent
+        {
+            get => _WaitTracker.EventRecorded;
+            set => _WaitTracker.EventRecorded = value;
+        }
+
+        /// <summary>Called when a Pending mission starts waiting on a different gate, for live delivery.</summary>
+        public Action<MissionWaitGateChange>? OnWaitingGateChanged
+        {
+            get => _WaitTracker.GateChanged;
+            set => _WaitTracker.GateChanged = value;
+        }
+
         /// <inheritdoc />
         public Task<int> CloseInterruptedWaitsAsync(CancellationToken token = default) => _WaitTracker.CloseInterruptedAsync(token);
 

@@ -171,8 +171,9 @@ namespace Armada.Core.Services
             ResetForRestart(mission, keptBranch);
             mission = await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
 
+            List<string> restoredIds = new List<string>();
             if (!String.IsNullOrEmpty(mission.VoyageId))
-                await ReopenVoyageAndRestoreDependentsAsync(mission, new HashSet<string>(StringComparer.Ordinal) { mission.Id }, token).ConfigureAwait(false);
+                restoredIds.AddRange(await ReopenVoyageAndRestoreDependentsAsync(mission, new HashSet<string>(StringComparer.Ordinal) { mission.Id }, token).ConfigureAwait(false));
 
             // D18: restarting a parent brings back the descendants that were cancelled only because it failed.
             Mission root = mission;
@@ -182,13 +183,15 @@ namespace Armada.Core.Services
                 if (upstream == null) break;
                 root = upstream;
             }
-            await RestoreDescendantsCancelledForParentAsync(root, token).ConfigureAwait(false);
+            restoredIds.AddRange(await RestoreDescendantsCancelledForParentAsync(root, token).ConfigureAwait(false));
 
             _Logging.Info(_Header + "restarted mission " + mission.Id + (keptBranch != null ? " on branch " + keptBranch : ""));
-            return await TryDispatchRestartedMissionAsync(mission, token).ConfigureAwait(false);
+            Mission restarted = await TryDispatchRestartedMissionAsync(mission, token).ConfigureAwait(false);
+            restarted.RestoredMissionIds = restoredIds.Distinct(StringComparer.Ordinal).Where(id => id != restarted.Id).Take(CollectionLimits.MaxLinkedIds).ToList();
+            return restarted;
         }
 
-        private async Task ReopenVoyageAndRestoreDependentsAsync(Mission mission, HashSet<string> seedIds, CancellationToken token)
+        private async Task<List<string>> ReopenVoyageAndRestoreDependentsAsync(Mission mission, HashSet<string> seedIds, CancellationToken token)
         {
             Voyage? voyage = await _Database.Voyages.ReadAsync(mission.VoyageId!, token).ConfigureAwait(false);
             if (voyage != null && (voyage.Status == VoyageStatusEnum.Failed || voyage.Status == VoyageStatusEnum.Cancelled || voyage.Status == VoyageStatusEnum.Complete))
@@ -230,6 +233,7 @@ namespace Armada.Core.Services
                     grew = true;
                 }
             }
+            return chain.Where(id => !seedIds.Contains(id)).ToList();
         }
 
         private static bool IsBlockedVerifierAwaitingWorker(Mission mission)

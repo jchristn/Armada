@@ -319,6 +319,9 @@ namespace Armada.Helm
                     .WithDescription("Launch a new voyage with missions");
                 voyage.AddCommand<VoyageShowCommand>("show")
                     .WithDescription("Show voyage details (accepts name or ID)");
+                voyage.AddCommand<VoyageTreeCommand>("tree")
+                    .WithDescription("Show a voyage's missions as a tree of parents, children and stages")
+                    .WithExample("voyage", "tree", "vyg_abc123");
                 voyage.AddCommand<VoyageCancelCommand>("cancel")
                     .WithDescription("Cancel a voyage");
                 voyage.AddCommand<VoyageRetryCommand>("retry")
@@ -483,6 +486,9 @@ namespace Armada.Helm
                 vessel.AddCommand<VesselOverlapPreviewCommand>("overlap-preview")
                     .WithDescription("Preview a mission's overlaps and brief lint on a vessel (nothing is dispatched)")
                     .WithExample("vessel", "overlap-preview", "my-repo", "--brief-file", "brief.md");
+                vessel.AddCommand<VesselConcurrencyCommand>("concurrency")
+                    .WithDescription("Show a vessel's voyage slots, waiting missions and slot wait")
+                    .WithExample("vessel", "concurrency", "my-repo");
                 vessel.AddCommand<VesselReservationsCommand>("reservations")
                     .WithDescription("List a vessel's soft directory reservations");
                 vessel.AddCommand<VesselDoctorCommand>("doctor")

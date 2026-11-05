@@ -41,6 +41,8 @@ If the selected deployment disconnects or the tunnel drops, the proxy closes the
   - [mission.changed](#missionchanged)
   - [mission.activity](#missionactivity)
   - [captain-selection.changed](#captain-selectionchanged)
+  - [mission.waiting_gate_changed](#missionwaiting_gate_changed)
+  - [mission.starving and concurrency.limit_exceeded](#missionstarving-and-concurrencylimit_exceeded)
   - [mission.status_changed](#missionstatus_changed)
   - [voyage.changed](#voyagechanged)
   - [captain.changed](#captainchanged)
@@ -425,6 +427,52 @@ authorization. Not recorded as an event.
 | `data.voyageId` | string \| null | Parent voyage ID |
 | `data.decisionId` | string \| null | Recorded decision ID, or null for `RecoveryAuthorized` |
 | `data.outcome` | string | `Admitted`, `Waiting` or `RecoveryAuthorized` |
+
+### mission.waiting_gate_changed
+
+Broadcast to the mission's tenant when a Pending mission starts waiting on a different scheduling gate (for example
+from `Parent` to `CaptainSlot`). It is sent once per gate change, never per scheduler tick, so a mission that keeps
+waiting on the same gate sends nothing more. Not recorded as an event; the full history is
+`GET /api/v1/missions/{id}/waits`.
+
+```json
+{
+  "type": "mission.waiting_gate_changed",
+  "data": {
+    "tenantId": "ten_default",
+    "missionId": "msn_abc123def456ghi789jk",
+    "voyageId": "vyg_abc123def456ghi789jk",
+    "vesselId": "vsl_abc123def456ghi789jk",
+    "gate": "CaptainSlot",
+    "previousGate": "Parent",
+    "detail": "CaptainSlotsFull",
+    "sinceUtc": "2026-03-07T12:35:00.100Z"
+  },
+  "timestamp": "2026-03-07T12:35:00.100Z"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `data.missionId` | string | Mission ID |
+| `data.voyageId` | string \| null | Voyage ID |
+| `data.vesselId` | string \| null | Vessel ID |
+| `data.gate` | string | Gate the mission now waits on (`MissionWaitGateEnum`) |
+| `data.previousGate` | string \| null | Gate it waited on before, or null when the wait just began |
+| `data.detail` | string \| null | Selection reason code or blocker reason recorded with the wait |
+| `data.sinceUtc` | string | When the wait on `gate` began |
+
+### mission.starving and concurrency.limit_exceeded
+
+Both are recorded as events (`GET /api/v1/events`) and pushed live with the recorded `ArmadaEvent` as `data`.
+
+- `mission.starving`: a Pending mission has waited longer than `Concurrency.StarvationWarningMinutes`. Sent once per
+  waiting episode. `data.payload` is a JSON string with `MissionId`, `Gate` and `WaitedMinutes`. Delivered to the
+  mission's tenant.
+- `concurrency.limit_exceeded`: the invariant monitor observed more work than a captain, vessel, runtime, endpoint or
+  global limit allows. `data.payload` is a JSON string with `Gate`, `Count`, `Limit` and `Cause` (`limit_lowered`,
+  `unknown` or `unexpected`). Captain and vessel overruns go to the owning tenant; runtime, endpoint and global
+  overruns have no tenant and reach only global admins.
 
 ### mission.status_changed
 

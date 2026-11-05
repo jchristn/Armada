@@ -552,6 +552,17 @@ namespace Armada.Server.Routes
                     }
                 }
 
+                if (body.Concurrency != null && body.ExpectedConcurrencyRevision.HasValue && body.ExpectedConcurrencyRevision.Value != _settings.ConcurrencyRevision)
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return new ApiErrorResponse
+                    {
+                        Error = ApiResultEnum.Conflict,
+                        Message = "Concurrency settings changed since revision " + body.ExpectedConcurrencyRevision.Value + " (current " + _settings.ConcurrencyRevision + "). Reload settings before retrying.",
+                        Data = new { Code = "StaleConcurrencyRevision", Field = "Concurrency", CurrentRevision = _settings.ConcurrencyRevision }
+                    };
+                }
+
                 // Lists stored in settings are bounded (docs/ENUMERATION.md); checked before anything is applied.
                 try
                 {
@@ -633,6 +644,13 @@ namespace Armada.Server.Routes
                 if (body.BlockDependentsOfFailedStages.HasValue)
                     _settings.BlockDependentsOfFailedStages = body.BlockDependentsOfFailedStages.Value;
 
+                if (body.Concurrency != null)
+                {
+                    // Applied in place: admission, hierarchy validation and retention read this object on every use.
+                    IReadOnlyList<string> adjustments = body.Concurrency.ApplyTo(_settings.Concurrency, out bool concurrencyChanged);
+                    foreach (string adjustment in adjustments) _logging.Info(_Header + adjustment);
+                    if (concurrencyChanged) _settings.ConcurrencyRevision = _settings.ConcurrencyRevision + 1;
+                }
                 if (body.Import != null)
                     _settings.Import = body.Import;
                 if (body.FleetActions != null)
@@ -728,7 +746,7 @@ namespace Armada.Server.Routes
                 .WithResponse(200, OpenApiResponseMetadata.Create("Server settings including effective usage-selection policy, revision and capabilities"))
                 .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("Usage selection revision/source/capability conflict"))
                 .WithResponse(503, OpenApiJson.For<ApiStatusErrorResponse>("Usage selection persistence unavailable"))
-                .WithDescription("Accepts partial update of editable settings. Validates values and persists to settings file. UsageSelection changes only the members sent (omitted members keep their current values), defaults to Observe/FirstAvailable, supports FirstAvailable/MostRemainingAllowance/MostUsedAllowance, applies live, and optionally checks ExpectedUsageSelectionRevision (409 on stale revision). Environment overrides are read-only; Enforce is refused until capability metadata reports availability. Numeric bounds clamp; invalid enum/non-finite values and cross-field bounds return 400 before mutation. UsageCapture omission/null preserves the group; a supplied object replaces it using defaults for omitted members. Invalid field types return 400 before mutation. UsageCapture numeric bounds clamp: MinimumIntervalSeconds 60..86400, ProbeTimeoutSeconds 1..300, MaximumConcurrentProbes/MaximumConcurrentProbesPerHost 1..64, MaximumBackoffSeconds 60..86400, MaximumExcerptBytes 256..65536, RawSnapshotRetentionDays 1..365, RollupRetentionDays 7..1825. Lists are bounded: Import.AllowedRoots, Import.ExcludedDirectoryNames and FleetActions.OfflineHarborIds hold at most 256 entries each (400 with Data.Code CollectionLimitExceeded otherwise); RepositoryHealth.ScoredCriteria and Push.Categories keep one entry per defined value.")
+                .WithDescription("Accepts partial update of editable settings. Validates values and persists to settings file. UsageSelection changes only the members sent (omitted members keep their current values), defaults to Observe/FirstAvailable, supports FirstAvailable/MostRemainingAllowance/MostUsedAllowance, applies live, and optionally checks ExpectedUsageSelectionRevision (409 on stale revision). Concurrency likewise changes only the members sent, clamps each value to its bounds (the captain defaults to MaxCaptainConcurrency), applies live, bumps ConcurrencyRevision when an effective value changes, and optionally checks ExpectedConcurrencyRevision (409 with Data.Code StaleConcurrencyRevision). Environment overrides are read-only; Enforce is refused until capability metadata reports availability. Numeric bounds clamp; invalid enum/non-finite values and cross-field bounds return 400 before mutation. UsageCapture omission/null preserves the group; a supplied object replaces it using defaults for omitted members. Invalid field types return 400 before mutation. UsageCapture numeric bounds clamp: MinimumIntervalSeconds 60..86400, ProbeTimeoutSeconds 1..300, MaximumConcurrentProbes/MaximumConcurrentProbesPerHost 1..64, MaximumBackoffSeconds 60..86400, MaximumExcerptBytes 256..65536, RawSnapshotRetentionDays 1..365, RollupRetentionDays 7..1825. Lists are bounded: Import.AllowedRoots, Import.ExcludedDirectoryNames and FleetActions.OfflineHarborIds hold at most 256 entries each (400 with Data.Code CollectionLimitExceeded otherwise); RepositoryHealth.ScoredCriteria and Push.Categories keep one entry per defined value.")
                 .WithSecurity("ApiKey"));
 
             app.Post("/api/v1/server/reset", async (ApiRequest req) =>
@@ -868,6 +886,8 @@ namespace Armada.Server.Routes
                 UsageSelection = usageSelection.Settings,
                 UsageSelectionRevision = usageSelection.Revision,
                 UsageSelectionCapabilities = usageSelection.Capabilities,
+                Concurrency = _settings.Concurrency,
+                ConcurrencyRevision = _settings.ConcurrencyRevision,
                 AdmiralPort = _settings.AdmiralPort,
                 McpPort = _settings.McpPort,
                 MaxCaptains = _settings.MaxCaptains,

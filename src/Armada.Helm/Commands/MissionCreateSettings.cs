@@ -77,5 +77,19 @@ namespace Armada.Helm.Commands
         [Description("Worker envelope: required capability (tools or mcp); repeat for more")]
         [CommandOption("--require-tool <CAPABILITY>")]
         public string[]? RequiredTools { get; set; }
+
+        /// <summary>
+        /// Optional parent logical mission ID (msn_ prefix); the new mission starts after the parent's last stage finishes.
+        /// </summary>
+        [Description("Parent mission ID (msn_): start after the parent finishes; a failed parent cancels this mission")]
+        [CommandOption("--parent <MISSION>")]
+        public string? Parent { get; set; }
+
+        /// <summary>
+        /// Optional branch relationship to the parent: New, ContinueParent or ForkFromParent.
+        /// </summary>
+        [Description("Branch relationship to the parent: New (default), ContinueParent or ForkFromParent")]
+        [CommandOption("--branch-strategy <STRATEGY>")]
+        public string? BranchStrategy { get; set; }
     }
 }

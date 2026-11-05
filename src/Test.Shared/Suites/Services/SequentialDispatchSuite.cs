@@ -150,10 +150,17 @@ namespace Test.Shared.Suites.Services
                     foreach (KeyValuePair<string, object?> tag in tags) lock (waitingGauge) waitingGauge[tag.Value?.ToString() ?? ""] = value;
                 });
                 listener.Start();
+                List<MissionWaitGateChange> gateChanges = new List<MissionWaitGateChange>();
+                services.Missions.OnWaitingGateChanged = change => { if (change.MissionId == waiting.Id) lock (gateChanges) gateChanges.Add(change); };
 
                 AssertTrue(await services.Missions.TryAssignAsync(work.Missions[0], work.Vessel));
                 AssertFalse(await services.Missions.TryAssignAsync(waiting, work.Vessel), "the only slot is taken");
                 AssertFalse(await services.Missions.TryAssignAsync(waiting, work.Vessel), "a repeat observation of the same gate");
+                lock (gateChanges)
+                {
+                    AssertEqual(1, gateChanges.Count, "one notification per gate change, not per observation");
+                    AssertNull(gateChanges[0].PreviousGate, "the first wait has no previous gate");
+                }
                 List<MissionWaitInterval> open = await db.MissionWaitIntervals.EnumerateByMissionAsync(waiting.Id);
                 AssertEqual(1, open.Count, "the same gate keeps one interval open");
                 AssertNull(open[0].EndedUtc);
@@ -168,6 +175,7 @@ namespace Test.Shared.Suites.Services
                 List<MissionWaitInterval> closed = await db.MissionWaitIntervals.EnumerateByMissionAsync(waiting.Id);
                 AssertEqual(1, closed.Count);
                 AssertNotNull(closed[0].EndedUtc, "assignment closes the interval");
+                AssertEqual((await db.Missions.ReadAsync(waiting.Id))!.CaptainId, closed[0].CaptainId, "assignment attributes the wait to the captain that took the mission");
                 Mission assigned = (await db.Missions.ReadAsync(waiting.Id))!;
                 AssertNotNull(assigned.ReadyUtc);
                 AssertNotNull(assigned.AssignedUtc);

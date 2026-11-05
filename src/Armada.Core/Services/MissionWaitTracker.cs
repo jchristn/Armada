@@ -38,6 +38,12 @@ namespace Armada.Core.Services
             ConcurrencyGaugeState.PublishWaiting(WaitingByGate);
         }
 
+        /// <summary>Called after a <c>mission.starving</c> event is recorded.</summary>
+        internal Action<ArmadaEvent>? EventRecorded { get; set; }
+
+        /// <summary>Called when a Pending mission starts waiting on a different gate.</summary>
+        internal Action<MissionWaitGateChange>? GateChanged { get; set; }
+
         /// <summary>When this tracker started; intervals opened earlier belong to a previous Admiral process.</summary>
         internal DateTime StartedUtc { get; }
 
@@ -66,14 +72,23 @@ namespace Armada.Core.Services
                 }
                 if (wait.Gate != gate)
                 {
+                    MissionWaitGateEnum? previousGate = wait.Gate;
                     if (wait.Gate.HasValue) await CloseAsync(mission.Id, wait, now, token).ConfigureAwait(false);
-                    await _Database.MissionWaitIntervals.CreateAsync(new MissionWaitInterval
+                    MissionWaitInterval interval = new MissionWaitInterval
                     {
                         TenantId = mission.TenantId, MissionId = mission.Id, VesselId = mission.VesselId, VoyageId = mission.VoyageId,
-                        Gate = gate, StartedUtc = now, Detail = Truncate(detail)
-                    }, token).ConfigureAwait(false);
+                        Gate = gate, StartedUtc = now, Detail = Truncate(detail),
+                        // A pinned mission can only be taken by its requested captain, so its wait belongs to that captain now.
+                        CaptainId = String.IsNullOrEmpty(mission.RequestedCaptainId) ? null : mission.RequestedCaptainId
+                    };
+                    await RetryTransientAsync(() => _Database.MissionWaitIntervals.CreateAsync(interval, token), token).ConfigureAwait(false);
                     wait.Gate = gate;
                     wait.StartedUtc = now;
+                    Notify(GateChanged, new MissionWaitGateChange
+                    {
+                        TenantId = mission.TenantId, MissionId = mission.Id, VoyageId = mission.VoyageId, VesselId = mission.VesselId,
+                        Gate = gate, PreviousGate = previousGate, Detail = interval.Detail, SinceUtc = now
+                    });
                 }
                 await ReportStarvationAsync(mission, wait, now, token).ConfigureAwait(false);
             }
@@ -113,6 +128,11 @@ namespace Armada.Core.Services
         internal async Task CompleteAssignmentAsync(Mission mission, AssignmentWaitTiming timing, CancellationToken token)
         {
             await ReleaseAsync(mission.Id, timing.AssignedUtc, token).ConfigureAwait(false);
+            if (!String.IsNullOrEmpty(mission.CaptainId))
+            {
+                DateTime episodeStart = timing.QueueStartUtc ?? timing.ReadyUtc;
+                await RetryTransientAsync(() => _Database.MissionWaitIntervals.AttributeCaptainAsync(mission.Id, mission.CaptainId!, episodeStart, token), token).ConfigureAwait(false);
+            }
             KeyValuePair<string, object?> persona = new KeyValuePair<string, object?>("persona", String.IsNullOrWhiteSpace(mission.Persona) ? "none" : mission.Persona);
             ArmadaMetrics.SlotWaitSeconds.Record(Math.Max(0, (timing.AssignedUtc - timing.ReadyUtc).TotalSeconds),
                 new KeyValuePair<string, object?>("gate_last", timing.LastCapacityGate?.ToString() ?? "None"), persona);
@@ -151,14 +171,20 @@ namespace Armada.Core.Services
             try
             {
                 if (!_Open.TryRemove(missionId, out OpenMissionWait? wait) || !wait.Gate.HasValue) return;
-                await CloseAsync(missionId, wait, endedUtc, token).ConfigureAwait(false);
+                try { await CloseAsync(missionId, wait, endedUtc, token).ConfigureAwait(false); }
+                catch
+                {
+                    // Keep the wait tracked so the next reconcile pass closes the interval instead of leaving it open.
+                    _Open.TryAdd(missionId, wait);
+                    throw;
+                }
             }
             finally { gateLock.Release(); }
         }
 
         private async Task CloseAsync(string missionId, OpenMissionWait wait, DateTime endedUtc, CancellationToken token)
         {
-            await _Database.MissionWaitIntervals.CloseOpenAsync(missionId, endedUtc, token).ConfigureAwait(false);
+            await RetryTransientAsync(() => _Database.MissionWaitIntervals.CloseOpenAsync(missionId, endedUtc, token), token).ConfigureAwait(false);
             ArmadaMetrics.GateWaitSeconds.Record(Math.Max(0, (endedUtc - wait.StartedUtc).TotalSeconds),
                 new KeyValuePair<string, object?>("gate", wait.Gate!.Value.ToString()));
             wait.Gate = null;
@@ -179,7 +205,29 @@ namespace Armada.Core.Services
             };
             try { await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false); }
             catch (Exception ex) when (!(ex is OperationCanceledException)) { _Logging.Warn(_Header + "could not record starvation of mission " + mission.Id + ": " + ex.Message); }
+            Notify(EventRecorded, evt);
             _Logging.Warn(_Header + evt.Message);
+        }
+
+        // A subscriber failure (a closed socket, for example) never fails the scheduling path.
+        private void Notify<T>(Action<T>? handler, T value)
+        {
+            if (handler == null) return;
+            try { handler(value); }
+            catch (Exception ex) { _Logging.Debug(_Header + "wait notification failed: " + ex.Message); }
+        }
+
+        // Interval writes run outside the admission retry loop, so deadlock victims and lock timeouts are retried here.
+        private static async Task RetryTransientAsync(Func<Task> write, CancellationToken token)
+        {
+            for (int attempt = 1; ; attempt++)
+            {
+                try { await write().ConfigureAwait(false); return; }
+                catch (Exception ex) when (attempt < 3 && TransientDatabaseError.IsTransient(ex))
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(50 * attempt), token).ConfigureAwait(false);
+                }
+            }
         }
 
         private SemaphoreSlim LockFor(string missionId) => _Locks[(StringComparer.Ordinal.GetHashCode(missionId) & 0x7fffffff) % _Stripes];

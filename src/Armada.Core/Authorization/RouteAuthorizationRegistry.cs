@@ -70,6 +70,11 @@ namespace Armada.Core.Authorization
             Add("DELETE", "/api/v1/cli-permissions/rules/{id}", "CliPermission", ResourceOperationEnum.Delete, PermissionLevel.TenantAdmin);
 
             // Captain selection: shared service enforces tenant/owner and mission-token scope.
+            Add("GET", "/api/v1/missions/{id}/waits", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("POST", "/api/v1/missions/{id}/waits/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/voyages/{id}/tree", "Voyage", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/vessels/{id}/concurrency", "Vessel", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
+            Add("GET", "/api/v1/metrics/concurrency", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/missions/{id}/captain-selection/recovery", "Mission", ResourceOperationEnum.Update, PermissionLevel.TenantAdmin);
             Add("GET", "/api/v1/missions/{id}/captain-selection", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);
             Add("POST", "/api/v1/missions/{id}/captain-selection/history/enumerate", "Mission", ResourceOperationEnum.Read, PermissionLevel.Authenticated);

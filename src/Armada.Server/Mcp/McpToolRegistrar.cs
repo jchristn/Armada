@@ -146,6 +146,7 @@ namespace Armada.Server.Mcp
             McpVesselTools.Register(register, database, dockService, vesselService, settings, admiral, blackBoxCapture, blackBoxHooks);
             if (vesselImportService != null) McpVesselImportTools.Register(register, vesselImportService, fleetCategorizationService);
             McpVoyageTools.Register(register, database, admiral, settings);
+            McpConcurrencyTools.Register(register, database);
             McpMissionTools.Register(register, database, admiral, settings, git, landingService, missionService, blackBoxCapture, blackBoxHooks);
             McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, agentLifecycle, captainToolService);
             McpSignalTools.Register(register, database);
@@ -242,6 +243,7 @@ namespace Armada.Server.Mcp
             RegisterCatalogGroup("Armada MCP / Vessels", register => McpVesselTools.Register(register, database, dockService, vesselService, settings, admiral));
             if (vesselImportService != null) RegisterCatalogGroup("Armada MCP / Vessel Import", register => McpVesselImportTools.Register(register, vesselImportService, fleetCategorizationService));
             RegisterCatalogGroup("Armada MCP / Voyages", register => McpVoyageTools.Register(register, database, admiral, settings));
+            RegisterCatalogGroup("Armada MCP / Concurrency", register => McpConcurrencyTools.Register(register, database));
             RegisterCatalogGroup("Armada MCP / Missions", register => McpMissionTools.Register(register, database, admiral, settings, git, landingService));
             RegisterCatalogGroup("Armada MCP / Captains", register => McpCaptainTools.Register(register, database, admiral, settings, onStopCaptain, agentLifecycle));
             RegisterCatalogGroup("Armada MCP / Signals", register => McpSignalTools.Register(register, database));

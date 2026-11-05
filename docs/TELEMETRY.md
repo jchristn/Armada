@@ -84,6 +84,12 @@ detail `admiral restart`; the next evaluation opens fresh ones. A mission's `Rea
 observation (voyage, mission, branch, global, captain, endpoint, runtime or placement slot), or its assignment time
 when it was admitted on first sight. `AssignedUtc` is stamped at assignment.
 
+Prometheus carries fleet-wide series only. Per-vessel and per-mission numbers come from the REST API (and the matching
+MCP tools): `GET /api/v1/missions/{id}/waits`, `GET /api/v1/vessels/{id}/concurrency` (slots, waiting missions and
+24 h / 7 d slot wait percentiles) and `GET /api/v1/metrics/concurrency` (wait by gate in time buckets, filterable by vessel or by the captain that took the
+waiting missions). See
+[REST_API.md](REST_API.md#v130-mission-tree-waits-and-concurrency).
+
 | Prometheus series | Type | Labels | Meaning |
 |---|---|---|---|
 | `armada_missions_slot_wait_seconds` | histogram | `gate_last`, `persona` | Assignment minus `ReadyUtc`; `gate_last` is the last capacity gate, or `None` |

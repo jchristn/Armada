@@ -38,6 +38,16 @@ namespace Armada.Helm.Commands
 
             if (!string.IsNullOrEmpty(settings.Voyage)) mission.VoyageId = settings.Voyage;
             if (settings.Priority.HasValue) mission.Priority = settings.Priority.Value;
+            if (!string.IsNullOrEmpty(settings.Parent)) mission.ParentMissionId = settings.Parent;
+            if (!string.IsNullOrEmpty(settings.BranchStrategy))
+            {
+                if (!Enum.TryParse<MissionBranchStrategyEnum>(settings.BranchStrategy, true, out MissionBranchStrategyEnum strategy) || !Enum.IsDefined(typeof(MissionBranchStrategyEnum), strategy))
+                {
+                    HelmConsole.Error.MarkupLine("[red]--branch-strategy must be New, ContinueParent or ForkFromParent.[/]");
+                    return 1;
+                }
+                mission.BranchStrategy = strategy;
+            }
             if (settings.MaxFiles.HasValue || settings.MaxSteps.HasValue || settings.MinServedContextTokens.HasValue || (settings.RequiredTools != null && settings.RequiredTools.Length > 0))
             {
                 // The server validates the envelope (it may only tighten the vessel default) and answers 400 with the reason.

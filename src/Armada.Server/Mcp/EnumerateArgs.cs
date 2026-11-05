@@ -101,6 +101,26 @@ namespace Armada.Server.Mcp
         public bool? UnreadOnly { get; set; }
 
         /// <summary>
+        /// Return the direct children of this logical mission (missions only).
+        /// </summary>
+        public string? ParentMissionId { get; set; }
+
+        /// <summary>
+        /// Return only top-level logical missions (missions only).
+        /// </summary>
+        public bool? RootsOnly { get; set; }
+
+        /// <summary>
+        /// Return only captains with exactly this many mission slots (captains only).
+        /// </summary>
+        public int? MaxConcurrency { get; set; }
+
+        /// <summary>
+        /// Return only Pending missions waiting on this gate (missions only).
+        /// </summary>
+        public string? WaitingGate { get; set; }
+
+        /// <summary>
         /// Include Description field on missions and voyages (default false). When false, a DescriptionLength hint is returned instead.
         /// </summary>
         public bool? IncludeDescription { get; set; }
@@ -176,6 +196,11 @@ namespace Armada.Server.Mcp
             query.SignalType = SignalType;
             query.ToCaptainId = ToCaptainId;
             query.UnreadOnly = UnreadOnly;
+            query.ParentMissionId = ParentMissionId;
+            query.RootsOnly = RootsOnly;
+            query.MaxConcurrency = MaxConcurrency;
+            if (!String.IsNullOrEmpty(WaitingGate) && Enum.TryParse<MissionWaitGateEnum>(WaitingGate, true, out MissionWaitGateEnum gate) && Enum.IsDefined(typeof(MissionWaitGateEnum), gate))
+                query.WaitingGate = gate;
 
             return query;
         }

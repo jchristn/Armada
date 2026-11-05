@@ -821,6 +821,43 @@ namespace Armada.Core.Client
         }
 
         /// <summary>
+        /// Get a voyage's missions arranged as logical missions with their stages and children (GET /api/v1/voyages/{id}/tree).
+        /// </summary>
+        public async Task<VoyageTree?> GetVoyageTreeAsync(string id, CancellationToken token = default)
+        {
+            return await GetAsync<VoyageTree>("/api/v1/voyages/" + Uri.EscapeDataString(id) + "/tree", token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get one page of a mission's recorded wait intervals, oldest first (GET /api/v1/missions/{id}/waits).
+        /// </summary>
+        public async Task<EnumerationResult<MissionWaitInterval>?> GetMissionWaitsAsync(string id, int pageNumber = 1, int pageSize = 100, CancellationToken token = default)
+        {
+            return await GetAsync<EnumerationResult<MissionWaitInterval>>("/api/v1/missions/" + Uri.EscapeDataString(id) + "/waits?pageNumber=" + pageNumber + "&pageSize=" + pageSize, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get a vessel's slots, waiting missions and recent slot wait (GET /api/v1/vessels/{id}/concurrency).
+        /// </summary>
+        public async Task<VesselConcurrency?> GetVesselConcurrencyAsync(string id, CancellationToken token = default)
+        {
+            return await GetAsync<VesselConcurrency>("/api/v1/vessels/" + Uri.EscapeDataString(id) + "/concurrency", token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Get wait aggregates over a window (GET /api/v1/metrics/concurrency); the server defaults to the last 24 hours.
+        /// </summary>
+        public async Task<ConcurrencyMetrics?> GetConcurrencyMetricsAsync(DateTime? fromUtc = null, DateTime? toUtc = null, string? vesselId = null, string? captainId = null, CancellationToken token = default)
+        {
+            List<string> parts = new List<string>();
+            if (fromUtc.HasValue) parts.Add("from=" + Uri.EscapeDataString(fromUtc.Value.ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture)));
+            if (toUtc.HasValue) parts.Add("to=" + Uri.EscapeDataString(toUtc.Value.ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture)));
+            if (!String.IsNullOrEmpty(vesselId)) parts.Add("vesselId=" + Uri.EscapeDataString(vesselId));
+            if (!String.IsNullOrEmpty(captainId)) parts.Add("captainId=" + Uri.EscapeDataString(captainId));
+            return await GetAsync<ConcurrencyMetrics>("/api/v1/metrics/concurrency" + (parts.Count == 0 ? "" : "?" + String.Join("&", parts)), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Enumerate voyage progress one page at a time (POST /api/v1/voyages/progress/enumerate). With no status filter,
         /// the active voyages (InProgress, then Open).
         /// </summary>

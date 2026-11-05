@@ -3239,6 +3239,38 @@
     },
     {
       "kind": "api",
+      "key": "getVoyageTree",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVoyageTreeAsync",
+      "workstream": "W0.2",
+      "notes": "Voyages: mission tree"
+    },
+    {
+      "kind": "api",
+      "key": "getMissionWaits",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetMissionWaitsAsync",
+      "workstream": "W0.2",
+      "notes": "Missions: wait intervals"
+    },
+    {
+      "kind": "api",
+      "key": "getVesselConcurrency",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetVesselConcurrencyAsync",
+      "workstream": "W0.2",
+      "notes": "Vessels: concurrency"
+    },
+    {
+      "kind": "api",
+      "key": "getConcurrencyMetrics",
+      "status": "implemented",
+      "tui": "ArmadaClient.GetConcurrencyMetricsAsync",
+      "workstream": "W0.2",
+      "notes": "Concurrency wait aggregates"
+    },
+    {
+      "kind": "api",
       "key": "getVoyageBlackBox",
       "status": "implemented",
       "tui": "ArmadaClient.GetVoyageBlackBoxAsync",

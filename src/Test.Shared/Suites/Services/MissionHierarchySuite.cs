@@ -117,7 +117,8 @@ namespace Test.Shared.Suites.Services
             AssertEqual(MissionStatusEnum.Cancelled, bRow.Status); AssertEqual(MissionFailureKindEnum.ParentFailed, bRow.FailureKind);
             AssertEqual(MissionStatusEnum.Cancelled, cRow.Status, "the whole subtree is cancelled"); AssertEqual(MissionFailureKindEnum.ParentFailed, cRow.FailureKind);
             AssertEqual(MissionStatusEnum.Pending, (await h.ReadAsync(d)).Status, "an unrelated root is unaffected");
-            await h.Missions.RestartAsync(await h.ReadAsync(a));
+            Mission restarted = await h.Missions.RestartAsync(await h.ReadAsync(a));
+            AssertEqual(b.Id + "," + c.Id, String.Join(",", (restarted.RestoredMissionIds ?? new List<string>()).OrderBy(id => id == b.Id ? 0 : 1)), "the restart lists the descendants it re-pended");
             AssertEqual(MissionStatusEnum.Pending, (await h.ReadAsync(b)).Status, "restart restores B");
             AssertEqual(MissionStatusEnum.Pending, (await h.ReadAsync(c)).Status, "and C");
             AssertNull((await h.ReadAsync(c)).FailureKind);

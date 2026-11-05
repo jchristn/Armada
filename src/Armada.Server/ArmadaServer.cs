@@ -336,6 +336,8 @@ namespace Armada.Server
             // Dispatch returns once a mission is admitted; dock provisioning and launch continue in the background, so neither
             // create requests nor the health check wait on per-repository git work.
             admiralService.LaunchInBackground = true;
+            // Concurrency limit overruns reach the owning tenant's sockets; one without a tenant reaches only global admins.
+            admiralService.OnConcurrencyEvent = evt => _WebSocketHub?.BroadcastToTenant(evt.TenantId, evt.EventType, evt.Message, evt);
             _Admiral = admiralService;
             _MergeQueue = new MergeQueueService(_Logging, _Database, _Settings, _Git);
             _JobService = new Armada.Core.Services.JobService(_Database, _Logging);
@@ -561,6 +563,9 @@ namespace Armada.Server
             admiralService.OnIsProcessAwaitingReconnect = _HarborConnectionManager.IsProcessAwaitingReconnect;
             // A captain on a Harbor that lost its link is held as unreachable, not judged stalled, and reconciled on reconnect.
             admiralService.HarborLinks = _HarborConnectionManager;
+            // Starvation and gate changes reach the owning tenant's sockets.
+            missionService.OnConcurrencyEvent = evt => _WebSocketHub?.BroadcastToTenant(evt.TenantId, evt.EventType, evt.Message, evt);
+            missionService.OnWaitingGateChanged = change => _WebSocketHub?.BroadcastToTenant(change.TenantId, "mission.waiting_gate_changed", change);
             missionService.OnGetMissionOutput = _AgentLifecycle.GetAndClearMissionOutput;
             missionService.OnPeekMissionOutput = _AgentLifecycle.PeekMissionOutput;
             missionService.OnTakeMissionTelemetry = _AgentLifecycle.TakeMissionTelemetry;
@@ -1719,6 +1724,9 @@ namespace Armada.Server
             // Voyages
             new VoyageRoutes(_Database, _Admiral, EmitEventAsync, _WebSocketHub, _Logging, _ObjectiveService, _JsonOptions, _MissionService)
                 .Register(_App, authenticate, _AuthorizationService);
+
+            // Mission tree, waits and concurrency reports
+            new ConcurrencyRoutes(_Database).Register(_App, authenticate, _AuthorizationService);
 
             // Missions
             new MissionRoutes(_Database, _Admiral, _MissionService, _Settings, _Git, _LandingService, _LandingPreviewService, _GitHubIntegrationService, EmitEventAsync, EmitMissionStatusChangedAsync, _MissionLanding.HandleMissionCompleteAsync, _WebSocketHub, _Logging, _JsonOptions)

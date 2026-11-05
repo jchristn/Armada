@@ -12984,3 +12984,24 @@ Example (admin):
   }]
 }
 ```
+
+## v1.3.0 mission tree, waits and concurrency
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/api/v1/voyages/{id}/tree` | `VoyageTree`: `VoyageId`, `Title`, `TotalMissions`, `MaxDepth` and `Roots`. Each `MissionTreeNode` holds `Mission` (the logical mission's root, a `MissionSummary`), `Stages` (its later pipeline stages in order, missions reached by `DependsOnMissionId`) and `Children` (child logical missions by `ParentMissionId`). A child whose parent is a stage sits under that stage's root. |
+| GET | `/api/v1/missions/{id}/waits` | One page (`pageNumber`, `pageSize` 1-1000 default 100, `order`) of the mission's `MissionWaitInterval` rows, oldest first; `POST .../waits/enumerate` takes the same paging as a body. Each row has `Gate`, `StartedUtc`, `EndedUtc` (null while it still waits), `Detail`. Closed intervals are kept for `Concurrency.WaitIntervalRetentionDays`. |
+| GET | `/api/v1/vessels/{id}/concurrency` | `VesselConcurrency`: `MaxParallelVoyages`, `MaxParallelMissionsPerVoyage`, `VoyageSlotsInUse`, `RunningMissions`, `HoldingVoyages` (running and Pending counts each), `Waiting` (longest wait first, at most 100; `WaitingCount` is the total), and `SlotWait24h` / `SlotWait7d` (`Missions`, `P50Seconds`, `P95Seconds`, `MaxSeconds`). Callers who are not tenant administrators see only their own voyages and missions in the lists; counts cover the whole vessel. |
+| GET | `/api/v1/metrics/concurrency?from&to&vesselId&captainId` | `ConcurrencyMetrics` for a window (default the last 24 hours, at most 31 days; 400 otherwise): `SlotWait`, `ByGate` (seconds and missions per gate, largest first) and about 48 `Buckets` 5 minutes to 1 day wide (`MissionsWaiting`, `ByGate`). `Truncated` is true past 50000 intervals. `captainId` counts the waits attributed to a captain: those of missions it went on to run (stamped when it takes the mission, for that waiting episode only) and the open waits of missions pinned to it with `RequestedCaptainId`. An unpinned mission that is still waiting belongs to no captain yet. An unknown or invisible vessel or captain is a 404. |
+
+Slot wait for one mission is its time on capacity gates (vessel voyage and voyage mission slots, captain, endpoint, runtime and global slots, branch locks and placement) within the window. Dependency, parent and integration waits are reported per gate but are not slot wait.
+
+Mission enumeration (`GET /api/v1/missions`, `POST /api/v1/missions/enumerate`) accepts `parentMissionId` (direct children), `rootsOnly` (no parent and not a later pipeline stage) and `waitingGate` (Pending missions whose open wait is on that gate). Captain enumeration (`GET /api/v1/captains`, `POST /api/v1/captains/enumerate`) accepts `maxConcurrency`, an exact slot count (1 lists serial captains).
+
+`POST /api/v1/voyages` mission entries accept `Key`, `ParentKey` and `BranchStrategy`; an unknown or later `ParentKey` returns 400 and creates nothing. `POST /api/v1/missions/{id}/restart` returns `RestoredMissionIds`, the other missions it returned to Pending (later stages and dependents cancelled because this mission failed, and descendants cancelled with `ParentFailed`).
+
+`PUT /api/v1/settings` accepts a `Concurrency` group. Only the members sent change; each value is clamped to its bounds (captain defaults to `MaxCaptainConcurrency`) and applied live. `ConcurrencyRevision` increases when an effective value changes; send `ExpectedConcurrencyRevision` to get 409 (`Data.Code` `StaleConcurrencyRevision`) instead of overwriting a newer change. `GET /api/v1/settings` returns `Concurrency` and `ConcurrencyRevision`.
+
+```json
+{ "Concurrency": { "StarvationWarningMinutes": 45 }, "ExpectedConcurrencyRevision": 3 }
+```

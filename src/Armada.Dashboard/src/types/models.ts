@@ -389,6 +389,8 @@ export interface Mission {
   depth?: number;
   readyUtc?: string | null;
   assignedUtc?: string | null;
+  /** Other missions a restart returned to Pending (only on a restart response). */
+  restoredMissionIds?: string[] | null;
   ownedPathsJson?: string | null;
   readsPathsJson?: string | null;
   persona: string | null;
@@ -522,6 +524,124 @@ export interface MissionSummary {
   lastUpdateUtc: string;
   /** True for evaluation work (fixture battery, model evaluation); its stage outcomes never count as production data. */
   isEvaluation?: boolean;
+}
+
+/** Scheduling gate a Pending mission waits on (MissionWaitGateEnum). */
+export type MissionWaitGate =
+  | 'Dependency' | 'Parent' | 'IntegrationBarrier' | 'BroadScope' | 'BranchLock' | 'VesselVoyageSlot'
+  | 'VoyageMissionSlot' | 'CaptainSlot' | 'EndpointSlot' | 'RuntimeSlot' | 'GlobalSlot' | 'Placement'
+  | 'LaunchBackoff' | 'Other';
+
+/** One recorded scheduling wait (GET /api/v1/missions/{id}/waits). endedUtc is null while the mission still waits. */
+export interface MissionWaitInterval {
+  id: string;
+  tenantId: string | null;
+  missionId: string;
+  vesselId: string | null;
+  voyageId: string | null;
+  captainId: string | null;
+  gate: MissionWaitGate;
+  startedUtc: string;
+  endedUtc: string | null;
+  detail: string | null;
+}
+
+/** A logical mission in a voyage tree: its root, later pipeline stages, and child logical missions. */
+export interface MissionTreeNode {
+  mission: MissionSummary;
+  stages: MissionSummary[];
+  children: MissionTreeNode[];
+}
+
+/** GET /api/v1/voyages/{id}/tree */
+export interface VoyageTree {
+  voyageId: string;
+  title: string;
+  totalMissions: number;
+  /** True when the voyage has more missions than the tree holds (1000, oldest first). */
+  truncated: boolean;
+  maxDepth: number;
+  roots: MissionTreeNode[];
+}
+
+/** Slot wait over a window, per mission; null percentiles mean no samples. */
+export interface SlotWaitStatistics {
+  windowHours: number;
+  missions: number;
+  p50Seconds: number | null;
+  p95Seconds: number | null;
+  maxSeconds: number | null;
+}
+
+export interface VesselVoyageSlotUsage {
+  voyageId: string | null;
+  missionId: string | null;
+  title: string;
+  runningMissions: number;
+  pendingMissions: number;
+}
+
+export interface WaitingMissionInfo {
+  missionId: string;
+  title: string;
+  voyageId: string | null;
+  gate: MissionWaitGate;
+  detail: string | null;
+  waitingSinceUtc: string;
+  waitedSeconds: number;
+}
+
+/** GET /api/v1/vessels/{id}/concurrency */
+export interface VesselConcurrency {
+  vesselId: string;
+  name: string;
+  maxParallelVoyages: number;
+  maxParallelMissionsPerVoyage: number;
+  voyageSlotsInUse: number;
+  runningMissions: number;
+  holdingVoyages: VesselVoyageSlotUsage[];
+  waiting: WaitingMissionInfo[];
+  waitingCount: number;
+  slotWait24h: SlotWaitStatistics;
+  slotWait7d: SlotWaitStatistics;
+  computedUtc: string;
+}
+
+export interface GateWaitTotal {
+  gate: MissionWaitGate;
+  seconds: number;
+  missions: number;
+}
+
+export interface ConcurrencyMetricsBucket {
+  startUtc: string;
+  missionsWaiting: number;
+  byGate: GateWaitTotal[];
+}
+
+/** GET /api/v1/metrics/concurrency */
+export interface ConcurrencyMetrics {
+  fromUtc: string;
+  toUtc: string;
+  vesselId: string | null;
+  captainId: string | null;
+  bucketSeconds: number;
+  slotWait: SlotWaitStatistics;
+  byGate: GateWaitTotal[];
+  buckets: ConcurrencyMetricsBucket[];
+  truncated: boolean;
+}
+
+/** WebSocket mission.waiting_gate_changed payload. */
+export interface MissionWaitGateChange {
+  tenantId: string | null;
+  missionId: string;
+  voyageId: string | null;
+  vesselId: string | null;
+  gate: MissionWaitGate;
+  previousGate: MissionWaitGate | null;
+  detail: string | null;
+  sinceUtc: string;
 }
 
 export interface MissionHistoryBucket {

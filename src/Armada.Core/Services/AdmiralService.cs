@@ -83,6 +83,13 @@ namespace Armada.Core.Services
         /// </summary>
         public Func<RemoteTunnelStatus>? OnGetRemoteTunnelStatus { get; set; }
 
+        /// <summary>Called after a <c>concurrency.limit_exceeded</c> event is recorded, for live delivery.</summary>
+        public Action<ArmadaEvent>? OnConcurrencyEvent
+        {
+            get => _ConcurrencyInvariants.EventRecorded;
+            set => _ConcurrencyInvariants.EventRecorded = value;
+        }
+
         /// <summary>
         /// Optional health-check hook that completes WorkProduced manual-landing (Landing Mode None) missions whose branch
         /// was merged into the target by hand. Returns the number reconciled. Concrete hook, like

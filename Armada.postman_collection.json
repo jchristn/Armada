@@ -1602,6 +1602,34 @@
                         },
                         "description": "Step 5: Check the system status to see the voyage and missions in progress."
                     }
+                },
+                {
+                    "name": "Update Concurrency Settings",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"Concurrency\": {\n    \"StarvationWarningMinutes\": 45,\n    \"DefaultVesselMaxParallelVoyages\": 2\n  },\n  \"ExpectedConcurrencyRevision\": 0\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/settings",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "settings"
+                            ]
+                        },
+                        "description": "Only the Concurrency members sent change; values are clamped to their bounds and applied live. ConcurrencyRevision increases on an effective change; a stale ExpectedConcurrencyRevision returns 409 with Data.Code StaleConcurrencyRevision."
+                    }
                 }
             ]
         },
@@ -2597,6 +2625,54 @@
                         },
                         "description": "Step 2: Register a git repository as a vessel in the fleet."
                     }
+                },
+                {
+                    "name": "9. Inspect Concurrency",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/vessels/{{vesselId}}/concurrency",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "vessels",
+                                "{{vesselId}}",
+                                "concurrency"
+                            ]
+                        },
+                        "description": "Step 9: after dispatching (step 4), see how the vessel's capacity is used: voyage slots in use against MaxParallelVoyages, the voyages holding them, each Pending mission and the gate it waits on (longest first), and slot wait p50/p95/max over 24 hours and 7 days. The test script logs a summary and sets missionId to the longest-waiting mission, so Missions > Get Mission Waits shows its full wait history next."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Step 9: vessel concurrency is returned', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    var json = pm.response.json();",
+                                    "    pm.expect(json.VesselId).to.eql(pm.collectionVariables.get('vesselId'));",
+                                    "    pm.expect(json).to.have.property('VoyageSlotsInUse');",
+                                    "    pm.expect(json.Waiting).to.be.an('array');",
+                                    "});",
+                                    "if (pm.response.code === 200) {",
+                                    "    var json = pm.response.json();",
+                                    "    var slots = json.MaxParallelVoyages === 0 ? json.VoyageSlotsInUse + ' (unlimited)' : json.VoyageSlotsInUse + ' / ' + json.MaxParallelVoyages;",
+                                    "    console.log('Voyage slots in use: ' + slots + '; running missions: ' + json.RunningMissions + '; waiting: ' + json.WaitingCount);",
+                                    "    json.Waiting.forEach(function (w) { console.log('  ' + w.Title + ' waits on ' + w.Gate + ' for ' + Math.round(w.WaitedSeconds) + ' s'); });",
+                                    "    if (json.Waiting.length > 0) {",
+                                    "        // Follow up with Missions > Get Mission Waits for the longest-waiting mission.",
+                                    "        pm.collectionVariables.set('missionId', json.Waiting[0].MissionId);",
+                                    "    }",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
                 }
             ]
         },
@@ -3559,6 +3635,55 @@
                             "raw": "{\n  \"Title\": \"Backlog follow-through voyage\",\n  \"Description\": \"Dispatch implementation from the backlog item.\",\n  \"VesselId\": \"{{vesselId}}\",\n  \"ObjectiveId\": \"{{objectiveId}}\",\n  \"Missions\": [\n    {\n      \"Title\": \"Backlog follow-through mission\",\n      \"Description\": \"Implement the linked backlog item\"\n    }\n  ]\n}"
                         }
                     }
+                },
+                {
+                    "name": "Get Voyage Tree",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/voyages/{{voyageId}}/tree",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "voyages",
+                                "{{voyageId}}",
+                                "tree"
+                            ]
+                        },
+                        "description": "The voyage's missions as logical missions: each node holds Mission (the root's summary), Stages (later pipeline stages in order) and Children (child logical missions). Roots, TotalMissions and MaxDepth describe the whole tree."
+                    }
+                },
+                {
+                    "name": "Dispatch Hierarchical Voyage",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"Title\": \"Add audit logging\",\n  \"VesselId\": \"{{vesselId}}\",\n  \"Missions\": [\n    {\n      \"Title\": \"Add the audit log table\",\n      \"Description\": \"Create the audit_log table and its data access methods.\",\n      \"Key\": \"schema\"\n    },\n    {\n      \"Title\": \"Write audit entries from the API\",\n      \"Description\": \"Record an audit entry for every mutating API call.\",\n      \"ParentKey\": \"schema\"\n    },\n    {\n      \"Title\": \"Show the audit log in the dashboard\",\n      \"Description\": \"Add a read-only audit log page.\",\n      \"ParentKey\": \"schema\",\n      \"BranchStrategy\": \"ForkFromParent\"\n    }\n  ]\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/voyages",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "voyages"
+                            ]
+                        },
+                        "description": "A tree in one call: Key names a mission and ParentKey makes a later mission its child. Children start once the parent's last stage finishes; the first child continues the parent's branch and later ones fork from its head (BranchStrategy overrides). An unknown or later ParentKey returns 400 and creates nothing."
+                    }
                 }
             ]
         },
@@ -4447,6 +4572,171 @@
                         },
                         "description": "Step 7: List missions for the voyage to see individual progress."
                     }
+                },
+                {
+                    "name": "Get Mission Waits",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/waits?pageNumber=1&pageSize=100",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "missions",
+                                "{{missionId}}",
+                                "waits"
+                            ],
+                            "query": [
+                                {
+                                    "key": "pageNumber",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "pageSize",
+                                    "value": "100"
+                                },
+                                {
+                                    "key": "order",
+                                    "value": "CreatedDescending",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "One page of the mission's recorded scheduling waits, oldest first (order=CreatedDescending for newest first): Gate, StartedUtc, EndedUtc (null while it still waits) and Detail."
+                    }
+                },
+                {
+                    "name": "Enumerate Mission Waits",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"PageNumber\": 1,\n  \"PageSize\": 100,\n  \"Order\": \"CreatedDescending\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/missions/{{missionId}}/waits/enumerate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "missions",
+                                "{{missionId}}",
+                                "waits",
+                                "enumerate"
+                            ]
+                        },
+                        "description": "POST form of Get Mission Waits with paging in an EnumerationQuery body."
+                    }
+                },
+                {
+                    "name": "List Child Missions",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/missions?parentMissionId={{missionId}}&pageSize=25",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "missions"
+                            ],
+                            "query": [
+                                {
+                                    "key": "parentMissionId",
+                                    "value": "{{missionId}}"
+                                },
+                                {
+                                    "key": "pageSize",
+                                    "value": "25"
+                                }
+                            ]
+                        },
+                        "description": "Direct children of a logical mission."
+                    }
+                },
+                {
+                    "name": "List Missions Waiting on Captain Slots",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/missions?waitingGate=CaptainSlot&pageSize=25",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "missions"
+                            ],
+                            "query": [
+                                {
+                                    "key": "waitingGate",
+                                    "value": "CaptainSlot"
+                                },
+                                {
+                                    "key": "pageSize",
+                                    "value": "25"
+                                }
+                            ]
+                        },
+                        "description": "Pending missions whose current wait is on a captain slot. Other gates: VesselVoyageSlot, VoyageMissionSlot, EndpointSlot, RuntimeSlot, GlobalSlot, BranchLock, Placement, Dependency, Parent."
+                    }
+                },
+                {
+                    "name": "Get Concurrency Metrics",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/metrics/concurrency?from={{usageFrom}}&to={{usageTo}}&vesselId={{vesselId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "metrics",
+                                "concurrency"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "{{usageFrom}}"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "{{usageTo}}"
+                                },
+                                {
+                                    "key": "vesselId",
+                                    "value": "{{vesselId}}"
+                                },
+                                {
+                                    "key": "captainId",
+                                    "value": "{{captainId}}",
+                                    "disabled": true,
+                                    "description": "Only waits attributed to this captain: missions it went on to run, plus open waits of missions pinned to it"
+                                }
+                            ]
+                        },
+                        "description": "Wait aggregates over a window (default the last 24 hours, at most 31 days): slot wait p50/p95/max, wait by gate and about 48 time buckets. Optional vesselId and captainId filters; captainId counts the waits of missions the captain went on to run and the open waits of missions pinned to it."
+                    }
                 }
             ]
         },
@@ -5060,6 +5350,35 @@
                             ]
                         },
                         "description": "Step 3: Register an AI captain agent."
+                    }
+                },
+                {
+                    "name": "List Captains by Slot Count",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/v1/captains?maxConcurrency=1&pageSize=25",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "captains"
+                            ],
+                            "query": [
+                                {
+                                    "key": "maxConcurrency",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "pageSize",
+                                    "value": "25"
+                                }
+                            ]
+                        },
+                        "description": "Captains with exactly this many mission slots (MaxConcurrency); 1 lists serial captains."
                     }
                 }
             ]

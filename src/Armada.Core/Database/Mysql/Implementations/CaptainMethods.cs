@@ -354,6 +354,11 @@ namespace Armada.Core.Database.Mysql.Implementations
                     conditions.Add("state = @state");
                     parameters.Add(new MySqlParameter("@state", query.Status));
                 }
+                if (query.MaxConcurrency.HasValue)
+                {
+                    conditions.Add("max_concurrency = @max_concurrency");
+                    parameters.Add(new MySqlParameter("@max_concurrency", query.MaxConcurrency.Value));
+                }
 
                 string whereClause = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : "";
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -613,6 +618,11 @@ namespace Armada.Core.Database.Mysql.Implementations
                     conditions.Add("state = @state");
                     parameters.Add(new MySqlParameter("@state", query.Status));
                 }
+                if (query.MaxConcurrency.HasValue)
+                {
+                    conditions.Add("max_concurrency = @max_concurrency");
+                    parameters.Add(new MySqlParameter("@max_concurrency", query.MaxConcurrency.Value));
+                }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -863,6 +873,11 @@ namespace Armada.Core.Database.Mysql.Implementations
                 {
                     conditions.Add("state = @state");
                     parameters.Add(new MySqlParameter("@state", query.Status));
+                }
+                if (query.MaxConcurrency.HasValue)
+                {
+                    conditions.Add("max_concurrency = @max_concurrency");
+                    parameters.Add(new MySqlParameter("@max_concurrency", query.MaxConcurrency.Value));
                 }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);

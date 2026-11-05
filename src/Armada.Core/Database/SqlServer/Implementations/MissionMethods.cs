@@ -333,6 +333,17 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     conditions.Add("captain_id = @captain_id");
                     parameters.Add(new SqlParameter("@captain_id", query.CaptainId));
                 }
+                if (!string.IsNullOrEmpty(query.ParentMissionId))
+                {
+                    conditions.Add("parent_mission_id = @parent_mission_id");
+                    parameters.Add(new SqlParameter("@parent_mission_id", query.ParentMissionId));
+                }
+                if (query.RootsOnly == true) conditions.Add("parent_mission_id IS NULL AND depends_on_mission_id IS NULL");
+                if (query.WaitingGate.HasValue)
+                {
+                    conditions.Add("status = 'Pending' AND id IN (SELECT mission_id FROM mission_wait_intervals WHERE ended_utc IS NULL AND gate = @waiting_gate)");
+                    parameters.Add(new SqlParameter("@waiting_gate", query.WaitingGate.Value.ToString()));
+                }
 
                 string whereClause = conditions.Count > 0 ? " WHERE " + string.Join(" AND ", conditions) : "";
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -746,6 +757,17 @@ namespace Armada.Core.Database.SqlServer.Implementations
                     conditions.Add("captain_id = @captain_id");
                     parameters.Add(new SqlParameter("@captain_id", query.CaptainId));
                 }
+                if (!string.IsNullOrEmpty(query.ParentMissionId))
+                {
+                    conditions.Add("parent_mission_id = @parent_mission_id");
+                    parameters.Add(new SqlParameter("@parent_mission_id", query.ParentMissionId));
+                }
+                if (query.RootsOnly == true) conditions.Add("parent_mission_id IS NULL AND depends_on_mission_id IS NULL");
+                if (query.WaitingGate.HasValue)
+                {
+                    conditions.Add("status = 'Pending' AND id IN (SELECT mission_id FROM mission_wait_intervals WHERE ended_utc IS NULL AND gate = @waiting_gate)");
+                    parameters.Add(new SqlParameter("@waiting_gate", query.WaitingGate.Value.ToString()));
+                }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);
                 string orderDirection = query.Order == EnumerationOrderEnum.CreatedAscending ? "ASC" : "DESC";
@@ -902,6 +924,17 @@ namespace Armada.Core.Database.SqlServer.Implementations
                 {
                     conditions.Add("captain_id = @captain_id");
                     parameters.Add(new SqlParameter("@captain_id", query.CaptainId));
+                }
+                if (!string.IsNullOrEmpty(query.ParentMissionId))
+                {
+                    conditions.Add("parent_mission_id = @parent_mission_id");
+                    parameters.Add(new SqlParameter("@parent_mission_id", query.ParentMissionId));
+                }
+                if (query.RootsOnly == true) conditions.Add("parent_mission_id IS NULL AND depends_on_mission_id IS NULL");
+                if (query.WaitingGate.HasValue)
+                {
+                    conditions.Add("status = 'Pending' AND id IN (SELECT mission_id FROM mission_wait_intervals WHERE ended_utc IS NULL AND gate = @waiting_gate)");
+                    parameters.Add(new SqlParameter("@waiting_gate", query.WaitingGate.Value.ToString()));
                 }
 
                 string whereClause = " WHERE " + string.Join(" AND ", conditions);

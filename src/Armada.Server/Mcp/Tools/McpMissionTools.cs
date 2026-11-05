@@ -42,24 +42,31 @@ namespace Armada.Server.Mcp.Tools
         {
             register(
                 "mission_status",
-                "Get status of a specific mission. LastBlackBoxEntryId names its current black box entry when it failed (read it with get_blackbox).",
+                "Get status of a specific mission. LastBlackBoxEntryId names its current black box entry when it failed (read it with get_blackbox). A Pending mission carries AssignmentBlocker; includeWaits adds Waits, its recorded scheduling waits (gate, start, end and detail).",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        missionId = new { type = "string", description = "Mission ID (msn_ prefix)" }
+                        missionId = new { type = "string", description = "Mission ID (msn_ prefix)" },
+                        includeWaits = new { type = "boolean", description = "Include Waits, the mission's 100 most recent wait intervals, oldest first (default false)" }
                     },
                     required = new[] { "missionId" }
                 },
                 async (args) =>
                 {
                     AuthContext caller = McpToolHelpers.ResolveCallerContext();
-                    MissionIdArgs request = JsonSerializer.Deserialize<MissionIdArgs>(args!.Value, _JsonOptions)!;
+                    MissionStatusArgs request = JsonSerializer.Deserialize<MissionStatusArgs>(args!.Value, _JsonOptions)!;
                     string missionId = request.MissionId;
                     Mission? mission = await McpCallerScope.ReadMissionAsync(database, caller, missionId).ConfigureAwait(false);
                     if (mission == null) return (object)McpToolError.NotFound("Mission not found");
                     mission.DiffSnapshot = null;
+                    if (request.IncludeWaits == true)
+                    {
+                        // The 100 most recent waits, oldest first; GET /api/v1/missions/{id}/waits pages the rest.
+                        List<MissionWaitInterval> waits = await database.MissionWaitIntervals.EnumerateByMissionAsync(mission.Id, null).ConfigureAwait(false);
+                        mission.Waits = waits.Skip(Math.Max(0, waits.Count - 100)).ToList();
+                    }
                     if (missionService != null)
                     {
                         mission.AssignmentBlocker = await missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
@@ -108,6 +115,8 @@ namespace Armada.Server.Mcp.Tools
                         mode = new { type = "string", description = "Execution mode: Implementation (default), Audit, or Research. Audit and Research are read-only modes that produce a written report instead of a commit; their empty diff is treated as success." },
                         tier = new { type = "string", description = "Optional minimum captain tier for this mission (Economy, Standard, or Premium); only captains at or above it are assigned" },
                         isEvaluation = new { type = "boolean", description = "True for evaluation work: the mission's stage outcomes never count as production data. A mission added to an evaluation voyage is flagged regardless. Default false." },
+                        parentMissionId = new { type = "string", description = "Optional parent logical mission (msn_ prefix) in the same voyage, or a standalone mission on the same vessel. The new mission waits until the parent's last stage finishes; a failed or cancelled parent cancels it." },
+                        branchStrategy = new { type = "string", description = "Branch relationship to the parent: New (default), ContinueParent (the first child continues the parent's branch) or ForkFromParent (fork from the parent's head)" },
                         workerEnvelope = McpVesselTools.WorkerEnvelopeSchema("Optional Worker eligibility envelope for this mission. It may only tighten the vessel's default envelope (fewer files or steps, a larger context minimum, more required tools); a looser or invalid one is rejected with InvalidArgument. Omit or pass {} to use the vessel default."),
                         selectedPlaybooks = new
                         {
@@ -150,6 +159,18 @@ namespace Armada.Server.Mcp.Tools
                         mission.Mode = missionMode;
                     mission.SelectedPlaybooks = request.SelectedPlaybooks ?? new List<SelectedPlaybook>();
                     mission.IsEvaluation = request.IsEvaluation;
+                    if (!String.IsNullOrWhiteSpace(request.ParentMissionId))
+                    {
+                        if (await McpCallerScope.ReadMissionAsync(database, caller, request.ParentMissionId).ConfigureAwait(false) == null)
+                            return (object)McpToolError.NotFound("Parent mission not found");
+                        mission.ParentMissionId = request.ParentMissionId;
+                    }
+                    if (!String.IsNullOrWhiteSpace(request.BranchStrategy))
+                    {
+                        if (!Enum.TryParse<MissionBranchStrategyEnum>(request.BranchStrategy.Trim(), true, out MissionBranchStrategyEnum strategy) || !Enum.IsDefined(typeof(MissionBranchStrategyEnum), strategy))
+                            return (object)McpToolError.InvalidArgument("branchStrategy must be New, ContinueParent or ForkFromParent.");
+                        mission.BranchStrategy = strategy;
+                    }
                     if (request.WorkerEnvelope != null)
                     {
                         // Same rule as REST dispatch: a mission may only tighten its vessel's Worker envelope.
@@ -432,7 +453,7 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "restart_mission",
-                "Restart a Failed, LandingFailed, or Cancelled mission, resetting it to Pending for re-dispatch, or start a Pending mission as it is. A later pipeline stage keeps the previous stage's branch, a finished voyage is reopened, and the stages cancelled because this one failed are restored. The mission is then dispatched at once when a captain is available; otherwise it stays Pending for the regular dispatcher. Optionally update title and description (instructions) before restarting.",
+                "Restart a Failed, LandingFailed, or Cancelled mission, resetting it to Pending for re-dispatch, or start a Pending mission as it is. A later pipeline stage keeps the previous stage's branch, a finished voyage is reopened, and the stages cancelled because this one failed are restored, as are descendants cancelled with ParentFailed; RestoredMissionIds lists them. The mission is then dispatched at once when a captain is available; otherwise it stays Pending for the regular dispatcher. Optionally update title and description (instructions) before restarting.",
                 new
                 {
                     type = "object",

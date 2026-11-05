@@ -10,6 +10,9 @@ namespace Armada.Core.Services
     /// <summary>Observes persisted captain and vessel capacity without preempting or claiming work.</summary>
     internal sealed class ConcurrencyInvariantMonitor
     {
+        /// <summary>Called after a <c>concurrency.limit_exceeded</c> event is recorded.</summary>
+        internal Action<ArmadaEvent>? EventRecorded { get; set; }
+
         private readonly DatabaseDriver _Database;
         private readonly ArmadaSettings _Settings;
         private readonly LoggingModule _Logging;
@@ -42,7 +45,7 @@ namespace Armada.Core.Services
                         "captain", captain.TenantId, captain.UserId, seen, token).ConfigureAwait(false);
                 await ObserveAsync("global", "global", "Armada", await _Database.Missions.CountExecutionSlotsAsync(token).ConfigureAwait(false),
                     _Settings.MaxConcurrentMissions, "settings", null, null, seen, token).ConfigureAwait(false);
-                var runtimeLimits = ConcurrencyCapacityPolicy.RuntimeLimits(_Settings.Agents);
+                Dictionary<AgentRuntimeEnum, int> runtimeLimits = ConcurrencyCapacityPolicy.RuntimeLimits(_Settings.Agents);
                 foreach (AgentRuntimeEnum runtime in Enum.GetValues<AgentRuntimeEnum>().Concat(runtimeLimits.Keys).Distinct())
                     await ObserveAsync("runtime", runtime.ToString(), runtime + " runtime",
                         captains.Where(c => c.Runtime == runtime).Sum(ConcurrencyCapacityPolicy.Occupancy),
@@ -53,7 +56,7 @@ namespace Armada.Core.Services
                 Dictionary<string, int> endpointUsage = captains.Where(c => c.ModelEndpointId != null && byEndpoint.ContainsKey(c.ModelEndpointId))
                     .GroupBy(c => ConcurrencyCapacityPolicy.EndpointKey(byEndpoint[c.ModelEndpointId!]), StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(g => g.Key, g => g.Sum(ConcurrencyCapacityPolicy.Occupancy), StringComparer.OrdinalIgnoreCase);
-                foreach (var group in endpoints.GroupBy(ConcurrencyCapacityPolicy.EndpointKey, StringComparer.OrdinalIgnoreCase))
+                foreach (IGrouping<string, ModelEndpoint> group in endpoints.GroupBy(ConcurrencyCapacityPolicy.EndpointKey, StringComparer.OrdinalIgnoreCase))
                 {
                     bool mixedLimits = group.Select(e => e.InferenceOptions?.MaxConcurrentMissions).Distinct().Count() > 1;
                     int usage = endpointUsage.TryGetValue(group.Key, out int count) ? count : 0;
@@ -67,7 +70,7 @@ namespace Armada.Core.Services
                     List<MissionAdmissionSnapshot> missions = VoyageSlotPolicy.Runnable(
                         await _Database.Missions.EnumerateAdmissionSnapshotsAsync(vessel.Id, token).ConfigureAwait(false));
                     Dictionary<string, MissionAdmissionSnapshot> byId = missions.GroupBy(m => m.Id).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-                    var groups = missions.GroupBy(m => VoyageSlotPolicy.Group(m, byId)).ToList();
+                    List<IGrouping<string, MissionAdmissionSnapshot>> groups = missions.GroupBy(m => VoyageSlotPolicy.Group(m, byId)).ToList();
                     int heldVoyageSlots = groups.Count(g => VoyageSlotPolicy.Admitted(g));
                     if (vessel.MaxParallelVoyages > 0) { gauges.VoyageSlotsInUse += heldVoyageSlots; gauges.VoyageSlotsTotal += vessel.MaxParallelVoyages; }
                     else gauges.UnlimitedVessels++;
@@ -121,6 +124,11 @@ namespace Armada.Core.Services
                 Payload = JsonSerializer.Serialize(new { Gate = gate, Count = count, Limit = limit, Cause = cause })
             };
             await _Database.Events.CreateAsync(evt, token).ConfigureAwait(false);
+            if (EventRecorded != null)
+            {
+                try { EventRecorded(evt); }
+                catch (Exception ex) { _Logging.Debug("[ConcurrencyInvariantMonitor] event notification failed: " + ex.Message); }
+            }
             ArmadaMetrics.ConcurrencyLimitViolations.Add(1, new KeyValuePair<string, object?>("gate", gate), new KeyValuePair<string, object?>("cause", cause));
             _Logging.Warn("[ConcurrencyInvariantMonitor] " + gate + " " + id + ": " + evt.Message);
             _Previous[key] = current;

@@ -60,5 +60,15 @@ namespace Armada.Server.Mcp
         /// Optional Worker eligibility envelope; it may only tighten the vessel default.
         /// </summary>
         public Armada.Core.Models.WorkerEnvelope? WorkerEnvelope { get; set; }
+
+        /// <summary>
+        /// Optional parent logical mission (msn_ prefix): the new mission starts once the parent's last stage finishes.
+        /// </summary>
+        public string? ParentMissionId { get; set; }
+
+        /// <summary>
+        /// Optional branch relationship to the parent: New (default), ContinueParent or ForkFromParent.
+        /// </summary>
+        public string? BranchStrategy { get; set; }
     }
 }

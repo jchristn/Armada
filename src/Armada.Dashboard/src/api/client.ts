@@ -42,6 +42,10 @@ import type {
   GitHubPullRequestComment,
   GitHubPullRequestCheck,
   VoyageProgress,
+  VoyageTree,
+  MissionWaitInterval,
+  VesselConcurrency,
+  ConcurrencyMetrics,
   VoyageCancelResult,
   ObjectiveQuery,
   ObjectiveReorderRequest,
@@ -1745,6 +1749,19 @@ export const listVoyages = (params?: { pageNumber?: number; pageSize?: number; f
   get<EnumerationResult<Voyage>>(`/api/v1/voyages${buildQuery(params)}`);
 /** The voyage with its mission counts (VoyageProgress); the missions are paged with listMissions({ filters: { voyageId } }). */
 export const getVoyage = (id: string) => get<VoyageProgress>(`/api/v1/voyages/${id}`);
+export const getVoyageTree = (id: string) => get<VoyageTree>(`/api/v1/voyages/${encodeURIComponent(id)}/tree`);
+export const getMissionWaits = (id: string, pageNumber = 1, pageSize = 100) =>
+  get<EnumerationResult<MissionWaitInterval>>(`/api/v1/missions/${encodeURIComponent(id)}/waits?pageNumber=${pageNumber}&pageSize=${pageSize}`);
+export const getVesselConcurrency = (id: string) => get<VesselConcurrency>(`/api/v1/vessels/${encodeURIComponent(id)}/concurrency`);
+export const getConcurrencyMetrics = (params: { from?: string; to?: string; vesselId?: string; captainId?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.from) query.set('from', params.from);
+  if (params.to) query.set('to', params.to);
+  if (params.vesselId) query.set('vesselId', params.vesselId);
+  if (params.captainId) query.set('captainId', params.captainId);
+  const text = query.toString();
+  return get<ConcurrencyMetrics>(`/api/v1/metrics/concurrency${text ? `?${text}` : ''}`);
+};
 /** The voyage with its mission counts, as raw JSON for the status view. */
 export const getVoyageStatus = (id: string) => get<Record<string, unknown>>(`/api/v1/voyages/${encodeURIComponent(id)}`);
 /** One page of voyages with progress; with no status filter, the active voyages (InProgress, then Open). */

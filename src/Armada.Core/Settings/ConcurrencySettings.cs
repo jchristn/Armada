@@ -5,8 +5,9 @@ namespace Armada.Core.Settings
     using Armada.Core.Services;
 
     /// <summary>
-    /// Bounds and defaults for v1.3 concurrency. Vessel defaults and the admission timeout are active;
-    /// captain slots, hierarchy and wait retention are enabled by subsequent implementation milestones.
+    /// Bounds and defaults for v1.3 concurrency: vessel and captain slot defaults, the captain slot ceiling, hierarchy
+    /// depth, starvation reporting, the admission lock timeout and wait-interval retention. Editable through the
+    /// settings API's Concurrency group.
     /// </summary>
     public sealed class ConcurrencySettings
     {

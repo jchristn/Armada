@@ -374,6 +374,22 @@ namespace Armada.Core.Models
         public RuntimeActivity? Activity { get; set; } = null;
 
         /// <summary>
+        /// The mission's recorded scheduling waits, oldest first. Returned only when a single mission is read with
+        /// waits requested (MCP mission_status includeWaits; REST GET /api/v1/missions/{id}/waits); not stored here.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(100, Reason = "The 100 most recent waits; page the rest through GET /api/v1/missions/{id}/waits")]
+        public List<MissionWaitInterval>? Waits { get; set; } = null;
+
+        /// <summary>
+        /// Missions a restart returned to Pending along with this one: later pipeline stages and dependents cancelled
+        /// because it failed, and descendants cancelled with ParentFailed. Set only on a restart response; not stored.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [CollectionBound(CollectionLimits.MaxLinkedIds)]
+        public List<string>? RestoredMissionIds { get; set; } = null;
+
+        /// <summary>
         /// Creation timestamp in UTC.
         /// </summary>
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;

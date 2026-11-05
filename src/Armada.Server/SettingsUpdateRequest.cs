@@ -38,6 +38,15 @@ namespace Armada.Server
         /// <summary>Optional optimistic revision required to replace UsageSelection; stale updates return conflict.</summary>
         public long? ExpectedUsageSelectionRevision { get; set; }
 
+        /// <summary>
+        /// Optional Concurrency group update. Only the members sent change; values are clamped to their bounds and
+        /// applied live to admission, hierarchy validation and wait retention.
+        /// </summary>
+        public ConcurrencyPatch? Concurrency { get; set; }
+
+        /// <summary>Optional optimistic revision required to change Concurrency; stale updates return conflict.</summary>
+        public long? ExpectedConcurrencyRevision { get; set; }
+
 
         /// <summary>Optional completed mission/event/signal retention in days; zero disables expiry.</summary>
         public int? DataRetentionDays { get; set; }

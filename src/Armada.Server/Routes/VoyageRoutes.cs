@@ -170,7 +170,7 @@ namespace Armada.Server.Routes
                 {
                     foreach (MissionRequest m in voyageReq.Missions)
                     {
-                        missions.Add(new MissionDescription(m.Title, m.Description) { Tier = m.Tier, RequestedCaptainId = m.RequestedCaptainId });
+                        missions.Add(new MissionDescription(m.Title, m.Description) { Tier = m.Tier, RequestedCaptainId = m.RequestedCaptainId, Key = m.Key, ParentKey = m.ParentKey, BranchStrategy = m.BranchStrategy });
                     }
                 }
 
@@ -217,15 +217,19 @@ namespace Armada.Server.Routes
                         ? MissionService.SerializeCaptainOverrides(voyageReq.CaptainAssignments)
                         : null;
 
-                    voyage = await _admiral.DispatchVoyageAsync(
-                        voyageReq.Title,
-                        voyageReq.Description,
-                        voyageReq.VesselId,
-                        missions,
-                        pipelineId,
-                        voyageReq.SelectedPlaybooks,
-                        overridesJson,
-                        voyageReq.LandingMode, approvalOptions: voyageReq.ApprovalOptions, isEvaluation: voyageReq.IsEvaluation).ConfigureAwait(false);
+                    try
+                    {
+                        voyage = await _admiral.DispatchVoyageAsync(
+                            voyageReq.Title,
+                            voyageReq.Description,
+                            voyageReq.VesselId,
+                            missions,
+                            pipelineId,
+                            voyageReq.SelectedPlaybooks,
+                            overridesJson,
+                            voyageReq.LandingMode, approvalOptions: voyageReq.ApprovalOptions, isEvaluation: voyageReq.IsEvaluation).ConfigureAwait(false);
+                    }
+                    catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
                 }
 
                 if (!String.IsNullOrWhiteSpace(voyageReq.ObjectiveId))
@@ -247,7 +251,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Voyages")
                 .WithSummary("Create a voyage")
-                .WithDescription("Creates a new voyage with optional missions. Missions are automatically dispatched to the target vessel.")
+                .WithDescription("Creates a new voyage with optional missions. Missions are automatically dispatched to the target vessel. A mission can name a Key, and a later mission can name it as ParentKey to become its child (it starts once the parent's last stage finishes; BranchStrategy sets whether it continues or forks the parent's branch). An unknown or later ParentKey returns 400 and creates nothing.")
                 .WithRequestBody(OpenApiJson.BodyFor<VoyageRequest>("Voyage with missions", true))
                 .WithResponse(201, OpenApiJson.For<Voyage>("Created voyage"))
                 .WithResponse(400, OpenApiResponseMetadata.BadRequest())

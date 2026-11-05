@@ -139,6 +139,9 @@ namespace Armada.Server.WebSocket
             events.Add(new WebSocketEventDescriptor("usage.snapshot", "tenant", false, null, new[] { "tenantId", "snapshotId", "hostId", "runtime", "provider", "captainIds", "capturedUtc", "status" }, false));
             events.Add(new WebSocketEventDescriptor("mission.changed", "tenant", false, null, new[] { "id", "title", "status", "voyageId", "activity" }, false));
             events.Add(new WebSocketEventDescriptor("mission.activity", "tenant", false, null, new[] { "id", "voyageId", "activity" }, false));
+            events.Add(new WebSocketEventDescriptor("mission.waiting_gate_changed", "tenant", false, "MissionWaitGateChange", null, false));
+            events.Add(new WebSocketEventDescriptor("mission.starving", "tenant", false, "ArmadaEvent", null, false));
+            events.Add(new WebSocketEventDescriptor("concurrency.limit_exceeded", "tenant", false, "ArmadaEvent", null, false));
             events.Add(new WebSocketEventDescriptor("captain-selection.changed", "tenant", false, null, new[] { "missionId", "voyageId", "decisionId", "outcome" }, false));
             events.Add(new WebSocketEventDescriptor("voyage.changed", "tenant", false, null, new[] { "id", "title", "status" }, false));
             events.Add(new WebSocketEventDescriptor("captain.changed", "tenant", false, null, new[] { "id", "name", "state" }, false));

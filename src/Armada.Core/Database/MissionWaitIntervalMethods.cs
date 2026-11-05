@@ -38,12 +38,36 @@ namespace Armada.Core.Database
             {
                 using DbCommand cmd = c.CreateCommand(); cmd.CommandText = "SELECT * FROM mission_wait_intervals WHERE mission_id=@mission" + (tenantId == null ? "" : " AND tenant_id=@tenant") + " ORDER BY started_utc,id;";
                 Add(cmd, "@mission", missionId); if (tenantId != null) Add(cmd, "@tenant", tenantId);
-                using DbDataReader r = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false); List<MissionWaitInterval> rows = new();
-                string? Text(string key) => r[key] == DBNull.Value ? null : r[key].ToString();
-                DateTime Time(string key) => r[key] is DateTime value ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : DateTime.Parse((string)r[key], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
-                while (await r.ReadAsync(token).ConfigureAwait(false)) rows.Add(new MissionWaitInterval { Id = Text("id")!, TenantId = Text("tenant_id"), MissionId = Text("mission_id")!, VesselId = Text("vessel_id"), VoyageId = Text("voyage_id"), CaptainId = Text("captain_id"), Gate = Enum.Parse<MissionWaitGateEnum>(Text("gate")!), StartedUtc = Time("started_utc"), EndedUtc = r["ended_utc"] == DBNull.Value ? null : Time("ended_utc"), Detail = Text("detail") });
-                return rows;
+                return await ReadRowsAsync(cmd, Int32.MaxValue, token).ConfigureAwait(false);
             }, token);
+        public Task<List<MissionWaitInterval>> EnumerateAsync(MissionWaitIntervalQuery query, CancellationToken token = default)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            return Run(async c =>
+            {
+                using DbCommand cmd = c.CreateCommand();
+                List<string> where = new List<string>();
+                if (query.TenantId != null) { where.Add("tenant_id=@tenant"); Add(cmd, "@tenant", query.TenantId); }
+                if (query.VesselId != null) { where.Add("vessel_id=@vessel"); Add(cmd, "@vessel", query.VesselId); }
+                if (query.CaptainId != null) { where.Add("captain_id=@captain"); Add(cmd, "@captain", query.CaptainId); }
+                if (query.OpenOnly) where.Add("ended_utc IS NULL");
+                if (query.FromUtc.HasValue) { where.Add("(ended_utc IS NULL OR ended_utc>=@from)"); Add(cmd, "@from", Date(c, query.FromUtc.Value)); }
+                if (query.ToUtc.HasValue) { where.Add("started_utc<@to"); Add(cmd, "@to", Date(c, query.ToUtc.Value)); }
+                // The row cap is applied while reading so the statement stays portable across providers.
+                cmd.CommandText = "SELECT * FROM mission_wait_intervals" + (where.Count == 0 ? "" : " WHERE " + String.Join(" AND ", where)) + " ORDER BY started_utc DESC,id DESC;";
+                return await ReadRowsAsync(cmd, query.MaxRows, token).ConfigureAwait(false);
+            }, token);
+        }
+        private static async Task<List<MissionWaitInterval>> ReadRowsAsync(DbCommand cmd, int maxRows, CancellationToken token)
+        {
+            using DbDataReader r = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false); List<MissionWaitInterval> rows = new();
+            string? Text(string key) => r[key] == DBNull.Value ? null : r[key].ToString();
+            DateTime Time(string key) => r[key] is DateTime value ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : DateTime.Parse((string)r[key], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
+            while (rows.Count < maxRows && await r.ReadAsync(token).ConfigureAwait(false)) rows.Add(new MissionWaitInterval { Id = Text("id")!, TenantId = Text("tenant_id"), MissionId = Text("mission_id")!, VesselId = Text("vessel_id"), VoyageId = Text("voyage_id"), CaptainId = Text("captain_id"), Gate = Enum.Parse<MissionWaitGateEnum>(Text("gate")!), StartedUtc = Time("started_utc"), EndedUtc = r["ended_utc"] == DBNull.Value ? null : Time("ended_utc"), Detail = Text("detail") });
+            return rows;
+        }
+        public Task<int> AttributeCaptainAsync(string missionId, string captainId, DateTime startedSinceUtc, CancellationToken token = default)
+            => Run(async c => { using DbCommand cmd = c.CreateCommand(); cmd.CommandText = "UPDATE mission_wait_intervals SET captain_id=@captain WHERE mission_id=@mission AND started_utc>=@since;"; Add(cmd, "@captain", captainId); Add(cmd, "@mission", missionId); Add(cmd, "@since", Date(c, startedSinceUtc)); return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false); }, token);
         public Task<int> CloseOpenAsync(string missionId, DateTime endedUtc, CancellationToken token = default)
             => Run(async c => { using DbCommand cmd = c.CreateCommand(); cmd.CommandText = "UPDATE mission_wait_intervals SET ended_utc=@ended WHERE mission_id=@mission AND ended_utc IS NULL AND started_utc<=@ended;"; Add(cmd, "@mission", missionId); Add(cmd, "@ended", Date(c, endedUtc)); return await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false); }, token);
         public Task<int> CloseAllOpenAsync(DateTime endedUtc, DateTime startedBeforeUtc, string detail, CancellationToken token = default)

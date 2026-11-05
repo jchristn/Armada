@@ -8027,3 +8027,14 @@ Example (admin):
   }]
 }
 ```
+
+## v1.3.0 mission tree, waits and concurrency
+
+- `voyage_tree` (`voyageId`): the same `VoyageTree` as `GET /api/v1/voyages/{id}/tree`.
+- `vessel_concurrency` (`vesselId`): the same `VesselConcurrency` as `GET /api/v1/vessels/{id}/concurrency`, with the same per-user listing rule.
+- `mission_status` accepts `includeWaits`; when true the mission carries `Waits`, its recorded wait intervals.
+- `enumerate` for missions accepts `parentMissionId`, `rootsOnly` and `waitingGate`; for captains it accepts `maxConcurrency` (an exact slot count).
+- `create_mission` accepts `parentMissionId` (visible to the caller, same voyage or a standalone mission on the same vessel) and `branchStrategy` (`New`, `ContinueParent` or `ForkFromParent`; anything else is `InvalidArgument`).
+- `restart_mission` results carry `RestoredMissionIds`.
+
+All of these are read-only except `create_mission` and `restart_mission`; `voyage_tree` and `vessel_concurrency` are available to Ask Armada.

@@ -3972,6 +3972,24 @@
     },
     {
       "method": "GET",
+      "route": "/api/v1/metrics/concurrency",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "ConcurrencyMetrics",
+        "400": "",
+        "404": ""
+      },
+      "tags": [
+        "Missions"
+      ],
+      "summary": "Get concurrency wait aggregates",
+      "experimental": false
+    },
+    {
+      "method": "GET",
       "route": "/api/v1/missions",
       "auth": "Authenticated",
       "resource": "Mission:Read",
@@ -4633,6 +4651,40 @@
         "Missions"
       ],
       "summary": "Transition mission status",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/missions/{id}/waits",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<MissionWaitInterval>",
+        "404": ""
+      },
+      "tags": [
+        "Missions"
+      ],
+      "summary": "Get a mission's wait intervals",
+      "experimental": false
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/missions/{id}/waits/enumerate",
+      "auth": "Authenticated",
+      "resource": "Mission:Read",
+      "requestType": "EnumerationQuery",
+      "requestRequired": false,
+      "responses": {
+        "200": "EnumerationResult<MissionWaitInterval>",
+        "404": ""
+      },
+      "tags": [
+        "Missions"
+      ],
+      "summary": "Enumerate a mission's wait intervals",
       "experimental": false
     },
     {
@@ -8283,6 +8335,23 @@
       "experimental": false
     },
     {
+      "method": "GET",
+      "route": "/api/v1/vessels/{id}/concurrency",
+      "auth": "Authenticated",
+      "resource": "Vessel:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "VesselConcurrency",
+        "404": ""
+      },
+      "tags": [
+        "Vessels"
+      ],
+      "summary": "Get a vessel's concurrency",
+      "experimental": false
+    },
+    {
       "method": "PATCH",
       "route": "/api/v1/vessels/{id}/context",
       "auth": "TenantAdmin",
@@ -8715,6 +8784,23 @@
         "Voyages"
       ],
       "summary": "Permanently delete a voyage",
+      "experimental": false
+    },
+    {
+      "method": "GET",
+      "route": "/api/v1/voyages/{id}/tree",
+      "auth": "Authenticated",
+      "resource": "Voyage:Read",
+      "requestType": null,
+      "requestRequired": false,
+      "responses": {
+        "200": "VoyageTree",
+        "404": ""
+      },
+      "tags": [
+        "Voyages"
+      ],
+      "summary": "Get a voyage's mission tree",
       "experimental": false
     },
     {
@@ -10479,6 +10565,11 @@
       "resource": "Mission:Create",
       "arguments": [
         {
+          "name": "branchStrategy",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "description",
           "type": "string",
           "required": true
@@ -10490,6 +10581,11 @@
         },
         {
           "name": "mode",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "parentMissionId",
           "type": "string",
           "required": false
         },
@@ -11949,6 +12045,11 @@
           "required": false
         },
         {
+          "name": "maxConcurrency",
+          "type": "integer",
+          "required": false
+        },
+        {
           "name": "missionId",
           "type": "string",
           "required": false
@@ -11966,6 +12067,16 @@
         {
           "name": "pageSize",
           "type": "integer",
+          "required": false
+        },
+        {
+          "name": "parentMissionId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "rootsOnly",
+          "type": "boolean",
           "required": false
         },
         {
@@ -12015,6 +12126,11 @@
         },
         {
           "name": "voyageId",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "waitingGate",
           "type": "string",
           "required": false
         }
@@ -14529,12 +14645,17 @@
       "resource": "Mission:Read",
       "arguments": [
         {
+          "name": "includeWaits",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "name": "missionId",
           "type": "string",
           "required": true
         }
       ],
-      "description": "Get status of a specific mission. LastBlackBoxEntryId names its current black box entry when it failed (read it with get_blackbox).",
+      "description": "Get status of a specific mission. LastBlackBoxEntryId names its current black box entry when it failed (read it with get_blackbox). A Pending mission carries AssignmentBlocker; includeWaits adds Waits, its recorded scheduling waits (gate, start, end and detail).",
       "experimental": false
     },
     {
@@ -15280,7 +15401,7 @@
           "required": false
         }
       ],
-      "description": "Restart a Failed, LandingFailed, or Cancelled mission, resetting it to Pending for re-dispatch, or start a Pending mission as it is. A later pipeline stage keeps the previous stage's branch, a finished voyage is reopened, and the stages cancelled because this one failed are restored. The mission is then dispatched at once when a captain is available; otherwise it stays Pending for the regular dispatcher. Optionally update title and description (instructions) before restarting.",
+      "description": "Restart a Failed, LandingFailed, or Cancelled mission, resetting it to Pending for re-dispatch, or start a Pending mission as it is. A later pipeline stage keeps the previous stage's branch, a finished voyage is reopened, and the stages cancelled because this one failed are restored, as are descendants cancelled with ParentFailed; RestoredMissionIds lists them. The mission is then dispatched at once when a captain is available; otherwise it stays Pending for the regular dispatcher. Optionally update title and description (instructions) before restarting.",
       "experimental": false
     },
     {
@@ -17949,6 +18070,20 @@
       "experimental": false
     },
     {
+      "name": "vessel_concurrency",
+      "auth": "Authenticated",
+      "resource": "Vessel:Read",
+      "arguments": [
+        {
+          "name": "vesselId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get a vessel's concurrency: voyage slots in use against MaxParallelVoyages, the voyages holding them (running and Pending counts), Pending missions waiting on a recorded gate (longest first, at most 100; WaitingCount is the total) and slot wait p50/p95/max over 24 hours and 7 days. Callers who are not tenant administrators see only their own voyages and missions listed.",
+      "experimental": false
+    },
+    {
       "name": "vessel_health",
       "auth": "Authenticated",
       "resource": "VesselHealth:Read",
@@ -17979,6 +18114,20 @@
         }
       ],
       "description": "Get status of a specific voyage: the voyage with its mission counts (TotalMissions, MissionCountsByStatus) and LastBlackBoxEntryId (its current black box entry, read it with get_blackbox). Missions are never embedded; read them one page at a time with enumerate (entityType missions, voyageId).",
+      "experimental": false
+    },
+    {
+      "name": "voyage_tree",
+      "auth": "Authenticated",
+      "resource": "Voyage:Read",
+      "arguments": [
+        {
+          "name": "voyageId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "description": "Get a voyage's missions arranged as logical missions. Each node holds Mission (the root's summary), Stages (its later pipeline stages, in order) and Children (child logical missions by ParentMissionId). Roots lists the top-level logical missions; TotalMissions and MaxDepth describe the whole tree.",
       "experimental": false
     },
     {
@@ -18452,6 +18601,14 @@
         "generic": false
       },
       {
+        "type": "concurrency.limit_exceeded",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": "ArmadaEvent",
+        "fields": [],
+        "generic": false
+      },
+      {
         "type": "deployment.changed",
         "scope": "tenant",
         "hasMessage": false,
@@ -18816,6 +18973,14 @@
         "generic": true
       },
       {
+        "type": "mission.starving",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": "ArmadaEvent",
+        "fields": [],
+        "generic": false
+      },
+      {
         "type": "mission.status_changed",
         "scope": "tenant",
         "hasMessage": true,
@@ -18831,6 +18996,14 @@
           "previousStatus"
         ],
         "generic": true
+      },
+      {
+        "type": "mission.waiting_gate_changed",
+        "scope": "tenant",
+        "hasMessage": false,
+        "payloadType": "MissionWaitGateChange",
+        "fields": [],
+        "generic": false
       },
       {
         "type": "mission.work_produced",
@@ -24576,6 +24749,14 @@
         },
         {
           "kind": "option",
+          "name": "branch-strategy",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
           "name": "description",
           "short": "d",
           "valueKind": "scalar",
@@ -24628,6 +24809,14 @@
           "short": null,
           "valueKind": "scalar",
           "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "parent",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
           "required": false
         },
         {
@@ -26329,6 +26518,76 @@
       ]
     },
     {
+      "command": "vessel concurrency",
+      "description": "Show a vessel's voyage slots, waiting missions and slot wait",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "vessel",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "vessel doctor",
       "description": "List a vessel's recurring black box configuration recommendations",
       "parameters": [
@@ -27603,6 +27862,76 @@
       ]
     },
     {
+      "command": "voyage tree",
+      "description": "Show a voyage's missions as a tree of parents, children and stages",
+      "parameters": [
+        {
+          "kind": "argument",
+          "name": "voyage",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": true
+        },
+        {
+          "kind": "option",
+          "name": "json",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "page-size",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "Int32?",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "profile",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "server",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "token",
+          "short": null,
+          "valueKind": "scalar",
+          "type": "String",
+          "required": false
+        },
+        {
+          "kind": "option",
+          "name": "verbose",
+          "short": null,
+          "valueKind": "flag",
+          "type": "Boolean",
+          "required": false
+        }
+      ]
+    },
+    {
       "command": "watch",
       "description": "Live-updating status dashboard",
       "parameters": [
@@ -28327,6 +28656,12 @@
       "key": "concurrency.waitIntervalRetentionDays",
       "type": "int",
       "default": "90",
+      "experimental": false
+    },
+    {
+      "key": "concurrencyRevision",
+      "type": "long",
+      "default": "0",
       "experimental": false
     },
     {
