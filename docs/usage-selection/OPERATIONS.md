@@ -133,7 +133,7 @@ Counters reset when the Admiral restarts; the decision ledger is the audit recor
 
 ## Backup, upgrade and rollback
 
-Migrations 123 through 129 add the selection ledger; 129 stores per-reason counts of candidates a decision did not list. Back up the database and the protected settings and usage identity before upgrading. Rolling back to v1.2.0 requires restoring that pre-upgrade backup; do not point an older binary at an upgraded database. Follow [UPGRADING.md](../UPGRADING.md#v120-to-v130-development) for the post-upgrade checklist and the per-provider backup and restore steps.
+Migrations 123 through 129 add the selection ledger; 129 stores per-reason counts of candidates a decision did not list. Back up the database and the protected settings and usage identity before upgrading. Rolling back to v1.2.0 requires restoring that pre-upgrade backup; do not point an older binary at an upgraded database. Follow [UPGRADING.md](../UPGRADING.md#v120-to-v130) for the post-upgrade checklist and the per-provider backup and restore steps.
 
 ## Known limitations
 

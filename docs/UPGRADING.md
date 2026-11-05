@@ -2,31 +2,6 @@
 
 This guide covers how an Armada Admiral moves its database forward between releases, what it does to protect your data on the way, and how to get back to a known-good state when you need to. It also lists the retention settings that keep long-running installs from growing without bound.
 
-## v1.3.0 usage-selection development upgrades
-
-Migrations 123 through 128 add immutable selection history, capture timing, current-attempt correlation and operational uncertainty for unreserved work. Migration 127 adds immutable execution attribution, mission recovery authorizations and retained reconsideration deadlines. Migration 128 adds each captain's last assignment time, backfilled from existing mission assignments, so selection tie-breaking no longer depends on unrelated captain updates. Existing live executions are adopted before dispatch without reconstructing historical decisions. Observe/FirstAvailable remains the default; Enforce is opt-in. After an upgrade, inspect current captures and mission selection diagnostics before choosing stricter unknown-usage policy. See the [implementation and acceptance guide](usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md). Back up the database and protected settings/usage identity before upgrading; rollback requires restoring that backup. A populated v1.2.0-to-current release drill remains part of the final release plan.
-
-### Contract changes to act on in v1.3.0
-
-- `POST /api/v1/missions` always answers `201` with the Mission. A mission no captain can take yet stays `Pending` and
-  carries an `X-Armada-Warning` header; earlier versions wrapped it as `{ "Mission": ..., "Warning": ... }`. Read `Id`
-  from the body in both cases. The .NET clients, Helm, the TUI, the Dashboard and Mobile read both shapes. MCP
-  `create_mission` is unchanged.
-- Mission create (REST, MCP and WebSocket) now returns once the mission is admitted, usually `Assigned`, and
-  provisions the dock and launches the agent in the background. Poll the mission, or watch `mission.status_changed`,
-  for `InProgress` instead of expecting it in the create response. A failed launch returns the mission to `Pending`.
-- The captain-selection REST routes now use the same PascalCase bodies and error envelope (`Error`, `Message`, `Data`)
-  as every other route. A stale recovery revision returns `409` with `Data.Code` `RecoveryRevisionConflict`.
-- Decision detail stores the candidates that explain a decision (the selected, proposed and requested captains, plus the
-  25 nearest to eligibility for a wait) and counts the rest by reason in `OmittedCandidates`. Decisions recorded before
-  the upgrade keep every candidate row. An automatic retry is recorded with `Trigger` `Redispatch`.
-- A request-body value that does not bind returns `400` with a message naming the field and what it accepts, and
-  `Data.Code` `InvalidJsonValue` (or `MalformedJson`) with `Data.Field`. Earlier messages named .NET types.
-- Helm writes errors and diagnostics to stderr and shows the server's own message. Scripts that parsed error text from
-  stdout must read stderr; exit codes are unchanged.
-- Migration 129 adds `captain_selection_omitted_candidates`. Migration 130 rewrites the SQLite default tenant's
-  timestamps as zone-qualified UTC; they were stored without a zone and read as local time.
-
 ## Supported upgrade paths
 
 Upgrade any 0.9.x release directly to 1.0. You do not need to step through intermediate builds: the Admiral applies every pending schema migration, in order, the first time the new version starts.
@@ -509,31 +484,95 @@ v1.0.0 is the first stable release: security hardening, a frozen and documented 
 
 **New settings worth reviewing:** `TransientOutageGraceMinutes` (default 10) and `BlockDependentsOfFailedStages` (default false; when true, the stages waiting on a failed stage show Blocked until it is restarted instead of being cancelled). Personas gain ordered captain priorities; an empty list keeps the 1.0 default-captain behavior. See [PIPELINES.md](PIPELINES.md) and [CAPTAIN_ROUTING.md](CAPTAIN_ROUTING.md).
 
-### v1.2.0 to v1.3.0 (development)
+### v1.2.0 to v1.3.0
 
-The `feature/v1.3.0` branch focuses on parallelization and concurrency. Migration 117 adds numeric vessel limits: old `AllowConcurrentMissions=false` becomes 1/1, true becomes 0/0 (unlimited); new vessels default to 1/4. Migration 118 adds durable captain slots, per-mission heartbeat/recovery and exclusive session IDs. Existing ApiEndpoint/Mux captains become concurrency 4; other runtimes become 1. Set `MaxConcurrency` to 1 to retain serial endpoint operation. Lowering capacity never preempts existing missions.
+v1.3.0 adds concurrency limits and the mission hierarchy, usage-based captain selection, and fleet action modes. Schema migrations 117 through 130 run automatically at startup on SQLite, PostgreSQL, MySQL and SQL Server through the normal [upgrade procedure](#how-an-upgrade-runs). Fresh installs and populated v1.2 upgrades run the same ordered migrations.
 
-Migration 119 adds mission hierarchy/branch metadata and `ReadyUtc`/`AssignedUtc`; rescue links move from `ParentMissionId` to `RescueOfMissionId`. Migration 120 creates indexed mission wait storage with mission-delete cascading and closed-interval retention. Migration 121 normalizes live legacy Testing jobs to InProgress, preserves legacy process IDs in the corresponding mission/slot, preserves exclusive session owners, and removes `captains.current_mission_id`, `captains.current_dock_id` and `vessels.allow_concurrent_missions`. SQLite uses native column removal, preserving existing constraints and indexes. Fresh installs and populated v1.2 upgrades use the same ordered migrations. Historical replay stops at this schema boundary so it cannot recreate removed columns.
+**Before you upgrade.** Back up the database (and, for captain selection, the protected settings and usage identity). Downgrading in place is not supported: migration 121 removes columns v1.2.0 reads. To return to v1.2.0, restore the pre-upgrade backup; do not point a v1.2.0 binary at an upgraded database.
 
-Update clients to use captain `ActiveMissionIds` and mission-owned docks/processes. Vessel requests containing the removed boolean fail with migration guidance; Helm rejects `--allow-concurrent`. This is the explicitly approved [compatibility exception](COMPATIBILITY.md#v130-concurrency-exception). SQLite, PostgreSQL, MySQL and SQL Server have populated v1.2 upgrade and live slot/storage coverage. Planning/refinement persistence remains SQLite-only as before; the other providers retain their existing unsupported-session behavior.
+#### Breaking changes
 
-Helm now uses strict parsing: an unknown option (`armada mission list --bogus`) or a stray extra argument fails with a non-zero exit before any request, where earlier versions ignored it. Check scripts that pass options a command does not define.
+These are an owner-approved [compatibility exception](COMPATIBILITY.md#v130-concurrency-exception) with no deprecation period.
 
-**Usage selection after upgrading** (migrations 123 through 128, described [above](#v130-usage-selection-development-upgrades)):
+| Removed | Replacement |
+|---|---|
+| `Vessel.AllowConcurrentMissions` | `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage` (0 = unlimited). A request that still sends the boolean gets `400` with migration guidance instead of having it ignored. |
+| `Captain.CurrentMissionId`, `Captain.CurrentDockId` | `Captain.ActiveMissionIds`; each mission carries its own `DockId` and `ProcessId`. |
+| Helm `--allow-concurrent` | `--max-parallel-voyages` and `--max-parallel-missions-per-voyage`. |
+
+Before and after:
+
+```text
+REST    PUT /api/v1/vessels/{id}   {"AllowConcurrentMissions": true}
+     -> PUT /api/v1/vessels/{id}   {"MaxParallelVoyages": 0, "MaxParallelMissionsPerVoyage": 0}
+
+MCP     update_vessel { "allowConcurrentMissions": false }
+     -> update_vessel { "maxParallelVoyages": 1, "maxParallelMissionsPerVoyage": 1 }
+
+SDK     captain.CurrentMissionId
+     -> captain.ActiveMissionIds   (a list; recompile against the v1.3.0 Armada.Client)
+
+Helm    armada vessel update vsl_... --allow-concurrent
+     -> armada vessel update vsl_... --max-parallel-voyages 0 --max-parallel-missions-per-voyage 0
+```
+
+Helm also parses strictly now: an unknown option (`armada mission list --bogus`) or a stray extra argument fails with a non-zero exit before any request, where earlier versions ignored it.
+
+#### Concurrency and the mission hierarchy (migrations 117 to 121)
+
+| Migration | Change |
+|---|---|
+| 117 | Numeric vessel limits. `AllowConcurrentMissions=false` becomes 1/1 and `true` becomes 0/0, so existing vessels schedule as before. New vessels default to 1 voyage and 4 missions per voyage. |
+| 118 | Captain slots (`MaxConcurrency`), per-mission heartbeat and recovery, and exclusive session ids. Existing ApiEndpoint and Mux captains become concurrency 4; every other runtime becomes 1. |
+| 119 | Mission hierarchy and branch metadata (`ParentMissionId`, `BranchStrategy`, `OwnedPaths`, `Depth`) and `ReadyUtc`/`AssignedUtc`. Rescue links move from `ParentMissionId` to `RescueOfMissionId`. |
+| 120 | Indexed mission wait intervals, deleted with their mission; closed intervals are kept `Concurrency.WaitIntervalRetentionDays`. |
+| 121 | Normalizes live legacy Testing jobs to InProgress, moves process ids and session owners onto missions and sessions, and removes `captains.current_mission_id`, `captains.current_dock_id` and `vessels.allow_concurrent_missions` (SQLite uses native column removal, keeping constraints and indexes). |
+
+**What changes in scheduling after the upgrade:**
+
+- The only scheduling change on upgrade is that ApiEndpoint and Mux captains run up to 4 missions each. Set their `MaxConcurrency` back to 1 to keep serial operation.
+- The endpoint, runtime and global caps (`InferenceOptions.MaxConcurrentMissions`, runtime `MaxConcurrent`, `MaxConcurrentMissions`) now count running missions instead of working captains. With every captain at 1 the numbers are the same, so this changes behavior only together with the endpoint captain change above.
+- Lowering any limit stops new admissions and never stops running work.
+- Verification, review and landing no longer hold a captain slot.
+
+See [SCHEDULING.md](SCHEDULING.md#capacity) for how the limits combine and [CONCURRENCY_TESTING.md](CONCURRENCY_TESTING.md) to test the admission path.
+
+**Settings.** The new `Concurrency` group (defaults for new vessels and captains, `MaxCaptainConcurrency` 256, `MaxHierarchyDepth` 4, `StarvationWarningMinutes` 60, `AdmissionLockTimeoutSeconds` 30, `WaitIntervalRetentionDays`) is written into the settings file on first start and is editable at `PUT /api/v1/settings` with its revision. Setters clamp out-of-range values and log the supplied and effective values; captain defaults are normalized against `MaxCaptainConcurrency` regardless of JSON property order. Negative vessel defaults clamp to 1; zero stays unlimited. The existing `MaxConcurrentMissions` now clamps negative values to 1 and values above 10000 to 10000 instead of rejecting the settings file.
+
+**Architect plans.** Built-in Architect prompts now request `armada-plan` contract version 4 (`parent`, `ownedPaths`, `readsPaths`, `branchStrategy`); versions 2 and 3 are still accepted, and `dependsOn` is read as `parent` with a warning. Untouched built-in persona briefs and prompt templates upgrade automatically; edited ones are kept. See [PIPELINES.md](PIPELINES.md#contract-version-4-hierarchy-and-owned-paths).
+
+**Planning and refinement** persistence remains SQLite-only, as in v1.2.0; the other providers keep their existing unsupported-session behavior.
+
+#### Captain selection (migrations 123 to 130)
+
+Migrations 123 through 128 add immutable selection history, capture timing, current-attempt correlation and operational uncertainty for unreserved work. Migration 127 adds immutable execution attribution, mission recovery authorizations and retained reconsideration deadlines. Migration 128 adds each captain's last assignment time, backfilled from existing mission assignments, so selection tie-breaking no longer depends on unrelated captain updates. Migration 129 adds `captain_selection_omitted_candidates`. Migration 130 rewrites the SQLite default tenant's timestamps as zone-qualified UTC; they were stored without a zone and read as local time. Existing live executions are adopted before dispatch without reconstructing historical decisions.
 
 - The `UsageSelection` mode stays `Observe` with strategy `FirstAvailable`, so routing does not change. Enforce is never enabled by the upgrade.
 - Review the group in Server settings (Captain selection) or `GET /api/v1/settings`, especially `ReservePercent`, `PerAttemptReservationPercent`, `UnknownUsageBehavior` and `DecisionRetentionDays`.
-- If you run the bundled telemetry stack, open the **Armada Captain Selection** Grafana dashboard (uid `armada-captain-selection`) and check Observe divergence and waits before considering Enforce.
-- Decision history retention now runs on every provider, pruning decisions older than `DecisionRetentionDays` (default 90) in bounded batches.
-- See the [usage selection operator guide](usage-selection/OPERATIONS.md) for moving to Enforce and for known limitations.
+- If you run the bundled telemetry stack, open the **Armada Captain Selection** Grafana dashboard (uid `armada-captain-selection`) and check Observe divergence and waits before considering Enforce. The **Armada Concurrency** dashboard sits beside it.
+- Decision history retention runs on every provider, pruning decisions older than `DecisionRetentionDays` (default 90) in bounded batches.
+- See the [usage selection operator guide](usage-selection/OPERATIONS.md) for moving to Enforce, and the [implementation and acceptance guide](usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md) for inspecting captures and selection diagnostics.
 
-Back up before upgrading. Do not point v1.2.0 at a v1.3.0 database; restoring the pre-upgrade backup is required for rollback. Hierarchy execution, wait telemetry and final stress/release integration remain in the plan.
+Migration 122 adds fleet action applicability commands and the report-only Audit and Research mission modes.
 
-The new `Concurrency` settings-file group carries defaults and bounds for later milestones. Setters clamp hard bounds; load/save normalizes captain defaults against `MaxCaptainConcurrency` independently of JSON property order. Negative vessel defaults clamp to 1; zero remains unlimited. The existing global `MaxConcurrentMissions` now clamps negative values to 1 and values over 10000 to 10000 instead of rejecting a negative settings file. Adjustment warnings name the supplied and effective values.
+#### Contract changes to act on
 
-Migration 117 is implemented for SQLite, PostgreSQL, SQL Server and MySQL. The SQLite upgrade/backfill and fresh-database path are tested; external database servers require provider integration testing. Migrations 118-121 remain reserved. Take a backup before testing this branch. Restore the backup to return to v1.2.0; changing the old flag in v1.2.0 would not keep the new limits synchronized. [Test the complete vessel admission path](CONCURRENCY_TESTING.md).
-
-Packages and development compose files use version 1.3.0. These changes do not publish Docker images; continue deploying the v1.2.0 release until a v1.3.0 release is available.
+- `POST /api/v1/missions` always answers `201` with the Mission. A mission no captain can take yet stays `Pending` and
+  carries an `X-Armada-Warning` header; earlier versions wrapped it as `{ "Mission": ..., "Warning": ... }`. Read `Id`
+  from the body in both cases. The .NET clients, Helm, the TUI, the Dashboard and Mobile read both shapes. MCP
+  `create_mission` is unchanged.
+- Mission create (REST, MCP and WebSocket) now returns once the mission is admitted, usually `Assigned`, and
+  provisions the dock and launches the agent in the background. Poll the mission, or watch `mission.status_changed`,
+  for `InProgress` instead of expecting it in the create response. A failed launch returns the mission to `Pending`.
+- The captain-selection REST routes now use the same PascalCase bodies and error envelope (`Error`, `Message`, `Data`)
+  as every other route. A stale recovery revision returns `409` with `Data.Code` `RecoveryRevisionConflict`.
+- Decision detail stores the candidates that explain a decision (the selected, proposed and requested captains, plus the
+  25 nearest to eligibility for a wait) and counts the rest by reason in `OmittedCandidates`. Decisions recorded before
+  the upgrade keep every candidate row. An automatic retry is recorded with `Trigger` `Redispatch`.
+- A request-body value that does not bind returns `400` with a message naming the field and what it accepts, and
+  `Data.Code` `InvalidJsonValue` (or `MalformedJson`) with `Data.Field`. Earlier messages named .NET types.
+- Helm writes errors and diagnostics to stderr and shows the server's own message. Scripts that parsed error text from
+  stdout must read stderr; exit codes are unchanged.
 
 ### v1.1.0 to v1.2.0
 

@@ -8,7 +8,7 @@ Migrations 119–121 persist assignment/hierarchy metadata and wait intervals, m
 
 Populated v1.2/schema-116 fixtures were upgraded using real SQLite, PostgreSQL 16, MySQL 8.4 and SQL Server 2022 databases. Provider suites cover atomic captain slots, exclusive sessions, model round trips, rescue backfill/deletion, runtime compare-and-set updates, wait interval close/retention/cascade and final-schema replay. PostgreSQL and SQL Server each pass 18 provider cases and MySQL passes 19; the final migration/runtime reruns pass 3, 3 and 4 cases respectively. MySQL's extra case independently interrupts migrations 119, 120 and 121 before their last statement and successfully resumes each fixture. Owned temporary database containers were removed after validation.
 
-This is the explicitly approved v1.3 compatibility break. Removed vessel request fields and Helm options return actionable numeric-limit guidance. Back up before upgrading; downgrade requires restoring that backup. See [UPGRADING](../UPGRADING.md#v120-to-v130-development), [REST](../REST_API.md), [MCP](../MCP_API.md) and [compatibility policy](../COMPATIBILITY.md).
+This is the explicitly approved v1.3 compatibility break. Removed vessel request fields and Helm options return actionable numeric-limit guidance. Back up before upgrading; downgrade requires restoring that backup. See [UPGRADING](../UPGRADING.md#v120-to-v130), [REST](../REST_API.md), [MCP](../MCP_API.md) and [compatibility policy](../COMPATIBILITY.md).
 
 ## Lifecycle and regression coverage
 

@@ -13,7 +13,7 @@ Migrations 119–121 complete the storage transition. Captain responses contain 
 
 Mission metadata adds `RescueOfMissionId`, `BranchStrategy`, `BaseBranchName`, `ReadyUtc`, `AssignedUtc`, `Depth`, `OwnedPathsJson` and `ReadsPathsJson`. Rescue links migrate out of `ParentMissionId`; deleting the original clears the rescue link. Assignment time is recorded atomically with the slot claim. A live agent’s `Testing` marker is progress information; execution remains `InProgress` so capacity and exit ownership are retained. Migration 121 normalizes live legacy Testing jobs and preserves their process handles. Hierarchy execution, branch strategies and wait reporting remain separate plan items; persisted metadata and wait storage do not imply those operations are available yet.
 
-This is an owner-approved compatibility exception for v1.3.0; see [compatibility](COMPATIBILITY.md#v130-concurrency-exception) and [upgrade guidance](UPGRADING.md#v120-to-v130-development). Back up before upgrading and restore that backup before running an older release.
+This is an owner-approved compatibility exception for v1.3.0; see [compatibility](COMPATIBILITY.md#v130-concurrency-exception) and [upgrade guidance](UPGRADING.md#v120-to-v130). Back up before upgrading and restore that backup before running an older release.
 
 
 ## v1.3.0: parallelization and concurrency
