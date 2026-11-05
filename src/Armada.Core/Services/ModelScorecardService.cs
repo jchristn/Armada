@@ -390,6 +390,8 @@ namespace Armada.Core.Services
 
             // Tool failures.
             metrics.Add(Rate("toolFailures", "Attempts whose suspected cause is ToolUse, of attempts.", attempts.Count(o => o.SuspectedCause == FailureCauseEnum.ToolUse), n));
+            metrics.Add(Rate("ownershipWarnings", "Attempts that changed files outside their owned paths or owned by a mission running alongside them (a warning; it does not fail the mission), of attempts.",
+                attempts.Count(o => o.SuspectedCause == FailureCauseEnum.OwnershipViolation || (o.CauseNote ?? String.Empty).Contains("Ownership:", StringComparison.Ordinal)), n));
             metrics.Add(Unavailable("toolFailures.kinds", "Tool failures by kind (malformed calls, loops, iteration limits).",
                 "Stage outcomes record the ToolUse cause, not the kind of tool failure."));
 

@@ -391,10 +391,15 @@ namespace Armada.Server
                 ? request.Description.Trim()
                 : sourceMessage.Content.Trim();
 
-            List<MissionDescription> missions = new List<MissionDescription>
-            {
-                new MissionDescription(title, description)
-            };
+            // A tree draft dispatches one mission per entry with its key, parent and owned paths; otherwise the draft is
+            // the single mission.
+            List<PlanningDraftMission> drafted = NormalizeDraftMissions(request.Missions);
+            List<MissionDescription> missions = drafted.Count > 1
+                ? drafted.Select(d => new MissionDescription(d.Title, d.Description)
+                {
+                    Key = d.Key, ParentKey = d.ParentKey, OwnedPaths = d.OwnedPaths.Count == 0 ? null : d.OwnedPaths
+                }).ToList()
+                : new List<MissionDescription> { new MissionDescription(title, description) { OwnedPaths = drafted.Count == 1 && drafted[0].OwnedPaths.Count > 0 ? drafted[0].OwnedPaths : null } };
 
             Voyage voyage = await _Admiral.DispatchVoyageAsync(
                 title,
@@ -479,9 +484,13 @@ namespace Armada.Server
                 string prompt =
                     "Read `" + promptFilePath + "` and the selected planning message below.\n" +
                     "Produce a dispatch draft for Armada.\n" +
-                    "Return JSON only with keys `title` and `description`.\n" +
+                    "Return JSON only with keys `title`, `description` and, when the work splits, `missions`.\n" +
                     "- `title` must be concise, actionable, and 80 characters or less.\n" +
                     "- `description` must be mission-ready markdown that tells a captain exactly what to do.\n" +
+                    "- Small work is one mission: omit `missions`. Otherwise `missions` is a list of `{key, parentKey, title, description, ownedPaths}`: " +
+                    "small missions (one coherent change each), `parentKey` naming an earlier mission's `key` only when a mission needs that mission's code, " +
+                    "and `ownedPaths` (files or `dir/` prefixes it may change) that never overlap between missions that can run at the same time. " +
+                    "This vessel runs at most " + (vessel.MaxParallelMissionsPerVoyage == 0 ? "an unlimited number of" : vessel.MaxParallelMissionsPerVoyage.ToString(System.Globalization.CultureInfo.InvariantCulture)) + " missions of a voyage at once.\n" +
                     "- Preserve the user's concrete intent and constraints.\n" +
                     "- Do not mention that this was generated from a planning session.\n" +
                     "- If the existing session title is already strong, keep it close to `" + preferredTitle.Replace("`", "'") + "`.\n\n" +
@@ -1132,7 +1141,7 @@ namespace Armada.Server
             builder.AppendLine("## Response Guidance");
             builder.AppendLine("- Continue the conversation naturally.");
             builder.AppendLine("- Be concrete about architecture, implementation order, and risk when relevant.");
-            builder.AppendLine("- If useful, include a short `Dispatch Draft` section that could be sent to Armada as a mission.");
+            builder.AppendLine("- If useful, include a short `Dispatch Draft` section that could be sent to Armada: one mission, or a few small missions naming the earlier mission each builds on (only when it needs that code) and the files each owns, with no file owned by two missions that can run at the same time.");
 
             await File.WriteAllTextAsync(filePath, builder.ToString(), token).ConfigureAwait(false);
             return filePath;
@@ -1396,6 +1405,27 @@ namespace Armada.Server
             };
         }
 
+        // Keep entries that have a title; trim keys and drop a parentKey that names the mission itself.
+        private static List<PlanningDraftMission> NormalizeDraftMissions(List<PlanningDraftMission>? missions)
+        {
+            List<PlanningDraftMission> kept = new List<PlanningDraftMission>();
+            foreach (PlanningDraftMission? mission in missions ?? new List<PlanningDraftMission>())
+            {
+                if (mission == null || String.IsNullOrWhiteSpace(mission.Title)) continue;
+                string? key = String.IsNullOrWhiteSpace(mission.Key) ? null : mission.Key.Trim();
+                string? parentKey = String.IsNullOrWhiteSpace(mission.ParentKey) ? null : mission.ParentKey.Trim();
+                kept.Add(new PlanningDraftMission
+                {
+                    Key = key,
+                    ParentKey = parentKey != null && parentKey == key ? null : parentKey,
+                    Title = mission.Title.Trim(),
+                    Description = String.IsNullOrWhiteSpace(mission.Description) ? mission.Title.Trim() : mission.Description.Trim(),
+                    OwnedPaths = (mission.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).Distinct(StringComparer.Ordinal).ToList()
+                });
+            }
+            return kept;
+        }
+
         private bool TryParseSummaryResponse(string content, out PlanningSessionSummaryResponse? response)
         {
             response = null;
@@ -1413,6 +1443,7 @@ namespace Armada.Server
             {
                 Title = document.Title ?? String.Empty,
                 Description = document.Description ?? String.Empty,
+                Missions = NormalizeDraftMissions(document.Missions)
             };
             return true;
         }

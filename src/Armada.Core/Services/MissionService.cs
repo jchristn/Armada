@@ -181,6 +181,15 @@ namespace Armada.Core.Services
             /// Whether the mission waits until the other Worker missions in the voyage settle.
             /// </summary>
             public bool WaitForOtherMissions { get; set; } = false;
+
+            /// <summary>Files or directories the mission may change (plan ownedPaths or a legacy "Owns:" line).</summary>
+            public List<string> OwnedPaths { get; set; } = new List<string>();
+
+            /// <summary>Context the mission must not change (plan readsPaths).</summary>
+            public List<string> ReadsPaths { get; set; } = new List<string>();
+
+            /// <summary>Plan branchStrategy (continue or fork), or null for the default rule.</summary>
+            public string? BranchStrategy { get; set; } = null;
         }
 
         private sealed class WorktreePlaybookLocation

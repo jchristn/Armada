@@ -7,7 +7,9 @@ namespace Armada.Core.Services
 
     /// <summary>
     /// Arranges missions into logical missions and their children. A mission with no upstream in the set is a
-    /// logical root; missions reached from it by <c>DependsOnMissionId</c> are its pipeline stages (D14). A root's
+    /// logical root; missions reached from it by <c>DependsOnMissionId</c> are its pipeline stages (D14). Where several
+    /// missions depend on one upstream (an Architect fanning out into slices), a dependent is a stage only when it
+    /// carries the upstream's title (a rework); the others are logical missions of their own. A root's
     /// <c>ParentMissionId</c> places it under the logical mission that owns that mission, stage references included.
     /// </summary>
     public static class MissionTreeBuilder
@@ -23,8 +25,12 @@ namespace Armada.Core.Services
             Dictionary<string, MissionSummary> byId = new Dictionary<string, MissionSummary>(StringComparer.Ordinal);
             foreach (MissionSummary mission in ordered) byId[mission.Id] = mission;
 
+            Dictionary<string, int> dependents = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (MissionSummary mission in ordered)
+                if (!String.IsNullOrEmpty(mission.DependsOnMissionId) && byId.ContainsKey(mission.DependsOnMissionId!))
+                    dependents[mission.DependsOnMissionId!] = (dependents.TryGetValue(mission.DependsOnMissionId!, out int n) ? n : 0) + 1;
             Dictionary<string, string> rootOf = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (MissionSummary mission in ordered) rootOf[mission.Id] = RootOf(mission, byId);
+            foreach (MissionSummary mission in ordered) rootOf[mission.Id] = RootOf(mission, byId, dependents);
 
             Dictionary<string, MissionTreeNode> nodes = new Dictionary<string, MissionTreeNode>(StringComparer.Ordinal);
             foreach (MissionSummary mission in ordered)
@@ -82,14 +88,23 @@ namespace Armada.Core.Services
             return max;
         }
 
-        private static string RootOf(MissionSummary mission, Dictionary<string, MissionSummary> byId)
+        private static string RootOf(MissionSummary mission, Dictionary<string, MissionSummary> byId, Dictionary<string, int> dependents)
         {
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal) { mission.Id };
             MissionSummary current = mission;
             while (!String.IsNullOrEmpty(current.DependsOnMissionId)
-                && byId.TryGetValue(current.DependsOnMissionId!, out MissionSummary? upstream) && seen.Add(upstream.Id))
+                && byId.TryGetValue(current.DependsOnMissionId!, out MissionSummary? upstream) && seen.Add(upstream.Id)
+                && (dependents[upstream.Id] == 1 || String.Equals(BaseTitle(current.Title), BaseTitle(upstream.Title), StringComparison.OrdinalIgnoreCase)))
                 current = upstream;
             return current.Id;
+        }
+
+        // "Add the table [Judge]" and "Add the table [Worker]" share the base title "Add the table".
+        private static string BaseTitle(string? title)
+        {
+            string value = (title ?? String.Empty).Trim();
+            int bracket = value.LastIndexOf(" [", StringComparison.Ordinal);
+            return bracket > 0 && value.EndsWith("]", StringComparison.Ordinal) ? value.Substring(0, bracket) : value;
         }
 
         // Follow DependsOn links from the root; stages not on the chain (branching dependents) keep creation order.

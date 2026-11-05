@@ -302,6 +302,62 @@ namespace Test.Shared.Suites.Services
                     UsageReservationStateEnum.Released, DateTime.UtcNow.AddSeconds(1), "NotStarted"), "a launched attempt cannot be released as unstarted");
                 AssertEqual(0, (await h.Db.CaptainSelections.ReadReservationsAsync(tenant.Id, "host-" + (actualCaptain.Id == first.Id ? second.Id : first.Id), actualCaptain.Runtime.ToString(), "opaque-account")).Count);
             });
+            // M7: requirements an Architect plan sets on a slice (here its Worker envelope) go through Enforce routing: the
+            // captain with more headroom that does not meet them is filtered out before usage ranking.
+            Add("enforce_honors_architect_slice_requirements", async () =>
+            {
+                using Harness h = await Harness.CreateAsync();
+                TenantMetadata tenant = await h.Db.Tenants.CreateAsync(new TenantMetadata("architect-requirements"));
+                UserMaster owner = await h.Db.Users.CreateAsync(new UserMaster(tenant.Id, "architect-req@example.invalid", "fixture-password"));
+                h.Mission.TenantId = tenant.Id; h.Mission.UserId = owner.Id;
+                h.Mission.WorkerEnvelope = new WorkerEnvelope { MinServedContextTokens = 32768 };
+                await h.Db.Missions.UpdateAsync(h.Mission);
+                h.Settings.UsageSelection.Strategy = CaptainSelectionStrategyEnum.MostRemainingAllowance;
+                h.Settings.UsageSelection.Mode = UsageSelectionModeEnum.Enforce;
+                h.Settings.UsageCapture.Enabled = true;
+                ModelProfile wide = new ModelProfile
+                {
+                    TenantId = tenant.Id,
+                    Identity = new ModelProfileIdentity { Runtime = "ClaudeCode", Model = "m", ServedContextTokens = 131072 },
+                    Capabilities = new ModelProfileCapabilities { ToolsAvailable = true }
+                };
+                wide = await h.Db.ModelProfiles.CreateAsync(wide, "architect-req-" + Guid.NewGuid().ToString("N"));
+                Captain eligible = await h.Db.Captains.CreateAsync(new Captain("meets the envelope") { TenantId = tenant.Id, UserId = owner.Id, Model = "opus", ModelProfileId = wide.Id, UsageCaptureEnabled = true });
+                await h.Db.ModelProfiles.LinkCaptainAsync(eligible.Id, wide.Id);
+                Captain roomier = await h.Db.Captains.CreateAsync(new Captain("more headroom, no profile") { TenantId = tenant.Id, UserId = owner.Id, Model = "opus", UsageCaptureEnabled = true });
+                foreach (KeyValuePair<Captain, double> usage in new[] { new KeyValuePair<Captain, double>(eligible, 80), new KeyValuePair<Captain, double>(roomier, 10) })
+                {
+                    Captain captain = usage.Key;
+                    string host = "host-" + captain.Id;
+                    string revision = UsageAccountResolver.ConfigurationRevision(host, captain.Runtime, null);
+                    string context = UsageAccountResolver.CaptureContextKey(UsageAccountResolver.GroupKey(tenant.Id, host, captain.Runtime, null), revision);
+                    await h.Db.UsageMemberships.CreateAsync(new UsageAccountMembership { TenantId = tenant.Id, CaptainId = captain.Id, HostId = host,
+                        AccountKey = "opaque-account", Runtime = captain.Runtime, Provider = "anthropic", ConfigurationRevision = revision });
+                    UsageSnapshot snapshot = new UsageSnapshot { TenantId = tenant.Id, HostId = host, AccountKey = "opaque-account", Runtime = captain.Runtime,
+                        Source = UsageCaptureSourceEnum.OAuthEndpoint, Status = UsageSnapshotStatusEnum.Ok, Provider = "anthropic", ProbeStartedUtc = DateTime.UtcNow.AddSeconds(-1),
+                        WindowsJson = UsageWindowsJson.Serialize(new List<UsageWindow> { new UsageWindow { Name = "five-hour", UsedPercent = usage.Value } }) };
+                    await h.Db.UsageSnapshots.CreateAsync(snapshot, new List<string> { captain.Id });
+                    await h.Db.UsageSnapshots.UpsertLatestStateAsync(new UsageLatestState { TenantId = tenant.Id, HostId = host, AccountKey = "opaque-account", Runtime = captain.Runtime,
+                        Provider = "anthropic", LastGoodSnapshotId = snapshot.Id, LastGoodCapturedUtc = snapshot.CapturedUtc, LastGoodReceivedUtc = snapshot.ReceivedUtc,
+                        LastGoodStatus = snapshot.Status, LastGoodWindowsJson = snapshot.WindowsJson, CaptureContextKey = context });
+                }
+                h.Service.UsageSelectionLocalHostId = "host-" + eligible.Id;
+                bool admitted = await h.Service.TryAssignAsync(h.Mission, h.Vessel);
+                MissionAssignmentBlocker? why = admitted ? null : await h.Service.GetAssignmentBlockerAsync((await h.Db.Missions.ReadAsync(h.Mission.Id))!);
+                AssertTrue(admitted, "the eligible captain is admitted: " + (why == null ? "" : why.Reason + " " + why.Summary + " " + why.SelectionReasonCode));
+                AssertEqual(eligible.Id, (await h.Db.Missions.ReadAsync(h.Mission.Id))!.CaptainId, "headroom never overrides the slice's requirements");
+                CaptainSelectionDecision decision = (await h.Db.CaptainSelections.ReadCurrentDecisionAsync(tenant.Id, h.Mission.Id))!;
+                AssertEqual(eligible.Id, decision.SelectedCaptainId);
+                // The envelope filters captains before usage ranking: the roomier captain is not even a usage candidate,
+                // and the envelope decision records why it was excluded.
+                List<CaptainSelectionCandidateRecord> candidates = (await h.Db.CaptainSelections.EnumerateCandidatesAsync(tenant.Id, decision.Id, pageSize: 50)).Objects;
+                AssertEqual(eligible.Id, candidates.Single().CaptainId, "only the captain that meets the envelope is ranked by usage");
+                AssertTrue(candidates.Single().Eligible);
+                List<ArmadaEvent> events = await h.Db.Events.EnumerateByMissionAsync(h.Mission.Id);
+                ArmadaEvent envelopeEvent = events.Single(e => e.EventType == WorkerEnvelopeRules.EventType);
+                AssertContains(roomier.Id, envelopeEvent.Payload ?? "", "the envelope decision names the excluded captain");
+                AssertContains("no model profile", envelopeEvent.Payload ?? "");
+            });
             return new TestSuiteDescriptor(suite, "Captain admission parity", cases);
         }
 

@@ -201,16 +201,21 @@ namespace Armada.Core.Services
                 "Do not invent interfaces.",
                 "",
                 "## Slices",
-                "Plan one independently verifiable outcome per slice.",
-                "Separate discovery from execution.",
-                "Serialize shared components and verify helpers before consumers.",
-                "Each description stands alone: Outcome; Components (verified paths, mark new); Approach; Scope exclusions; Invariants; Dependencies; Uncertainties.",
+                "Prefer small slices: one verifiable change, usually 1-5 files.",
+                "Set parent only when a slice needs code another produces; a child starts after its parent finishes, on its result.",
+                "Independent slices are siblings and run in parallel.",
+                "Keep the tree shallow.",
+                "Each description stands alone: Outcome; Components (verified paths, mark new); Approach; Scope exclusions; Invariants; Uncertainties.",
+                "Give every slice ownedPaths.",
+                "Slices that can run at once (neither an ancestor of the other) never share a file.",
+                "Shared files (project files, index exports, lockfiles, registries, changelogs) belong to one slice, usually the parent or the integration slice.",
+                "Parallel slice limit: {MaxParallelMissionsPerVoyage}.",
                 "End with an integration slice after all implementation pipelines settle.",
                 "",
                 "## Plan format",
-                "Output one fenced `armada-plan` JSON block with contractVersion:3, requirements:[stable objective IDs], decisions:[atomic resolved rules], missions:[{title,description,kind,dependsOn,waitForOtherMissions,decisionIndexes,validationCommands,acceptanceCriteria}].",
+                "Output one fenced `armada-plan` JSON block with contractVersion:4, requirements:[stable objective IDs], decisions:[atomic resolved rules], missions:[{title,description,kind,parent,ownedPaths,readsPaths,waitForOtherMissions,decisionIndexes,validationCommands,acceptanceCriteria}].",
                 "kind is implementation, investigation or integration.",
-                "dependsOn is an earlier 1-based index or null.",
+                "parent is an earlier 1-based index or null.",
                 "The last mission is integration with waitForOtherMissions:true.",
                 "Each acceptance criterion has id (unique plan-wide), requirementIds, decisionIndexes (plan decisions this check verifies; [] if none), scenario, expected, verification (named check), negativeCases, or negativeCasesNotApplicableReason if none apply.",
                 "Split compound decisions.",
@@ -270,13 +275,63 @@ namespace Armada.Core.Services
 
             ["persona.architect"] = Lines(
                 "You are an Armada architect agent. Analyze; do not implement.{WorkerEnvelope}",
+                "Plan small slices (one verifiable change, usually 1-5 files); each description stands alone (Outcome, Components, Approach, Scope exclusions, Invariants, Uncertainties).",
+                "Set parent only when a slice needs another's code. Give every slice ownedPaths; slices that can run at once never share a file. Parallel slice limit: {MaxParallelMissionsPerVoyage}.",
+                "Output one fenced `armada-plan` JSON block with contractVersion:4, requirements:[stable objective IDs], decisions:[atomic resolved rules], missions:[{title,description,kind,parent,ownedPaths,readsPaths,waitForOtherMissions,decisionIndexes,validationCommands,acceptanceCriteria}].",
+                "kind is implementation, investigation or integration; parent is an earlier 1-based index or null; the last mission is integration with waitForOtherMissions:true.",
+                "Each acceptance criterion has id, requirementIds, decisionIndexes, scenario, expected, verification, and negativeCases or negativeCasesNotApplicableReason.",
+                _CompactEvidence,
+                ArchitectContract)
+        };
+
+        // The Lean and Compact architect variants shipped before contract v4 (v1.2), kept so untouched stored copies
+        // are upgraded and edited ones are left alone.
+        private static readonly string _PreviousArchitectLean = Lines(
+                "You are an Armada architect agent.",
+                "Output contract: one fenced `armada-plan` JSON block. " + ArchitectContract,
+                "",
+                "## Analysis",
+                "Inspect the objective, source, dependency contracts and commands.",
+                "Do not implement.",
+                "Resolve compatibility, mandatory rules versus defaults and overrides, failures, auth and redaction before dispatch.",
+                "Resolve contradictory invariants and critical unknowns.{WorkerEnvelope}",
+                "Do not invent interfaces.",
+                "",
+                "## Slices",
+                "Plan one independently verifiable outcome per slice.",
+                "Separate discovery from execution.",
+                "Serialize shared components and verify helpers before consumers.",
+                "Each description stands alone: Outcome; Components (verified paths, mark new); Approach; Scope exclusions; Invariants; Dependencies; Uncertainties.",
+                "End with an integration slice after all implementation pipelines settle.",
+                "",
+                "## Plan format",
+                "Output one fenced `armada-plan` JSON block with contractVersion:3, requirements:[stable objective IDs], decisions:[atomic resolved rules], missions:[{title,description,kind,dependsOn,waitForOtherMissions,decisionIndexes,validationCommands,acceptanceCriteria}].",
+                "kind is implementation, investigation or integration.",
+                "dependsOn is an earlier 1-based index or null.",
+                "The last mission is integration with waitForOtherMissions:true.",
+                "Each acceptance criterion has id (unique plan-wide), requirementIds, decisionIndexes (plan decisions this check verifies; [] if none), scenario, expected, verification (named check), negativeCases, or negativeCasesNotApplicableReason if none apply.",
+                "Split compound decisions.",
+                "Every objective ID and decision needs a named check.",
+                "Criterion decision indexes must be within the slice scope.",
+                "validationCommands lists exact commands.",
+                "Cover applicable failures: HTTP errors and empty results, pre-request rejection, truncated streams, stale queued or in-flight work, credential collisions and prefix or shifted overlaps, and omitted, null, empty, whitespace, inherited, false, custom and case-sensitive values.",
+                "Integration checks cover configure, save, reload, discovery, inference, tools, health responses and logs.",
+                "Use decisionIndexes for the 1-based indexes of only this slice's relevant decisions ([] if none).",
+                "",
+                _LeanEvidence,
+                "",
+                "## Output contract (repeated)",
+                "Output one fenced `armada-plan` JSON block.",
+                ArchitectContract);
+
+        private static readonly string _PreviousArchitectCompact = Lines(
+                "You are an Armada architect agent. Analyze; do not implement.{WorkerEnvelope}",
                 "Plan one independently verifiable outcome per slice; each description stands alone (Outcome, Components, Approach, Scope exclusions, Invariants, Dependencies, Uncertainties).",
                 "Output one fenced `armada-plan` JSON block with contractVersion:3, requirements:[stable objective IDs], decisions:[atomic resolved rules], missions:[{title,description,kind,dependsOn,waitForOtherMissions,decisionIndexes,validationCommands,acceptanceCriteria}].",
                 "kind is implementation, investigation or integration; dependsOn is an earlier 1-based index or null; the last mission is integration with waitForOtherMissions:true.",
                 "Each acceptance criterion has id, requirementIds, decisionIndexes, scenario, expected, verification, and negativeCases or negativeCasesNotApplicableReason.",
                 _CompactEvidence,
-                ArchitectContract)
-        };
+                ArchitectContract);
 
         #endregion
 
@@ -300,6 +355,24 @@ namespace Armada.Core.Services
             };
             if (source == null) return null;
             return source.TryGetValue(personaTemplateName, out string? content) ? content : null;
+        }
+
+        /// <summary>
+        /// Earlier built-in contents of a persona's variant template that an untouched stored copy may still hold, newest
+        /// first. Empty when the variant never changed.
+        /// </summary>
+        /// <param name="personaTemplateName">Persona template name without suffix.</param>
+        /// <param name="variant">Variant.</param>
+        /// <returns>Previous contents.</returns>
+        public static IReadOnlyList<string> GetPreviousContents(string? personaTemplateName, PromptVariantEnum variant)
+        {
+            if (!String.Equals(personaTemplateName, "persona.architect", StringComparison.Ordinal)) return new List<string>();
+            return variant switch
+            {
+                PromptVariantEnum.Lean => new List<string> { _PreviousArchitectLean },
+                PromptVariantEnum.Compact => new List<string> { _PreviousArchitectCompact },
+                _ => new List<string>()
+            };
         }
 
         #endregion

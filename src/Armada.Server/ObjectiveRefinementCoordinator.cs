@@ -331,7 +331,8 @@ namespace Armada.Server
                 string prompt =
                     "Read `" + promptFilePath + "` and the selected refinement message below.\n" +
                     "Produce a structured backlog-refinement summary for Armada.\n" +
-                    "Return JSON only with keys `summary`, `acceptanceCriteria`, `nonGoals`, `rolloutConstraints`, and `suggestedPipelineId`.\n" +
+                    "Return JSON only with keys `summary`, `acceptanceCriteria`, `nonGoals`, `rolloutConstraints`, `suggestedPipelineId`, and optionally `suggestedSlices`.\n" +
+                    "- `suggestedSlices` is an optional list of `{title, parent}` small slices for later planning; `parent` is an earlier 1-based index only when a slice needs another's code, otherwise null.\n" +
                     "- `summary` must be concise and implementation-oriented.\n" +
                     "- Each list must be an array of strings.\n" +
                     "- Keep only concrete items that materially clarify future implementation.\n" +
@@ -1368,6 +1369,23 @@ namespace Armada.Server
             };
         }
 
+        // Titled slices only; a parent must name an earlier kept slice.
+        private static List<ObjectiveSuggestedSlice> CleanSlices(List<ObjectiveSuggestedSlice?>? slices)
+        {
+            List<ObjectiveSuggestedSlice> kept = new List<ObjectiveSuggestedSlice>();
+            Dictionary<int, int> positions = new Dictionary<int, int>();
+            List<ObjectiveSuggestedSlice?> source = slices ?? new List<ObjectiveSuggestedSlice?>();
+            for (int i = 0; i < source.Count; i++)
+            {
+                ObjectiveSuggestedSlice? slice = source[i];
+                if (slice == null || String.IsNullOrWhiteSpace(slice.Title)) continue;
+                int? parent = slice.Parent.HasValue && slice.Parent.Value < i + 1 && positions.TryGetValue(slice.Parent.Value, out int mapped) ? mapped : null;
+                kept.Add(new ObjectiveSuggestedSlice { Title = slice.Title.Trim(), Parent = parent });
+                positions[i + 1] = kept.Count;
+            }
+            return kept;
+        }
+
         private static bool TryParseSummaryResponse(string content, out ObjectiveRefinementSummaryResponse? response)
         {
             response = null;
@@ -1391,7 +1409,8 @@ namespace Armada.Server
                 AcceptanceCriteria = CleanStringList(document.AcceptanceCriteria),
                 NonGoals = CleanStringList(document.NonGoals),
                 RolloutConstraints = CleanStringList(document.RolloutConstraints),
-                SuggestedPipelineId = document.SuggestedPipelineId
+                SuggestedPipelineId = document.SuggestedPipelineId,
+                SuggestedSlices = CleanSlices(document.SuggestedSlices)
             };
             return true;
         }

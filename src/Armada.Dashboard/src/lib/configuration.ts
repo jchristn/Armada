@@ -91,6 +91,15 @@ export const PROMPT_TEMPLATE_PARAMETER_GROUPS: PromptTemplateParameterGroup[] = 
     ],
   },
   {
+    label: 'Concurrency and Ownership',
+    params: [
+      { name: '{MaxParallelMissionsPerVoyage}', description: "Vessel's per-voyage mission limit (\"none\" when unlimited)" },
+      { name: '{OwnedPaths}', description: 'Files and directories this mission may change' },
+      { name: '{ConcurrentSiblingPaths}', description: 'Paths owned by missions that can run at the same time' },
+      { name: '{ParentSummary}', description: "What the parent mission finished (empty without a parent)" },
+    ],
+  },
+  {
     label: 'System',
     params: [
       { name: '{Timestamp}', description: 'Current UTC timestamp' },

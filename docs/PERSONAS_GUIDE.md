@@ -223,28 +223,45 @@ When a pipeline has multiple stages:
 
 ### The Architect Special Case
 
-The Architect outputs its plan as one fenced code block whose info string is `armada-plan`:
+The Architect outputs its plan as one fenced code block whose info string is `armada-plan`. Contract v4
+(v1.3.0) adds the mission hierarchy and path ownership:
 
 ````
 ```armada-plan
-{"missions": [
-  {"title": "Add core model properties", "description": "Update Captain.cs and Mission.cs.", "dependsOn": null},
-  {"title": "Extend secondary backends", "description": "Update PostgreSQL and MySQL.", "dependsOn": 1},
-  {"title": "Document the final behavior", "description": "Update README.md.", "waitForOtherMissions": true}
+{"contractVersion": 4, "missions": [
+  {"title": "Add core model properties", "parent": null, "ownedPaths": ["src/Core/Models/"]},
+  {"title": "Extend secondary backends", "parent": 1, "ownedPaths": ["src/Backends/"], "readsPaths": ["src/Core/Models/"]},
+  {"title": "Add the CLI flags", "parent": 1, "branchStrategy": "fork", "ownedPaths": ["src/Cli/"]},
+  {"title": "Document the final behavior", "kind": "integration", "ownedPaths": ["README.md", "CHANGELOG.md"], "waitForOtherMissions": true}
 ]}
 ```
 ````
 
-The Admiral deserializes the block and creates one Worker mission (plus the downstream
-stages) per entry. `dependsOn` is the 1-based number of an earlier entry whose full
-Worker -> Test Engineer -> Judge chain must finish first; `waitForOtherMissions` holds the
-mission until every other Worker mission in the voyage has settled. Sequencing comes only
-from these fields (persisted as `DependsOnMissionId` and `WaitForVoyageWorkers`), never from
-description wording.
+(Versioned plans also carry requirements, decisions, acceptance criteria and validation commands; they are
+omitted here.) The Admiral deserializes the block and creates one Worker mission (plus the downstream stages)
+per entry.
+
+- `parent` is the 1-based number of an earlier entry this one builds on. It becomes the mission's
+  `ParentMissionId`: the child starts once the parent's last stage finishes and branches from its result (the
+  first child continues the parent's branch, later children fork from its head; `branchStrategy` `continue` or
+  `fork` overrides that). Entries without a parent are siblings and run in parallel. A parent chain deeper than
+  `Concurrency.MaxHierarchyDepth` is rejected. A `dependsOn` in a v3 or v4 plan is read as `parent` with a warning.
+- `ownedPaths` are the files or directories (trailing `/`) the mission may change; `readsPaths` are context it
+  must not change. Both are stored on every stage (`OwnedPathsJson`, `ReadsPathsJson`) and named in the slice
+  description and the captain's merge-conflict rules. Two entries that can run at the same time (neither an
+  ancestor of the other, and neither the final integration entry) must not own overlapping paths: a v4 plan that
+  does is rejected and the repair turn names both missions; a v3 plan only logs a warning.
+- `waitForOtherMissions` holds the mission until every other Worker mission in the voyage has settled
+  (`WaitForVoyageWorkers`).
+
+Sequencing comes only from these fields, never from description wording. After each stage, Armada compares the
+files the attempt changed with its owned paths and with the paths of missions running alongside it; a mismatch
+is recorded on the stage outcome as `OwnershipViolation` (or added to its cause note) and shown to the Judge. In
+v1.3.0 this is a warning and never fails the mission.
 
 Fallback: when the output has no valid `armada-plan` block, the older `[ARMADA:MISSION]`
 marker format is still read (title on the marker line, description below, an optional
-standalone `Depends on: Mission N` line). For that format only, deferral wording such as
+standalone `Parent: N` or `Depends on: Mission N` line naming the parent, and an optional `Owns: a, b` line). For that format only, deferral wording such as
 "after both implementation missions complete" is converted once, at parse time, into
 `WaitForVoyageWorkers`; a mission created any other way is never deferred by its wording.
 
@@ -471,6 +488,15 @@ and `persona.judge` templates (Current, Lean, Compact) carry it. A customized Ar
 template saved before the placeholder existed is not rewritten: when it lacks `{WorkerEnvelope}` and
 an envelope applies, Armada logs a warning once per template and appends the rendered section after
 the template's text. Add `{WorkerEnvelope}` to the template to choose where it goes.
+
+**Concurrency and ownership:**
+`{MaxParallelMissionsPerVoyage}` (the vessel's per-voyage mission limit, or "none (captain capacity still
+applies)" when unlimited; the built-in Architect templates use it), `{OwnedPaths}` (the mission's owned paths, or
+"the files named in your mission description" when none are recorded), `{ConcurrentSiblingPaths}` (the paths
+owned by active missions in the voyage that can run at the same time, excluding its ancestors, descendants and an
+integration mission waiting for all others; "none recorded" when there are none) and `{ParentSummary}` (one line
+on what the parent finished, empty without a parent). The built-in `mission.merge_conflict_avoidance` section uses
+the last three; an untouched copy of the previous default is upgraded at startup and an edited one is kept.
 
 **System:**
 `{Timestamp}`, `{ExistingClaudeMd}`

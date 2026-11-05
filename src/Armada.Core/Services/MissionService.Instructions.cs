@@ -54,6 +54,7 @@ namespace Armada.Core.Services
                 ? await RenderHandoffAsync(harborHost, worktreePath, previousStage, captain, token).ConfigureAwait(false)
                 : null;
             Dictionary<string, string> templateParams = MissionPromptBuilder.BuildTemplateParams(mission, vessel, captain, null, previousStage, handoff);
+            await AddOwnershipParamsAsync(mission, templateParams, token).ConfigureAwait(false);
             List<MissionPlaybookSnapshot> playbookSnapshots = await LoadMissionPlaybookSnapshotsAsync(mission, token).ConfigureAwait(false);
 
             string content = "";
@@ -800,36 +801,7 @@ namespace Armada.Core.Services
                         "emit a success marker or claim completion for partial work.\n";
 
                 case "mission.merge_conflict_avoidance":
-                    return
-                        "## Avoiding Merge Conflicts (CRITICAL)\n" +
-                        "\n" +
-                        "You are one of several captains working on this repository. Other captains may be working on " +
-                        "other missions in parallel on separate branches. To prevent merge conflicts and landing failures, " +
-                        "you MUST follow these rules:\n" +
-                        "\n" +
-                        "1. **Only modify files explicitly mentioned in your mission description.** If the description says " +
-                        "to edit `src/routes/users.ts`, do NOT also refactor `src/routes/orders.ts` even if you notice " +
-                        "improvements. Another captain may be working on that file.\n" +
-                        "\n" +
-                        "2. **Do not make \"helpful\" changes outside your scope.** Do not rename shared variables, " +
-                        "reorganize imports in files you were not asked to touch, reformat code in unrelated files, " +
-                        "update documentation files unless instructed, or modify configuration/project files " +
-                        "(e.g., .csproj, package.json, tsconfig.json) unless your mission specifically requires it.\n" +
-                        "\n" +
-                        "3. **Do not modify barrel/index export files** (e.g., index.ts, mod.rs) unless your mission " +
-                        "explicitly requires it. These are high-conflict files that many missions may need to touch.\n" +
-                        "\n" +
-                        "4. **Keep changes minimal and focused.** The fewer files you touch, the lower the risk of " +
-                        "conflicts. If your mission can be completed by editing 2 files, do not edit 5.\n" +
-                        "\n" +
-                        "5. **If you must create new files**, prefer names that are specific to your mission's feature " +
-                        "rather than generic names that another captain might also choose.\n" +
-                        "\n" +
-                        "6. **Do not modify or delete files created by another mission's branch.** You are working in " +
-                        "an isolated worktree -- if you see files that seem unrelated to your mission, leave them alone.\n" +
-                        "\n" +
-                        "Violating these rules will cause your branch to conflict with other captains' branches during " +
-                        "landing, resulting in a LandingFailed status and wasted work.\n";
+                    return MergeConflictPrompt.Default;
 
                 case "mission.progress_signals":
                     return

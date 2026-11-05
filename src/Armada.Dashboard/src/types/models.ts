@@ -4404,7 +4404,7 @@ export interface TokenUsageSyntheticResult { batchId: string; sourceId: string; 
 // ==================== Stage outcomes and failure-cause rules ====================
 
 /** Suspected cause of a stage attempt that fell short (FailureCauseEnum). */
-export type FailureCause = 'None' | 'Protocol' | 'InstructionFollowing' | 'ToolUse' | 'Context' | 'Capability' | 'NotTheModel' | 'Unknown' | 'Mixed';
+export type FailureCause = 'None' | 'Protocol' | 'InstructionFollowing' | 'ToolUse' | 'Context' | 'Capability' | 'NotTheModel' | 'Unknown' | 'Mixed' | 'OwnershipViolation';
 
 /** Where a stage outcome's cause came from (FailureCauseSourceEnum). */
 export type FailureCauseSource = 'None' | 'Rule' | 'Judge' | 'Manual';

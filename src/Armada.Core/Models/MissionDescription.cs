@@ -1,5 +1,6 @@
 namespace Armada.Core.Models
 {
+    using System.Collections.Generic;
     using System.Text.Json.Serialization;
 
     /// <summary>
@@ -68,6 +69,13 @@ namespace Armada.Core.Models
         /// first child continues the parent's branch and later children fork from its head).
         /// </summary>
         public Armada.Core.Enums.MissionBranchStrategyEnum? BranchStrategy { get; set; } = null;
+
+        /// <summary>
+        /// Files or directories this mission may change (a trailing <c>/</c> is a directory prefix). Stored on every
+        /// stage and named in the captain's instructions; missions that can run at the same time should not overlap.
+        /// </summary>
+        [Armada.Core.Services.CollectionBound(Armada.Core.Services.CollectionLimits.MaxConfigItems)]
+        public List<string>? OwnedPaths { get; set; } = null;
 
         #endregion
 

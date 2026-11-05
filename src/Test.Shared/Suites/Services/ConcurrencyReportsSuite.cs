@@ -36,6 +36,7 @@ namespace Test.Shared.Suites.Services
                 Case("metrics_window_buckets_and_validation", "Metrics sum wait by gate within the window, bucket it and reject an inverted or oversized window", MetricsAsync),
                 Case("captain_attribution_and_filter", "Assignment stamps the captain on the episode's waits, pinned waits belong to the requested captain, and metrics filter by captain", CaptainFilterAsync),
                 Case("captain_max_concurrency_filter", "maxConcurrency filters captain enumeration exactly, in every scope, and parses from the querystring", MaxConcurrencyFilterAsync),
+                Case("ownership_concurrent_paths_and_check", "Concurrent sibling paths exclude ancestors, descendants and the integration mission; the ownership check flags files outside owned or inside concurrent paths", OwnershipAsync),
                 Case("settings_patch_partial_clamped_and_detects_change", "A Concurrency patch changes only sent members, clamps values and reports whether anything changed", PatchAsync)
             };
             return new TestSuiteDescriptor(suiteId: SuiteId, displayName: "Concurrency reports", cases: cases);
@@ -60,6 +61,20 @@ namespace Test.Shared.Suites.Services
             AssertEqual("d", na.Children[0].Children.Single().Mission.Id);
             AssertEqual(2, MissionTreeBuilder.MaxDepth(roots));
             AssertEqual(0, MissionTreeBuilder.MaxDepth(new List<MissionTreeNode>()));
+
+            // An Architect fan-out: slices depending on one Architect are logical missions, each with its own stages;
+            // a rework that carries the upstream's title stays a stage.
+            MissionSummary architect = Summary("arch", t.AddSeconds(10)); architect.Title = "Plan [Architect]";
+            MissionSummary w1 = Summary("w1", t.AddSeconds(11), dependsOn: "arch"); w1.Title = "Slice one [Worker]";
+            MissionSummary j1 = Summary("j1", t.AddSeconds(12), dependsOn: "w1"); j1.Title = "Slice one [Judge]";
+            MissionSummary w2 = Summary("w2", t.AddSeconds(13), dependsOn: "arch"); w2.Title = "Slice two [Worker]";
+            MissionSummary w3 = Summary("w3", t.AddSeconds(14), parent: "w1"); w3.Title = "Slice three [Worker]";
+            MissionSummary rework = Summary("rw", t.AddSeconds(15), dependsOn: "arch"); rework.Title = "Plan [Architect]";
+            List<MissionTreeNode> fanOut = MissionTreeBuilder.Build(new[] { architect, w1, j1, w2, w3, rework });
+            AssertEqual("arch,w1,w2", String.Join(",", fanOut.Select(n => n.Mission.Id)), "each slice is its own logical mission");
+            AssertEqual("rw", String.Join(",", fanOut[0].Stages.Select(m => m.Id)), "a same-titled rework stays a stage");
+            AssertEqual("j1", fanOut[1].Stages.Single().Id);
+            AssertEqual("w3", fanOut[1].Children.Single().Mission.Id, "a planned child sits under its parent slice");
             return Task.CompletedTask;
         }
 
@@ -278,6 +293,49 @@ namespace Test.Shared.Suites.Services
             EnumerationQuery invalid = new EnumerationQuery();
             invalid.ApplyQuerystringOverrides(key => key == "maxConcurrency" ? "many" : null);
             AssertNull(invalid.MaxConcurrency, "a non-number is ignored");
+        }
+
+        private static Task OwnershipAsync(CancellationToken token)
+        {
+            DateTime t = DateTime.UtcNow.AddMinutes(-30);
+            Mission Owned(string id, int seconds, string paths, string? parent = null, string? dependsOn = null, MissionStatusEnum status = MissionStatusEnum.Pending, bool integration = false)
+                => new Mission(id) { Id = id, CreatedUtc = t.AddSeconds(seconds), ParentMissionId = parent, DependsOnMissionId = dependsOn, Status = status,
+                    OwnedPathsJson = paths.Length == 0 ? null : System.Text.Json.JsonSerializer.Serialize(paths.Split(',')), WaitForVoyageWorkers = integration, VoyageId = "vyg_x" };
+            Mission root = Owned("root", 0, "src/Core/", status: MissionStatusEnum.Complete);
+            Mission me = Owned("me", 1, "src/A/", parent: "root", status: MissionStatusEnum.InProgress);
+            Mission meJudge = Owned("me-judge", 2, "src/A/", dependsOn: "me"); meJudge.Title = "me [Judge]"; me.Title = "me [Worker]";
+            Mission child = Owned("child", 3, "src/A/Sub/", parent: "me");
+            Mission sibling = Owned("sibling", 4, "src/B/,src/A/Shared.cs", parent: "root", status: MissionStatusEnum.InProgress);
+            Mission done = Owned("done", 5, "src/C/", parent: "root", status: MissionStatusEnum.Complete);
+            Mission integration = Owned("integration", 6, "CHANGELOG.md", integration: true);
+            List<Mission> voyage = new List<Mission> { root, me, meJudge, child, sibling, done, integration };
+
+            List<ConcurrentOwnership> owners = MissionOwnership.ConcurrentOwners(me, voyage);
+            AssertEqual("sibling", String.Join(",", owners.Select(o => o.MissionId)), "only the active sibling: not the parent, child, finished mission or integration");
+            AssertEqual("sibling", String.Join(",", MissionOwnership.ConcurrentOwners(meJudge, voyage).Select(o => o.MissionId)), "a later stage sees the same concurrent owners");
+            AssertEqual(0, MissionOwnership.ConcurrentOwners(integration, voyage).Count, "nothing runs beside the integration mission");
+
+            string diff = "diff --git a/src/A/x.cs b/src/A/x.cs\n+1\ndiff --git a/src/B/y.cs b/src/B/y.cs\n+2\ndiff --git a/docs/z.md b/docs/z.md\n+3\ndiff --git a/src/A/x.cs b/src/A/x.cs\n";
+            List<string> changed = MissionOwnership.ChangedFiles(diff);
+            AssertEqual("src/A/x.cs,src/B/y.cs,docs/z.md", String.Join(",", changed), "distinct files in diff order");
+            OwnershipFinding finding = MissionOwnership.Check(me, voyage, changed);
+            AssertEqual("src/B/y.cs,docs/z.md", String.Join(",", finding.OutsideOwned));
+            AssertEqual("src/B/y.cs (sibling)", String.Join(",", finding.InConcurrentPaths));
+            AssertContains("changed outside its owned paths", finding.Describe());
+            AssertTrue(MissionOwnership.Check(me, voyage, new[] { "src/A/ok.cs" }).Clean, "a change inside owned paths is clean");
+            Mission unowned = Owned("unowned", 7, "", parent: "root", status: MissionStatusEnum.InProgress);
+            voyage.Add(unowned);
+            OwnershipFinding noPaths = MissionOwnership.Check(unowned, voyage, new[] { "src/B/y.cs", "src/Q.cs" });
+            AssertEqual(0, noPaths.OutsideOwned.Count, "without owned paths only concurrent ownership is checked");
+            AssertEqual(1, noPaths.InConcurrentPaths.Count);
+
+            string prompt = MissionService.ConcurrentSiblingPaths(me, voyage);
+            AssertContains("`src/B/`, `src/A/Shared.cs` (sibling) -- overlaps your owned paths at src/A/ and src/A/Shared.cs", prompt);
+            AssertFalse(prompt.Contains("src/Core/"), "the parent's paths are not concurrent");
+            AssertEqual(MergeConflictPrompt.NoConcurrentPaths, MissionService.ConcurrentSiblingPaths(integration, voyage));
+            AssertContains("Your parent mission \"root\" (root) finished", MissionService.ParentSummary(meJudge, voyage), "a stage resolves its logical mission's parent");
+            AssertEqual("", MissionService.ParentSummary(root, voyage));
+            return Task.CompletedTask;
         }
 
         private static Task PatchAsync(CancellationToken token)

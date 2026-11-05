@@ -738,7 +738,8 @@
             "Capability",
             "NotTheModel",
             "Unknown",
-            "Mixed"
+            "Mixed",
+            "OwnershipViolation"
           ]
         },
         "causeRuleId": {

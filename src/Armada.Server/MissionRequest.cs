@@ -64,5 +64,12 @@ namespace Armada.Server
         /// and to ContinueParent for the first child of a parent.
         /// </summary>
         public MissionBranchStrategyEnum? BranchStrategy { get; set; } = null;
+
+        /// <summary>
+        /// Optional files or directories this mission may change; missions that can run at the same time should not
+        /// overlap.
+        /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
+        public List<string>? OwnedPaths { get; set; } = null;
     }
 }

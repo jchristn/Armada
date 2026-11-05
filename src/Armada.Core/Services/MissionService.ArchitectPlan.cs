@@ -96,6 +96,7 @@ namespace Armada.Core.Services
             Dictionary<int, Mission> workerRootsByIndex = new Dictionary<int, Mission>();
             Dictionary<int, Mission> terminalStagesByIndex = new Dictionary<int, Mission>();
             Dictionary<string, Mission> terminalStagesByTitle = new Dictionary<string, Mission>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, int> indexByTerminalId = new Dictionary<string, int>(StringComparer.Ordinal);
 
             for (int i = 0; i < parsed.Count; i++)
             {
@@ -109,55 +110,88 @@ namespace Armada.Core.Services
                 workerRootsByIndex[i + 1] = workerRoot;
                 terminalStagesByIndex[i + 1] = terminalStage;
                 terminalStagesByTitle[parsed[i].Title] = terminalStage;
+                indexByTerminalId[terminalStage.Id] = i + 1;
             }
 
+            Dictionary<int, int> depthByIndex = new Dictionary<int, int>();
             for (int i = 0; i < parsed.Count; i++)
             {
+                if (!workerRootsByIndex.TryGetValue(i + 1, out Mission? workerRoot)) continue;
+                // Idempotent: only a slice still waiting on the Architect is changed, so a recovery pass never touches one
+                // that already started (H11).
+                bool waitingOnArchitect = workerRoot.Status == MissionStatusEnum.Pending && workerRoot.DependsOnMissionId == architectMission.Id;
+                if (waitingOnArchitect) await ApplySliceOwnershipAsync(voyageMissions, workerRoot, parsed[i], token).ConfigureAwait(false);
+
                 string? dependencyReference = parsed[i].DependsOnReference;
                 int? dependencyIndex = parsed[i].DependsOnIndex;
                 if (!dependencyIndex.HasValue && String.IsNullOrWhiteSpace(dependencyReference)) continue;
-                if (!workerRootsByIndex.TryGetValue(i + 1, out Mission? workerRoot)) continue;
-                // Idempotent: only a slice still waiting on the Architect is rewired, so a recovery pass never touches one
-                // that already started (H11).
-                if (workerRoot.Status != MissionStatusEnum.Pending || workerRoot.DependsOnMissionId != architectMission.Id) continue;
+                if (!waitingOnArchitect) continue;
 
-                // Structured plan: the dependency is an index. Legacy marker format: resolve the "Depends on:" text.
-                Mission? resolvedDependency;
+                // Structured plan: the parent is an index. Legacy marker format: resolve the "Parent:" or "Depends on:" text.
+                int? parentIndex = null;
                 if (dependencyIndex.HasValue)
                 {
-                    terminalStagesByIndex.TryGetValue(dependencyIndex.Value, out resolvedDependency);
+                    if (terminalStagesByIndex.ContainsKey(dependencyIndex.Value)) parentIndex = dependencyIndex.Value;
                     dependencyReference = "mission " + dependencyIndex.Value;
                 }
                 else
                 {
-                    resolvedDependency = ResolveArchitectDependencyTerminalStage(
-                        terminalStagesByIndex,
-                        terminalStagesByTitle,
-                        i + 1,
-                        dependencyReference!);
+                    Mission? resolved = ResolveArchitectDependencyTerminalStage(terminalStagesByIndex, terminalStagesByTitle, i + 1, dependencyReference!);
+                    if (resolved != null && indexByTerminalId.TryGetValue(resolved.Id, out int found)) parentIndex = found;
                 }
-                if (resolvedDependency == null)
+                if (!parentIndex.HasValue || !workerRootsByIndex.TryGetValue(parentIndex.Value, out Mission? parentRoot))
                 {
-                    _Logging.Warn(_Header + "could not resolve architect dependency '" + dependencyReference +
-                        "' for mission '" + parsed[i].Title + "' -- leaving dependency on architect");
+                    _Logging.Warn(_Header + "could not resolve architect parent '" + dependencyReference +
+                        "' for mission '" + parsed[i].Title + "' -- leaving it after the architect");
+                    continue;
+                }
+                if (parentRoot.Id == workerRoot.Id || parentIndex.Value >= i + 1)
+                {
+                    _Logging.Warn(_Header + "ignoring architect parent '" + dependencyReference +
+                        "' for mission '" + parsed[i].Title + "': a parent must be an earlier mission");
+                    continue;
+                }
+                int depth = (depthByIndex.TryGetValue(parentIndex.Value, out int parentDepth) ? parentDepth : parentRoot.Depth) + 1;
+                if (depth > _Settings.Concurrency.MaxHierarchyDepth)
+                {
+                    _Logging.Warn(_Header + "architect parent for mission '" + parsed[i].Title + "' would be " + depth
+                        + " deep (maximum " + _Settings.Concurrency.MaxHierarchyDepth + ") -- it starts after the architect instead");
                     continue;
                 }
 
-                if (resolvedDependency.Id == workerRoot.Id)
-                {
-                    _Logging.Warn(_Header + "ignoring self-referential architect dependency '" + dependencyReference +
-                        "' for mission '" + parsed[i].Title + "'");
-                    continue;
-                }
-
-                workerRoot.DependsOnMissionId = resolvedDependency.Id;
+                // D13/D16: the slice becomes a child of the parent slice's root. It starts once the parent's last stage
+                // finishes (gate 2), so it no longer needs its own link to the Architect; the branch rule picks continue
+                // for the first child and fork for later ones unless the plan says otherwise.
+                workerRoot.ParentMissionId = parentRoot.Id;
+                workerRoot.DependsOnMissionId = null;
+                workerRoot.Depth = depth;
+                workerRoot.BranchStrategy = parsed[i].BranchStrategy == "continue" ? MissionBranchStrategyEnum.ContinueParent
+                    : parsed[i].BranchStrategy == "fork" ? MissionBranchStrategyEnum.ForkFromParent
+                    : MissionBranchStrategyEnum.New;
                 workerRoot.BranchName = null;
                 workerRoot.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(workerRoot, token).ConfigureAwait(false);
+                depthByIndex[i + 1] = depth;
 
-                _Logging.Debug(_Header + "architect sequenced worker mission " + workerRoot.Id +
-                    " to depend on terminal stage " + resolvedDependency.Id +
+                _Logging.Debug(_Header + "architect made worker mission " + workerRoot.Id + " a child of " + parentRoot.Id +
                     " from reference '" + dependencyReference + "'");
+            }
+        }
+
+        // Ownership is copied onto every stage of the slice, so any stage's prompt can name the slice's paths.
+        private async Task ApplySliceOwnershipAsync(List<Mission> voyageMissions, Mission workerRoot, ParsedArchitectMission slice, CancellationToken token)
+        {
+            string? owned = slice.OwnedPaths.Count == 0 ? null : JsonSerializer.Serialize(slice.OwnedPaths);
+            string? reads = slice.ReadsPaths.Count == 0 ? null : JsonSerializer.Serialize(slice.ReadsPaths);
+            HashSet<string> chain = new HashSet<string>(StringComparer.Ordinal);
+            for (Mission? member = workerRoot; member != null && chain.Add(member.Id);
+                member = voyageMissions.Where(m => m.DependsOnMissionId == member.Id).OrderBy(m => m.CreatedUtc).FirstOrDefault())
+            {
+                if (member.OwnedPathsJson == owned && member.ReadsPathsJson == reads) continue;
+                member.OwnedPathsJson = owned;
+                member.ReadsPathsJson = reads;
+                member.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.Missions.UpdateAsync(member, token).ConfigureAwait(false);
             }
         }
 
@@ -229,16 +263,21 @@ namespace Armada.Core.Services
             List<ParsedArchitectMission> results = new List<ParsedArchitectMission>();
             HashSet<string> seenTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            if (ArchitectPlanParser.TryParse(architectMission.AgentOutput, out ArchitectPlan? plan) && plan != null)
+            if (ArchitectPlanParser.TryParse(architectMission.AgentOutput, out ArchitectPlan? plan, out _, _Settings.Concurrency.MaxHierarchyDepth) && plan != null)
             {
+                foreach (string warning in plan.Warnings)
+                    _Logging.Warn(_Header + "architect plan of " + architectMission.Id + ": " + warning);
                 foreach (ArchitectPlanMission planned in plan.Missions)
                 {
                     ParsedArchitectMission parsed = new ParsedArchitectMission();
                     parsed.Title = planned.Title ?? String.Empty;
                     parsed.Description = ArchitectPlanParser.DescribeMission(plan, planned);
-                    parsed.DependsOnIndex = planned.DependsOn;
+                    parsed.DependsOnIndex = planned.Parent ?? planned.DependsOn;
                     parsed.WaitForOtherMissions = planned.WaitForOtherMissions;
                     parsed.WorkerEnvelope = planned.WorkerEnvelope;
+                    parsed.OwnedPaths = (planned.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+                    parsed.ReadsPaths = (planned.ReadsPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+                    parsed.BranchStrategy = planned.BranchStrategy;
                     results.Add(parsed);
                 }
 
@@ -317,7 +356,7 @@ namespace Armada.Core.Services
             string normalizedTitle = title.Trim();
             string normalizedDescription = NormalizeArchitectDescription(description);
             ArchitectDependencyExtractionResult dependencyExtraction = ExtractArchitectDependencyReference(normalizedDescription);
-            normalizedDescription = dependencyExtraction.Description;
+            normalizedDescription = ExtractOwnedPaths(dependencyExtraction.Description, out List<string> ownedPaths);
             string? dependencyReference = dependencyExtraction.DependsOnReference;
             if (String.IsNullOrWhiteSpace(normalizedDescription))
             {
@@ -338,6 +377,7 @@ namespace Armada.Core.Services
                 parsed.Title = normalizedTitle;
                 parsed.Description = normalizedDescription;
                 parsed.DependsOnReference = dependencyReference;
+                parsed.OwnedPaths = ownedPaths;
                 parsed.WaitForOtherMissions = LegacyDescriptionRequestsDeferral(normalizedDescription);
                 results.Add(parsed);
             }
@@ -417,6 +457,29 @@ namespace Armada.Core.Services
             };
         }
 
+        // Legacy markers: an "Owns: a, b" line names the files the slice may change; it is removed from the description.
+        private static string ExtractOwnedPaths(string description, out List<string> ownedPaths)
+        {
+            ownedPaths = new List<string>();
+            if (String.IsNullOrWhiteSpace(description)) return description;
+            List<string> kept = new List<string>();
+            foreach (string rawLine in description.Replace("\r\n", "\n").Split('\n'))
+            {
+                string trimmed = rawLine.Trim();
+                if (trimmed.StartsWith("owns:", StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (string path in trimmed.Substring(5).Split(','))
+                    {
+                        string normalized = OwnedPathMatcher.Normalize(path);
+                        if (normalized.Length > 0 && !ownedPaths.Contains(normalized)) ownedPaths.Add(normalized);
+                    }
+                    continue;
+                }
+                kept.Add(rawLine.TrimEnd('\r'));
+            }
+            return String.Join("\n", kept).Trim();
+        }
+
         private static bool TryExtractArchitectDependency(string line, out string? dependencyReference, out string? remainingDescription)
         {
             dependencyReference = null;
@@ -425,12 +488,16 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(line)) return false;
 
             string trimmed = line.Trim();
-            if (!trimmed.StartsWith("depends on", StringComparison.OrdinalIgnoreCase))
+            // "Parent: <n>" (v1.3) and the older "Depends on: <n>" both name the slice this one builds on.
+            string keyword = trimmed.StartsWith("parent", StringComparison.OrdinalIgnoreCase) && trimmed.Length > 6 && (trimmed[6] == ':' || trimmed[6] == ' ')
+                ? "parent"
+                : trimmed.StartsWith("depends on", StringComparison.OrdinalIgnoreCase) ? "depends on" : String.Empty;
+            if (keyword.Length == 0)
             {
                 return false;
             }
 
-            string remainder = trimmed.Substring("depends on".Length).TrimStart();
+            string remainder = trimmed.Substring(keyword.Length).TrimStart();
             if (remainder.StartsWith(":", StringComparison.Ordinal))
             {
                 remainder = remainder.Substring(1).TrimStart();

@@ -114,6 +114,7 @@ namespace Armada.Core.Services
                 StageOutcome outcome = await BuildAsync(capture, mission, token).ConfigureAwait(false);
                 List<FailureCauseRule> rules = await _Database.FailureCauseRules.EnumerateAsync(outcome.TenantId, token).ConfigureAwait(false);
                 Apply(outcome, FailureCauseClassifier.Classify(outcome, rules));
+                await ApplyOwnershipCheckAsync(outcome, mission, token).ConfigureAwait(false);
                 StageOutcome stored = await _Database.StageOutcomes.CreateAsync(outcome, token).ConfigureAwait(false);
                 if (stored.Disposition == StageDispositionEnum.Completed)
                     await LinkEscalationsAsync(stored, mission, capture.DockId, token).ConfigureAwait(false);
@@ -130,6 +131,37 @@ namespace Armada.Core.Services
             {
                 _Logging.Warn(_Header + "could not record the stage outcome for mission " + capture.MissionId + ": " + ex.Message);
                 return null;
+            }
+        }
+
+        // 10.4: compare the attempt's changed files with the mission's owned paths and the paths of missions running
+        // alongside it. A finding becomes the suspected cause only when nothing else was found; otherwise it is added to
+        // the note. Warning only: the disposition and mission status are unchanged.
+        private async Task ApplyOwnershipCheckAsync(StageOutcome outcome, Mission mission, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(mission.VoyageId) || String.IsNullOrEmpty(mission.DiffSnapshot)) return;
+            try
+            {
+                List<string> changed = MissionOwnership.ChangedFiles(mission.DiffSnapshot);
+                if (changed.Count == 0) return;
+                List<Mission> voyage = await _Database.Missions.EnumerateByVoyageAsync(mission.VoyageId!, token).ConfigureAwait(false);
+                OwnershipFinding finding = MissionOwnership.Check(mission, voyage, changed);
+                if (finding.Clean) return;
+                string note = finding.Describe();
+                if (outcome.SuspectedCause == FailureCauseEnum.None)
+                {
+                    outcome.SuspectedCause = FailureCauseEnum.OwnershipViolation;
+                    outcome.CauseSource = FailureCauseSourceEnum.Rule;
+                    outcome.CauseRuleId = null;
+                    outcome.CauseNote = Truncate(note, MaxFailureReasonLength);
+                    outcome.ClassifiedUtc = DateTime.UtcNow;
+                }
+                else outcome.CauseNote = Truncate(String.IsNullOrEmpty(outcome.CauseNote) ? note : outcome.CauseNote + " " + note, MaxFailureReasonLength);
+                _Logging.Info(_Header + "mission " + mission.Id + " " + note);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                _Logging.Debug(_Header + "ownership check skipped for mission " + mission.Id + ": " + ex.Message);
             }
         }
 

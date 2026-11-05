@@ -6,6 +6,7 @@ namespace Test.Shared.Suites.Services
     using System.Threading;
     using System.Threading.Tasks;
     using SyslogLogging;
+    using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Test.Shared.Infrastructure;
@@ -596,6 +597,86 @@ namespace Test.Shared.Suites.Services
                         row = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
                         AssertTrue(row.Content.EndsWith("Operator-specific instruction"), name + " custom brief preserved");
                     }
+                }
+            }));
+
+            cases.Add(CaseAsync("concurrency_brief_upgrade_preserves_operator_edits", "Untouched v6 briefs (as written or as a seeded install stored them) upgrade to the ownership briefs; edited ones are kept", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    PromptTemplateService service = new PromptTemplateService(testDb.Driver, new LoggingModule());
+                    await service.SeedDefaultsAsync().ConfigureAwait(false);
+                    foreach (string name in new[] { "persona.architect", "persona.worker" })
+                    {
+                        foreach (string untouched in new[] { PersonaPromptImprovements.ConcurrencyBriefs[name], PromptTemplateService.ShippedPersonaContent(name, PersonaPromptImprovements.ConcurrencyBriefs[name]) })
+                        {
+                            PromptTemplate row = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                            row.Content = untouched;
+                            await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                            await service.SeedDefaultsAsync().ConfigureAwait(false);
+                            row = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                            AssertEqual(service.GetEmbeddedDefault(name), row.Content, name + " untouched v6 brief upgraded");
+                        }
+                        PromptTemplate edited = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                        edited.Content = PersonaPromptImprovements.ConcurrencyBriefs[name] + "Operator-specific instruction";
+                        await testDb.Driver.PromptTemplates.UpdateAsync(edited).ConfigureAwait(false);
+                        await service.SeedDefaultsAsync().ConfigureAwait(false);
+                        edited = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                        AssertTrue(edited.Content.EndsWith("Operator-specific instruction"), name + " edited brief preserved");
+                    }
+                    foreach (PromptVariantEnum variant in new[] { PromptVariantEnum.Lean, PromptVariantEnum.Compact })
+                    {
+                        string variantName = MissionPromptBuilder.GetPersonaVariantTemplateName("persona.architect", variant);
+                        PromptTemplate stored = (await testDb.Driver.PromptTemplates.ReadByNameAsync(variantName).ConfigureAwait(false))!;
+                        stored.Content = PersonaPromptVariants.GetPreviousContents("persona.architect", variant)[0];
+                        await testDb.Driver.PromptTemplates.UpdateAsync(stored).ConfigureAwait(false);
+                        await service.SeedDefaultsAsync().ConfigureAwait(false);
+                        stored = (await testDb.Driver.PromptTemplates.ReadByNameAsync(variantName).ConfigureAwait(false))!;
+                        AssertEqual(PersonaPromptVariants.GetContent("persona.architect", variant), stored.Content, variantName + " untouched previous variant upgraded");
+                        AssertContains("contractVersion:4", stored.Content);
+                        stored.Content = PersonaPromptVariants.GetPreviousContents("persona.architect", variant)[0] + "\nKeep mine.";
+                        await testDb.Driver.PromptTemplates.UpdateAsync(stored).ConfigureAwait(false);
+                        await service.SeedDefaultsAsync().ConfigureAwait(false);
+                        stored = (await testDb.Driver.PromptTemplates.ReadByNameAsync(variantName).ConfigureAwait(false))!;
+                        AssertTrue(stored.Content.EndsWith("Keep mine."), variantName + " edited variant kept");
+                    }
+                    string architect = service.GetEmbeddedDefault("persona.architect")!;
+                    AssertContains("contractVersion:4", architect);
+                    AssertContains("ownedPaths", architect);
+                    AssertContains("{MaxParallelMissionsPerVoyage}", architect);
+                    AssertFalse(architect.Contains("dependsOn"), "the v4 architect names parent, not dependsOn");
+                    AssertContains("sibling missions may run alongside you", service.GetEmbeddedDefault("persona.worker")!);
+                }
+            }));
+
+            cases.Add(CaseAsync("merge_conflict_avoidance_upgrade_and_placeholders", "The previous merge-conflict default upgrades to the ownership text and renders owned, concurrent and parent placeholders; an edited copy is kept", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    PromptTemplateService service = new PromptTemplateService(testDb.Driver, new LoggingModule());
+                    await service.SeedDefaultsAsync().ConfigureAwait(false);
+                    const string name = "mission.merge_conflict_avoidance";
+                    PromptTemplate row = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                    AssertEqual(MergeConflictPrompt.Default, row.Content, "seeded with the ownership text");
+                    row.Content = MergeConflictPrompt.LegacyDefault;
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                    await service.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                    AssertEqual(MergeConflictPrompt.Default, row.Content, "the untouched previous default upgrades");
+                    row.Content = MergeConflictPrompt.LegacyDefault + "\nOur own rule.";
+                    await testDb.Driver.PromptTemplates.UpdateAsync(row).ConfigureAwait(false);
+                    await service.SeedDefaultsAsync().ConfigureAwait(false);
+                    row = (await testDb.Driver.PromptTemplates.ReadByNameAsync(name).ConfigureAwait(false))!;
+                    AssertTrue(row.Content.EndsWith("Our own rule."), "an edited copy is kept");
+
+                    string rendered = await service.RenderAsync(name, new Dictionary<string, string>
+                    {
+                        ["OwnedPaths"] = "`src/A.cs`", ["ConcurrentSiblingPaths"] = "\n   - `src/B.cs` (Sibling)", ["ParentSummary"] = "\n   Your parent mission finished.\n"
+                    }).ConfigureAwait(false);
+                    AssertContains("Our own rule.", rendered);
+                    string current = MergeConflictPrompt.Default.Replace("{OwnedPaths}", "`src/A.cs`").Replace("{ConcurrentSiblingPaths}", "x").Replace("{ParentSummary}", "");
+                    AssertContains("Change only your owned paths:** `src/A.cs`", current);
+                    AssertContains("stop and report it as a blocker", current);
                 }
             }));
 

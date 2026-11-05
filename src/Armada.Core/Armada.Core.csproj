@@ -13,6 +13,7 @@
     <EmbeddedResource Include="Prompts\persona-briefs-v3.json" />
     <EmbeddedResource Include="Prompts\persona-briefs-v4.json" />
     <EmbeddedResource Include="Prompts\persona-briefs-v5.json" />
+    <EmbeddedResource Include="Prompts\persona-briefs-v6.json" />
   </ItemGroup>
 
   <ItemGroup>

@@ -43,11 +43,40 @@ namespace Armada.Core.Models
         public string? Description { get; set; } = null;
 
         /// <summary>
-        /// 1-based index of an earlier mission in the plan whose full Worker chain must finish before this mission
-        /// starts, or null when the mission can start immediately.
+        /// Contracts up to v3: 1-based index of an earlier mission in the plan whose full Worker chain must finish before
+        /// this mission starts, or null when the mission can start immediately. Read as <see cref="Parent"/>.
         /// </summary>
         [JsonPropertyName("dependsOn")]
         public int? DependsOn { get; set; } = null;
+
+        /// <summary>
+        /// Contract v4: 1-based index of an earlier mission in the plan that this mission builds on. It becomes the
+        /// mission's parent: it starts after the parent's last stage finishes and branches from the parent's result.
+        /// A v3 or v4 <see cref="DependsOn"/> is read as a parent with a warning.
+        /// </summary>
+        [JsonPropertyName("parent")]
+        public int? Parent { get; set; } = null;
+
+        /// <summary>
+        /// Contract v4: files or directories this mission may change. A trailing <c>/</c> is a directory prefix and
+        /// <c>*</c> matches within one path segment (<c>**</c> across segments). Missions that can run at the same time
+        /// must not own the same path.
+        /// </summary>
+        [JsonPropertyName("ownedPaths")]
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
+        public List<string> OwnedPaths { get; set; } = new List<string>();
+
+        /// <summary>Contract v4: context the mission needs but must not change.</summary>
+        [JsonPropertyName("readsPaths")]
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
+        public List<string> ReadsPaths { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Contract v4: <c>continue</c> or <c>fork</c> to override the default branch rule (the first child continues
+        /// its parent's branch, later children fork from its head). Null keeps the default.
+        /// </summary>
+        [JsonPropertyName("branchStrategy")]
+        public string? BranchStrategy { get; set; } = null;
 
         /// <summary>
         /// When true, this mission waits until other implementation pipelines in the voyage, including reviews

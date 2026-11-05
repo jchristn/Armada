@@ -1313,6 +1313,8 @@ namespace Test.Shared.Suites.Services
                         Description = "Update relevant components; run dotnet run --project src/Test.Automated.",
                         Kind = i == 2 ? "integration" : "implementation",
                         DependsOn = i == 1 ? 1 : null,
+                        OwnedPaths = new List<string> { i == 0 ? "src/Core/Models/" : i == 1 ? "./src/Backends/" : "docs/" },
+                        ReadsPaths = i == 1 ? new List<string> { "src/Core/Models/" } : new List<string>(),
                         WaitForOtherMissions = i == 2,
                         ValidationCommands = new List<string> { "dotnet run --project src/Test.Automated" },
                         AcceptanceCriteria = new List<ArchitectAcceptanceCriterion> { new ArchitectAcceptanceCriterion
@@ -1349,7 +1351,13 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(backendWorker, "Dependent worker should exist");
                     AssertNotNull(docsWorker, "Deferred docs worker should exist");
                     AssertNull(ignored, "Legacy marker blocks are not read when a structured plan is present");
-                    AssertEqual(coreJudge!.Id, backendWorker!.DependsOnMissionId, "dependsOn: 1 waits for mission 1's terminal stage, not the text in the description");
+                    AssertEqual(coreWorker!.Id, backendWorker!.ParentMissionId, "dependsOn: 1 makes mission 1 the parent, not the text in the description");
+                    AssertNull(backendWorker.DependsOnMissionId, "a child waits through its parent link, not a dependency on the architect");
+                    AssertEqual(1, backendWorker.Depth);
+                    AssertEqual("[\"src/Backends/\"]", backendWorker.OwnedPathsJson, "owned paths are stored normalized on the slice");
+                    AssertEqual("[\"src/Core/Models/\"]", backendWorker.ReadsPathsJson);
+                    AssertEqual("[\"src/Core/Models/\"]", coreJudge.OwnedPathsJson, "every stage of the slice carries its ownership");
+                    AssertContains("## Owned paths (change only these)", coreWorker.Description ?? String.Empty, "the slice description names its paths");
                     AssertFalse(coreWorker!.WaitForVoyageWorkers, "missions without waitForOtherMissions are not deferred");
                     AssertTrue(docsWorker!.WaitForVoyageWorkers, "waitForOtherMissions sets the structured flag");
                     AssertEqual(MissionStatusEnum.InProgress, coreWorker.Status, "Primary worker should auto-dispatch after architect completion");
@@ -1431,7 +1439,7 @@ namespace Test.Shared.Suites.Services
                     Mission secondAfter = repaired.Single(m => m.Id == second.Id);
                     AssertTrue(repaired.Any(m => m.DependsOnMissionId == second.Id && m.Persona == "Judge"), "the slice that lost its chain gets one");
                     Mission coreJudge = repaired.Single(m => m.DependsOnMissionId == first.Id && m.Persona == "Judge");
-                    AssertEqual(coreJudge.Id, secondAfter.DependsOnMissionId, "dependsOn: 1 is applied to the slice that has not started");
+                    AssertEqual(first.Id, secondAfter.ParentMissionId, "dependsOn: 1 makes mission 1 the parent of the slice that has not started");
                     Mission firstAfter = repaired.Single(m => m.Id == first.Id);
                     AssertEqual(MissionStatusEnum.InProgress, firstAfter.Status);
                     AssertEqual("armada/core", firstAfter.BranchName, "a started slice is never rewired");
@@ -1661,7 +1669,8 @@ namespace Test.Shared.Suites.Services
                     AssertNotNull(backendWorker, "Dependent worker should exist");
                     AssertNotNull(backendTest, "Dependent test stage should exist");
                     AssertNotNull(backendJudge, "Dependent judge stage should exist");
-                    AssertEqual(coreJudge!.Id, backendWorker!.DependsOnMissionId, "Dependent worker should wait for the upstream chain's terminal stage");
+                    AssertEqual(coreWorker!.Id, backendWorker!.ParentMissionId, "A legacy Depends on line makes the upstream slice the parent");
+                    AssertNull(backendWorker.DependsOnMissionId, "the child waits for its parent's terminal stage through the hierarchy gate");
                     AssertFalse((backendWorker.Description ?? String.Empty).Contains("Depends on:", StringComparison.OrdinalIgnoreCase),
                         "Dependency metadata should be removed from the worker description after parsing");
                     AssertEqual(MissionStatusEnum.InProgress, coreWorker!.Status, "Primary worker should auto-dispatch after architect completion");
@@ -1702,9 +1711,11 @@ namespace Test.Shared.Suites.Services
 
                     coreJudge = await testDb.Driver.Missions.ReadAsync(coreJudge.Id).ConfigureAwait(false);
                     backendWorker = await testDb.Driver.Missions.ReadAsync(backendWorker.Id).ConfigureAwait(false);
-                    AssertEqual(MissionStatusEnum.WorkProduced, coreJudge!.Status, "Upstream judge should remain WorkProduced while dependent stages still exist");
-                    AssertEqual(0, landingCalls, "Upstream judge should not land while a dependent worker chain remains");
+                    // D16: the child of a finished parent starts at once; as the only child it continues the parent's branch.
+                    AssertTrue(coreJudge!.Status == MissionStatusEnum.WorkProduced || coreJudge.Status == MissionStatusEnum.Complete,
+                        "the parent's terminal stage finished, got " + coreJudge.Status);
                     AssertEqual(MissionStatusEnum.InProgress, backendWorker!.Status, "Dependent worker should start once the upstream chain completes");
+                    AssertEqual(MissionBranchStrategyEnum.ContinueParent, backendWorker.BranchStrategy, "an only child continues its parent");
                     AssertEqual(coreJudge.BranchName, backendWorker.BranchName, "Dependent worker should inherit the approved upstream branch");
                 }
             }));

@@ -56,6 +56,10 @@ namespace Armada.Core.Services
             "PreviousStageOutput",
             "SelectedPlaybooksMarkdown",
             "WorkerEnvelope",
+            "MaxParallelMissionsPerVoyage",
+            "OwnedPaths",
+            "ConcurrentSiblingPaths",
+            "ParentSummary",
             "ExistingClaudeMd",
             "Timestamp"
         };
@@ -157,6 +161,10 @@ namespace Armada.Core.Services
                 ["StyleGuide"] = vessel.StyleGuide ?? "",
                 ["ModelContext"] = vessel.EnableModelContext ? vessel.ModelContext ?? "" : "",
                 ["SelectedPlaybooksMarkdown"] = "",
+                ["MaxParallelMissionsPerVoyage"] = vessel.MaxParallelMissionsPerVoyage == 0 ? "none (captain capacity still applies)" : vessel.MaxParallelMissionsPerVoyage.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["OwnedPaths"] = DescribeOwnedPaths(mission.OwnedPathsJson),
+                ["ConcurrentSiblingPaths"] = MergeConflictPrompt.NoConcurrentPaths,
+                ["ParentSummary"] = "",
                 ["WorkerEnvelope"] = WorkerEnvelopeRules.PromptSection(WorkerEnvelopeRules.Effective(vessel.WorkerEnvelope, mission.WorkerEnvelope, previousStage?.WorkerEnvelope), mission.Persona),
                 ["CaptainId"] = captain?.Id ?? "",
                 ["CaptainName"] = captain?.Name ?? "",
@@ -166,6 +174,22 @@ namespace Armada.Core.Services
                 ["Timestamp"] = DateTime.UtcNow.ToString("o")
             };
         }
+
+        /// <summary>
+        /// Render a mission's stored owned paths (a JSON string array) for prompts, or the description fallback.
+        /// </summary>
+        /// <param name="ownedPathsJson">Stored <c>OwnedPathsJson</c>.</param>
+        /// <returns>Comma-separated paths in backticks, or <see cref="MergeConflictPrompt.NoOwnedPaths"/>.</returns>
+        public static string DescribeOwnedPaths(string? ownedPathsJson)
+        {
+            List<string> paths = OwnedPathList(ownedPathsJson);
+            return paths.Count == 0 ? MergeConflictPrompt.NoOwnedPaths : String.Join(", ", paths.Select(p => "`" + p + "`"));
+        }
+
+        /// <summary>Parse stored owned or read paths; malformed or empty JSON yields an empty list.</summary>
+        /// <param name="pathsJson">A JSON string array.</param>
+        /// <returns>The paths.</returns>
+        public static List<string> OwnedPathList(string? pathsJson) => MissionOwnership.Paths(pathsJson);
 
         /// <summary>
         /// Normalize a persona name into the template naming convention.
@@ -369,7 +393,7 @@ namespace Armada.Core.Services
         {
             if (PersonaCatalog.Matches(persona, PersonaCatalog.Architect))
             {
-                return "You are an Armada architect agent. Analyze the objective and decompose it into bounded, independently verifiable slices in one fenced `armada-plan` JSON block (or [ARMADA:MISSION] markers). Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.";
+                return "You are an Armada architect agent. Analyze the objective and decompose it into bounded, independently verifiable slices in one fenced `armada-plan` JSON block (or [ARMADA:MISSION] markers). Use parent only where a slice needs another's code, and give slices that can run at the same time disjoint ownedPaths. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.";
             }
 
             if (!String.IsNullOrEmpty(personaSummary))
@@ -417,7 +441,7 @@ namespace Armada.Core.Services
         {
             return PersonaCatalog.NormalizeName(persona) switch
             {
-                PersonaCatalog.Architect => "You are an Armada architect agent. Analyze the codebase and decompose the objective into bounded, independently verifiable slices in one fenced `armada-plan` JSON block (or [ARMADA:MISSION] markers). Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
+                PersonaCatalog.Architect => "You are an Armada architect agent. Analyze the codebase and decompose the objective into bounded, independently verifiable slices in one fenced `armada-plan` JSON block (or [ARMADA:MISSION] markers). Use parent only where a slice needs another's code, and give slices that can run at the same time disjoint ownedPaths. Do not emit [ARMADA:RESULT] or [ARMADA:VERDICT] lines.",
                 PersonaCatalog.ProductManager => "You are an Armada product manager agent. Clarify the whole product picture, define user value and experience requirements, include `## Product Vision`, `## Use Cases`, `## Experience Requirements`, `## Validation`, and `## Future Readiness` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
                 PersonaCatalog.UsabilityEngineer => "You are an Armada usability engineer agent. Improve the work through the lens of usability, consistency, and edge-case handling, include `## Usability`, `## Consistency`, `## Edge Cases`, and `## Residual Risks` sections, and end with a standalone [ARMADA:RESULT] COMPLETE line.",
                 PersonaCatalog.Worker => "You are an Armada worker agent. Implement the requested code changes carefully, stay within scope, and end with a standalone [ARMADA:RESULT] COMPLETE line.",

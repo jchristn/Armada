@@ -585,6 +585,8 @@ namespace Armada.Core.Services
 
         private static void ApplyHierarchy(Mission mission, MissionDescription md, MissionHierarchyPlan hierarchy, Dictionary<int, Mission> roots, int index)
         {
+            List<string> owned = (md.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+            if (owned.Count > 0) mission.OwnedPathsJson = System.Text.Json.JsonSerializer.Serialize(owned);
             int parentIndex = hierarchy.ParentOf(index);
             if (parentIndex < 0) return;
             mission.ParentMissionId = roots[parentIndex].Id;
