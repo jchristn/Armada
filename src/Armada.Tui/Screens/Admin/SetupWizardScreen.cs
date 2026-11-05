@@ -171,6 +171,12 @@ namespace Armada.Tui.Screens.Admin
         /// </summary>
         public InputField MaxParallelVoyages { get; } = new InputField { Value = "1" };
 
+        /// <summary>
+        /// How many missions should run at once: a CLI runtime gets that many single-slot captains, an API endpoint or
+        /// Mux runtime one captain with that many slots (1 to 16).
+        /// </summary>
+        public InputField Parallelism { get; } = new InputField { Value = "1" };
+
         /// <summary>Maximum running agents per voyage; zero is unlimited.</summary>
         public InputField MaxParallelMissionsPerVoyage { get; } = new InputField { Value = "4" };
 
@@ -745,16 +751,37 @@ namespace Armada.Tui.Screens.Admin
             payload.Tier = tier.Length > 0 && Enum.TryParse<CaptainTierEnum>(tier, out CaptainTierEnum tierEnum) ? tierEnum : (CaptainTierEnum?)null;
             payload.SystemInstructions = SystemInstructions.Value.Trim().Length > 0 ? SystemInstructions.Value.Trim() : null;
             payload.RuntimeOptionsJson = BuildMuxRuntimeOptionsJson(runtime, MuxConfigDirectory.Value, MuxEndpoint.Value, MuxBaseUrl.Value, MuxAdapterType.Value, MuxTemperature.Value, MuxMaxTokens.Value, MuxSystemPromptPath.Value, MuxApprovalPolicy.Value ?? "");
-            RunStep(() => Context.Client.CreateCaptainAsync(payload), captain =>
+            int count = PlannedCaptainCount(runtimeEnum);
+            bool multiSlot = runtimeEnum == AgentRuntimeEnum.ApiEndpoint || runtimeEnum == AgentRuntimeEnum.Mux;
+            if (multiSlot) payload.MaxConcurrency = count;
+            else payload.MaxConcurrency = 1;
+            List<Captain> created = new List<Captain>();
+            RunStep(async () =>
+            {
+                // A CLI runtime runs one mission per captain, so "N at once" is N captains: name, name 2, name 3, ...
+                for (int i = 0; i < (multiSlot ? 1 : count); i++)
+                {
+                    Captain next = new Captain(i == 0 ? payload.Name : payload.Name + " " + (i + 1), runtimeEnum)
+                    {
+                        Model = payload.Model, Tier = payload.Tier, SystemInstructions = payload.SystemInstructions,
+                        RuntimeOptionsJson = payload.RuntimeOptionsJson, MaxConcurrency = payload.MaxConcurrency
+                    };
+                    Captain? made = await Context.Client.CreateCaptainAsync(next).ConfigureAwait(false);
+                    if (made != null) created.Add(made);
+                }
+                return created.FirstOrDefault();
+            }, captain =>
             {
                 if (captain == null) return;
-                Captains = Upsert(Captains, captain, c => c.Id);
+                foreach (Captain c in created) Captains = Upsert(Captains, c, x => x.Id);
                 RefreshCaptainOptions();
                 CaptainSelect.SetValue(captain.Id);
                 ActiveCaptainId = captain.Id;
                 CaptainMode = SetupWizardModeEnum.Existing;
                 RebuildCaptainBody();
-                SetResult(SetupWizardResultKindEnum.Success, Context.Loc.T("Created {{entity}} \"{{name}}\".", LocalizationArgs.Of("entity", L("Captain").ToLowerInvariant(), "name", captain.Name)));
+                SetResult(SetupWizardResultKindEnum.Success, created.Count > 1
+                    ? Context.Loc.T("Created {{count}} captains, \"{{first}}\" to \"{{last}}\".", LocalizationArgs.Of("count", created.Count, "first", created[0].Name, "last", created[created.Count - 1].Name))
+                    : Context.Loc.T("Created {{entity}} \"{{name}}\".", LocalizationArgs.Of("entity", L("Captain").ToLowerInvariant(), "name", captain.Name)));
                 Advance(4);
             }, message => Context.Loc.T("{{entity}} creation failed: {{message}}", LocalizationArgs.Of("entity", L("Captain"), "message", message)));
         }
@@ -1389,6 +1416,25 @@ namespace Armada.Tui.Screens.Admin
             _Panels[2].SetBody(form);
         }
 
+        private int PlannedCaptainCount(AgentRuntimeEnum runtime)
+        {
+            int value = Int32.TryParse(Parallelism.Value.Trim(), out int parsed) ? parsed : 1;
+            return Math.Clamp(value, 1, 16);
+        }
+
+        // Rebuilt with the form (on a runtime change), so it states the rule rather than a count that could go stale.
+        private string ParallelismHint()
+        {
+            AgentRuntimeEnum runtime = Runtime.Value ?? AgentRuntimeEnum.ClaudeCode;
+            string hint = runtime == AgentRuntimeEnum.ApiEndpoint || runtime == AgentRuntimeEnum.Mux
+                ? L("1 to 16. One captain is created that runs that many missions at once.")
+                : L("1 to 16. CLI runtimes run one mission each, so that many captains are created.");
+            Vessel? vessel = ActiveVessel();
+            if (vessel != null && vessel.MaxParallelMissionsPerVoyage > 0)
+                hint += " " + Context.Loc.T("The vessel runs at most {{limit}} missions of a voyage at once.", LocalizationArgs.Of("limit", vessel.MaxParallelMissionsPerVoyage));
+            return hint;
+        }
+
         private void RebuildCaptainBody()
         {
             FormView form = new FormView();
@@ -1404,6 +1450,7 @@ namespace Armada.Tui.Screens.Admin
                 form.AddField("Runtime", Runtime);
                 form.AddField("Model", Model);
                 form.AddField("Capability Tier", Tier);
+                form.AddField("Missions At Once", Parallelism, ParallelismHint());
                 form.AddField("System Instructions", SystemInstructions, null, 4);
                 if (mux)
                 {

@@ -33,6 +33,11 @@ namespace Armada.Tui.Screens.Build
         #region Public-Members
 
         /// <summary>
+        /// The vessel's concurrency report (slots, waiting missions, slot wait), or null before it loads.
+        /// </summary>
+        public VesselConcurrency? Concurrency { get; private set; } = null;
+
+        /// <summary>
         /// Vessel id from the route.
         /// </summary>
         public string VesselId { get; }
@@ -265,6 +270,7 @@ namespace Armada.Tui.Screens.Build
                 }
 
                 Vessel = r.Vessel;
+                LoadConcurrency();
                 Fleets = r.Fleets;
                 Missions = r.Missions;
                 Pipelines = r.Pipelines;
@@ -491,6 +497,45 @@ namespace Armada.Tui.Screens.Build
             }, "Delete");
         }
 
+        private void LoadConcurrency()
+        {
+            Call((c, t) => c.GetVesselConcurrencyAsync(VesselId, t), r => { Concurrency = r; Overview.Invalidate(); }, null, ex => { });
+        }
+
+        // Slots in use, slot wait and the missions waiting, like the dashboard's vessel Concurrency card.
+        private void RenderConcurrency(OpsDocument doc, DateTime now)
+        {
+            VesselConcurrency? r = Concurrency;
+            if (r == null) return;
+            doc.Section("Concurrency");
+            bool full = r.MaxParallelVoyages > 0 && r.VoyageSlotsInUse >= r.MaxParallelVoyages;
+            doc.Field("Voyage Slots", r.MaxParallelVoyages == 0 ? r.VoyageSlotsInUse + " " + Tr("in use (no limit)") : r.VoyageSlotsInUse + " / " + r.MaxParallelVoyages + " " + Tr("in use"),
+                full ? doc.Theme.Warning : null);
+            doc.Field("Running Missions", r.RunningMissions.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            doc.Field("Slot Wait (24h)", SlotWaitLine(r.SlotWait24h));
+            doc.Field("Slot Wait (7d)", SlotWaitLine(r.SlotWait7d));
+            foreach (VesselVoyageSlotUsage holder in r.HoldingVoyages.Take(10))
+                doc.Text("  " + holder.Title + "  " + (holder.RunningMissions == 0 && holder.PendingMissions == 0
+                    ? Tr("work landing or in review")
+                    : Tr("{{running}} running, {{pending}} pending", LocalizationArgs.Of("running", holder.RunningMissions, "pending", holder.PendingMissions))), doc.Theme.Muted);
+            if (r.WaitingCount > 0)
+            {
+                doc.Note(Tr("Waiting ({{count}})", LocalizationArgs.Of("count", r.WaitingCount)), doc.Theme.Accent);
+                foreach (WaitingMissionInfo w in r.Waiting.Take(10))
+                    doc.Text("  " + w.Title + "  " + Tr(Armada.Tui.Screens.Operations.MissionWaitText.GateLabel(w.Gate)) + "  " + Armada.Tui.Screens.Operations.MissionWaitText.Duration(w.WaitedSeconds), doc.Theme.Muted);
+                if (r.WaitingCount > Math.Min(10, r.Waiting.Count)) doc.Note(Tr("Showing {{shown}} of {{count}} waiting missions.", LocalizationArgs.Of("shown", Math.Min(10, r.Waiting.Count), "count", r.WaitingCount)));
+            }
+        }
+
+        private string SlotWaitLine(SlotWaitStatistics stats)
+        {
+            if (stats.Missions == 0 || !stats.P50Seconds.HasValue) return Tr("No waits recorded");
+            return "p50 " + Armada.Tui.Screens.Operations.MissionWaitText.Duration(stats.P50Seconds.Value)
+                + ", p95 " + Armada.Tui.Screens.Operations.MissionWaitText.Duration(stats.P95Seconds ?? 0)
+                + ", max " + Armada.Tui.Screens.Operations.MissionWaitText.Duration(stats.MaxSeconds ?? 0)
+                + " (" + (stats.Missions == 1 ? Tr("1 mission") : Tr("{{count}} missions", LocalizationArgs.Of("count", stats.Missions))) + ")";
+        }
+
         private OpsDocument BuildOverview(OpsDocument doc)
         {
             Vessel? v = Vessel;
@@ -543,6 +588,7 @@ namespace Armada.Tui.Screens.Build
             doc.YesNo("Active", v.Active);
             doc.Field("Created", Context.Loc.FormatRelative(v.CreatedUtc, now) + " (" + Context.Loc.FormatDateTime(v.CreatedUtc) + ")");
             doc.Field("Last Updated", Context.Loc.FormatRelative(v.LastUpdateUtc, now) + " (" + Context.Loc.FormatDateTime(v.LastUpdateUtc) + ")");
+            RenderConcurrency(doc, now);
             doc.Section("Missions", " (" + Missions.Count + ")");
             doc.Note(Missions.Count == 0 ? "No missions yet" : "] " + Tr("Missions") + ": Enter " + Tr("Open"));
             return doc;

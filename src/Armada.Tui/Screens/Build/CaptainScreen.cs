@@ -330,7 +330,7 @@ namespace Armada.Tui.Screens.Build
                 doc.Field("Quarantine", q + "   q " + Tr("Lift Quarantine"), doc.Theme.Warning);
             }
 
-            doc.Field("Current Mission", String.IsNullOrEmpty(String.Join(", ", c.ActiveMissionIds)) ? "-" : String.Join(", ", c.ActiveMissionIds) + "   (m)");
+            doc.Field(c.ActiveMissionIds.Count > 1 ? "Active Missions" : "Current Mission", c.ActiveMissionIds.Count == 0 ? "-" : String.Join(", ", c.ActiveMissionIds) + (c.ActiveMissionIds.Count == 1 ? "   (m)" : ""));
             if (c.CurrentSessionId != null)
             {
             doc.Field("Process ID", c.ProcessId.HasValue && c.ProcessId.Value != 0 ? c.ProcessId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "-");

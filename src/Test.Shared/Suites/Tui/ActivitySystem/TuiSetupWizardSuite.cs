@@ -338,6 +338,39 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                 }
             }));
 
+            cases.Add(TuiCase.Sync(Suite, "missions_at_once", "Missions At Once creates that many single-slot captains for a CLI runtime and one multi-slot captain for an endpoint runtime", () =>
+            {
+                StubHttpHandler stub = EmptyServer();
+                using (TuiTestHost host = TuiCase.SignedIn(140, 50, "/setup", stub))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "loaded");
+                    screen.GoTo(3);
+                    AssertTrue(host.WaitForText("Missions At Once"), "field shown\n" + host.Screen());
+                    TuiCase.Contains(host.Screen(), "CLI runtimes run one mission each", "rule hint");
+                    screen.Parallelism.Value = "3";
+                    screen.SubmitCaptain();
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/captains") == 3), "three captains posted");
+                    List<string?> names = stub.RequestsFor("POST", "/api/v1/captains").Select(r => JsonHelper.Deserialize<SetupWizardCaptainBody>(r.Body).Name).ToList();
+                    AssertEqual("Setup Captain,Setup Captain 2,Setup Captain 3", String.Join(",", names));
+                    AssertTrue(stub.RequestsFor("POST", "/api/v1/captains").All(r => JsonHelper.Deserialize<SetupWizardCaptainBody>(r.Body).MaxConcurrency == 1), "single-slot CLI captains");
+                    AssertTrue(host.WaitForText("Created 3 captains"), "summary\n" + host.Screen());
+                }
+                StubHttpHandler endpointStub = EmptyServer();
+                using (TuiTestHost host = TuiCase.SignedIn(140, 50, "/setup", endpointStub))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "loaded");
+                    screen.GoTo(3);
+                    screen.Runtime.Choose(screen.Runtime.Options.First(o => o.Value == AgentRuntimeEnum.Mux));
+                    screen.MuxEndpoint.Value = "local";
+                    screen.Parallelism.Value = "40";
+                    screen.SubmitCaptain();
+                    AssertTrue(host.PumpUntil(() => endpointStub.CountFor("POST", "/api/v1/captains") == 1), "one captain posted");
+                    AssertEqual(16, endpointStub.LastBody<SetupWizardCaptainBody>("POST", "/api/v1/captains").MaxConcurrency, "slots clamped to 16");
+                }
+            }));
+
             cases.Add(TuiCase.Sync(Suite, "dispatch_guards", "Dispatch requires a vessel, a captain, and a title and description", () =>
             {
                 using (TuiTestHost host = TuiCase.SignedIn(120, 40, "/setup", EmptyServer()))

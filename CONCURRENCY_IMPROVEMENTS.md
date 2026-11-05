@@ -75,7 +75,15 @@ Captain usage management and the mobile applications shipped in v1.2.0. This pla
 - [x] M8d Dashboard setup wizard (2026-11-05): the captain step asks "How many missions should run at once?" (1-16). A CLI runtime creates that many single-slot captains ("Setup Captain", "Setup Captain 2", ...); an API endpoint or Mux runtime creates one captain with that many slots. The hint says which, and warns when the number exceeds the vessel's per-voyage limit; the button reads "Create N Captains". UX pass on the real wizard at 1280 and 390 in light and dark. Tests: `lib/setupWizard.test.ts` (3).
 - [x] M8e Selection waits in the wait views (2026-11-05): a wait's recorded detail reads like the captain-selection card (selection reason codes use the same translated reasons) or as the assignment blocker title, with the raw code as a tooltip, in the mission wait history and the vessel's waiting list. The launch-backoff gate reads "Automatic retry". The dashboard's blocker reason list caught up with the server (`LaunchFailing`, `PlacementWaiting`, `BranchInUse`, `ParentNotFinished` had no titles). The UX check confirmed list links follow the app's underline rule for links in lists and text.
 - [x] M8 complete.
-- [ ] M9, M10: TUI and Mobile tree, wait and concurrency views.
+- [x] M9 TUI (2026-11-05):
+  - Voyage screen: a Tree tab (read when opened, reloaded on mission and voyage events) listing logical missions indented by parent with the base title, status, the pipeline ("Worker: Complete > Judge: Complete"), and "continues parent", "forks from parent" or "integration"; the integration mission is last; Enter opens the mission.
+  - Mission screen: a Wait Time section with the same summary line as the dashboard, the slot wait and the last 10 waits (detail codes read as words, the launch-backoff gate as "Automatic retry"), and a Children section with branch markers.
+  - Vessel screen: a Concurrency section with voyage slots against the limit (warning style when full), running missions, slot wait over 24 hours and 7 days, holders and waiting missions. The captain screen labels several running missions "Active Missions".
+  - Setup wizard: "Missions At Once" on the captain step with the dashboard's rule (CLI: that many single-slot captains; Mux: one captain with that many slots; 1-16). The hint states the rule, not a count, because the form rebuilds only on a runtime change.
+  - Activity > Concurrency is recorded in `parity.json` as dashboard-only charts (8.5).
+  - UX pass on rendered frames (160x40 to 160x60, kept with `ARMADA_TUI_FRAMES`): columns align, indents read as a tree, the parent detail code was humanized.
+  - Tests: `Tui.ConcurrencyViews` (3 cases) and a `Tui.System.Setup` "missions at once" case; all TUI suites pass (650).
+- [ ] M10: Mobile tree, wait and concurrency views.
 - [ ] M11: final integration, release documentation, migration/upgrade validation, and the complete concurrency stress matrix.
 
 Migration 117 preserves existing vessel admission behavior. Migration 118 changes existing ApiEndpoint/Mux captains to concurrency 4 and CLI captains to 1; set endpoint-backed captains to 1 to retain serial operation. The existing global `MaxConcurrentMissions` settings-file guard now clamps negative input to 1 (not unlimited) and values above 10000 to 10000.

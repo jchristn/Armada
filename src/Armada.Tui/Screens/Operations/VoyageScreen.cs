@@ -89,12 +89,24 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public BlackBoxCascadeGraph? CascadeGraph { get; private set; } = null;
 
+        /// <summary>
+        /// Tree panel: the voyage's logical missions with their pipeline stages, children indented under their parent.
+        /// </summary>
+        public ArmadaGrid<MissionTreeRow> Tree { get; }
+
+        /// <summary>
+        /// The loaded mission tree, or null.
+        /// </summary>
+        public VoyageTree? MissionTree { get; private set; } = null;
+
         #endregion
 
         #region Private-Members
 
         private bool _CascadeLoaded = false;
         private int _CascadeGeneration = 0;
+        private bool _TreeLoaded = false;
+        private int _TreeGeneration = 0;
 
         #endregion
 
@@ -160,15 +172,32 @@ namespace Armada.Tui.Screens.Operations
             PanelAction("cascade", "cascade-mission", "Open cascade mission", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Cascade.Current!.Node.MissionId)), "m", () => Cascade.Current != null);
             PanelHint("cascade", "Enter", "Open entry");
 
+            Tree = new ArmadaGrid<MissionTreeRow>(r => r.Mission.Id);
+            Tree.MultiSelect = false;
+            Tree.ShowPagingBar = false;
+            Tree.PageSize = 10000;
+            Tree.ModalHost = context.Modals;
+            Tree.EmptyText = "Open this tab to read the mission tree.";
+            Tree.AddColumn(new GridColumn<MissionTreeRow>("mission", "Mission", r => new string(' ', r.Depth * 2) + (r.Depth > 0 ? "> " : "") + MissionTreeText.BaseTitle(r.Mission.Title)) { Weight = 5 });
+            GridColumn<MissionTreeRow> treeStatus = new GridColumn<MissionTreeRow>("status", "Status", r => StatusBadge.Label(r.Mission.Status)) { Width = 16 };
+            treeStatus.Style = (r, t) => StatusBadge.Style(r.Mission.Status, t);
+            Tree.AddColumn(treeStatus);
+            Tree.AddColumn(new GridColumn<MissionTreeRow>("pipeline", "Pipeline", r => MissionTreeText.Pipeline(r)) { Weight = 4 });
+            Tree.AddColumn(new GridColumn<MissionTreeRow>("branch", "Branch", r => Tr(MissionTreeText.Branch(r.Mission))) { Width = 18 });
+            Tree.Activated += (s, r) => Context.Navigate("/missions/" + Uri.EscapeDataString(r.Mission.Id));
+            PanelHint("tree", "Enter", "Open mission");
+
             Overview.Builder = BuildOverview;
             AddPanel("overview", "Overview", Overview);
             AddPanel("missions", "Missions", MissionGrid);
+            AddPanel("tree", "Tree", Tree);
             AddPanel("failure", "Failure", Failure);
             AddPanel("cascade", "Cascade", Cascade);
             Tabs.SelectedChanged += (s, e) =>
             {
                 if (ReferenceEquals(CurrentPanel, Failure)) Failure.Ensure();
                 if (ReferenceEquals(CurrentPanel, Cascade) && !_CascadeLoaded) LoadCascade();
+                if (ReferenceEquals(CurrentPanel, Tree) && !_TreeLoaded) LoadTree();
             };
             SubscribeCoalesced("blackbox.", () => { if (Failure.Loaded) Failure.Reload(); });
 
@@ -228,9 +257,34 @@ namespace Armada.Tui.Screens.Operations
                 SubtitleText = Tr("Voyages") + " / " + Heading;
                 Overview.Invalidate();
                 if (_CascadeLoaded) LoadCascade();
+                if (_TreeLoaded) LoadTree();
             }, null, ex =>
             {
                 if (initial) LoadError = Tr("Failed to load voyage: {{message}}", LocalizationArgs.Of("message", ex.Message));
+            });
+        }
+
+        /// <summary>
+        /// Load (or reload) the mission tree into the Tree tab.
+        /// </summary>
+        public void LoadTree()
+        {
+            _TreeLoaded = true;
+            int generation = ++_TreeGeneration;
+            if (MissionTree == null) Tree.SetLoading();
+            Call((c, t) => c.GetVoyageTreeAsync(VoyageId, t), tree =>
+            {
+                if (generation != _TreeGeneration) return;
+                MissionTree = tree;
+                List<MissionTreeRow> rows = tree == null ? new List<MissionTreeRow>() : MissionTreeText.Rows(tree.Roots);
+                Tree.EmptyText = "No missions in this voyage.";
+                Tree.SetLocalRows(rows);
+                if (tree != null && tree.Truncated) Toast(NotificationSeverityEnum.Info, Tr("The tree shows the oldest {{count}} missions.", LocalizationArgs.Of("count", 1000)));
+            }, null, ex =>
+            {
+                if (generation != _TreeGeneration) return;
+                MissionTree = null;
+                Tree.SetError(Tr("The mission tree could not be loaded: {{message}}", LocalizationArgs.Of("message", ex.Message)));
             });
         }
 

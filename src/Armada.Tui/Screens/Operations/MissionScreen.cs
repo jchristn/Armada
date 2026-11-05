@@ -29,6 +29,21 @@ namespace Armada.Tui.Screens.Operations
         #region Public-Members
 
         /// <summary>
+        /// The mission's recorded scheduling waits (the first 100, oldest first), or empty.
+        /// </summary>
+        public List<MissionWaitInterval> Waits { get; private set; } = new List<MissionWaitInterval>();
+
+        /// <summary>
+        /// Child missions that build on this one (the first 50), or empty.
+        /// </summary>
+        public List<MissionSummary> Children { get; private set; } = new List<MissionSummary>();
+
+        /// <summary>
+        /// Total child missions.
+        /// </summary>
+        public long ChildCount { get; private set; } = 0;
+
+        /// <summary>
         /// Mission id from the route.
         /// </summary>
         public string MissionId { get; }
@@ -281,6 +296,7 @@ namespace Armada.Tui.Screens.Operations
                 if (!String.IsNullOrEmpty(m.LastBlackBoxEntryId) && (Failure.Entry == null || Failure.Entry.Id != m.LastBlackBoxEntryId)) Failure.Reload();
                 LoadPreview();
                 LoadPolicyNote();
+                LoadHierarchyAndWaits();
                 if (!String.IsNullOrEmpty(m.PrUrl) && _PullRequestFor != m.Id + m.PrUrl) LoadPullRequest(false);
                 if (String.IsNullOrEmpty(m.PrUrl)) PullRequest = null;
             }, null, ex =>
@@ -412,6 +428,21 @@ namespace Armada.Tui.Screens.Operations
             }, null, ex => { });
         }
 
+        private void LoadHierarchyAndWaits()
+        {
+            Call((c, t) => c.GetMissionWaitsAsync(MissionId, 1, 100, t), page =>
+            {
+                Waits = page?.Objects ?? new List<MissionWaitInterval>();
+                Invalidate();
+            }, null, ex => { });
+            Call((c, t) => c.ListMissionSummariesAsync(new ArmadaPageQuery(1, 50).With("parentMissionId", MissionId).With("order", "CreatedAscending"), t), page =>
+            {
+                Children = page?.Objects ?? new List<MissionSummary>();
+                ChildCount = page?.TotalRecords ?? 0;
+                Invalidate();
+            }, null, ex => { });
+        }
+
         private void ViewLog()
         {
             if (Mission == null) return;
@@ -451,6 +482,25 @@ namespace Armada.Tui.Screens.Operations
                 ? LandingPreview.SourceBranch + " -> " + LandingPreview.TargetBranch
                 : (m.BranchName ?? Tr("No branch selected"));
             if (m.Status == MissionStatusEnum.Pending && m.AssignmentBlocker != null) RenderBlocker(doc, m.AssignmentBlocker);
+            string? waitLine = MissionWaitText.Summary(Waits, now, Tr);
+            if (waitLine != null)
+            {
+                doc.Section("Wait Time");
+                doc.Text(waitLine);
+                double? slot = MissionWaitText.SlotWait(m.ReadyUtc, m.AssignedUtc);
+                if (slot.HasValue) doc.Note(Tr("Slot wait") + " " + MissionWaitText.Duration(slot.Value));
+                foreach (MissionWaitInterval w in Waits.Skip(Math.Max(0, Waits.Count - 10)))
+                    doc.Text("  " + Tr(MissionWaitText.GateLabel(w.Gate)) + "  " + MissionWaitText.Duration(MissionWaitText.Seconds(w, now))
+                        + (w.EndedUtc.HasValue ? "" : " " + Tr("(ongoing)")) + (String.IsNullOrEmpty(w.Detail) ? "" : "  " + Tr(MissionWaitText.Detail(w.Detail)!)), doc.Theme.Muted);
+                if (Waits.Count > 10) doc.Note(Tr("Showing the last 10 of {{count}} waits.", LocalizationArgs.Of("count", Waits.Count)));
+            }
+            if (Children.Count > 0)
+            {
+                doc.Section("Children");
+                foreach (MissionSummary child in Children)
+                    doc.Text("  " + StatusBadge.Label(child.Status) + "  " + MissionTreeText.BaseTitle(child.Title) + "  " + Tr(MissionTreeText.Branch(child)) + "  " + child.Id);
+                if (ChildCount > Children.Count) doc.Note(Tr("Showing the first {{shown}} of {{count}} children.", LocalizationArgs.Of("shown", Children.Count, "count", ChildCount)));
+            }
             OpsLandingPreview.Render(doc, LandingPreview, _LoadingPreview, meta, true);
 
             if (!String.IsNullOrEmpty(m.PrUrl))

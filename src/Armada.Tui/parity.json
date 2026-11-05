@@ -799,6 +799,14 @@
     },
     {
       "kind": "tab",
+      "key": "Activity:concurrency",
+      "status": "not-applicable",
+      "tui": "",
+      "workstream": "M9",
+      "notes": "Dashboard Concurrency charts wait time by cause over a window. Per CONCURRENCY_IMPROVEMENTS.md 8.5 the TUI shows the per-mission wait line and history (MissionScreen), the vessel slot usage and slot wait percentiles (VesselScreen) and captain slot usage (CaptainScreen) instead of charts."
+    },
+    {
+      "kind": "tab",
       "key": "CaptainsHub:battery",
       "status": "not-applicable",
       "tui": "",
