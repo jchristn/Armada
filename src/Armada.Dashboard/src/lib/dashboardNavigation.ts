@@ -72,6 +72,7 @@ export const dashboardHubs = [
       { key: 'signals', label: 'Signals' },
       { key: 'tokens', label: 'Token Usage' },
       { key: 'usage-overview', label: 'Captain Usage' },
+      { key: 'concurrency', label: 'Concurrency' },
     ],
   },
   {

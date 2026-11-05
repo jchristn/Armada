@@ -7,6 +7,7 @@ const RequestHistory = lazy(() => import('./RequestHistory'));
 const Events = lazy(() => import('./Events'));
 const Signals = lazy(() => import('./Signals'));
 const TokenUsage = lazy(() => import('./TokenUsage'));
+const Concurrency = lazy(() => import('../components/activity/ConcurrencyPanel'));
 const CaptainUsage = lazy(() => import('../components/usage/UsageActivityTabs').then((module) => ({ default: module.CaptainUsageTab })));
 
 function panel(node: ReactNode): ReactNode {
@@ -50,6 +51,7 @@ export default function Activity() {
     { key: 'signals', label: 'Signals', tooltip: 'Messages sent between the Admiral and captains.', render: () => panel(<Signals />) },
     { key: 'tokens', label: 'Token Usage', tooltip: 'Model tokens and cost used by captains, by day, captain, vessel, and model.', render: () => panel(<TokenUsage />) },
     { key: 'usage-overview', label: 'Captain Usage', render: () => panel(<CaptainUsage />) },
+    { key: 'concurrency', label: 'Concurrency', tooltip: 'How long missions waited for a free slot and on what: captain, voyage, vessel and global limits, and dependencies.', render: () => panel(<Concurrency />) },
   ];
 
   return <Tabs tabs={tabs} param="source" defaultTabKey="history" ariaLabel="Activity sources" />;

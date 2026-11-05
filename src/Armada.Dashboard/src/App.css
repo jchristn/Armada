@@ -9986,3 +9986,20 @@ a.btn:hover { text-decoration: none; }
 .mission-hierarchy-children { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
 .mission-hierarchy-children a, .mission-hierarchy-path a { text-decoration: none; }
 .mission-hierarchy-children li { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; min-width: 0; }
+
+/* Activity > Concurrency (palette validated: light #ffffff, dark #111827; light contrast relief is the legend and table) */
+:root, [data-theme="light"] { --wait-series-1: #2a78d6; --wait-series-2: #eb6834; --wait-series-3: #1baf7a; --wait-series-4: #eda100; }
+[data-theme="dark"] { --wait-series-1: #3987e5; --wait-series-2: #d95926; --wait-series-3: #199e70; --wait-series-4: #c98500; }
+.concurrency-panel { display: grid; gap: 1rem; }
+.concurrency-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem; }
+.concurrency-filters label { display: grid; gap: 0.2rem; font-size: 0.8rem; }
+.concurrency-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; }
+.concurrency-tiles .card { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.concurrency-tiles h3 { margin: 0 0 0.25rem; font-size: 0.85rem; color: var(--text-dim); font-weight: 600; }
+.concurrency-tile-value { font-size: 1.5rem; font-weight: 700; }
+.concurrency-chart { width: 100%; height: auto; display: block; }
+.concurrency-chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+.concurrency-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0; padding: 0; font-size: 0.8rem; }
+.concurrency-legend li, .concurrency-tooltip span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.concurrency-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.concurrency-tooltip { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.8rem; min-height: 1.4rem; }
