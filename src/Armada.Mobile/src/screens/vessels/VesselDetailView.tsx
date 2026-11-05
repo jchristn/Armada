@@ -19,6 +19,7 @@ import { useLocale } from '../../i18n/LocaleContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing, typography } from '../../theme/typography';
 import { LandingPreviewCard, ReadinessCard } from './ReadinessCards';
+import { VesselConcurrencySection } from './VesselConcurrencySection';
 import { useVesselActions } from './VesselActions';
 
 /** Missions listed on the vessel page (the dashboard loads up to 1000). */
@@ -236,6 +237,8 @@ export function VesselDetailView({ id, embedded, openEdit, onEditOpened, onDelet
               </View>
             </Section>
           ) : null}
+
+          <VesselConcurrencySection vesselId={vessel.id} revision={bundle.data} />
 
           <Section title={t('Missions')}>
             {missions.loading ? (

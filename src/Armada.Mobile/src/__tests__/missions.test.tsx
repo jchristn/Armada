@@ -208,7 +208,8 @@ describe('Missions list', () => {
     await renderScreen(<MissionRoute />);
     expect(await screen.findByTestId('mission-detail-title')).toHaveTextContent('Mission msn_1');
     expect(screen.queryByTestId('split-view')).toBeNull();
-    expect(api.listMissionSummaries).not.toHaveBeenCalled();
+    // Only the Children section's parent-filtered query runs; the mission list itself is not loaded.
+    for (const call of api.listMissionSummaries.mock.calls) expect(call[0]?.filters?.parentMissionId).toBe('msn_1');
   });
 
   it('switches hub tabs through the route query', async () => {

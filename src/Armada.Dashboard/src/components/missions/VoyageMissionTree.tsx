@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getVoyageTree } from '../../api/client';
-import type { MissionSummary, MissionTreeNode, VoyageTree } from '../../types/models';
+import type { MissionTreeNode, VoyageTree } from '../../types/models';
 import { useLocale } from '../../context/LocaleContext';
 import { useLiveRefresh } from '../../lib/useLiveRefresh';
+import { baseTitle, countRunning, hasPipeline, orderedNodes as ordered, stageLabel, treeIsInformative } from '../../lib/missionTree';
 import StatusBadge from '../shared/StatusBadge';
 
 interface VoyageMissionTreeProps {
@@ -12,42 +13,7 @@ interface VoyageMissionTreeProps {
   missionLimit?: number;
 }
 
-const RUNNING = new Set(['Assigned', 'InProgress']);
-
-/** Logical missions that are running now: any stage Assigned or InProgress. */
-export function countRunning(roots: MissionTreeNode[]): number {
-  let running = 0;
-  const visit = (node: MissionTreeNode) => {
-    if ([node.mission, ...node.stages].some(m => RUNNING.has(m.status))) running++;
-    node.children.forEach(visit);
-  };
-  roots.forEach(visit);
-  return running;
-}
-
-/** True when the tree adds something the flat mission table does not show: a parent link or pipeline stages. */
-export function treeIsInformative(tree: VoyageTree | null): boolean {
-  if (!tree) return false;
-  return tree.maxDepth > 0 || tree.roots.some(function hasStages(node: MissionTreeNode): boolean {
-    return node.stages.length > 0 || node.children.some(hasStages);
-  });
-}
-
-// "Add the table [Worker]" -> persona "Worker"; otherwise the persona field.
-function stageLabel(stage: MissionSummary): string {
-  const match = /\[([^\]]+)\]\s*$/.exec(stage.title);
-  return match ? match[1] : stage.persona || 'Stage';
-}
-
-// "Add the table [Worker]" -> "Add the table"; the persona shows as the first stage pill instead.
-export function baseTitle(title: string): string {
-  return title.replace(/\s*\[[^\]]+\]\s*$/, '') || title;
-}
-
-// The integration mission runs after every other pipeline, so it is listed last at its level.
-function ordered(nodes: MissionTreeNode[]): MissionTreeNode[] {
-  return [...nodes.filter(n => !n.mission.waitForVoyageWorkers), ...nodes.filter(n => n.mission.waitForVoyageWorkers)];
-}
+export { baseTitle, countRunning, treeIsInformative } from '../../lib/missionTree';
 
 /**
  * The voyage's missions as logical missions: each row is a mission with its pipeline stages as pills and how it
@@ -82,7 +48,7 @@ export default function VoyageMissionTree({ voyageId, missionLimit }: VoyageMiss
         <div className="mission-tree-row">
           <StatusBadge status={node.mission.status} />
           <Link to={`/missions/${encodeURIComponent(node.mission.id)}`} className="mission-tree-title" title={node.mission.title}>{baseTitle(node.mission.title)}</Link>
-          {(node.stages.length > 0 || /\[[^\]]+\]\s*$/.test(node.mission.title)) && (
+          {hasPipeline(node) && (
             <span className="mission-tree-stages" aria-label={t('Pipeline stages')}>
               {[node.mission, ...node.stages].map((stage, index) => (
                 <span key={stage.id} className="mission-tree-stage-step">

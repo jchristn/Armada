@@ -7,6 +7,7 @@
 const OPERATIONS_CALLS = [
   'authorizeCaptainSelectionRecovery', 'getCaptainSelection', 'getCaptainSelectionHistory', 'getCaptainSelectionDecision', 'getCaptainSelectionCandidates', 'previewCaptainSelection',
   'getStatus', 'getHealth', 'getDoctor', 'getSettings',
+  'getVoyageTree', 'getMissionWaits', 'getVesselConcurrency',
   'listMissions', 'listMissionSummaries', 'getMission', 'getMissionHistory', 'getTokenUsage', 'getMissionLandingPreview',
   'getMissionGitHubPullRequest', 'enumerateMissionPullRequestReviews', 'enumerateMissionPullRequestChecks', 'createMission', 'updateMission', 'deleteMission', 'purgeMission', 'dispatchMission',
   'restartMission', 'retryMissionLanding', 'transitionMission', 'approveMissionReview', 'denyMissionReview',

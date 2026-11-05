@@ -33,6 +33,7 @@ import { MissionOutputSheet, type MissionOutputRequest } from '../../components/
 import { BlackBoxPanel } from '../blackbox/BlackBoxPanel';
 import { voyageMayHaveBlackBox } from '../blackbox/blackBoxModel';
 import { VoyageCascadeSection } from '../blackbox/VoyageCascadeSection';
+import { VoyageTreeSection } from './voyage/VoyageTreeSection';
 import { dispatchWarningsOf, firstWarningMessage, mergeWarnings, warningCount } from '../blackbox/insightModel';
 
 interface VoyageData {
@@ -230,6 +231,7 @@ export function VoyageDetail({ id, embedded }: OperationsDetailProps) {
 
       {voyageMayHaveBlackBox(voyage.status) ? <BlackBoxPanel source={{ kind: 'voyage', id: voyage.id }} /> : null}
       {voyageMayHaveBlackBox(voyage.status) || failedCount > 0 ? <VoyageCascadeSection voyageId={voyage.id} /> : null}
+      <VoyageTreeSection voyageId={voyage.id} missionLimit={missions[0]?.vesselId ? lookups.vessels.find(v => v.id === missions[0].vesselId)?.maxParallelMissionsPerVoyage : undefined} />
 
       <Section title={t('Details')}>
         <KeyValueRow label={t('ID')} value={voyage.id} mono />

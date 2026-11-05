@@ -54,6 +54,7 @@ import { AssignmentBlockerCard, LandingPreviewCard, PullRequestCard } from './mi
 import { MissionFormSheet, type MissionFormValues } from './mission/MissionFormSheet';
 import { MissionDiffTab, MissionInstructionsTab, MissionLogTab } from './mission/MissionTabs';
 import { CaptainSelectionSection } from './mission/CaptainSelectionSection';
+import { MissionChildrenSection, MissionWaitsSection } from './mission/MissionWaitsSection';
 import { ReviewSheet } from './mission/ReviewSheet';
 import { TransitionSheet } from './mission/TransitionSheet';
 import { externalUrl, openExternalUrl } from '../../lib/externalLinks';
@@ -328,6 +329,9 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
       {mission.prUrl ? (
         <PullRequestCard prUrl={mission.prUrl} evidence={prQuery.data ?? null} loading={prQuery.loading || prQuery.refreshing} onRefresh={() => void prQuery.refresh()} />
       ) : null}
+
+      <MissionWaitsSection mission={mission} />
+      <MissionChildrenSection missionId={mission.id} />
 
       <Section title={t('Details')}>
         <KeyValueRow label={t('ID')} value={mission.id} mono testID="mission-detail-id" />

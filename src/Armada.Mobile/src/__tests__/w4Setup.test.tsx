@@ -65,6 +65,24 @@ describe('setup wizard', () => {
     await waitFor(() => expect(h.getPathname()).toBe('/missions/msn_1'));
   });
 
+  it('asks how many missions should run at once and creates that many CLI captains', async () => {
+    api.listCaptains.mockResolvedValue(page([]) as never);
+    let n = 0;
+    api.createCaptain.mockImplementation(async (body) => ({ ...body, id: `cpt_${++n}`, state: 'Idle' }) as never);
+    await renderW4Routes(ROUTES, '/setup');
+    await waitFor(() => expect(screen.getByTestId('setup-next').props.accessibilityState.disabled).toBe(false));
+    await fireEvent.press(screen.getByTestId('setup-next'));
+    await act(async () => { await fireEvent.press(screen.getByTestId('setup-fleet-submit')); });
+    await act(async () => { await fireEvent.press(screen.getByTestId('setup-vessel-submit')); });
+    await act(async () => { fireEvent.changeText(screen.getByTestId('setup-captain-parallelism'), '3'); });
+    expect(screen.getByText(/so 3 captains are created/)).toBeTruthy();
+    expect(screen.getByTestId('setup-captain-submit')).toHaveTextContent('Create 3 Captains');
+    await act(async () => { await fireEvent.press(screen.getByTestId('setup-captain-submit')); });
+    expect(api.createCaptain).toHaveBeenCalledTimes(3);
+    expect(api.createCaptain).toHaveBeenNthCalledWith(3, expect.objectContaining({ name: 'Setup Captain 3', maxConcurrency: 1 }));
+    expect(screen.getByTestId('setup-step-count')).toHaveTextContent('Step 5 of 6');
+  });
+
   it('creates a fleet and validates the vessel landing mode', async () => {
     api.listFleets.mockResolvedValue(page([]) as never);
     api.listVessels.mockResolvedValue(page([]) as never);
