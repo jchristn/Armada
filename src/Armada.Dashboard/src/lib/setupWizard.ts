@@ -91,3 +91,28 @@ export function relevantWorkflowProfiles(profiles: WorkflowProfile[], fleetId: s
     return false;
   });
 }
+
+
+/** Most captains or slots the setup wizard plans in one step. */
+export const MAX_SETUP_PARALLELISM = 16;
+
+export interface PlannedCaptain {
+  name: string;
+  maxConcurrency: number;
+}
+
+/** True for runtimes that serve several missions from one captain (an API endpoint or a Mux endpoint). */
+export function isMultiSlotRuntime(runtime: string): boolean {
+  return runtime === 'ApiEndpoint' || runtime === 'Mux';
+}
+
+/**
+ * Captains to create for "how many missions should run at once": one captain with that many slots for an endpoint
+ * runtime, or that many single-slot captains (name, name 2, name 3, ...) for a CLI runtime. Clamped to 1..16.
+ */
+export function planSetupCaptains(name: string, runtime: string, parallelism: number): PlannedCaptain[] {
+  const count = Math.min(MAX_SETUP_PARALLELISM, Math.max(1, Math.trunc(Number.isFinite(parallelism) ? parallelism : 1)));
+  const base = name.trim();
+  if (isMultiSlotRuntime(runtime)) return [{ name: base, maxConcurrency: count }];
+  return Array.from({ length: count }, (_, i) => ({ name: i === 0 ? base : `${base} ${i + 1}`, maxConcurrency: 1 }));
+}
