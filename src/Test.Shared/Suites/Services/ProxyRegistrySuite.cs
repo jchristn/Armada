@@ -208,6 +208,88 @@ namespace Test.Shared.Suites.Services
                     CancellationToken.None)).ConfigureAwait(false);
             }));
 
+            cases.Add(CaseAsync("send_request_async_times_out_when_sender_does_not_return", "SendRequestAsync TimesOutWhenSenderDoesNotReturn", TestTags.Negative, async () =>
+            {
+                TaskCompletionSource<bool> blockSend = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                RemoteTunnelEnvelope? sent = null;
+                RemoteInstanceSession session = new RemoteInstanceSession((envelope, sendToken) =>
+                {
+                    sent = envelope;
+                    return blockSend.Task;
+                });
+
+                TimeSpan requestTimeout = TimeSpan.FromMilliseconds(200);
+                TimeSpan bound = TimeSpan.FromSeconds(2);
+                Task<RemoteTunnelEnvelope> pending = session.SendRequestAsync(
+                    "armada.status.snapshot",
+                    null,
+                    requestTimeout,
+                    CancellationToken.None);
+
+                Task winner = await Task.WhenAny(pending, Task.Delay(bound)).ConfigureAwait(false);
+                bool completedInsideBound = Object.ReferenceEquals(winner, pending);
+                Exception? error = null;
+                if (completedInsideBound)
+                {
+                    try
+                    {
+                        await pending.ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        error = ex;
+                    }
+                }
+
+                blockSend.TrySetResult(true);
+                if (!completedInsideBound)
+                {
+                    try
+                    {
+                        await pending.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                    }
+                    catch (Exception observed)
+                    {
+                        _ = observed;
+                    }
+                }
+
+                AssertTrue(completedInsideBound, "The request is still pending after the deadline.");
+                AssertTrue(error is TimeoutException, "A blocked sender returned " + (error == null ? "no exception" : error.GetType().Name) + ".");
+                AssertEqual(0, session.PendingRequestCount);
+                AssertNotNull(sent, "The sender should have received the request envelope.");
+                AssertFalse(session.TryCompleteResponse(sent!), "A late response must not complete a removed request.");
+            }));
+
+            cases.Add(CaseAsync("send_request_async_caller_cancel_is_not_a_timeout", "SendRequestAsync CallerCancelIsNotATimeout", TestTags.Negative, async () =>
+            {
+                using (CancellationTokenSource caller = new CancellationTokenSource())
+                {
+                    RemoteInstanceSession session = new RemoteInstanceSession((envelope, sendToken) => Task.CompletedTask);
+                    Task<RemoteTunnelEnvelope> pending = session.SendRequestAsync(
+                        "armada.status.snapshot",
+                        null,
+                        TimeSpan.FromSeconds(30),
+                        caller.Token);
+                    caller.Cancel();
+
+                    Exception? error = null;
+                    try
+                    {
+                        await pending.ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        error = ex;
+                    }
+
+                    AssertTrue(
+                        error is OperationCanceledException,
+                        "Caller cancellation returned " + (error == null ? "no exception" : error.GetType().Name) + ".");
+                    AssertEqual(0, session.PendingRequestCount);
+                }
+            }));
+
             cases.Add(Case("record_event_retains_recent_activity_within_configured_limit", "RecordEvent RetainsRecentActivityWithinConfiguredLimit", TestTags.Positive, () =>
             {
                 ProxySettings settings = new ProxySettings
