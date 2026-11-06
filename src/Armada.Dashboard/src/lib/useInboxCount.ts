@@ -22,14 +22,19 @@ export function useInboxCount(): InboxCountState {
   const { subscribe } = useWebSocket();
   const [items, setItems] = useState<InboxItem[]>([]);
   const lastLoadRef = useRef(0);
+  const inFlightRef = useRef(false);
 
   const load = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    lastLoadRef.current = Date.now();
     try {
       const result = await getInbox();
-      lastLoadRef.current = Date.now();
       setItems(Array.isArray(result) ? result : []);
     } catch {
       // Best-effort: a failed poll leaves the last known count in place.
+    } finally {
+      inFlightRef.current = false;
     }
   }, []);
 
