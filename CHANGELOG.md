@@ -110,6 +110,10 @@ v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-
 - Audit every dashboard page and route. Remove unused router page loaders and the orphan legacy Settings page; expose its account usage-capture controls on the active Settings page. Retired list URLs retain filters and navigation state, and unknown URLs show a recovery page.
 - Add route/module/link inventory and rendered breadcrumb regression checks. See [dashboard navigation](docs/DASHBOARD_NAVIGATION.md).
 
+### Fixes
+
+- Fix captain evaluation battery results listing in a different order on MySQL and SQL Server than on SQLite and PostgreSQL when several results share a timestamp. The id tie-break now compares ordinally on every provider, so pages are stable and identical across providers.
+
 ---
 
 ## v1.2.0 (2026-10-29)
