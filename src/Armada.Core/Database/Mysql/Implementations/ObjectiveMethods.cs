@@ -381,20 +381,21 @@ namespace Armada.Core.Database.Mysql.Implementations
 
         private static Objective ObjectiveFromReader(MySqlDataReader reader)
         {
+            string objectiveId = reader["id"].ToString()!;
             Objective objective = new Objective
             {
-                Id = reader["id"].ToString()!,
+                Id = objectiveId,
                 TenantId = MysqlDatabaseDriver.NullableString(reader["tenant_id"]),
                 UserId = MysqlDatabaseDriver.NullableString(reader["user_id"]),
                 Title = reader["title"].ToString()!,
                 Description = MysqlDatabaseDriver.NullableString(reader["description"]),
-                Status = ObjectivePersistenceHelper.ParseEnum(reader["status"], ObjectiveStatusEnum.Draft),
-                Kind = ObjectivePersistenceHelper.ParseEnum(reader["kind"], ObjectiveKindEnum.Feature),
+                Status = ObjectivePersistenceHelper.ParseEnum(reader["status"], ObjectiveStatusEnum.Draft, objectiveId, "status"),
+                Kind = ObjectivePersistenceHelper.ParseEnum(reader["kind"], ObjectiveKindEnum.Feature, objectiveId, "kind"),
                 Category = MysqlDatabaseDriver.NullableString(reader["category"]),
-                Priority = ObjectivePersistenceHelper.ParseEnum(reader["priority"], ObjectivePriorityEnum.P2),
+                Priority = ObjectivePersistenceHelper.ParseEnum(reader["priority"], ObjectivePriorityEnum.P2, objectiveId, "priority"),
                 Rank = MysqlDatabaseDriver.NullableInt(reader["rank"]) ?? 0,
-                BacklogState = ObjectivePersistenceHelper.ParseEnum(reader["backlog_state"], ObjectiveBacklogStateEnum.Inbox),
-                Effort = ObjectivePersistenceHelper.ParseEnum(reader["effort"], ObjectiveEffortEnum.M),
+                BacklogState = ObjectivePersistenceHelper.ParseEnum(reader["backlog_state"], ObjectiveBacklogStateEnum.Inbox, objectiveId, "backlog_state"),
+                Effort = ObjectivePersistenceHelper.ParseEnum(reader["effort"], ObjectiveEffortEnum.M, objectiveId, "effort"),
                 Owner = MysqlDatabaseDriver.NullableString(reader["owner"]),
                 TargetVersion = MysqlDatabaseDriver.NullableString(reader["target_version"]),
                 DueUtc = MysqlDatabaseDriver.FromIso8601Nullable(reader["due_utc"]),
@@ -411,23 +412,23 @@ namespace Armada.Core.Database.Mysql.Implementations
                 CompletedUtc = MysqlDatabaseDriver.FromIso8601Nullable(reader["completed_utc"])
             };
 
-            objective.BlockedByObjectiveIds = ObjectivePersistenceHelper.DeserializeList(reader["blocked_by_objective_ids_json"]);
-            objective.SuggestedPlaybooks = ObjectivePersistenceHelper.DeserializePlaybooks(reader["suggested_playbooks_json"]);
-            objective.Tags = ObjectivePersistenceHelper.DeserializeList(reader["tags_json"]);
-            objective.AcceptanceCriteria = ObjectivePersistenceHelper.DeserializeList(reader["acceptance_criteria_json"]);
-            objective.NonGoals = ObjectivePersistenceHelper.DeserializeList(reader["non_goals_json"]);
-            objective.RolloutConstraints = ObjectivePersistenceHelper.DeserializeList(reader["rollout_constraints_json"]);
-            objective.EvidenceLinks = ObjectivePersistenceHelper.DeserializeList(reader["evidence_links_json"]);
-            objective.FleetIds = ObjectivePersistenceHelper.DeserializeList(reader["fleet_ids_json"]);
-            objective.VesselIds = ObjectivePersistenceHelper.DeserializeList(reader["vessel_ids_json"]);
-            objective.PlanningSessionIds = ObjectivePersistenceHelper.DeserializeList(reader["planning_session_ids_json"]);
-            objective.RefinementSessionIds = ObjectivePersistenceHelper.DeserializeList(reader["refinement_session_ids_json"]);
-            objective.VoyageIds = ObjectivePersistenceHelper.DeserializeList(reader["voyage_ids_json"]);
-            objective.MissionIds = ObjectivePersistenceHelper.DeserializeList(reader["mission_ids_json"]);
-            objective.CheckRunIds = ObjectivePersistenceHelper.DeserializeList(reader["check_run_ids_json"]);
-            objective.ReleaseIds = ObjectivePersistenceHelper.DeserializeList(reader["release_ids_json"]);
-            objective.DeploymentIds = ObjectivePersistenceHelper.DeserializeList(reader["deployment_ids_json"]);
-            objective.IncidentIds = ObjectivePersistenceHelper.DeserializeList(reader["incident_ids_json"]);
+            objective.BlockedByObjectiveIds = ObjectivePersistenceHelper.DeserializeList(reader["blocked_by_objective_ids_json"], objectiveId, "blocked_by_objective_ids_json");
+            objective.SuggestedPlaybooks = ObjectivePersistenceHelper.DeserializePlaybooks(reader["suggested_playbooks_json"], objectiveId, "suggested_playbooks_json");
+            objective.Tags = ObjectivePersistenceHelper.DeserializeList(reader["tags_json"], objectiveId, "tags_json");
+            objective.AcceptanceCriteria = ObjectivePersistenceHelper.DeserializeList(reader["acceptance_criteria_json"], objectiveId, "acceptance_criteria_json");
+            objective.NonGoals = ObjectivePersistenceHelper.DeserializeList(reader["non_goals_json"], objectiveId, "non_goals_json");
+            objective.RolloutConstraints = ObjectivePersistenceHelper.DeserializeList(reader["rollout_constraints_json"], objectiveId, "rollout_constraints_json");
+            objective.EvidenceLinks = ObjectivePersistenceHelper.DeserializeList(reader["evidence_links_json"], objectiveId, "evidence_links_json");
+            objective.FleetIds = ObjectivePersistenceHelper.DeserializeList(reader["fleet_ids_json"], objectiveId, "fleet_ids_json");
+            objective.VesselIds = ObjectivePersistenceHelper.DeserializeList(reader["vessel_ids_json"], objectiveId, "vessel_ids_json");
+            objective.PlanningSessionIds = ObjectivePersistenceHelper.DeserializeList(reader["planning_session_ids_json"], objectiveId, "planning_session_ids_json");
+            objective.RefinementSessionIds = ObjectivePersistenceHelper.DeserializeList(reader["refinement_session_ids_json"], objectiveId, "refinement_session_ids_json");
+            objective.VoyageIds = ObjectivePersistenceHelper.DeserializeList(reader["voyage_ids_json"], objectiveId, "voyage_ids_json");
+            objective.MissionIds = ObjectivePersistenceHelper.DeserializeList(reader["mission_ids_json"], objectiveId, "mission_ids_json");
+            objective.CheckRunIds = ObjectivePersistenceHelper.DeserializeList(reader["check_run_ids_json"], objectiveId, "check_run_ids_json");
+            objective.ReleaseIds = ObjectivePersistenceHelper.DeserializeList(reader["release_ids_json"], objectiveId, "release_ids_json");
+            objective.DeploymentIds = ObjectivePersistenceHelper.DeserializeList(reader["deployment_ids_json"], objectiveId, "deployment_ids_json");
+            objective.IncidentIds = ObjectivePersistenceHelper.DeserializeList(reader["incident_ids_json"], objectiveId, "incident_ids_json");
             return objective;
         }
     }
