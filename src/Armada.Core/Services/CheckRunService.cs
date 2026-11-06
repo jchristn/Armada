@@ -37,6 +37,12 @@ namespace Armada.Core.Services
         private const long _MaxArtifactCopyBytes = 16L * 1024L * 1024L;
 
         /// <summary>
+        /// How long before <see cref="CheckRun.StartedUtc"/> an artifact write time may still be parsed.
+        /// The stamp is stored after readiness, so a file written for this run can be slightly older than it.
+        /// </summary>
+        private static readonly TimeSpan _ArtifactFreshnessTolerance = TimeSpan.FromMinutes(1);
+
+        /// <summary>
         /// Instantiate.
         /// </summary>
         public CheckRunService(
@@ -174,8 +180,9 @@ namespace Armada.Core.Services
             else
             {
                 run.Artifacts = CollectArtifacts(run.WorkingDirectory!, profile?.ExpectedArtifacts);
-                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, run.WorkingDirectory, run.Artifacts);
-                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(run.WorkingDirectory, run.Artifacts);
+                List<CheckRunArtifact> parseArtifacts = GetCurrentRunArtifacts(run);
+                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, run.WorkingDirectory, parseArtifacts);
+                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(run.WorkingDirectory, parseArtifacts);
             }
 
             run.Summary = BuildSummary(run, profile);
@@ -514,7 +521,7 @@ namespace Armada.Core.Services
                         {
                             Path = normalized,
                             SizeBytes = info.SizeBytes ?? 0,
-                            LastWriteUtc = info.LastWriteUtc ?? DateTime.UtcNow
+                            LastWriteUtc = info.LastWriteUtc
                         });
 
                         if ((info.SizeBytes ?? 0) > _MaxArtifactCopyBytes) continue;
@@ -532,9 +539,10 @@ namespace Armada.Core.Services
                 }
 
                 run.Artifacts = artifacts;
+                List<CheckRunArtifact> parseArtifacts = GetCurrentRunArtifacts(run);
                 string? parseRoot = Directory.Exists(copyRoot) ? copyRoot : null;
-                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, parseRoot, run.Artifacts);
-                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(parseRoot, run.Artifacts);
+                run.TestSummary = CheckRunParsingService.ParseTestSummary(run.Output, parseRoot, parseArtifacts);
+                run.CoverageSummary = CheckRunParsingService.ParseCoverageSummary(parseRoot, parseArtifacts);
             }
             finally
             {
@@ -602,6 +610,24 @@ namespace Armada.Core.Services
             }
 
             return results;
+        }
+
+        /// <summary>
+        /// Artifacts whose write time is at or after the run start, less
+        /// <see cref="_ArtifactFreshnessTolerance"/>. A missing write time is left out.
+        /// The full list stays on <see cref="CheckRun.Artifacts"/>.
+        /// </summary>
+        /// <param name="run">The check run.</param>
+        /// <returns>The artifacts parsers may read.</returns>
+        private static List<CheckRunArtifact> GetCurrentRunArtifacts(CheckRun run)
+        {
+            if (!run.StartedUtc.HasValue)
+                return new List<CheckRunArtifact>();
+
+            DateTime earliestUtc = run.StartedUtc.Value - _ArtifactFreshnessTolerance;
+            return run.Artifacts
+                .Where(artifact => artifact.LastWriteUtc.HasValue && artifact.LastWriteUtc.Value >= earliestUtc)
+                .ToList();
         }
 
         private static string BuildSummary(CheckRun run, WorkflowProfile? profile)
