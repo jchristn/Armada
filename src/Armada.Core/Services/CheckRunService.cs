@@ -35,6 +35,7 @@ namespace Armada.Core.Services
         private readonly LoggingModule _Logging;
         private readonly TimeSpan _DefaultTimeout = TimeSpan.FromMinutes(30);
         private const long _MaxArtifactCopyBytes = 16L * 1024L * 1024L;
+        private static readonly TimeSpan _TimeoutOutputDrainLimit = TimeSpan.FromSeconds(1);
 
         /// <summary>
         /// Instantiate.
@@ -451,11 +452,34 @@ namespace Armada.Core.Services
                     if (!process.HasExited)
                         process.Kill(true);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _Logging.Debug(_Header + "could not stop timed out check command: " + ex.Message);
                 }
 
-                throw new TimeoutException("Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes.");
+                Task outputDrain = Task.WhenAll(stdoutTask, stderrTask);
+                try
+                {
+                    await outputDrain.WaitAsync(_TimeoutOutputDrainLimit).ConfigureAwait(false);
+                }
+                catch (TimeoutException ex)
+                {
+                    _Logging.Debug(_Header + "timed out check command output drain stopped: " + ex.Message);
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Debug(_Header + "could not drain timed out check command output: " + ex.Message);
+                }
+
+                string capturedStdout = stdoutTask.IsCompletedSuccessfully ? stdoutTask.Result : String.Empty;
+                string capturedStderr = stderrTask.IsCompletedSuccessfully ? stderrTask.Result : String.Empty;
+                return new CommandExecutionResult
+                {
+                    ExitCode = -1,
+                    Output = AppendTimeoutMessage(
+                        CombineOutput(capturedStdout, capturedStderr),
+                        "Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes.")
+                };
             }
 
             string stdout = await stdoutTask.ConfigureAwait(false);
@@ -482,7 +506,15 @@ namespace Armada.Core.Services
             request.Label = label;
             HostCommandResult result = await host.Commands.RunAsync(request, token).ConfigureAwait(false);
             if (result.TimedOut)
-                throw new TimeoutException("Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes on " + host.HostLabel + ".");
+            {
+                return new CommandExecutionResult
+                {
+                    ExitCode = result.ExitCode == 0 ? -1 : result.ExitCode,
+                    Output = AppendTimeoutMessage(
+                        CombineOutput(result.StandardOutput, result.StandardError),
+                        "Check command timed out after " + timeout.TotalMinutes.ToString("0") + " minutes on " + host.HostLabel + ".")
+                };
+            }
 
             _Logging.Debug(_Header + "command on " + host.HostLabel + " exited with code " + result.ExitCode + ": " + FirstNonEmptyLine(result.StandardError, result.StandardOutput));
             return new CommandExecutionResult
@@ -557,6 +589,13 @@ namespace Armada.Core.Services
             if (String.IsNullOrWhiteSpace(trimmedStderr)) return trimmedStdout;
             if (String.IsNullOrWhiteSpace(trimmedStdout)) return trimmedStderr;
             return trimmedStdout + Environment.NewLine + Environment.NewLine + "--- STDERR ---" + Environment.NewLine + trimmedStderr;
+        }
+
+        private static string AppendTimeoutMessage(string output, string timeoutMessage)
+        {
+            return String.IsNullOrWhiteSpace(output)
+                ? timeoutMessage
+                : output + Environment.NewLine + Environment.NewLine + timeoutMessage;
         }
 
         private static string FirstNonEmptyLine(string? primary, string? secondary)
