@@ -52,8 +52,8 @@ namespace Armada.Server.Routes
                 if (ctx == null) return BuildAuthError(req);
 
                 MemoryEnumerateRequest query = new MemoryEnumerateRequest();
-                query.ApplyMemoryQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
-                query.ApplyDefaultSort(!String.IsNullOrEmpty(req.Query.GetValueOrDefault("order")));
+                query.ApplyMemoryQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
+                query.ApplyDefaultSort(!String.IsNullOrEmpty(QueryValueReader.Read(req.Query, "order")));
                 return await _Memories.EnumerateAsync(ctx, query).ConfigureAwait(false);
             },
             api => api
@@ -87,8 +87,8 @@ namespace Armada.Server.Routes
 
                 MemoryEnumerateRequest query = JsonSerializer.Deserialize<MemoryEnumerateRequest>(req.Http.Request.DataAsString, _BodyJsonOptions) ?? new MemoryEnumerateRequest();
                 MemoryEnumerateOrderProbe? probe = JsonSerializer.Deserialize<MemoryEnumerateOrderProbe>(req.Http.Request.DataAsString, _BodyJsonOptions);
-                query.ApplyMemoryQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
-                query.ApplyDefaultSort(probe?.Order != null || !String.IsNullOrEmpty(req.Query.GetValueOrDefault("order")));
+                query.ApplyMemoryQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
+                query.ApplyDefaultSort(probe?.Order != null || !String.IsNullOrEmpty(QueryValueReader.Read(req.Query, "order")));
                 return await _Memories.EnumerateAsync(ctx, query).ConfigureAwait(false);
             },
             api => api

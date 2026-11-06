@@ -134,7 +134,7 @@ namespace Armada.Server.Routes
 
         private static int? ReadInt(ApiRequest req, string key)
         {
-            string? value = req.Query.GetValueOrDefault(key);
+            string? value = QueryValueReader.Read(req.Query, key);
             if (String.IsNullOrWhiteSpace(value)) return null;
             if (!Int32.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
                 throw new ArgumentException(key + " must be an integer.");

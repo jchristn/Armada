@@ -44,7 +44,7 @@ namespace Armada.Server.Routes
                 AuthContext context = await authenticate(req.Http).ConfigureAwait(false);
                 if (!authz.IsAuthorized(context, "GET", "/api/v1/storage/hosts")) return Denied(req, context);
                 EnumerationQuery query = new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 return (object)_Inventory.EnumerateHosts(query);
             }, api => api.WithTag("Storage").WithSummary("List cached storage host reports")
                 .WithDescription("Global administrators only. One page of the cached host reports (the Admiral first, then each Harbor by name): locations (at most StorageSettings.MaxLocations), volumes, warnings, and largest files. Querystring: pageNumber (default 1), pageSize (1 to 1000, default 10). Does not trigger scans.")
