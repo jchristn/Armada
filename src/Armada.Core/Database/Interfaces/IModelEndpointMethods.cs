@@ -18,6 +18,18 @@ namespace Armada.Core.Database.Interfaces
         Task<ModelEndpoint> UpdateAsync(ModelEndpoint endpoint, CancellationToken token = default);
 
         /// <summary>
+        /// Writes health columns and <c>last_update_utc</c> when the stored update time still equals
+        /// <paramref name="expectedLastUpdateUtc"/>. Configuration columns are left unchanged. The expected
+        /// time is the value read for this result, in the same form the provider already uses for
+        /// <c>last_update_utc</c>.
+        /// </summary>
+        /// <param name="endpoint">Endpoint whose health fields and new <see cref="ModelEndpoint.LastUpdateUtc"/> are written.</param>
+        /// <param name="expectedLastUpdateUtc">Update time the stored row must still have.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when one row changed. False when the stored update time no longer matches.</returns>
+        Task<bool> UpdateHealthAsync(ModelEndpoint endpoint, DateTime expectedLastUpdateUtc, CancellationToken token = default);
+
+        /// <summary>
         /// Reads a model endpoint by its identifier.
         /// </summary>
         Task<ModelEndpoint?> ReadAsync(string id, CancellationToken token = default);
