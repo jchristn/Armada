@@ -55,29 +55,35 @@ namespace Armada.Core.Database.Postgresql.Implementations
             using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                // The parent row and its stages commit together.
+                using (NpgsqlTransaction transaction = (NpgsqlTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                 {
-                    cmd.Connection = conn;
-                    cmd.CommandText = @"INSERT INTO pipelines (id, tenant_id, user_id, scope, name, description, is_built_in, active, created_utc, last_update_utc)
+                    using (NpgsqlCommand cmd = new NpgsqlCommand())
+                    {
+                        cmd.Connection = conn;
+                        cmd.Transaction = transaction;
+                        cmd.CommandText = @"INSERT INTO pipelines (id, tenant_id, user_id, scope, name, description, is_built_in, active, created_utc, last_update_utc)
                         VALUES (@id, @tenant_id, @user_id, @scope, @name, @description, @is_built_in, @active, @created_utc, @last_update_utc);";
-                    cmd.Parameters.AddWithValue("@id", pipeline.Id);
-                    cmd.Parameters.AddWithValue("@tenant_id", (object?)pipeline.TenantId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@user_id", (object?)pipeline.UserId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@scope", pipeline.Scope.ToString());
-                    cmd.Parameters.AddWithValue("@name", pipeline.Name);
-                    cmd.Parameters.AddWithValue("@description", (object?)pipeline.Description ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@is_built_in", pipeline.IsBuiltIn);
-                    cmd.Parameters.AddWithValue("@active", pipeline.Active);
-                    cmd.Parameters.AddWithValue("@created_utc", pipeline.CreatedUtc);
-                    cmd.Parameters.AddWithValue("@last_update_utc", pipeline.LastUpdateUtc);
-                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                }
+                        cmd.Parameters.AddWithValue("@id", pipeline.Id);
+                        cmd.Parameters.AddWithValue("@tenant_id", (object?)pipeline.TenantId ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@user_id", (object?)pipeline.UserId ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@scope", pipeline.Scope.ToString());
+                        cmd.Parameters.AddWithValue("@name", pipeline.Name);
+                        cmd.Parameters.AddWithValue("@description", (object?)pipeline.Description ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@is_built_in", pipeline.IsBuiltIn);
+                        cmd.Parameters.AddWithValue("@active", pipeline.Active);
+                        cmd.Parameters.AddWithValue("@created_utc", pipeline.CreatedUtc);
+                        cmd.Parameters.AddWithValue("@last_update_utc", pipeline.LastUpdateUtc);
+                        await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    }
 
-                foreach (PipelineStage stage in pipeline.Stages)
-                {
-                    stage.PipelineId = pipeline.Id;
-                    await InsertStageAsync(conn, stage, token).ConfigureAwait(false);
+                    foreach (PipelineStage stage in pipeline.Stages)
+                    {
+                        stage.PipelineId = pipeline.Id;
+                        await InsertStageAsync(conn, transaction, stage, token).ConfigureAwait(false);
+                    }
+
+                    await transaction.CommitAsync(token).ConfigureAwait(false);
                 }
             }
 
@@ -182,11 +188,14 @@ namespace Armada.Core.Database.Postgresql.Implementations
             using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                // The parent row and its stages commit together.
+                using (NpgsqlTransaction transaction = (NpgsqlTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                 {
-                    cmd.Connection = conn;
-                    cmd.CommandText = @"UPDATE pipelines SET
+                    using (NpgsqlCommand cmd = new NpgsqlCommand())
+                    {
+                        cmd.Connection = conn;
+                        cmd.Transaction = transaction;
+                        cmd.CommandText = @"UPDATE pipelines SET
                         tenant_id = @tenant_id,
                         user_id = @user_id,
                         scope = @scope,
@@ -196,31 +205,35 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         active = @active,
                         last_update_utc = @last_update_utc
                         WHERE id = @id;";
-                    cmd.Parameters.AddWithValue("@id", pipeline.Id);
-                    cmd.Parameters.AddWithValue("@tenant_id", (object?)pipeline.TenantId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@user_id", (object?)pipeline.UserId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@scope", pipeline.Scope.ToString());
-                    cmd.Parameters.AddWithValue("@name", pipeline.Name);
-                    cmd.Parameters.AddWithValue("@description", (object?)pipeline.Description ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@is_built_in", pipeline.IsBuiltIn);
-                    cmd.Parameters.AddWithValue("@active", pipeline.Active);
-                    cmd.Parameters.AddWithValue("@last_update_utc", pipeline.LastUpdateUtc);
-                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                }
+                        cmd.Parameters.AddWithValue("@id", pipeline.Id);
+                        cmd.Parameters.AddWithValue("@tenant_id", (object?)pipeline.TenantId ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@user_id", (object?)pipeline.UserId ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@scope", pipeline.Scope.ToString());
+                        cmd.Parameters.AddWithValue("@name", pipeline.Name);
+                        cmd.Parameters.AddWithValue("@description", (object?)pipeline.Description ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@is_built_in", pipeline.IsBuiltIn);
+                        cmd.Parameters.AddWithValue("@active", pipeline.Active);
+                        cmd.Parameters.AddWithValue("@last_update_utc", pipeline.LastUpdateUtc);
+                        await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    }
 
-                // Delete existing stages and reinsert
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
-                {
-                    cmd.Connection = conn;
-                    cmd.CommandText = "DELETE FROM pipeline_stages WHERE pipeline_id = @pipeline_id;";
-                    cmd.Parameters.AddWithValue("@pipeline_id", pipeline.Id);
-                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                }
+                    // Delete existing stages and reinsert
+                    using (NpgsqlCommand cmd = new NpgsqlCommand())
+                    {
+                        cmd.Connection = conn;
+                        cmd.Transaction = transaction;
+                        cmd.CommandText = "DELETE FROM pipeline_stages WHERE pipeline_id = @pipeline_id;";
+                        cmd.Parameters.AddWithValue("@pipeline_id", pipeline.Id);
+                        await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    }
 
-                foreach (PipelineStage stage in pipeline.Stages)
-                {
-                    stage.PipelineId = pipeline.Id;
-                    await InsertStageAsync(conn, stage, token).ConfigureAwait(false);
+                    foreach (PipelineStage stage in pipeline.Stages)
+                    {
+                        stage.PipelineId = pipeline.Id;
+                        await InsertStageAsync(conn, transaction, stage, token).ConfigureAwait(false);
+                    }
+
+                    await transaction.CommitAsync(token).ConfigureAwait(false);
                 }
             }
 
@@ -235,23 +248,30 @@ namespace Armada.Core.Database.Postgresql.Implementations
             using (NpgsqlConnection conn = new NpgsqlConnection(_Settings.GetConnectionString()))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
-
-                // Delete stages first
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
+                // The parent row and its stages commit together.
+                using (NpgsqlTransaction transaction = (NpgsqlTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                 {
-                    cmd.Connection = conn;
-                    cmd.CommandText = "DELETE FROM pipeline_stages WHERE pipeline_id = @pipeline_id;";
-                    cmd.Parameters.AddWithValue("@pipeline_id", id);
-                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-                }
+                    // Delete stages first
+                    using (NpgsqlCommand cmd = new NpgsqlCommand())
+                    {
+                        cmd.Connection = conn;
+                        cmd.Transaction = transaction;
+                        cmd.CommandText = "DELETE FROM pipeline_stages WHERE pipeline_id = @pipeline_id;";
+                        cmd.Parameters.AddWithValue("@pipeline_id", id);
+                        await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    }
 
-                // Delete pipeline
-                using (NpgsqlCommand cmd = new NpgsqlCommand())
-                {
-                    cmd.Connection = conn;
-                    cmd.CommandText = "DELETE FROM pipelines WHERE id = @id;";
-                    cmd.Parameters.AddWithValue("@id", id);
-                    await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    // Delete pipeline
+                    using (NpgsqlCommand cmd = new NpgsqlCommand())
+                    {
+                        cmd.Connection = conn;
+                        cmd.Transaction = transaction;
+                        cmd.CommandText = "DELETE FROM pipelines WHERE id = @id;";
+                        cmd.Parameters.AddWithValue("@id", id);
+                        await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    }
+
+                    await transaction.CommitAsync(token).ConfigureAwait(false);
                 }
             }
         }
@@ -418,13 +438,15 @@ namespace Armada.Core.Database.Postgresql.Implementations
         /// Insert a single pipeline stage row.
         /// </summary>
         /// <param name="conn">Open PostgreSQL connection.</param>
+        /// <param name="transaction">Transaction the insert belongs to.</param>
         /// <param name="stage">Pipeline stage to insert.</param>
         /// <param name="token">Cancellation token.</param>
-        private static async Task InsertStageAsync(NpgsqlConnection conn, PipelineStage stage, CancellationToken token)
+        private static async Task InsertStageAsync(NpgsqlConnection conn, NpgsqlTransaction transaction, PipelineStage stage, CancellationToken token)
         {
             using (NpgsqlCommand cmd = new NpgsqlCommand())
             {
                 cmd.Connection = conn;
+                cmd.Transaction = transaction;
                 cmd.CommandText = @"INSERT INTO pipeline_stages (id, pipeline_id, stage_order, persona_name, is_optional, description, requires_review, review_deny_action)
                     VALUES (@id, @pipeline_id, @stage_order, @persona_name, @is_optional, @description, @requires_review, @review_deny_action);";
                 cmd.Parameters.AddWithValue("@id", stage.Id);
