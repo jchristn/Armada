@@ -749,15 +749,15 @@ namespace Armada.Server
         }
 
         /// <summary>
-        /// Handle voyage completion by broadcasting to the dashboard.
+        /// Broadcast a settled voyage to the dashboard using the status already stored on the voyage.
         /// </summary>
         public Task HandleVoyageCompleteAsync(Voyage voyage)
         {
-            _Logging.Info(_Header + "voyage " + voyage.Id + " completed, broadcasting to dashboard");
+            _Logging.Info(_Header + "voyage " + voyage.Id + " reached status " + voyage.Status + ", broadcasting to dashboard");
 
             if (_WebSocketHub != null)
             {
-                _WebSocketHub.BroadcastVoyageChange(voyage, VoyageStatusEnum.Complete.ToString());
+                _WebSocketHub.BroadcastVoyageChange(voyage);
             }
 
             return Task.CompletedTask;
