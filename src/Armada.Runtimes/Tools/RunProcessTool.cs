@@ -120,40 +120,27 @@ namespace Armada.Runtimes.Tools
                 {
                     process.StartInfo = startInfo;
 
-                    StringBuilder stdout = new StringBuilder();
-                    StringBuilder stderr = new StringBuilder();
-
-                    process.OutputDataReceived += (sender, e) =>
-                    {
-                        if (e.Data != null)
-                        {
-                            stdout.AppendLine(e.Data);
-                        }
-                    };
-
-                    process.ErrorDataReceived += (sender, e) =>
-                    {
-                        if (e.Data != null)
-                        {
-                            stderr.AppendLine(e.Data);
-                        }
-                    };
+                    int maxOutput = ToolSafetyLimits.MaxProcessOutputBytes;
+                    BoundedOutputBuffer stdout = new BoundedOutputBuffer(maxOutput);
+                    BoundedOutputBuffer stderr = new BoundedOutputBuffer(maxOutput);
 
                     process.Start();
                     // This tool has no interactive input channel. EOF prevents commands such as cat/read
                     // from waiting on the Harbor GUI's inherited stdin for the entire tool timeout.
                     process.StandardInput.Close();
-                    process.BeginOutputReadLine();
-                    process.BeginErrorReadLine();
 
                     bool timedOut = false;
 
                     using (CancellationTokenSource timeoutCts = new CancellationTokenSource(timeoutMs))
                     using (CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token))
                     {
+                        Task stdoutRead = CaptureOutputAsync(process.StandardOutput.BaseStream, stdout, linkedCts.Token);
+                        Task stderrRead = CaptureOutputAsync(process.StandardError.BaseStream, stderr, linkedCts.Token);
+                        Task processWait = process.WaitForExitAsync(linkedCts.Token);
+
                         try
                         {
-                            await process.WaitForExitAsync(linkedCts.Token).ConfigureAwait(false);
+                            await Task.WhenAll(processWait, stdoutRead, stderrRead).ConfigureAwait(false);
                         }
                         catch (OperationCanceledException)
                         {
@@ -171,6 +158,15 @@ namespace Armada.Runtimes.Tools
                             if (!timedOut)
                             {
                                 // Cancelled by the caller, not timeout
+                                try
+                                {
+                                    await Task.WhenAll(stdoutRead, stderrRead).ConfigureAwait(false);
+                                }
+                                catch (OperationCanceledException)
+                                {
+                                    // Caller cancellation stops the active stream reads.
+                                }
+
                                 return new ToolResult
                                 {
                                     ToolCallId = toolCallId,
@@ -178,25 +174,22 @@ namespace Armada.Runtimes.Tools
                                     Content = JsonSerializer.Serialize(new { error = "cancelled", message = "Process execution was cancelled." })
                                 };
                             }
+
+                            try
+                            {
+                                await Task.WhenAll(stdoutRead, stderrRead).ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                // Timeout cancels stream reads after the process tree is stopped.
+                            }
                         }
                     }
 
                     int exitCode = timedOut ? -1 : process.ExitCode;
 
-                    string stdoutStr = stdout.ToString();
-                    string stderrStr = stderr.ToString();
-
-                    int maxOutput = ToolSafetyLimits.MaxProcessOutputBytes;
-
-                    if (stdoutStr.Length > maxOutput)
-                    {
-                        stdoutStr = stdoutStr.Substring(0, maxOutput) + "\n[truncated - output exceeded " + maxOutput + " bytes]";
-                    }
-
-                    if (stderrStr.Length > maxOutput)
-                    {
-                        stderrStr = stderrStr.Substring(0, maxOutput) + "\n[truncated - output exceeded " + maxOutput + " bytes]";
-                    }
+                    string stdoutStr = stdout.GetOutput();
+                    string stderrStr = stderr.GetOutput();
 
                     return new ToolResult
                     {
@@ -226,6 +219,16 @@ namespace Armada.Runtimes.Tools
         #endregion
 
         #region Private-Methods
+
+        private static async Task CaptureOutputAsync(Stream stream, BoundedOutputBuffer output, CancellationToken cancellationToken)
+        {
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) > 0)
+            {
+                output.Append(buffer, count);
+            }
+        }
 
         private static ProcessStartInfo BuildStartInfo(string command, List<string?>? argv, string resolvedWorkDir)
         {
@@ -311,6 +314,146 @@ namespace Armada.Runtimes.Tools
         private static string GetShellInvocationArgsHint()
         {
             return _IsWindows ? "/c" : GetShellProgram() == "/bin/bash" ? "-o pipefail -c" : "-c";
+        }
+
+        private sealed class BoundedOutputBuffer
+        {
+            private const string _MarkerPrefix = "[truncated - output exceeded ";
+            private const string _MarkerMiddle = " bytes; omitted ";
+            private const string _MarkerSuffix = " bytes]";
+            private readonly int _MaxBytes;
+            private readonly byte[] _Head;
+            private readonly byte[] _Tail;
+            private int _HeadCount;
+            private int _TailCount;
+            private int _TailNext;
+            private long _TotalBytes;
+
+            public BoundedOutputBuffer(int maxBytes)
+            {
+                _MaxBytes = Math.Max(0, maxBytes);
+                _Head = new byte[_MaxBytes / 5];
+                _Tail = new byte[_MaxBytes - _Head.Length];
+            }
+
+            public void Append(byte[] bytes, int count)
+            {
+                _TotalBytes += count;
+
+                int offset = 0;
+                int headCopy = Math.Min(_Head.Length - _HeadCount, count);
+                if (headCopy > 0)
+                {
+                    Array.Copy(bytes, 0, _Head, _HeadCount, headCopy);
+                    _HeadCount += headCopy;
+                    offset += headCopy;
+                }
+
+                if (_Tail.Length == 0) return;
+
+                while (offset < count)
+                {
+                    _Tail[_TailNext] = bytes[offset];
+                    _TailNext = (_TailNext + 1) % _Tail.Length;
+                    _TailCount = Math.Min(_TailCount + 1, _Tail.Length);
+                    offset++;
+                }
+            }
+
+            public string GetOutput()
+            {
+                if (_TotalBytes <= _MaxBytes)
+                {
+                    byte[] complete = new byte[_HeadCount + _TailCount];
+                    Array.Copy(_Head, 0, complete, 0, _HeadCount);
+                    CopyTail(complete, _HeadCount, _TailCount);
+                    return Encoding.UTF8.GetString(complete);
+                }
+
+                byte[] head = GetValidHead();
+                int tailLength = _TailCount;
+                string marker = String.Empty;
+                byte[] tail = Array.Empty<byte>();
+
+                for (int attempt = 0; attempt < 32; attempt++)
+                {
+                    tailLength = Math.Max(0, Math.Min(_TailCount, _MaxBytes - head.Length - Encoding.UTF8.GetByteCount(marker) - 2));
+                    tail = GetValidTail(tailLength);
+                    long omittedBytes = Math.Max(0, _TotalBytes - head.Length - tail.Length);
+                    string nextMarker = _MarkerPrefix + _MaxBytes + _MarkerMiddle + omittedBytes + _MarkerSuffix;
+                    if (nextMarker == marker)
+                    {
+                        marker = nextMarker;
+                        break;
+                    }
+
+                    marker = nextMarker;
+                }
+
+                return Encoding.UTF8.GetString(head) + "\n" + marker + "\n" + Encoding.UTF8.GetString(tail);
+            }
+
+            private byte[] GetValidHead()
+            {
+                int length = _HeadCount;
+                while (length > 0 && IsContinuation(_Head[length - 1])) length--;
+                if (length == 0) return Array.Empty<byte>();
+
+                int lead = length - 1;
+                while (lead >= 0 && IsContinuation(_Head[lead])) lead--;
+                if (lead < 0) return Array.Empty<byte>();
+                int expected = Utf8SequenceLength(_Head[lead]);
+                if (expected > length - lead) length = lead;
+                return Slice(_Head, 0, length);
+            }
+
+            private byte[] GetValidTail(int requestedLength)
+            {
+                byte[] bytes = new byte[requestedLength];
+                CopyTailSuffix(bytes, requestedLength);
+                int start = 0;
+                while (start < bytes.Length && IsContinuation(bytes[start])) start++;
+                if (start == bytes.Length) return Array.Empty<byte>();
+                int expected = Utf8SequenceLength(bytes[start]);
+                if (expected > bytes.Length - start) return Array.Empty<byte>();
+                return Slice(bytes, start, bytes.Length - start);
+            }
+
+            private void CopyTail(byte[] destination, int destinationOffset, int count)
+            {
+                int start = (_TailNext - _TailCount + _Tail.Length) % _Tail.Length;
+                int firstLength = Math.Min(count, _Tail.Length - start);
+                Array.Copy(_Tail, start, destination, destinationOffset, firstLength);
+                if (firstLength < count) Array.Copy(_Tail, 0, destination, destinationOffset + firstLength, count - firstLength);
+            }
+
+            private void CopyTailSuffix(byte[] destination, int count)
+            {
+                byte[] ordered = new byte[_TailCount];
+                CopyTail(ordered, 0, _TailCount);
+                Array.Copy(ordered, ordered.Length - count, destination, 0, count);
+            }
+
+            private static byte[] Slice(byte[] bytes, int offset, int count)
+            {
+                byte[] result = new byte[count];
+                Array.Copy(bytes, offset, result, 0, count);
+                return result;
+            }
+
+            private static bool IsContinuation(byte value)
+            {
+                return (value & 0xC0) == 0x80;
+            }
+
+            private static int Utf8SequenceLength(byte lead)
+            {
+                if ((lead & 0x80) == 0) return 1;
+                if ((lead & 0xE0) == 0xC0) return 2;
+                if ((lead & 0xF0) == 0xE0) return 3;
+                if ((lead & 0xF8) == 0xF0) return 4;
+                return 1;
+            }
         }
 
         #endregion
