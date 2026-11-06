@@ -8535,12 +8535,31 @@ tr.row-muted td { opacity: 0.72; }
 /* ---------------------------------------------------------------------------
    Ask Armada home base: conversation list + conversation (docs/ASK_ARMADA_HOME_BASE.md)
    --------------------------------------------------------------------------- */
+/* The Ask page fills the main pane exactly: .main stops scrolling on this route and
+   becomes a flex column, every wrapper between .main and .ask-home flexes into the
+   remaining height, and only the transcript (and the thread list) scroll inside it. */
+.main:has(.ask-home) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.main:has(.ask-home) > * { flex: 0 0 auto; }
+.main:has(.ask-home) > .view {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.main:has(.ask-home) > .view > * { flex: 0 0 auto; }
+.main:has(.ask-home) > .view > .ask-home { flex: 1 1 auto; }
 .ask-home {
     display: grid;
     grid-template-columns: min(var(--ask-list-width, 280px), calc(100% - 360px - 1rem)) 1rem minmax(0, 1fr);
-    height: calc(100dvh - var(--shell-chrome-height) - 1.5rem);
+    grid-template-rows: minmax(0, 1fr);
+    flex: 1 1 auto;
+    height: auto;
     min-height: 0;
-    padding-bottom: 0.75rem;
+    box-sizing: border-box;
 }
 .ask-home input[type="checkbox"] { width: auto; margin: 0; }
 .ask-home-list {
@@ -8558,6 +8577,8 @@ tr.row-muted td { opacity: 0.72; }
     min-height: 0;
     min-width: 0;
 }
+.ask-home-conv > * { flex: 0 0 auto; }
+.ask-home-conv > .ask-transcript { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .ask-drawer-backdrop { display: none; }
 .ask-home.is-resizing { cursor: col-resize; user-select: none; }
 /* Splitter between the list and the conversation: drag, or focus it and use the arrow keys. */
