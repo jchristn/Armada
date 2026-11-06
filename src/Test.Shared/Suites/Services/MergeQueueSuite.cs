@@ -84,6 +84,38 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("cancel_landed_keeps_status", "Cancel Landed KeepsStatus", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MergeQueueService queue = CreateQueue(db);
+                    MergeEntry entry = await queue.EnqueueAsync(NewEntry("feature/landed"));
+                    await SetStatusAsync(db, entry, MergeStatusEnum.Landed);
+
+                    await queue.CancelAsync(entry.Id);
+                    MergeEntry? read = await queue.GetAsync(entry.Id);
+                    AssertNotNull(read);
+                    AssertEqual(MergeStatusEnum.Landed, read!.Status);
+                }
+            }));
+
+            cases.Add(CaseAsync("cancel_failed_keeps_status", "Cancel Failed KeepsStatus", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    DatabaseDriver db = testDb.Driver;
+                    MergeQueueService queue = CreateQueue(db);
+                    MergeEntry entry = await queue.EnqueueAsync(NewEntry("feature/failed"));
+                    await SetStatusAsync(db, entry, MergeStatusEnum.Failed);
+
+                    await queue.CancelAsync(entry.Id);
+                    MergeEntry? read = await queue.GetAsync(entry.Id);
+                    AssertNotNull(read);
+                    AssertEqual(MergeStatusEnum.Failed, read!.Status);
+                }
+            }));
+
             cases.Add(CaseAsync("delete_terminal_entry_succeeds", "Delete TerminalEntry Succeeds", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
