@@ -132,18 +132,38 @@ namespace Armada.Core.Services
 
         private static CheckRunTestSummary? ParseDotNetSummary(string output)
         {
-            Match match = _DotNetSummaryRegex.Match(output);
-            if (!match.Success)
+            // dotnet test prints one Passed or Failed summary line per project and no combined line.
+            // Add the counts. Keep the longest duration, because the check text reports that duration with "in".
+            MatchCollection matches = _DotNetSummaryRegex.Matches(output);
+            if (matches.Count == 0)
                 return null;
+
+            int failed = 0;
+            int passed = 0;
+            int skipped = 0;
+            int total = 0;
+            long? longestDurationMs = null;
+
+            foreach (Match match in matches)
+            {
+                failed += ParseInt(match, "failed");
+                passed += ParseInt(match, "passed");
+                skipped += ParseInt(match, "skipped");
+                total += ParseInt(match, "total");
+
+                long? durationMs = ParseDurationMilliseconds(match.Groups["duration"].Value);
+                if (durationMs.HasValue && (longestDurationMs == null || durationMs.Value > longestDurationMs.Value))
+                    longestDurationMs = durationMs;
+            }
 
             return new CheckRunTestSummary
             {
                 Format = "dotnet",
-                Failed = ParseInt(match, "failed"),
-                Passed = ParseInt(match, "passed"),
-                Skipped = ParseInt(match, "skipped"),
-                Total = ParseInt(match, "total"),
-                DurationMs = ParseDurationMilliseconds(match.Groups["duration"].Value)
+                Failed = failed,
+                Passed = passed,
+                Skipped = skipped,
+                Total = total,
+                DurationMs = longestDurationMs
             };
         }
 

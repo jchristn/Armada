@@ -211,7 +211,9 @@ When you need to understand what happened after the fact, use:
 
 A check run's test counts come from a structured result artifact when one is collected (TRX, JUnit XML, NUnit XML, or
 a Jest or Vitest JSON report), and otherwise from the command's console summary: `dotnet test`, pytest, Jest, Vitest,
-cargo, Maven Surefire, and the NUnit console runner, with LF or CRLF line endings. For JavaScript, Armada reads the
+cargo, Maven Surefire, and the NUnit console runner, with LF or CRLF line endings. For `dotnet test`, each project
+prints its own summary line. Armada adds the failed, passed, skipped, and total counts and keeps the longest duration.
+For JavaScript, Armada reads the
 per-test line, Jest's `Tests:       1 failed, 2 skipped, 1 todo, 5 passed, 9 total` or Vitest's
 `      Tests  1 failed | 5 passed | 2 skipped | 1 todo (9)`, never Jest's `Test Suites:` or Vitest's `Test Files` line.
 Skipped and todo tests count as skipped, the total is Jest's `total` or Vitest's number in parentheses, and the
