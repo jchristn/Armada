@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getMissionHistory } from '../api/client';
 import type { MissionHistorySummaryResult, Vessel, Fleet } from '../types/models';
 import { useLocale } from '../context/LocaleContext';
@@ -17,9 +17,11 @@ interface MissionHistoryChartProps {
   vessels: Vessel[];
   fleets: Fleet[];
   onRefresh?: () => void;
+  /** Changes when the home page runs another refresh, so this chart loads history with that refresh. */
+  refreshSignal?: number;
 }
 
-export default function MissionHistoryChart({ vessels, fleets, onRefresh }: MissionHistoryChartProps) {
+export default function MissionHistoryChart({ vessels, fleets, onRefresh, refreshSignal }: MissionHistoryChartProps) {
   const { t } = useLocale();
   const [timeRange, setTimeRange] = useState<TimeRangeValue>('week');
   const [fleetId, setFleetId] = useState('');
@@ -27,6 +29,8 @@ export default function MissionHistoryChart({ vessels, fleets, onRefresh }: Miss
   const [hoveredBar, setHoveredBar] = useState<number | null>(null);
   const [history, setHistory] = useState<MissionHistorySummaryResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const historyRef = useRef<MissionHistorySummaryResult | null>(history);
+  historyRef.current = history;
 
   const filteredVessels = useMemo(() => {
     if (!fleetId) return vessels;
@@ -43,7 +47,7 @@ export default function MissionHistoryChart({ vessels, fleets, onRefresh }: Miss
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    if (historyRef.current == null) setLoading(true);
     getMissionHistory(missionHistoryQuery(range, fleetId, vesselId, new Date()))
       .then((result) => {
         if (!cancelled) setHistory(result);
@@ -58,7 +62,7 @@ export default function MissionHistoryChart({ vessels, fleets, onRefresh }: Miss
     return () => {
       cancelled = true;
     };
-  }, [fleetId, range.hours, range.stepMinutes, timeRange, vesselId]);
+  }, [fleetId, range.hours, range.stepMinutes, timeRange, vesselId, refreshSignal]);
 
   const buckets = useMemo<Bucket[]>(() => historyBuckets(history), [history]);
 
@@ -76,7 +80,9 @@ export default function MissionHistoryChart({ vessels, fleets, onRefresh }: Miss
 
   const refresh = () => {
     onRefresh?.();
-    setLoading(true);
+    // The home signal already reloads history. A second request here would duplicate that load.
+    if (refreshSignal !== undefined) return;
+    if (history == null) setLoading(true);
     getMissionHistory(missionHistoryQuery(range, fleetId, vesselId, new Date()))
       .then(setHistory)
       .catch(() => setHistory(null))
