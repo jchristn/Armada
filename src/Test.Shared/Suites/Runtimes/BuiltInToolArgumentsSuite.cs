@@ -8,6 +8,7 @@ namespace Test.Shared.Suites.Runtimes
     using System.Text.Json.Serialization;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.Services;
     using Armada.Runtimes.Tools;
     using Armada.Runtimes.Tools.Arguments;
     using Armada.Runtimes.Tools.Tasks;
@@ -279,6 +280,31 @@ namespace Test.Shared.Suites.Runtimes
                     AssertContains("explicit input", JsonSerializer.Deserialize<RunProcessOutput>(heredoc.Content)!.Stdout);
                 }
                 finally { Cleanup(dir); }
+            }));
+
+            cases.Add(CaseAsync("run_process_does_not_pass_initial_admin_password", "run_process does not pass the initial admin password to the child process", TestTags.Positive, async () =>
+            {
+                string variableName = DefaultCredentialService.InitialAdminPasswordEnvironmentVariable;
+                string? previousValue = Environment.GetEnvironmentVariable(variableName);
+                string dir = NewTempDir();
+                try
+                {
+                    Environment.SetEnvironmentVariable(variableName, "test-only-initial-password");
+                    BuiltInToolRegistry registry = new BuiltInToolRegistry(null);
+                    string command = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                        ? "powershell -NoProfile -Command \"if (Test-Path Env:ARMADA_INITIAL_ADMIN_PASSWORD) { 'present' } else { 'absent' }\""
+                        : "if printenv ARMADA_INITIAL_ADMIN_PASSWORD >/dev/null; then printf present; else printf absent; fi";
+                    ToolResult result = await Run(registry, "run_process", JsonSerializer.Serialize(new { command }), dir).ConfigureAwait(false);
+                    AssertTrue(result.Success, "run_process: " + result.Content);
+                    RunProcessOutput? output = JsonSerializer.Deserialize<RunProcessOutput>(result.Content);
+                    AssertNotNull(output, "run_process output");
+                    AssertEqual("absent" + Environment.NewLine, output!.Stdout, "the child process must not receive the initial admin password");
+                }
+                finally
+                {
+                    Environment.SetEnvironmentVariable(variableName, previousValue);
+                    Cleanup(dir);
+                }
             }));
 
             return new TestSuiteDescriptor(
