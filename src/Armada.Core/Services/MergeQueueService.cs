@@ -73,6 +73,7 @@ namespace Armada.Core.Services
         /// Name of the durable lease that serializes queue processing across instances.
         /// </summary>
         private const string _ProcessLeaseName = "merge-queue:process";
+        private static readonly TimeSpan _ProcessLeaseDuration = TimeSpan.FromMinutes(15);
         private readonly object _ProcessLock = new object();
 
         /// <summary>
@@ -140,12 +141,29 @@ namespace Armada.Core.Services
                 // TTL guarantees a crashed holder does not block the queue forever, and takeover is
                 // automatic once it expires.
                 leaseAcquired = await _Database.CoordinationLeases
-                    .TryAcquireAsync(_ProcessLeaseName, _InstanceId, TimeSpan.FromMinutes(15), null, token)
+                    .TryAcquireAsync(_ProcessLeaseName, _InstanceId, _ProcessLeaseDuration, null, token)
                     .ConfigureAwait(false);
                 if (!leaseAcquired)
                 {
                     _Logging.Debug(_Header + "merge queue already being processed by another instance -- skipping");
                     return;
+                }
+
+                // Recover work left in Testing only after the processing lease expires. A null
+                // start time has no evidence of a live processor and is safe to resume. A newer
+                // status write keeps the entry.
+                DateTime staleBeforeUtc = DateTime.UtcNow - _ProcessLeaseDuration;
+                List<MergeEntry> testing = await _Database.MergeEntries.EnumerateByStatusAsync(MergeStatusEnum.Testing, token).ConfigureAwait(false);
+                foreach (MergeEntry entry in testing)
+                {
+                    if (!entry.TestStartedUtc.HasValue || entry.TestStartedUtc.Value <= staleBeforeUtc)
+                    {
+                        DateTime version = entry.LastUpdateUtc;
+                        entry.Status = MergeStatusEnum.Queued;
+                        entry.TestStartedUtc = null;
+                        entry.TestExitCode = null;
+                        if (!await _Database.MergeEntries.TryUpdateIfUnchangedAsync(entry, version, token).ConfigureAwait(false)) continue;
+                    }
                 }
 
                 // Get all queued entries ordered by priority then created_utc
