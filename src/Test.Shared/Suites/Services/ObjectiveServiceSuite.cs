@@ -341,6 +341,109 @@ namespace Test.Shared.Suites.Services
 
             // Audit addition: reading an unknown objective returns null (confirmed against source).
 
+            cases.Add(CaseAsync("update_preserves_missing_incident_link", "UpdateAsync preserves an unresolved stored incident link", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_objective_stale_update";
+                string userId = "usr_objective_stale_update";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                string incidentId = "missing-incident-update";
+                Objective objective = await CreateObjectiveWithMissingIncidentAsync(testDb, objectives, auth, "Before update", incidentId).ConfigureAwait(false);
+
+                Objective updated = await objectives.UpdateAsync(auth, objective.Id, new ObjectiveUpsertRequest
+                {
+                    Title = "After update"
+                }).ConfigureAwait(false);
+
+                AssertEqual("After update", updated.Title);
+                AssertTrue(updated.IncidentIds.Contains(incidentId), "Expected the unresolved incident link to remain.");
+            }));
+
+            cases.Add(CaseAsync("link_voyage_preserves_missing_incident_link", "LinkVoyageAsync preserves an unresolved stored incident link", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_objective_stale_voyage";
+                string userId = "usr_objective_stale_voyage";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                string incidentId = "missing-incident-voyage";
+                Objective objective = await CreateObjectiveWithMissingIncidentAsync(testDb, objectives, auth, "Voyage objective", incidentId).ConfigureAwait(false);
+                Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("Linked voyage", "Objective link")
+                {
+                    TenantId = tenantId,
+                    UserId = userId
+                }).ConfigureAwait(false);
+
+                Objective linked = await objectives.LinkVoyageAsync(auth, objective.Id, voyage.Id).ConfigureAwait(false);
+
+                AssertTrue(linked.VoyageIds.Contains(voyage.Id), "Expected the voyage link to be stored.");
+                AssertTrue(linked.IncidentIds.Contains(incidentId), "Expected the unresolved incident link to remain.");
+            }));
+
+            cases.Add(CaseAsync("update_rejects_supplied_missing_incident_link", "UpdateAsync rejects a supplied unresolved incident link", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_objective_bad_update";
+                string userId = "usr_objective_bad_update";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                Objective objective = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest { Title = "Strict update" }).ConfigureAwait(false);
+
+                await AssertThrowsAsync<KeyNotFoundException>(() => objectives.UpdateAsync(auth, objective.Id, new ObjectiveUpsertRequest
+                {
+                    IncidentIds = new List<string> { "missing-incident-supplied" }
+                }));
+            }));
+
+            cases.Add(CaseAsync("create_rejects_missing_incident_link", "CreateAsync rejects an unresolved incident link", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_objective_bad_create";
+                string userId = "usr_objective_bad_create";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+
+                await AssertThrowsAsync<KeyNotFoundException>(() => objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+                {
+                    Title = "Strict create",
+                    IncidentIds = new List<string> { "missing-incident-create" }
+                }));
+            }));
+
+            cases.Add(CaseAsync("reorder_preserves_missing_incident_link", "ReorderAsync preserves an unresolved stored incident link", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                string tenantId = "ten_objective_stale_reorder";
+                string userId = "usr_objective_stale_reorder";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                string incidentId = "missing-incident-reorder";
+                Objective objective = await CreateObjectiveWithMissingIncidentAsync(testDb, objectives, auth, "Reorder objective", incidentId).ConfigureAwait(false);
+                int rank = objective.Rank + 1000;
+
+                ObjectiveReorderResult reordered = await objectives.ReorderAsync(auth, new ObjectiveReorderRequest
+                {
+                    Items = new List<ObjectiveReorderItem>
+                    {
+                        new ObjectiveReorderItem { ObjectiveId = objective.Id, Rank = rank }
+                    }
+                }).ConfigureAwait(false);
+
+                AssertEqual(1, reordered.Updated);
+                AssertEqual(objective.Id, reordered.Items[0].ObjectiveId);
+                AssertEqual(rank, reordered.Items[0].Rank);
+                Objective? stored = await objectives.ReadAsync(auth, objective.Id).ConfigureAwait(false);
+                AssertNotNull(stored, "Expected the reordered objective to remain.");
+                AssertEqual(rank, stored!.Rank);
+                AssertTrue(stored.IncidentIds.Contains(incidentId), "Expected the unresolved incident link to remain.");
+            }));
+
             cases.Add(CaseAsync("read_unknown_id_returns_null", "ReadAsync UnknownId ReturnsNull", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
@@ -410,6 +513,21 @@ namespace Test.Shared.Suites.Services
                     IsTenantAdmin = true
                 }).ConfigureAwait(false);
             }
+        }
+
+        private static async Task<Objective> CreateObjectiveWithMissingIncidentAsync(
+            TestDatabase testDb,
+            ObjectiveService objectives,
+            AuthContext auth,
+            string title,
+            string incidentId)
+        {
+            Objective objective = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+            {
+                Title = title
+            }).ConfigureAwait(false);
+            objective.IncidentIds.Add(incidentId);
+            return await testDb.Driver.Objectives.UpdateAsync(objective).ConfigureAwait(false);
         }
 
         private static Objective NotNull(Objective? objective)
