@@ -1,11 +1,14 @@
 namespace Test.Shared.Suites.E2E
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
+    using System.Collections.Specialized;
     using System.IO;
     using System.Linq;
     using System.Net.Http;
     using System.Net.WebSockets;
+    using System.Reflection;
     using System.Text;
     using System.Text.Json;
     using System.Threading;
@@ -13,10 +16,13 @@ namespace Test.Shared.Suites.E2E
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services.Interfaces;
     using Armada.Core.Settings;
+    using Armada.Server.WebSocket;
     using SyslogLogging;
     using Test.Shared.Infrastructure;
     using Touchstone.Core;
+    using WatsonWebserver.Core.WebSockets;
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
@@ -37,6 +43,45 @@ namespace Test.Shared.Suites.E2E
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+
+            cases.Add(CaseAsync("slow_client_does_not_block_tenant_broadcast", "SlowClient_DoesNotBlockTenantBroadcast", TestTags.Positive, () =>
+                AssertSlowClientDoesNotBlockAsync(
+                    "tenant-a",
+                    "user-a",
+                    "tenant-b",
+                    "user-b",
+                    "wave-",
+                    (ArmadaWebSocketHub hub, string marker) => hub.BroadcastToTenant("tenant-a", "mission.changed", new { marker }),
+                    true)));
+
+            cases.Add(CaseAsync("slow_client_does_not_block_cli_permission_broadcast", "SlowClient_DoesNotBlockCliPermissionBroadcast", TestTags.Positive, () =>
+                AssertSlowClientDoesNotBlockAsync(
+                    "tenant-a",
+                    "user-owner",
+                    "tenant-a",
+                    "user-other",
+                    "perm-",
+                    (ArmadaWebSocketHub hub, string marker) =>
+                    {
+                        CliPermissionRequest request = new CliPermissionRequest();
+                        request.Id = marker;
+                        request.TenantId = "tenant-a";
+                        request.UserId = "user-owner";
+                        request.ToolName = "Bash";
+                        hub.BroadcastCliPermission("cli_permission.requested", request);
+                    },
+                    false)));
+
+            cases.Add(CaseAsync("slow_client_does_not_block_command_reply", "SlowClient_DoesNotBlockCommandReply", TestTags.Positive, () =>
+                AssertSlowCommandSendDoesNotBlockAsync("{\"route\":\"command\",\"action\":\"list_fleets\"}", "Forbidden", false)));
+
+            cases.Add(CaseAsync("slow_client_does_not_block_unknown_route_error", "SlowClient_DoesNotBlockUnknownRouteError", TestTags.Positive, () =>
+                AssertSlowCommandSendDoesNotBlockAsync("{\"route\":\"other\"}", "Unknown route", false)));
+
+            cases.Add(CaseAsync("slow_client_does_not_block_handler_error", "SlowClient_DoesNotBlockHandlerError", TestTags.Positive, () =>
+                AssertSlowCommandSendDoesNotBlockAsync("{\"route\":\"subscribe\"}", "status unavailable", true)));
+
+            cases.Add(CaseAsync("outbound_queue_keeps_order_and_rejects_overflow_without_waiting", "OutboundQueue_KeepsOrderAndRejectsOverflowWithoutWaiting", TestTags.Positive, AssertOutputQueueIsolatesAHeldSendAsync));
 
             // Subscribe Tests
             cases.Add(CaseAsync("subscribe_returns_status_snapshot", "Subscribe_ReturnsStatusSnapshot", TestTags.Positive, async () =>
@@ -1963,6 +2008,546 @@ namespace Test.Shared.Suites.E2E
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+        private static async Task AssertSlowClientDoesNotBlockAsync(
+            string recipientTenantId,
+            string recipientUserId,
+            string otherTenantId,
+            string otherUserId,
+            string markerPrefix,
+            Action<ArmadaWebSocketHub, string> broadcast,
+            bool floodUntilDisconnected)
+        {
+            using (DeliveryHarness harness = DeliveryHarness.Create(false))
+            {
+                ScriptedSocket slow = harness.AddClient(recipientTenantId, recipientUserId, true);
+                ScriptedSocket fast = harness.AddClient(recipientTenantId, recipientUserId, false);
+                ScriptedSocket other = harness.AddClient(otherTenantId, otherUserId, false);
+                try
+                {
+                    await harness.BroadcastWhileHeldAsync(slow, fast, other, markerPrefix + "000", marker => broadcast(harness.Hub, marker)).ConfigureAwait(false);
+                    if (!floodUntilDisconnected) return;
+
+                    bool disconnected = false;
+                    for (int i = 1; i <= 128 && !disconnected; i++)
+                    {
+                        string marker = markerPrefix + i.ToString("D3");
+                        await harness.BroadcastWhileHeldAsync(slow, fast, other, marker, markerValue => broadcast(harness.Hub, markerValue)).ConfigureAwait(false);
+                        disconnected = slow.DisposeCount > 0;
+                    }
+
+                    Assert(slow.DisposeCount > 0, "A full outbound backlog must abort only the slow client while its send is still held.");
+                    await harness.BroadcastWhileHeldAsync(slow, fast, other, markerPrefix + "999", marker => broadcast(harness.Hub, marker)).ConfigureAwait(false);
+                    Assert(slow.ReleaseCompleted == false, "The held send must still be outstanding when the slow client is aborted.");
+                    AssertEqual(1, slow.SendCount, "Only the first frame may enter the held send.");
+                    AssertEqual(2, harness.Hub.ConnectionCount, "The fast client and the filtered client stay connected.");
+                    Assert(other.Contains(markerPrefix) == false, "A client outside the recipient filter must not receive the event.");
+                }
+                finally
+                {
+                    slow.Release();
+                    await harness.DrainAsync().ConfigureAwait(false);
+                }
+            }
+        }
+
+        private static async Task AssertSlowCommandSendDoesNotBlockAsync(string body, string replyMarker, bool failStatus)
+        {
+            using (DeliveryHarness harness = DeliveryHarness.Create(failStatus))
+            {
+                ScriptedSocket slow = harness.AddClient("tenant-a", "user-a", true);
+                ScriptedSocket fast = harness.AddClient("tenant-a", "user-a", false);
+                ScriptedSocket other = harness.AddClient("tenant-b", "user-b", false);
+                Task? handler = null;
+                try
+                {
+                    handler = Task.Run(() => harness.HandleAsync(slow, body));
+                    await slow.WaitUntilSendStartedAsync().ConfigureAwait(false);
+                    await harness.BroadcastWhileHeldAsync(
+                        slow,
+                        fast,
+                        other,
+                        "delivery-marker",
+                        marker => harness.Hub.BroadcastToTenant("tenant-a", "mission.changed", new { marker })).ConfigureAwait(false);
+                    await harness.WaitForCompletionAsync(handler, "The command handler must return while its send is still held.").ConfigureAwait(false);
+                    await slow.WaitForTextAsync(replyMarker).ConfigureAwait(false);
+                }
+                finally
+                {
+                    slow.Release();
+                    if (handler != null)
+                    {
+                        try { await handler.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
+                        catch (Exception ex) { _ = ex.Message; }
+                    }
+
+                    await harness.DrainAsync().ConfigureAwait(false);
+                }
+            }
+        }
+
+        private static async Task AssertOutputQueueIsolatesAHeldSendAsync()
+        {
+            TaskCompletionSource<bool> release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<bool> started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<bool> drained = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<bool> disconnected = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<bool> fastSent = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            List<string> heldFrames = new List<string>();
+            int disconnects = 0;
+
+            using (WebSocketClientOutputQueue held = new WebSocketClientOutputQueue(
+                async frame =>
+                {
+                    lock (heldFrames)
+                    {
+                        heldFrames.Add(frame);
+                        if (heldFrames.Count >= 2) drained.TrySetResult(true);
+                    }
+
+                    started.TrySetResult(true);
+                    await release.Task.ConfigureAwait(false);
+                },
+                error =>
+                {
+                    Interlocked.Increment(ref disconnects);
+                    disconnected.TrySetResult(true);
+                },
+                1))
+            using (WebSocketClientOutputQueue fast = new WebSocketClientOutputQueue(
+                frame =>
+                {
+                    fastSent.TrySetResult(frame == "event");
+                    return Task.CompletedTask;
+                },
+                error => throw new InvalidOperationException("The other queue must stay open."),
+                1))
+            {
+                try
+                {
+                    Assert(held.TryEnqueue("first"), "The first frame must be accepted.");
+                    using (CancellationTokenSource startedTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                    {
+                        await started.Task.WaitAsync(startedTimeout.Token).ConfigureAwait(false);
+                    }
+
+                    Assert(held.TryEnqueue("second"), "One waiting frame must fit behind the held send.");
+                    Assert(held.TryEnqueue("third") == false, "A full queue must reject the next frame without waiting.");
+                    using (CancellationTokenSource disconnectTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1)))
+                    {
+                        await disconnected.Task.WaitAsync(disconnectTimeout.Token).ConfigureAwait(false);
+                    }
+
+                    AssertEqual(1, Volatile.Read(ref disconnects));
+                    Assert(release.Task.IsCompleted == false, "Queue overflow must be reported while the send is still held.");
+                    Assert(fast.TryEnqueue("event"), "The other client must accept a frame while the first send is held.");
+                    using (CancellationTokenSource fastTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1)))
+                    {
+                        bool sent = await fastSent.Task.WaitAsync(fastTimeout.Token).ConfigureAwait(false);
+                        Assert(sent, "The other client must receive its frame while the first send is held.");
+                    }
+
+                    lock (heldFrames) AssertEqual("first", heldFrames[0]);
+                }
+                finally
+                {
+                    release.TrySetResult(true);
+                }
+
+                using (CancellationTokenSource orderTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                {
+                    await drained.Task.WaitAsync(orderTimeout.Token).ConfigureAwait(false);
+                }
+
+                lock (heldFrames)
+                {
+                    AssertEqual(2, heldFrames.Count);
+                    AssertEqual("first", heldFrames[0]);
+                    AssertEqual("second", heldFrames[1]);
+                }
+            }
+        }
+
+        #endregion
+
+        #region Private-Types
+
+        private sealed class DeliveryHarness : IDisposable
+        {
+            private readonly ConcurrentDictionary<Guid, WebSocketClientState> _Clients;
+            private readonly List<ScriptedSocket> _Sockets = new List<ScriptedSocket>();
+            private readonly List<Task> _Operations = new List<Task>();
+
+            private DeliveryHarness(ArmadaWebSocketHub hub, ConcurrentDictionary<Guid, WebSocketClientState> clients)
+            {
+                Hub = hub;
+                _Clients = clients;
+            }
+
+            public ArmadaWebSocketHub Hub { get; }
+
+            public static DeliveryHarness Create(bool failStatus)
+            {
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                IdleDatabaseDriver database = new IdleDatabaseDriver();
+                ArmadaWebSocketHub hub = new ArmadaWebSocketHub(
+                    logging,
+                    SlowClientAdmiralProxy.Create(failStatus),
+                    database,
+                    new RecordingMergeQueueService());
+                FieldInfo? clientsField = typeof(ArmadaWebSocketHub).GetField("_Clients", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert(clientsField != null, "The hub client map must be present.");
+                ConcurrentDictionary<Guid, WebSocketClientState> clients = (ConcurrentDictionary<Guid, WebSocketClientState>)clientsField.GetValue(hub)!;
+                return new DeliveryHarness(hub, clients);
+            }
+
+            public ScriptedSocket AddClient(string tenantId, string userId, bool holdSend)
+            {
+                ScriptedSocket socket = new ScriptedSocket(holdSend);
+                WebSocketRequestDescriptor descriptor = new WebSocketRequestDescriptor(
+                    "/ws",
+                    new NameValueCollection(),
+                    new Dictionary<string, string>(),
+                    "13",
+                    new List<string>(),
+                    "127.0.0.1",
+                    9);
+                WebSocketSession session = new WebSocketSession(socket, descriptor, Guid.NewGuid(), 8192, 1048576, 1000);
+                socket.Session = session;
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, false, "Bearer");
+                _Clients[session.Id] = new WebSocketClientState(session, auth);
+                _Sockets.Add(socket);
+                return socket;
+            }
+
+            public Task HandleAsync(ScriptedSocket socket, string body)
+            {
+                WebSocketClientState? client = null;
+                foreach (WebSocketClientState candidate in _Clients.Values)
+                {
+                    if (ReferenceEquals(candidate.Session, socket.Session))
+                    {
+                        client = candidate;
+                        break;
+                    }
+                }
+
+                Assert(client != null, "The command client must be registered.");
+                MethodInfo? method = typeof(ArmadaWebSocketHub).GetMethod(
+                    "HandleMessageAsync",
+                    BindingFlags.Instance | BindingFlags.NonPublic,
+                    null,
+                    new Type[] { typeof(WebSocketClientState), typeof(string) },
+                    null);
+                Assert(method != null, "HandleMessageAsync must be present.");
+                object? result = method.Invoke(Hub, new object[] { client, body });
+                Task handler = (Task)result!;
+                _Operations.Add(handler);
+                return handler;
+            }
+
+            public async Task BroadcastWhileHeldAsync(ScriptedSocket slow, ScriptedSocket fast, ScriptedSocket other, string marker, Action<string> broadcast)
+            {
+                Task operation = Task.Run(() => broadcast(marker));
+                _Operations.Add(operation);
+                await slow.WaitUntilSendStartedAsync().ConfigureAwait(false);
+                await WaitForCompletionAsync(operation, "The broadcast must return while a client send is still held.").ConfigureAwait(false);
+                await fast.WaitForTextAsync(marker).ConfigureAwait(false);
+                Assert(other.Contains(marker) == false, "A filtered client must not receive the frame.");
+                Assert(slow.ReleaseCompleted == false, "The assertion must run before the held send is released.");
+            }
+
+            public async Task WaitForCompletionAsync(Task operation, string message)
+            {
+                using (CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1)))
+                {
+                    try
+                    {
+                        await operation.WaitAsync(timeout.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        Assert(false, message);
+                    }
+                }
+            }
+
+            public async Task DrainAsync()
+            {
+                foreach (ScriptedSocket socket in _Sockets) socket.Release();
+                foreach (Task operation in _Operations)
+                {
+                    try { await operation.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
+                    catch (Exception ex) { _ = ex.Message; }
+                }
+
+                FieldInfo? queuesField = typeof(ArmadaWebSocketHub).GetField("_OutputQueues", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (queuesField != null)
+                {
+                    object? value = queuesField.GetValue(Hub);
+                    if (value is System.Collections.IEnumerable queues)
+                    {
+                        foreach (object entry in queues)
+                        {
+                            PropertyInfo? valueProperty = entry.GetType().GetProperty("Value");
+                            if (valueProperty == null) continue;
+                            IDisposable? queue = valueProperty.GetValue(entry) as IDisposable;
+                            if (queue != null) queue.Dispose();
+                        }
+                    }
+                }
+            }
+
+            public void Dispose()
+            {
+                foreach (ScriptedSocket socket in _Sockets) socket.Shutdown();
+            }
+        }
+
+        private sealed class ScriptedSocket : WebSocket
+        {
+            private readonly bool _Hold;
+            private readonly object _Gate = new object();
+            private readonly List<string> _Frames = new List<string>();
+            private readonly List<FrameWait> _Waiters = new List<FrameWait>();
+            private readonly TaskCompletionSource<bool> _SendStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly TaskCompletionSource<bool> _Release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly SemaphoreSlim _Transport = new SemaphoreSlim(1, 1);
+            private volatile WebSocketState _State = WebSocketState.Open;
+            private int _SendCount;
+            private int _DisposeCount;
+
+            public ScriptedSocket(bool holdSend)
+            {
+                _Hold = holdSend;
+            }
+
+            public WebSocketSession? Session { get; set; }
+
+            public int SendCount => Volatile.Read(ref _SendCount);
+
+            public int DisposeCount => Volatile.Read(ref _DisposeCount);
+
+            public bool ReleaseCompleted => _Release.Task.IsCompleted;
+
+            public async Task WaitUntilSendStartedAsync()
+            {
+                using (CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                {
+                    await _SendStarted.Task.WaitAsync(timeout.Token).ConfigureAwait(false);
+                }
+            }
+
+            public Task WaitForTextAsync(string marker)
+            {
+                TaskCompletionSource<bool> waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                lock (_Gate)
+                {
+                    if (HasMarker(marker)) return Task.CompletedTask;
+                    _Waiters.Add(new FrameWait(marker, waiter));
+                }
+
+                return WaitForMarkerAsync(waiter);
+            }
+
+            public bool Contains(string marker)
+            {
+                lock (_Gate) return HasMarker(marker);
+            }
+
+            public void Release()
+            {
+                _Release.TrySetResult(true);
+            }
+
+            public void Shutdown()
+            {
+                Release();
+                _Transport.Dispose();
+            }
+
+            public override void Abort()
+            {
+                _State = WebSocketState.Aborted;
+            }
+
+            public override Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
+            {
+                return CloseAfterTransportAsync(cancellationToken);
+            }
+
+            public override Task CloseOutputAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
+            {
+                return Task.CompletedTask;
+            }
+
+            public override void Dispose()
+            {
+                Interlocked.Increment(ref _DisposeCount);
+                _State = WebSocketState.Aborted;
+            }
+
+            public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new WebSocketReceiveResult(0, WebSocketMessageType.Close, true));
+            }
+
+            public override async Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
+            {
+                string text = Encoding.UTF8.GetString(buffer.Array ?? Array.Empty<byte>(), buffer.Array == null ? 0 : buffer.Offset, buffer.Array == null ? 0 : buffer.Count);
+                AddFrame(text);
+                if (!_Hold)
+                {
+                    Interlocked.Increment(ref _SendCount);
+                    return;
+                }
+
+                await _Transport.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    Interlocked.Increment(ref _SendCount);
+                    _SendStarted.TrySetResult(true);
+                    await _Release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _Transport.Release();
+                }
+            }
+
+            public override WebSocketCloseStatus? CloseStatus => null;
+
+            public override string? CloseStatusDescription => null;
+
+            public override WebSocketState State => _State;
+
+            public override string? SubProtocol => null;
+
+            private async Task WaitForMarkerAsync(TaskCompletionSource<bool> waiter)
+            {
+                using (CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                {
+                    await waiter.Task.WaitAsync(timeout.Token).ConfigureAwait(false);
+                }
+            }
+
+            private async Task CloseAfterTransportAsync(CancellationToken cancellationToken)
+            {
+                await _Transport.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    _State = WebSocketState.Closed;
+                }
+                finally
+                {
+                    _Transport.Release();
+                }
+            }
+
+            private void AddFrame(string text)
+            {
+                List<FrameWait> ready = new List<FrameWait>();
+                lock (_Gate)
+                {
+                    _Frames.Add(text);
+                    for (int i = 0; i < _Waiters.Count; i++)
+                    {
+                        if (text.Contains(_Waiters[i].Marker, StringComparison.Ordinal)) ready.Add(_Waiters[i]);
+                    }
+
+                    for (int i = 0; i < ready.Count; i++) _Waiters.Remove(ready[i]);
+                }
+
+                for (int i = 0; i < ready.Count; i++) ready[i].Done.TrySetResult(true);
+            }
+
+            private bool HasMarker(string marker)
+            {
+                for (int i = 0; i < _Frames.Count; i++)
+                {
+                    if (_Frames[i].Contains(marker, StringComparison.Ordinal)) return true;
+                }
+
+                return false;
+            }
+        }
+
+        private sealed class FrameWait
+        {
+            public FrameWait(string marker, TaskCompletionSource<bool> done)
+            {
+                Marker = marker;
+                Done = done;
+            }
+
+            public string Marker { get; }
+
+            public TaskCompletionSource<bool> Done { get; }
+        }
+
+        private sealed class IdleDatabaseDriver : DatabaseDriver
+        {
+            public override Task InitializeAsync(CancellationToken token = default) => Task.CompletedTask;
+
+            public override Task<int> GetSchemaVersionAsync(CancellationToken token = default) => Task.FromResult(0);
+
+            public override int GetLatestSchemaVersion() => 0;
+
+            public override void Dispose()
+            {
+            }
+
+            internal override IReadOnlyList<SchemaMigration> GetMigrationsForVerification() => new List<SchemaMigration>();
+
+            internal override Task ReplayMigrationsAsync(CancellationToken token = default) => Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Admiral stand-in for the slow-client WebSocket cases. Status reads can fail on request.
+        /// Every other call returns a completed task.
+        /// </summary>
+        public class SlowClientAdmiralProxy : DispatchProxy
+        {
+            /// <summary>
+            /// When true, GetStatusAsync throws.
+            /// </summary>
+            public bool FailStatus { get; set; }
+
+            /// <summary>
+            /// Create the proxy.
+            /// </summary>
+            /// <param name="failStatus">Whether status reads throw.</param>
+            /// <returns>The admiral proxy.</returns>
+            public static IAdmiralService Create(bool failStatus)
+            {
+                IAdmiralService proxy = DispatchProxy.Create<IAdmiralService, SlowClientAdmiralProxy>();
+                ((SlowClientAdmiralProxy)(object)proxy).FailStatus = failStatus;
+                return proxy;
+            }
+
+            /// <inheritdoc />
+            protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+            {
+                if (targetMethod == null) throw new ArgumentNullException(nameof(targetMethod));
+                if (FailStatus && targetMethod.Name == "GetStatusAsync")
+                    throw new InvalidOperationException("status unavailable");
+
+                Type returnType = targetMethod.ReturnType;
+                if (returnType == typeof(Task)) return Task.CompletedTask;
+                if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>))
+                {
+                    Type resultType = returnType.GetGenericArguments()[0];
+                    object? result = resultType.IsValueType ? Activator.CreateInstance(resultType) : null;
+                    MethodInfo fromResult = typeof(Task).GetMethod(nameof(Task.FromResult), BindingFlags.Public | BindingFlags.Static)!;
+                    return fromResult.MakeGenericMethod(resultType).Invoke(null, new object?[] { result });
+                }
+
+                if (returnType == typeof(void)) return null;
+                if (returnType.IsValueType) return Activator.CreateInstance(returnType);
+                return null;
+            }
         }
 
         #endregion
