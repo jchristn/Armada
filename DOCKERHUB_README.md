@@ -1,5 +1,3 @@
-> The `feature/v1.3.0` branch is in development and pins compose images to `v1.3.0`. This documentation change does not publish those images. Use the v1.2.0 release checkout for the current published compose stack.
-
 <p align="center">
   <img src="https://raw.githubusercontent.com/jchristn/armada/main/assets/logo.png" alt="Armada Logo" width="200" />
 </p>

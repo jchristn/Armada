@@ -1,8 +1,8 @@
 # Changelog
 
-## 1.3.0 (in development)
+## 1.3.0
 
-- Align extension packaging with the v1.3.0 concurrency development branch.
+- Align extension packaging with the v1.3.0 release.
 
 ## 1.2.0
 

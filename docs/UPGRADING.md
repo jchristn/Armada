@@ -689,7 +689,3 @@ new number.
 **Harbors.** Black box capture and storage run on the Admiral only; a Harbor needs no change for it. Update each
 Harbor along with the Admiral as usual. How evidence is read from Harbor docks is in
 [HARBOR.md](HARBOR.md#black-box-evidence-on-harbor-hosted-missions).
-
-## v1.3.0 usage-selection foundations
-
-Migration 123 adds structured captain selection history, policy revisions, window evidence and reservation/cooldown storage. Migration 124 adds nullable active-probe start timing to usage snapshots; legacy and passive snapshots keep null and cannot prove settlement timing. Existing missions do not gain fabricated historical decisions. Migration 125 adds historical captain names, source timing/normalization evidence, an internal current-attempt pointer and a reservation reconciliation index. Existing unrecorded missions still have no fabricated decisions. Selection defaults to Observe/FirstAvailable; Observe now records actual versus hypothetical choices during dispatch/repair, with live Dashboard/REST/MCP policy controls. Enforce remains unavailable. Settings-file policy updates preserve the mounted inode and use a protected adjacent rollback journal for interrupted-write recovery. See [live configuration and Observe notes](usage-selection/LIVE_CONFIGURATION_AND_OBSERVE.md). Back up before upgrading; returning to a pre-migration binary requires restoring its database backup.
