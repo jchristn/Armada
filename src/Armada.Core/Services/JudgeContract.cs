@@ -93,12 +93,12 @@ namespace Armada.Core.Services
         {
             if (String.IsNullOrWhiteSpace(output) || String.IsNullOrWhiteSpace(sectionName)) return false;
 
-            string pattern =
-                @"(?im)^\s*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\d+\.\s*)?(?:\*\*|__|`)?"
-                + Regex.Escape(sectionName)
-                + @"(?:\*\*|__|`)?\s*(?::|-)?(?:\s|$)";
-
-            return Regex.IsMatch(output, pattern);
+            foreach (string line in output.Replace("\r\n", "\n").Split('\n'))
+            {
+                string normalized = NormalizeHeadingLine(line, out _);
+                if (String.Equals(normalized, sectionName, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -291,16 +291,12 @@ namespace Armada.Core.Services
         private static string ExtractSectionBody(string output, string sectionName)
         {
             string[] lines = output.Replace("\r\n", "\n").Split('\n');
-            string headingPattern =
-                @"(?i)^\s*(?:#{1,6}\s*)?(?:[-*]\s*)?(?:\d+\.\s*)?(?:\*\*|__|`)?"
-                + Regex.Escape(sectionName)
-                + @"(?:\*\*|__|`)?\s*(?::|-)?\s*$";
-            string anyHeadingPattern = @"^\s*#{1,6}\s+\S";
 
             int start = -1;
             for (int i = 0; i < lines.Length; i++)
             {
-                if (Regex.IsMatch(lines[i], headingPattern))
+                string normalized = NormalizeHeadingLine(lines[i], out _);
+                if (String.Equals(normalized, sectionName, StringComparison.OrdinalIgnoreCase))
                 {
                     start = i + 1;
                     break;
@@ -311,10 +307,88 @@ namespace Armada.Core.Services
             List<string> body = new List<string>();
             for (int i = start; i < lines.Length; i++)
             {
-                if (Regex.IsMatch(lines[i], anyHeadingPattern)) break;
+                string normalized = NormalizeHeadingLine(lines[i], out bool hasHeadingMarker);
+                if (hasHeadingMarker && normalized.Length > 0) break;
                 body.Add(lines[i]);
             }
             return String.Join("\n", body).Trim();
+        }
+
+        private static string NormalizeHeadingLine(string line, out bool hasHeadingMarker)
+        {
+            string value = (line ?? String.Empty).Trim();
+            hasHeadingMarker = false;
+            bool removedTrailingPunctuation = false;
+
+            bool changed;
+            do
+            {
+                changed = false;
+                value = value.TrimStart();
+
+                Match heading = Regex.Match(value, @"^#{1,6}\s+");
+                if (heading.Success)
+                {
+                    value = value.Substring(heading.Length);
+                    hasHeadingMarker = true;
+                    changed = true;
+                    continue;
+                }
+
+                Match list = Regex.Match(value, @"^(?:[-*]\s+|\d+\.\s+)");
+                if (list.Success)
+                {
+                    value = value.Substring(list.Length);
+                    changed = true;
+                    continue;
+                }
+
+                string? leadingDecoration = GetLeadingDecoration(value);
+                if (leadingDecoration != null)
+                {
+                    value = value.Substring(leadingDecoration.Length);
+                    changed = true;
+                    continue;
+                }
+
+                value = value.TrimEnd();
+                string? trailingDecoration = GetTrailingDecoration(value);
+                if (trailingDecoration != null)
+                {
+                    value = value.Substring(0, value.Length - trailingDecoration.Length);
+                    changed = true;
+                    continue;
+                }
+
+                if (!removedTrailingPunctuation
+                    && (value.EndsWith(":", StringComparison.Ordinal) || value.EndsWith("-", StringComparison.Ordinal)))
+                {
+                    value = value.Substring(0, value.Length - 1);
+                    removedTrailingPunctuation = true;
+                    changed = true;
+                }
+            }
+            while (changed);
+
+            return value.Trim();
+        }
+
+        private static string? GetLeadingDecoration(string value)
+        {
+            foreach (string decoration in new[] { "**", "__", "`", "*", "_" })
+            {
+                if (value.StartsWith(decoration, StringComparison.Ordinal)) return decoration;
+            }
+            return null;
+        }
+
+        private static string? GetTrailingDecoration(string value)
+        {
+            foreach (string decoration in new[] { "**", "__", "`", "*", "_" })
+            {
+                if (value.EndsWith(decoration, StringComparison.Ordinal)) return decoration;
+            }
+            return null;
         }
 
         #endregion
