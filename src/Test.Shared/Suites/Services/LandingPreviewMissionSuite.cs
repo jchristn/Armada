@@ -14,8 +14,9 @@ namespace Test.Shared.Suites.Services
     using static Test.Shared.Infrastructure.Asserts;
 
     /// <summary>
-    /// Mission landing preview regressions: a Pending mission is never Ready To Land (F11), a mission whose effective
-    /// landing mode is None reports manual landing only and is not ready (F12), and a Complete mission is not ready (F22).
+    /// Mission landing preview regressions: a Pending mission is never Ready To Land, a mission whose effective
+    /// landing mode is None reports manual landing only and is not ready, a Complete mission is not ready, and the
+    /// reported action and branch-policy checks use the same mode the landing handler resolves.
     /// </summary>
     public sealed class LandingPreviewMissionSuite : IArmadaTestSuite
     {
@@ -79,6 +80,14 @@ namespace Test.Shared.Suites.Services
                 AssertEqual(LandingModeEnum.LocalMerge, preview.EffectiveLandingMode, "effective mode from the voyage");
             }));
 
+            cases.Add(CaseAsync("voyage_local_merge_action", "A voyage LocalMerge replaces the vessel MergeAndPush action", TestTags.Positive, async () =>
+            {
+                LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, LandingModeEnum.MergeAndPush, LandingModeEnum.LocalMerge).ConfigureAwait(false);
+                AssertEqual("Merge the branch into the target branch in the working directory, without pushing", preview.ExpectedLandingAction, "expected action");
+                AssertEqual(LandingModeEnum.LocalMerge, preview.LandingMode, "reported landing mode");
+                AssertEqual(LandingModeEnum.LocalMerge, preview.EffectiveLandingMode, "effective mode");
+            }));
+
             foreach (LandingModeEnum localMode in new[] { LandingModeEnum.LocalMerge, LandingModeEnum.MergeAndPush })
             {
                 LandingModeEnum mode = localMode;
@@ -113,8 +122,69 @@ namespace Test.Shared.Suites.Services
             cases.Add(CaseAsync("voyage_mode_overrides_vessel_none", "A voyage landing mode overrides the vessel's None", TestTags.Positive, async () =>
             {
                 LandingPreviewResult preview = await PreviewAsync(MissionStatusEnum.WorkProduced, LandingModeEnum.None, LandingModeEnum.LocalMerge).ConfigureAwait(false);
+                AssertFalse(preview.Issues.Exists(i => i.Code == "manual_landing_only"), "manual landing warning");
+                AssertEqual("Merge the branch into the target branch in the working directory, without pushing", preview.ExpectedLandingAction, "expected action");
+                AssertEqual(LandingModeEnum.LocalMerge, preview.LandingMode, "reported landing mode");
                 AssertFalse(preview.ManualLandingOnly, "voyage mode applies");
                 AssertEqual(LandingModeEnum.LocalMerge, preview.EffectiveLandingMode, "effective mode from the voyage");
+            }));
+
+            cases.Add(CaseAsync("voyage_pull_request_on_protected_target", "A voyage PullRequest on a protected target is ready to land", TestTags.Positive, async () =>
+            {
+                LandingPreviewResult preview = await PreviewAsync(
+                    MissionStatusEnum.WorkProduced,
+                    LandingModeEnum.LocalMerge,
+                    LandingModeEnum.PullRequest,
+                    "feature/preview",
+                    vessel =>
+                    {
+                        vessel.DefaultBranch = "main";
+                        vessel.ProtectedBranchPatterns = new List<string> { "main" };
+                        vessel.RequirePullRequestForProtectedBranches = true;
+                    }).ConfigureAwait(false);
+                AssertFalse(preview.Issues.Exists(issue => issue.Code == "protected_branch_requires_pr"), "protected branch error");
+                AssertTrue(preview.IsReadyToLand, "ready when no other error exists");
+                AssertEqual(LandingModeEnum.PullRequest, preview.LandingMode, "reported landing mode");
+                AssertEqual("Open or update a pull request", preview.ExpectedLandingAction, "expected action");
+            }));
+
+            cases.Add(CaseAsync("null_modes_follow_global_pull_request", "Null vessel and voyage modes follow the global PullRequest setting", TestTags.Positive, async () =>
+            {
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.LandingMode = LandingModeEnum.PullRequest;
+                LandingPreviewResult preview = await PreviewAsync(
+                    MissionStatusEnum.WorkProduced,
+                    null,
+                    null,
+                    "feature/preview",
+                    null,
+                    settings).ConfigureAwait(false);
+                AssertEqual("Open or update a pull request", preview.ExpectedLandingAction, "expected action");
+                AssertTrue(preview.Issues.Exists(issue => issue.Code == "landing_mode_inherited"), "inherited warning");
+                AssertFalse(preview.Issues.Exists(issue => issue.Code == "manual_landing_only"), "manual landing warning");
+                AssertEqual(LandingModeEnum.PullRequest, preview.LandingMode, "reported landing mode");
+                AssertEqual(LandingModeEnum.PullRequest, preview.EffectiveLandingMode, "effective mode");
+            }));
+
+            cases.Add(CaseAsync("vessel_null_mode_follows_global_pull_request", "A vessel preview with no stored mode follows the global PullRequest setting", TestTags.Positive, async () =>
+            {
+                ArmadaSettings settings = new ArmadaSettings();
+                settings.LandingMode = LandingModeEnum.PullRequest;
+                LandingPreviewResult preview = await PreviewVesselAsync(
+                    null,
+                    "feature/preview",
+                    vessel =>
+                    {
+                        vessel.DefaultBranch = "main";
+                        vessel.ProtectedBranchPatterns = new List<string> { "main" };
+                        vessel.RequirePullRequestForProtectedBranches = true;
+                    },
+                    settings).ConfigureAwait(false);
+                AssertFalse(preview.Issues.Exists(issue => issue.Code == "protected_branch_requires_pr"), "protected branch error");
+                AssertEqual("Open or update a pull request", preview.ExpectedLandingAction, "expected action");
+                AssertTrue(preview.Issues.Exists(issue => issue.Code == "landing_mode_inherited"), "inherited warning");
+                AssertEqual(LandingModeEnum.PullRequest, preview.LandingMode, "reported landing mode");
+                AssertTrue(preview.IsReadyToLand, "ready when no other error exists");
             }));
 
             cases.Add(CaseAsync("complete_mission_not_ready", "A Complete mission is not Ready To Land", TestTags.Negative, async () =>
@@ -136,13 +206,20 @@ namespace Test.Shared.Suites.Services
             return PreviewAsync(status, vesselMode, voyageMode, "armada/preview", null);
         }
 
-        private static async Task<LandingPreviewResult> PreviewAsync(MissionStatusEnum status, LandingModeEnum? vesselMode, LandingModeEnum? voyageMode, string branchName, Action<Vessel>? configureVessel)
+        private static async Task<LandingPreviewResult> PreviewAsync(
+            MissionStatusEnum status,
+            LandingModeEnum? vesselMode,
+            LandingModeEnum? voyageMode,
+            string branchName,
+            Action<Vessel>? configureVessel,
+            ArmadaSettings? settings = null)
         {
             using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
             {
                 LoggingModule logging = new LoggingModule();
                 logging.Settings.EnableConsole = false;
-                LandingPreviewService service = new LandingPreviewService(testDb.Driver, logging, new ArmadaSettings());
+                ArmadaSettings previewSettings = settings ?? new ArmadaSettings();
+                LandingPreviewService service = new LandingPreviewService(testDb.Driver, logging, previewSettings);
 
                 Vessel vessel = new Vessel("preview-vessel", "https://github.com/test/repo.git");
                 vessel.DefaultBranch = "main";
@@ -165,6 +242,29 @@ namespace Test.Shared.Suites.Services
                 mission = await testDb.Driver.Missions.CreateAsync(mission).ConfigureAwait(false);
                 AuthContext auth = AuthContext.Authenticated("default", "default", true, true, "UnitTest");
                 return await service.PreviewForMissionAsync(auth, vessel, mission).ConfigureAwait(false);
+            }
+        }
+
+        private static async Task<LandingPreviewResult> PreviewVesselAsync(
+            LandingModeEnum? vesselMode,
+            string sourceBranch,
+            Action<Vessel>? configureVessel,
+            ArmadaSettings settings)
+        {
+            using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+            {
+                LoggingModule logging = new LoggingModule();
+                logging.Settings.EnableConsole = false;
+                LandingPreviewService service = new LandingPreviewService(testDb.Driver, logging, settings);
+
+                Vessel vessel = new Vessel("preview-vessel", "https://github.com/test/repo.git");
+                vessel.DefaultBranch = "main";
+                vessel.LandingMode = vesselMode;
+                configureVessel?.Invoke(vessel);
+                vessel = await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                AuthContext auth = AuthContext.Authenticated("default", "default", true, true, "UnitTest");
+                return await service.PreviewForVesselAsync(auth, vessel, sourceBranch).ConfigureAwait(false);
             }
         }
 
