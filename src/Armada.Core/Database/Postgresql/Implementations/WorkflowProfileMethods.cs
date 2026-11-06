@@ -371,10 +371,10 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 profile.Scope = scope;
                 profile.OwnershipScope = System.Enum.TryParse<Armada.Core.Enums.ScopeEnum>(reader["ownership_scope"]?.ToString(), true, out Armada.Core.Enums.ScopeEnum __os) ? __os : Armada.Core.Enums.ScopeEnum.TenantWide;
 
-            profile.LanguageHints = Deserialize<List<string>>(NullableString(reader["language_hints_json"])) ?? new List<string>();
-            profile.RequiredSecrets = Deserialize<List<string>>(NullableString(reader["required_secrets_json"])) ?? new List<string>();
-            profile.ExpectedArtifacts = Deserialize<List<string>>(NullableString(reader["expected_artifacts_json"])) ?? new List<string>();
-            profile.Environments = Deserialize<List<WorkflowEnvironmentProfile>>(NullableString(reader["environments_json"])) ?? new List<WorkflowEnvironmentProfile>();
+            profile.LanguageHints = Deserialize<List<string>>(NullableString(reader["language_hints_json"]), profile.Id, "language_hints_json") ?? new List<string>();
+            profile.RequiredSecrets = Deserialize<List<string>>(NullableString(reader["required_secrets_json"]), profile.Id, "required_secrets_json") ?? new List<string>();
+            profile.ExpectedArtifacts = Deserialize<List<string>>(NullableString(reader["expected_artifacts_json"]), profile.Id, "expected_artifacts_json") ?? new List<string>();
+            profile.Environments = Deserialize<List<WorkflowEnvironmentProfile>>(NullableString(reader["environments_json"]), profile.Id, "environments_json") ?? new List<WorkflowEnvironmentProfile>();
             return profile;
         }
 
@@ -383,12 +383,16 @@ namespace Armada.Core.Database.Postgresql.Implementations
             return JsonSerializer.Serialize(value ?? Activator.CreateInstance<T>(), _Json);
         }
 
-        private static T? Deserialize<T>(string? json)
+        private static T? Deserialize<T>(string? json, string entityId, string columnName)
         {
             if (String.IsNullOrWhiteSpace(json)) return default;
             try
             {
                 return JsonSerializer.Deserialize<T>(json, _Json);
+            }
+            catch (JsonException exception)
+            {
+                throw new InvalidOperationException("Invalid JSON in " + columnName + " for row " + entityId + ".", exception);
             }
             catch
             {

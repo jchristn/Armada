@@ -314,7 +314,7 @@ namespace Armada.Core.Database.SqlServer.Implementations
 
             if (Enum.TryParse(reader["kind"].ToString(), true, out EnvironmentKindEnum kind))
                 environment.Kind = kind;
-            environment.VerificationDefinitions = Deserialize<List<DeploymentVerificationDefinition>>(SqlServerDatabaseDriver.NullableString(reader["verification_definitions_json"])) ?? new List<DeploymentVerificationDefinition>();
+            environment.VerificationDefinitions = Deserialize<List<DeploymentVerificationDefinition>>(SqlServerDatabaseDriver.NullableString(reader["verification_definitions_json"]), environment.Id, "verification_definitions_json") ?? new List<DeploymentVerificationDefinition>();
 
             return environment;
         }
@@ -324,12 +324,16 @@ namespace Armada.Core.Database.SqlServer.Implementations
             return new SqlParameter(parameter.ParameterName, parameter.Value ?? DBNull.Value);
         }
 
-        private static T? Deserialize<T>(string? json)
+        private static T? Deserialize<T>(string? json, string entityId, string columnName)
         {
             if (String.IsNullOrWhiteSpace(json)) return default;
             try
             {
                 return JsonSerializer.Deserialize<T>(json, _Json);
+            }
+            catch (JsonException exception)
+            {
+                throw new InvalidOperationException("Invalid JSON in " + columnName + " for row " + entityId + ".", exception);
             }
             catch
             {
