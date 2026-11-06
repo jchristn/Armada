@@ -81,7 +81,7 @@ namespace Armada.Core.Services.Interfaces
 
         /// <summary>
         /// Explain why a Pending mission is still waiting for a captain, using the same gates as
-        /// <see cref="TryAssignAsync"/> without changing anything. Returns null when the mission is not Pending.
+        /// <see cref="TryAssignAsync(Mission, Vessel, CancellationToken)"/> without changing anything. Returns null when the mission is not Pending.
         /// </summary>
         /// <param name="mission">Mission.</param>
         /// <param name="token">Cancellation token.</param>
