@@ -226,11 +226,29 @@ namespace Armada.Core.Services
                     try { if (!process.HasExited) process.Kill(true); }
                     catch { }
                 }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    try { if (!process.HasExited) process.Kill(true); }
+                    catch { }
+                    throw;
+                }
+
+                Task allOutput = Task.WhenAll(stdoutTask, stderrTask);
+                if (await Task.WhenAny(allOutput, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false) != allOutput)
+                {
+                    try { if (!process.HasExited) process.Kill(true); }
+                    catch { }
+                    return new DefinitionOfDoneResult(DefinitionOfDoneOutcomeEnum.Infra, phase + " command output was incomplete because the output drain exceeded its limit");
+                }
 
                 string stdout = await stdoutTask.ConfigureAwait(false);
                 string stderr = await stderrTask.ConfigureAwait(false);
                 output = (stdout + "\n" + stderr).Trim();
                 if (!timedOut) exitCode = process.ExitCode;
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
