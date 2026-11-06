@@ -7,6 +7,7 @@ import {
   getMissionDiff, getMissionLog,
 } from '../api/client';
 import { listAll } from '../api/paging';
+import { reconcileServerPage, useListRequestGuard } from '../lib/serverPage';
 import type { MergeEntry, Vessel } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -82,21 +83,30 @@ export default function MergeQueue() {
     return v?.name || id.substring(0, 8);
   }, [vessels]);
 
+  const beginListRequest = useListRequestGuard();
+
   const load = useCallback(async () => {
+    const request = beginListRequest();
     try {
       setLoading(true);
       const result = await listMergeQueue({ pageNumber, pageSize, filters: userScope ? { userId: userScope } : undefined });
+      if (!request.isCurrent()) return;
+      const decision = reconcileServerPage(pageNumber, result.totalPages);
+      if (!decision.accept) {
+        setPageNumber(decision.pageNumber);
+        return;
+      }
       setEntries(result.objects || []);
-      setTotalPages(result.totalPages || 1);
+      setTotalPages(decision.totalPages);
       setTotalRecords(result.totalRecords || 0);
       setSelected([]);
       setError('');
     } catch {
-      setError(t('Failed to load merge queue.'));
+      if (request.isCurrent()) setError(t('Failed to load merge queue.'));
     } finally {
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
     }
-  }, [pageNumber, pageSize, userScope, t]);
+  }, [beginListRequest, pageNumber, pageSize, userScope, t]);
 
   useEffect(() => { load(); }, [load]);
 

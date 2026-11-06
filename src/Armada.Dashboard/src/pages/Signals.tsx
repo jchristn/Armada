@@ -23,6 +23,7 @@ import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { SIGNAL_TYPES, buildSendSignalRequest, signalListFilters } from '../lib/signals';
+import { reconcileServerPage, useListRequestGuard } from '../lib/serverPage';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 
 type SortDir = 'asc' | 'desc';
@@ -76,22 +77,31 @@ export default function Signals() {
     return c?.name || id;
   }, [captains, t]);
 
+  const beginListRequest = useListRequestGuard();
+
   const load = useCallback(async () => {
+    const request = beginListRequest();
     setLoading(true);
     try {
       const filters = signalListFilters({ type: filterType, toCaptainId: filterToCaptain, unreadOnly: filterUnreadOnly, userId: userScope });
       const result = await listSignals({ pageNumber: page, pageSize, filters });
+      if (!request.isCurrent()) return;
+      const decision = reconcileServerPage(page, result.totalPages);
+      if (!decision.accept) {
+        setPage(decision.pageNumber);
+        return;
+      }
       setSignals(result.objects || []);
-      setTotalPages(result.totalPages || 0);
+      setTotalPages(decision.totalPages);
       setTotalRecords(result.totalRecords || 0);
       setTotalMs(result.totalMs || 0);
       setSelected([]);
     } catch {
-      setError(t('Failed to load signals.'));
+      if (request.isCurrent()) setError(t('Failed to load signals.'));
     } finally {
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
     }
-  }, [page, pageSize, filterType, filterToCaptain, filterUnreadOnly, userScope, t]);
+  }, [beginListRequest, page, pageSize, filterType, filterToCaptain, filterUnreadOnly, userScope, t]);
 
   useEffect(() => { load(); }, [load]);
 
