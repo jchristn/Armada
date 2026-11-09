@@ -23,6 +23,7 @@ namespace Armada.Core.Services
         private readonly DatabaseDriver _Database;
         private readonly SemaphoreSlim _BackfillLock = new SemaphoreSlim(1, 1);
         private bool _BackfillCompleted = false;
+        private const string _DeletedEventType = "objective.deleted";
         private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
@@ -297,6 +298,8 @@ namespace Armada.Core.Services
             List<ArmadaEvent> snapshots = await ReadObjectiveSnapshotEventsAsync(auth, id, token).ConfigureAwait(false);
             if (existing == null && snapshots.Count == 0)
                 throw new KeyNotFoundException("Objective not found.");
+
+            await WriteDeletionMarkerAsync(auth, id, token).ConfigureAwait(false);
 
             if (existing != null)
             {
@@ -625,6 +628,7 @@ namespace Armada.Core.Services
         private async Task BackfillFromSnapshotsAsync(CancellationToken token)
         {
             Dictionary<string, ArmadaEvent> latestByObjectiveId = new Dictionary<string, ArmadaEvent>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> deletedObjectiveIds = await ReadDeletedObjectiveIdsAsync(token).ConfigureAwait(false);
             int pageNumber = 1;
 
             while (true)
@@ -641,6 +645,9 @@ namespace Armada.Core.Services
                     && String.Equals(evt.EventType, "objective.snapshot", StringComparison.OrdinalIgnoreCase)))
                 {
                     if (String.IsNullOrWhiteSpace(snapshot.EntityId))
+                        continue;
+
+                    if (deletedObjectiveIds.Contains(snapshot.EntityId))
                         continue;
 
                     if (!latestByObjectiveId.TryGetValue(snapshot.EntityId, out ArmadaEvent? existing)
@@ -669,6 +676,9 @@ namespace Armada.Core.Services
 
         private async Task<Objective?> TryRehydrateObjectiveFromSnapshotsAsync(AuthContext auth, string id, CancellationToken token)
         {
+            if (await IsObjectiveDeletedAsync(id, token).ConfigureAwait(false))
+                return null;
+
             List<ArmadaEvent> snapshots = await ReadObjectiveSnapshotEventsAsync(auth, id, token).ConfigureAwait(false);
             Objective? objective = ProjectLatestObjective(snapshots);
             if (objective == null)
@@ -683,6 +693,73 @@ namespace Armada.Core.Services
         {
             await UpsertObjectiveRowAsync(objective, token, skipIfExistingNewer: false).ConfigureAwait(false);
             await WriteSnapshotAsync(auth, objective, token).ConfigureAwait(false);
+            await ClearDeletionMarkersAsync(objective.Id, token).ConfigureAwait(false);
+        }
+
+        private async Task<HashSet<string>> ReadDeletedObjectiveIdsAsync(CancellationToken token)
+        {
+            HashSet<string> ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int pageNumber = 1;
+            while (true)
+            {
+                EnumerationResult<ArmadaEvent> page = await _Database.Events.EnumerateAsync(new EnumerationQuery
+                {
+                    PageNumber = pageNumber,
+                    PageSize = 1000,
+                    EventType = _DeletedEventType
+                }, token).ConfigureAwait(false);
+
+                foreach (ArmadaEvent marker in page.Objects)
+                {
+                    if (!String.IsNullOrWhiteSpace(marker.EntityId))
+                        ids.Add(marker.EntityId);
+                }
+
+                if (page.PageNumber >= page.TotalPages || page.Objects.Count == 0)
+                    break;
+
+                pageNumber++;
+            }
+
+            return ids;
+        }
+
+        private async Task<bool> IsObjectiveDeletedAsync(string id, CancellationToken token)
+        {
+            ArmadaEvent? marker = await _Database.Events.ReadAsync(DeletionMarkerId(id), token).ConfigureAwait(false);
+            return marker != null
+                && String.Equals(marker.EventType, _DeletedEventType, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task WriteDeletionMarkerAsync(AuthContext auth, string id, CancellationToken token)
+        {
+            string markerId = DeletionMarkerId(id);
+            if (await _Database.Events.ReadAsync(markerId, token).ConfigureAwait(false) != null)
+                return;
+
+            await _Database.Events.CreateAsync(new ArmadaEvent
+            {
+                Id = markerId,
+                TenantId = auth.IsAdmin ? null : auth.TenantId,
+                UserId = auth.UserId,
+                EventType = _DeletedEventType,
+                EntityType = "objective",
+                EntityId = id,
+                Message = id,
+                CreatedUtc = DateTime.UtcNow
+            }, token).ConfigureAwait(false);
+        }
+
+        private async Task ClearDeletionMarkersAsync(string id, CancellationToken token)
+        {
+            ArmadaEvent? marker = await _Database.Events.ReadAsync(DeletionMarkerId(id), token).ConfigureAwait(false);
+            if (marker != null && String.Equals(marker.EventType, _DeletedEventType, StringComparison.OrdinalIgnoreCase))
+                await _Database.Events.DeleteAsync(marker.Id, token).ConfigureAwait(false);
+        }
+
+        private static string DeletionMarkerId(string id)
+        {
+            return "objdel_" + id;
         }
 
         private async Task UpsertObjectiveRowAsync(Objective objective, CancellationToken token, bool skipIfExistingNewer)
