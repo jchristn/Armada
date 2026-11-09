@@ -42,33 +42,42 @@ namespace Armada.Proxy.Services
         }
 
         /// <summary>
-        /// Send a request and wait for the correlated response.
+        /// Send a request and wait for the correlated response. One deadline, started before the
+        /// send, bounds both the send and the response wait, so a sender that blocks still times
+        /// out. The pending entry is removed on every exit.
         /// </summary>
+        /// <param name="method">Request method name.</param>
+        /// <param name="payload">Optional request payload.</param>
+        /// <param name="timeout">Deadline for the send and the response wait.</param>
+        /// <param name="token">Caller cancellation token.</param>
+        /// <param name="requesterIp">Optional requester address forwarded on the envelope.</param>
+        /// <returns>The correlated response envelope.</returns>
+        /// <exception cref="TimeoutException">The deadline passed before the response arrived.</exception>
+        /// <exception cref="OperationCanceledException">The caller's token was cancelled.</exception>
         public async Task<RemoteTunnelEnvelope> SendRequestAsync(string method, object? payload, TimeSpan timeout, CancellationToken token, string? requesterIp = null)
         {
             string correlationId = Guid.NewGuid().ToString("N");
             TaskCompletionSource<RemoteTunnelEnvelope> tcs = new TaskCompletionSource<RemoteTunnelEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
             _PendingRequests[correlationId] = tcs;
 
-            try
+            using (CancellationTokenSource deadline = new CancellationTokenSource(timeout))
+            using (CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(token, deadline.Token))
             {
-                await SendAsync(RemoteTunnelProtocol.CreateRequest(method, payload, correlationId, requesterIp), token).ConfigureAwait(false);
-
-                using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(token);
-                timeoutSource.CancelAfter(timeout);
-                using CancellationTokenRegistration registration = timeoutSource.Token.Register(() =>
+                try
                 {
-                    if (_PendingRequests.TryRemove(correlationId, out TaskCompletionSource<RemoteTunnelEnvelope>? removed))
-                    {
-                        removed.TrySetException(new TimeoutException("Timed out waiting for tunnel response to " + method + "."));
-                    }
-                });
-
-                return await tcs.Task.ConfigureAwait(false);
-            }
-            finally
-            {
-                _PendingRequests.TryRemove(correlationId, out TaskCompletionSource<RemoteTunnelEnvelope>? _);
+                    Task send = SendAsync(RemoteTunnelProtocol.CreateRequest(method, payload, correlationId, requesterIp), linked.Token);
+                    ObserveFault(send);
+                    await send.WaitAsync(linked.Token).ConfigureAwait(false);
+                    return await tcs.Task.WaitAsync(linked.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!token.IsCancellationRequested && deadline.IsCancellationRequested)
+                {
+                    throw new TimeoutException("Timed out waiting for tunnel response to " + method + ".");
+                }
+                finally
+                {
+                    _PendingRequests.TryRemove(correlationId, out TaskCompletionSource<RemoteTunnelEnvelope>? _);
+                }
             }
         }
 
@@ -103,6 +112,28 @@ namespace Armada.Proxy.Services
                     waiter.TrySetException(ex);
                 }
             }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        /// <summary>
+        /// A send abandoned at the deadline can still fault later. Observe that fault so it is not
+        /// raised as an unobserved task exception.
+        /// </summary>
+        /// <param name="send">Send task that may outlive the request.</param>
+        private static void ObserveFault(Task send)
+        {
+            _ = send.ContinueWith(
+                completed =>
+                {
+                    Exception? observed = completed.Exception;
+                    _ = observed;
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
 
         #endregion
