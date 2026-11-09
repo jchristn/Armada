@@ -116,6 +116,37 @@ namespace Armada.Core.Database.SqlServer.Implementations
         }
 
         /// <inheritdoc />
+        public async Task<bool> UpdateHealthAsync(ModelEndpoint endpoint, DateTime expectedLastUpdateUtc, CancellationToken token = default)
+        {
+            if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
+            using (SqlConnection conn = new SqlConnection(_Driver.ConnectionString))
+            {
+                await conn.OpenAsync(token).ConfigureAwait(false);
+                using (SqlCommand cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = @"UPDATE model_endpoints SET
+                        health_status = @health_status,
+                        last_health_check_utc = @last_health_check_utc,
+                        last_health_error = @last_health_error,
+                        last_latency_ms = @last_latency_ms,
+                        health_history_json = @health_history_json,
+                        last_update_utc = @last_update_utc
+                        WHERE id = @id AND last_update_utc = @expected_last_update_utc;";
+                    cmd.Parameters.AddWithValue("@id", endpoint.Id);
+                    cmd.Parameters.AddWithValue("@health_status", endpoint.HealthStatus.ToString());
+                    cmd.Parameters.AddWithValue("@last_health_check_utc", endpoint.LastHealthCheckUtc.HasValue ? (object)SqlServerDatabaseDriver.ToIso8601(endpoint.LastHealthCheckUtc.Value) : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@last_health_error", (object?)endpoint.LastHealthError ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@last_latency_ms", endpoint.LastLatencyMs.HasValue ? (object)endpoint.LastLatencyMs.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@health_history_json", JsonSerializer.Serialize(endpoint.HealthHistory ?? new List<ModelEndpointHealthRecord>(), _Json));
+                    cmd.Parameters.AddWithValue("@last_update_utc", SqlServerDatabaseDriver.ToIso8601(endpoint.LastUpdateUtc));
+                    cmd.Parameters.AddWithValue("@expected_last_update_utc", SqlServerDatabaseDriver.ToIso8601(expectedLastUpdateUtc));
+                    int changed = await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    return changed == 1;
+                }
+            }
+        }
+
+        /// <inheritdoc />
         public async Task<ModelEndpoint?> ReadAsync(string id, CancellationToken token = default)
         {
             if (String.IsNullOrWhiteSpace(id)) throw new ArgumentNullException(nameof(id));

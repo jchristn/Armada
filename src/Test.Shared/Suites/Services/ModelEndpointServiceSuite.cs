@@ -2,6 +2,9 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
+    using System.Net;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Enums;
@@ -15,7 +18,8 @@ namespace Test.Shared.Suites.Services
 
     /// <summary>
     /// Descriptors for <see cref="ModelEndpointService"/>: CRUD over a live SQLite store, provider/kind
-    /// capability guards, API-key preservation on update, and base-URL health deduplication. Positive
+    /// capability guards, API-key preservation on update, and base-URL health deduplication. Health
+    /// cases hold the probe request, then save configuration or overlap a second probe. Positive
     /// cases assert creation, scoped enumeration, key preservation, and URL normalization; negative cases
     /// assert rejection of the unsupported Anthropic-embedding and Voyage-inference combinations, the
     /// missing-base-URL path, and the audited null-id / not-found paths.
@@ -717,6 +721,148 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<ArgumentException>(() => service.CreateAsync(AuthContext.Authenticated("ten_cloud", "usr_cloud", false, true, "UnitTest"), endpoint)).ConfigureAwait(false);
             }));
 
+            cases.Add(CaseAsync("probe_keeps_configuration_saved_during_health_check", "A configuration save during a health probe keeps the model, URL, and key", TestTags.Positive, async () =>
+            {
+                using (HeldHealthProbe probe = new HeldHealthProbe(1))
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ModelEndpointService service = new ModelEndpointService(testDb.Driver, CreateLogging());
+                    AuthContext auth = AuthContext.Authenticated("ten_health", "usr_health", false, true, "Test");
+                    ModelEndpoint created = await service.CreateAsync(auth, NewOllama("held", probe.BaseUrl, "original-model", "original-key")).ConfigureAwait(false);
+                    Task<int> sweep = service.CheckHealthAllAsync();
+                    bool arrived = await probe.WaitForProbesAsync().ConfigureAwait(false);
+                    if (arrived)
+                    {
+                        ModelEndpoint edit = (await service.ReadAsync(auth, created.Id).ConfigureAwait(false))!;
+                        edit.Model = "saved-model";
+                        edit.BaseUrl = "http://127.0.0.1:9";
+                        edit.ApiKeyInput = "saved-key";
+                        await service.UpdateAsync(auth, edit).ConfigureAwait(false);
+                    }
+
+                    probe.Release();
+                    await sweep.ConfigureAwait(false);
+                    AssertTrue(arrived, "The health probe did not reach the endpoint.");
+                    ModelEndpoint stored = (await service.ReadAsync(auth, created.Id).ConfigureAwait(false))!;
+                    AssertEqual("saved-model", stored.Model, "saved model");
+                    AssertEqual("http://127.0.0.1:9", stored.BaseUrl, "saved url");
+                    AssertEqual("saved-key", stored.ApiKey, "saved key");
+                    AssertEqual(EndpointHealthStatusEnum.Unknown, stored.HealthStatus, "stale health");
+                    AssertEqual(0, stored.HealthHistory.Count, "stale history");
+                }
+            }));
+
+            cases.Add(CaseAsync("probe_records_health_when_configuration_is_unchanged", "A health probe with no configuration edit records health and keeps the model and key", TestTags.Positive, async () =>
+            {
+                using (HeldHealthProbe probe = new HeldHealthProbe(1))
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ModelEndpointService service = new ModelEndpointService(testDb.Driver, CreateLogging());
+                    AuthContext auth = AuthContext.Authenticated("ten_health", "usr_health", false, true, "Test");
+                    ModelEndpoint created = await service.CreateAsync(auth, NewOllama("held", probe.BaseUrl, "original-model", "original-key")).ConfigureAwait(false);
+                    Task<int> sweep = service.CheckHealthAllAsync();
+                    bool arrived = await probe.WaitForProbesAsync().ConfigureAwait(false);
+                    probe.Release();
+                    int probed = await sweep.ConfigureAwait(false);
+                    AssertTrue(arrived, "The health probe did not reach the endpoint.");
+                    AssertEqual(1, probed, "probed groups");
+                    ModelEndpoint stored = (await service.ReadAsync(auth, created.Id).ConfigureAwait(false))!;
+                    AssertEqual("original-model", stored.Model, "model");
+                    AssertEqual("original-key", stored.ApiKey, "key");
+                    AssertEqual(probe.BaseUrl, stored.BaseUrl, "url");
+                    AssertEqual(EndpointHealthStatusEnum.Healthy, stored.HealthStatus, "health");
+                    AssertEqual(1, stored.HealthHistory.Count, "history");
+                    AssertTrue(stored.HealthHistory[0].Success, "history success");
+                }
+            }));
+
+            cases.Add(CaseAsync("concurrent_health_checks_keep_both_results", "Two overlapping health probes both remain in history", TestTags.Positive, async () =>
+            {
+                using (HeldHealthProbe probe = new HeldHealthProbe(2))
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ModelEndpointService service = new ModelEndpointService(testDb.Driver, CreateLogging());
+                    AuthContext auth = AuthContext.Authenticated("ten_health", "usr_health", false, true, "Test");
+                    ModelEndpoint created = await service.CreateAsync(auth, NewOllama("held", probe.BaseUrl, "original-model", "original-key")).ConfigureAwait(false);
+                    Task<int> first = service.CheckHealthAllAsync();
+                    Task<int> second = service.CheckHealthAllAsync();
+                    bool arrived = await probe.WaitForProbesAsync().ConfigureAwait(false);
+                    probe.Release();
+                    await first.ConfigureAwait(false);
+                    await second.ConfigureAwait(false);
+                    AssertTrue(arrived, "Both health probes did not reach the endpoint.");
+                    ModelEndpoint stored = (await service.ReadAsync(auth, created.Id).ConfigureAwait(false))!;
+                    AssertEqual("original-model", stored.Model, "model");
+                    AssertEqual("original-key", stored.ApiKey, "key");
+                    AssertEqual(2, stored.HealthHistory.Count, "both health results");
+                    AssertTrue(stored.HealthHistory[0].Success && stored.HealthHistory[1].Success, "both results succeeded");
+                }
+            }));
+
+            cases.Add(CaseAsync("grouped_probe_keeps_each_member_configuration", "One grouped probe keeps a member configuration saved during the probe", TestTags.Positive, async () =>
+            {
+                using (HeldHealthProbe probe = new HeldHealthProbe(1))
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ModelEndpointService service = new ModelEndpointService(testDb.Driver, CreateLogging());
+                    AuthContext auth = AuthContext.Authenticated("ten_health", "usr_health", false, true, "Test");
+                    ModelEndpoint first = await service.CreateAsync(auth, NewOllama("member-a", probe.BaseUrl, "model-a", "group-key")).ConfigureAwait(false);
+                    ModelEndpoint second = await service.CreateAsync(auth, NewOllama("member-b", probe.BaseUrl, "model-b", "group-key")).ConfigureAwait(false);
+                    Task<int> sweep = service.CheckHealthAllAsync();
+                    bool arrived = await probe.WaitForProbesAsync().ConfigureAwait(false);
+                    if (arrived)
+                    {
+                        ModelEndpoint edit = (await service.ReadAsync(auth, first.Id).ConfigureAwait(false))!;
+                        edit.Model = "saved-model";
+                        edit.BaseUrl = "http://127.0.0.1:9";
+                        edit.ApiKeyInput = "saved-key";
+                        await service.UpdateAsync(auth, edit).ConfigureAwait(false);
+                    }
+
+                    probe.Release();
+                    int probed = await sweep.ConfigureAwait(false);
+                    AssertTrue(arrived, "The grouped health probe did not reach the endpoint.");
+                    AssertEqual(1, probed, "one probe for the group");
+                    ModelEndpoint changed = (await service.ReadAsync(auth, first.Id).ConfigureAwait(false))!;
+                    ModelEndpoint unchanged = (await service.ReadAsync(auth, second.Id).ConfigureAwait(false))!;
+                    AssertEqual("saved-model", changed.Model, "member model");
+                    AssertEqual("http://127.0.0.1:9", changed.BaseUrl, "member url");
+                    AssertEqual("saved-key", changed.ApiKey, "member key");
+                    AssertEqual(EndpointHealthStatusEnum.Unknown, changed.HealthStatus, "member health");
+                    AssertEqual("model-b", unchanged.Model, "other member model");
+                    AssertEqual(EndpointHealthStatusEnum.Healthy, unchanged.HealthStatus, "other member health");
+                    AssertEqual(1, unchanged.HealthHistory.Count, "other member history");
+                }
+            }));
+
+            cases.Add(CaseAsync("probe_discards_health_when_only_region_changes", "A health probe discards its result when only the region changed", TestTags.Positive, async () =>
+            {
+                using (HeldHealthProbe probe = new HeldHealthProbe(1))
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ModelEndpointService service = new ModelEndpointService(testDb.Driver, CreateLogging());
+                    AuthContext auth = AuthContext.Authenticated("ten_health", "usr_health", false, true, "Test");
+                    ModelEndpoint created = await service.CreateAsync(auth, NewOllama("held", probe.BaseUrl, "original-model", "original-key")).ConfigureAwait(false);
+                    Task<int> sweep = service.CheckHealthAllAsync();
+                    bool arrived = await probe.WaitForProbesAsync().ConfigureAwait(false);
+                    if (arrived)
+                    {
+                        ModelEndpoint edit = (await service.ReadAsync(auth, created.Id).ConfigureAwait(false))!;
+                        edit.Region = "eu-central-1";
+                        await service.UpdateAsync(auth, edit).ConfigureAwait(false);
+                    }
+
+                    probe.Release();
+                    await sweep.ConfigureAwait(false);
+                    AssertTrue(arrived, "The health probe did not reach the endpoint.");
+                    ModelEndpoint stored = (await service.ReadAsync(auth, created.Id).ConfigureAwait(false))!;
+                    AssertEqual("eu-central-1", stored.Region, "saved region");
+                    AssertEqual("original-model", stored.Model, "model");
+                    AssertEqual("original-key", stored.ApiKey, "key");
+                    AssertEqual(EndpointHealthStatusEnum.Unknown, stored.HealthStatus, "stale health");
+                }
+            }));
+
             string? simulation = Environment.GetEnvironmentVariable("ARMADA_MODEL_PROVIDER_SIMULATION");
             if (!String.IsNullOrWhiteSpace(simulation))
             {
@@ -755,6 +901,22 @@ namespace Test.Shared.Suites.Services
             return logging;
         }
 
+        private static ModelEndpoint NewOllama(string name, string baseUrl, string model, string apiKey)
+        {
+            ModelEndpoint endpoint = new ModelEndpoint
+            {
+                Name = name,
+                Kind = ModelEndpointKindEnum.Inference,
+                Provider = ModelProviderEnum.Ollama,
+                BaseUrl = baseUrl,
+                Model = model,
+                Region = "us-east-1",
+                TimeoutMs = 30000
+            };
+            endpoint.ApiKey = apiKey;
+            return endpoint;
+        }
+
         private static ModelEndpoint NewInference(string name, string baseUrl)
         {
             return new ModelEndpoint
@@ -775,6 +937,117 @@ namespace Test.Shared.Suites.Services
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
                 tags: new List<string> { tag });
+        }
+
+        #endregion
+
+        #region Private-Classes
+
+        /// <summary>
+        /// Accepts health-probe HTTP calls and holds the response until the test releases it.
+        /// </summary>
+        private sealed class HeldHealthProbe : IDisposable
+        {
+            private readonly HttpListener _Listener;
+            private readonly List<Task> _Responses = new List<Task>();
+            private readonly object _Gate = new object();
+            private readonly TaskCompletionSource<bool> _AllArrived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly TaskCompletionSource<bool> _Release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly int _Expected;
+            private int _Arrived;
+
+            /// <summary>
+            /// Base URL of the held endpoint.
+            /// </summary>
+            public string BaseUrl { get; }
+
+            /// <summary>
+            /// Start a listener that holds each probe response.
+            /// </summary>
+            /// <param name="expectedProbes">Number of probe requests to wait for.</param>
+            public HeldHealthProbe(int expectedProbes)
+            {
+                _Expected = expectedProbes;
+                int boundPort;
+                _Listener = TestPorts.StartHttpListener(port => new[] { "http://127.0.0.1:" + port + "/" }, out boundPort);
+                BaseUrl = "http://127.0.0.1:" + boundPort;
+                AcceptLoopAsync().ContinueWith(task =>
+                {
+                    if (task.Exception != null) task.Exception.Handle(ex => true);
+                }, TaskScheduler.Default);
+            }
+
+            /// <summary>
+            /// Wait until the expected probe requests have arrived.
+            /// </summary>
+            /// <returns>True when they arrived within 20 seconds.</returns>
+            public async Task<bool> WaitForProbesAsync()
+            {
+                Task delay = Task.Delay(TimeSpan.FromSeconds(20));
+                Task finished = await Task.WhenAny(_AllArrived.Task, delay).ConfigureAwait(false);
+                return finished == _AllArrived.Task;
+            }
+
+            /// <summary>
+            /// Send the held probe responses.
+            /// </summary>
+            public void Release()
+            {
+                _Release.TrySetResult(true);
+            }
+
+            /// <summary>
+            /// Release held calls and stop the listener.
+            /// </summary>
+            public void Dispose()
+            {
+                Release();
+                try { _Listener.Stop(); } catch { }
+                try { _Listener.Close(); } catch { }
+            }
+
+            private async Task AcceptLoopAsync()
+            {
+                while (true)
+                {
+                    HttpListenerContext context;
+                    try
+                    {
+                        context = await _Listener.GetContextAsync().ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        return;
+                    }
+
+                    int arrived = Interlocked.Increment(ref _Arrived);
+                    if (arrived >= _Expected) _AllArrived.TrySetResult(true);
+                    Task response = RespondAsync(context);
+                    lock (_Gate) { _Responses.Add(response); }
+                }
+            }
+
+            private async Task RespondAsync(HttpListenerContext context)
+            {
+                try
+                {
+                    await _Release.Task.ConfigureAwait(false);
+                    byte[] body = Encoding.UTF8.GetBytes("{\"models\":[]}");
+                    context.Response.StatusCode = 200;
+                    context.Response.ContentType = "application/json";
+                    context.Response.ContentLength64 = body.Length;
+                    using (Stream stream = context.Response.OutputStream)
+                    {
+                        await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
+                    }
+
+                    context.Response.Close();
+                }
+                catch
+                {
+                    try { context.Response.Abort(); } catch { }
+                }
+            }
         }
 
         #endregion
