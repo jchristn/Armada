@@ -349,6 +349,57 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("create_worktree_async_preexisting_registered_worktree_stays_and_throws", "CreateWorktreeAsync PreexistingRegisteredWorktree Stays And Throws", TestTags.Negative, async () =>
+            {
+                GitService service = CreateService();
+                string bareDir = TestGitRepoHelper.CreateBareRepoCopy();
+                string rootDir = TestTemp.NewDirectory("gitservice");
+                string worktreeDir = Path.Combine(rootDir, "existing");
+                string markerPath = Path.Combine(worktreeDir, "keep-me.txt");
+                string keptBranch = "armada/kept";
+                string newBranch = "armada/preexisting-target";
+
+                try
+                {
+                    await RunGitAsync(bareDir, "worktree", "add", "-b", keptBranch, worktreeDir, "main").ConfigureAwait(false);
+                    await File.WriteAllTextAsync(markerPath, "keep\n").ConfigureAwait(false);
+
+                    bool registeredBefore = await service.IsWorktreeRegisteredAsync(bareDir, worktreeDir).ConfigureAwait(false);
+                    AssertTrue(registeredBefore, "the fixture worktree is registered before the call");
+
+                    GitCommandException? caught = null;
+                    try
+                    {
+                        await service.CreateWorktreeAsync(bareDir, worktreeDir, newBranch, "main").ConfigureAwait(false);
+                        throw new Exception("Assertion failed: expected GitCommandException but no exception was thrown");
+                    }
+                    catch (GitCommandException ex)
+                    {
+                        caught = ex;
+                    }
+
+                    AssertNotNull(caught, "the original git worktree add error propagates");
+                    AssertTrue(caught!.Arguments.Contains("add"), "the propagated error is the failed worktree add");
+                    AssertTrue(Directory.Exists(worktreeDir), "a registered worktree that already existed must remain after a failed add");
+                    AssertTrue(File.Exists(markerPath), "a registered worktree that already existed must keep its marker after a failed add");
+                    AssertEqual("keep\n", await File.ReadAllTextAsync(markerPath).ConfigureAwait(false));
+
+                    bool registeredAfter = await service.IsWorktreeRegisteredAsync(bareDir, worktreeDir).ConfigureAwait(false);
+                    AssertTrue(registeredAfter, "the pre-existing worktree stays registered");
+
+                    string keptHead = (await RunGitAsync(worktreeDir, "rev-parse", "--abbrev-ref", "HEAD").ConfigureAwait(false)).Trim();
+                    AssertEqual(keptBranch, keptHead, "the pre-existing worktree stays on its own branch");
+
+                    string createdBranch = await RunGitAsync(bareDir, "branch", "--list", newBranch).ConfigureAwait(false);
+                    AssertEqual(String.Empty, createdBranch.Trim(), "a branch ref this call created is still deleted");
+                }
+                finally
+                {
+                    TestTemp.TryDelete(rootDir);
+                    TestTemp.TryDelete(bareDir);
+                }
+            }));
+
             cases.Add(CaseAsync("fetch_async_checked_out_worktree_branch_uses_remote_tracking_refs", "FetchAsync CheckedOutWorktreeBranch UsesRemoteTrackingRefs", TestTags.Positive, async () =>
             {
                 GitService service = CreateService();
