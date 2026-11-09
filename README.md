@@ -266,6 +266,8 @@ cd armada
 ./scripts/macos/install.sh      # Linux: ./scripts/linux/install.sh   Windows: scripts\windows\install.bat
 ```
 
+On WSL, use `scripts/wsl2/` (WSL 2) or `scripts/wsl/` (WSL 1). They have the same script names as `scripts/linux/` and fix what breaks under WSL: Windows `dotnet`/`node`/`claude` shims on the PATH, `~/.dotnet/tools` missing from the PATH, CRLF checkouts, and (WSL 2) an Admiral on Windows that is not reachable at `localhost`.
+
 The install script builds the solution, deploys the dashboard, and installs the `armada` CLI as a global .NET tool. The default target is `net10.0`. With only .NET 8 installed, use `./scripts/macos/install.sh --framework net8.0` (Linux uses the same flag) or `scripts\windows\install.bat net8.0`. Prebuilt installers and Docker images are listed under [Deployment](#deployment).
 
 #### Behind an enterprise proxy or firewall
@@ -900,6 +902,8 @@ To run the server as a user-scoped background service from your checkout, use th
 | Update from the current checkout | `./scripts/linux/update-systemd-user.sh` | `./scripts/macos/update-launchd-agent.sh` | `scripts\windows\update-windows-task.bat` |
 | Verify the running deployment | `./scripts/linux/healthcheck-server.sh` | `./scripts/macos/healthcheck-server.sh` | `scripts\windows\healthcheck-server.bat` |
 | Remove the startup registration | `./scripts/linux/remove-systemd-user.sh` | `./scripts/macos/remove-launchd-agent.sh` | `scripts\windows\remove-windows-task.bat` |
+
+On WSL, run the same-named scripts from `scripts/wsl2/` (WSL 2) or `scripts/wsl/` (WSL 1). `install-systemd-user.sh` uses a systemd user unit when systemd runs in the distro, and otherwise a hidden launcher in the Windows Startup folder that starts the server through `wsl.exe` at Windows login.
 
 These publish `Armada.Server` into `~/.armada/bin` (`%USERPROFILE%\.armada\bin` on Windows) and the dashboard into `~/.armada/dashboard`. The remove scripts unregister the startup entry but keep the published files. `scripts/<os>/run-local.sh` (or `.bat`) builds and starts the server, then runs a Harbor in the foreground for exercising the Harbor link. See [docs/RUN_ON_STARTUP.md](docs/RUN_ON_STARTUP.md).
 

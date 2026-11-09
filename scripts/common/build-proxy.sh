@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TAG="$1"
 
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 
 if [ -z "$TAG" ]; then
     echo "Building jchristn77/armada-proxy:latest"

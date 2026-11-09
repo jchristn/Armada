@@ -123,6 +123,13 @@ The installer writes `~/.config/systemd/user/armada.service` (under `$XDG_CONFIG
 >
 > `sudo loginctl enable-linger $USER`
 
+## WSL (`scripts/wsl2`, `scripts/wsl`)
+
+Use `scripts/wsl2/` on WSL 2 and `scripts/wsl/` on WSL 1. The scripts keep the Linux names (`install-systemd-user.sh`, `update-systemd-user.sh`, `remove-systemd-user.sh`):
+
+- When systemd runs in the distro (WSL 2 with `[boot] systemd=true` in `/etc/wsl.conf`), they run the Linux scripts unchanged.
+- Otherwise (always on WSL 1), the installer puts a hidden launcher, `armada-wsl.vbs`, in the Windows Startup folder. At Windows login it runs `~/.armada/bin/Armada.Server` through `wsl.exe`, which keeps the distro running. This mode has no automatic restart. The remove script deletes the launcher (and any leftover unit file) and stops the server.
+
 ## macOS (`launchd`)
 
 The supported macOS path is a user-scoped `LaunchAgent`.

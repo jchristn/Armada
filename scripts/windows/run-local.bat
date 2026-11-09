@@ -16,6 +16,7 @@ for %%I in ("%SCRIPT_DIR%\..\..") do set "REPO_ROOT=%%~fI"
 
 REM Resolve the target framework (-f / --framework / bare net* / ARMADA_TARGET_FRAMEWORK / default net10.0).
 call "%SCRIPT_DIR%\resolve-framework.bat" %*
+if errorlevel 1 exit /b 1
 set "FRAMEWORK=%ARMADA_TARGET_FRAMEWORK%"
 if "%FRAMEWORK%"=="" set "FRAMEWORK=net10.0"
 
