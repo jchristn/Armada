@@ -1,6 +1,7 @@
 namespace Armada.Helm.Commands
 {
     using System.Diagnostics;
+    using System.Text;
     using System.Text.Json;
     using System.Text.Json.Nodes;
     using Armada.Core.Services;
@@ -559,26 +560,13 @@ namespace Armada.Helm.Commands
             if (target.ArmadaConfig == null)
                 throw new InvalidOperationException("Config target does not define ArmadaConfig for file-based installation.");
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
-            if (root["mcpServers"] is not JsonObject)
-            {
-                root["mcpServers"] = new JsonObject();
-            }
-
-            JsonObject mcpServers = root["mcpServers"]!.AsObject();
-            JsonNode? existing = mcpServers["armada"];
-            bool changed = existing == null || !JsonNode.DeepEquals(existing, target.ArmadaConfig);
-            mcpServers["armada"] = target.ArmadaConfig.DeepClone();
-
-            Directory.CreateDirectory(Path.GetDirectoryName(target.FilePath)!);
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
-
-            return new ApplyResult(
-                target.ClientName,
-                target.FilePath,
-                changed,
-                changed ? "Configured Armada MCP entry." : "Armada MCP entry already matched the expected configuration.",
-                target.IsProjectScoped);
+            return await ApplyJsoncEditAsync(
+                target,
+                "mcpServers",
+                false,
+                true,
+                "Configured Armada MCP entry.",
+                "Armada MCP entry already matched the expected configuration.").ConfigureAwait(false);
         }
 
         internal static async Task<ApplyResult> RemoveTargetAsync(ConfigTarget target)
@@ -612,32 +600,13 @@ namespace Armada.Helm.Commands
                     target.IsProjectScoped);
             }
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
-            JsonObject? mcpServers = root["mcpServers"] as JsonObject;
-            if (mcpServers == null || !mcpServers.ContainsKey("armada"))
-            {
-                return new ApplyResult(
-                    target.ClientName,
-                    target.FilePath,
-                    false,
-                    "No Armada MCP entry was present.",
-                    target.IsProjectScoped);
-            }
-
-            mcpServers.Remove("armada");
-            if (mcpServers.Count == 0)
-            {
-                root.Remove("mcpServers");
-            }
-
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
-
-            return new ApplyResult(
-                target.ClientName,
-                target.FilePath,
-                true,
+            return await ApplyJsoncEditAsync(
+                target,
+                "mcpServers",
+                false,
+                false,
                 "Removed Armada MCP entry.",
-                target.IsProjectScoped);
+                "No Armada MCP entry was present.").ConfigureAwait(false);
         }
 
         /// <summary>
@@ -650,34 +619,13 @@ namespace Armada.Helm.Commands
             if (target.ArmadaConfig == null)
                 throw new InvalidOperationException("Mux config target does not define ArmadaConfig.");
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
-            if (root["servers"] is not JsonArray)
-                root["servers"] = new JsonArray();
-
-            JsonArray servers = root["servers"]!.AsArray();
-            int existingIndex = FindMuxServerIndex(servers, "armada");
-
-            bool changed;
-            if (existingIndex >= 0)
-            {
-                changed = !JsonNode.DeepEquals(servers[existingIndex], target.ArmadaConfig);
-                servers[existingIndex] = target.ArmadaConfig.DeepClone();
-            }
-            else
-            {
-                servers.Add(target.ArmadaConfig.DeepClone());
-                changed = true;
-            }
-
-            Directory.CreateDirectory(Path.GetDirectoryName(target.FilePath)!);
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
-
-            return new ApplyResult(
-                target.ClientName,
-                target.FilePath,
-                changed,
-                changed ? "Configured Armada MCP server (HTTP)." : "Armada MCP server already matched the expected configuration.",
-                target.IsProjectScoped);
+            return await ApplyJsoncEditAsync(
+                target,
+                "servers",
+                true,
+                true,
+                "Configured Armada MCP server (HTTP).",
+                "Armada MCP server already matched the expected configuration.").ConfigureAwait(false);
         }
 
         /// <summary>
@@ -695,46 +643,13 @@ namespace Armada.Helm.Commands
                     target.IsProjectScoped);
             }
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
-            JsonArray? servers = root["servers"] as JsonArray;
-            if (servers == null || servers.Count == 0)
-            {
-                return new ApplyResult(
-                    target.ClientName,
-                    target.FilePath,
-                    false,
-                    "No Armada MCP server was present.",
-                    target.IsProjectScoped);
-            }
-
-            int removed = 0;
-            for (int i = servers.Count - 1; i >= 0; i--)
-            {
-                if (String.Equals(GetMuxServerName(servers[i]), "armada", StringComparison.Ordinal))
-                {
-                    servers.RemoveAt(i);
-                    removed++;
-                }
-            }
-
-            if (removed == 0)
-            {
-                return new ApplyResult(
-                    target.ClientName,
-                    target.FilePath,
-                    false,
-                    "No Armada MCP server was present.",
-                    target.IsProjectScoped);
-            }
-
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
-
-            return new ApplyResult(
-                target.ClientName,
-                target.FilePath,
+            return await ApplyJsoncEditAsync(
+                target,
+                "servers",
                 true,
+                false,
                 "Removed Armada MCP server.",
-                target.IsProjectScoped);
+                "No Armada MCP server was present.").ConfigureAwait(false);
         }
 
         private static async Task<ApplyResult> InstallOpenCodeServerAsync(ConfigTarget target)
@@ -742,24 +657,13 @@ namespace Armada.Helm.Commands
             if (target.ArmadaConfig == null)
                 throw new InvalidOperationException("OpenCode config target does not define ArmadaConfig.");
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
-            if (root["mcp"] is not JsonObject)
-                root["mcp"] = new JsonObject();
-
-            JsonObject mcp = root["mcp"]!.AsObject();
-            JsonNode? existing = mcp["armada"];
-            bool changed = existing == null || !JsonNode.DeepEquals(existing, target.ArmadaConfig);
-            mcp["armada"] = target.ArmadaConfig.DeepClone();
-
-            Directory.CreateDirectory(Path.GetDirectoryName(target.FilePath)!);
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
-
-            return new ApplyResult(
-                target.ClientName,
-                target.FilePath,
-                changed,
-                changed ? "Configured Armada MCP entry." : "Armada MCP entry already matched the expected configuration.",
-                target.IsProjectScoped);
+            return await ApplyJsoncEditAsync(
+                target,
+                "mcp",
+                false,
+                true,
+                "Configured Armada MCP entry.",
+                "Armada MCP entry already matched the expected configuration.").ConfigureAwait(false);
         }
 
         private static async Task<ApplyResult> RemoveOpenCodeServerAsync(ConfigTarget target)
@@ -774,53 +678,13 @@ namespace Armada.Helm.Commands
                     target.IsProjectScoped);
             }
 
-            JsonObject root = await ReadOrCreateRootAsync(target.FilePath).ConfigureAwait(false);
-            JsonObject? mcp = root["mcp"] as JsonObject;
-            if (mcp == null || !mcp.ContainsKey("armada"))
-            {
-                return new ApplyResult(
-                    target.ClientName,
-                    target.FilePath,
-                    false,
-                    "No Armada MCP entry was present.",
-                    target.IsProjectScoped);
-            }
-
-            mcp.Remove("armada");
-            await File.WriteAllTextAsync(target.FilePath, root.ToJsonString(JsonOptions)).ConfigureAwait(false);
-
-            return new ApplyResult(
-                target.ClientName,
-                target.FilePath,
-                true,
+            return await ApplyJsoncEditAsync(
+                target,
+                "mcp",
+                false,
+                false,
                 "Removed Armada MCP entry.",
-                target.IsProjectScoped);
-        }
-
-        private static int FindMuxServerIndex(JsonArray servers, string name)
-        {
-            for (int i = 0; i < servers.Count; i++)
-            {
-                if (String.Equals(GetMuxServerName(servers[i]), name, StringComparison.Ordinal))
-                    return i;
-            }
-
-            return -1;
-        }
-
-        private static string? GetMuxServerName(JsonNode? node)
-        {
-            if (node is not JsonObject obj)
-                return null;
-
-            try
-            {
-                return obj["name"]?.GetValue<string>();
-            }
-            catch
-            {
-                return null;
-            }
+                "No Armada MCP entry was present.").ConfigureAwait(false);
         }
 
         internal static async Task<ApplyResult> InstallClaudeAgentAsync()
@@ -1037,26 +901,91 @@ namespace Armada.Helm.Commands
             return $"{ManagedBlockStart}{Environment.NewLine}{content.Trim()}{Environment.NewLine}{ManagedBlockEnd}";
         }
 
-        private static async Task<JsonObject> ReadOrCreateRootAsync(string path)
+        /// <summary>
+        /// Replace or remove one managed Armada member in the original JSONC text.
+        /// Throws before any write when the document is malformed, the container has the wrong shape, or the Armada entry is ambiguous.
+        /// </summary>
+        private static async Task<ApplyResult> ApplyJsoncEditAsync(
+            ConfigTarget target,
+            string containerName,
+            bool namedArray,
+            bool install,
+            string changedMessage,
+            string idleMessage)
+        {
+            JsoncFileText loaded = await ReadJsoncFileAsync(target.FilePath).ConfigureAwait(false);
+            string value = install ? target.ArmadaConfig!.ToJsonString(JsonOptions) : String.Empty;
+            bool changed;
+            string updated;
+            if (install && namedArray)
+                updated = JsoncScopedEditor.UpsertArrayObject(loaded.Text, containerName, "armada", value, out changed);
+            else if (install)
+                updated = JsoncScopedEditor.UpsertObjectMember(loaded.Text, containerName, "armada", value, out changed);
+            else if (namedArray)
+                updated = JsoncScopedEditor.RemoveArrayObject(loaded.Text, containerName, "armada", out changed);
+            else
+                updated = JsoncScopedEditor.RemoveObjectMember(loaded.Text, containerName, "armada", out changed);
+
+            if (!changed)
+            {
+                return new ApplyResult(
+                    target.ClientName,
+                    target.FilePath,
+                    false,
+                    idleMessage,
+                    target.IsProjectScoped);
+            }
+
+            await WriteJsoncFileAsync(target.FilePath, updated, loaded.HasBom).ConfigureAwait(false);
+            return new ApplyResult(
+                target.ClientName,
+                target.FilePath,
+                true,
+                changedMessage,
+                target.IsProjectScoped);
+        }
+
+        private static async Task<JsoncFileText> ReadJsoncFileAsync(string path)
         {
             if (!File.Exists(path))
+                return new JsoncFileText(String.Empty, false);
+
+            byte[] bytes = await File.ReadAllBytesAsync(path).ConfigureAwait(false);
+            bool hasBom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+            int offset = hasBom ? 3 : 0;
+            string text = Encoding.UTF8.GetString(bytes, offset, bytes.Length - offset);
+            return new JsoncFileText(text, hasBom);
+        }
+
+        private static async Task WriteJsoncFileAsync(string path, string text, bool hasBom)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            byte[] body = new UTF8Encoding(false).GetBytes(text);
+            if (!hasBom)
             {
-                return new JsonObject();
+                await File.WriteAllBytesAsync(path, body).ConfigureAwait(false);
+                return;
             }
 
-            string text = await File.ReadAllTextAsync(path).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(text))
+            byte[] withBom = new byte[body.Length + 3];
+            withBom[0] = 0xEF;
+            withBom[1] = 0xBB;
+            withBom[2] = 0xBF;
+            Buffer.BlockCopy(body, 0, withBom, 3, body.Length);
+            await File.WriteAllBytesAsync(path, withBom).ConfigureAwait(false);
+        }
+
+        private sealed class JsoncFileText
+        {
+            internal JsoncFileText(string text, bool hasBom)
             {
-                return new JsonObject();
+                Text = text;
+                HasBom = hasBom;
             }
 
-            // Tolerate JSONC (comments / trailing commas) so config files like opencode.jsonc parse cleanly.
-            JsonNode? node = JsonNode.Parse(text, null, new System.Text.Json.JsonDocumentOptions
-            {
-                CommentHandling = System.Text.Json.JsonCommentHandling.Skip,
-                AllowTrailingCommas = true,
-            });
-            return node as JsonObject ?? new JsonObject();
+            internal string Text { get; }
+
+            internal bool HasBom { get; }
         }
 
         private static string ResolveCliCommand(string baseName)
