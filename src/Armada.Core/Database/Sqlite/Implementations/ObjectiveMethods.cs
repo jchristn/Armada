@@ -364,20 +364,21 @@ namespace Armada.Core.Database.Sqlite.Implementations
 
         private static Objective ObjectiveFromReader(SqliteDataReader reader)
         {
+            string objectiveId = reader["id"].ToString()!;
             Objective objective = new Objective
             {
-                Id = reader["id"].ToString()!,
+                Id = objectiveId,
                 TenantId = SqliteDatabaseDriver.NullableString(reader["tenant_id"]),
                 UserId = SqliteDatabaseDriver.NullableString(reader["user_id"]),
                 Title = reader["title"].ToString()!,
                 Description = SqliteDatabaseDriver.NullableString(reader["description"]),
-                Status = ParseEnum(reader["status"], ObjectiveStatusEnum.Draft),
-                Kind = ParseEnum(reader["kind"], ObjectiveKindEnum.Feature),
+                Status = ParseEnum(reader["status"], ObjectiveStatusEnum.Draft, objectiveId, "status"),
+                Kind = ParseEnum(reader["kind"], ObjectiveKindEnum.Feature, objectiveId, "kind"),
                 Category = SqliteDatabaseDriver.NullableString(reader["category"]),
-                Priority = ParseEnum(reader["priority"], ObjectivePriorityEnum.P2),
+                Priority = ParseEnum(reader["priority"], ObjectivePriorityEnum.P2, objectiveId, "priority"),
                 Rank = SqliteDatabaseDriver.NullableInt(reader["rank"]) ?? 0,
-                BacklogState = ParseEnum(reader["backlog_state"], ObjectiveBacklogStateEnum.Inbox),
-                Effort = ParseEnum(reader["effort"], ObjectiveEffortEnum.M),
+                BacklogState = ParseEnum(reader["backlog_state"], ObjectiveBacklogStateEnum.Inbox, objectiveId, "backlog_state"),
+                Effort = ParseEnum(reader["effort"], ObjectiveEffortEnum.M, objectiveId, "effort"),
                 Owner = SqliteDatabaseDriver.NullableString(reader["owner"]),
                 TargetVersion = SqliteDatabaseDriver.NullableString(reader["target_version"]),
                 DueUtc = SqliteDatabaseDriver.FromIso8601Nullable(reader["due_utc"]),
@@ -394,30 +395,29 @@ namespace Armada.Core.Database.Sqlite.Implementations
                 CompletedUtc = SqliteDatabaseDriver.FromIso8601Nullable(reader["completed_utc"])
             };
 
-            objective.BlockedByObjectiveIds = DeserializeList(reader["blocked_by_objective_ids_json"]);
-            objective.SuggestedPlaybooks = DeserializePlaybooks(reader["suggested_playbooks_json"]);
-            objective.Tags = DeserializeList(reader["tags_json"]);
-            objective.AcceptanceCriteria = DeserializeList(reader["acceptance_criteria_json"]);
-            objective.NonGoals = DeserializeList(reader["non_goals_json"]);
-            objective.RolloutConstraints = DeserializeList(reader["rollout_constraints_json"]);
-            objective.EvidenceLinks = DeserializeList(reader["evidence_links_json"]);
-            objective.FleetIds = DeserializeList(reader["fleet_ids_json"]);
-            objective.VesselIds = DeserializeList(reader["vessel_ids_json"]);
-            objective.PlanningSessionIds = DeserializeList(reader["planning_session_ids_json"]);
-            objective.RefinementSessionIds = DeserializeList(reader["refinement_session_ids_json"]);
-            objective.VoyageIds = DeserializeList(reader["voyage_ids_json"]);
-            objective.MissionIds = DeserializeList(reader["mission_ids_json"]);
-            objective.CheckRunIds = DeserializeList(reader["check_run_ids_json"]);
-            objective.ReleaseIds = DeserializeList(reader["release_ids_json"]);
-            objective.DeploymentIds = DeserializeList(reader["deployment_ids_json"]);
-            objective.IncidentIds = DeserializeList(reader["incident_ids_json"]);
+            objective.BlockedByObjectiveIds = DeserializeList(reader["blocked_by_objective_ids_json"], objectiveId, "blocked_by_objective_ids_json");
+            objective.SuggestedPlaybooks = DeserializePlaybooks(reader["suggested_playbooks_json"], objectiveId, "suggested_playbooks_json");
+            objective.Tags = DeserializeList(reader["tags_json"], objectiveId, "tags_json");
+            objective.AcceptanceCriteria = DeserializeList(reader["acceptance_criteria_json"], objectiveId, "acceptance_criteria_json");
+            objective.NonGoals = DeserializeList(reader["non_goals_json"], objectiveId, "non_goals_json");
+            objective.RolloutConstraints = DeserializeList(reader["rollout_constraints_json"], objectiveId, "rollout_constraints_json");
+            objective.EvidenceLinks = DeserializeList(reader["evidence_links_json"], objectiveId, "evidence_links_json");
+            objective.FleetIds = DeserializeList(reader["fleet_ids_json"], objectiveId, "fleet_ids_json");
+            objective.VesselIds = DeserializeList(reader["vessel_ids_json"], objectiveId, "vessel_ids_json");
+            objective.PlanningSessionIds = DeserializeList(reader["planning_session_ids_json"], objectiveId, "planning_session_ids_json");
+            objective.RefinementSessionIds = DeserializeList(reader["refinement_session_ids_json"], objectiveId, "refinement_session_ids_json");
+            objective.VoyageIds = DeserializeList(reader["voyage_ids_json"], objectiveId, "voyage_ids_json");
+            objective.MissionIds = DeserializeList(reader["mission_ids_json"], objectiveId, "mission_ids_json");
+            objective.CheckRunIds = DeserializeList(reader["check_run_ids_json"], objectiveId, "check_run_ids_json");
+            objective.ReleaseIds = DeserializeList(reader["release_ids_json"], objectiveId, "release_ids_json");
+            objective.DeploymentIds = DeserializeList(reader["deployment_ids_json"], objectiveId, "deployment_ids_json");
+            objective.IncidentIds = DeserializeList(reader["incident_ids_json"], objectiveId, "incident_ids_json");
             return objective;
         }
 
-        private static TEnum ParseEnum<TEnum>(object value, TEnum fallback) where TEnum : struct
+        private static TEnum ParseEnum<TEnum>(object value, TEnum fallback, string objectiveId, string fieldName) where TEnum : struct
         {
-            if (value == null || value == DBNull.Value) return fallback;
-            return Enum.TryParse<TEnum>(value.ToString(), true, out TEnum parsed) ? parsed : fallback;
+            return ObjectivePersistenceHelper.ParseEnum(value, fallback, objectiveId, fieldName);
         }
 
         private static string Serialize<T>(T value)
@@ -425,32 +425,14 @@ namespace Armada.Core.Database.Sqlite.Implementations
             return JsonSerializer.Serialize(value, _JsonOptions);
         }
 
-        private static List<string> DeserializeList(object value)
+        private static List<string> DeserializeList(object value, string objectiveId, string fieldName)
         {
-            string? json = SqliteDatabaseDriver.NullableString(value);
-            if (String.IsNullOrWhiteSpace(json)) return new List<string>();
-            try
-            {
-                return JsonSerializer.Deserialize<List<string>>(json, _JsonOptions) ?? new List<string>();
-            }
-            catch
-            {
-                return new List<string>();
-            }
+            return ObjectivePersistenceHelper.DeserializeList(value, objectiveId, fieldName);
         }
 
-        private static List<SelectedPlaybook> DeserializePlaybooks(object value)
+        private static List<SelectedPlaybook> DeserializePlaybooks(object value, string objectiveId, string fieldName)
         {
-            string? json = SqliteDatabaseDriver.NullableString(value);
-            if (String.IsNullOrWhiteSpace(json)) return new List<SelectedPlaybook>();
-            try
-            {
-                return JsonSerializer.Deserialize<List<SelectedPlaybook>>(json, _JsonOptions) ?? new List<SelectedPlaybook>();
-            }
-            catch
-            {
-                return new List<SelectedPlaybook>();
-            }
+            return ObjectivePersistenceHelper.DeserializePlaybooks(value, objectiveId, fieldName);
         }
     }
 }

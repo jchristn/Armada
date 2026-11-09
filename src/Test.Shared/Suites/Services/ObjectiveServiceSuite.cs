@@ -2,10 +2,16 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Data;
+    using System.Data.Common;
     using System.IO;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Microsoft.Data.SqlClient;
+    using Microsoft.Data.Sqlite;
+    using MySqlConnector;
+    using Npgsql;
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
@@ -15,9 +21,9 @@ namespace Test.Shared.Suites.Services
 
     /// <summary>
     /// Descriptors for <see cref="ObjectiveService"/>: internal-first objective capture, linkage,
-    /// filtering, snapshot backfill, and deletion over a live SQLite store. Positive cases assert
+    /// filtering, snapshot backfill, and deletion over the configured database provider. Positive cases assert
     /// the full scoped-objective lifecycle and latest-snapshot normalization; negative cases cover
-    /// the audited not-found read, not-found update, and null-request guards.
+    /// the audited not-found read, not-found update, null-request guards, and stored fields that cannot be decoded.
     /// </summary>
     public sealed class ObjectiveServiceSuite : IArmadaTestSuite
     {
@@ -376,6 +382,106 @@ namespace Test.Shared.Suites.Services
                 await AssertThrowsAsync<ArgumentNullException>(() => objectives.CreateAsync(auth, null!));
             }));
 
+            cases.Add(CaseAsync("corrupt_blocker_json_update_keeps_stored_text", "A title update rejects malformed blocker JSON and leaves the stored text", TestTags.Negative, async () =>
+            {
+                await RejectStoredFieldOnOtherUpdateAsync(
+                    "ten_obj_blocker",
+                    "Blocker field",
+                    "blocked_by_objective_ids_json",
+                    "{not-json").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("corrupt_playbook_json_update_keeps_stored_text", "A title update rejects malformed playbook JSON and leaves the stored text", TestTags.Negative, async () =>
+            {
+                await RejectStoredFieldOnOtherUpdateAsync(
+                    "ten_obj_playbook",
+                    "Playbook field",
+                    "suggested_playbooks_json",
+                    "{not-json").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("unknown_status_update_keeps_stored_text", "A title update rejects an unknown status name and leaves the stored text", TestTags.Negative, async () =>
+            {
+                await RejectStoredFieldOnOtherUpdateAsync(
+                    "ten_obj_status",
+                    "Status field",
+                    "status",
+                    "NotAStatus").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("corrupt_blocker_json_enumerate_fails", "Enumeration rejects malformed blocker JSON and leaves the stored text", TestTags.Negative, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                    string tenantId = "ten_obj_enumerate";
+                    string userId = "usr_obj_stored";
+                    await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                    AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                    Objective created = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+                    {
+                        Title = "Enumerate field"
+                    }).ConfigureAwait(false);
+                    string column = "blocked_by_objective_ids_json";
+                    string storedText = "{not-json";
+                    await SetObjectiveColumnAsync(testDb, created.Id, column, storedText).ConfigureAwait(false);
+
+                    Exception? thrown = null;
+                    try
+                    {
+                        await objectives.EnumerateAsync(auth, new ObjectiveQuery
+                        {
+                            PageNumber = 1,
+                            PageSize = 25
+                        }).ConfigureAwait(false);
+                    }
+                    catch (Exception exception)
+                    {
+                        thrown = exception;
+                    }
+
+                    string? stored = await ReadObjectiveColumnAsync(testDb, created.Id, column).ConfigureAwait(false);
+                    Assert(thrown != null, "enumerate accepted stored " + column + " and left '" + stored + "' for " + created.Id);
+                    Assert(thrown.Message.IndexOf(created.Id, StringComparison.Ordinal) >= 0, "error must name objective " + created.Id + " but was: " + thrown.Message);
+                    Assert(thrown.Message.IndexOf(column, StringComparison.Ordinal) >= 0, "error must name field " + column + " but was: " + thrown.Message);
+                    AssertEqual(storedText, stored, column);
+                }
+            }));
+
+            cases.Add(CaseAsync("empty_and_valid_blocker_json_reads", "Empty blocker text stays an empty list and valid JSON still reads", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                    string tenantId = "ten_obj_empty";
+                    string userId = "usr_obj_stored";
+                    await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                    AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                    Objective created = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+                    {
+                        Title = "Empty blocker field"
+                    }).ConfigureAwait(false);
+                    string column = "blocked_by_objective_ids_json";
+
+                    await SetObjectiveColumnAsync(testDb, created.Id, column, "").ConfigureAwait(false);
+                    Objective emptyText = NotNull(await objectives.ReadAsync(auth, created.Id).ConfigureAwait(false));
+                    AssertEqual(0, emptyText.BlockedByObjectiveIds.Count, "empty text");
+
+                    await SetObjectiveColumnAsync(testDb, created.Id, column, "   ").ConfigureAwait(false);
+                    Objective blankText = NotNull(await objectives.ReadAsync(auth, created.Id).ConfigureAwait(false));
+                    AssertEqual(0, blankText.BlockedByObjectiveIds.Count, "blank text");
+
+                    await SetObjectiveColumnAsync(testDb, created.Id, column, null).ConfigureAwait(false);
+                    Objective nullText = NotNull(await objectives.ReadAsync(auth, created.Id).ConfigureAwait(false));
+                    AssertEqual(0, nullText.BlockedByObjectiveIds.Count, "null text");
+
+                    await SetObjectiveColumnAsync(testDb, created.Id, column, "[\"obj_blocker\"]").ConfigureAwait(false);
+                    Objective valid = NotNull(await objectives.ReadAsync(auth, created.Id).ConfigureAwait(false));
+                    AssertEqual(1, valid.BlockedByObjectiveIds.Count, "valid json count");
+                    AssertEqual("obj_blocker", valid.BlockedByObjectiveIds[0], "valid json value");
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: "Services.ObjectiveService",
                 displayName: "Objective Service",
@@ -410,6 +516,111 @@ namespace Test.Shared.Suites.Services
                     IsTenantAdmin = true
                 }).ConfigureAwait(false);
             }
+        }
+
+        private static async Task RejectStoredFieldOnOtherUpdateAsync(string tenantId, string title, string column, string storedText)
+        {
+            using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+            {
+                ObjectiveService objectives = new ObjectiveService(testDb.Driver);
+                string userId = "usr_obj_stored";
+                await EnsureTenantAndUserAsync(testDb, tenantId, userId).ConfigureAwait(false);
+                AuthContext auth = AuthContext.Authenticated(tenantId, userId, false, true, "UnitTest");
+                Objective created = await objectives.CreateAsync(auth, new ObjectiveUpsertRequest
+                {
+                    Title = title
+                }).ConfigureAwait(false);
+                await SetObjectiveColumnAsync(testDb, created.Id, column, storedText).ConfigureAwait(false);
+
+                Exception? thrown = null;
+                try
+                {
+                    await objectives.UpdateAsync(auth, created.Id, new ObjectiveUpsertRequest
+                    {
+                        Title = title + " renamed"
+                    }).ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    thrown = exception;
+                }
+
+                string? stored = await ReadObjectiveColumnAsync(testDb, created.Id, column).ConfigureAwait(false);
+                Assert(thrown != null, "update accepted stored " + column + " and left '" + stored + "' for " + created.Id);
+                Assert(thrown.Message.IndexOf(created.Id, StringComparison.Ordinal) >= 0, "error must name objective " + created.Id + " but was: " + thrown.Message);
+                Assert(thrown.Message.IndexOf(column, StringComparison.Ordinal) >= 0, "error must name field " + column + " but was: " + thrown.Message);
+                AssertEqual(storedText, stored, column);
+            }
+        }
+
+        private static async Task SetObjectiveColumnAsync(TestDatabase testDb, string objectiveId, string column, string? value)
+        {
+            RequireObjectiveColumn(column);
+            using (DbConnection connection = OpenConnection(testDb.ConnectionString))
+            {
+                await connection.OpenAsync().ConfigureAwait(false);
+                using (DbCommand command = connection.CreateCommand())
+                {
+                    command.CommandText = "UPDATE objectives SET " + column + " = @stored WHERE id = @id";
+                    AddParameter(command, "@stored", (object?)value ?? DBNull.Value);
+                    AddParameter(command, "@id", objectiveId);
+                    int rows = await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+                    AssertEqual(1, rows, column);
+                }
+            }
+        }
+
+        private static async Task<string?> ReadObjectiveColumnAsync(TestDatabase testDb, string objectiveId, string column)
+        {
+            RequireObjectiveColumn(column);
+            using (DbConnection connection = OpenConnection(testDb.ConnectionString))
+            {
+                await connection.OpenAsync().ConfigureAwait(false);
+                using (DbCommand command = connection.CreateCommand())
+                {
+                    command.CommandText = "SELECT " + column + " FROM objectives WHERE id = @id";
+                    AddParameter(command, "@id", objectiveId);
+                    object? result = await command.ExecuteScalarAsync().ConfigureAwait(false);
+                    if (result == null || result == DBNull.Value)
+                        return null;
+                    return result.ToString();
+                }
+            }
+        }
+
+        private static void RequireObjectiveColumn(string column)
+        {
+            if (column == "blocked_by_objective_ids_json"
+                || column == "suggested_playbooks_json"
+                || column == "status")
+                return;
+
+            throw new InvalidOperationException("Column is not an objective stored field under test: " + column);
+        }
+
+        private static DbConnection OpenConnection(string connectionString)
+        {
+            switch (TestDatabaseConfig.Type)
+            {
+                case DatabaseTypeEnum.Sqlite:
+                    return new SqliteConnection(connectionString);
+                case DatabaseTypeEnum.Postgresql:
+                    return new NpgsqlConnection(connectionString);
+                case DatabaseTypeEnum.Mysql:
+                    return new MySqlConnection(connectionString);
+                case DatabaseTypeEnum.SqlServer:
+                    return new SqlConnection(connectionString);
+                default:
+                    throw new InvalidOperationException("Objective stored-field cases do not support database provider " + TestDatabaseConfig.Type + ".");
+            }
+        }
+
+        private static void AddParameter(DbCommand command, string name, object value)
+        {
+            DbParameter parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
         }
 
         private static Objective NotNull(Objective? objective)
