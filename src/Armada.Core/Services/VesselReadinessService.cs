@@ -24,7 +24,6 @@ namespace Armada.Core.Services
         /// </summary>
         public VesselHostResolver? Hosts { get; set; } = null;
 
-        private static readonly Regex _CommandSegmentSplit = new Regex(@"\s*(?:&&|\|\||;|\r?\n)\s*", RegexOptions.Compiled);
         private static readonly Regex _TokenRegex = new Regex("^\\s*(?:\"([^\"]+)\"|'([^']+)'|([^\\s]+))", RegexOptions.Compiled);
         private static readonly HashSet<string> _ShellBuiltins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -874,8 +873,46 @@ namespace Armada.Core.Services
                 yield break;
 
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<string> segments = new List<string>();
+            int segmentStart = 0;
+            bool insideDoubleQuotes = false;
 
-            foreach (string segment in _CommandSegmentSplit.Split(command))
+            for (int index = 0; index < command.Length; index++)
+            {
+                char current = command[index];
+                if (insideDoubleQuotes && current == '\\' && index + 1 < command.Length)
+                {
+                    index++;
+                    continue;
+                }
+
+                if (current == '"')
+                {
+                    insideDoubleQuotes = !insideDoubleQuotes;
+                    continue;
+                }
+
+                if (insideDoubleQuotes)
+                    continue;
+
+                int separatorLength = 0;
+                if (current == '&' && index + 1 < command.Length && command[index + 1] == '&')
+                    separatorLength = 2;
+                else if (current == '|' && index + 1 < command.Length && command[index + 1] == '|')
+                    separatorLength = 2;
+                else if (current == ';' || current == '\n')
+                    separatorLength = 1;
+
+                if (separatorLength == 0)
+                    continue;
+
+                segments.Add(command.Substring(segmentStart, index - segmentStart));
+                index += separatorLength - 1;
+                segmentStart = index + 1;
+            }
+
+            segments.Add(command.Substring(segmentStart));
+            foreach (string segment in segments)
             {
                 string? dependency = ExtractDependencyFromSegment(segment);
                 if (String.IsNullOrWhiteSpace(dependency)) continue;
