@@ -2,6 +2,7 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Linq;
     using System.Threading;
@@ -20,13 +21,16 @@ namespace Test.Shared.Suites.Services
     /// environments), command previews, vessel/fleet/global resolution and preview, check-run
     /// execution with artifact collection, retry, structured test/coverage parsing, readiness
     /// evaluation (missing inputs, toolchains/environments/checklist, environment-scoped inputs),
-    /// landing preview gating, and fail-fast on missing required inputs.
+    /// landing preview gating, and fail-fast on missing required inputs. Two POSIX cases cover a
+    /// descendant that keeps the local check's output pipe open, and caller cancellation that must
+    /// stop the owned process. Windows skips those cases.
     /// </summary>
     public sealed class WorkflowProfileCheckRunServiceSuite : IArmadaTestSuite
     {
         #region Private-Members
 
         private const string SuiteId = "Services.WorkflowProfileCheckRunService";
+        private const string PosixFixtureSkipReason = "This case uses a POSIX shell process fixture, so it does not run on Windows.";
 
         #endregion
 
@@ -807,6 +811,23 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            bool skipPosixFixture = OperatingSystem.IsWindows();
+            string? posixSkipReason = skipPosixFixture ? PosixFixtureSkipReason : null;
+            cases.Add(CaseAsync(
+                "local_check_inherited_output_pipe_is_failed",
+                "A local check fails when a descendant keeps its output pipe open",
+                TestTags.Negative,
+                LocalCheckInheritedOutputPipeIsFailedAsync,
+                skipPosixFixture,
+                posixSkipReason));
+            cases.Add(CaseAsync(
+                "local_check_caller_cancel_stops_process",
+                "Caller cancellation stops the owned local check process",
+                TestTags.Negative,
+                LocalCheckCallerCancelStopsProcessAsync,
+                skipPosixFixture,
+                posixSkipReason));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Workflow Profile and Check Run Services",
@@ -883,14 +904,190 @@ namespace Test.Shared.Suites.Services
             }
         }
 
-        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body)
+        private static async Task LocalCheckInheritedOutputPipeIsFailedAsync()
+        {
+            using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+            {
+                LoggingModule logging = CreateLogging();
+                WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+                CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
+                await EnsureTenantAndUserAsync(testDb, "ten_pipe", "usr_pipe").ConfigureAwait(false);
+
+                string workingDirectory = TestTemp.NewDirectory("check-pipe");
+                string pidPath = Path.Combine(workingDirectory, "hold.pid");
+                try
+                {
+                    Vessel vessel = CreateVessel("ten_pipe", "usr_pipe", workingDirectory);
+                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                    AuthContext auth = AuthContext.Authenticated("ten_pipe", "usr_pipe", false, false, "UnitTest");
+                    Stopwatch clock = Stopwatch.StartNew();
+                    CheckRun run = await checkRuns.RunAsync(auth, new CheckRunRequest
+                    {
+                        VesselId = vessel.Id,
+                        Type = CheckRunTypeEnum.Build,
+                        Label = "Build",
+                        CommandOverride = "(trap '' HUP; command sleep 12) & echo $! > hold.pid; echo done"
+                    }).ConfigureAwait(false);
+                    clock.Stop();
+
+                    AssertEqual(CheckRunStatusEnum.Failed, run.Status, "incomplete output is not a passing check");
+                    AssertEqual(-1, run.ExitCode ?? 0, "incomplete output uses the non-pass exit code");
+                    AssertContains("incomplete", run.Output ?? String.Empty, "the result names the incomplete output");
+                    AssertTrue(clock.Elapsed < TimeSpan.FromSeconds(8), "the check returns within the output drain bound, took " + clock.Elapsed.ToString());
+                }
+                finally
+                {
+                    StopRecordedProcess(pidPath);
+                    TestTemp.TryDelete(workingDirectory);
+                }
+            }
+        }
+
+        private static async Task LocalCheckCallerCancelStopsProcessAsync()
+        {
+            using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+            {
+                LoggingModule logging = CreateLogging();
+                WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+                CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
+                await EnsureTenantAndUserAsync(testDb, "ten_cancel", "usr_cancel").ConfigureAwait(false);
+
+                string workingDirectory = TestTemp.NewDirectory("check-cancel");
+                string pidPath = Path.Combine(workingDirectory, "shell.pid");
+                int processId = 0;
+                try
+                {
+                    Vessel vessel = CreateVessel("ten_cancel", "usr_cancel", workingDirectory);
+                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+                    AuthContext auth = AuthContext.Authenticated("ten_cancel", "usr_cancel", false, false, "UnitTest");
+                    using (CancellationTokenSource cancel = new CancellationTokenSource())
+                    {
+                        Task<CheckRun> running = checkRuns.RunAsync(auth, new CheckRunRequest
+                        {
+                            VesselId = vessel.Id,
+                            Type = CheckRunTypeEnum.Build,
+                            Label = "Build",
+                            CommandOverride = "echo $$ > shell.pid; command sleep 90"
+                        }, cancel.Token);
+
+                        bool started = await WaitUntilAsync(() => TryReadProcessId(pidPath, out processId), TimeSpan.FromSeconds(40)).ConfigureAwait(false);
+                        AssertTrue(started, "the local check process started");
+                        cancel.Cancel();
+                        Task finished = await Task.WhenAny(running, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
+                        bool stopped = await WaitUntilAsync(() => !ProcessIsRunning(processId), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                        AssertTrue(finished == running, "the cancelled check returns");
+                        AssertTrue(stopped, "the owned check process is stopped after cancellation");
+                        try
+                        {
+                            await running.ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // RunAsync may surface the caller token after it stops the process.
+                        }
+                    }
+                }
+                finally
+                {
+                    if (processId > 0) StopProcessTree(processId);
+                    StopRecordedProcess(pidPath);
+                    TestTemp.TryDelete(workingDirectory);
+                }
+            }
+        }
+
+        private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+        {
+            MonotonicDeadline deadline = MonotonicDeadline.After(timeout);
+            while (!deadline.Passed)
+            {
+                if (condition()) return true;
+                await Task.Delay(50).ConfigureAwait(false);
+            }
+
+            return condition();
+        }
+
+        private static bool TryReadProcessId(string path, out int processId)
+        {
+            processId = 0;
+            try
+            {
+                if (!File.Exists(path)) return false;
+                return Int32.TryParse(File.ReadAllText(path).Trim(), out processId) && processId > 0;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        private static void StopRecordedProcess(string path)
+        {
+            if (TryReadProcessId(path, out int processId))
+                StopProcessTree(processId);
+        }
+
+        private static bool ProcessIsRunning(int processId)
+        {
+            try
+            {
+                using (Process process = Process.GetProcessById(processId))
+                {
+                    return !process.HasExited;
+                }
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
+
+        private static void StopProcessTree(int processId)
+        {
+            if (processId <= 0) return;
+            try
+            {
+                using (Process process = Process.GetProcessById(processId))
+                {
+                    if (!process.HasExited)
+                        process.Kill(true);
+                }
+            }
+            catch (ArgumentException)
+            {
+                // The process has already exited.
+            }
+            catch (InvalidOperationException)
+            {
+                // The process has already exited.
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // The process has already exited.
+            }
+        }
+
+        private static TestCaseDescriptor CaseAsync(string caseId, string displayName, string tag, Func<Task> body, bool skip = false, string? skipReason = null)
         {
             return new TestCaseDescriptor(
                 suiteId: SuiteId,
                 caseId: caseId,
                 displayName: displayName,
                 executeAsync: (CancellationToken ct) => body(),
-                tags: new List<string> { tag });
+                tags: new List<string> { tag },
+                skip: skip,
+                skipReason: skipReason);
         }
 
         #endregion
