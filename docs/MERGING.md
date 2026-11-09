@@ -86,7 +86,7 @@ Because each entry is landed immediately, the next entry in the same group alway
 - **Keep test commands fast.** Tests run synchronously per entry, blocking subsequent entries in the same group. Long tests slow down the entire group's queue throughput.
 - **Use priorities.** Lower priority numbers are processed first within a group. Use this to land critical fixes ahead of routine changes.
 - **Monitor terminal entries.** Use `enumerate` with entityType 'merge_queue' and status 'Failed' to check for entries that may need attention.
-- **Clean up regularly.** Use `delete_merge`, `purge_merge_entry`, `purge_merge_entries`, or `purge_merge_queue` to remove terminal entries and their associated git branches (local and remote, best effort).
+- **Clean up regularly.** Use `delete_merge`, `purge_merge_entry`, `purge_merge_entries`, or `purge_merge_queue` to remove terminal entries. A landed entry follows `BranchCleanupPolicy`: `None` keeps the local and origin mission refs, `LocalOnly` deletes the local ref only, and `LocalAndRemote` deletes both. A landed branch that is not contained in the target stays. A failed entry keeps its branch. A cancelled entry loses the local and origin refs when git shows that the branch is merged.
 
 ---
 
@@ -99,7 +99,7 @@ Because each entry is landed immediately, the next entry in the same group alway
 | `process_merge_entry` | Process a single entry by ID. |
 | `get_merge_entry` | Get a single entry by ID. |
 | `cancel_merge` | Cancel a queued entry. |
-| `delete_merge` | Delete a terminal entry and clean up its branches. |
+| `delete_merge` | Delete a terminal entry and clean up its landed branch under `BranchCleanupPolicy`. |
 | `purge_merge_entry` | Delete a single terminal entry by ID. |
 | `purge_merge_entries` | Delete several terminal entries by ID; returns purged and skipped counts. |
 | `purge_merge_queue` | Bulk delete all terminal entries, with optional vessel/status filters. |
@@ -180,7 +180,7 @@ Nothing is migrated for you: every `LocalMerge` you set in 1.0.0 now merges with
 
 ## Branch Cleanup Policy
 
-After a mission's work has landed, Armada can automatically clean up the mission branch. The policy is resolved from the vessel level (falling back to global settings):
+After a mission's work has landed, Armada can automatically clean up the mission branch. The policy is resolved from the vessel level (falling back to global settings). Purging a landed merge-queue entry uses the same policy.
 
 | Policy | Behavior |
 |---|---|
