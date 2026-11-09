@@ -14,7 +14,7 @@ export interface SignalListFilterState {
 /** The server-side filters for listSignals (empty values are omitted). */
 export function signalListFilters(state: SignalListFilterState): Record<string, string> {
   const filters: Record<string, string> = {};
-  if (state.type) filters.type = state.type;
+  if (state.type) filters.signalType = state.type;
   if (state.toCaptainId) filters.toCaptainId = state.toCaptainId;
   if (state.unreadOnly) filters.unreadOnly = 'true';
   if (state.userId) filters.userId = state.userId;

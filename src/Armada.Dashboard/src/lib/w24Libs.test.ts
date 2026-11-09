@@ -99,7 +99,7 @@ describe('signals', () => {
   it('builds list filters', () => {
     expect(signalListFilters({ type: '', toCaptainId: '', unreadOnly: false, userId: '' })).toEqual({});
     expect(signalListFilters({ type: 'Mail', toCaptainId: 'cpt_1', unreadOnly: true, userId: 'usr_1' }))
-      .toEqual({ type: 'Mail', toCaptainId: 'cpt_1', unreadOnly: 'true', userId: 'usr_1' });
+      .toEqual({ signalType: 'Mail', toCaptainId: 'cpt_1', unreadOnly: 'true', userId: 'usr_1' });
   });
 
   it('builds the send request', () => {
