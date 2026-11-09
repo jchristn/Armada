@@ -33,6 +33,29 @@ namespace Test.Shared.Suites.Services
 
         private const string SuiteId = "Services.MissionPrompt";
 
+        private const string CommitInstructionSentence = "Commit all changes to the current branch";
+
+        private const string PushInstructionSentence = "Commit and push your changes";
+
+        /// <summary>
+        /// Exact <c>mission.rules</c> content shipped with an unconditional captain push. Seeding must
+        /// replace this built-in text. Any other built-in text stays in place.
+        /// </summary>
+        private const string ShippedMissionRulesWithUnconditionalPush =
+            "## Rules\n" +
+            "- Work only within this worktree directory\n" +
+            "- Stay strictly within the mission scope and listed files\n" +
+            "- Do not create, modify, or delete files outside the listed scope unless the mission explicitly requires it\n" +
+            "- If you discover a necessary out-of-scope change, report it in your result instead of expanding scope on your own\n" +
+            "- Commit all changes to the current branch\n" +
+            "- Commit and push your changes -- the Admiral will also push if needed\n" +
+            "- If you encounter a blocking issue, commit what you have and exit\n" +
+            "- Exit with code 0 on success\n" +
+            "- Do not use extended/Unicode characters (em dashes, smart quotes, etc.) -- use only ASCII characters in all output and commit messages\n" +
+            "- Do not use ANSI color codes or terminal formatting in output -- keep all output plain text\n" +
+            "- You cannot ask the operator questions during a mission and nobody will answer them: when a choice has a sensible default (for example the newest target framework of a multi-targeted .NET project whose SDK is installed; `dotnet --list-sdks` shows them), make it, say what you chose in your result, and continue\n" +
+            "- Stop and report instead of choosing only when the choice is risky or hard to undo, or the mission could mean materially different things\n";
+
         #endregion
 
         #region Public-Methods
@@ -44,6 +67,89 @@ namespace Test.Shared.Suites.Services
         public TestSuiteDescriptor Build()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
+
+            cases.Add(CaseAsync("mission_rules_push_instruction_matches_landing_mode", "Mission rules only instruct the captain to push for pull requests", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.LandingMode = LandingModeEnum.MergeAndPush;
+                    StubGitService git = new StubGitService();
+                    MissionService fallbackService = CreateMissionService(logging, testDb.Driver, settings, git);
+                    MissionService templateService = CreateMissionServiceWithTemplates(logging, testDb.Driver, settings, git, out IPromptTemplateService templates);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    Vessel vessel = new Vessel("LandingModeRulesVessel", "https://github.com/example/landing-mode-rules");
+                    LandingModeEnum[] modes = new LandingModeEnum[]
+                    {
+                        LandingModeEnum.LocalMerge,
+                        LandingModeEnum.MergeQueue,
+                        LandingModeEnum.None,
+                        LandingModeEnum.MergeAndPush,
+                        LandingModeEnum.PullRequest,
+                        (LandingModeEnum)999
+                    };
+
+                    foreach (MissionService service in new MissionService[] { fallbackService, templateService })
+                    {
+                        foreach (LandingModeEnum mode in modes)
+                        {
+                            vessel.LandingMode = mode;
+                            Mission mission = new Mission("Prompt landing mode " + mode, "Check the landing instructions.");
+                            string content = await ReadGeneratedInstructionsAsync(service, "landing-mode-rules", mission, vessel).ConfigureAwait(false);
+                            bool expectsPush = mode == LandingModeEnum.PullRequest || (int)mode == 999;
+                            AssertEqual(expectsPush, content.Contains(PushInstructionSentence, StringComparison.Ordinal), mode + " captain push instruction");
+                            AssertTrue(content.Contains(CommitInstructionSentence, StringComparison.Ordinal), mode + " captain commit instruction");
+                        }
+                    }
+
+                    vessel.LandingMode = LandingModeEnum.LocalMerge;
+                    Mission audit = new Mission("Read only audit prompt", "Inspect the work.") { Mode = MissionModeEnum.Audit };
+                    string auditContent = await ReadGeneratedInstructionsAsync(templateService, "audit-mode-rules", audit, vessel).ConfigureAwait(false);
+                    AssertContains("READ-ONLY", auditContent);
+                    AssertFalse(auditContent.Contains(CommitInstructionSentence, StringComparison.Ordinal), "Audit must not receive commit instructions");
+                    AssertFalse(auditContent.Contains(PushInstructionSentence, StringComparison.Ordinal), "Audit must not receive push instructions");
+
+                    Mission research = new Mission("Read only research prompt", "Investigate the implementation.") { Mode = MissionModeEnum.Research };
+                    string researchContent = await ReadGeneratedInstructionsAsync(templateService, "research-mode-rules", research, vessel).ConfigureAwait(false);
+                    AssertContains("READ-ONLY", researchContent);
+                    AssertFalse(researchContent.Contains(CommitInstructionSentence, StringComparison.Ordinal), "Research must not receive commit instructions");
+                    AssertFalse(researchContent.Contains(PushInstructionSentence, StringComparison.Ordinal), "Research must not receive push instructions");
+                }
+            }));
+
+            cases.Add(CaseAsync("mission_rules_untouched_builtin_follows_landing_mode", "Seeding an untouched built-in mission rules template follows the landing mode", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    await testDb.Driver.PromptTemplates.CreateAsync(new PromptTemplate("mission.rules", ShippedMissionRulesWithUnconditionalPush) { IsBuiltIn = true }).ConfigureAwait(false);
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    settings.LandingMode = LandingModeEnum.PullRequest;
+                    MissionService service = CreateMissionServiceWithTemplates(logging, testDb.Driver, settings, new StubGitService(), out IPromptTemplateService templates);
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    Vessel vessel = new Vessel("UntouchedMissionRulesVessel", "https://github.com/example/untouched-mission-rules");
+                    vessel.LandingMode = LandingModeEnum.LocalMerge;
+                    Mission mission = new Mission("Untouched rules landing mode", "Check the stored built-in rules.");
+                    string content = await ReadGeneratedInstructionsAsync(service, "untouched-mission-rules", mission, vessel).ConfigureAwait(false);
+                    AssertTrue(content.Contains(CommitInstructionSentence, StringComparison.Ordinal), "Untouched built-in rules still ask for a commit");
+                    AssertFalse(content.Contains(PushInstructionSentence, StringComparison.Ordinal), "Untouched built-in rules must not ask for a captain push on local merge");
+                }
+            }));
+
+            cases.Add(CaseAsync("mission_rules_seed_keeps_custom_builtin_content", "Seeding mission rules preserves operator content", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    string customContent = "## Rules\n- CUSTOM_OPERATOR_RULE_LANDING_MODE\n";
+                    await testDb.Driver.PromptTemplates.CreateAsync(new PromptTemplate("mission.rules", customContent) { IsBuiltIn = true }).ConfigureAwait(false);
+                    PromptTemplateService templates = new PromptTemplateService(testDb.Driver, CreateLogging());
+                    await templates.SeedDefaultsAsync().ConfigureAwait(false);
+                    PromptTemplate? resolved = await testDb.Driver.PromptTemplates.ReadByNameAsync("mission.rules").ConfigureAwait(false);
+                    AssertNotNull(resolved, "mission.rules should remain present");
+                    AssertEqual(customContent, resolved!.Content, "Custom built-in content must not be overwritten");
+                }
+            }));
 
             cases.Add(CaseAsync("generate_claude_md_async_includes_project_context_when_set", "GenerateClaudeMdAsync includes ProjectContext when set", TestTags.Positive, async () =>
             {
@@ -1241,6 +1347,13 @@ namespace Test.Shared.Suites.Services
             ICaptainService captainService = new CaptainService(logging, db, settings, git, dockService);
             templateService = new PromptTemplateService(db, logging);
             return new MissionService(logging, db, settings, dockService, captainService, templateService);
+        }
+
+        private static async Task<string> ReadGeneratedInstructionsAsync(MissionService service, string directoryLabel, Mission mission, Vessel vessel)
+        {
+            string directory = TestTemp.NewDirectory(directoryLabel);
+            await service.GenerateClaudeMdAsync(directory, mission, vessel).ConfigureAwait(false);
+            return await File.ReadAllTextAsync(Path.Combine(directory, "CLAUDE.md")).ConfigureAwait(false);
         }
 
         private static string Git(string workingDirectory, params string[] args)

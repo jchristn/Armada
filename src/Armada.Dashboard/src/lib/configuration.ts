@@ -54,6 +54,8 @@ export const PROMPT_TEMPLATE_PARAMETER_GROUPS: PromptTemplateParameterGroup[] = 
       { name: '{MissionId}', description: 'Mission identifier' },
       { name: '{MissionTitle}', description: 'Mission title' },
       { name: '{MissionDescription}', description: 'Full mission description' },
+      { name: '{MissionCommitInstruction}', description: 'Commit instruction selected for the mission mode' },
+      { name: '{MissionPushInstruction}', description: 'Push instruction selected for the landing mode' },
       { name: '{MissionPersona}', description: 'Persona assigned to this mission' },
       { name: '{VoyageId}', description: 'Parent voyage identifier' },
       { name: '{BranchName}', description: 'Git branch for this mission' },
