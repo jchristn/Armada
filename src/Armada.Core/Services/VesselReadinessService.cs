@@ -931,9 +931,9 @@ namespace Armada.Core.Services
         {
             int separatorIndex = token.IndexOf('=');
             if (separatorIndex <= 0) return false;
-            if (token.Contains(Path.DirectorySeparatorChar) || token.Contains(Path.AltDirectorySeparatorChar)) return false;
 
             string variableName = token.Substring(0, separatorIndex);
+            if (Char.IsDigit(variableName[0])) return false;
             return variableName.All(ch => Char.IsLetterOrDigit(ch) || ch == '_');
         }
 
