@@ -807,6 +807,132 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("cancel_interrupted_runs_cancels_only_older_armada_rows", "CancelInterruptedRunsAsync cancels only older Armada Running rows", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false))
+                {
+                    LoggingModule logging = CreateLogging();
+                    WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                    VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+                    CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
+                    List<string> changedIds = new List<string>();
+                    checkRuns.OnCheckRunChanged = changed => changedIds.Add(changed.Id);
+
+                    DateTime baseUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                    DateTime insertedEqual = baseUtc.AddDays(2);
+                    List<string> oldIds = new List<string>();
+                    for (int index = 0; index < 201; index++)
+                    {
+                        bool specimen = index == 0;
+                        CheckRun old = await testDb.Driver.CheckRuns.CreateAsync(new CheckRun
+                        {
+                            Source = CheckRunSourceEnum.Armada,
+                            Status = CheckRunStatusEnum.Running,
+                            Command = "echo interrupted",
+                            StartedUtc = baseUtc,
+                            Output = specimen ? null : "filler",
+                            DurationMs = specimen ? 88001L : 3L,
+                            CreatedUtc = baseUtc.AddSeconds(index),
+                            Type = CheckRunTypeEnum.Build
+                        }).ConfigureAwait(false);
+                        oldIds.Add(old.Id);
+                    }
+
+                    CheckRun nullStart = await testDb.Driver.CheckRuns.CreateAsync(new CheckRun
+                    {
+                        Source = CheckRunSourceEnum.Armada,
+                        Status = CheckRunStatusEnum.Running,
+                        Command = "echo interrupted",
+                        StartedUtc = null,
+                        Output = "kept output",
+                        DurationMs = 42L,
+                        CreatedUtc = baseUtc.AddSeconds(201),
+                        Type = CheckRunTypeEnum.Build
+                    }).ConfigureAwait(false);
+                    CheckRun equal = await testDb.Driver.CheckRuns.CreateAsync(new CheckRun
+                    {
+                        Source = CheckRunSourceEnum.Armada,
+                        Status = CheckRunStatusEnum.Running,
+                        Command = "echo interrupted",
+                        StartedUtc = insertedEqual,
+                        Output = "equal output",
+                        DurationMs = 5L,
+                        CreatedUtc = baseUtc.AddSeconds(202),
+                        Type = CheckRunTypeEnum.Build
+                    }).ConfigureAwait(false);
+                    CheckRun future = await testDb.Driver.CheckRuns.CreateAsync(new CheckRun
+                    {
+                        Source = CheckRunSourceEnum.Armada,
+                        Status = CheckRunStatusEnum.Running,
+                        Command = "echo interrupted",
+                        StartedUtc = insertedEqual.AddDays(1),
+                        Output = "future output",
+                        DurationMs = 6L,
+                        CreatedUtc = baseUtc.AddSeconds(203),
+                        Type = CheckRunTypeEnum.Build
+                    }).ConfigureAwait(false);
+                    CheckRun external = await testDb.Driver.CheckRuns.CreateAsync(new CheckRun
+                    {
+                        Source = CheckRunSourceEnum.External,
+                        Status = CheckRunStatusEnum.Running,
+                        Command = "echo interrupted",
+                        StartedUtc = baseUtc,
+                        Output = "external output",
+                        Summary = "imported run",
+                        DurationMs = 9L,
+                        CreatedUtc = baseUtc.AddSeconds(204),
+                        Type = CheckRunTypeEnum.Build
+                    }).ConfigureAwait(false);
+
+                    CheckRun storedEqual = (await testDb.Driver.CheckRuns.ReadAsync(equal.Id).ConfigureAwait(false))!;
+                    AssertTrue(storedEqual.StartedUtc.HasValue, "the equal start is stored");
+                    DateTime processStart = storedEqual.StartedUtc!.Value;
+
+                    int cancelled = await checkRuns.CancelInterruptedRunsAsync(processStart).ConfigureAwait(false);
+                    AssertEqual(202, cancelled, "older Armada rows and the null start");
+                    AssertEqual(202, changedIds.Count, "each cancel notifies");
+
+                    CheckRun storedSpecimen = (await testDb.Driver.CheckRuns.ReadAsync(oldIds[0]).ConfigureAwait(false))!;
+                    AssertEqual(CheckRunStatusEnum.Canceled, storedSpecimen.Status, "old Armada run on the later page");
+                    AssertEqual("The command died with the process and this record has no verdict.", storedSpecimen.Summary, "dead-command summary");
+                    AssertEqual("The command died with the process and this record has no verdict.", storedSpecimen.Output, "empty output receives the summary");
+                    AssertTrue(storedSpecimen.CompletedUtc.HasValue, "old Armada run has a completion time");
+                    AssertEqual(88001L, storedSpecimen.DurationMs ?? -1L, "old Armada duration is unchanged");
+
+                    CheckRun storedNull = (await testDb.Driver.CheckRuns.ReadAsync(nullStart.Id).ConfigureAwait(false))!;
+                    AssertEqual(CheckRunStatusEnum.Canceled, storedNull.Status, "null start is eligible");
+                    AssertEqual("kept output", storedNull.Output, "stored output is kept");
+                    AssertFalse(storedNull.StartedUtc.HasValue, "null start stays null");
+                    AssertEqual(42L, storedNull.DurationMs ?? -1L, "null-start duration is unchanged");
+
+                    foreach (string oldId in oldIds)
+                    {
+                        CheckRun storedOld = (await testDb.Driver.CheckRuns.ReadAsync(oldId).ConfigureAwait(false))!;
+                        AssertEqual(CheckRunStatusEnum.Canceled, storedOld.Status, "every older Armada row");
+                    }
+
+                    CheckRun storedEqualAfter = (await testDb.Driver.CheckRuns.ReadAsync(equal.Id).ConfigureAwait(false))!;
+                    AssertEqual(CheckRunStatusEnum.Running, storedEqualAfter.Status, "a start equal to the process start stays Running");
+                    AssertEqual("equal output", storedEqualAfter.Output, "equal-start output stays");
+                    AssertFalse(storedEqualAfter.CompletedUtc.HasValue, "equal-start run has no completion time");
+
+                    CheckRun storedFuture = (await testDb.Driver.CheckRuns.ReadAsync(future.Id).ConfigureAwait(false))!;
+                    AssertEqual(CheckRunStatusEnum.Running, storedFuture.Status, "a later start stays Running");
+                    AssertEqual("future output", storedFuture.Output, "later output stays");
+
+                    CheckRun storedExternal = (await testDb.Driver.CheckRuns.ReadAsync(external.Id).ConfigureAwait(false))!;
+                    AssertEqual(CheckRunStatusEnum.Running, storedExternal.Status, "an imported run stays Running");
+                    AssertEqual("imported run", storedExternal.Summary, "imported summary stays");
+                    AssertEqual("external output", storedExternal.Output, "imported output stays");
+                    AssertFalse(changedIds.Contains(equal.Id), "a current run does not notify");
+                    AssertFalse(changedIds.Contains(external.Id), "an imported run does not notify");
+
+                    int second = await checkRuns.CancelInterruptedRunsAsync(processStart).ConfigureAwait(false);
+                    AssertEqual(0, second, "a second call finds nothing still eligible");
+                    AssertEqual(202, changedIds.Count, "the second call does not notify");
+                }
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Workflow Profile and Check Run Services",
