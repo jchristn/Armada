@@ -20,8 +20,10 @@ namespace Armada.Core.Services
         /// Decide whether a voyage's missions have settled and, if so, its terminal status. A voyage is still running
         /// while any mission is Pending, Blocked, Assigned, InProgress, Testing, Review or PullRequestOpen, while a WorkProduced
         /// mission is still being completed (its handoff, rework or landing is being decided), or while a WorkProduced
-        /// mission still has an unsettled merge-queue entry. A settled voyage is Failed when any mission Failed or
-        /// LandingFailed, otherwise Complete.
+        /// mission still has an unsettled merge-queue entry. A settled voyage is Failed when any mission is Failed or
+        /// LandingFailed. It is Cancelled when every mission is Cancelled. It is Failed when any mission is Cancelled
+        /// and no mission is Complete. It is Complete when at least one mission is Complete, and when the settled
+        /// missions are only WorkProduced.
         /// </summary>
         /// <param name="missions">The voyage's missions.</param>
         /// <param name="isCompletionInFlight">Whether a WorkProduced mission's completion is still running, or null.</param>
@@ -65,7 +67,17 @@ namespace Armada.Core.Services
             }
 
             bool anyFailed = missions.Any(m => m.Status == MissionStatusEnum.Failed || m.Status == MissionStatusEnum.LandingFailed);
-            return anyFailed ? VoyageStatusEnum.Failed : VoyageStatusEnum.Complete;
+            if (anyFailed) return VoyageStatusEnum.Failed;
+
+            if (missions.All(m => m.Status == MissionStatusEnum.Cancelled)) return VoyageStatusEnum.Cancelled;
+
+            if (missions.Any(m => m.Status == MissionStatusEnum.Cancelled) &&
+                !missions.Any(m => m.Status == MissionStatusEnum.Complete))
+            {
+                return VoyageStatusEnum.Failed;
+            }
+
+            return VoyageStatusEnum.Complete;
         }
 
         /// <summary>
