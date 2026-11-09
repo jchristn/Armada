@@ -106,6 +106,28 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("handle_completion_clears_stale_failure_reason", "HandleCompletion clears a stale failure reason", TestTags.Positive, async () =>
+            {
+                using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
+                {
+                    StubGitService git = new StubGitService();
+                    LoggingModule logging = CreateLogging();
+                    ArmadaSettings settings = CreateSettings();
+                    IDockService dockService = new DockService(logging, testDb.Driver, settings, git);
+                    ICaptainService captainService = new CaptainService(logging, testDb.Driver, settings, git, dockService);
+                    IMissionService missionService = new MissionService(logging, testDb.Driver, settings, dockService, captainService);
+                    TestEntitiesResult entities = await CreateTestEntitiesAsync(testDb.Driver);
+                    entities.Mission.FailureReason = "stale failure";
+                    await testDb.Driver.Missions.UpdateAsync(entities.Mission);
+
+                    await missionService.HandleCompletionAsync(entities.Captain);
+
+                    Mission? updated = await testDb.Driver.Missions.ReadAsync(entities.Mission.Id);
+                    AssertEqual(MissionStatusEnum.WorkProduced, updated!.Status);
+                    AssertNull(updated.FailureReason, "successful completion clears the prior failure reason");
+                }
+            }));
+
             cases.Add(CaseAsync("handle_completion_clears_process_id", "HandleCompletion clears ProcessId", TestTags.Positive, async () =>
             {
                 using (TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync())
@@ -447,8 +469,8 @@ namespace Test.Shared.Suites.Services
         {
             // Create a vessel (fleet is optional)
             Vessel vessel = new Vessel("test-vessel", "https://github.com/test/repo.git");
-            vessel.LocalPath = Path.Combine(Path.GetTempPath(), "armada_test_bare_" + Guid.NewGuid().ToString("N"));
-            vessel.WorkingDirectory = Path.Combine(Path.GetTempPath(), "armada_test_work_" + Guid.NewGuid().ToString("N"));
+            vessel.LocalPath = TestTemp.NewDirectory("mission_transition_bare");
+            vessel.WorkingDirectory = TestTemp.NewDirectory("mission_transition_work");
             vessel.DefaultBranch = "main";
             await db.Vessels.CreateAsync(vessel).ConfigureAwait(false);
 
@@ -460,7 +482,7 @@ namespace Test.Shared.Suites.Services
             // Create a dock
             Dock dock = new Dock(vessel.Id);
             dock.CaptainId = captain.Id;
-            dock.WorktreePath = Path.Combine(Path.GetTempPath(), "armada_test_wt_" + Guid.NewGuid().ToString("N"));
+            dock.WorktreePath = TestTemp.NewDirectory("mission_transition_worktree");
             dock.BranchName = "armada/test-captain/msn_test123";
             dock.Active = true;
             await db.Docks.CreateAsync(dock).ConfigureAwait(false);

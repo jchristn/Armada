@@ -47,6 +47,8 @@ namespace Test.Shared.Suites.Services
                     repos.PushBranch("feature/clean", "clean.txt", "clean change\n");
                     MergeQueueService queue = CreateQueue(testDb.Driver);
                     Mission mission = await CreateMissionAsync(testDb.Driver, repos).ConfigureAwait(false);
+                    mission.FailureReason = "stale failure";
+                    await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
                     MergeEntry entry = await EnqueueAsync(queue, testDb.Driver, repos, "feature/clean", mission.Id, null).ConfigureAwait(false);
 
                     MergeEntry? processed = await queue.ProcessSingleAsync(entry.Id).ConfigureAwait(false);
@@ -55,6 +57,7 @@ namespace Test.Shared.Suites.Services
                     AssertTrue(repos.OriginHasFile("main", "clean.txt"), "origin main contains the landed change");
                     Mission? updated = await testDb.Driver.Missions.ReadAsync(mission.Id).ConfigureAwait(false);
                     AssertEqual(MissionStatusEnum.Complete, updated!.Status);
+                    AssertNull(updated.FailureReason, "successful landing clears the prior failure reason");
                 }
             }));
 
