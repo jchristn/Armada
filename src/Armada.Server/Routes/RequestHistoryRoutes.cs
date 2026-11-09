@@ -299,31 +299,31 @@ namespace Armada.Server.Routes
 
         private static RequestHistoryQuery ApplyQuerystringOverrides(ApiRequest req, RequestHistoryQuery query)
         {
-            if (int.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
+            if (int.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int pageNumber))
                 query.PageNumber = Math.Max(1, pageNumber);
-            if (int.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
+            if (int.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int pageSize))
                 query.PageSize = Math.Clamp(pageSize, 1, 500);
-            if (int.TryParse(req.Query.GetValueOrDefault("statusCode"), out int statusCode))
+            if (int.TryParse(QueryValueReader.Read(req.Query, "statusCode"), out int statusCode))
                 query.StatusCode = statusCode;
-            if (int.TryParse(req.Query.GetValueOrDefault("bucketMinutes"), out int bucketMinutes))
+            if (int.TryParse(QueryValueReader.Read(req.Query, "bucketMinutes"), out int bucketMinutes))
                 query.BucketMinutes = Math.Max(1, bucketMinutes);
 
-            query.Method = NormalizeEmpty(req.Query.GetValueOrDefault("method")) ?? query.Method;
-            query.Route = NormalizeEmpty(req.Query.GetValueOrDefault("route")) ?? query.Route;
-            query.Principal = NormalizeEmpty(req.Query.GetValueOrDefault("principal")) ?? query.Principal;
-            query.TenantId = NormalizeEmpty(req.Query.GetValueOrDefault("tenantId")) ?? query.TenantId;
-            query.UserId = NormalizeEmpty(req.Query.GetValueOrDefault("userId")) ?? query.UserId;
-            query.CredentialId = NormalizeEmpty(req.Query.GetValueOrDefault("credentialId")) ?? query.CredentialId;
+            query.Method = NormalizeEmpty(QueryValueReader.Read(req.Query, "method")) ?? query.Method;
+            query.Route = NormalizeEmpty(QueryValueReader.Read(req.Query, "route")) ?? query.Route;
+            query.Principal = NormalizeEmpty(QueryValueReader.Read(req.Query, "principal")) ?? query.Principal;
+            query.TenantId = NormalizeEmpty(QueryValueReader.Read(req.Query, "tenantId")) ?? query.TenantId;
+            query.UserId = NormalizeEmpty(QueryValueReader.Read(req.Query, "userId")) ?? query.UserId;
+            query.CredentialId = NormalizeEmpty(QueryValueReader.Read(req.Query, "credentialId")) ?? query.CredentialId;
 
-            if (TryParseNullableBool(req.Query.GetValueOrDefault("isSuccess"), out bool? isSuccess)
-                || TryParseNullableBool(req.Query.GetValueOrDefault("successOnly"), out isSuccess))
+            if (TryParseNullableBool(QueryValueReader.Read(req.Query, "isSuccess"), out bool? isSuccess)
+                || TryParseNullableBool(QueryValueReader.Read(req.Query, "successOnly"), out isSuccess))
             {
                 query.IsSuccess = isSuccess;
             }
 
-            if (DateTime.TryParse(Uri.UnescapeDataString(req.Query.GetValueOrDefault("fromUtc") ?? ""), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime fromUtc))
+            if (DateTime.TryParse(QueryValueReader.Read(req.Query, "fromUtc") ?? "", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime fromUtc))
                 query.FromUtc = fromUtc.ToUniversalTime();
-            if (DateTime.TryParse(Uri.UnescapeDataString(req.Query.GetValueOrDefault("toUtc") ?? ""), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime toUtc))
+            if (DateTime.TryParse(QueryValueReader.Read(req.Query, "toUtc") ?? "", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime toUtc))
                 query.ToUtc = toUtc.ToUniversalTime();
 
             return query;
@@ -368,7 +368,7 @@ namespace Armada.Server.Routes
 
         private static string? NormalizeEmpty(string? value)
         {
-            return String.IsNullOrWhiteSpace(value) ? null : Uri.UnescapeDataString(value);
+            return String.IsNullOrWhiteSpace(value) ? null : value;
         }
 
     }

@@ -104,32 +104,32 @@ namespace Armada.Server.Routes
         private static void ApplyQuerystringOverrides(ApiRequest req, HistoricalTimelineQuery query)
         {
             // PageNumber and PageSize clamp themselves (EnumerationQuery: page 1 or later, 1 to 1000 rows).
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageNumber"), out int pageNumber))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageNumber"), out int pageNumber))
                 query.PageNumber = pageNumber;
-            if (Int32.TryParse(req.Query.GetValueOrDefault("pageSize"), out int pageSize))
+            if (Int32.TryParse(QueryValueReader.Read(req.Query, "pageSize"), out int pageSize))
                 query.PageSize = pageSize;
-            if (Enum.TryParse<EnumerationOrderEnum>(req.Query.GetValueOrDefault("order"), true, out EnumerationOrderEnum order) && Enum.IsDefined(typeof(EnumerationOrderEnum), order))
+            if (Enum.TryParse<EnumerationOrderEnum>(QueryValueReader.Read(req.Query, "order"), true, out EnumerationOrderEnum order) && Enum.IsDefined(typeof(EnumerationOrderEnum), order))
                 query.Order = order;
-            if (DateTime.TryParse(req.Query.GetValueOrDefault("fromUtc"), out DateTime fromUtc))
+            if (DateTime.TryParse(QueryValueReader.Read(req.Query, "fromUtc"), out DateTime fromUtc))
                 query.FromUtc = fromUtc.ToUniversalTime();
-            if (DateTime.TryParse(req.Query.GetValueOrDefault("toUtc"), out DateTime toUtc))
+            if (DateTime.TryParse(QueryValueReader.Read(req.Query, "toUtc"), out DateTime toUtc))
                 query.ToUtc = toUtc.ToUniversalTime();
-            if (Boolean.TryParse(req.Query.GetValueOrDefault("postmortemOnly"), out bool postmortemOnly))
+            if (Boolean.TryParse(QueryValueReader.Read(req.Query, "postmortemOnly"), out bool postmortemOnly))
                 query.PostmortemOnly = postmortemOnly;
-            if (Boolean.TryParse(req.Query.GetValueOrDefault("excludeReadRequests"), out bool excludeReadRequests))
+            if (Boolean.TryParse(QueryValueReader.Read(req.Query, "excludeReadRequests"), out bool excludeReadRequests))
                 query.ExcludeReadRequests = excludeReadRequests;
 
-            query.ObjectiveId = NormalizeEmpty(req.Query.GetValueOrDefault("objectiveId")) ?? query.ObjectiveId;
-            query.VesselId = NormalizeEmpty(req.Query.GetValueOrDefault("vesselId")) ?? query.VesselId;
-            query.EnvironmentId = NormalizeEmpty(req.Query.GetValueOrDefault("environmentId")) ?? query.EnvironmentId;
-            query.DeploymentId = NormalizeEmpty(req.Query.GetValueOrDefault("deploymentId")) ?? query.DeploymentId;
-            query.IncidentId = NormalizeEmpty(req.Query.GetValueOrDefault("incidentId")) ?? query.IncidentId;
-            query.MissionId = NormalizeEmpty(req.Query.GetValueOrDefault("missionId")) ?? query.MissionId;
-            query.VoyageId = NormalizeEmpty(req.Query.GetValueOrDefault("voyageId")) ?? query.VoyageId;
-            query.Actor = NormalizeEmpty(req.Query.GetValueOrDefault("actor")) ?? query.Actor;
-            query.Text = NormalizeEmpty(req.Query.GetValueOrDefault("text")) ?? query.Text;
+            query.ObjectiveId = NormalizeEmpty(QueryValueReader.Read(req.Query, "objectiveId")) ?? query.ObjectiveId;
+            query.VesselId = NormalizeEmpty(QueryValueReader.Read(req.Query, "vesselId")) ?? query.VesselId;
+            query.EnvironmentId = NormalizeEmpty(QueryValueReader.Read(req.Query, "environmentId")) ?? query.EnvironmentId;
+            query.DeploymentId = NormalizeEmpty(QueryValueReader.Read(req.Query, "deploymentId")) ?? query.DeploymentId;
+            query.IncidentId = NormalizeEmpty(QueryValueReader.Read(req.Query, "incidentId")) ?? query.IncidentId;
+            query.MissionId = NormalizeEmpty(QueryValueReader.Read(req.Query, "missionId")) ?? query.MissionId;
+            query.VoyageId = NormalizeEmpty(QueryValueReader.Read(req.Query, "voyageId")) ?? query.VoyageId;
+            query.Actor = NormalizeEmpty(QueryValueReader.Read(req.Query, "actor")) ?? query.Actor;
+            query.Text = NormalizeEmpty(QueryValueReader.Read(req.Query, "text")) ?? query.Text;
 
-            string? sourceTypeValue = NormalizeEmpty(req.Query.GetValueOrDefault("sourceType"));
+            string? sourceTypeValue = NormalizeEmpty(QueryValueReader.Read(req.Query, "sourceType"));
             if (!String.IsNullOrWhiteSpace(sourceTypeValue))
             {
                 query.SourceTypes = sourceTypeValue

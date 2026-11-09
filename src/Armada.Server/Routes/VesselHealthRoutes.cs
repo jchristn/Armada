@@ -153,7 +153,7 @@ namespace Armada.Server.Routes
                 AuthContext? ctx = await AuthorizeAsync(req, authenticate, authz).ConfigureAwait(false);
                 if (ctx == null) return BuildAuthError(req);
                 EnumerationQuery query = new EnumerationQuery();
-                query.ApplyQuerystringOverrides(key => req.Query.GetValueOrDefault(key));
+                query.ApplyQuerystringOverrides(key => QueryValueReader.Read(req.Query, key));
                 EnumerationResult<VesselDependency>? page = await _Health.EnumerateDependenciesAsync(ctx.TenantId!, req.Parameters["id"], query).ConfigureAwait(false);
                 if (page == null) return NotFound(req);
                 return (object)page;

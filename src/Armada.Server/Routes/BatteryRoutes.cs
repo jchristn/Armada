@@ -58,8 +58,8 @@ namespace Armada.Server.Routes
                 if (denied != null) return denied;
                 try
                 {
-                    int? pageNumber = ParseInt(req.Query.GetValueOrDefault("pageNumber"), "pageNumber");
-                    int? pageSize = ParseInt(req.Query.GetValueOrDefault("pageSize"), "pageSize");
+                    int? pageNumber = ParseInt(QueryValueReader.Read(req.Query, "pageNumber"), "pageNumber");
+                    int? pageSize = ParseInt(QueryValueReader.Read(req.Query, "pageSize"), "pageSize");
                     return _Service.ListPacks(ctx, pageNumber, pageSize);
                 }
                 catch (Exception ex) when (RouteErrorMapper.IsMapped(ex))
