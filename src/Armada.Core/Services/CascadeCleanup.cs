@@ -83,7 +83,16 @@ namespace Armada.Core.Services
 
             int removed = await _DeleteEventsAsync(database, (int limit) => database.Events.EnumerateByCaptainAsync(captainId, limit, token), token).ConfigureAwait(false);
 
-            List<PlanningSession> sessions = await database.PlanningSessions.EnumerateByCaptainAsync(captainId, token).ConfigureAwait(false);
+            List<PlanningSession> sessions;
+            try
+            {
+                sessions = await database.PlanningSessions.EnumerateByCaptainAsync(captainId, token).ConfigureAwait(false);
+            }
+            catch (NotSupportedException)
+            {
+                sessions = new List<PlanningSession>();
+            }
+
             foreach (PlanningSession session in sessions)
             {
                 try
