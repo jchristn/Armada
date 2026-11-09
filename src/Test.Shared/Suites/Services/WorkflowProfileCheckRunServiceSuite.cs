@@ -722,6 +722,95 @@ namespace Test.Shared.Suites.Services
                 }
             }));
 
+            cases.Add(CaseAsync("landing_preview_does_not_count_failed_import_with_zero_exit_code_as_passing", "Landing preview does not count a failed imported check with exit code zero as passing", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                LoggingModule logging = CreateLogging();
+                WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+                CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
+                LandingPreviewService landingPreview = new LandingPreviewService(testDb.Driver, logging);
+
+                await EnsureTenantAndUserAsync(testDb, "ten_failed_check", "usr_failed_check").ConfigureAwait(false);
+
+                string workingDirectory = Path.Combine(Path.GetTempPath(), "armada-landing-failed-check-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(workingDirectory);
+
+                try
+                {
+                    Vessel vessel = CreateVessel("ten_failed_check", "usr_failed_check", workingDirectory);
+                    vessel.RequirePassingChecksToLand = true;
+                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    AuthContext auth = AuthContext.Authenticated("ten_failed_check", "usr_failed_check", false, false, "UnitTest");
+                    DateTime completedUtc = DateTime.UtcNow;
+                    CheckRun imported = await checkRuns.ImportAsync(auth, new CheckRunImportRequest
+                    {
+                        VesselId = vessel.Id,
+                        Status = CheckRunStatusEnum.Failed,
+                        BranchName = "feature/work",
+                        ExitCode = 0,
+                        CompletedUtc = completedUtc
+                    }).ConfigureAwait(false);
+
+                    AssertEqual(CheckRunStatusEnum.Failed, imported.Status, "Imported status");
+                    AssertEqual(0, imported.ExitCode ?? -1, "Imported exit code");
+                    AssertNotNull(imported.CompletedUtc, "Imported completion time");
+
+                    LandingPreviewResult preview = await landingPreview.PreviewForVesselAsync(auth, vessel, "feature/work").ConfigureAwait(false);
+
+                    AssertFalse(preview.HasPassingChecks, "A failed imported run must not count as passing evidence because its exit code is zero.");
+                    AssertTrue(preview.Issues.Exists(issue => issue.Code == "passing_checks_required"), "Expected passing_checks_required issue.");
+                    AssertFalse(preview.IsReadyToLand, "Expected landing preview to block landing without a passed check.");
+                    AssertEqual(CheckRunStatusEnum.Failed, preview.LatestCheckStatus!.Value, "Latest check status");
+                }
+                finally
+                {
+                    TryDeleteDirectory(workingDirectory);
+                }
+            }));
+
+            cases.Add(CaseAsync("landing_preview_counts_passed_import_without_zero_exit_code_as_passing", "Landing preview counts a passed imported check without exit code zero as passing", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
+                LoggingModule logging = CreateLogging();
+                WorkflowProfileService workflowProfiles = new WorkflowProfileService(testDb.Driver, logging);
+                VesselReadinessService readiness = new VesselReadinessService(testDb.Driver, workflowProfiles, logging);
+                CheckRunService checkRuns = new CheckRunService(testDb.Driver, workflowProfiles, readiness, logging);
+                LandingPreviewService landingPreview = new LandingPreviewService(testDb.Driver, logging);
+
+                await EnsureTenantAndUserAsync(testDb, "ten_passed_check", "usr_passed_check").ConfigureAwait(false);
+
+                string workingDirectory = Path.Combine(Path.GetTempPath(), "armada-landing-passed-check-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(workingDirectory);
+
+                try
+                {
+                    Vessel vessel = CreateVessel("ten_passed_check", "usr_passed_check", workingDirectory);
+                    vessel.RequirePassingChecksToLand = true;
+                    await testDb.Driver.Vessels.CreateAsync(vessel).ConfigureAwait(false);
+
+                    AuthContext auth = AuthContext.Authenticated("ten_passed_check", "usr_passed_check", false, false, "UnitTest");
+                    await checkRuns.ImportAsync(auth, new CheckRunImportRequest
+                    {
+                        VesselId = vessel.Id,
+                        Status = CheckRunStatusEnum.Passed,
+                        BranchName = "feature/work",
+                        ExitCode = null,
+                        CompletedUtc = DateTime.UtcNow
+                    }).ConfigureAwait(false);
+
+                    LandingPreviewResult preview = await landingPreview.PreviewForVesselAsync(auth, vessel, "feature/work").ConfigureAwait(false);
+
+                    AssertTrue(preview.HasPassingChecks, "A passed imported run must count as passing evidence when its exit code is absent.");
+                    AssertFalse(preview.Issues.Exists(issue => issue.Code == "passing_checks_required"), "Did not expect passing_checks_required after a passed check.");
+                }
+                finally
+                {
+                    TryDeleteDirectory(workingDirectory);
+                }
+            }));
+
             cases.Add(CaseAsync("run_async_fails_fast_when_required_workflow_input_is_missing", "RunAsync fails fast when required workflow input is missing", TestTags.Negative, async () =>
             {
                 using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync().ConfigureAwait(false);
