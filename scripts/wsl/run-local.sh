@@ -38,6 +38,8 @@ wsl_require_cmd curl "Install curl inside WSL (for example: sudo apt install cur
 if [ -z "${DISPLAY:-}" ]; then
     die "WSL 1 has no WSLg, so it cannot show Armada Harbor. Run scripts\\windows\\run-harbor.bat from Windows, move this distro to WSL 2 (wsl --set-version ${WSL_DISTRO_NAME:-<distro>} 2) and use scripts/wsl2, or start an X server on Windows and set DISPLAY."
 fi
+# A display alone is not enough: the distro needs the X11 client libraries Avalonia loads (stock WSL images lack them).
+wsl_check_libs error "Armada Harbor" "$WSL_AVALONIA_LIBS"
 
 # Builds the dashboard with the Linux Node.js in this distro (wsl_sanitize_path drops Windows node/npm from the
 # PATH) and deploys it into ~/.armada/dashboard. Without Node.js it deploys the dist/ an earlier build left, and
@@ -121,4 +123,6 @@ else
 fi
 
 echo "[run-local] Starting Armada Harbor (${FRAMEWORK})..."
+# Give Harbor the Windows PATH entries back (explorer.exe, wslview, the Windows browser) and BROWSER=wslview.
+wsl_prepare_app_env
 dotnet run --project "$REPO_ROOT/src/Armada.Harbor" --framework "$FRAMEWORK" --no-build

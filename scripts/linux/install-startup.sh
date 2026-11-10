@@ -28,7 +28,16 @@ case "${1:-}" in -h|--help) usage; exit 0 ;; esac
 armada_resolve_framework "$@"
 armada_reject_unexpected_args "$@"
 
+# Install ICU for .NET when it is missing (the Admiral is headless and needs nothing else); INSTALL_SYSTEM_PACKAGES=0
+# only reports it. Nothing is installed before the arguments are checked.
+# shellcheck source=../common/native-libs.sh
+. "${COMMON_DIR}/native-libs.sh"
+native_install_deps "Armada" icu
+
 command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install the .NET SDK: https://learn.microsoft.com/dotnet/core/install/linux"
+# shellcheck source=../common/native-libs.sh
+. "${COMMON_DIR}/native-libs.sh"
+native_check_icu
 command -v curl >/dev/null 2>&1 || die "curl was not found on PATH; the health check needs it. Install curl with your package manager."
 
 UNIT_NAME="armada.service"

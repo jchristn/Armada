@@ -42,6 +42,10 @@ while [ $# -gt 0 ]; do
 done
 
 command -v dotnet >/dev/null 2>&1 || { echo "dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download" >&2; exit 1; }
+# Native-library checks (ICU, Avalonia, clipboard); they do nothing where there is no ldconfig (macOS).
+# shellcheck source=scripts/common/native-libs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/native-libs.sh"
+native_check_icu
 if [ "$(echo "$PROVIDERS" | tr '[:upper:]' '[:lower:]' | tr -d ' ')" != "sqlite" ]; then
   command -v docker >/dev/null 2>&1 || { echo "docker was not found on PATH; it runs the server providers. Install Docker or pass --providers sqlite." >&2; exit 1; }
   docker info >/dev/null 2>&1 || { echo "The Docker engine is not reachable. Start Docker or pass --providers sqlite." >&2; exit 1; }

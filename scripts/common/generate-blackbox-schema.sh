@@ -20,6 +20,10 @@ case "${1:-}" in -h|--help) usage; exit 0 ;; esac
 armada_resolve_framework "$@"
 shift "$ARMADA_FRAMEWORK_ARGS_CONSUMED"
 command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download"
+# Native-library checks (ICU, Avalonia, clipboard); they do nothing where there is no ldconfig (macOS).
+# shellcheck source=scripts/common/native-libs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/native-libs.sh"
+native_check_icu
 
 OUT_DIR="$REPO_ROOT/docs"
 while [ $# -gt 0 ]; do

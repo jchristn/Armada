@@ -21,6 +21,10 @@ armada_resolve_framework "$@"
 armada_reject_unexpected_args "$@"
 
 command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download"
+# Native-library checks (ICU, Avalonia, clipboard); they do nothing where there is no ldconfig (macOS).
+# shellcheck source=scripts/common/native-libs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/native-libs.sh"
+native_check_icu
 
 echo
 echo "[install-mcp] Configuring Armada MCP for Claude Code, Codex, Gemini, and Cursor (${ARMADA_TARGET_FRAMEWORK})..."

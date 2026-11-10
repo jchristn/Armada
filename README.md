@@ -268,6 +268,12 @@ cd armada
 
 On WSL, use `scripts/wsl2/` (WSL 2) or `scripts/wsl/` (WSL 1). They have the same script names as `scripts/linux/` and fix what breaks under WSL: Windows `dotnet`/`node`/`claude` shims on the PATH, `~/.dotnet/tools` missing from the PATH, CRLF checkouts, and (WSL 2) an Admiral on Windows that is not reachable at `localhost`.
 
+**Native libraries on Linux and WSL.** Building never loads these, so a missing one only shows when a program starts. The install-type scripts (`install`, `reinstall`, `update`, `install-startup`, `update-startup`) install what is missing themselves, with `sudo apt-get install -y` (or `dnf install -y`): ICU always, plus `xclip` for the TUI's clipboard and, on WSL, `wslu xdg-utils` for opening links. Set `INSTALL_SYSTEM_PACKAGES=0` to have them only list the packages (they still stop when ICU is missing). The `run-*` scripts only check, with `ldconfig`, and print the command:
+
+- .NET itself needs ICU. Without it `dotnet` fails with "Couldn't find a valid ICU package installed on the system": `sudo apt install libicu-dev` (or the `libicuNN` package; Fedora: `sudo dnf install libicu`). The Admiral server needs nothing else.
+- Harbor (an Avalonia desktop app) needs the X11 client libraries. WSLg supplies only the display, and the stock WSL images lack them, so Harbor fails with "Unable to load shared library 'libICE.so.6'" (or another of these): `sudo apt install libx11-6 libice6 libsm6 libxext6 libxrandr2 libxi6 libxcursor1 libxfixes3 libfontconfig1` (Fedora: `sudo dnf install libX11 libICE libSM libXext libXrandr libXi libXcursor libXfixes fontconfig`). `run-harbor` and `run-local` stop before building when they are missing; Harbor itself prints the same command and keeps running headless.
+- The terminal UI (`armada tui`) copies with `wl-copy`, `xclip` or `xsel` (`sudo apt install xclip`) and opens links with `xdg-open`; under WSL install `sudo apt install wslu xdg-utils` so links reach the Windows browser through `wslview`.
+
 The install script builds the solution, deploys the dashboard, and installs the `armada` CLI as a global .NET tool. The default target is `net10.0`. With only .NET 8 installed, use `./scripts/macos/install.sh --framework net8.0` (Linux uses the same flag) or `scripts\windows\install.bat net8.0`. Prebuilt installers and Docker images are listed under [Deployment](#deployment).
 
 #### Behind an enterprise proxy or firewall

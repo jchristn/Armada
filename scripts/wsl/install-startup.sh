@@ -35,6 +35,9 @@ case "${1:-}" in -h|--help) usage; exit 0 ;; esac
 . "$REPO_ROOT/scripts/common/resolve-framework.sh"
 armada_resolve_framework "$@"
 armada_reject_unexpected_args "$@"
+# Install the system packages the headless Admiral (ICU) needs when they are missing.
+# This runs before the dotnet check, whose ICU check would stop first. INSTALL_SYSTEM_PACKAGES=0 only reports them.
+wsl_install_deps "Armada" icu
 wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft.com/dotnet/core/install/linux"
 wsl_require_cmd curl "Install curl inside WSL (for example: sudo apt install curl)."
 wsl_win_exe cmd.exe >/dev/null

@@ -39,6 +39,8 @@ wsl_require_cmd curl "Install curl inside WSL (for example: sudo apt install cur
 if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
     die "Armada Harbor is a desktop app and needs WSLg (Windows 11, or Windows 10 with WSL from the Microsoft Store; run 'wsl --update' from Windows), but neither DISPLAY nor WAYLAND_DISPLAY is set. Or run scripts\\windows\\run-harbor.bat from Windows."
 fi
+# A display alone is not enough: the distro needs the X11 client libraries Avalonia loads (stock WSL images lack them).
+wsl_check_libs error "Armada Harbor" "$WSL_AVALONIA_LIBS"
 
 # Builds the dashboard with the Linux Node.js in this distro (wsl_sanitize_path drops Windows node/npm from the
 # PATH) and deploys it into ~/.armada/dashboard. Without Node.js it deploys the dist/ an earlier build left, and
@@ -122,4 +124,6 @@ else
 fi
 
 echo "[run-local] Starting Armada Harbor (${FRAMEWORK})..."
+# Give Harbor the Windows PATH entries back (explorer.exe, wslview, the Windows browser) and BROWSER=wslview.
+wsl_prepare_app_env
 dotnet run --project "$REPO_ROOT/src/Armada.Harbor" --framework "$FRAMEWORK" --no-build

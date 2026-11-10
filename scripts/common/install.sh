@@ -21,7 +21,19 @@ source "${SCRIPT_DIR}/resolve-framework.sh"
 armada_resolve_framework "$@"
 armada_reject_unexpected_args "$@"
 
+# On Linux, install the system packages the armada CLI and its terminal UI needs when they are missing (ICU for .NET, xclip for the TUI's clipboard);
+# INSTALL_SYSTEM_PACKAGES=0 only reports them. Nothing is installed before the arguments are checked.
+if [ "$(uname -s)" = Linux ]; then
+    # shellcheck source=scripts/common/native-libs.sh
+    . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/native-libs.sh"
+    native_install_deps "Armada" icu clipboard
+fi
+
 command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download"
+# Native-library checks (ICU, Avalonia, clipboard); they do nothing where there is no ldconfig (macOS).
+# shellcheck source=scripts/common/native-libs.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/native-libs.sh"
+native_check_icu
 
 # True when the Armada.Helm global tool is installed.
 tool_installed() {
@@ -64,6 +76,9 @@ case ":$PATH:" in
         echo "[install] Add this line to your shell profile: export PATH=\"\$PATH:\$HOME/.dotnet/tools\"" >&2
         ;;
 esac
+
+# The armada CLI hosts the terminal UI (armada tui), which copies with wl-copy, xclip or xsel.
+if [ "$(uname -s)" = Linux ]; then native_check_clipboard "the Armada TUI (armada tui)"; fi
 
 echo
 echo "[install] Completed."

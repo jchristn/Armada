@@ -36,6 +36,8 @@ wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft
 if [ -z "${DISPLAY:-}" ]; then
     die "WSL 1 has no WSLg, so it cannot show Armada Harbor. Run scripts\\windows\\run-harbor.bat from Windows, move this distro to WSL 2 (wsl --set-version ${WSL_DISTRO_NAME:-<distro>} 2) and use scripts/wsl2, or start an X server on Windows and set DISPLAY."
 fi
+# A display alone is not enough: the distro needs the X11 client libraries Avalonia loads (stock WSL images lack them).
+wsl_check_libs error "Armada Harbor" "$WSL_AVALONIA_LIBS"
 for arg in "$@"; do
     if [ "$arg" = --install-startup ]; then
         echo "[run-harbor] Note: Harbor's --install-startup writes a Linux login item, which does not run at Windows login." >&2
@@ -47,4 +49,6 @@ echo "[run-harbor] Building Armada Harbor (${FRAMEWORK})..."
 dotnet build "$REPO_ROOT/src/Armada.Harbor/Armada.Harbor.csproj" $ARMADA_DOTNET_FRAMEWORK_ARGS
 
 echo "[run-harbor] Starting Armada Harbor (${FRAMEWORK})..."
+# Give Harbor the Windows PATH entries back (explorer.exe, wslview, the Windows browser) and BROWSER=wslview.
+wsl_prepare_app_env
 exec dotnet run --project "$REPO_ROOT/src/Armada.Harbor" --framework "$FRAMEWORK" --no-build -- "$@"

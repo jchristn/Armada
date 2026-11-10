@@ -33,6 +33,9 @@ case "${1:-}" in -h|--help) usage; exit 0 ;; esac
 . "$REPO_ROOT/scripts/common/resolve-framework.sh"
 armada_resolve_framework "$@"
 armada_reject_unexpected_args "$@"
+# Install the system packages the armada CLI and its terminal UI (ICU, xclip, wslu and xdg-utils) needs when they are missing.
+# This runs before the dotnet check, whose ICU check would stop first. INSTALL_SYSTEM_PACKAGES=0 only reports them.
+wsl_install_deps "Armada" icu clipboard browser
 wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft.com/dotnet/core/install/linux"
 
 # Prints the PIDs of running Admirals in this distro, one per line: processes whose executable is Armada.Server (the
@@ -144,6 +147,8 @@ install_tool() {
         echo "[install] Note: .NET is installed in ~/.dotnet, so 'armada' also needs DOTNET_ROOT. Add this line to ~/.bashrc (or ~/.profile): export DOTNET_ROOT=\"\$HOME/.dotnet\"" >&2
     fi
     echo "[install] This installs armada in this distro only; use scripts\\windows\\install.bat for Windows."
+    # The armada CLI hosts the terminal UI (armada tui), which copies with wl-copy, xclip or xsel.
+    wsl_check_clipboard "the Armada TUI (armada tui)"
 }
 
 echo

@@ -79,6 +79,7 @@ if name == 'systemctl':
 if name == 'launchctl':
     sys.exit(1 if args[:1] == ['print'] else 0)
 if name == 'dotnet':
+    with open(env['CALL_LOG'] + '.path', 'a') as f: f.write(json.dumps([args[0] if args else '', env.get('PATH', ''), env.get('BROWSER')]) + '\n')
     if args[:3] == ['tool', 'list', '--global']:
         print('Package Id      Version      Commands')
         print('-------------------------------------')
@@ -129,7 +130,7 @@ with tempfile.TemporaryDirectory(prefix='armada scripts ') as temp:
     launcher = startup_dir / 'armada-wsl-Test.vbs'   # wsl_launcher_file armada, with WSL_DISTRO_NAME=Test
     base_env = {k: v for k, v in os.environ.items() if not k.startswith(('ARMADA_', 'WSL_', 'DOTNET_', 'XDG_'))}
     base_env.update(PATH=f'{bin_dir}:/usr/bin:/bin', CALL_LOG=str(log), WSL_SKIP_CHECK='1', WSL_DISTRO_NAME='Test',
-                    DISPLAY=':0', MOCK_APPDATA=str(appdata))
+                    DISPLAY=':0', MOCK_APPDATA=str(appdata), INSTALL_SYSTEM_PACKAGES='0')
     for key in ['WAYLAND_DISPLAY', 'DOCKER_HOST', 'NODE_TLS_REJECT_UNAUTHORIZED', 'npm_config_strict_ssl']:
         base_env.pop(key, None)
     home = temp / 'home'
@@ -568,6 +569,158 @@ with tempfile.TemporaryDirectory(prefix='armada scripts ') as temp:
             assert p.returncode == 2 and not dn(calls)
             count += 2
 
+# ---- Native libraries on Linux and WSL (fake ldconfig) ----
+LDC = r'''#!/bin/sh
+[ "$1" = -p ] || exit 1
+# Once the fake apt-get has "installed" packages, everything is present.
+if [ -f "$MOCK_LDCONFIG_CACHE.installed" ]; then cat "$MOCK_LDCONFIG_CACHE.full"; else cat "$MOCK_LDCONFIG_CACHE"; fi
+'''
+APT = r'''#!/bin/sh
+echo "$(basename "$0") $*" >> "$MOCK_APT_LOG"
+case "$(basename "$0") $1" in
+    "apt-get install")
+        : > "$MOCK_LDCONFIG_CACHE.installed"
+        for pkg in "$@"; do
+            case "$pkg" in xclip) cmd=xclip ;; wslu) cmd=wslview ;; xdg-utils) cmd=xdg-open ;; *) cmd="" ;; esac
+            if [ -n "$cmd" ]; then printf '#!/bin/sh\n' > "$MOCK_APT_BIN/$cmd"; chmod +x "$MOCK_APT_BIN/$cmd"; fi
+        done ;;
+    "apt-cache pkgnames") printf 'libicu-dev\nlibicu74\nlibicu70\n' ;;
+esac
+exit 0
+'''
+AVALONIA = ['libX11.so.6', 'libICE.so.6', 'libSM.so.6', 'libXext.so.6', 'libXrandr.so.2', 'libXi.so.6', 'libXcursor.so.1', 'libXfixes.so.3', 'libfontconfig.so.1']
+def cache(names, extra=''):
+    return ''.join(f'\t{n} (libc6,x86-64) => /usr/lib/x86_64-linux-gnu/{n}\n' for n in names) + extra
+with tempfile.TemporaryDirectory(prefix='armada native ') as t2:
+    t2 = Path(t2)
+    repo = make_repo(t2)
+    bin_dir = t2 / 'bin'
+    bin_dir.mkdir()
+    for name in TOOLS:
+        (bin_dir / name).write_text(FAKE)
+        (bin_dir / name).chmod(0o755)
+    ldc = t2 / 'ldconfig'
+    ldc.write_text(LDC)
+    ldc.chmod(0o755)
+    apt_dir = t2 / 'apt'   # fake apt-get, apt-cache and sudo, put on PATH only where a test wants them
+    apt_dir.mkdir()
+    for name in ['apt-get', 'apt-cache']:
+        (apt_dir / name).write_text(APT)
+        (apt_dir / name).chmod(0o755)
+    (apt_dir / 'sudo').write_text('#!/bin/sh\nexec "$@"\n')
+    (apt_dir / 'sudo').chmod(0o755)
+    tools_dir = t2 / 'tools'   # a clipboard tool, wslview and xdg-open, for "nothing missing"
+    tools_dir.mkdir()
+    for name in ['xclip', 'wslview', 'xdg-open']:
+        (tools_dir / name).write_text('#!/bin/sh\n')
+        (tools_dir / name).chmod(0o755)
+    apt_log = t2 / 'apt.log'
+    log = t2 / 'calls.jsonl'
+    home = t2 / 'home'
+    home.mkdir()
+    def native_run(platform, script, names, *args, extra='', **env):
+        for f in [log, Path(str(log) + '.path'), Path(str(log) + '.installed')]:
+            f.unlink(missing_ok=True)
+        (t2 / 'cache').write_text(cache(names, extra))
+        (t2 / 'cache.full').write_text(cache(AVALONIA + ['libicuuc.so.74']))
+        Path(str(t2 / 'cache') + '.installed').unlink(missing_ok=True)
+        apt_log.unlink(missing_ok=True)
+        shutil.rmtree(t2 / 'apt-bin', ignore_errors=True)
+        (t2 / 'apt-bin').mkdir()
+        e = {k: v for k, v in os.environ.items() if not k.startswith(('ARMADA_', 'WSL_', 'DOTNET_', 'BROWSER'))}
+        e.update(PATH=f'{bin_dir}:/usr/bin:/bin', CALL_LOG=str(log), HOME=str(home), WSL_SKIP_CHECK='1', WSL_DISTRO_NAME='Test',
+                 DISPLAY=':0', MOCK_UNAME='Linux', MOCK_LDCONFIG_CACHE=str(t2 / 'cache'), ARMADA_LDCONFIG=str(ldc), WSL_LDCONFIG=str(ldc),
+                 MOCK_APT_LOG=str(apt_log), MOCK_APT_BIN=str(t2 / 'apt-bin'), INSTALL_SYSTEM_PACKAGES='0')
+        e.update(env)
+        p = subprocess.run(['bash', str(repo / f'scripts/{platform}/{script}.sh'), *args], env=e, capture_output=True, text=True, timeout=120)
+        calls = [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []
+        paths = [json.loads(x) for x in Path(str(log) + '.path').read_text().splitlines()] if Path(str(log) + '.path').exists() else []
+        return p, [c[1:-1] for c in calls if c[0] == 'dotnet'], paths
+    ICU = ['libicuuc.so.74']
+    for platform in ['linux', 'wsl', 'wsl2']:
+        for script in ['run-harbor', 'run-local']:
+            # All libraries present: builds and runs.
+            # (run-local's fake server exits at once, so only its build is checked)
+            p, d, _ = native_run(platform, script, AVALONIA + ICU)
+            assert (p.returncode == 0 or script == 'run-local') and any(c[0] == 'build' for c in d), (platform, script, p.stderr)
+            # libICE only for i386 (wrong architecture) and libXi missing: stops before any build or run.
+            p, d, _ = native_run(platform, script, [n for n in AVALONIA if n not in ('libICE.so.6', 'libXi.so.6')] + ICU,
+                                 extra='\tlibICE.so.6 (libc6) => /usr/lib/i386-linux-gnu/libICE.so.6\n')
+            assert p.returncode != 0 and not d and 'cannot start without these shared libraries: libICE.so.6 libXi.so.6' in p.stderr, (platform, script, p.stderr)
+            assert "Unable to load shared library" in p.stderr and 'libice6' in p.stderr and 'libxi6' in p.stderr, p.stderr
+            count += 2
+        # ICU missing: every dotnet script stops before building, unless invariant globalization is on.
+        for script in ['install', 'run-tui', 'publish-server']:
+            p, d, _ = native_run(platform, script, AVALONIA)
+            msg = 'were not installed automatically' if script == 'install' else "Couldn't find a valid ICU package"
+            assert p.returncode != 0 and not d and msg in p.stderr, (platform, script, p.stderr)
+            p, d, _ = native_run(platform, script, AVALONIA, DOTNET_SYSTEM_GLOBALIZATION_INVARIANT='1')
+            assert p.returncode == 0 and d, (platform, script, p.stderr)
+            count += 2
+        # No ldconfig: the checks stay quiet and nothing is blocked.
+        p, d, _ = native_run(platform, 'run-harbor', [], ARMADA_LDCONFIG=str(t2 / 'missing'), WSL_LDCONFIG=str(t2 / 'missing'))
+        assert p.returncode == 0 and any(c[0] == 'build' for c in d) and 'shared libraries' not in p.stderr, (platform, p.stderr)
+        # Warnings succeed: no clipboard tool is a note after install and when the TUI starts.
+        for script in ['install', 'run-tui']:
+            p, d, _ = native_run(platform, script, AVALONIA + ICU)
+            assert p.returncode == 0 and 'copy to clipboard will not work in the Armada TUI' in p.stderr, (platform, script, p.stderr)
+        count += 3
+    # Install-type scripts install what is missing (apt-get through sudo); launchers and -h never do.
+    # The fakes come before /usr/bin, so the real sudo is never reached.
+    apt_path = f'{bin_dir}:{apt_dir}:{t2}/apt-bin:/usr/bin:/bin'
+    def apt_installs():
+        return [l.split()[2:] for l in apt_log.read_text().splitlines() if l.startswith('apt-get install')] if apt_log.exists() else []
+    for platform in ['linux', 'wsl', 'wsl2']:
+        browser = ['wslu', 'xdg-utils'] if platform != 'linux' else []
+        for script in ['install', 'reinstall', 'update']:
+            p, d, _ = native_run(platform, script, AVALONIA, PATH=apt_path, INSTALL_SYSTEM_PACKAGES='1')
+            assert p.returncode == 0, (platform, script, p.stderr)
+            assert apt_installs() == [['-y', '-q', 'libicu74'], ['-y', '-q', 'xclip', *browser]], (platform, script, apt_installs())
+            assert any(c[0] == 'build' for c in d), d
+            count += 1
+        for script in ['install-startup', 'update-startup']:
+            p, d, _ = native_run(platform, script, AVALONIA, PATH=apt_path, MOCK_SYSTEMD='1', INSTALL_SYSTEM_PACKAGES='1')
+            assert apt_installs() and apt_installs()[0] == ['-y', '-q', 'libicu74'] and len(apt_installs()) == 1, (platform, script, apt_installs(), p.stderr)
+            count += 1
+        # Nothing missing: no package manager call at all.
+        p, d, _ = native_run(platform, 'install', AVALONIA + ICU, PATH=f'{apt_path}:{tools_dir}', INSTALL_SYSTEM_PACKAGES='1')
+        assert p.returncode == 0 and not apt_log.exists(), (platform, apt_log.read_text() if apt_log.exists() else '')
+        # INSTALL_SYSTEM_PACKAGES=0 reports, installs nothing, and exits for the required ICU.
+        p, d, _ = native_run(platform, 'install', AVALONIA, PATH=apt_path, INSTALL_SYSTEM_PACKAGES='0')
+        assert p.returncode != 0 and not apt_installs() and not d and 'libicu' in p.stderr and 'Install them with' in p.stderr, (platform, p.stderr)
+        # -h never installs; launchers only check.
+        for script in ['install', 'reinstall', 'update', 'install-startup', 'update-startup']:
+            p, d, _ = native_run(platform, script, [], '--help', PATH=apt_path, INSTALL_SYSTEM_PACKAGES='1')
+            assert p.returncode == 0 and not apt_log.exists(), (platform, script)
+        for script in ['run-harbor', 'run-tui', 'run-local']:
+            p, d, _ = native_run(platform, script, ['libX11.so.6'], PATH=apt_path, INSTALL_SYSTEM_PACKAGES='1')
+            assert p.returncode != 0 and not apt_installs() and not d, (platform, script, p.stderr)
+        count += 10
+
+    # On WSL the app process gets the Windows PATH entries back (clip.exe, wslview); builds do not.
+    win = '/mnt/c/Windows/System32'
+    wslu = t2 / 'wslu'
+    wslu.mkdir()
+    (wslu / 'wslview').write_text('#!/bin/sh\n')
+    (wslu / 'wslview').chmod(0o755)
+    for platform in ['wsl', 'wsl2']:
+        for script, run_arg in [('run-tui', 'run'), ('run-harbor', 'run')]:
+            p, d, paths = native_run(platform, script, AVALONIA + ICU, PATH=f'{bin_dir}:/usr/bin:/bin:{wslu}:{win}')
+            build_path = next(x for x in paths if x[0] == 'build')
+            run_path = next(x for x in paths if x[0] == run_arg)
+            assert p.returncode == 0 and win not in build_path[1].split(':') and win in run_path[1].split(':'), (platform, script, paths)
+            assert run_path[2] == 'wslview', run_path
+            p, d, paths = native_run(platform, script, AVALONIA + ICU, PATH=f'{bin_dir}:/usr/bin:/bin:{win}')
+            assert p.returncode == 0 and 'wslu xdg-utils' in p.stderr, p.stderr
+            count += 2
+    # The Linux library and the WSL helper print the same text.
+    lib = (root / 'scripts/common/native-libs.sh').read_text()
+    helper = (root / 'scripts/wsl2/_wsl-common.sh').read_text()
+    for text in ['cannot start without these shared libraries:', 'is installed, but it cannot start until these shared libraries are installed:',
+                 'Note: copy to clipboard will not work in $1 until a clipboard tool is installed:', "Couldn't find a valid ICU package installed on the system"]:
+        assert text in lib and text in helper, text
+    assert lib.split('NATIVE_AVALONIA_LIBS="')[1].split('"')[0] == helper.split('WSL_AVALONIA_LIBS="')[1].split('"')[0]
+
 # ---- Line endings, executable bits, shell syntax, Windows help ----
 for f in root.glob('scripts/**/*'):
     if f.suffix in ('.bat', '.cmd', '.ps1') and 'node_modules' not in f.parts:
@@ -575,7 +728,7 @@ for f in root.glob('scripts/**/*'):
         assert data.count(b'\n') == data.count(b'\r\n'), f'{f} must be CRLF on disk'
     if f.suffix == '.sh' and f.parent.name in UNIX + ['common']:
         assert b'\r' not in f.read_bytes(), f'{f} has CR characters'
-        assert os.access(f, os.X_OK) or f.name in ('_wsl-common.sh', 'resolve-framework.sh', 'resolve-insecure.sh'), f'{f} is not executable'
+        assert os.access(f, os.X_OK) or f.name in ('_wsl-common.sh', 'resolve-framework.sh', 'resolve-insecure.sh', 'native-libs.sh'), f'{f} is not executable'
         subprocess.run(['bash', '-n', str(f)], check=True)
 for f in (root / 'scripts/windows').glob('*.bat'):
     text = f.read_text()

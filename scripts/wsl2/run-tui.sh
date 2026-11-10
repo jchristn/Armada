@@ -32,10 +32,14 @@ armada_resolve_framework "$@"
 shift "$ARMADA_FRAMEWORK_ARGS_CONSUMED"
 FRAMEWORK="$ARMADA_TARGET_FRAMEWORK"
 wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft.com/dotnet/core/install/linux"
+# The TUI copies with wl-copy, xclip or xsel and opens links with xdg-open (wslview from wslu under WSL).
+wsl_check_clipboard "the Armada TUI (armada tui)"
 
 echo "[run-tui] Building the Armada CLI (${FRAMEWORK})..."
 # shellcheck disable=SC2086 # the framework arguments are several words
 dotnet build "$REPO_ROOT/src/Armada.Helm/Armada.Helm.csproj" $ARMADA_DOTNET_FRAMEWORK_ARGS
 
 echo "[run-tui] Starting armada tui (${FRAMEWORK})..."
+# Give the TUI the Windows PATH entries back (clip.exe, explorer.exe, wslview) and BROWSER=wslview.
+wsl_prepare_app_env
 exec dotnet run --project "$REPO_ROOT/src/Armada.Helm" --framework "$FRAMEWORK" --no-build -- tui "$@"
