@@ -577,14 +577,16 @@ if [ -f "$MOCK_LDCONFIG_CACHE.installed" ]; then cat "$MOCK_LDCONFIG_CACHE.full"
 '''
 APT = r'''#!/bin/sh
 echo "$(basename "$0") $*" >> "$MOCK_APT_LOG"
-case "$(basename "$0") $1" in
-    "apt-get install")
+# The installer passes -o options first (apt-get -o DPkg::Lock::Timeout=300 ... install -y <pkgs>), so look for the
+# subcommand anywhere in the arguments.
+case "$(basename "$0") $*" in
+    "apt-get "*" install "*)
         : > "$MOCK_LDCONFIG_CACHE.installed"
         for pkg in "$@"; do
             case "$pkg" in xclip) cmd=xclip ;; wslu) cmd=wslview ;; xdg-utils) cmd=xdg-open ;; *) cmd="" ;; esac
             if [ -n "$cmd" ]; then printf '#!/bin/sh\n' > "$MOCK_APT_BIN/$cmd"; chmod +x "$MOCK_APT_BIN/$cmd"; fi
         done ;;
-    "apt-cache pkgnames") printf 'libicu-dev\nlibicu74\nlibicu70\n' ;;
+    "apt-cache pkgnames"*) printf 'libicu-dev\nlibicu74\nlibicu70\n' ;;
 esac
 exit 0
 '''
@@ -607,7 +609,8 @@ with tempfile.TemporaryDirectory(prefix='armada native ') as t2:
     for name in ['apt-get', 'apt-cache']:
         (apt_dir / name).write_text(APT)
         (apt_dir / name).chmod(0o755)
-    (apt_dir / 'sudo').write_text('#!/bin/sh\nexec "$@"\n')
+    # sudo -v (refresh credentials) succeeds; anything else runs the command (the installer runs "sudo env ... apt-get").
+    (apt_dir / 'sudo').write_text('#!/bin/sh\necho "sudo $*" >> "$MOCK_APT_LOG"\n[ "$1" = -v ] && exit 0\nexec "$@"\n')
     (apt_dir / 'sudo').chmod(0o755)
     tools_dir = t2 / 'tools'   # a clipboard tool, wslview and xdg-open, for "nothing missing"
     tools_dir.mkdir()
@@ -668,19 +671,31 @@ with tempfile.TemporaryDirectory(prefix='armada native ') as t2:
     # Install-type scripts install what is missing (apt-get through sudo); launchers and -h never do.
     # The fakes come before /usr/bin, so the real sudo is never reached.
     apt_path = f'{bin_dir}:{apt_dir}:{t2}/apt-bin:/usr/bin:/bin'
+    def apt_lines():
+        return [l for l in apt_log.read_text().splitlines() if l.startswith('apt-get ')] if apt_log.exists() else []
     def apt_installs():
-        return [l.split()[2:] for l in apt_log.read_text().splitlines() if l.startswith('apt-get install')] if apt_log.exists() else []
+        # The arguments after the install subcommand, for example ['-y', 'libicu74'].
+        out = []
+        for l in apt_lines():
+            words = l.split()
+            if 'install' in words:
+                assert '-o' in words and 'DPkg::Lock::Timeout=300' in words, l
+                out.append(words[words.index('install') + 1:])
+        return out
     for platform in ['linux', 'wsl', 'wsl2']:
         browser = ['wslu', 'xdg-utils'] if platform != 'linux' else []
         for script in ['install', 'reinstall', 'update']:
             p, d, _ = native_run(platform, script, AVALONIA, PATH=apt_path, INSTALL_SYSTEM_PACKAGES='1')
             assert p.returncode == 0, (platform, script, p.stderr)
-            assert apt_installs() == [['-y', '-q', 'libicu74'], ['-y', '-q', 'xclip', *browser]], (platform, script, apt_installs())
+            assert apt_installs() == [['-y', 'libicu74'], ['-y', 'xclip', *browser]], (platform, script, apt_installs())
+            updates = [l.split() for l in apt_lines() if 'update' in l.split()]
+            assert updates and all('DPkg::Lock::Timeout=300' in u and '-qq' not in u for u in updates), (platform, script, apt_lines())
+            assert 'sudo -v' in apt_log.read_text().splitlines(), apt_log.read_text()
             assert any(c[0] == 'build' for c in d), d
             count += 1
         for script in ['install-startup', 'update-startup']:
             p, d, _ = native_run(platform, script, AVALONIA, PATH=apt_path, MOCK_SYSTEMD='1', INSTALL_SYSTEM_PACKAGES='1')
-            assert apt_installs() and apt_installs()[0] == ['-y', '-q', 'libicu74'] and len(apt_installs()) == 1, (platform, script, apt_installs(), p.stderr)
+            assert apt_installs() == [['-y', 'libicu74']], (platform, script, apt_installs(), p.stderr)
             count += 1
         # Nothing missing: no package manager call at all.
         p, d, _ = native_run(platform, 'install', AVALONIA + ICU, PATH=f'{apt_path}:{tools_dir}', INSTALL_SYSTEM_PACKAGES='1')
