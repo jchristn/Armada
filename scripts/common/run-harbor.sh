@@ -9,11 +9,19 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+die() { echo "ERROR: $*" >&2; exit 1; }
+usage() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"; }
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
 
 # shellcheck source=scripts/common/resolve-framework.sh
 . "${REPO_ROOT}/scripts/common/resolve-framework.sh"
 armada_resolve_framework "$@"
 shift "${ARMADA_FRAMEWORK_ARGS_CONSUMED}"
+command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download"
+# Harbor is a desktop (Avalonia) app: on Linux it needs a graphical session.
+if [ "$(uname -s)" = Linux ] && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    die "Armada Harbor is a desktop app and needs a graphical session, but neither DISPLAY nor WAYLAND_DISPLAY is set."
+fi
 FRAMEWORK="${ARMADA_TARGET_FRAMEWORK}"
 
 echo "[run-harbor] Building Armada Harbor (${FRAMEWORK})..."

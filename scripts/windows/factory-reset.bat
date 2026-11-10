@@ -1,5 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
+if /I "%~1"=="-h" goto :armada_usage
+if /I "%~1"=="--help" goto :armada_usage
+if "%~1"=="/?" goto :armada_usage
+goto :armada_main
+:armada_usage
+echo(Stop every Armada.Server and delete the database and runtime state under %%USERPROFILE%%\.armada.
+echo(Usage: scripts\windows\factory-reset.bat [-y^|--yes^|--force] [--all]
+echo(  -y, --yes, --force   skip the confirmation prompt
+echo(  --all                also delete the deployed server bin and dashboard
+exit /b 0
+:armada_main
 
 rem =====================================================================
 rem factory-reset.bat -- wipe Armada back to a factory-fresh state.
@@ -51,8 +62,11 @@ if not defined FORCE (
     echo   - docks: git worktrees; repos: clones; logs; settings.json
     if defined WIPE_ALL echo   - --all: ALSO the deployed server bin and dashboard
     echo.
+    rem Clear CONFIRM first: set /p keeps an inherited value when the user just presses Enter. The match is
+    rem case-sensitive, as in factory-reset.sh.
+    set "CONFIRM="
     set /p "CONFIRM=Type YES to continue: "
-    if /I not "!CONFIRM!"=="YES" (
+    if not "!CONFIRM!"=="YES" (
         echo [factory-reset] Aborted.
         exit /b 1
     )
@@ -70,7 +84,7 @@ echo [factory-reset] Verifying the server is stopped...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='SilentlyContinue'; $p=@(Get-CimInstance Win32_Process -Filter \"Name='Armada.Server.exe'\") + @(Get-CimInstance Win32_Process -Filter \"Name='dotnet.exe'\" | Where-Object { $_.CommandLine -match 'Armada\.Server\.dll' }); if ($p.Count -gt 0) { exit 1 } else { exit 0 }"
 if errorlevel 1 (
     echo.
-    echo ERROR: Armada.Server is still running and could not be stopped. Aborting BEFORE deleting anything.
+    echo ERROR: Armada.Server is still running and could not be stopped. Aborting BEFORE deleting anything. 1>&2
     echo        A running server keeps armada.db locked, so the wipe would silently fail and leave your data
     echo        in place. Stop every Armada.Server process manually, then re-run factory-reset.
     exit /b 1
@@ -94,10 +108,15 @@ if defined WIPE_ALL (
 
 echo.
 echo [factory-reset] Done. Armada state wiped at %ARMADA_DIR%.
-if defined WIPE_ALL (
-    echo Reinstall to redeploy: scripts\windows\install-windows-task.bat
-) else (
-    echo Start the server to come up factory-fresh: scripts\windows\update-windows-task.bat
+reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v ArmadaAdmiral >nul 2>nul
+if not errorlevel 1 (
+    echo Publish and start it factory-fresh: scripts\windows\update-startup.bat
     echo   or it will start automatically on next login.
+    exit /b 0
+)
+if defined WIPE_ALL (
+    echo Publish and register it again: scripts\windows\install-startup.bat
+) else (
+    echo Start it factory-fresh: powershell -File scripts\windows\start-armada-server.ps1
 )
 exit /b 0

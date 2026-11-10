@@ -4,7 +4,7 @@ REM Regenerate docs\blackbox-record.schema.json, the JSON Schema of the black bo
 REM record.json and its published shapes, from the C# models (BlackBoxSchemaGenerator).
 REM The Models.BlackBoxSchema test fails when the committed file drifts from the models.
 REM Usage: scripts\windows\generate-blackbox-schema.bat [net10.0 | -f net10.0 | --framework net10.0] [--out <dir>]
-REM Unknown arguments are rejected (exit 1), as in generate-blackbox-schema.sh.
+REM Unknown arguments are rejected (exit 2), as in generate-blackbox-schema.sh.
 set "SCRIPT_DIR=%~dp0"
 set "REPO_ROOT=%SCRIPT_DIR%..\.."
 set "FRAMEWORK=%ARMADA_TARGET_FRAMEWORK%"
@@ -13,6 +13,9 @@ set "OUT_DIR=%REPO_ROOT%\docs"
 :parse
 if "%~1"=="" goto run
 set "ARG=%~1"
+if /I "%ARG%"=="-h" goto help
+if /I "%ARG%"=="--help" goto help
+if "%ARG%"=="/?" goto help
 if /I "%ARG%"=="--out" goto parse_out
 if /I "%ARG%"=="-f" goto parse_framework
 if /I "%ARG%"=="--framework" goto parse_framework
@@ -41,9 +44,18 @@ set "FRAMEWORK=%~2"
 shift
 shift
 goto parse
+:help
+echo(Regenerate docs\blackbox-record.schema.json from the C# models through src\Test.Automated.
+echo(Usage: scripts\windows\generate-blackbox-schema.bat [^<framework^> ^| -f ^<framework^> ^| --framework ^<framework^>] [--out ^<dir^>]
+exit /b 0
 :usage
 echo Usage: scripts\windows\generate-blackbox-schema.bat [net10.0 ^| -f net10.0 ^| --framework net10.0] [--out ^<dir^>] 1>&2
-exit /b 1
+exit /b 2
 :run
+where dotnet >nul 2>nul
+if errorlevel 1 (
+    echo ERROR: dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download 1>&2
+    exit /b 1
+)
 dotnet run --project "%REPO_ROOT%\src\Test.Automated" --framework %FRAMEWORK% -p:TargetFramework=%FRAMEWORK% -p:TargetFrameworks=%FRAMEWORK% -- --generate-blackbox-schema "%OUT_DIR%"
 exit /b %errorlevel%

@@ -146,9 +146,9 @@ namespace Test.Shared.Suites.Services
                 string updateBatContents = ReadRepositoryFile("scripts", "windows", "update.bat");
                 string publishServerBatContents = ReadRepositoryFile("scripts", "windows", "publish-server.bat");
                 string deployDashboardBatContents = ReadRepositoryFile("scripts", "windows", "deploy-dashboard.bat");
-                string installWindowsTaskBatContents = ReadRepositoryFile("scripts", "windows", "install-windows-task.bat");
-                string updateWindowsTaskBatContents = ReadRepositoryFile("scripts", "windows", "update-windows-task.bat");
-                string removeWindowsTaskBatContents = ReadRepositoryFile("scripts", "windows", "remove-windows-task.bat");
+                string installWindowsTaskBatContents = ReadRepositoryFile("scripts", "windows", "install-startup.bat");
+                string updateWindowsTaskBatContents = ReadRepositoryFile("scripts", "windows", "update-startup.bat");
+                string removeWindowsTaskBatContents = ReadRepositoryFile("scripts", "windows", "remove-startup.bat");
                 string healthcheckServerBatContents = ReadRepositoryFile("scripts", "windows", "healthcheck-server.bat");
                 string serverStartCommandContents = ReadRepositoryFile("src", "Armada.Helm", "Commands", "ServerStartCommand.cs");
 
@@ -171,9 +171,9 @@ namespace Test.Shared.Suites.Services
                 AssertContains("call \"%LOCAL_VITE%\" build", deployDashboardBatContents, "deploy-dashboard.bat should build with the local Vite CLI instead of npm run");
                 AssertContains("if exist \"%USERPROFILE%\\.armada\\dashboard\\index.html\" (", publishServerBatContents, "publish-server.bat should only continue after dashboard deploy errors when a React dashboard is already deployed");
                 AssertContains("echo ERROR: Dashboard deploy failed and no deployed React dashboard is available.", publishServerBatContents, "publish-server.bat should fail fresh installs when the React dashboard is unavailable");
-                AssertContains("call \"%SCRIPT_DIR%\\publish-server.bat\" %ARMADA_FORWARD_FRAMEWORK_ARGS%", installWindowsTaskBatContents, "install-windows-task.bat should forward the resolved framework to publish-server explicitly");
-                AssertContains("call \"%SCRIPT_DIR%\\install-windows-task.bat\" %ARMADA_FORWARD_FRAMEWORK_ARGS%", updateWindowsTaskBatContents, "update-windows-task.bat should forward the resolved framework explicitly");
-                AssertContains("call \"%SCRIPT_DIR%\\resolve-framework.bat\" %*", removeWindowsTaskBatContents, "remove-windows-task.bat should accept framework overrides for parity");
+                AssertContains("call \"%SCRIPT_DIR%\\publish-server.bat\" %ARMADA_FORWARD_FRAMEWORK_ARGS%", installWindowsTaskBatContents, "install-startup.bat should forward the resolved framework to publish-server explicitly");
+                AssertContains("call \"%SCRIPT_DIR%\\publish-server.bat\" %ARMADA_FORWARD_FRAMEWORK_ARGS%", updateWindowsTaskBatContents, "update-startup.bat should forward the resolved framework to publish-server explicitly");
+                AssertContains("call \"%SCRIPT_DIR%\\resolve-framework.bat\" %*", removeWindowsTaskBatContents, "remove-startup.bat should accept framework overrides for parity");
                 AssertContains("string targetFramework = GetCliTargetFramework();", serverStartCommandContents, "ServerStartCommand should derive the build framework from the running Helm target");
                 AssertContains("buildInfo.ArgumentList.Add(targetFramework);", serverStartCommandContents, "ServerStartCommand should build Armada.Server with the derived framework");
                 AssertContains("buildInfo.ArgumentList.Add(\"-p:TargetFramework=\" + targetFramework);", serverStartCommandContents, "ServerStartCommand should lock the server build to the derived framework");
@@ -234,7 +234,7 @@ namespace Test.Shared.Suites.Services
                     CopyRepositoryFile(repoRoot, tempRepo, Path.Combine("scripts", "windows", "resolve-framework.bat"));
                     CopyRepositoryFile(repoRoot, tempRepo, Path.Combine("scripts", "windows", "publish-server.bat"));
                     CopyRepositoryFile(repoRoot, tempRepo, Path.Combine("scripts", "windows", "deploy-dashboard.bat"));
-                    CopyRepositoryFile(repoRoot, tempRepo, Path.Combine("scripts", "windows", "install-windows-task.bat"));
+                    CopyRepositoryFile(repoRoot, tempRepo, Path.Combine("scripts", "windows", "install-startup.bat"));
                     CopyRepositoryFile(repoRoot, tempRepo, Path.Combine("scripts", "windows", "healthcheck-server.bat"));
                     CopyRepositoryFile(repoRoot, tempRepo, Path.Combine("scripts", "windows", "start-armada-server.ps1"));
                     CopyRepositoryFile(repoRoot, tempRepo, Path.Combine("scripts", "windows", "stop-armada-server.ps1"));
@@ -289,7 +289,7 @@ namespace Test.Shared.Suites.Services
                         "@echo off\r\n" +
                         "exit /b 0\r\n");
 
-                    string installTaskPath = Path.Combine(tempRepo, "scripts", "windows", "install-windows-task.bat");
+                    string installTaskPath = Path.Combine(tempRepo, "scripts", "windows", "install-startup.bat");
                     RunCommandAndCaptureOutput(
                         "cmd.exe",
                         "/c call \"" + installTaskPath + "\" net8.0",
@@ -303,8 +303,8 @@ namespace Test.Shared.Suites.Services
                         });
 
                     string dotnetLogContents = File.ReadAllText(logPath);
-                    AssertContains("publish \"" + Path.Combine(tempRepo, "src", "Armada.Server") + "\" -c Release --framework net8.0 -p:TargetFramework=net8.0 -p:TargetFrameworks=net8.0 -o \"" + Path.Combine(tempUserProfile, ".armada", "bin") + "\"", dotnetLogContents, "install-windows-task.bat should preserve the explicit framework into publish-server.bat");
-                    AssertFalse(dotnetLogContents.Contains("net10.0", StringComparison.Ordinal), "install-windows-task.bat should not fall back to net10.0 when net8.0 is requested");
+                    AssertContains("publish \"" + Path.Combine(tempRepo, "src", "Armada.Server") + "\" -c Release --framework net8.0 -p:TargetFramework=net8.0 -p:TargetFrameworks=net8.0 -o \"" + Path.Combine(tempUserProfile, ".armada", "bin") + "\"", dotnetLogContents, "install-startup.bat should preserve the explicit framework into publish-server.bat");
+                    AssertFalse(dotnetLogContents.Contains("net10.0", StringComparison.Ordinal), "install-startup.bat should not fall back to net10.0 when net8.0 is requested");
                 }
                 finally
                 {

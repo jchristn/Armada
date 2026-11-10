@@ -9,11 +9,15 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+die() { echo "ERROR: $*" >&2; exit 1; }
+usage() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"; }
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
 
 # shellcheck source=scripts/common/resolve-framework.sh
 . "${REPO_ROOT}/scripts/common/resolve-framework.sh"
 armada_resolve_framework "$@"
 shift "${ARMADA_FRAMEWORK_ARGS_CONSUMED}"
+command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download"
 FRAMEWORK="${ARMADA_TARGET_FRAMEWORK}"
 
 echo "[run-tui] Building the Armada CLI (${FRAMEWORK})..."

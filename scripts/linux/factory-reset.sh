@@ -8,6 +8,7 @@
 # next start comes up empty as if freshly deployed. By default it KEEPS the deployed server bin and dashboard so
 # the deployment still runs; pass --all to remove those too.
 #
+# Usage: scripts/linux/factory-reset.sh [-y|--yes|--force] [--all]
 # Flags:
 #   -y | --yes | --force   skip the confirmation prompt
 #   --all                  also delete bin and dashboard (whole ~/.armada)
@@ -18,6 +19,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+die() { echo "ERROR: $*" >&2; exit 1; }
+[ "$(uname -s)" = Linux ] || die "This script is for Linux. Use scripts/macos on macOS or scripts\\windows on Windows."
+if grep -qi microsoft /proc/version 2>/dev/null \
+    && { [ -n "${WSL_DISTRO_NAME:-}" ] || [ -d /run/WSL ] || ls /proc/sys/fs/binfmt_misc/WSLInterop* >/dev/null 2>&1; }; then
+    die "This is WSL. Use the same script in scripts/wsl2 (WSL 2) or scripts/wsl (WSL 1); they handle the Windows PATH, line endings and Windows startup."
+fi
 ARMADA_DIR="${HOME}/.armada"
 UNIT_NAME="armada.service"
 FORCE=0
@@ -27,6 +34,7 @@ for arg in "$@"; do
     case "$arg" in
         -y|--yes|--force) FORCE=1 ;;
         --all) WIPE_ALL=1 ;;
+        -h|--help) awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) echo "[factory-reset] Unknown argument: $arg" >&2
            echo "Usage: scripts/linux/factory-reset.sh [-y|--yes|--force] [--all]" >&2
            exit 2 ;;
@@ -49,7 +57,8 @@ if [ "$FORCE" -ne 1 ]; then
     fi
     echo
     printf 'Type YES to continue: '
-    read -r CONFIRM
+    CONFIRM=""
+    read -r CONFIRM || true
     if [ "$CONFIRM" != "YES" ]; then
         echo "[factory-reset] Aborted."
         exit 1
@@ -79,14 +88,16 @@ rm -rf "$ARMADA_DIR"/docks "$ARMADA_DIR"/repos "$ARMADA_DIR"/logs
 
 if [ "$WIPE_ALL" -eq 1 ]; then
     echo "[factory-reset] Removing deployed server bin and dashboard..."
-    rm -rf "$ARMADA_DIR"/bin "$ARMADA_DIR"/dashboard
+    rm -rf "${ARMADA_DIR:?}"/bin "${ARMADA_DIR:?}"/dashboard
 fi
 
 echo
 echo "[factory-reset] Done. Armada state wiped at $ARMADA_DIR."
-if [ "$WIPE_ALL" -eq 1 ]; then
-    echo "Reinstall to redeploy: ./scripts/linux/install-systemd-user.sh"
+if [ -f "${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user/${UNIT_NAME}" ] || [ -f "${XDG_CONFIG_HOME:-${HOME}/.config}/autostart/armada.desktop" ]; then
+    echo "Publish and start it factory-fresh: ./scripts/linux/update-startup.sh"
+elif [ "$WIPE_ALL" -eq 1 ]; then
+    echo "Publish and register it again: ./scripts/linux/install-startup.sh"
 else
-    echo "Start it factory-fresh: ./scripts/linux/update-systemd-user.sh (or: systemctl --user start $UNIT_NAME)"
+    echo "Start it factory-fresh: ./scripts/linux/start-armada-server.sh (or ./scripts/linux/install-startup.sh to start it at login)"
 fi
 exit 0

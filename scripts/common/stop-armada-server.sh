@@ -9,7 +9,10 @@
 # by a loose command-line pattern, so an editor, a log tail, or a shell
 # whose arguments merely mention Armada.Server is never touched. Each
 # Admiral gets SIGTERM, then SIGKILL by PID if it has not exited within
-# about 10 seconds.
+# about 10 seconds. A supervisor that would restart it is stopped first:
+# the launchd agent com.armada.admiral (KeepAlive) on macOS, and the
+# systemd user unit armada.service (Restart=on-failure) on Linux. They
+# start again at the next login; remove-startup.sh unregisters them.
 #
 # Usage:
 #   stop-armada-server.sh            stop every Admiral, wait for exit
@@ -25,7 +28,7 @@ LIST_ONLY=0
 for arg in "$@"; do
     case "$arg" in
         --list) LIST_ONLY=1 ;;
-        -h|--help) grep '^#' "$0" | grep -v '^#!' | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; exit 0 ;;
         *) echo "[stop-armada-server] Unknown argument: $arg" >&2; exit 2 ;;
     esac
 done
@@ -48,6 +51,20 @@ armada_server_pids() {
         fi
     done
 }
+
+if [ "$LIST_ONLY" -eq 0 ]; then
+    # Stop a supervisor first, or it restarts the server as soon as it is signalled.
+    if [ "$(uname -s)" = Darwin ]; then
+        PLIST="${HOME}/Library/LaunchAgents/com.armada.admiral.plist"
+        if [ -f "$PLIST" ] && launchctl print "gui/$(id -u)/com.armada.admiral" >/dev/null 2>&1; then
+            echo "[stop-armada-server] Unloading the launchd agent com.armada.admiral..."
+            launchctl bootout "gui/$(id -u)" "$PLIST" >/dev/null 2>&1 || true
+        fi
+    elif command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet armada.service 2>/dev/null; then
+        echo "[stop-armada-server] Stopping the systemd user unit armada.service..."
+        systemctl --user stop armada.service >/dev/null 2>&1 || true
+    fi
+fi
 
 PIDS="$(armada_server_pids)"
 if [ "$LIST_ONLY" -eq 1 ]; then

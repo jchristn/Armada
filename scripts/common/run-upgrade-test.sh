@@ -38,11 +38,14 @@ PROVIDERS="sqlite"
 FRAMEWORK="net10.0"
 KEEP=0
 
+# need_value <flag> <value...>: a flag that takes a value must have one.
+need_value() { if [ "$#" -lt 2 ] || [ -z "$2" ]; then echo "Missing value after $1" >&2; exit 2; fi; }
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    --from-ref) FROM_REF="$2"; shift 2 ;;
-    --providers) PROVIDERS="$2"; shift 2 ;;
-    --framework) FRAMEWORK="$2"; shift 2 ;;
+    --from-ref) need_value "$@"; FROM_REF="$2"; shift 2 ;;
+    --providers) need_value "$@"; PROVIDERS="$2"; shift 2 ;;
+    --framework) need_value "$@"; FRAMEWORK="$2"; shift 2 ;;
     --keep) KEEP=1; shift ;;
     -h|--help) grep '^#' "$0" | grep -v '^#!' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -50,6 +53,13 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$PROVIDERS" = "all" ]; then PROVIDERS="sqlite,postgresql,mysql,sqlserver"; fi
+
+command -v git >/dev/null 2>&1 || { echo "git was not found on PATH. Install git." >&2; exit 1; }
+command -v dotnet >/dev/null 2>&1 || { echo "dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download" >&2; exit 1; }
+if [ "$(echo "$PROVIDERS" | tr '[:upper:]' '[:lower:]' | tr -d ' ')" != "sqlite" ]; then
+  command -v docker >/dev/null 2>&1 || { echo "docker was not found on PATH; it runs the server providers. Install Docker or pass --providers sqlite." >&2; exit 1; }
+  docker info >/dev/null 2>&1 || { echo "The Docker engine is not reachable. Start Docker or pass --providers sqlite." >&2; exit 1; }
+fi
 
 if [ -z "$FROM_REF" ]; then
   if git -C "$REPO_ROOT" rev-parse -q --verify "refs/tags/v0.9.0" >/dev/null 2>&1; then
@@ -101,10 +111,22 @@ port_for() {
   if [ -n "${ARMADA_UPGRADE_DB_PORT_BASE:-}" ]; then echo $(( ARMADA_UPGRADE_DB_PORT_BASE + $1 )); else rand_port; fi
 }
 
+# start_container <label> <docker run args...> -- starts a detached container and fails fast (non-zero, with
+# docker's own error) when docker cannot start it, instead of waiting out the readiness probe.
+start_container() {
+  local label="$1"; shift
+  local err
+  if ! err="$(docker run -d "$@" 2>&1 >/dev/null)"; then
+    echo "  ${label}: docker run failed: ${err}"
+    SUMMARY+=("${label} :: CONTAINER FAILED TO START")
+    return 1
+  fi
+  return 0
+}
+
 wait_ready() {
   local name="$1"; shift
-  local i
-  for i in $(seq 1 90); do
+  for _ in $(seq 1 90); do
     if docker exec "$name" "$@" >/dev/null 2>&1; then return 0; fi
     sleep 2
   done
@@ -141,8 +163,9 @@ for provider in "${PROVIDER_LIST[@]}"; do
       echo "==> PostgreSQL (${POSTGRES_IMAGE})"
       port="$(port_for 0)"; name="armada_upgrade_pg_$$"
       CONTAINERS+=("$name")
-      docker run -d --name "$name" --shm-size=256m -e POSTGRES_PASSWORD=testpass -p "${port}:5432" "$POSTGRES_IMAGE" >/dev/null
-      if wait_ready "$name" pg_isready -U postgres -q; then
+      if ! start_container "postgresql" --name "$name" --shm-size=256m -e POSTGRES_PASSWORD=testpass -p "${port}:5432" "$POSTGRES_IMAGE"; then
+        FAIL=1
+      elif wait_ready "$name" pg_isready -U postgres -q; then
         sleep 2
         run_suite "postgresql" --db-type postgresql --db-host 127.0.0.1 --db-port "$port" --db-user postgres --db-pass testpass --db-name armada_upgrade || FAIL=1
       else echo "  postgresql: container not ready"; FAIL=1; fi
@@ -152,9 +175,10 @@ for provider in "${PROVIDER_LIST[@]}"; do
       echo "==> MySQL (${MYSQL_IMAGE})"
       port="$(port_for 1)"; name="armada_upgrade_my_$$"
       CONTAINERS+=("$name")
-      docker run -d --name "$name" -e MYSQL_ROOT_PASSWORD=testpass -p "${port}:3306" "$MYSQL_IMAGE" \
-        --skip-name-resolve --innodb-flush-log-at-trx-commit=0 --sync-binlog=0 >/dev/null
-      if wait_ready "$name" mysqladmin ping -uroot -ptestpass --silent; then
+      if ! start_container "mysql" --name "$name" -e MYSQL_ROOT_PASSWORD=testpass -p "${port}:3306" "$MYSQL_IMAGE" \
+        --skip-name-resolve --innodb-flush-log-at-trx-commit=0 --sync-binlog=0; then
+        FAIL=1
+      elif wait_ready "$name" mysqladmin ping -uroot -ptestpass --silent; then
         sleep 3
         run_suite "mysql" --db-type mysql --db-host 127.0.0.1 --db-port "$port" --db-user root --db-pass testpass --db-name armada_upgrade || FAIL=1
       else echo "  mysql: container not ready"; FAIL=1; fi
@@ -164,8 +188,9 @@ for provider in "${PROVIDER_LIST[@]}"; do
       echo "==> SQL Server (${SQLSERVER_IMAGE})"
       port="$(port_for 2)"; name="armada_upgrade_ss_$$"
       CONTAINERS+=("$name")
-      docker run -d --name "$name" -e "ACCEPT_EULA=Y" -e "MSSQL_SA_PASSWORD=${SA_PASSWORD}" -p "${port}:1433" "$SQLSERVER_IMAGE" >/dev/null
-      if wait_ready "$name" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" -b; then
+      if ! start_container "sqlserver" --name "$name" -e "ACCEPT_EULA=Y" -e "MSSQL_SA_PASSWORD=${SA_PASSWORD}" -p "${port}:1433" "$SQLSERVER_IMAGE"; then
+        FAIL=1
+      elif wait_ready "$name" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" -b; then
         run_suite "sqlserver" --db-type sqlserver --db-host 127.0.0.1 --db-port "$port" --db-user sa --db-pass "$SA_PASSWORD" --db-name armada_upgrade || FAIL=1
       else echo "  sqlserver: container not ready"; FAIL=1; fi
       docker rm -f "$name" >/dev/null 2>&1 || true

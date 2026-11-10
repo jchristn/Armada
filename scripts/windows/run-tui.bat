@@ -1,5 +1,14 @@
 @echo off
 setlocal
+if /I "%~1"=="-h" goto :armada_usage
+if /I "%~1"=="--help" goto :armada_usage
+if "%~1"=="/?" goto :armada_usage
+goto :armada_main
+:armada_usage
+echo(Build and run the Armada terminal UI from source; arguments after the framework go to armada tui.
+echo(Usage: scripts\windows\run-tui.bat [^<framework^> ^| -f ^<framework^> ^| --framework ^<framework^>] [tui arguments...]
+exit /b 0
+:armada_main
 
 REM Build and run the Armada terminal UI (armada tui, hosted by the CLI in src\Armada.Helm) from source.
 REM
@@ -17,6 +26,11 @@ REM Resolve the target framework (-f / --framework / bare net* / ARMADA_TARGET_F
 call "%REPO_ROOT%\scripts\windows\resolve-framework.bat" %*
 if errorlevel 1 exit /b 1
 set "FRAMEWORK=%ARMADA_TARGET_FRAMEWORK%"
+where dotnet >nul 2>nul
+if errorlevel 1 (
+    echo ERROR: dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download 1>&2
+    exit /b 1
+)
 if "%FRAMEWORK%"=="" set "FRAMEWORK=net10.0"
 
 REM Drop the framework arguments the resolver consumed; forward the rest to armada tui.
@@ -26,6 +40,8 @@ if /i "%~1"=="-f" set "SKIP=2"
 if /i "%~1"=="--framework" set "SKIP=2"
 set "FIRST=%~1"
 if "%SKIP%"=="0" if /i "%FIRST:~0,3%"=="net" set "SKIP=1"
+REM With nothing to drop, forward %* untouched: rebuilding the list mangles =, ;, and , in arguments.
+set "ARMADA_FRAMEWORK_SKIPPED=%SKIP%"
 :skip_loop
 if "%SKIP%"=="0" goto :collect
 shift
@@ -46,6 +62,11 @@ if errorlevel 1 (
 )
 
 echo [run-tui] Starting armada tui (%FRAMEWORK%)...
+if not "%ARMADA_FRAMEWORK_SKIPPED%"=="0" goto :run_collected
+dotnet run --project "%REPO_ROOT%\src\Armada.Helm" --framework %FRAMEWORK% --no-build -- tui %*
+goto :run_done
+:run_collected
 dotnet run --project "%REPO_ROOT%\src\Armada.Helm" --framework %FRAMEWORK% --no-build -- tui%TUI_ARGS%
+:run_done
 set "EXIT_CODE=%ERRORLEVEL%"
 endlocal & exit /b %EXIT_CODE%

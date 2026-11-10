@@ -1,19 +1,58 @@
-#!/usr/bin/env sh
-# Waits for the Armada server's health endpoint. WSL 1 counterpart of scripts/linux/healthcheck-server.sh.
-# Under WSL 2 NAT networking, when nothing answers at localhost inside the distro but an Admiral on Windows does, the Windows host address is used (set WSL_NO_HOST_REWRITE=1 to disable).
-set -eu
-SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
-REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
+#!/usr/bin/env bash
+# Wait up to 30 seconds for the Armada server's health endpoint (<base url>/api/v1/status/health) to answer.
+# Exits 0 once it does and 1 when it never does.
+# WSL 1 version: WSL 1 shares the Windows network, so localhost also reaches an Admiral running on Windows.
+#
+# Usage: scripts/wsl/healthcheck-server.sh [<framework> | -f <framework> | --framework <framework>] [<base url>]
+#   <base url>   default ARMADA_BASE_URL, else http://localhost:7890
+#   A leading framework is accepted and ignored, as in healthcheck-server.bat.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC2034 # not every script needs REPO_ROOT
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+die() { echo "ERROR: $*" >&2; exit 1; }
+usage() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"; }
+
+# shellcheck disable=SC2034 # read by _wsl-common.sh
 WSL_FLAVOR=wsl
-# shellcheck source=_wsl-common.sh source-path=SCRIPTDIR
+# shellcheck source=_wsl-common.sh
 . "$SCRIPT_DIR/_wsl-common.sh"
+# The helper's own errors get the same "ERROR:" prefix as every other Armada script.
+wsl_die() { die "$@"; }
 wsl_require
 wsl_sanitize_path
 wsl_check_repo "$REPO_ROOT"
-wsl_require_cmd curl "Install curl inside WSL (for example: sudo apt install curl)."
-if [ "$#" -gt 0 ]; then
-    BASE_URL="$1"; shift
-else
-    BASE_URL="$(wsl_resolve_local_url "${ARMADA_BASE_URL:-http://localhost:7890}")"
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
+
+# shellcheck source=../common/resolve-framework.sh
+. "$REPO_ROOT/scripts/common/resolve-framework.sh"
+armada_resolve_framework "$@"
+shift "$ARMADA_FRAMEWORK_ARGS_CONSUMED"
+if [ "$#" -gt 1 ]; then
+    echo "ERROR: Unexpected argument: $2 (run with -h for usage)" >&2
+    exit 2
 fi
-wsl_run "$SCRIPT_DIR/../linux/healthcheck-server.sh" "$BASE_URL" "$@"
+wsl_require_cmd curl "Install curl inside WSL (for example: sudo apt install curl)."
+
+# Waits up to 30 seconds for <base url>/api/v1/status/health. Usage: wait_healthy <base url>
+wait_healthy() {
+    local health_url="${1%/}/api/v1/status/health"
+    echo
+    echo "[healthcheck-server] Waiting for ${health_url}..."
+    for _ in $(seq 1 30); do
+        if curl -fsS --max-time 3 "$health_url" >/dev/null 2>&1; then
+            echo "[healthcheck-server] Healthy."
+            return 0
+        fi
+        sleep 1
+    done
+    die "Armada server did not become healthy at ${health_url}"
+}
+
+if [ "$#" -eq 1 ]; then
+    BASE_URL="$1"
+else
+    BASE_URL="${ARMADA_BASE_URL:-http://localhost:7890}"
+fi
+wait_healthy "$BASE_URL"

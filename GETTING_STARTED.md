@@ -53,12 +53,12 @@ If you want Armada managed as a local deployment on your machine instead of a fo
 | Task | Linux | macOS | Windows |
 |------|-------|-------|---------|
 | Publish server and dashboard only | `./scripts/linux/publish-server.sh` | `./scripts/macos/publish-server.sh` | `scripts\windows\publish-server.bat` |
-| Install and register a user-scoped local deployment | `./scripts/linux/install-systemd-user.sh` | `./scripts/macos/install-launchd-agent.sh` | `scripts\windows\install-windows-task.bat` |
-| Update the deployed server from the current checkout | `./scripts/linux/update-systemd-user.sh` | `./scripts/macos/update-launchd-agent.sh` | `scripts\windows\update-windows-task.bat` |
+| Install and register a user-scoped local deployment | `./scripts/linux/install-startup.sh` | `./scripts/macos/install-startup.sh` | `scripts\windows\install-startup.bat` |
+| Update the deployed server from the current checkout | `./scripts/linux/update-startup.sh` | `./scripts/macos/update-startup.sh` | `scripts\windows\update-startup.bat` |
 | Verify the running deployment | `./scripts/linux/healthcheck-server.sh` | `./scripts/macos/healthcheck-server.sh` | `scripts\windows\healthcheck-server.bat` |
-| Remove the startup-managed deployment | `./scripts/linux/remove-systemd-user.sh` | `./scripts/macos/remove-launchd-agent.sh` | `scripts\windows\remove-windows-task.bat` |
+| Remove the startup-managed deployment | `./scripts/linux/remove-startup.sh` | `./scripts/macos/remove-startup.sh` | `scripts\windows\remove-startup.bat` |
 
-On Windows, the install and update wrappers also accept a framework override when the machine only has one SDK, for example `scripts\windows\install-windows-task.bat net8.0` or `scripts\windows\update-windows-task.bat --framework net8.0`.
+On Windows, the install and update wrappers also accept a framework override when the machine only has one SDK, for example `scripts\windows\install-startup.bat net8.0` or `scripts\windows\update-startup.bat --framework net8.0`.
 
 These scripts publish `Armada.Server` into `~/.armada/bin` on Linux and macOS, or `%USERPROFILE%\.armada\bin` on Windows, and deploy dashboard assets into `~/.armada/dashboard` or `%USERPROFILE%\.armada\dashboard`.
 
@@ -66,9 +66,9 @@ The remove scripts unregister the user-scoped startup entry or service, but they
 
 Repo-relative deployment script paths:
 
-- Linux: `scripts/linux/install-systemd-user.sh`, `scripts/linux/update-systemd-user.sh`, `scripts/linux/healthcheck-server.sh`
-- macOS: `scripts/macos/install-launchd-agent.sh`, `scripts/macos/update-launchd-agent.sh`, `scripts/macos/healthcheck-server.sh`
-- Windows: `scripts/windows/install-windows-task.bat`, `scripts/windows/update-windows-task.bat`, `scripts/windows/healthcheck-server.bat`
+- Linux: `scripts/linux/install-startup.sh`, `scripts/linux/update-startup.sh`, `scripts/linux/healthcheck-server.sh`
+- macOS: `scripts/macos/install-startup.sh`, `scripts/macos/update-startup.sh`, `scripts/macos/healthcheck-server.sh`
+- Windows: `scripts/windows/install-startup.bat`, `scripts/windows/update-startup.bat`, `scripts/windows/healthcheck-server.bat`
 
 ## First mission with the setup wizard
 
