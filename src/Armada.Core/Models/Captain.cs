@@ -2,11 +2,12 @@ namespace Armada.Core.Models
 {
     using System.Text.Json.Serialization;
     using Armada.Core.Enums;
+    using Armada.Core.Services;
 
     /// <summary>
     /// A worker agent instance executing missions.
     /// </summary>
-    public class Captain
+    public class Captain : IJsonOnDeserialized
     {
         #region Public-Members
 
@@ -88,6 +89,17 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// Model profile (mdl_ prefix) of the model this captain runs as served, or null until Armada has observed it.
+        /// Advisory and server-owned: Armada sets it when it records the captain's runtime and model (a stage outcome or a
+        /// Quick probe run). It does not set <see cref="Tier"/> or change routing. Harbor-specific facts stay on the captain.
+        /// </summary>
+        public string? ModelProfileId
+        {
+            get => _ModelProfileId;
+            set => _ModelProfileId = String.IsNullOrEmpty(value) ? null : value;
+        }
+
+        /// <summary>
         /// User-supplied system instructions for this captain. Injected into every mission's
         /// instructions before vessel context and mission details. Use this to specialize
         /// captain behavior, add guardrails, or provide persistent context.
@@ -136,22 +148,117 @@ namespace Armada.Core.Models
         public CliPermissionPolicyEnum? CliPermissionPolicy { get; set; } = null;
 
         /// <summary>
+        /// Whether this captain participates in account usage capture. Null and omitted values inherit true.
+        /// Explicit false opts out; Disabled mode always opts out regardless of this flag. The nullable
+        /// choice is preserved on the wire so metadata write-back does not persist a resolved default.
+        /// </summary>
+        [JsonConverter(typeof(UsageCaptureEnabledJsonConverter))]
+        public bool? UsageCaptureEnabled { get; set; } = null;
+
+        /// <summary>
+        /// Requested seconds between usage captures for this captain. Default 300, clamped to 60..86400 in
+        /// the setter so model, storage and API agree on the effective value. Groups run at the shortest
+        /// requested interval among enabled members, bounded by the global minimum interval. An explicit JSON
+        /// null reads as 300.
+        /// </summary>
+        [JsonConverter(typeof(UsageCaptureIntervalJsonConverter))]
+        public int UsageCaptureIntervalSeconds
+        {
+            get => _UsageCaptureIntervalSeconds;
+            set => _UsageCaptureIntervalSeconds = value < 60 ? 60 : (value > 86400 ? 86400 : value);
+        }
+
+        /// <summary>
+        /// How this captain captures usage: Auto (verified read-only sources only), Disabled (opt out
+        /// entirely) or Custom (the configured local executable). Default Auto. Setting a mode other than
+        /// Custom clears <see cref="UsageCaptureCommand"/>, so leaving Custom never keeps a stale command. An
+        /// explicit JSON null reads as Auto.
+        /// </summary>
+        [JsonConverter(typeof(UsageCaptureModeJsonConverter))]
+        public UsageCaptureModeEnum UsageCaptureMode
+        {
+            get => _UsageCaptureMode;
+            set
+            {
+                _UsageCaptureMode = value;
+                if (value != UsageCaptureModeEnum.Custom) _UsageCaptureCommand = null;
+            }
+        }
+
+        /// <summary>
+        /// The Custom usage-capture executable contract (JSON with executable and argument array), or null.
+        /// Only meaningful in Custom mode: outside Custom it always reads as null whatever order the mode and
+        /// command were assigned in (JSON property order included), so storage and API never see a command
+        /// for an Auto or Disabled captain. Null or whitespace is normalized to null. Rejecting shell syntax
+        /// and requiring a command in Custom mode is the service layer's contract, enforced before storage.
+        /// </summary>
+        public string? UsageCaptureCommand
+        {
+            get => _UsageCaptureMode == UsageCaptureModeEnum.Custom ? _UsageCaptureCommand : null;
+            set => _UsageCaptureCommand = String.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        /// <summary>
+        /// Explicit credential Harbor for account usage, including while idle. Null follows the current
+        /// dock, or the Admiral in a standalone deployment. Never changes mission placement.
+        /// </summary>
+        public string? UsageCaptureHarborId
+        {
+            get => _UsageCaptureHarborId;
+            set => _UsageCaptureHarborId = String.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        /// <summary>
+        /// Whether usage capture is effectively active for this captain: enabled AND not opted out with
+        /// Disabled mode. Derived; not stored.
+        /// </summary>
+        public bool UsageCaptureActive => (UsageCaptureEnabled ?? true) && UsageCaptureMode != UsageCaptureModeEnum.Disabled;
+
+        /// <summary>
         /// Current state of the captain.
         /// </summary>
         public CaptainStateEnum State { get; set; } = CaptainStateEnum.Idle;
 
-        /// <summary>
-        /// Currently assigned mission identifier.
-        /// </summary>
-        public string? CurrentMissionId { get; set; } = null;
+        /// <summary>Maximum simultaneous missions; CLI defaults to one and endpoint/Mux to four.</summary>
+        public int MaxConcurrency { get => _MaxConcurrency ?? CaptainConcurrencyDefaults.For(Runtime); set => _MaxConcurrency = ConcurrencyClamp.CaptainLimit(value); }
+        private int? _MaxConcurrency;
+        /// <summary>Whether the caller supplied a concurrency limit.</summary>
+        [JsonIgnore]
+        public bool MaxConcurrencySpecified => _MaxConcurrency.HasValue;
+        /// <summary>Server-owned number of execution slots; retained verification ownership is excluded.</summary>
+        public int ActiveMissionCount { get; set; }
+        /// <summary>Server-owned mission identifiers occupying execution slots; verification is excluded.</summary>
+        [CollectionBound(Constants.CaptainConcurrencyCeiling, Reason = "Bounded by the captain concurrency ceiling; ActiveMissionCount carries the total")]
+        public List<string> ActiveMissionIds { get; set; } = new List<string>();
+        /// <summary>Exclusive planning, refinement or analysis session, when any.</summary>
+        public string? CurrentSessionId { get; set; }
+        /// <summary>Whether another mission can be admitted without interrupting existing work.</summary>
+        [JsonIgnore]
+        public bool HasMissionCapacity => Active && CurrentSessionId == null && ActiveMissionCount < MaxConcurrency
+            && (State == CaptainStateEnum.Idle || (State == CaptainStateEnum.Working && ActiveMissionCount > 0));
+        /// <summary>Check execution slot identities or this explicitly scoped runtime context.</summary>
+        public bool HoldsMission(string id) => ActiveMissionIds.Contains(id) || Assignment?.Id == id;
+        /// <summary>Make a transient mission-scoped view; never change another mission's process/dock context.</summary>
+        public Captain ForMission(Mission mission)
+        {
+            Captain scoped = (Captain)MemberwiseClone();
+            scoped.CurrentSessionId = null;
+            scoped.Assignment = mission;
+            scoped.ProcessId = mission.ProcessId;
+            scoped.RecoveryAttempts = mission.StallRecoveryAttempts;
+            scoped.LastHeartbeatUtc = mission.LastHeartbeatUtc ?? mission.StartedUtc ?? mission.CreatedUtc;
+            return scoped;
+        }
+
+        /// <summary>Whether this captain may accept new work. Disabling leaves in-flight work running.</summary>
+        public bool Active { get; set; } = true;
+
+        /// <summary>Transient runtime context for one explicit mission; never serialized or stored on the captain.</summary>
+        [JsonIgnore]
+        public Mission? Assignment { get; set; }
 
         /// <summary>
-        /// Currently assigned dock identifier.
-        /// </summary>
-        public string? CurrentDockId { get; set; } = null;
-
-        /// <summary>
-        /// Operating system process identifier.
+        /// Operating system process identifier for the current exclusive session. Mission processes are recorded on each mission.
         /// </summary>
         public int? ProcessId { get; set; } = null;
 
@@ -204,6 +311,11 @@ namespace Armada.Core.Models
         private string _Name = "Captain";
         private string? _Model = null;
         private string? _ModelEndpointId = null;
+        private string? _ModelProfileId = null;
+        private int _UsageCaptureIntervalSeconds = 300;
+        private UsageCaptureModeEnum _UsageCaptureMode = UsageCaptureModeEnum.Auto;
+        private string? _UsageCaptureCommand = null;
+        private string? _UsageCaptureHarborId = null;
 
         #endregion
 
@@ -225,6 +337,19 @@ namespace Armada.Core.Models
         {
             Name = name;
             Runtime = runtime;
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Normalize usage capture settings after JSON deserialization: a command supplied for a non-Custom
+        /// mode is dropped regardless of property order, so a later switch to Custom cannot revive it.
+        /// </summary>
+        public void OnDeserialized()
+        {
+            if (_UsageCaptureMode != UsageCaptureModeEnum.Custom) _UsageCaptureCommand = null;
         }
 
         #endregion

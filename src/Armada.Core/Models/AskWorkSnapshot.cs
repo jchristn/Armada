@@ -146,6 +146,12 @@ namespace Armada.Core.Models
         }
 
         /// <summary>
+        /// The black box card of BlackBox work (an entry's summary, conflicting missions, recovery paths and follow-ups);
+        /// null for every other kind of work.
+        /// </summary>
+        public AskBlackBoxCard? BlackBox { get; set; } = null;
+
+        /// <summary>
         /// Failure reason or error text, or null.
         /// </summary>
         public string? ErrorText { get; set; } = null;

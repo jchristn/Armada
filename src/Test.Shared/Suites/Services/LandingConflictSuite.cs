@@ -425,6 +425,95 @@ namespace Test.Shared.Suites.Services
                 AssertTrue((await f.Git.GetWorkingTreeStatusAsync(f.Dock.WorktreePath!)).IsClean, "the conflicted merge was aborted");
             }));
 
+            cases.Add(CaseAsync("retry_landing_reads_conflicts_from_merge_worktree", "RetryLanding lists conflicted files from the dock worktree where the merge ran, not from the owning repository", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                RealLandingFixture f = await RealLandingFixture.CreateAsync(testDb.Driver, LandingModeEnum.MergeAndPush, "shared.txt", "mission version\n");
+                f.Repos.AdvanceMain("shared.txt", "target version\n");
+                await MarkLandingFailedAsync(testDb.Driver, f.Mission);
+
+                LandingService landing = new LandingService(f.Logging, testDb.Driver, f.Settings, f.Git);
+                landing.OnPerformLanding = async (m, d) =>
+                {
+                    // A landing that dies mid-merge leaves the conflict in the dock worktree.
+                    await HarborDockGitFixture.TryGitAsync(d.WorktreePath!, "fetch", "-q", "origin");
+                    await HarborDockGitFixture.TryGitAsync(d.WorktreePath!, "-c", "user.name=Armada Test", "-c", "user.email=test@armada.local", "merge", "--no-edit", "origin/main");
+                    throw new InvalidOperationException("landing handler stopped mid-merge");
+                };
+
+                AssertFalse(await landing.RetryLandingAsync(f.Mission.Id), "the retry fails");
+                Mission failed = (await testDb.Driver.Missions.ReadAsync(f.Mission.Id))!;
+                AssertEqual(MissionStatusEnum.LandingFailed, failed.Status);
+                AssertEqual(MissionFailureKindEnum.LandingConflict, failed.FailureKind, failed.FailureReason);
+                AssertContains("merge conflicts in: shared.txt", failed.FailureReason ?? "");
+                AssertEqual(0, (await f.Git.GetConflictedFilesAsync(f.Vessel.LocalPath!)).Count, "the owning repository holds no conflict, so reading it found nothing");
+            }));
+
+            cases.Add(CaseAsync("retry_landing_uses_conflicts_carried_by_aborted_merge", "RetryLanding records the conflicted files a merge read before it aborted, even though the worktree is clean again", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                RealLandingFixture f = await RealLandingFixture.CreateAsync(testDb.Driver, LandingModeEnum.MergeAndPush);
+                await MarkLandingFailedAsync(testDb.Driver, f.Mission);
+
+                LandingService landing = new LandingService(f.Logging, testDb.Driver, f.Settings, f.Git);
+                landing.OnPerformLanding = (m, d) => throw new InvalidOperationException("wrapped", new GitMergeConflictException("conflict", new[] { "src/A.cs", "src/B.cs" }));
+
+                AssertFalse(await landing.RetryLandingAsync(f.Mission.Id));
+                Mission failed = (await testDb.Driver.Missions.ReadAsync(f.Mission.Id))!;
+                AssertEqual(MissionFailureKindEnum.LandingConflict, failed.FailureKind);
+                AssertContains("merge conflicts in: src/A.cs, src/B.cs", failed.FailureReason ?? "");
+            }));
+
+            cases.Add(CaseAsync("retry_landing_non_conflict_failure_lists_no_files", "RetryLanding of a failure that is not a merge conflict records Infra and no conflicted files", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                RealLandingFixture f = await RealLandingFixture.CreateAsync(testDb.Driver, LandingModeEnum.MergeAndPush);
+                await MarkLandingFailedAsync(testDb.Driver, f.Mission);
+
+                LandingService landing = new LandingService(f.Logging, testDb.Driver, f.Settings, f.Git);
+                landing.OnPerformLanding = (m, d) => throw new InvalidOperationException("push rejected");
+
+                AssertFalse(await landing.RetryLandingAsync(f.Mission.Id));
+                Mission failed = (await testDb.Driver.Missions.ReadAsync(f.Mission.Id))!;
+                AssertEqual(MissionFailureKindEnum.Infra, failed.FailureKind);
+                AssertEqual("Landing retry failed: push rejected", failed.FailureReason);
+            }));
+
+            cases.Add(CaseAsync("landing_target_advanced_event_records_before_and_after", "Integrating a moved target records mission.landing_target_advanced with the dock head before and after and the target tip", TestTags.Positive, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                RealLandingFixture f = await RealLandingFixture.CreateAsync(testDb.Driver, LandingModeEnum.MergeAndPush);
+                f.Repos.AdvanceMain("other.txt", "target moved\n");
+                string targetTip = f.Repos.OriginHead("main");
+
+                await f.Handler.HandleMissionCompleteAsync(f.Mission, f.Dock);
+
+                Mission landed = (await testDb.Driver.Missions.ReadAsync(f.Mission.Id))!;
+                AssertEqual(MissionStatusEnum.Complete, landed.Status, landed.FailureReason);
+                List<ArmadaEvent> events = await testDb.Driver.Events.EnumerateRecentAsync(100);
+                ArmadaEvent? advanced = events.Find(e => e.EventType == "mission.landing_target_advanced" && e.EntityId == f.Mission.Id);
+                AssertNotNull(advanced, "the advance is recorded");
+                AssertNotNull(advanced!.Payload, "the event carries a payload");
+                LandingTargetAdvancedPayload payload = System.Text.Json.JsonSerializer.Deserialize<LandingTargetAdvancedPayload>(advanced.Payload!)!;
+                AssertEqual("main", payload.TargetBranch);
+                AssertEqual(f.WorkCommit, payload.Before, "Before is the mission's own commit");
+                AssertEqual(landed.CommitHash, payload.After, "After is the integrated commit landing verified and published");
+                AssertEqual(targetTip, payload.RemoteTargetTip, "the target tip integrated against");
+                AssertTrue(payload.Before != payload.After, "the head moved");
+            }));
+
+            cases.Add(CaseAsync("landing_target_unchanged_records_no_advance", "Landing onto a target that has not moved records no mission.landing_target_advanced event", TestTags.Negative, async () =>
+            {
+                using TestDatabase testDb = await TestDatabaseHelper.CreateDatabaseAsync();
+                RealLandingFixture f = await RealLandingFixture.CreateAsync(testDb.Driver, LandingModeEnum.MergeAndPush);
+
+                await f.Handler.HandleMissionCompleteAsync(f.Mission, f.Dock);
+
+                AssertEqual(MissionStatusEnum.Complete, (await testDb.Driver.Missions.ReadAsync(f.Mission.Id))!.Status);
+                List<ArmadaEvent> events = await testDb.Driver.Events.EnumerateRecentAsync(100);
+                AssertFalse(events.Exists(e => e.EventType == "mission.landing_target_advanced" && e.EntityId == f.Mission.Id), "nothing was integrated");
+            }));
+
             return new TestSuiteDescriptor(
                 suiteId: SuiteId,
                 displayName: "Landing Conflict",
@@ -434,6 +523,14 @@ namespace Test.Shared.Suites.Services
         #endregion
 
         #region Private-Methods
+
+        private static async Task MarkLandingFailedAsync(DatabaseDriver db, Mission mission)
+        {
+            mission.Status = MissionStatusEnum.LandingFailed;
+            mission.FailureKind = MissionFailureKindEnum.Infra;
+            mission.FailureReason = "previous landing failed";
+            await db.Missions.UpdateAsync(mission);
+        }
 
         private static MissionLandingHandler CreateHandler(DatabaseDriver db, StubGitService git)
         {

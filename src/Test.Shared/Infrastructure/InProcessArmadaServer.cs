@@ -78,6 +78,9 @@ namespace Test.Shared.Infrastructure
             Directory.CreateDirectory(dataDirectory);
 
             ArmadaSettings settings = new ArmadaSettings();
+            // Production capture defaults on. Test servers explicitly opt out so their long-lived
+            // health loops never read the developer's provider credentials. Capture suites opt in.
+            settings.UsageCapture.Enabled = false;
             settings.DataDirectory = dataDirectory;
             settings.SettingsFilePath = Path.Combine(dataDirectory, "settings.json");
             settings.Database = database;

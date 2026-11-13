@@ -1,0 +1,278 @@
+[
+  {
+    "page": "pin",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Pinned worker",
+    "card": "Why This Mission Is WaitingCaptain mission limitPendingEligible captains have no free mission slots: Pinned worker 1 running / limit 1.Next stepsAdd another eligible captain to run work in parallel.Add captainHeld by msn_parity_held_pinJudge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "CaptainConcurrencyLimit",
+    "links": [
+      {
+        "text": "Add captain",
+        "href": "/dashboard/captains?create=1"
+      },
+      {
+        "text": "msn_parity_held_pin",
+        "href": "/dashboard/missions/msn_parity_held_pin"
+      },
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  },
+  {
+    "page": "spare",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Judge specialist",
+    "card": "Why This Mission Is WaitingNo captain can take this missionPendingWaiting for a captain: no available captain may take this mission (persona Worker) (tier Premium or higher). Check the persona's captain priorities and the captains' allowed personas and tiers.Judge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "NoEligibleCaptain",
+    "links": [
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  },
+  {
+    "page": "pin",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Pinned worker",
+    "card": "Why This Mission Is WaitingCaptain mission limitPendingEligible captains have no free mission slots: Pinned worker 1 running / limit 1.Next stepsAdd another eligible captain to run work in parallel.Add captainHeld by msn_parity_held_pinJudge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "CaptainConcurrencyLimit",
+    "links": [
+      {
+        "text": "Add captain",
+        "href": "/dashboard/captains?create=1"
+      },
+      {
+        "text": "msn_parity_held_pin",
+        "href": "/dashboard/missions/msn_parity_held_pin"
+      },
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  },
+  {
+    "page": "spare",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Judge specialist",
+    "card": "Why This Mission Is WaitingNo captain can take this missionPendingWaiting for a captain: no available captain may take this mission (persona Worker) (tier Premium or higher). Check the persona's captain priorities and the captains' allowed personas and tiers.Judge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "NoEligibleCaptain",
+    "links": [
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  },
+  {
+    "page": "pin",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Pinned worker",
+    "card": "Why This Mission Is WaitingCaptain mission limitPendingEligible captains have no free mission slots: Pinned worker 1 running / limit 1.Next stepsAdd another eligible captain to run work in parallel.Add captainHeld by msn_parity_held_pinJudge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "CaptainConcurrencyLimit",
+    "links": [
+      {
+        "text": "Add captain",
+        "href": "/dashboard/captains?create=1"
+      },
+      {
+        "text": "msn_parity_held_pin",
+        "href": "/dashboard/missions/msn_parity_held_pin"
+      },
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  },
+  {
+    "page": "spare",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Judge specialist",
+    "card": "Why This Mission Is WaitingNo captain can take this missionPendingWaiting for a captain: no available captain may take this mission (persona Worker) (tier Premium or higher). Check the persona's captain priorities and the captains' allowed personas and tiers.Judge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "NoEligibleCaptain",
+    "links": [
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  },
+  {
+    "page": "pin",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Pinned worker",
+    "card": "Why This Mission Is WaitingCaptain mission limitPendingEligible captains have no free mission slots: Pinned worker 1 running / limit 1.Next stepsAdd another eligible captain to run work in parallel.Add captainHeld by msn_parity_held_pinJudge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "CaptainConcurrencyLimit",
+    "links": [
+      {
+        "text": "Add captain",
+        "href": "/dashboard/captains?create=1"
+      },
+      {
+        "text": "msn_parity_held_pin",
+        "href": "/dashboard/missions/msn_parity_held_pin"
+      },
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  },
+  {
+    "page": "spare",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Judge specialist",
+    "card": "Why This Mission Is WaitingNo captain can take this missionPendingWaiting for a captain: no available captain may take this mission (persona Worker) (tier Premium or higher). Check the persona's captain priorities and the captains' allowed personas and tiers.Judge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "NoEligibleCaptain",
+    "links": [
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  },
+  {
+    "page": "pin",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Pinned worker",
+    "card": "Why This Mission Is WaitingCaptain mission limitPendingEligible captains have no free mission slots: Pinned worker 1 running / limit 1.Next stepsAdd another eligible captain to run work in parallel.Add captainHeld by msn_parity_held_pinJudge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "CaptainConcurrencyLimit",
+    "links": [
+      {
+        "text": "Add captain",
+        "href": "/dashboard/captains?create=1"
+      },
+      {
+        "text": "msn_parity_held_pin",
+        "href": "/dashboard/missions/msn_parity_held_pin"
+      },
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  },
+  {
+    "page": "spare",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Judge specialist",
+    "card": "Why This Mission Is WaitingNo captain can take this missionPendingWaiting for a captain: no available captain may take this mission (persona Worker) (tier Premium or higher). Check the persona's captain priorities and the captains' allowed personas and tiers.Judge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "NoEligibleCaptain",
+    "links": [
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  },
+  {
+    "page": "pin",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Pinned worker",
+    "card": "Why This Mission Is WaitingCaptain mission limitPendingEligible captains have no free mission slots: Pinned worker 1 running / limit 1.Next stepsAdd another eligible captain to run work in parallel.Add captainHeld by msn_parity_held_pinJudge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "CaptainConcurrencyLimit",
+    "links": [
+      {
+        "text": "Add captain",
+        "href": "/dashboard/captains?create=1"
+      },
+      {
+        "text": "msn_parity_held_pin",
+        "href": "/dashboard/missions/msn_parity_held_pin"
+      },
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  },
+  {
+    "page": "spare",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Waiting for Judge specialist",
+    "card": "Why This Mission Is WaitingNo captain can take this missionPendingWaiting for a captain: no available captain may take this mission (persona Worker) (tier Premium or higher). Check the persona's captain priorities and the captains' allowed personas and tiers.Judge specialist: 1 / 2 mission slots in use (not assigned: persona not allowed)Pinned worker: 1 / 1 mission slots in use",
+    "reason": "NoEligibleCaptain",
+    "links": [
+      {
+        "text": "Judge specialist",
+        "href": "/dashboard/captains/cpt_parity_spare"
+      },
+      {
+        "text": "Pinned worker",
+        "href": "/dashboard/captains/cpt_parity_pin"
+      }
+    ]
+  }
+]

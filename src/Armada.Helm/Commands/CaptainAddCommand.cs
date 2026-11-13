@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Add a new captain.
@@ -22,19 +23,19 @@ namespace Armada.Helm.Commands
             AgentRuntimeEnum runtime = AgentRuntimeEnum.ClaudeCode;
             if (settings.Runtime != null && !AgentRuntimeParser.TryParse(settings.Runtime, out runtime))
             {
-                AnsiConsole.MarkupLine("[red]" + Markup.Escape(AgentRuntimeParser.DescribeInvalid(settings.Runtime)) + "[/]");
+                HelmConsole.Error.MarkupLine("[red]" + Markup.Escape(AgentRuntimeParser.DescribeInvalid(settings.Runtime)) + "[/]");
                 return 1;
             }
 
             if (runtime == AgentRuntimeEnum.Mux && String.IsNullOrWhiteSpace(settings.MuxEndpoint))
             {
-                AnsiConsole.MarkupLine("[red]Mux captains require --mux-endpoint <name>.[/]");
+                HelmConsole.Error.MarkupLine("[red]Mux captains require --mux-endpoint <name>.[/]");
                 return 1;
             }
 
             if (runtime == AgentRuntimeEnum.ApiEndpoint && String.IsNullOrWhiteSpace(settings.ModelEndpointId))
             {
-                AnsiConsole.MarkupLine("[red]API captains require --model-endpoint <endpoint-id>.[/]");
+                HelmConsole.Error.MarkupLine("[red]API captains require --model-endpoint <endpoint-id>.[/]");
                 return 1;
             }
 
@@ -56,6 +57,7 @@ namespace Armada.Helm.Commands
             {
                 Name = settings.Name,
                 Runtime = runtime,
+                Active = settings.Active ?? true,
                 ModelEndpointId = runtime == AgentRuntimeEnum.ApiEndpoint ? settings.ModelEndpointId?.Trim() : null,
                 Model = String.IsNullOrWhiteSpace(settings.Model) ? null : settings.Model.Trim(),
                 RuntimeOptionsJson = runtimeOptionsJson

@@ -4,6 +4,7 @@ namespace Armada.Helm.Commands
     using Spectre.Console;
     using Spectre.Console.Cli;
     using Armada.Core.Models;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Updates a backlog item.
@@ -19,6 +20,7 @@ namespace Armada.Helm.Commands
             /// <summary>
             /// Gets or sets the backlog item identifier or title.
             /// </summary>
+            [Description("Backlog item ID (obj_) or title")]
             [CommandArgument(0, "<backlog>")]
             public string Backlog { get; set; } = String.Empty;
         }
@@ -32,7 +34,7 @@ namespace Armada.Helm.Commands
             Objective? existing = await BacklogCommandSupport.ResolveBacklogItemAsync(GetApiClient(), settings.Backlog, cancellationToken).ConfigureAwait(false);
             if (existing == null)
             {
-                AnsiConsole.MarkupLine("[red]Backlog item not found:[/] " + Markup.Escape(settings.Backlog));
+                HelmConsole.Error.MarkupLine("[red]Backlog item not found:[/] " + Markup.Escape(settings.Backlog));
                 return 1;
             }
 
@@ -40,7 +42,7 @@ namespace Armada.Helm.Commands
             Objective? updated = await GetApiClient().UpdateBacklogItemAsync(existing.Id, request, cancellationToken).ConfigureAwait(false);
             if (updated == null)
             {
-                AnsiConsole.MarkupLine("[red]Backlog item update failed.[/]");
+                HelmConsole.Error.MarkupLine("[red]Backlog item update failed.[/]");
                 return 1;
             }
 

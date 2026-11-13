@@ -8,7 +8,7 @@ namespace Armada.Harbor
     /// <summary>
     /// The jobs running on this computer, one <see cref="JobListRow"/> each: what each is (a mission's title, an Ask turn's
     /// question), its runtime and elapsed time, its vessel and voyage, captain and stage, branch and IDs, its latest
-    /// activity, and Open in Dashboard and View output. A click on a row shows its last output lines. Shows a one-line
+    /// activity, and Open in Dashboard and View Output. A click on a row shows its last output lines. Shows a one-line
     /// note when nothing runs.
     /// </summary>
     public class JobListView : UserControl
@@ -21,7 +21,7 @@ namespace Armada.Harbor
         public event Action<string>? OpenLink;
 
         /// <summary>
-        /// Raised with a job whose log to show (View output).
+        /// Raised with a job whose log to show (View Output).
         /// </summary>
         public event Action<HarborRunningJobView>? ViewOutput;
 

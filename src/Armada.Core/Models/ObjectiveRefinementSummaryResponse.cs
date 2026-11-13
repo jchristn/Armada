@@ -39,6 +39,11 @@ namespace Armada.Core.Models
         /// </summary>
         public string? SuggestedPipelineId { get; set; } = null;
         /// <summary>
+        /// Optional slices suggested as a starting point for planning (title and parent index); never dispatched.
+        /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
+        public List<ObjectiveSuggestedSlice> SuggestedSlices { get; set; } = new List<ObjectiveSuggestedSlice>();
+        /// <summary>
         /// Gets or sets the summary generation method.
         /// </summary>
         public string Method { get; set; } = "assistant-fallback";

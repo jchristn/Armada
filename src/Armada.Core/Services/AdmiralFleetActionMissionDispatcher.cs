@@ -5,6 +5,7 @@ namespace Armada.Core.Services
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -65,18 +66,48 @@ namespace Armada.Core.Services
         public async Task<string> DispatchAsync(Vessel vessel, string title, string prompt, string? pipelineId, string? persona, RunApprovalOptions? approvalOptions, CancellationToken token = default)
         {
             if (vessel == null) throw new ArgumentNullException(nameof(vessel));
-            if (String.IsNullOrEmpty(title)) throw new ArgumentNullException(nameof(title));
+            FleetActionMissionDispatch dispatch = new FleetActionMissionDispatch(vessel)
+            {
+                Title = title,
+                Prompt = prompt ?? String.Empty,
+                PipelineId = pipelineId,
+                Persona = persona,
+                ApprovalOptions = approvalOptions
+            };
+            return await DispatchAsync(dispatch, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public async Task<string> DispatchAsync(FleetActionMissionDispatch dispatch, CancellationToken token = default)
+        {
+            if (dispatch == null) throw new ArgumentNullException(nameof(dispatch));
+            if (String.IsNullOrEmpty(dispatch.Title)) throw new ArgumentNullException(nameof(dispatch.Title));
 
             List<MissionDescription> missions = new List<MissionDescription>
             {
-                new MissionDescription(title, prompt ?? String.Empty)
+                new MissionDescription(dispatch.Title, dispatch.Prompt)
                 {
-                    Persona = String.IsNullOrWhiteSpace(persona) ? null : persona.Trim()
+                    Persona = String.IsNullOrWhiteSpace(dispatch.Persona) ? null : dispatch.Persona.Trim(),
+                    Mode = dispatch.MissionMode
                 }
             };
 
-            Voyage voyage = await _Admiral.DispatchVoyageAsync(title, prompt ?? String.Empty, vessel.Id, missions, pipelineId, null, token: token, approvalOptions: approvalOptions).ConfigureAwait(false);
+            Voyage voyage = await _Admiral.DispatchVoyageAsync(dispatch.Title, dispatch.Prompt, dispatch.Vessel.Id, missions, dispatch.PipelineId, null,
+                landingMode: dispatch.LandingMode, token: token, approvalOptions: dispatch.ApprovalOptions).ConfigureAwait(false);
             return voyage.Id;
+        }
+
+        /// <inheritdoc />
+        public async Task<string?> GetReportAsync(string voyageId, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(voyageId)) throw new ArgumentNullException(nameof(voyageId));
+
+            List<Mission> missions = await _Database.Missions.EnumerateByVoyageAsync(voyageId, token).ConfigureAwait(false);
+            Mission? last = missions
+                .Where(m => m.CompletedUtc.HasValue && !String.IsNullOrWhiteSpace(m.AgentOutput))
+                .OrderByDescending(m => m.CompletedUtc)
+                .FirstOrDefault();
+            return last?.AgentOutput;
         }
 
         /// <inheritdoc />
@@ -117,37 +148,32 @@ namespace Armada.Core.Services
             {
                 if (mission.Status != MissionStatusEnum.Pending && mission.Status != MissionStatusEnum.Assigned && mission.Status != MissionStatusEnum.Blocked) continue;
 
-                if (!String.IsNullOrEmpty(mission.CaptainId))
-                {
-                    Captain? captain = await _Database.Captains.ReadAsync(mission.CaptainId, token).ConfigureAwait(false);
-                    if (captain != null && captain.CurrentMissionId == mission.Id)
-                    {
-                        List<Mission> otherMissions = (await _Database.Missions.EnumerateByCaptainAsync(captain.Id, token).ConfigureAwait(false))
-                            .Where(om => om.Id != mission.Id && (om.Status == MissionStatusEnum.InProgress || om.Status == MissionStatusEnum.Assigned))
-                            .ToList();
-                        if (otherMissions.Count == 0)
-                        {
-                            captain.State = CaptainStateEnum.Idle;
-                            captain.CurrentMissionId = null;
-                            captain.CurrentDockId = null;
-                            captain.ProcessId = null;
-                            captain.RecoveryAttempts = 0;
-                            captain.LastUpdateUtc = DateTime.UtcNow;
-                            await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
-                        }
-                    }
-                }
-
+                MissionStatusEnum missionStatusBefore = mission.Status;
                 mission.Status = MissionStatusEnum.Cancelled;
                 mission.CompletedUtc = DateTime.UtcNow;
                 mission.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.Missions.UpdateAsync(mission, token).ConfigureAwait(false);
+                if (!String.IsNullOrEmpty(mission.CaptainId))
+                {
+                    Captain? owner = await _Database.Captains.ReadAsync(mission.CaptainId, token).ConfigureAwait(false);
+                    // Legacy snapshots may have other work without durable slots until reconciliation.
+                    bool legacySibling = owner?.ActiveMissionCount == 0 &&
+                        (await _Database.Missions.EnumerateByCaptainAsync(mission.CaptainId, token).ConfigureAwait(false))
+                        .Any(other => other.Id != mission.Id && (other.Status == MissionStatusEnum.Assigned || other.Status == MissionStatusEnum.InProgress));
+                    if (!legacySibling)
+                        await _Database.Captains.TryReleaseFromMissionAsync(mission.CaptainId, mission.Id, token).ConfigureAwait(false);
+                }
+                await _Admiral.BlackBox.RecordMissionFailureAsync(mission, missionStatusBefore, BlackBoxStepEnum.OperatorTransition,
+                    context => context.Reason = "The fleet action run that dispatched voyage " + voyageId + " was cancelled.", token).ConfigureAwait(false);
             }
 
+            VoyageStatusEnum voyageStatusBefore = voyage.Status;
             voyage.Status = VoyageStatusEnum.Cancelled;
             voyage.CompletedUtc = DateTime.UtcNow;
             voyage.LastUpdateUtc = DateTime.UtcNow;
             await _Database.Voyages.UpdateAsync(voyage, token).ConfigureAwait(false);
+            await _Admiral.BlackBox.RecordVoyageFailureAsync(voyage, voyageStatusBefore, BlackBoxStepEnum.Cancelled,
+                "The fleet action run that dispatched this voyage was cancelled.", null, token).ConfigureAwait(false);
         }
 
         #endregion

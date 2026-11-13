@@ -20,8 +20,10 @@ namespace Armada.Tui.Screens.Operations
     /// Voyage detail (W3.9, <c>/voyages/:id</c>), the dashboard's VoyageDetail page: actions (Run Check, Draft Release,
     /// Cancel Voyage while open or in progress, Retry Failed with a count, View JSON, Delete once finished), the
     /// status, details, configuration, captain assignments with fallback tier, timestamps, progress, and playbook
-    /// snapshots or selections, and the missions table (Diff, Log, Detail). Reloads on <c>voyage.changed</c> and
-    /// <c>mission.changed</c>. Not thread-safe.
+    /// snapshots or selections, the missions table (Diff, Log, Detail), the Failure tab, and the Cascade tab (the
+    /// black box cascade graph as a tree: which failure took the others down, each mission with its status, failure
+    /// kind, the edge that links it and its entry; Enter opens the entry, <c>m</c> the mission). Reloads on
+    /// <c>voyage.changed</c> and <c>mission.changed</c>. Not thread-safe.
     /// </summary>
     public class VoyageScreen : OpsDetailScreen
     {
@@ -72,6 +74,40 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public MissionOps Ops { get; }
 
+        /// <summary>
+        /// Failure panel: the voyage's black box entry (user brief, recovery paths) with its own keys.
+        /// </summary>
+        public BlackBoxFailurePanel Failure { get; }
+
+        /// <summary>
+        /// Cascade panel: the voyage's black box cascade graph in tree order.
+        /// </summary>
+        public ArmadaGrid<BlackBoxCascadeRow> Cascade { get; }
+
+        /// <summary>
+        /// The loaded cascade graph, or null.
+        /// </summary>
+        public BlackBoxCascadeGraph? CascadeGraph { get; private set; } = null;
+
+        /// <summary>
+        /// Tree panel: the voyage's logical missions with their pipeline stages, children indented under their parent.
+        /// </summary>
+        public ArmadaGrid<MissionTreeRow> Tree { get; }
+
+        /// <summary>
+        /// The loaded mission tree, or null.
+        /// </summary>
+        public VoyageTree? MissionTree { get; private set; } = null;
+
+        #endregion
+
+        #region Private-Members
+
+        private bool _CascadeLoaded = false;
+        private int _CascadeGeneration = 0;
+        private bool _TreeLoaded = false;
+        private int _TreeGeneration = 0;
+
         #endregion
 
         #region Constructors-and-Factories
@@ -115,10 +151,55 @@ namespace Armada.Tui.Screens.Operations
             Action("mission-log", "Log", () => { Mission m = MissionGrid.Current!; Ops.ViewLog(m.Id, Tr("Log: {{title}}", LocalizationArgs.Of("title", m.Title))); }, "l", OnMission);
             Action("mission-detail", "Detail", () => Context.Navigate("/missions/" + Uri.EscapeDataString(MissionGrid.Current!.Id)), "o", OnMission);
             Action("copy-id", "Copy ID", () => Copy(VoyageId, "Voyage ID"), "y");
+            Failure = new BlackBoxFailurePanel(this, BlackBoxPanelSourceEnum.Voyage, () => VoyageId);
+            Failure.Changed = Load;
+            MissionScreen.AddFailureActions(this, Failure);
+
+            Cascade = new ArmadaGrid<BlackBoxCascadeRow>(r => r.Node.MissionId);
+            Cascade.MultiSelect = false;
+            Cascade.ShowPagingBar = false;
+            Cascade.PageSize = 10000;
+            Cascade.ModalHost = context.Modals;
+            Cascade.EmptyText = "Open this tab to read the cascade.";
+            Cascade.AddColumn(new GridColumn<BlackBoxCascadeRow>("mission", "Mission", r => new string(' ', r.Depth * 2) + (r.Depth > 0 ? "> " : "") + (r.Node.IsRoot ? "* " : "") + (String.IsNullOrEmpty(r.Node.Title) ? r.Node.MissionId : r.Node.Title + "  " + r.Node.MissionId)) { Weight = 5 });
+            GridColumn<BlackBoxCascadeRow> cascadeStatus = new GridColumn<BlackBoxCascadeRow>("status", "Status", r => StatusBadge.Label(r.Node.Status)) { Width = 16 };
+            cascadeStatus.Style = (r, t) => StatusBadge.Style(r.Node.Status, t);
+            Cascade.AddColumn(cascadeStatus);
+            Cascade.AddColumn(new GridColumn<BlackBoxCascadeRow>("kind", "Failure", r => r.Node.FailureKind ?? "-") { Width = 18 });
+            Cascade.AddColumn(new GridColumn<BlackBoxCascadeRow>("edge", "Linked by", r => CascadeLinks(r)) { Weight = 3 });
+            Cascade.AddColumn(new GridColumn<BlackBoxCascadeRow>("entry", "Entry", r => r.Node.EntryId ?? "-") { Weight = 2 });
+            Cascade.Activated += (s, r) => OpenCascadeRow(r);
+            PanelAction("cascade", "cascade-mission", "Open cascade mission", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Cascade.Current!.Node.MissionId)), "m", () => Cascade.Current != null);
+            PanelHint("cascade", "Enter", "Open entry");
+
+            Tree = new ArmadaGrid<MissionTreeRow>(r => r.Mission.Id);
+            Tree.MultiSelect = false;
+            Tree.ShowPagingBar = false;
+            Tree.PageSize = 10000;
+            Tree.ModalHost = context.Modals;
+            Tree.EmptyText = "Open this tab to read the mission tree.";
+            Tree.AddColumn(new GridColumn<MissionTreeRow>("mission", "Mission", r => new string(' ', r.Depth * 2) + (r.Depth > 0 ? "> " : "") + MissionTreeText.BaseTitle(r.Mission.Title)) { Weight = 5 });
+            GridColumn<MissionTreeRow> treeStatus = new GridColumn<MissionTreeRow>("status", "Status", r => StatusBadge.Label(r.Mission.Status)) { Width = 16 };
+            treeStatus.Style = (r, t) => StatusBadge.Style(r.Mission.Status, t);
+            Tree.AddColumn(treeStatus);
+            Tree.AddColumn(new GridColumn<MissionTreeRow>("pipeline", "Pipeline", r => MissionTreeText.Pipeline(r)) { Weight = 4 });
+            Tree.AddColumn(new GridColumn<MissionTreeRow>("branch", "Branch", r => Tr(MissionTreeText.Branch(r.Mission))) { Width = 18 });
+            Tree.Activated += (s, r) => Context.Navigate("/missions/" + Uri.EscapeDataString(r.Mission.Id));
+            PanelHint("tree", "Enter", "Open mission");
 
             Overview.Builder = BuildOverview;
             AddPanel("overview", "Overview", Overview);
             AddPanel("missions", "Missions", MissionGrid);
+            AddPanel("tree", "Tree", Tree);
+            AddPanel("failure", "Failure", Failure);
+            AddPanel("cascade", "Cascade", Cascade);
+            Tabs.SelectedChanged += (s, e) =>
+            {
+                if (ReferenceEquals(CurrentPanel, Failure)) Failure.Ensure();
+                if (ReferenceEquals(CurrentPanel, Cascade) && !_CascadeLoaded) LoadCascade();
+                if (ReferenceEquals(CurrentPanel, Tree) && !_TreeLoaded) LoadTree();
+            };
+            SubscribeCoalesced("blackbox.", () => { if (Failure.Loaded) Failure.Reload(); });
 
             SubscribeCoalesced("voyage.changed", Load);
             SubscribeCoalesced("mission.changed", Load);
@@ -168,15 +249,68 @@ namespace Armada.Tui.Screens.Operations
                 Voyage = d.Voyage;
                 Progress = d;
                 MissionGrid.Reload();
+                if (!String.IsNullOrEmpty(Voyage.LastBlackBoxEntryId) && (Failure.Entry == null || Failure.Entry.Id != Voyage.LastBlackBoxEntryId)) Failure.Reload();
                 Loaded = true;
                 LoadError = null;
                 Heading = String.IsNullOrEmpty(Voyage.Title) ? Voyage.Id : Voyage.Title;
                 Status = Voyage.Status.ToString();
                 SubtitleText = Tr("Voyages") + " / " + Heading;
                 Overview.Invalidate();
+                if (_CascadeLoaded) LoadCascade();
+                if (_TreeLoaded) LoadTree();
             }, null, ex =>
             {
                 if (initial) LoadError = Tr("Failed to load voyage: {{message}}", LocalizationArgs.Of("message", ex.Message));
+            });
+        }
+
+        /// <summary>
+        /// Load (or reload) the mission tree into the Tree tab.
+        /// </summary>
+        public void LoadTree()
+        {
+            _TreeLoaded = true;
+            int generation = ++_TreeGeneration;
+            if (MissionTree == null) Tree.SetLoading();
+            Call((c, t) => c.GetVoyageTreeAsync(VoyageId, t), tree =>
+            {
+                if (generation != _TreeGeneration) return;
+                MissionTree = tree;
+                List<MissionTreeRow> rows = tree == null ? new List<MissionTreeRow>() : MissionTreeText.Rows(tree.Roots);
+                Tree.EmptyText = "No missions in this voyage.";
+                Tree.SetLocalRows(rows);
+                if (tree != null && tree.Truncated) Toast(NotificationSeverityEnum.Info, Tr("The tree shows the oldest {{count}} missions.", LocalizationArgs.Of("count", 1000)));
+            }, null, ex =>
+            {
+                if (generation != _TreeGeneration) return;
+                MissionTree = null;
+                Tree.SetError(Tr("The mission tree could not be loaded: {{message}}", LocalizationArgs.Of("message", ex.Message)));
+            });
+        }
+
+        /// <summary>
+        /// Load (or reload) the cascade graph into the Cascade tab.
+        /// </summary>
+        public void LoadCascade()
+        {
+            _CascadeLoaded = true;
+            int generation = ++_CascadeGeneration;
+            Cascade.SetLoading();
+            Call((c, t) => c.GetVoyageBlackBoxCascadeAsync(VoyageId, t), g =>
+            {
+                if (generation != _CascadeGeneration) return;
+                CascadeGraph = g;
+                List<BlackBoxCascadeRow> rows = g == null ? new List<BlackBoxCascadeRow>() : BlackBoxInsightText.CascadeRows(g);
+                Cascade.EmptyText = "No missions in the cascade.";
+                Cascade.SetLocalRows(rows);
+                if (g != null && g.Truncated) Toast(NotificationSeverityEnum.Info, Tr("The cascade shows the first {{count}} missions.", LocalizationArgs.Of("count", g.Nodes.Count)));
+            }, null, ex =>
+            {
+                if (generation != _CascadeGeneration) return;
+                CascadeGraph = null;
+                Cascade.SetError(ex is ArmadaApiException api && api.StatusCode == 404
+                    ? Tr("No cascade: the voyage has no black box failures.")
+                    : Tr("The cascade could not be loaded: {{message}}", LocalizationArgs.Of("message", ex.Message)));
             });
         }
 
@@ -224,6 +358,20 @@ namespace Armada.Tui.Screens.Operations
         private static bool IsActive(VoyageStatusEnum status)
         {
             return status == VoyageStatusEnum.Open || status == VoyageStatusEnum.InProgress;
+        }
+
+        private string CascadeLinks(BlackBoxCascadeRow row)
+        {
+            BlackBoxCascadeGraph? g = CascadeGraph;
+            if (g == null) return "-";
+            List<string> links = g.Edges.Where(e => e.ToMissionId == row.Node.MissionId).Select(e => e.Kind + " " + e.FromMissionId).ToList();
+            return links.Count == 0 ? (row.Node.IsRoot ? Tr("root cause") : "-") : String.Join(", ", links);
+        }
+
+        private void OpenCascadeRow(BlackBoxCascadeRow row)
+        {
+            if (!String.IsNullOrEmpty(row.Node.EntryId)) Context.Navigate("/blackbox/" + Uri.EscapeDataString(row.Node.EntryId!));
+            else Context.Navigate("/missions/" + Uri.EscapeDataString(row.Node.MissionId));
         }
 
         private bool OnMission()

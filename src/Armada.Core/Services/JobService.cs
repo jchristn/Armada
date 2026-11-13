@@ -116,6 +116,7 @@ namespace Armada.Core.Services
                     job.Status = current.Status;
                     job.CompletedUtc = current.CompletedUtc;
                     job.LastUpdateUtc = current.LastUpdateUtc;
+                    await RecordOutcomeAsync(current).ConfigureAwait(false);
                     _Logging.Info(_Header + "cancelled job " + current.Id);
                     return current;
                 }
@@ -195,7 +196,10 @@ namespace Armada.Core.Services
                 current.CompletedUtc = DateTime.UtcNow;
                 current.LastUpdateUtc = current.CompletedUtc.Value;
                 if (await _Database.Jobs.TryUpdateIfStatusAsync(current, new JobStatusEnum[] { from }, token).ConfigureAwait(false))
+                {
+                    await RecordOutcomeAsync(current).ConfigureAwait(false);
                     return true;
+                }
             }
 
             return false;
@@ -226,8 +230,27 @@ namespace Armada.Core.Services
                 job.CompletedUtc = DateTime.UtcNow;
                 job.LastUpdateUtc = DateTime.UtcNow;
                 if (await _Database.Jobs.TryUpdateIfStatusAsync(job, new JobStatusEnum[] { JobStatusEnum.Running }, token).ConfigureAwait(false))
+                {
+                    await RecordOutcomeAsync(job).ConfigureAwait(false);
                     _Logging.Warn(_Header + "failed stale running job " + job.Id);
+                }
             }
+        }
+
+        private async Task RecordOutcomeAsync(Job job)
+        {
+            // The work is already committed. Audit failures must never undo it or stop a worker.
+            ArmadaEvent outcome = JobActivity.Event(job);
+            try { await _Database.Events.CreateAsync(outcome, CancellationToken.None).ConfigureAwait(false); }
+            catch (Exception ex) { _Logging.Warn(_Header + "could not record job outcome " + job.Id + ": " + ex.Message); }
+            if (!JobActivity.NeedsAttention(job)) return;
+            try
+            {
+                Signal signal = new Signal(SignalTypeEnum.Error, outcome.Payload)
+                { TenantId = job.TenantId, UserId = job.UserId };
+                await _Database.Signals.CreateAsync(signal, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) { _Logging.Warn(_Header + "could not signal job failure " + job.Id + ": " + ex.Message); }
         }
 
         #endregion

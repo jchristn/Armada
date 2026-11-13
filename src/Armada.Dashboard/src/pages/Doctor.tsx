@@ -87,19 +87,19 @@ export default function Doctor() {
           <div className="card-grid" style={{ marginBottom: '1.5rem' }}>
             <div className="card" title={t('Checks that found no problem.')}>
               <div className="card-label">{t('Passed')}</div>
-              <div className="card-value" style={{ color: 'var(--color-success, #22c55e)' }}>
+              <div className="card-value" style={{ color: 'var(--green)' }}>
                 {passCount}
               </div>
             </div>
             <div className="card" title={t('Checks that found something worth a look but not blocking, such as an optional agent runtime that is not installed.')}>
               <div className="card-label">{t('Warnings')}</div>
-              <div className="card-value" style={{ color: 'var(--color-warning, #f59e0b)' }}>
+              <div className="card-value" style={{ color: 'var(--yellow)' }}>
                 {warnCount}
               </div>
             </div>
             <div className="card" title={t('Checks that found a problem Armada needs fixed to work properly.')}>
               <div className="card-label">{t('Failed')}</div>
-              <div className="card-value" style={{ color: 'var(--color-error, #ef4444)' }}>
+              <div className="card-value" style={{ color: 'var(--red)' }}>
                 {failCount}
               </div>
             </div>

@@ -86,7 +86,17 @@ export const PROMPT_TEMPLATE_PARAMETER_GROUPS: PromptTemplateParameterGroup[] = 
       { name: '{Diff}', description: 'Diff from the prior pipeline stage' },
       { name: '{PreviousStageOutput}', description: 'Agent output from the prior pipeline stage' },
       { name: '{SelectedPlaybooksMarkdown}', description: 'Rendered content of the selected playbooks' },
+      { name: '{WorkerEnvelope}', description: 'Worker eligibility envelope for the mission (empty when none)' },
       { name: '{ExistingClaudeMd}', description: "Contents of repo's existing CLAUDE.md" },
+    ],
+  },
+  {
+    label: 'Concurrency and Ownership',
+    params: [
+      { name: '{MaxParallelMissionsPerVoyage}', description: "Vessel's per-voyage mission limit (\"none\" when unlimited)" },
+      { name: '{OwnedPaths}', description: 'Files and directories this mission may change' },
+      { name: '{ConcurrentSiblingPaths}', description: 'Paths owned by missions that can run at the same time' },
+      { name: '{ParentSummary}', description: "What the parent mission finished (empty without a parent)" },
     ],
   },
   {

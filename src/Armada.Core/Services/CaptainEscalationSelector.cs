@@ -26,12 +26,13 @@ namespace Armada.Core.Services
             ArgumentNullException.ThrowIfNull(mission);
             ArgumentNullException.ThrowIfNull(voyageMissions);
             List<Captain> captains = await database.Captains.EnumerateAsync(token).ConfigureAwait(false);
-            List<Captain> eligible = captains.Where(c => c.Id != failedCaptainId && c.TenantId == mission.TenantId
+            List<Captain> eligible = captains.Where(c => c.Active && c.Id != failedCaptainId && c.TenantId == mission.TenantId
                 && (c.UserId == null || c.UserId == mission.UserId)
                 && (c.State == CaptainStateEnum.Idle || c.State == CaptainStateEnum.Working)
                 && (!c.QuarantineUntilUtc.HasValue || c.QuarantineUntilUtc <= DateTime.UtcNow)
                 && (!mission.Tier.HasValue || CaptainTierSelector.CanHandle(c, mission.Tier.Value))
                 && AllowsWorker(c)).ToList();
+            eligible = await MeetingWorkerEnvelopeAsync(database, mission, eligible, token).ConfigureAwait(false);
             foreach (string role in new[] { PersonaCatalog.Architect, PersonaCatalog.ProductManager })
             {
                 foreach (Mission planner in voyageMissions.Where(m => PersonaCatalog.Matches(m.Persona, role)))
@@ -81,6 +82,21 @@ namespace Armada.Core.Services
                 return roles != null && roles.Any(role => PersonaCatalog.Matches(role, PersonaCatalog.Worker));
             }
             catch (JsonException) { return false; }
+        }
+
+        // A recovery captain must meet the Worker eligibility envelope too, or the pinned rework could never start.
+        private static async Task<List<Captain>> MeetingWorkerEnvelopeAsync(DatabaseDriver database, Mission mission, List<Captain> captains, CancellationToken token)
+        {
+            Vessel? vessel = String.IsNullOrEmpty(mission.VesselId) ? null : await database.Vessels.ReadAsync(mission.VesselId, token).ConfigureAwait(false);
+            WorkerEnvelope? envelope = WorkerEnvelopeRules.Effective(vessel?.WorkerEnvelope, mission.WorkerEnvelope);
+            if (!WorkerEnvelopeRules.ConstrainsCaptains(envelope)) return captains;
+            List<Captain> meeting = new List<Captain>();
+            foreach (Captain captain in captains)
+            {
+                ModelProfile? profile = String.IsNullOrEmpty(captain.ModelProfileId) ? null : await database.ModelProfiles.ReadAsync(captain.ModelProfileId, token).ConfigureAwait(false);
+                if (WorkerEnvelopeRules.IneligibilityReason(envelope, captain, profile) == null) meeting.Add(captain);
+            }
+            return meeting;
         }
     }
 }

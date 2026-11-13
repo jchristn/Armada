@@ -15,6 +15,11 @@ export const INBOX_KINDS = {
   deploymentFailed: 'deployment_failed',
   askProposal: 'ask_proposal',
   cliPermission: 'cli_permission',
+  /** A model scorecard threshold was crossed; advisory, with suggested actions (not an approval). */
+  modelAlert: 'model_alert',
+  backgroundJobFailed: 'background_job_failed',
+  /** A Pending mission has waited for captain selection for a reason an operator must fix. */
+  selectionBlocked: 'selection_blocked',
 } as const;
 
 /** Inbox kind of a pending CLI tool permission request (InboxItemKinds.CliPermission). */
@@ -43,6 +48,7 @@ export function inboxActionLabel(t: Translate, item: Pick<InboxItem, 'kind'>): s
   if (item.kind === INBOX_KINDS.deploymentApproval) return t('Open deployment');
   if (item.kind === INBOX_KINDS.review) return t('Review mission');
   if (item.kind === CLI_PERMISSION_KIND) return t('Open request');
+  if (item.kind === INBOX_KINDS.selectionBlocked) return t('Open Mission');
   return t('Open');
 }
 

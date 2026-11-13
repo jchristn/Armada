@@ -54,9 +54,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
             await SqliteCommandHelper.WriteAsync(_ConnectionString, _WriteGate, async (SqliteConnection conn, SqliteTransaction tx) =>
             {
                 await SqliteCommandHelper.ExecuteAsync(conn, tx, @"INSERT INTO fleet_actions
-                    (id, tenant_id, user_id, name, description, kind, command_text, prompt_template, pipeline_id, persona, timeout_seconds, default_concurrency, requires_clean_working_tree, is_built_in, built_in_key, active, created_utc, last_update_utc, command_windows, output_parser, scan_source_action_key, required_tools_json, requires_network, inputs_json)
+                    (id, tenant_id, user_id, name, description, kind, command_text, prompt_template, pipeline_id, persona, timeout_seconds, default_concurrency, requires_clean_working_tree, is_built_in, built_in_key, active, created_utc, last_update_utc, command_windows, output_parser, scan_source_action_key, applicability_command, applicability_command_windows, mission_mode, required_tools_json, requires_network, inputs_json)
                     VALUES
-                    (@id, @tenant_id, @user_id, @name, @description, @kind, @command_text, @prompt_template, @pipeline_id, @persona, @timeout_seconds, @default_concurrency, @requires_clean_working_tree, @is_built_in, @built_in_key, @active, @created_utc, @last_update_utc, @command_windows, @output_parser, @scan_source_action_key, @required_tools_json, @requires_network, @inputs_json);",
+                    (@id, @tenant_id, @user_id, @name, @description, @kind, @command_text, @prompt_template, @pipeline_id, @persona, @timeout_seconds, @default_concurrency, @requires_clean_working_tree, @is_built_in, @built_in_key, @active, @created_utc, @last_update_utc, @command_windows, @output_parser, @scan_source_action_key, @applicability_command, @applicability_command_windows, @mission_mode, @required_tools_json, @requires_network, @inputs_json);",
                     cmd => Bind(cmd, action), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
 
@@ -121,7 +121,7 @@ namespace Armada.Core.Database.Sqlite.Implementations
                     persona = @persona, timeout_seconds = @timeout_seconds, default_concurrency = @default_concurrency,
                     requires_clean_working_tree = @requires_clean_working_tree, is_built_in = @is_built_in,
                     built_in_key = @built_in_key, active = @active, created_utc = @created_utc,
-                    command_windows = @command_windows, output_parser = @output_parser, scan_source_action_key = @scan_source_action_key, required_tools_json = @required_tools_json, requires_network = @requires_network, inputs_json = @inputs_json, last_update_utc = @last_update_utc
+                    command_windows = @command_windows, output_parser = @output_parser, scan_source_action_key = @scan_source_action_key, applicability_command = @applicability_command, applicability_command_windows = @applicability_command_windows, mission_mode = @mission_mode, required_tools_json = @required_tools_json, requires_network = @requires_network, inputs_json = @inputs_json, last_update_utc = @last_update_utc
                     WHERE id = @id;", cmd => Bind(cmd, action), token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
 
@@ -229,6 +229,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
             SqliteCommandHelper.Add(cmd, "@command_windows", action.CommandWindows);
             SqliteCommandHelper.Add(cmd, "@output_parser", action.OutputParser);
             SqliteCommandHelper.Add(cmd, "@scan_source_action_key", action.ScanSourceActionKey);
+            SqliteCommandHelper.Add(cmd, "@applicability_command", action.ApplicabilityCommand);
+            SqliteCommandHelper.Add(cmd, "@applicability_command_windows", action.ApplicabilityCommandWindows);
+            SqliteCommandHelper.Add(cmd, "@mission_mode", action.MissionMode.ToString());
             SqliteCommandHelper.Add(cmd, "@required_tools_json", System.Text.Json.JsonSerializer.Serialize(action.RequiredTools));
             SqliteCommandHelper.Add(cmd, "@requires_network", action.RequiresNetwork ? 1 : 0);
             SqliteCommandHelper.Add(cmd, "@inputs_json", System.Text.Json.JsonSerializer.Serialize(action.Inputs));
@@ -259,6 +262,9 @@ namespace Armada.Core.Database.Sqlite.Implementations
             action.CommandWindows = SqliteCommandHelper.ReadString(reader["command_windows"]);
             action.OutputParser = SqliteCommandHelper.ReadString(reader["output_parser"]);
             action.ScanSourceActionKey = SqliteCommandHelper.ReadString(reader["scan_source_action_key"]);
+            action.ApplicabilityCommand = SqliteCommandHelper.ReadString(reader["applicability_command"]);
+            action.ApplicabilityCommandWindows = SqliteCommandHelper.ReadString(reader["applicability_command_windows"]);
+            action.MissionMode = SqliteCommandHelper.ReadEnum(reader["mission_mode"], MissionModeEnum.Implementation);
             action.RequiredTools = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<string>>(SqliteCommandHelper.ReadString(reader["required_tools_json"]) ?? "[]") ?? new();
             action.RequiresNetwork = SqliteCommandHelper.ReadBool(reader["requires_network"], false);
             action.Inputs = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<FleetActionInput>>(SqliteCommandHelper.ReadString(reader["inputs_json"]) ?? "[]") ?? new();

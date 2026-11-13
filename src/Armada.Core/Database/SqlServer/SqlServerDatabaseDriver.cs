@@ -61,6 +61,8 @@ namespace Armada.Core.Database.SqlServer
             Fleets = new FleetMethods(this, _Settings, _Logging);
             Vessels = new VesselMethods(this, _Settings, _Logging);
             Captains = new CaptainMethods(this, _Settings, _Logging);
+            MissionWaitIntervals = new Armada.Core.Database.MissionWaitIntervalMethods(() => new Microsoft.Data.SqlClient.SqlConnection(_ConnectionString));
+            CaptainSelections = new Armada.Core.Database.CaptainSelectionMethods(() => new Microsoft.Data.SqlClient.SqlConnection(_ConnectionString));
             Missions = new MissionMethods(this, _Settings, _Logging);
             Voyages = new VoyageMethods(this, _Settings, _Logging);
             PlanningSessions = new PlanningSessionMethods(this, _Settings, _Logging);
@@ -81,9 +83,19 @@ namespace Armada.Core.Database.SqlServer
             CliPermissionRequests = new CliPermissionRequestMethods(this, _Settings, _Logging);
             CliPermissionRules = new CliPermissionRuleMethods(this, _Settings, _Logging);
             StageOutcomes = new StageOutcomeMethods(this, _Settings, _Logging);
+            BlackBoxEntries = new BlackBoxEntryMethods(this);
+            BlackBoxObjects = new BlackBoxObjectMethods(this);
+            BlackBoxFiles = new BlackBoxFileMethods(this);
+            BlackBoxLinks = new BlackBoxLinkMethods(this);
+            BlackBoxNotes = new BlackBoxNoteMethods(this);
+            BlackBoxMigrations = new BlackBoxMigrationMethods(this);
+            BlackBoxSuccesses = new BlackBoxSuccessMethods(this);
+            BlackBoxRecoveryOutcomes = new BlackBoxRecoveryOutcomeMethods(this);
             HandoffArtifacts = new HandoffArtifactMethods(this, _Settings, _Logging);
             FailureCauseRules = new FailureCauseRuleMethods(this, _Settings, _Logging);
             ModelProbeRuns = new ModelProbeRunMethods(this, _Settings, _Logging);
+            ModelProfiles = new ModelProfileMethods(this, _Settings, _Logging);
+            ModelAlerts = new ModelAlertMethods(this, _Settings, _Logging);
             ModelProbeResults = new ModelProbeResultMethods(this, _Settings, _Logging);
             BatteryRuns = new BatteryRunMethods(this, _Settings, _Logging);
             BatteryTaskResults = new BatteryTaskResultMethods(this, _Settings, _Logging);
@@ -101,6 +113,9 @@ namespace Armada.Core.Database.SqlServer
             VesselHealthFindings = new VesselHealthFindingMethods(this, _Settings, _Logging);
             VesselDependencies = new VesselDependencyMethods(this, _Settings, _Logging);
             VesselHealthOverrides = new VesselHealthOverrideMethods(this, _Settings, _Logging);
+            UsageSnapshots = new UsageSnapshotMethods(this, _Settings, _Logging);
+            UsageMemberships = new UsageAccountMembershipMethods(this, _Settings, _Logging);
+            UsageRollups = new UsageHourlyRollupMethods(this, _Settings, _Logging);
             ObjectiveRefinementSessions = new ObjectiveRefinementSessionMethods(this, _Settings, _Logging);
             ObjectiveRefinementMessages = new ObjectiveRefinementMessageMethods(this, _Settings, _Logging);
             Docks = new DockMethods(this, _Settings, _Logging);
@@ -299,11 +314,14 @@ namespace Armada.Core.Database.SqlServer
         /// <inheritdoc />
         internal override async Task ReplayMigrationsAsync(CancellationToken token = default)
         {
+            int version = await GetSchemaVersionAsync(token).ConfigureAwait(false);
             using (SqlConnection conn = new SqlConnection(_ConnectionString))
             {
                 await conn.OpenAsync(token).ConfigureAwait(false);
                 foreach (SchemaMigration migration in TableQueries.GetMigrations())
                 {
+                    // v121 is a destructive boundary: verify historical migrations on an upgrade fixture, never recreate removed columns.
+                    if (version >= 121 && migration.Version < 119) continue;
                     using (SqlTransaction tx = (SqlTransaction)await conn.BeginTransactionAsync(token).ConfigureAwait(false))
                     {
                         await ExecuteMigrationAsync(conn, tx, migration, token).ConfigureAwait(false);
@@ -365,6 +383,7 @@ namespace Armada.Core.Database.SqlServer
         internal static DateTime? FromIso8601Nullable(object value)
         {
             if (value == null || value == DBNull.Value) return null;
+            if (value is DateTime timestamp) return DateTime.SpecifyKind(timestamp, DateTimeKind.Utc);
             string str = value.ToString()!;
             if (string.IsNullOrEmpty(str)) return null;
             return FromIso8601(str);
@@ -482,8 +501,8 @@ namespace Armada.Core.Database.SqlServer
             catch { vessel.RequirePassingChecksToLand = false; }
             try { object autoApproveValue = reader["auto_approve"]; vessel.AutoApprove = autoApproveValue == null || autoApproveValue == DBNull.Value ? (bool?)null : Convert.ToBoolean(autoApproveValue); }
             catch { vessel.AutoApprove = null; }
-            try { vessel.AllowConcurrentMissions = Convert.ToBoolean(reader["allow_concurrent_missions"]); }
-            catch { vessel.AllowConcurrentMissions = false; }
+            vessel.MaxParallelVoyages = Convert.ToInt32(reader["max_parallel_voyages"]);
+            vessel.MaxParallelMissionsPerVoyage = Convert.ToInt32(reader["max_parallel_missions_per_voyage"]);
             try { vessel.DefaultPipelineId = NullableString(reader["default_pipeline_id"]); } catch { }
             try
             {
@@ -546,6 +565,9 @@ namespace Armada.Core.Database.SqlServer
             catch { vessel.LintCommand = null; }
             try { vessel.AuditCommand = NullableString(reader["audit_command"]); }
             catch { vessel.AuditCommand = null; }
+            try { vessel.WorkerEnvelope = Armada.Core.Services.WorkerEnvelopeRules.FromJson(NullableString(reader["worker_envelope_json"])); } catch { }
+            try { vessel.BlackBoxRetentionDays = reader["blackbox_retention_days"] == DBNull.Value ? null : Convert.ToInt32(reader["blackbox_retention_days"]); } catch { }
+            try { vessel.SerializeOverlappingMissions = Convert.ToBoolean(reader["serialize_overlapping_missions"]); } catch { vessel.SerializeOverlappingMissions = false; }
             try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); }
             catch { vessel.DefinitionOfDoneTimeoutSeconds = 1800; }
             vessel.DefaultBranch = reader["default_branch"].ToString()!;
@@ -568,12 +590,16 @@ namespace Armada.Core.Database.SqlServer
             captain.UserId = NullableString(reader["user_id"]);
             captain.Name = reader["name"].ToString()!;
             captain.Runtime = Enum.Parse<AgentRuntimeEnum>(reader["runtime"].ToString()!);
+            captain.MaxConcurrency = Convert.ToInt32(reader["max_concurrency"]);
+            captain.ActiveMissionCount = Convert.ToInt32(reader["active_mission_count"]);
+            captain.CurrentSessionId = reader["current_session_id"] == DBNull.Value ? null : reader["current_session_id"].ToString();
+            try { captain.ActiveMissionIds = System.Text.Json.JsonSerializer.Deserialize<List<string>>(reader["active_mission_ids"].ToString() ?? "[]") ?? new List<string>(); } catch (IndexOutOfRangeException) { }
+
             try { captain.Model = NullableString(reader["model"]); } catch { }
             try { captain.ModelEndpointId = NullableString(reader["model_endpoint_id"]); } catch { }
+            try { captain.ModelProfileId = NullableString(reader["model_profile_id"]); } catch { }
             captain.SystemInstructions = NullableString(reader["system_instructions"]);
             captain.State = Enum.Parse<CaptainStateEnum>(reader["state"].ToString()!);
-            captain.CurrentMissionId = NullableString(reader["current_mission_id"]);
-            captain.CurrentDockId = NullableString(reader["current_dock_id"]);
             captain.ProcessId = NullableInt(reader["process_id"]);
             captain.RecoveryAttempts = Convert.ToInt32(reader["recovery_attempts"]);
             captain.LastHeartbeatUtc = FromIso8601Nullable(reader["last_heartbeat_utc"]);
@@ -605,6 +631,23 @@ namespace Armada.Core.Database.SqlServer
                     captain.Tier = tier;
             }
             catch { }
+            try
+            {
+                object enabled = reader["usage_capture_enabled"];
+                if (enabled != DBNull.Value) captain.UsageCaptureEnabled = Convert.ToBoolean(enabled);
+            }
+            catch { }
+            try { captain.UsageCaptureIntervalSeconds = Convert.ToInt32(reader["usage_capture_interval_seconds"]); } catch { }
+            try
+            {
+                string? captureMode = NullableString(reader["usage_capture_mode"]);
+                if (!String.IsNullOrEmpty(captureMode) && Enum.TryParse<UsageCaptureModeEnum>(captureMode, out UsageCaptureModeEnum parsedMode))
+                    captain.UsageCaptureMode = parsedMode;
+            }
+            catch { }
+            try { captain.UsageCaptureCommand = NullableString(reader["usage_capture_command"]); } catch { }
+            captain.UsageCaptureHarborId = NullableString(reader["usage_capture_harbor_id"]);
+            try { captain.Active = Convert.ToBoolean(reader["active"]); } catch { }
             return captain;
         }
 
@@ -617,6 +660,7 @@ namespace Armada.Core.Database.SqlServer
         {
             Mission mission = new Mission();
             mission.Id = reader["id"].ToString()!;
+            try { mission.UsageAdmissionExecutionKey = NullableString(reader["usage_execution_key"]); } catch (IndexOutOfRangeException) { }
             mission.TenantId = NullableString(reader["tenant_id"]);
             mission.UserId = NullableString(reader["user_id"]);
             mission.VoyageId = NullableString(reader["voyage_id"]);
@@ -640,6 +684,7 @@ namespace Armada.Core.Database.SqlServer
             try { mission.NoOpRedispatchAttempts = Convert.ToInt32(reader["noop_redispatch_attempts"]); } catch { }
             try { mission.IsRescue = reader["is_rescue"] != DBNull.Value && Convert.ToBoolean(reader["is_rescue"]); } catch { }
             try { mission.IsEvaluation = reader["is_evaluation"] != DBNull.Value && Convert.ToBoolean(reader["is_evaluation"]); } catch { }
+            try { mission.WorkerEnvelope = Armada.Core.Services.WorkerEnvelopeRules.FromJson(NullableString(reader["worker_envelope_json"])); } catch { }
             try { mission.ReworkRound = reader["rework_round"] != DBNull.Value ? Convert.ToInt32(reader["rework_round"]) : 0; } catch { }
             try { mission.ReworkEscalated = reader["rework_escalated"] != DBNull.Value && Convert.ToBoolean(reader["rework_escalated"]); } catch { }
             try
@@ -659,13 +704,25 @@ namespace Armada.Core.Database.SqlServer
             try { mission.AgentOutput = NullableString(reader["agent_output"]); } catch { }
             mission.CreatedUtc = FromIso8601(reader["created_utc"].ToString()!);
             mission.StartedUtc = FromIso8601Nullable(reader["started_utc"]);
+            mission.RescueOfMissionId = reader["rescue_of_mission_id"] == DBNull.Value ? null : reader["rescue_of_mission_id"].ToString();
+            mission.BaseBranchName = reader["base_branch_name"] == DBNull.Value ? null : reader["base_branch_name"].ToString();
+            mission.OwnedPathsJson = reader["owned_paths_json"] == DBNull.Value ? null : reader["owned_paths_json"].ToString();
+            mission.ReadsPathsJson = reader["reads_paths_json"] == DBNull.Value ? null : reader["reads_paths_json"].ToString();
+            mission.Depth = Math.Clamp(Convert.ToInt32(reader["depth"]), 0, 16);
+            mission.BranchStrategy = Enum.TryParse(reader["branch_strategy"].ToString(), out MissionBranchStrategyEnum strategy) ? strategy : MissionBranchStrategyEnum.New;
+            mission.ReadyUtc = FromIso8601Nullable(reader["ready_utc"]);
+            mission.AssignedUtc = FromIso8601Nullable(reader["assigned_utc"]);
             mission.CompletedUtc = FromIso8601Nullable(reader["completed_utc"]);
             try { mission.TotalRuntimeMs = reader["total_runtime_ms"] == DBNull.Value ? null : Convert.ToInt64(reader["total_runtime_ms"]); } catch { }
             mission.LastUpdateUtc = FromIso8601(reader["last_update_utc"].ToString()!);
+            mission.StallRecoveryAttempts = Convert.ToInt32(reader["stall_recovery_attempts"]);
+            try { mission.LastHeartbeatUtc = reader["last_heartbeat_utc"] == DBNull.Value ? null : FromIso8601(reader["last_heartbeat_utc"].ToString()!); } catch (IndexOutOfRangeException) { }
             try { mission.Persona = NullableString(reader["persona"]); } catch { }
             try { mission.DependsOnMissionId = NullableString(reader["depends_on_mission_id"]); } catch { }
             try { mission.FailureReason = NullableString(reader["failure_reason"]); } catch { }
             try { mission.FailureKind = MissionFailureKindColumn.FromDbValue(reader["failure_kind"]); } catch { }
+            try { mission.LastBlackBoxEntryId = NullableString(reader["last_blackbox_entry_id"]); } catch { }
+            try { mission.StartCommit = NullableString(reader["start_commit"]); } catch { }
             try { mission.WaitForVoyageWorkers = reader["wait_for_voyage_workers"] != DBNull.Value && Convert.ToBoolean(reader["wait_for_voyage_workers"]); } catch { }
             try { mission.RequiresReview = reader["requires_review"] != DBNull.Value && Convert.ToBoolean(reader["requires_review"]); } catch { }
             try
@@ -711,6 +768,7 @@ namespace Armada.Core.Database.SqlServer
             try { voyage.CaptainOverridesJson = NullableString(reader["captain_overrides_json"]); } catch { }
             voyage.ApprovalOptions = RunApprovalOptions.FromJson(NullableString(reader["approval_options_json"]));
             try { voyage.IsEvaluation = reader["is_evaluation"] != DBNull.Value && Convert.ToBoolean(reader["is_evaluation"]); } catch { }
+            try { voyage.LastBlackBoxEntryId = NullableString(reader["last_blackbox_entry_id"]); } catch { }
             return voyage;
         }
 

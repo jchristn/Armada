@@ -8,14 +8,16 @@ namespace Armada.Core.Services.Ask
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
 
     /// <summary>
     /// Builds the live data of an Ask Armada work card (<see cref="AskWorkSnapshot"/>) for a tracked voyage, mission,
-    /// fleet action run, job, or vessel import batch, reading only rows of the tracked item's tenant. Also computes the
-    /// snapshot hash used to detect changes.
+    /// fleet action run, job, vessel import batch, or black box entry, reading only rows of the tracked item's tenant
+    /// (a black box entry is read through <see cref="BlackBox"/> as the thread's owner). Also computes the snapshot hash
+    /// used to detect changes.
     /// </summary>
     public class AskWorkSnapshotBuilder
     {
@@ -29,6 +31,12 @@ namespace Armada.Core.Services.Ask
             get => _MaxLinkedMissionRows;
             set => _MaxLinkedMissionRows = value < 0 ? 0 : (value > 500 ? 500 : value);
         }
+
+        /// <summary>
+        /// Black box service that BlackBox cards are read through (as the thread's owner, so the card shows only what the
+        /// owner may see). Null when the server has no black box: such a card reads as not found.
+        /// </summary>
+        public IBlackBoxService? BlackBox { get; set; } = null;
 
         #endregion
 
@@ -92,6 +100,9 @@ namespace Armada.Core.Services.Ask
                     break;
                 case AskTrackedEntityTypeEnum.VesselImportBatch:
                     await BuildImportBatchAsync(tenantId, snapshot, token).ConfigureAwait(false);
+                    break;
+                case AskTrackedEntityTypeEnum.BlackBox:
+                    await BuildBlackBoxAsync(tenantId, work.UserId, snapshot, token).ConfigureAwait(false);
                     break;
             }
 
@@ -257,6 +268,105 @@ namespace Armada.Core.Services.Ask
         #endregion
 
         #region Private-Methods
+
+        private async Task BuildBlackBoxAsync(string tenantId, string? userId, AskWorkSnapshot snapshot, CancellationToken token)
+        {
+            IBlackBoxService? service = BlackBox;
+            if (service == null)
+            {
+                snapshot.Found = false;
+                snapshot.ErrorText = "The black box is not available on this server.";
+                return;
+            }
+
+            AuthContext? owner = await OwnerAsync(tenantId, userId, token).ConfigureAwait(false);
+            if (owner == null)
+            {
+                snapshot.Found = false;
+                return;
+            }
+
+            BlackBoxEntry entry;
+            BlackBoxDigest digest;
+            try
+            {
+                entry = await service.GetEntryAsync(owner, snapshot.EntityId, true, token).ConfigureAwait(false);
+                digest = await service.GetDigestAsync(owner, entry.Id, token).ConfigureAwait(false);
+            }
+            catch (BlackBoxNotFoundException)
+            {
+                snapshot.Found = false;
+                snapshot.ErrorText = "Black box entry " + snapshot.EntityId + " no longer exists.";
+                return;
+            }
+            catch (BlackBoxException ex)
+            {
+                // The entry exists but its record cannot be read right now (store unavailable, being deleted): keep the
+                // card with what the row knows and say why.
+                snapshot.Status = "Unavailable";
+                snapshot.State = AskTrackedWorkStateEnum.Failed;
+                snapshot.ErrorText = ex.Message;
+                return;
+            }
+
+            BlackBoxRecord? record = entry.Record;
+            AskBlackBoxCard card = new AskBlackBoxCard();
+            card.Digest = digest;
+            card.Fingerprint = entry.Fingerprint;
+            if (record?.Conflict != null)
+            {
+                card.ConflictingMissions = record.Conflict.ConflictingMissions.Take(BlackBoxLimits.MaxConflictingMissions).ToList();
+                card.ConflictedFiles = record.Conflict.ConflictedFiles.Take(AskBlackBoxCard.MaxConflictedFiles).ToList();
+            }
+
+            if (record?.Analysis != null)
+            {
+                foreach (BlackBoxConfigRecommendation recommendation in record.Analysis.ConfigRecommendations.Take(AskBlackBoxCard.MaxRecommendations))
+                {
+                    AskBlackBoxRecommendation item = new AskBlackBoxRecommendation();
+                    item.Id = recommendation.Id;
+                    item.Setting = recommendation.Setting;
+                    item.Scope = recommendation.Scope;
+                    item.CurrentValue = recommendation.CurrentValue;
+                    item.SuggestedValue = recommendation.SuggestedValue;
+                    item.Rationale = recommendation.Rationale;
+                    item.RuleId = recommendation.RuleId;
+                    item.CanApply = recommendation.ApplyAction != null;
+                    item.HowToApply = recommendation.HowToApply;
+                    card.Recommendations.Add(item);
+                }
+            }
+
+            try
+            {
+                EnumerationQuery notes = new EnumerationQuery();
+                notes.PageSize = 1;
+                card.NoteCount = (await service.EnumerateNotesAsync(owner, entry.Id, notes, token).ConfigureAwait(false)).TotalRecords;
+            }
+            catch (BlackBoxException)
+            {
+                card.NoteCount = 0;
+            }
+
+            card.FollowUps = AskBlackBoxGuidance.FollowUps(card);
+            snapshot.BlackBox = card;
+            snapshot.Title = !String.IsNullOrWhiteSpace(entry.MissionTitle) ? entry.MissionTitle! : (entry.MissionId ?? entry.VoyageId ?? entry.Id);
+            snapshot.Status = !String.IsNullOrWhiteSpace(entry.StatusAfter) ? entry.StatusAfter : "Failed";
+            snapshot.State = entry.Resolution == BlackBoxResolutionEnum.Resolved || entry.Resolution == BlackBoxResolutionEnum.ArmadaFixed
+                ? AskTrackedWorkStateEnum.Succeeded
+                : AskTrackedWorkStateEnum.Failed;
+            snapshot.StartedUtc = entry.CreatedUtc;
+            snapshot.CompletedUtc = entry.ResolvedUtc ?? entry.CreatedUtc;
+            snapshot.ErrorText = digest.Reason;
+        }
+
+        private async Task<AuthContext?> OwnerAsync(string tenantId, string? userId, CancellationToken token)
+        {
+            if (String.IsNullOrEmpty(userId)) return null;
+            UserMaster? owner = await _Database.Users.ReadAsync(tenantId, userId, token).ConfigureAwait(false);
+            if (owner == null) return null;
+            return AuthContext.Authenticated(tenantId, userId, owner.IsAdmin, owner.IsTenantAdmin, "AskThreadOwner");
+        }
 
         private async Task BuildVoyageAsync(string tenantId, AskWorkSnapshot snapshot, CancellationToken token)
         {

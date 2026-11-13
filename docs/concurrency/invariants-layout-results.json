@@ -1,0 +1,140 @@
+[
+  {
+    "page": "list",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": []
+  },
+  {
+    "page": "detail",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": true,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzxf3yw_V4kb6pPdkz8",
+    "links": [
+      "/dashboard/vessels/vsl_invariant_fixture",
+      "/dashboard/vessels/vsl_invariant_fixture"
+    ]
+  },
+  {
+    "page": "list",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": []
+  },
+  {
+    "page": "detail",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": true,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzxf3yw_V4kb6pPdkz8",
+    "links": [
+      "/dashboard/vessels/vsl_invariant_fixture",
+      "/dashboard/vessels/vsl_invariant_fixture"
+    ]
+  },
+  {
+    "page": "list",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": []
+  },
+  {
+    "page": "detail",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": true,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzxf3yw_V4kb6pPdkz8",
+    "links": [
+      "/dashboard/vessels/vsl_invariant_fixture",
+      "/dashboard/vessels/vsl_invariant_fixture"
+    ]
+  },
+  {
+    "page": "list",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": []
+  },
+  {
+    "page": "detail",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": true,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzxf3yw_V4kb6pPdkz8",
+    "links": [
+      "/dashboard/vessels/vsl_invariant_fixture",
+      "/dashboard/vessels/vsl_invariant_fixture"
+    ]
+  },
+  {
+    "page": "list",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": []
+  },
+  {
+    "page": "detail",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": true,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzxf3yw_V4kb6pPdkz8",
+    "links": [
+      "/dashboard/vessels/vsl_invariant_fixture",
+      "/dashboard/vessels/vsl_invariant_fixture"
+    ]
+  },
+  {
+    "page": "list",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": false,
+    "breadcrumbs": "Dashboard>Activity>Events",
+    "links": []
+  },
+  {
+    "page": "detail",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "hasMessage": true,
+    "hasPayload": true,
+    "breadcrumbs": "Dashboard>Activity>Events>evt_mvzxf3yw_V4kb6pPdkz8",
+    "links": [
+      "/dashboard/vessels/vsl_invariant_fixture",
+      "/dashboard/vessels/vsl_invariant_fixture"
+    ]
+  }
+]

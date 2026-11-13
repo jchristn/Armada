@@ -25,21 +25,21 @@ namespace Armada.Helm.Commands
         /// Branch to read (default: the vessel's default branch).
         /// </summary>
         [Description("Branch to read (default: the vessel's default branch)")]
-        [CommandOption("--branch|-b")]
+        [CommandOption("--branch|-b <BRANCH>")]
         public string? Branch { get; set; }
 
         /// <summary>
         /// Only commits strictly before this date or instant.
         /// </summary>
         [Description("Only commits before this date (yyyy-MM-dd, the start of that day in UTC) or ISO 8601 instant")]
-        [CommandOption("--before")]
+        [CommandOption("--before <WHEN>")]
         public string? Before { get; set; }
 
         /// <summary>
         /// Commits per page.
         /// </summary>
         [Description("Commits per page, 1-200 (default 50)")]
-        [CommandOption("--limit|-n")]
+        [CommandOption("--limit|-n <N>")]
         public int? Limit { get; set; }
 
         /// <summary>
@@ -60,14 +60,14 @@ namespace Armada.Helm.Commands
         /// First heatmap day.
         /// </summary>
         [Description("Heatmap first day, yyyy-MM-dd (default: 364 days before --to)")]
-        [CommandOption("--from")]
+        [CommandOption("--from <DATE>")]
         public string? From { get; set; }
 
         /// <summary>
         /// Last heatmap day.
         /// </summary>
         [Description("Heatmap last day, yyyy-MM-dd (default: today)")]
-        [CommandOption("--to")]
+        [CommandOption("--to <DATE>")]
         public string? To { get; set; }
 
         #endregion

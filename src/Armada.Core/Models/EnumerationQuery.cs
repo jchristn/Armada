@@ -109,6 +109,26 @@ namespace Armada.Core.Models
         public bool? UnreadOnly { get; set; }
 
         /// <summary>
+        /// Filter by parent mission (missions only): the direct children of this logical mission.
+        /// </summary>
+        public string? ParentMissionId { get; set; }
+
+        /// <summary>
+        /// Return only top-level logical missions (missions only): no parent and not a later pipeline stage.
+        /// </summary>
+        public bool? RootsOnly { get; set; }
+
+        /// <summary>
+        /// Return only Pending missions currently waiting on this gate (missions only), from recorded wait intervals.
+        /// </summary>
+        public MissionWaitGateEnum? WaitingGate { get; set; }
+
+        /// <summary>
+        /// Return only captains with exactly this many mission slots (captains only), for example 1 for serial captains.
+        /// </summary>
+        public int? MaxConcurrency { get; set; }
+
+        /// <summary>
         /// Server-set mission filter: leave out missions with this failure kind (missions without a failure kind are
         /// kept). Applied in the data source before counting. Never read from a request body or querystring.
         /// </summary>
@@ -207,6 +227,18 @@ namespace Armada.Core.Models
 
             val = queryGetter("unreadOnly");
             if (!String.IsNullOrEmpty(val) && bool.TryParse(val, out bool uo)) UnreadOnly = uo;
+
+            val = queryGetter("parentMissionId");
+            if (!String.IsNullOrEmpty(val)) ParentMissionId = val;
+
+            val = queryGetter("rootsOnly");
+            if (!String.IsNullOrEmpty(val) && bool.TryParse(val, out bool ro)) RootsOnly = ro;
+
+            val = queryGetter("maxConcurrency");
+            if (!String.IsNullOrEmpty(val) && int.TryParse(val, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int mc)) MaxConcurrency = mc;
+
+            val = queryGetter("waitingGate");
+            if (!String.IsNullOrEmpty(val) && Enum.TryParse(val, true, out MissionWaitGateEnum gate) && Enum.IsDefined(typeof(MissionWaitGateEnum), gate)) WaitingGate = gate;
         }
 
         #endregion

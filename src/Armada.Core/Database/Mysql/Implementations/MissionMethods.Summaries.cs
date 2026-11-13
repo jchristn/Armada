@@ -12,7 +12,7 @@ namespace Armada.Core.Database.Mysql.Implementations
     {
         private const string MissionSummarySelectColumns = @"
 id, tenant_id, user_id, voyage_id, vessel_id, captain_id, title, status, priority,
-parent_mission_id, branch_name, dock_id, process_id, pr_url, commit_hash,
+parent_mission_id, branch_strategy, depth, ready_utc, assigned_utc, wait_for_voyage_workers, branch_name, dock_id, process_id, pr_url, commit_hash,
 persona, depends_on_mission_id, failure_reason, failure_kind, is_evaluation, requires_review, review_deny_action,
 review_comment, reviewed_by_user_id, review_requested_utc, review_deadline_utc, reviewed_utc,
 created_utc, started_utc, completed_utc, total_runtime_ms, last_update_utc,
@@ -551,6 +551,17 @@ CHAR_LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
                 conditions.Add("captain_id = @captain_id");
                 cmd.Parameters.AddWithValue("@captain_id", query.CaptainId);
             }
+            if (!String.IsNullOrEmpty(query.ParentMissionId))
+            {
+                conditions.Add("parent_mission_id = @parent_mission_id");
+                cmd.Parameters.AddWithValue("@parent_mission_id", query.ParentMissionId);
+            }
+            if (query.RootsOnly == true) conditions.Add("parent_mission_id IS NULL AND depends_on_mission_id IS NULL");
+            if (query.WaitingGate.HasValue)
+            {
+                conditions.Add("status = 'Pending' AND id IN (SELECT mission_id FROM mission_wait_intervals WHERE ended_utc IS NULL AND gate = @waiting_gate)");
+                cmd.Parameters.AddWithValue("@waiting_gate", query.WaitingGate.Value.ToString());
+            }
         }
 
         private static void AddParameters(MySqlCommand cmd, IEnumerable<KeyValuePair<string, object?>> parameters)
@@ -581,6 +592,11 @@ CHAR_LENGTH(COALESCE(agent_output, '')) AS agent_output_length";
                 Status = Enum.Parse<MissionStatusEnum>(reader["status"].ToString()!),
                 Priority = Convert.ToInt32(reader["priority"]),
                 ParentMissionId = NullableString(reader["parent_mission_id"]),
+                BranchStrategy = Enum.TryParse(reader["branch_strategy"].ToString(), out MissionBranchStrategyEnum strategy) ? strategy : MissionBranchStrategyEnum.New,
+                Depth = reader["depth"] == DBNull.Value ? 0 : Math.Clamp(Convert.ToInt32(reader["depth"]), 0, 16),
+                ReadyUtc = FromIso8601Nullable(reader["ready_utc"]),
+                AssignedUtc = FromIso8601Nullable(reader["assigned_utc"]),
+                WaitForVoyageWorkers = reader["wait_for_voyage_workers"] != DBNull.Value && Convert.ToInt64(reader["wait_for_voyage_workers"]) == 1,
                 BranchName = NullableString(reader["branch_name"]),
                 DockId = NullableString(reader["dock_id"]),
                 ProcessId = reader["process_id"] == DBNull.Value ? null : Convert.ToInt32(reader["process_id"]),

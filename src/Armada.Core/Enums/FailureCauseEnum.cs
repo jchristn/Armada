@@ -61,6 +61,13 @@ namespace Armada.Core.Enums
         /// More than one cause contributed and they cannot be separated.
         /// </summary>
         [EnumMember(Value = "Mixed")]
-        Mixed
+        Mixed,
+
+        /// <summary>
+        /// The attempt changed files outside its owned paths or owned by a mission running alongside it. Recorded as a
+        /// warning in v1.3.0; it never fails the mission.
+        /// </summary>
+        [EnumMember(Value = "OwnershipViolation")]
+        OwnershipViolation
     }
 }

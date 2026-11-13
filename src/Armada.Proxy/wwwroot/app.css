@@ -10,13 +10,51 @@
   --accent-strong: #084b84;
   --accent-soft: rgba(15, 108, 189, 0.1);
   --success: #11845b;
-  --warning: #b26b00;
+  --warning: #925800;
   --danger: #c23934;
   --radius: 18px;
   --shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
   --menu-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
+  --bg-hero-end: rgba(255, 255, 255, 0.96);
+  --row-hover: rgba(15, 108, 189, 0.04);
+  --row-selected: rgba(15, 108, 189, 0.07);
+  --table-head: rgba(248, 250, 252, 0.88);
+  --pill-neutral-bg: #e8eef5;
+  --pill-neutral-text: #425466;
+  --focus-ring: 0 0 0 3px rgba(15, 108, 189, 0.35);
   --font: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --mono: "Cascadia Code", "Consolas", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0d131b;
+    --bg-card: #151d28;
+    --bg-subtle: #1b2532;
+    --border: #2b3747;
+    --text: #e6edf5;
+    --text-dim: #9aa8b8;
+    --accent: #4ea1f0;
+    --accent-strong: #8cc4ff;
+    --accent-soft: rgba(78, 161, 240, 0.16);
+    --success: #3ccf91;
+    --warning: #f0b450;
+    --danger: #ff7b72;
+    --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    --menu-shadow: 0 24px 48px rgba(0, 0, 0, 0.55);
+    --bg-hero-end: rgba(21, 29, 40, 0.96);
+    --row-hover: rgba(78, 161, 240, 0.06);
+    --row-selected: rgba(78, 161, 240, 0.1);
+    --table-head: rgba(27, 37, 50, 0.9);
+    --pill-neutral-bg: #253142;
+    --pill-neutral-text: #b6c2d1;
+    --focus-ring: 0 0 0 3px rgba(78, 161, 240, 0.45);
+  }
+
+  .button-primary {
+    color: #08131f;
+  }
 }
 
 * {
@@ -73,7 +111,7 @@ input {
 
 .portal-card-hero {
   background:
-    linear-gradient(135deg, rgba(15, 108, 189, 0.09), rgba(255, 255, 255, 0.96)),
+    linear-gradient(135deg, var(--accent-soft), var(--bg-hero-end)),
     var(--bg-card);
 }
 
@@ -165,7 +203,16 @@ h2 {
 
 .field input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(15, 108, 189, 0.12);
+  box-shadow: var(--focus-ring);
+}
+
+.button:focus-visible,
+.icon-button:focus-visible,
+.menu-trigger:focus-visible,
+.instance-menu-item:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 .button,
@@ -284,7 +331,7 @@ h2 {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  background: rgba(248, 250, 252, 0.88);
+  background: var(--table-head);
   white-space: nowrap;
 }
 
@@ -293,11 +340,11 @@ h2 {
 }
 
 .instance-table tbody tr:hover {
-  background: rgba(15, 108, 189, 0.03);
+  background: var(--row-hover);
 }
 
 .instance-table-row.is-selected {
-  background: rgba(15, 108, 189, 0.06);
+  background: var(--row-selected);
 }
 
 .instance-deployment {
@@ -356,22 +403,22 @@ h2 {
   font-size: 0.74rem;
   font-weight: 700;
   text-transform: uppercase;
-  background: #e8eef5;
-  color: #425466;
+  background: var(--pill-neutral-bg);
+  color: var(--pill-neutral-text);
 }
 
 .state-pill.connected {
-  background: rgba(17, 132, 91, 0.13);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
   color: var(--success);
 }
 
 .state-pill.stale {
-  background: rgba(178, 107, 0, 0.14);
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
   color: var(--warning);
 }
 
 .state-pill.offline {
-  background: rgba(194, 57, 52, 0.12);
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
   color: var(--danger);
 }
 
@@ -393,7 +440,7 @@ h2 {
 .portal-toolbar {
   display: flex;
   gap: 0.6rem;
-  margin-top: 0.9rem;
+  flex-shrink: 0;
 }
 
 .instance-menu {
@@ -476,7 +523,6 @@ h2 {
     width: 56px;
   }
 
-  .section-head,
   .form-actions {
     flex-direction: column;
     align-items: stretch;
@@ -484,5 +530,103 @@ h2 {
 
   .button {
     width: 100%;
+  }
+
+  /* Stack each deployment into a card so the state and actions stay on screen. */
+  .instance-table-shell {
+    overflow-x: visible;
+    border: none;
+    background: none;
+  }
+
+  .instance-table {
+    min-width: 0;
+  }
+
+  .instance-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .instance-table,
+  .instance-table tbody {
+    display: block;
+  }
+
+  .instance-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .instance-table-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 0.75rem;
+    row-gap: 0.35rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--bg-subtle);
+  }
+
+  .instance-table-row.is-selected {
+    border-color: var(--accent);
+  }
+
+  .instance-table .instance-table-row td {
+    display: block;
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .instance-table-row td:first-child {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .instance-table-row .instance-actions-cell {
+    grid-column: 2;
+    grid-row: 1;
+    width: auto;
+  }
+
+  .instance-table-row td[data-label] {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.9rem;
+  }
+
+  .instance-table-row td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .instance-ip,
+  .instance-version,
+  .instance-last-seen {
+    white-space: normal;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .instance-empty {
+    display: block;
+  }
+
+  .instance-empty td {
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: 14px;
   }
 }

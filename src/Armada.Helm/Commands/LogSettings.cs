@@ -24,7 +24,7 @@ namespace Armada.Helm.Commands
         /// Number of lines to show from end of log.
         /// </summary>
         [Description("Number of lines to show (default: 50)")]
-        [CommandOption("--lines|-n")]
+        [CommandOption("--lines|-n <N>")]
         public int? Lines { get; set; }
 
         /// <summary>

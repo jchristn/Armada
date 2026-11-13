@@ -26,7 +26,8 @@ namespace Armada.Core.Database.Interfaces
         /// <summary>
         /// Update a captain.
         /// </summary>
-        Task<Captain> UpdateAsync(Captain captain, CancellationToken token = default);
+        /// <remarks>Set updateActive only for an intentional configuration edit; operational snapshots preserve eligibility.</remarks>
+        Task<Captain> UpdateAsync(Captain captain, CancellationToken token = default, bool updateActive = false, bool updateConcurrency = false);
 
         /// <summary>
         /// Set or clear a captain's CLI tool permission policy. <see cref="UpdateAsync"/> never writes this column, so
@@ -37,6 +38,9 @@ namespace Armada.Core.Database.Interfaces
         /// <param name="token">Cancellation token.</param>
         /// <returns>True when a row was updated.</returns>
         Task<bool> UpdateCliPermissionPolicyAsync(string id, CliPermissionPolicyEnum? policy, CancellationToken token = default);
+
+        /// <summary>Set the credential Harbor without overwriting concurrent mission or dock state.</summary>
+        Task<bool> UpdateUsageCaptureHarborAsync(string tenantId, string id, string? harborId, CancellationToken token = default);
 
         /// <summary>
         /// Delete a captain by identifier.
@@ -82,24 +86,46 @@ namespace Armada.Core.Database.Interfaces
 
         /// <summary>
         /// Atomically claim a captain for a mission. Sets state to Working and assigns
-        /// mission/dock IDs, but only if the captain is currently Idle.
-        /// Returns true if the claim succeeded, false if the captain was no longer Idle.
+        /// mission/dock IDs, when the captain has a free slot and is Idle or Working.
+        /// Returns true if the claim succeeded, false if no slot was available. The mission assignment and slot claim commit together.
         /// The dock may be null when the captain is claimed before its dock is provisioned; attach it later with
         /// <see cref="TrySetDockAsync"/>.
         /// </summary>
-        Task<bool> TryClaimAsync(string captainId, string missionId, string? dockId, CancellationToken token = default);
+        Task<bool> TryClaimAsync(string captainId, string missionId, string? dockId, CancellationToken token = default, int ceiling = 256);
+
+        /// <summary>Atomically reserve an idle captain with no mission slots for an exclusive session. Recovery may adopt an unowned legacy session state; an existing matching owner is idempotent.</summary>
+        Task<bool> TryClaimExclusiveAsync(string captainId, string sessionId, CaptainStateEnum state, CancellationToken token = default, bool recover = false);
+
+        /// <summary>Update runtime fields only while the caller still owns the exclusive session.</summary>
+        Task<bool> TryUpdateExclusiveAsync(string captainId, string sessionId, CaptainStateEnum state, int? processId, CancellationToken token = default);
+
+        /// <summary>Release only the matching exclusive session, never another session or a mission assignment.</summary>
+        Task<bool> TryReleaseExclusiveAsync(string captainId, string sessionId, CancellationToken token = default);
+
+        /// <summary>Reconcile durable slot ownership/counters from Assigned and InProgress missions after interruption.</summary>
+        Task ReconcileMissionSlotsAsync(CancellationToken token = default);
+
+        /// <summary>Retain verification exit ownership while releasing its execution capacity.</summary>
+        Task<bool> ReleaseVerificationCapacityAsync(string captainId, string missionId, int processId, DateTime version, CancellationToken token = default);
+
+        /// <summary>Atomically readmit a verified repair only while the version and captain capacity still allow it.</summary>
+        Task<bool> TryResumeVerificationAsync(string captainId, string missionId, DateTime version, int ceiling, CancellationToken token = default);
+
+        /// <summary>Read a slot's last process handle for durable exit replay after the mission PID was claimed.</summary>
+        Task<int?> ReadMissionProcessAsync(string captainId, string missionId, CancellationToken token = default);
 
         /// <summary>
         /// Atomically release a captain from a mission: sets it Idle and clears its mission, dock, process identifier
-        /// and recovery attempts, but only while it is still Working, Stalled or Stopping on that mission. A captain that
+        /// and recovery attempts, only while that mission still owns its slot. Sibling assignments and quarantine state are preserved. A captain that
         /// has already moved on to another mission, or was quarantined, is left alone.
         /// </summary>
         /// <param name="captainId">Captain identifier.</param>
         /// <param name="missionId">Mission the caller expects the captain to hold.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="emptyState">Optional state retained when the last slot closes after an unavailable runtime.</param>
         /// <returns>True when the captain was released.</returns>
         /// <exception cref="ArgumentNullException">Thrown when captainId or missionId is null or empty.</exception>
-        Task<bool> TryReleaseFromMissionAsync(string captainId, string missionId, CancellationToken token = default);
+        Task<bool> TryReleaseFromMissionAsync(string captainId, string missionId, CancellationToken token = default, CaptainStateEnum? emptyState = null);
 
         /// <summary>
         /// Atomically record the dock of a captain's current mission, only while the captain still holds that mission.

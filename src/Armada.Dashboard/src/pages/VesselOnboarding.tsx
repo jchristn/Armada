@@ -1,3 +1,4 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { getVessel, getVesselReadiness } from '../api/client';
@@ -75,11 +76,11 @@ export default function VesselOnboarding() {
 
   return (
     <div>
-      <div className="breadcrumb">
-        <Link to="/vessels" title={t('Back to the list of all vessels.')}>{t('Vessels')}</Link> <span className="breadcrumb-sep">&gt;</span>{' '}
-        <Link to={`/vessels/${vessel.id}`} title={t('Back to this vessel page.')}>{vessel.name}</Link> <span className="breadcrumb-sep">&gt;</span>{' '}
-        <span>{t('Onboarding')}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Vessels'), to: '/vessels', title: t('Back to the list of all vessels.') },
+        { label: vessel.name, to: `/vessels/${vessel.id}`, title: t('Back to this vessel page.') },
+        { label: t('Onboarding') },
+      ]} />
 
       <div className="detail-header">
         <div>

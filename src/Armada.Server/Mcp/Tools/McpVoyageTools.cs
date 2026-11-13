@@ -59,7 +59,11 @@ namespace Armada.Server.Mcp.Tools
                                     description = new { type = "string" },
                                     requestedCaptainId = new { type = "string", description = "Optional captain (cpt_ prefix) to run this mission (the first stage in a pipeline); overrides persona captain priorities" },
                                     tier = new { type = "string", description = "Optional minimum captain tier for this mission: Economy, Standard, or Premium" },
-                                    persona = new { type = "string", description = "Optional persona for a single-stage mission when no pipeline is given (defaults to Worker)" }
+                                    persona = new { type = "string", description = "Optional persona for a single-stage mission when no pipeline is given (defaults to Worker)" },
+                                    key = new { type = "string", description = "Optional key naming this mission so a later mission can name it as parentKey" },
+                                    parentKey = new { type = "string", description = "Optional key of an earlier mission in this dispatch: this mission becomes its child and starts once the parent finishes, on its result. Use it only when this mission needs the parent's code; unrelated missions run in parallel. An unknown or later key creates nothing" },
+                                    branchStrategy = new { type = "string", description = "Optional branch relationship to the parent: New, ContinueParent (default for the first child) or ForkFromParent (default for later children)" },
+                                    ownedPaths = new { type = "array", items = new { type = "string" }, description = "Optional files or directories (trailing / for a directory) this mission may change; missions that can run at the same time should not share them" }
                                 }
                             }
                         },
@@ -183,14 +187,14 @@ namespace Armada.Server.Mcp.Tools
 
             register(
                 "voyage_status",
-                "Get status of a specific voyage: the voyage with its mission counts (TotalMissions, MissionCountsByStatus). Missions are never embedded; read them one page at a time with enumerate (entityType missions, voyageId).",
+                "Get status of a specific voyage: the voyage with its mission counts (TotalMissions, MissionCountsByStatus) and LastBlackBoxEntryId (its current black box entry, read it with get_blackbox). Missions are never embedded; read them one page at a time with enumerate (entityType missions, voyageId).",
                 new
                 {
                     type = "object",
                     properties = new
                     {
                         voyageId = new { type = "string", description = "Voyage ID (vyg_ prefix)" },
-                        summary = new { type = "boolean", description = "Return a trimmed voyage (id, title, description, status, timestamps, approval options, evaluation flag) with the counts (default true). Set false for the full voyage object with the counts." }
+                        summary = new { type = "boolean", description = "Return a trimmed voyage (id, title, description, status, timestamps, approval options, evaluation flag, LastBlackBoxEntryId) with the counts (default true). Set false for the full voyage object with the counts." }
                     },
                     required = new[] { "voyageId" }
                 },
@@ -209,7 +213,7 @@ namespace Armada.Server.Mcp.Tools
                     {
                         return (object)new
                         {
-                            Voyage = new { voyage.Id, voyage.Title, voyage.Description, voyage.Status, voyage.CreatedUtc, voyage.LastUpdateUtc, voyage.ApprovalOptions, voyage.IsEvaluation },
+                            Voyage = new { voyage.Id, voyage.Title, voyage.Description, voyage.Status, voyage.CreatedUtc, voyage.LastUpdateUtc, voyage.ApprovalOptions, voyage.IsEvaluation, voyage.LastBlackBoxEntryId },
                             TotalMissions = progress.TotalMissions,
                             MissionCountsByStatus = progress.MissionCountsByStatus
                         };

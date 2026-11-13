@@ -5,6 +5,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+    <PackageReference Include="Porta.Pty" Version="1.0.7" />
     <PackageReference Include="SyslogLogging" Version="2.4.1" />
   </ItemGroup>
 

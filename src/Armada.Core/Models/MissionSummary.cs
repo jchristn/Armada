@@ -61,6 +61,31 @@ namespace Armada.Core.Models
         public string? ParentMissionId { get; set; } = null;
 
         /// <summary>
+        /// Branch relationship to the parent (continue or fork), as recorded at assignment.
+        /// </summary>
+        public MissionBranchStrategyEnum BranchStrategy { get; set; } = MissionBranchStrategyEnum.New;
+
+        /// <summary>
+        /// Depth in the mission hierarchy (0 for a top-level logical mission).
+        /// </summary>
+        public int Depth { get; set; } = 0;
+
+        /// <summary>
+        /// When the mission was first held back only by capacity, or its assignment time when admitted on first sight.
+        /// </summary>
+        public DateTime? ReadyUtc { get; set; } = null;
+
+        /// <summary>
+        /// When the mission was assigned to a captain.
+        /// </summary>
+        public DateTime? AssignedUtc { get; set; } = null;
+
+        /// <summary>
+        /// True for an integration mission that waits for every other pipeline in the voyage to settle.
+        /// </summary>
+        public bool WaitForVoyageWorkers { get; set; } = false;
+
+        /// <summary>
         /// Persona assigned to this mission.
         /// </summary>
         public string? Persona { get; set; } = null;

@@ -1,0 +1,518 @@
+[
+  {
+    "page": "captains",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "captain",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "captain-edit",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel-edit",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-1",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Output contract repair",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-2",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Independent parser tests",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1"
+    ]
+  },
+  {
+    "page": "mission-3",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Documentation updates",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "captains",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "captain",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "captain-edit",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel-edit",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-1",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Output contract repair",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-2",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Independent parser tests",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1"
+    ]
+  },
+  {
+    "page": "mission-3",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Documentation updates",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "captains",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "captain",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "captain-edit",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel-edit",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-1",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Output contract repair",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-2",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Independent parser tests",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1"
+    ]
+  },
+  {
+    "page": "mission-3",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Documentation updates",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "captains",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "captain",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "captain-edit",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel-edit",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-1",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Output contract repair",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-2",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Independent parser tests",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1"
+    ]
+  },
+  {
+    "page": "mission-3",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Documentation updates",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "captains",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "captain",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "captain-edit",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel-edit",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-1",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Output contract repair",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-2",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Independent parser tests",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1"
+    ]
+  },
+  {
+    "page": "mission-3",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Documentation updates",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "captains",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "captain",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "captain-edit",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Captains>Parallel model",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1",
+      "/dashboard/missions/msn_final_2",
+      "/dashboard/missions/msn_final_3"
+    ]
+  },
+  {
+    "page": "vessel-edit",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Vessels>Concurrency validation",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-1",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Output contract repair",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  },
+  {
+    "page": "mission-2",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Independent parser tests",
+    "breadcrumbCount": 1,
+    "missionLinks": [
+      "/dashboard/missions/msn_final_1"
+    ]
+  },
+  {
+    "page": "mission-3",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "breadcrumbs": "Dashboard>Missions>Documentation updates",
+    "breadcrumbCount": 1,
+    "missionLinks": []
+  }
+]

@@ -126,6 +126,7 @@ namespace Armada.Server
             if (!captain.SupportsPlanningSessions)
                 throw new InvalidOperationException(captain.PlanningSessionSupportReason ?? "This captain runtime is not supported for planning sessions.");
 
+            Armada.Core.Services.CaptainEligibility.RequireActive(captain);
             if (captain.State != CaptainStateEnum.Idle)
                 throw new CaptainNotIdleException(captain.Id, captain.State, "Captain " + captain.Name + " is not idle.");
 
@@ -159,6 +160,10 @@ namespace Armada.Server
 
             try
             {
+                if (!await _Database.Captains.TryClaimExclusiveAsync(captain.Id, session.Id, CaptainStateEnum.Planning, token).ConfigureAwait(false))
+                    throw new CaptainNotIdleException(captain.Id, (await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false))?.State ?? captain.State,
+                        "Captain " + captain.Name + " is already reserved or has active missions.");
+
                 string branchName = Constants.BranchPrefix + "planning/" + session.Id;
                 Dock? dock;
                 DockPlacement placement = PlaceDockAsync != null
@@ -187,12 +192,11 @@ namespace Armada.Server
                 await _Database.PlanningSessions.UpdateAsync(session, token).ConfigureAwait(false);
 
                 captain.State = CaptainStateEnum.Planning;
-                captain.CurrentMissionId = null;
-                captain.CurrentDockId = dock.Id;
+                captain.CurrentSessionId = session.Id;
                 captain.ProcessId = null;
                 captain.LastHeartbeatUtc = DateTime.UtcNow;
                 captain.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                await UpdateSessionCaptainAsync(captain, session.Id, token).ConfigureAwait(false);
                 _WebSocketHub?.BroadcastCaptainChange(captain);
 
                 BroadcastSessionChanged(session);
@@ -214,7 +218,7 @@ namespace Armada.Server
                 {
                     try
                     {
-                        await _Docks.ReclaimAsync(session.DockId, session.TenantId, token).ConfigureAwait(false);
+                        await _Docks.ReclaimAsync(session.DockId, session.TenantId, CancellationToken.None).ConfigureAwait(false);
                     }
                     catch
                     {
@@ -223,17 +227,10 @@ namespace Armada.Server
 
                 try
                 {
-                    Captain? failedCaptain = await _Database.Captains.ReadAsync(captain.Id, token).ConfigureAwait(false);
+                    Captain? failedCaptain = await _Database.Captains.ReadAsync(captain.Id, CancellationToken.None).ConfigureAwait(false);
                     if (failedCaptain != null)
                     {
-                        failedCaptain.State = CaptainStateEnum.Idle;
-                        failedCaptain.CurrentMissionId = null;
-                        failedCaptain.CurrentDockId = null;
-                        failedCaptain.ProcessId = null;
-                        failedCaptain.LastHeartbeatUtc = DateTime.UtcNow;
-                        failedCaptain.LastUpdateUtc = DateTime.UtcNow;
-                        await _Database.Captains.UpdateAsync(failedCaptain, token).ConfigureAwait(false);
-                        _WebSocketHub?.BroadcastCaptainChange(failedCaptain);
+                        await ReleaseSessionCaptainAsync(failedCaptain.Id, session.Id).ConfigureAwait(false);
                     }
                 }
                 catch
@@ -244,7 +241,7 @@ namespace Armada.Server
                 session.FailureReason = ex.Message;
                 session.CompletedUtc = DateTime.UtcNow;
                 session.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.PlanningSessions.UpdateAsync(session, token).ConfigureAwait(false);
+                await _Database.PlanningSessions.UpdateAsync(session, CancellationToken.None).ConfigureAwait(false);
                 BroadcastSessionChanged(session);
                 throw;
             }
@@ -259,6 +256,7 @@ namespace Armada.Server
             if (String.IsNullOrWhiteSpace(content)) throw new ArgumentNullException(nameof(content));
 
             session = await RequireSessionAsync(session.Id, token).ConfigureAwait(false);
+            Armada.Core.Services.CaptainEligibility.RequireActive(await RequireSessionCaptainAsync(session.CaptainId, session.Id, token).ConfigureAwait(false));
             if (session.Status != PlanningSessionStatusEnum.Active)
                 throw new InvalidOperationException("Planning session " + session.Id + " is not ready for a new message.");
 
@@ -359,7 +357,7 @@ namespace Armada.Server
             if (session.ProcessId.HasValue)
             {
                 Captain? captain = await _Database.Captains.ReadAsync(session.CaptainId, token).ConfigureAwait(false);
-                if (captain != null)
+                if (captain?.CurrentSessionId == session.Id)
                 {
                     try
                     {
@@ -393,10 +391,15 @@ namespace Armada.Server
                 ? request.Description.Trim()
                 : sourceMessage.Content.Trim();
 
-            List<MissionDescription> missions = new List<MissionDescription>
-            {
-                new MissionDescription(title, description)
-            };
+            // A tree draft dispatches one mission per entry with its key, parent and owned paths; otherwise the draft is
+            // the single mission.
+            List<PlanningDraftMission> drafted = NormalizeDraftMissions(request.Missions);
+            List<MissionDescription> missions = drafted.Count > 1
+                ? drafted.Select(d => new MissionDescription(d.Title, d.Description)
+                {
+                    Key = d.Key, ParentKey = d.ParentKey, OwnedPaths = d.OwnedPaths.Count == 0 ? null : d.OwnedPaths
+                }).ToList()
+                : new List<MissionDescription> { new MissionDescription(title, description) { OwnedPaths = drafted.Count == 1 && drafted[0].OwnedPaths.Count > 0 ? drafted[0].OwnedPaths : null } };
 
             Voyage voyage = await _Admiral.DispatchVoyageAsync(
                 title,
@@ -471,7 +474,7 @@ namespace Armada.Server
             try
             {
                 PlanningSessionMessage sourceMessage = await ResolveSourceMessageAsync(session, request.MessageId, token).ConfigureAwait(false);
-                Captain captain = await RequireCaptainAsync(session.CaptainId, token).ConfigureAwait(false);
+                Captain captain = await RequireSessionCaptainAsync(session.CaptainId, session.Id, token).ConfigureAwait(false);
                 Vessel vessel = await RequireVesselAsync(session.VesselId, token).ConfigureAwait(false);
                 Dock dock = await RequireDockAsync(session.DockId, token).ConfigureAwait(false);
                 List<PlanningSessionMessage> messages = await _Database.PlanningSessionMessages.EnumerateBySessionAsync(session.Id, token).ConfigureAwait(false);
@@ -481,9 +484,13 @@ namespace Armada.Server
                 string prompt =
                     "Read `" + promptFilePath + "` and the selected planning message below.\n" +
                     "Produce a dispatch draft for Armada.\n" +
-                    "Return JSON only with keys `title` and `description`.\n" +
+                    "Return JSON only with keys `title`, `description` and, when the work splits, `missions`.\n" +
                     "- `title` must be concise, actionable, and 80 characters or less.\n" +
                     "- `description` must be mission-ready markdown that tells a captain exactly what to do.\n" +
+                    "- Small work is one mission: omit `missions`. Otherwise `missions` is a list of `{key, parentKey, title, description, ownedPaths}`: " +
+                    "small missions (one coherent change each), `parentKey` naming an earlier mission's `key` only when a mission needs that mission's code, " +
+                    "and `ownedPaths` (files or `dir/` prefixes it may change) that never overlap between missions that can run at the same time. " +
+                    "This vessel runs at most " + (vessel.MaxParallelMissionsPerVoyage == 0 ? "an unlimited number of" : vessel.MaxParallelMissionsPerVoyage.ToString(System.Globalization.CultureInfo.InvariantCulture)) + " missions of a voyage at once.\n" +
                     "- Preserve the user's concrete intent and constraints.\n" +
                     "- Do not mention that this was generated from a planning session.\n" +
                     "- If the existing session title is already strong, keep it close to `" + preferredTitle.Replace("`", "'") + "`.\n\n" +
@@ -673,6 +680,18 @@ namespace Armada.Server
                         continue;
                     }
 
+                    if (!await _Database.Captains.TryClaimExclusiveAsync(captain.Id, session.Id, CaptainStateEnum.Planning, token, recover: true).ConfigureAwait(false))
+                    {
+                        session.Status = PlanningSessionStatusEnum.Failed;
+                        session.FailureReason = "Captain ownership changed during recovery; its current work was preserved.";
+                        session.ProcessId = null;
+                        session.CompletedUtc = DateTime.UtcNow;
+                        session.LastUpdateUtc = DateTime.UtcNow;
+                        await _Database.PlanningSessions.UpdateAsync(session, token).ConfigureAwait(false);
+                        BroadcastSessionChanged(session);
+                        continue;
+                    }
+
                     if (session.Status == PlanningSessionStatusEnum.Stopping)
                     {
                         await StopAsync(session, token).ConfigureAwait(false);
@@ -735,12 +754,11 @@ namespace Armada.Server
                     }
 
                     captain.State = CaptainStateEnum.Planning;
-                    captain.CurrentMissionId = null;
-                    captain.CurrentDockId = recoveredSession.DockId;
+                    captain.CurrentSessionId = session.Id;
                     captain.ProcessId = null;
                     captain.LastHeartbeatUtc = DateTime.UtcNow;
                     captain.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                    await UpdateSessionCaptainAsync(captain, session.Id, token).ConfigureAwait(false);
                     _WebSocketHub?.BroadcastCaptainChange(captain);
 
                     if (recoveredSession.Status == PlanningSessionStatusEnum.Responding)
@@ -768,7 +786,7 @@ namespace Armada.Server
             {
                 PlanningSession session = await RequireSessionAsync(sessionId, CancellationToken.None).ConfigureAwait(false);
                 PlanningSessionMessage assistantMessage = await RequireMessageAsync(assistantMessageId, CancellationToken.None).ConfigureAwait(false);
-                Captain captain = await RequireCaptainAsync(session.CaptainId, CancellationToken.None).ConfigureAwait(false);
+                Captain captain = await RequireSessionCaptainAsync(session.CaptainId, session.Id, CancellationToken.None).ConfigureAwait(false);
                 Vessel vessel = await RequireVesselAsync(session.VesselId, CancellationToken.None).ConfigureAwait(false);
                 Dock dock = await RequireDockAsync(session.DockId, CancellationToken.None).ConfigureAwait(false);
                 List<PlanningSessionMessage> messages = await _Database.PlanningSessionMessages.EnumerateBySessionAsync(session.Id).ConfigureAwait(false);
@@ -855,6 +873,7 @@ namespace Armada.Server
                 if (IsStopRequested(session.Id))
                     return;
 
+                Armada.Core.Services.CaptainEligibility.RequireActive(await RequireSessionCaptainAsync(captain.Id, session.Id, CancellationToken.None).ConfigureAwait(false));
                 int processId = await runtime.StartAsync(
                     dock.WorktreePath ?? vessel.WorkingDirectory ?? vessel.LocalPath ?? Directory.GetCurrentDirectory(),
                     prompt,
@@ -872,7 +891,7 @@ namespace Armada.Server
                 captain.ProcessId = processId;
                 captain.LastHeartbeatUtc = DateTime.UtcNow;
                 captain.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                await UpdateSessionCaptainAsync(captain, session.Id).ConfigureAwait(false);
 
                 int? exitCode = await exitSource.Task.ConfigureAwait(false);
 
@@ -933,16 +952,16 @@ namespace Armada.Server
                 await _Database.PlanningSessionMessages.UpdateAsync(assistantMessage).ConfigureAwait(false);
                 BroadcastMessageUpdated(assistantMessage);
 
-                captain = await RequireCaptainAsync(session.CaptainId, CancellationToken.None).ConfigureAwait(false);
+                captain = await RequireSessionCaptainAsync(session.CaptainId, session.Id, CancellationToken.None).ConfigureAwait(false);
                 captain.ProcessId = null;
                 captain.LastHeartbeatUtc = DateTime.UtcNow;
                 captain.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                await UpdateSessionCaptainAsync(captain, session.Id).ConfigureAwait(false);
 
                 session = await RequireSessionAsync(session.Id, CancellationToken.None).ConfigureAwait(false);
                 bool stopRequested = _ActiveTurns.TryGetValue(session.Id, out TurnState? turnState) && turnState.StopRequested;
                 session.ProcessId = null;
-                if (!stopRequested)
+                if (!stopRequested && session.Status == PlanningSessionStatusEnum.Responding)
                 {
                     session.Status = PlanningSessionStatusEnum.Active;
                     session.FailureReason = null;
@@ -969,7 +988,7 @@ namespace Armada.Server
                     if (session != null)
                     {
                         session.ProcessId = null;
-                        if (!_ActiveTurns.TryGetValue(session.Id, out TurnState? turnState) || !turnState.StopRequested)
+                        if (session.Status == PlanningSessionStatusEnum.Responding && (!_ActiveTurns.TryGetValue(session.Id, out TurnState? turnState) || !turnState.StopRequested))
                         {
                             session.Status = PlanningSessionStatusEnum.Active;
                             session.FailureReason = ex.Message;
@@ -987,9 +1006,10 @@ namespace Armada.Server
                             captain.ProcessId = null;
                             if (captain.State != CaptainStateEnum.Planning)
                                 captain.State = CaptainStateEnum.Planning;
+                                captain.CurrentSessionId = session.Id;
                             captain.LastHeartbeatUtc = DateTime.UtcNow;
                             captain.LastUpdateUtc = DateTime.UtcNow;
-                            await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                            await UpdateSessionCaptainAsync(captain, session.Id).ConfigureAwait(false);
                             _WebSocketHub?.BroadcastCaptainChange(captain);
                         }
                     }
@@ -1121,7 +1141,7 @@ namespace Armada.Server
             builder.AppendLine("## Response Guidance");
             builder.AppendLine("- Continue the conversation naturally.");
             builder.AppendLine("- Be concrete about architecture, implementation order, and risk when relevant.");
-            builder.AppendLine("- If useful, include a short `Dispatch Draft` section that could be sent to Armada as a mission.");
+            builder.AppendLine("- If useful, include a short `Dispatch Draft` section that could be sent to Armada: one mission, or a few small missions naming the earlier mission each builds on (only when it needs that code) and the files each owns, with no file owned by two missions that can run at the same time.");
 
             await File.WriteAllTextAsync(filePath, builder.ToString(), token).ConfigureAwait(false);
             return filePath;
@@ -1234,6 +1254,7 @@ namespace Armada.Server
 
             try
             {
+                Armada.Core.Services.CaptainEligibility.RequireActive(await RequireSessionCaptainAsync(captain.Id, session.Id, CancellationToken.None).ConfigureAwait(false));
                 processId = await runtime.StartAsync(
                     session.DockId != null
                         ? (await RequireDockAsync(session.DockId, token).ConfigureAwait(false)).WorktreePath ?? vessel.WorkingDirectory ?? vessel.LocalPath ?? Directory.GetCurrentDirectory()
@@ -1253,7 +1274,7 @@ namespace Armada.Server
                 captain.ProcessId = processId;
                 captain.LastHeartbeatUtc = DateTime.UtcNow;
                 captain.LastUpdateUtc = DateTime.UtcNow;
-                await _Database.Captains.UpdateAsync(captain, token).ConfigureAwait(false);
+                await UpdateSessionCaptainAsync(captain, session.Id, token).ConfigureAwait(false);
                 _WebSocketHub?.BroadcastCaptainChange(captain);
 
                 int? exitCode = await exitSource.Task.ConfigureAwait(false);
@@ -1310,7 +1331,7 @@ namespace Armada.Server
                             refreshedCaptain.ProcessId = null;
                             refreshedCaptain.LastHeartbeatUtc = DateTime.UtcNow;
                             refreshedCaptain.LastUpdateUtc = DateTime.UtcNow;
-                            await _Database.Captains.UpdateAsync(refreshedCaptain, CancellationToken.None).ConfigureAwait(false);
+                            await UpdateSessionCaptainAsync(refreshedCaptain, session.Id, CancellationToken.None).ConfigureAwait(false);
                             _WebSocketHub?.BroadcastCaptainChange(refreshedCaptain);
                         }
                     }
@@ -1384,6 +1405,27 @@ namespace Armada.Server
             };
         }
 
+        // Keep entries that have a title; trim keys and drop a parentKey that names the mission itself.
+        private static List<PlanningDraftMission> NormalizeDraftMissions(List<PlanningDraftMission>? missions)
+        {
+            List<PlanningDraftMission> kept = new List<PlanningDraftMission>();
+            foreach (PlanningDraftMission? mission in missions ?? new List<PlanningDraftMission>())
+            {
+                if (mission == null || String.IsNullOrWhiteSpace(mission.Title)) continue;
+                string? key = String.IsNullOrWhiteSpace(mission.Key) ? null : mission.Key.Trim();
+                string? parentKey = String.IsNullOrWhiteSpace(mission.ParentKey) ? null : mission.ParentKey.Trim();
+                kept.Add(new PlanningDraftMission
+                {
+                    Key = key,
+                    ParentKey = parentKey != null && parentKey == key ? null : parentKey,
+                    Title = mission.Title.Trim(),
+                    Description = String.IsNullOrWhiteSpace(mission.Description) ? mission.Title.Trim() : mission.Description.Trim(),
+                    OwnedPaths = (mission.OwnedPaths ?? new List<string>()).Select(OwnedPathMatcher.Normalize).Where(p => p.Length > 0).Distinct(StringComparer.Ordinal).ToList()
+                });
+            }
+            return kept;
+        }
+
         private bool TryParseSummaryResponse(string content, out PlanningSessionSummaryResponse? response)
         {
             response = null;
@@ -1401,6 +1443,7 @@ namespace Armada.Server
             {
                 Title = document.Title ?? String.Empty,
                 Description = document.Description ?? String.Empty,
+                Missions = NormalizeDraftMissions(document.Missions)
             };
             return true;
         }
@@ -1447,7 +1490,7 @@ namespace Armada.Server
 
                 Captain? captain = await _Database.Captains.ReadAsync(session.CaptainId).ConfigureAwait(false);
 
-                if (session.ProcessId.HasValue && captain != null)
+                if (session.ProcessId.HasValue && captain?.CurrentSessionId == session.Id)
                 {
                     try
                     {
@@ -1473,14 +1516,7 @@ namespace Armada.Server
 
                 if (captain != null)
                 {
-                    captain.State = CaptainStateEnum.Idle;
-                    captain.CurrentMissionId = null;
-                    captain.CurrentDockId = null;
-                    captain.ProcessId = null;
-                    captain.LastHeartbeatUtc = DateTime.UtcNow;
-                    captain.LastUpdateUtc = DateTime.UtcNow;
-                    await _Database.Captains.UpdateAsync(captain).ConfigureAwait(false);
-                    _WebSocketHub?.BroadcastCaptainChange(captain);
+                    await ReleaseSessionCaptainAsync(captain.Id, session.Id).ConfigureAwait(false);
                 }
 
                 session = await RequireSessionAsync(session.Id, CancellationToken.None).ConfigureAwait(false);
@@ -1658,6 +1694,40 @@ namespace Armada.Server
         /// <summary>
         /// Stop a planning turn's process, on its Harbor when it runs on one.
         /// </summary>
+        private async Task<Captain> RequireSessionCaptainAsync(string captainId, string sessionId, CancellationToken token)
+        {
+            Captain captain = await RequireCaptainAsync(captainId, token).ConfigureAwait(false);
+            if (captain.CurrentSessionId != sessionId || captain.State != CaptainStateEnum.Planning || captain.ActiveMissionCount != 0)
+                throw new InvalidOperationException("Captain no longer owns session " + sessionId + ".");
+            return captain;
+        }
+
+        private async Task UpdateSessionCaptainAsync(Captain captain, string sessionId, CancellationToken token = default)
+        {
+            if (!await _Database.Captains.TryUpdateExclusiveAsync(captain.Id, sessionId, CaptainStateEnum.Planning, captain.ProcessId, token).ConfigureAwait(false))
+            {
+                // A stop can release ownership while StartAsync is still returning its PID.
+                // Stop only the process this turn just started; never mutate the new owner's fields.
+                if (captain.CurrentSessionId == sessionId && captain.ProcessId.HasValue)
+                {
+                    try { await StopPlanningProcessAsync(captain, captain.ProcessId.Value, CancellationToken.None).ConfigureAwait(false); }
+                    catch (Exception ex) { _Logging.Warn(_Header + "could not stop detached session process: " + ex.Message); }
+                }
+                throw new InvalidOperationException("Captain no longer owns session " + sessionId + ".");
+            }
+            captain.State = CaptainStateEnum.Planning;
+            captain.CurrentSessionId = sessionId;
+        }
+
+        private async Task ReleaseSessionCaptainAsync(string captainId, string sessionId)
+        {
+            if (await _Database.Captains.TryReleaseExclusiveAsync(captainId, sessionId, CancellationToken.None).ConfigureAwait(false))
+            {
+                Captain? released = await _Database.Captains.ReadAsync(captainId, CancellationToken.None).ConfigureAwait(false);
+                if (released != null) _WebSocketHub?.BroadcastCaptainChange(released);
+            }
+        }
+
         private async Task StopPlanningProcessAsync(Captain captain, int processId, CancellationToken token)
         {
             if (LaunchRouter != null)

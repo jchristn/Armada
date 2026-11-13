@@ -1,3 +1,4 @@
+import { formatWaitDuration, slotWaitSeconds } from '../lib/missionWaits';
 import { useDuplicateRequest } from '../lib/useDuplicateRequest';
 import { duplicateDisplayName, buildMissionDuplicatePayload } from '../lib/duplicates';
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -29,6 +30,8 @@ import { MISSION_LIST_STATUSES, canRetryLanding, matchesMissionColumnFilters } f
 import { canRestartFromHome } from '../lib/dashboardStatus';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
+import DispatchPreview, { DispatchWarningsBanner } from '../components/blackbox/DispatchWarnings';
+import { dispatchWarningsFrom, type DispatchWarnings } from '../lib/dispatchPreview';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'title' | 'status' | 'priority' | 'createdUtc';
@@ -69,7 +72,7 @@ export default function Missions() {
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: '', message: '', onConfirm: () => {} });
 
   // Diff/Log modals
-  const [diffModal, setDiffModal] = useState<{ title: string; rawDiff: string } | null>(null);
+  const [diffModal, setDiffModal] = useState<{ title: string; rawDiff: string; error?: string } | null>(null);
   const [logModal, setLogModal] = useState<{ title: string; missionId: string; content: string; totalLines?: number; loading: boolean } | null>(null);
 
   // Transition modal
@@ -169,6 +172,8 @@ export default function Missions() {
   function clearSelection() { setSelected([]); }
 
   const [duplicateSource, setDuplicateSource] = useState<Mission | null>(null);
+  // Warnings the last create response carried (overlaps and brief lint); dispatch went ahead regardless.
+  const [createdWarnings, setCreatedWarnings] = useState<DispatchWarnings | null>(null);
 
   // Create
   function openCreate() {
@@ -193,8 +198,9 @@ export default function Missions() {
     if (saving) return;
     setSaving(true);
     try {
-      await createMission({ ...(duplicateSource ? buildMissionDuplicatePayload(duplicateSource) : {}), ...formData });
+      const created = await createMission({ ...(duplicateSource ? buildMissionDuplicatePayload(duplicateSource) : {}), ...formData });
       setShowForm(false);
+      setCreatedWarnings(dispatchWarningsFrom(created));
       pushToast('success', t('Mission "{{title}}" created.', { title: formData.title }));
       load();
     } catch (err: unknown) { setError(apiErrorMessage(err, t('Create failed.'))); }
@@ -286,8 +292,8 @@ export default function Missions() {
     try {
       const result = await getMissionDiff(id);
       setDiffModal({ title: t('Mission Diff'), rawDiff: result?.diff || '' });
-    } catch {
-      setDiffModal({ title: t('Mission Diff'), rawDiff: '' });
+    } catch (e) {
+      setDiffModal({ title: t('Mission Diff'), rawDiff: '', error: e instanceof Error ? e.message : String(e) });
     }
   }
 
@@ -335,7 +341,17 @@ export default function Missions() {
       key: 'status', label: t('Status'), sortKey: 'status', headerTitle: t('Lifecycle state: Pending waits for a captain, InProgress is running, WorkProduced awaits landing, then Complete, Failed or Cancelled. Click to sort.'), cellClassName: 'cell-nowrap',
       clearFilter: () => setColFilters(f => ({ ...f, status: '' })),
       filter: <input type="text" className="col-filter" aria-label={t('Filter by status')} title={t('Show only missions on this page whose status contains this text, for example Failed.')} value={colFilters.status} onChange={e => setColFilters(f => ({ ...f, status: e.target.value }))} placeholder={t('Search...')} />,
-      render: (m) => <StatusBadge status={m.status} />,
+      render: (m) => {
+        const waited = slotWaitSeconds(m.readyUtc, m.assignedUtc);
+        return <>
+          <StatusBadge status={m.status} />
+          {waited !== null && waited >= 60 && (
+            <div className="text-dim" style={{ fontSize: 11 }} title={t('Time this mission waited for a free slot before a captain took it.')}>
+              {t('waited {{duration}}', { duration: formatWaitDuration(waited) })}
+            </div>
+          )}
+        </>;
+      },
     },
     { key: 'priority', label: t('Priority'), sortKey: 'priority', headerTitle: t('Dispatch order. Lower numbers are assigned to a captain first; the default is 100. Click to sort.'), render: (m) => m.priority },
     {
@@ -411,6 +427,7 @@ export default function Missions() {
       />
 
       <ErrorModal error={error} onClose={() => setError('')} />
+      {createdWarnings && <DispatchWarningsBanner overlapWarnings={createdWarnings.overlapWarnings} briefLintWarnings={createdWarnings.briefLintWarnings} onDismiss={() => setCreatedWarnings(null)} />}
 
       {/* Create Modal */}
       {showForm && (
@@ -425,6 +442,7 @@ export default function Missions() {
                 {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
               </select>
             </label>
+            <DispatchPreview compact vesselId={formData.vesselId} title={formData.title} description={formData.description} enabled={!saving} />
             <label title={t('Implementation changes code and lands a diff (an empty diff fails). Audit and Research are read-only and produce a written report instead.')}>{t('Mode')}
               <select value={formData.mode} onChange={e => setFormData({ ...formData, mode: e.target.value as MissionMode })} title={t('Implementation changes code and lands a diff (an empty diff fails). Audit and Research are read-only and produce a written report instead.')}>
                 <option value="Implementation">{t('Implementation')}</option>
@@ -465,7 +483,7 @@ export default function Missions() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
       {deletion.dialog}
-      <DiffViewer open={diffModal !== null} title={diffModal?.title ?? ''} rawDiff={diffModal?.rawDiff ?? ''} onClose={() => setDiffModal(null)} />
+      <DiffViewer open={diffModal !== null} title={diffModal?.title ?? ''} rawDiff={diffModal?.rawDiff ?? ''} error={diffModal?.error} onClose={() => setDiffModal(null)} />
       <LogViewer
         open={logModal !== null}
         title={logModal?.title ?? ''}

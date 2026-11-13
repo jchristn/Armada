@@ -13,6 +13,9 @@ namespace Armada.Core.Models
     /// </summary>
     public class JobQuery
     {
+        // Server-only inbox policy; callers cannot opt into or override this through JSON.
+        internal bool NeedsAttentionOnly { get; set; }
+
         #region Public-Members
 
         /// <summary>
@@ -171,6 +174,23 @@ namespace Armada.Core.Models
             {
                 clauses.Add("kind = @kind");
                 parameters.Add(new KeyValuePair<string, object>("@kind", Kind.Value.ToString()));
+            }
+            if (NeedsAttentionOnly)
+            {
+                clauses.Add("status = 'Failed'");
+                // A retry in the same tenant/user operation supersedes the previous attempt, even while running.
+                clauses.Add(@"NOT EXISTS (SELECT 1 FROM jobs newer WHERE newer.kind=jobs.kind AND newer.name=jobs.name
+                    AND (newer.tenant_id=jobs.tenant_id OR (newer.tenant_id IS NULL AND jobs.tenant_id IS NULL))
+                    AND (newer.user_id=jobs.user_id OR (newer.user_id IS NULL AND jobs.user_id IS NULL))
+                    AND (newer.created_utc>jobs.created_utc OR (newer.created_utc=jobs.created_utc AND newer.id>jobs.id)))");
+                List<string> ignored = new List<string>();
+                for (int i = 0; i < JobActivity.BenignUsageFailures.Length; i++)
+                {
+                    string key = "@benign_usage" + i;
+                    ignored.Add(key);
+                    parameters.Add(new KeyValuePair<string, object>(key, JobActivity.BenignUsageFailures[i]));
+                }
+                clauses.Add("(kind <> 'UsageProbe' OR error_reason IS NULL OR error_reason NOT IN (" + String.Join(",", ignored) + "))");
             }
             return clauses.Count == 0 ? String.Empty : " WHERE " + String.Join(" AND ", clauses);
         }

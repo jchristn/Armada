@@ -18,6 +18,7 @@ import { ALL, useReference, useVessels } from '../../resource/lookups';
 import { errorText, useLoad, useReloadOnFocus } from '../../resource/useLoad';
 import { scopeBadge, useViewer } from './common';
 import { blankStage, moveStage, stageEntries, stageFields, stageFromValues, stagesPayload, stageValues, type StageEntry } from './pipelineForm';
+import { dispatchWarningsOf, firstWarningMessage, warningCount } from '../blackbox/insightModel';
 
 export interface PipelineDetailViewProps {
   name: string;
@@ -200,6 +201,8 @@ export function PipelineDetailView({ name, embedded, onDeleted, onChanged }: Pip
             });
             setRunning(false);
             pushToast('success', t('Voyage launched.'));
+            const dispatchWarnings = dispatchWarningsOf(voyage);
+            if (warningCount(dispatchWarnings) > 0) pushToast('warning', t('Dispatched with {{count}} warning(s): {{message}}', { count: warningCount(dispatchWarnings), message: firstWarningMessage(dispatchWarnings) }));
             router.push(`/voyages/${voyage.id}` as Href);
           } catch (err: unknown) {
             throw new Error(errorText(err, t('Run failed.')));

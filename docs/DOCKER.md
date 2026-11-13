@@ -16,28 +16,30 @@ This guide covers running the Armada server and dashboard using Docker container
 ```bash
 cd docker/armada
 export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-strong-password'   # or put it in docker/armada/.env
+export ARMADA_GRAFANA_ADMIN_PASSWORD='choose-another-strong-password'
 docker compose up -d
 ```
 
 The Admiral listens on all interfaces inside the container, so it refuses to start while the default admin password
 is in use; `ARMADA_INITIAL_ADMIN_PASSWORD` (8+ characters) replaces it on first start and disables the `default`
-bearer token. Compose stops with an error if the variable is not set.
+bearer token. Compose requires that variable and ARMADA_GRAFANA_ADMIN_PASSWORD for the bundled Grafana administrator.
 
-This starts five containers:
+This starts seven containers:
 
 | Service | Port | Description |
 |---------|------|-------------|
 | `armada-server` | 7890 | REST API, built-in dashboard, and WebSocket at /ws |
 | `armada-server` | 7891 | MCP (agent communication) |
-| `armada-server` | 9464 | Prometheus scrape endpoint (`/metrics`) |
 | `armada-dashboard` | 3000 (container port 8080) | Standalone React dashboard |
-| `prometheus` | 9090 | Metrics store, scrapes the Admiral |
+| `otel-collector` | private 4317/4318 | Receives OTLP; metrics exporter on private 9465 |
+| `tempo` | loopback 3200 | Trace store |
+| `prometheus` | loopback 9090 | Metrics store, scrapes the collector |
 | `loki` | 3100 | Log store |
-| `grafana` | 3001 | Dashboards (login `admin` / `admin`) |
+| `grafana` | 3001 | Dashboards (login `admin` / configured password) |
 
 Open the dashboard at **http://localhost:3000** (the standalone container, which redirects to `/dashboard/`) or **http://localhost:7890/dashboard** (served by the Admiral). Both serve the same React build.
 
-The stack also brings up a Prometheus / Loki / Grafana observability stack (telemetry is enabled in the
+The stack also brings up a Collector / Prometheus / Tempo / Loki / Grafana observability stack (telemetry is enabled in the
 container config). Open Grafana at **http://localhost:3001** and see [TELEMETRY.md](TELEMETRY.md) for
 the full metric list and configuration reference.
 
@@ -127,6 +129,14 @@ services:
 The image sets `ARMADA_DATA_DIR=/app/data`, so settings, database, logs, docks, and bare repository clones all live
 under `/app/data`. Only the settings file, `db/`, and `logs/` are bind-mounted; docks and repository clones live in
 the container and are recreated from each vessel's repository URL when the container is replaced.
+
+Fixture battery packs ship in the image at `/app/battery` (read-only). The image also sets
+`ARMADA_BATTERY_DIR=/app/data/battery-packs`, the managed directory that Evaluate and battery pack management use. On
+every start the Admiral copies each bundled pack the directory does not have yet; it never overwrites a pack that is
+already there (edited and custom packs survive upgrades) and records seeded ids in `.armada-seeded-packs`, so a bundled
+pack you delete stays deleted. Compose mounts the named volume `battery-packs` there; without a volume, custom packs
+are lost when the container is replaced (the bundled ones are seeded again). `Evaluation.BatteryDirectory` in
+settings.json takes precedence over the variable.
 
 The proxy stack file is `docker/proxy/compose.yaml`:
 
@@ -263,6 +273,7 @@ instead of running in the container; the Harbor creates each mission's dock in i
 ```bash
 cd docker/armada
 export ARMADA_INITIAL_ADMIN_PASSWORD='choose-a-strong-password'
+export ARMADA_GRAFANA_ADMIN_PASSWORD='choose-another-strong-password'
 docker compose -f compose.split.yaml up -d
 ```
 
@@ -469,3 +480,11 @@ The standalone dashboard proxies API and WebSocket calls to `ARMADA_SERVER_URL` 
 **CORS errors:**
 The Armada server enables CORS on all routes by default. If you see CORS errors, verify you're accessing the correct port (7890 for the API).
 
+
+## Persistent battery pack edits
+
+Set `Evaluation.BatteryDirectory` to a writable mounted volume, for example `/app/data/battery`, before managing
+packs from the dashboard. Mount a host battery directory there (for example `../../battery:/app/data/battery` in
+`docker/armada/compose.yaml`), and grant the container user (UID 1654) write access. Pack edits otherwise live in
+the container's writable layer and disappear when it is replaced. Source publishing includes battery packs when
+`battery/` is present; the server Dockerfile currently copies only `src/`, so mount your pack directory explicitly.

@@ -15,6 +15,7 @@ import { parseAskEvent } from '@dashboard/lib/askEvents';
 import { loadAskThreadView, loadToolCalls, withToolCalls, withWorkRows } from '@dashboard/lib/askPaging';
 import { conversationReducer, initialConversation, isLocalMessage, type ConversationState } from '@dashboard/lib/askConversation';
 import { isWorkActive } from '@dashboard/lib/askWork';
+import { quickActionForm } from '@dashboard/lib/askQuickActions';
 import { isPendingRequest, parseCliPermissionEvent } from '@dashboard/lib/cliPermissions';
 import { randomThinkingMessage } from '@dashboard/lib/askThinkingMessages';
 import { useLocale } from '../i18n/LocaleContext';
@@ -286,9 +287,13 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
       const proposal = await runAskQuickAction(id, action.toolName, args);
       if (proposal?.id) dispatch({ type: 'proposal', proposal });
       await Promise.all([refreshLatest(id), refreshDetail(id)]);
-      if (proposal && String(proposal.status).toLowerCase() === 'failed') {
+      const failed = !!proposal && String(proposal.status).toLowerCase() === 'failed';
+      if (failed) {
         pushToast('error', tRef.current('{{command}} failed: {{reason}}', { command: action.command || action.name, reason: proposal.errorText || tRef.current('unknown error') }));
       }
+      // /blackbox: the card is shown; the question (optional) goes to the captain as a message.
+      const question = typeof args.question === 'string' ? args.question.trim() : '';
+      if (!failed && question && quickActionForm(action) === 'blackbox' && !convRef.current.turnActive) void send(question);
       return true;
     } catch (err: unknown) {
       reportError(errorText(err, tRef.current('The quick action failed.')));
@@ -296,7 +301,7 @@ export function useAskConversation({ threadId, onCreated, schedule = (fn, ms) =>
     } finally {
       setActionBusy(false);
     }
-  }, [ensureThread, refreshLatest, refreshDetail, pushToast, reportError]);
+  }, [ensureThread, refreshLatest, refreshDetail, pushToast, reportError, send]);
 
   const decide = useCallback(async (proposal: AskActionProposal, approve: boolean) => {
     const id = convRef.current.threadId;

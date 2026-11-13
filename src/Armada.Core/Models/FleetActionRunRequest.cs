@@ -1,6 +1,7 @@
 namespace Armada.Core.Models
 {
     using System.Collections.Generic;
+    using Armada.Core.Enums;
     using Armada.Core.Services;
 
     /// <summary>
@@ -16,8 +17,8 @@ namespace Armada.Core.Models
         private Dictionary<string, string> _InputValues = new();
 
         /// <summary>
-        /// Target vessel identifiers in the caller's tenant. Required, 1 to 500 after de-duplication. A vessel from
-        /// another tenant (or unknown) rejects the whole request.
+        /// Target vessel identifiers in the caller's tenant. Required unless <see cref="FromRunId"/> is set; 1 to the per-run maximum after
+        /// de-duplication. A vessel from another tenant (or unknown) rejects the whole request.
         /// </summary>
         [CollectionBound(CollectionLimits.MaxRequestItems)]
         public List<string> VesselIds
@@ -25,6 +26,20 @@ namespace Armada.Core.Models
             get => _VesselIds;
             set => _VesselIds = value ?? new List<string>();
         }
+
+        /// <summary>
+        /// Follow-up run: the id of an earlier run in the caller's tenant (for example a scan). When set, the targets are
+        /// that run's vessels whose target status is in <see cref="FromTargetStatuses"/>, and <see cref="VesselIds"/>
+        /// must be empty. Pair a scan action with its fix action to dispatch captains only where the scan found something.
+        /// </summary>
+        public string? FromRunId { get; set; } = null;
+
+        /// <summary>
+        /// Target statuses selected from <see cref="FromRunId"/>. Defaults to Findings and Failed (a failed test run has
+        /// no parsed findings but still needs a fix).
+        /// </summary>
+        [CollectionBound(CollectionLimits.MaxConfigItems)]
+        public List<FleetActionTargetStatusEnum>? FromTargetStatuses { get; set; } = null;
 
         /// <summary>
         /// Optional concurrency for this run; defaults to the action's DefaultConcurrency; clamped 1 to 32.

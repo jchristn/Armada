@@ -74,9 +74,9 @@ namespace Armada.Server
                 return Remote(harbors, harborId!, null);
             }
 
-            if (harbors != null && captain != null && !String.IsNullOrWhiteSpace(captain.CurrentDockId))
+            if (harbors != null && captain != null)
             {
-                Dock? dock = await _Database.Docks.ReadAsync(captain.CurrentDockId!, token).ConfigureAwait(false);
+                Dock? dock = await CaptainContextResolver.ReadDockAsync(_Database, captain, token).ConfigureAwait(false);
                 if (dock != null && !String.IsNullOrWhiteSpace(dock.HarborId) && harbors.IsConnected(dock.HarborId!))
                     return Remote(harbors, dock.HarborId!, dock.WorktreePath);
             }

@@ -341,15 +341,15 @@ namespace Test.Shared.Suites.Database
 
                     // Captain with null optional fields
                     Captain captain = new Captain("Null Test Captain");
-                    captain.CurrentMissionId = null;
-                    captain.CurrentDockId = null;
+                    captain.Assignment = null;
+
                     captain.ProcessId = null;
                     captain.LastHeartbeatUtc = null;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
                     Captain? readCaptain = await db.Captains.ReadAsync(captain.Id);
                     AssertNotNull(readCaptain, "Captain should be readable");
-                    AssertNull(readCaptain!.CurrentMissionId, "Captain CurrentMissionId should be null");
-                    AssertNull(readCaptain.CurrentDockId, "Captain CurrentDockId should be null");
+                    AssertNull(readCaptain!.ActiveMissionIds.SingleOrDefault(), "Captain CurrentMissionId should be null");
+                    AssertNull(readCaptain.Assignment?.DockId, "Captain CurrentDockId should be null");
                     AssertNull(readCaptain.ProcessId, "Captain ProcessId should be null");
                     AssertNull(readCaptain.LastHeartbeatUtc, "Captain LastHeartbeatUtc should be null");
                 }
@@ -364,7 +364,7 @@ namespace Test.Shared.Suites.Database
                     // Create one Idle captain
                     Captain captain = new Captain("Contested Captain");
                     captain.State = CaptainStateEnum.Idle;
-                    await db.Captains.CreateAsync(captain);
+                    await CaptainAssignmentFixture.CreateAsync(db, captain);
 
                     // Create a mission and a dock for claiming
                     Mission mission = new Mission("Contested Mission");
@@ -397,8 +397,9 @@ namespace Test.Shared.Suites.Database
                     Captain? updatedCaptain = await db.Captains.ReadAsync(captain.Id);
                     AssertNotNull(updatedCaptain, "Captain should still exist");
                     AssertEqual(CaptainStateEnum.Working, updatedCaptain!.State, "Captain should be Working after claim");
-                    AssertEqual(mission.Id, updatedCaptain.CurrentMissionId, "Captain should have the mission assigned");
-                    AssertEqual(dock.Id, updatedCaptain.CurrentDockId, "Captain should have the dock assigned");
+                    AssertEqual(mission.Id, updatedCaptain.ActiveMissionIds.SingleOrDefault(), "Captain should have the mission assigned");
+                    AssertNull(updatedCaptain.Assignment, "Captain does not project a representative dock");
+                    AssertEqual(dock.Id, (await db.Missions.ReadAsync(mission.Id))!.DockId, "mission owns the dock");
                 }
             }));
 

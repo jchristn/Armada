@@ -60,8 +60,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                 using (NpgsqlCommand cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = @"INSERT INTO vessels (id, tenant_id, user_id, fleet_id, name, repo_url, local_path, working_directory, preferred_harbor_id, required_capabilities, project_context, style_guide, enable_model_context, model_context, github_token_override, landing_mode, branch_cleanup_policy, require_passing_checks_to_land, auto_approve, allow_concurrent_missions, default_pipeline_id, default_branch, protected_branch_patterns_json, release_branch_prefix, hotfix_branch_prefix, require_pull_request_for_protected_branches, require_merge_queue_for_release_branches, secret_scan_enabled, protected_path_patterns_json, private_identifier_denylist_json, auto_land_enabled, auto_land_max_files, auto_land_max_lines, auto_land_path_allow_globs_json, auto_land_path_deny_globs_json, definition_of_done_enabled, definition_of_done_build_command, definition_of_done_test_command, test_command, lint_command, audit_command, definition_of_done_timeout_seconds, active, created_utc, last_update_utc)
-                        VALUES (@id, @tenant_id, @user_id, @fleet_id, @name, @repo_url, @local_path, @working_directory, @preferred_harbor_id, @required_capabilities, @project_context, @style_guide, @enable_model_context, @model_context, @github_token_override, @landing_mode, @branch_cleanup_policy, @require_passing_checks_to_land, @auto_approve, @allow_concurrent_missions, @default_pipeline_id, @default_branch, @protected_branch_patterns_json, @release_branch_prefix, @hotfix_branch_prefix, @require_pull_request_for_protected_branches, @require_merge_queue_for_release_branches, @secret_scan_enabled, @protected_path_patterns_json, @private_identifier_denylist_json, @auto_land_enabled, @auto_land_max_files, @auto_land_max_lines, @auto_land_path_allow_globs_json, @auto_land_path_deny_globs_json, @definition_of_done_enabled, @definition_of_done_build_command, @definition_of_done_test_command, @test_command, @lint_command, @audit_command, @definition_of_done_timeout_seconds, @active, @created_utc, @last_update_utc);";
+                    cmd.CommandText = @"INSERT INTO vessels (id, tenant_id, user_id, fleet_id, name, repo_url, local_path, working_directory, preferred_harbor_id, required_capabilities, project_context, style_guide, enable_model_context, model_context, github_token_override, landing_mode, branch_cleanup_policy, require_passing_checks_to_land, auto_approve, max_parallel_voyages, max_parallel_missions_per_voyage, default_pipeline_id, default_branch, protected_branch_patterns_json, release_branch_prefix, hotfix_branch_prefix, require_pull_request_for_protected_branches, require_merge_queue_for_release_branches, secret_scan_enabled, protected_path_patterns_json, private_identifier_denylist_json, auto_land_enabled, auto_land_max_files, auto_land_max_lines, auto_land_path_allow_globs_json, auto_land_path_deny_globs_json, definition_of_done_enabled, definition_of_done_build_command, definition_of_done_test_command, test_command, lint_command, audit_command, worker_envelope_json, blackbox_retention_days, serialize_overlapping_missions, definition_of_done_timeout_seconds, active, created_utc, last_update_utc)
+                        VALUES (@id, @tenant_id, @user_id, @fleet_id, @name, @repo_url, @local_path, @working_directory, @preferred_harbor_id, @required_capabilities, @project_context, @style_guide, @enable_model_context, @model_context, @github_token_override, @landing_mode, @branch_cleanup_policy, @require_passing_checks_to_land, @auto_approve, @max_parallel_voyages, @max_parallel_missions_per_voyage, @default_pipeline_id, @default_branch, @protected_branch_patterns_json, @release_branch_prefix, @hotfix_branch_prefix, @require_pull_request_for_protected_branches, @require_merge_queue_for_release_branches, @secret_scan_enabled, @protected_path_patterns_json, @private_identifier_denylist_json, @auto_land_enabled, @auto_land_max_files, @auto_land_max_lines, @auto_land_path_allow_globs_json, @auto_land_path_deny_globs_json, @definition_of_done_enabled, @definition_of_done_build_command, @definition_of_done_test_command, @test_command, @lint_command, @audit_command, @worker_envelope_json, @blackbox_retention_days, @serialize_overlapping_missions, @definition_of_done_timeout_seconds, @active, @created_utc, @last_update_utc);";
                     cmd.Parameters.AddWithValue("@id", vessel.Id);
                     cmd.Parameters.AddWithValue("@tenant_id", (object?)vessel.TenantId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@user_id", (object?)vessel.UserId ?? DBNull.Value);
@@ -81,7 +81,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@branch_cleanup_policy", vessel.BranchCleanupPolicy.HasValue ? vessel.BranchCleanupPolicy.Value.ToString() : DBNull.Value);
                     cmd.Parameters.AddWithValue("@require_passing_checks_to_land", vessel.RequirePassingChecksToLand);
                     cmd.Parameters.AddWithValue("@auto_approve", vessel.AutoApprove.HasValue ? (object)vessel.AutoApprove.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@allow_concurrent_missions", vessel.AllowConcurrentMissions);
+                    cmd.Parameters.AddWithValue("@max_parallel_voyages", vessel.MaxParallelVoyages);
+                    cmd.Parameters.AddWithValue("@max_parallel_missions_per_voyage", vessel.MaxParallelMissionsPerVoyage);
                     cmd.Parameters.AddWithValue("@default_pipeline_id", (object?)vessel.DefaultPipelineId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@default_branch", vessel.DefaultBranch);
                     cmd.Parameters.AddWithValue("@protected_branch_patterns_json", JsonSerializer.Serialize(vessel.ProtectedBranchPatterns ?? new List<string>()));
@@ -103,6 +104,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@test_command", (object?)vessel.TestCommand ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@lint_command", (object?)vessel.LintCommand ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@audit_command", (object?)vessel.AuditCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@worker_envelope_json", (object?)Armada.Core.Services.WorkerEnvelopeRules.ToJson(vessel.WorkerEnvelope) ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@blackbox_retention_days", vessel.BlackBoxRetentionDays.HasValue ? (object)vessel.BlackBoxRetentionDays.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@serialize_overlapping_missions", vessel.SerializeOverlappingMissions);
                     cmd.Parameters.AddWithValue("@definition_of_done_timeout_seconds", vessel.DefinitionOfDoneTimeoutSeconds);
                     cmd.Parameters.AddWithValue("@active", vessel.Active);
                     cmd.Parameters.AddWithValue("@created_utc", vessel.CreatedUtc);
@@ -194,8 +198,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         branch_cleanup_policy = @branch_cleanup_policy,
                         require_passing_checks_to_land = @require_passing_checks_to_land,
                         auto_approve = @auto_approve,
-                        allow_concurrent_missions = @allow_concurrent_missions,
-                        default_pipeline_id = @default_pipeline_id,
+                        max_parallel_voyages = @max_parallel_voyages,
+                            max_parallel_missions_per_voyage = @max_parallel_missions_per_voyage,
                         default_branch = @default_branch,
                         protected_branch_patterns_json = @protected_branch_patterns_json,
                         release_branch_prefix = @release_branch_prefix,
@@ -216,6 +220,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
                         test_command = @test_command,
                         lint_command = @lint_command,
                         audit_command = @audit_command,
+                        worker_envelope_json = @worker_envelope_json,
+                        blackbox_retention_days = @blackbox_retention_days,
+                        serialize_overlapping_missions = @serialize_overlapping_missions,
                         definition_of_done_timeout_seconds = @definition_of_done_timeout_seconds,
                         active = @active,
                         last_update_utc = @last_update_utc
@@ -239,7 +246,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@branch_cleanup_policy", vessel.BranchCleanupPolicy.HasValue ? vessel.BranchCleanupPolicy.Value.ToString() : DBNull.Value);
                     cmd.Parameters.AddWithValue("@require_passing_checks_to_land", vessel.RequirePassingChecksToLand);
                     cmd.Parameters.AddWithValue("@auto_approve", vessel.AutoApprove.HasValue ? (object)vessel.AutoApprove.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@allow_concurrent_missions", vessel.AllowConcurrentMissions);
+                    cmd.Parameters.AddWithValue("@max_parallel_voyages", vessel.MaxParallelVoyages);
+                    cmd.Parameters.AddWithValue("@max_parallel_missions_per_voyage", vessel.MaxParallelMissionsPerVoyage);
                     cmd.Parameters.AddWithValue("@default_pipeline_id", (object?)vessel.DefaultPipelineId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@default_branch", vessel.DefaultBranch);
                     cmd.Parameters.AddWithValue("@protected_branch_patterns_json", JsonSerializer.Serialize(vessel.ProtectedBranchPatterns ?? new List<string>()));
@@ -261,6 +269,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
                     cmd.Parameters.AddWithValue("@test_command", (object?)vessel.TestCommand ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@lint_command", (object?)vessel.LintCommand ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@audit_command", (object?)vessel.AuditCommand ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@worker_envelope_json", (object?)Armada.Core.Services.WorkerEnvelopeRules.ToJson(vessel.WorkerEnvelope) ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@blackbox_retention_days", vessel.BlackBoxRetentionDays.HasValue ? (object)vessel.BlackBoxRetentionDays.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@serialize_overlapping_missions", vessel.SerializeOverlappingMissions);
                     cmd.Parameters.AddWithValue("@definition_of_done_timeout_seconds", vessel.DefinitionOfDoneTimeoutSeconds);
                     cmd.Parameters.AddWithValue("@active", vessel.Active);
                     cmd.Parameters.AddWithValue("@last_update_utc", vessel.LastUpdateUtc);
@@ -759,8 +770,8 @@ namespace Armada.Core.Database.Postgresql.Implementations
             string? branchCleanupStr = NullableString(reader["branch_cleanup_policy"]);
             if (!String.IsNullOrEmpty(branchCleanupStr) && Enum.TryParse<BranchCleanupPolicyEnum>(branchCleanupStr, out BranchCleanupPolicyEnum bcp))
                 vessel.BranchCleanupPolicy = bcp;
-            try { vessel.AllowConcurrentMissions = (bool)reader["allow_concurrent_missions"]; }
-            catch { vessel.AllowConcurrentMissions = false; }
+            vessel.MaxParallelVoyages = Convert.ToInt32(reader["max_parallel_voyages"]);
+            vessel.MaxParallelMissionsPerVoyage = Convert.ToInt32(reader["max_parallel_missions_per_voyage"]);
             try { vessel.DefaultPipelineId = NullableString(reader["default_pipeline_id"]); } catch { }
             try { vessel.RequirePassingChecksToLand = Convert.ToBoolean(reader["require_passing_checks_to_land"]); } catch { }
             try { object autoApproveValue = reader["auto_approve"]; vessel.AutoApprove = autoApproveValue == null || autoApproveValue == DBNull.Value ? (bool?)null : Convert.ToBoolean(autoApproveValue); }
@@ -817,6 +828,9 @@ namespace Armada.Core.Database.Postgresql.Implementations
             try { vessel.TestCommand = NullableString(reader["test_command"]); } catch { }
             try { vessel.LintCommand = NullableString(reader["lint_command"]); } catch { }
             try { vessel.AuditCommand = NullableString(reader["audit_command"]); } catch { }
+            try { vessel.WorkerEnvelope = Armada.Core.Services.WorkerEnvelopeRules.FromJson(NullableString(reader["worker_envelope_json"])); } catch { }
+            try { vessel.BlackBoxRetentionDays = reader["blackbox_retention_days"] == DBNull.Value ? null : Convert.ToInt32(reader["blackbox_retention_days"]); } catch { }
+            try { vessel.SerializeOverlappingMissions = Convert.ToBoolean(reader["serialize_overlapping_missions"]); } catch { vessel.SerializeOverlappingMissions = false; }
             try { vessel.DefinitionOfDoneTimeoutSeconds = Convert.ToInt32(reader["definition_of_done_timeout_seconds"]); } catch { }
             vessel.DefaultBranch = reader["default_branch"].ToString()!;
             vessel.Active = (bool)reader["active"];

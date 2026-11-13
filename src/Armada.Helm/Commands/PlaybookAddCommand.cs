@@ -4,6 +4,7 @@ namespace Armada.Helm.Commands
     using Spectre.Console;
     using Spectre.Console.Cli;
     using Armada.Core.Models;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Add a new playbook.
@@ -19,7 +20,7 @@ namespace Armada.Helm.Commands
             {
                 if (!File.Exists(settings.FromFile))
                 {
-                    AnsiConsole.MarkupLine($"[red]File not found:[/] {Markup.Escape(settings.FromFile)}");
+                    HelmConsole.Error.MarkupLine($"[red]File not found:[/] {Markup.Escape(settings.FromFile)}");
                     return 1;
                 }
                 content = await File.ReadAllTextAsync(settings.FromFile, cancellationToken).ConfigureAwait(false);

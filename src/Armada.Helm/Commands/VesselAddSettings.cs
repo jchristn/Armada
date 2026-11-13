@@ -31,14 +31,14 @@ namespace Armada.Helm.Commands
         /// Optional fleet identifier or name.
         /// </summary>
         [Description("Fleet name or ID")]
-        [CommandOption("--fleet|-f")]
+        [CommandOption("--fleet|-f <FLEET>")]
         public string? Fleet { get; set; }
 
         /// <summary>
         /// Optional branch name.
         /// </summary>
         [Description("Default branch name")]
-        [CommandOption("--branch|-b")]
+        [CommandOption("--branch|-b <BRANCH>")]
         public string? Branch { get; set; }
     }
 }

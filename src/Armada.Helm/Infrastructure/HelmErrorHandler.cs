@@ -4,13 +4,14 @@ namespace Armada.Helm.Infrastructure
     using System.IO;
     using System.Net;
     using System.Net.Http;
+    using System.Text.RegularExpressions;
     using Spectre.Console;
     using Spectre.Console.Cli;
 
     /// <summary>
-    /// Renders an exception that escaped a CLI command. Targeting errors (<see cref="AdmiralTargetException"/>) and
-    /// 401/403 responses get a one-line explanation on stderr; anything else is rendered the way Spectre.Console.Cli
-    /// renders it by default.
+    /// Renders an exception that escaped a CLI command, always on stderr. Targeting errors
+    /// (<see cref="AdmiralTargetException"/>) and 401/403 responses get a one-line explanation with a hint; parse errors
+    /// render the way Spectre.Console.Cli renders them; anything else prints the server's or exception's message.
     /// </summary>
     public static class HelmErrorHandler
     {
@@ -64,19 +65,61 @@ namespace Armada.Helm.Infrastructure
                 return TargetErrorExitCode;
             }
 
-            if (exception is CommandAppException app && app.Pretty != null)
+            // Diagnostics go to stderr so a script that reads stdout never parses an error as a result.
+            IAnsiConsole console = ErrorConsole(error);
+            string? conversion = DescribeConversionFailure(exception.Message);
+            if (conversion != null)
             {
-                AnsiConsole.Write(app.Pretty);
+                console.MarkupLine("[red]Error:[/] " + Markup.Escape(conversion));
                 return -1;
             }
 
-            AnsiConsole.MarkupLine("[red]Error:[/] " + Markup.Escape(exception.Message));
+            if (exception is CommandAppException app && app.Pretty != null)
+            {
+                console.Write(app.Pretty);
+                return -1;
+            }
+
+            console.MarkupLine("[red]Error:[/] " + Markup.Escape(inner.Message));
             return -1;
         }
 
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Spectre reports a bad option value as "Failed to convert 'abc' to Nullable`1." which names a CLR type,
+        /// not what the user should type. Rewrite it in plain words; return null for any other message.
+        /// </summary>
+        private static string? DescribeConversionFailure(string? message)
+        {
+            if (String.IsNullOrEmpty(message)) return null;
+            Match match = Regex.Match(message, "^Failed to convert '(?<value>.*)' to (?<type>[^ ]+)\\.$", RegexOptions.Singleline);
+            if (!match.Success) return null;
+
+            string value = match.Groups["value"].Value;
+            string type = match.Groups["type"].Value;
+            string expected;
+            if (type.StartsWith("Int", StringComparison.Ordinal) || type.StartsWith("UInt", StringComparison.Ordinal) || type.StartsWith("Nullable", StringComparison.Ordinal))
+                expected = "a number";
+            else if (type == "Double" || type == "Single" || type == "Decimal")
+                expected = "a number";
+            else if (type == "Boolean")
+                expected = "true or false";
+            else if (type == "DateTime" || type == "DateTimeOffset")
+                expected = "a date such as 2026-01-31";
+            else
+                expected = "a valid " + type + " value";
+
+            return "Invalid value '" + value + "': expected " + expected + ". Run the command with --help to see each option's format.";
+        }
+
+        private static IAnsiConsole ErrorConsole(TextWriter error)
+        {
+            if (ReferenceEquals(error, Console.Error)) return HelmConsole.Error;
+            return AnsiConsole.Create(new AnsiConsoleSettings { Out = new AnsiConsoleOutput(error), Ansi = AnsiSupport.No, ColorSystem = ColorSystemSupport.NoColors });
+        }
 
         private static Exception Unwrap(Exception exception)
         {

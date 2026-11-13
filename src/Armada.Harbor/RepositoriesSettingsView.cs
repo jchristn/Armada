@@ -5,6 +5,7 @@ namespace Armada.Harbor
     using System.Threading.Tasks;
     using Armada.Core.Harbor;
     using Avalonia;
+    using Avalonia.Automation;
     using Avalonia.Controls;
     using Avalonia.Layout;
     using Avalonia.Platform.Storage;
@@ -43,17 +44,19 @@ namespace Armada.Harbor
             StackPanel checkouts = new StackPanel { Spacing = 8 };
             checkouts.Children.Add(HarborUi.Help("A vessel (by name or ID) and the folder of its checkout on this computer."));
             checkouts.Children.Add(_MappingRows);
-            checkouts.Children.Add(HarborUi.Button("Add vessel checkout", () => AddMapping(String.Empty, String.Empty), "Name a vessel (by name or ID) and the folder of its checkout on this machine"));
+            checkouts.Children.Add(HarborUi.Button("Add Vessel Checkout", () => AddMapping(String.Empty, String.Empty), "Name a vessel (by name or ID) and the folder of its checkout on this machine"));
 
             StackPanel roots = new StackPanel { Spacing = 8 };
             roots.Children.Add(HarborUi.Help("Searched up to three folders deep for checkouts of vessels not named above."));
             roots.Children.Add(_RootRows);
-            roots.Children.Add(HarborUi.Button("Add root folder", () => AddRoot(String.Empty), "Add a folder that holds your code, such as ~/Code. Harbor searches it up to three levels deep for checkouts of vessels."));
+            roots.Children.Add(HarborUi.Button("Add Root Folder", () => AddRoot(String.Empty), "Add a folder that holds your code, such as ~/Code. Harbor searches it up to three levels deep for checkouts of vessels."));
 
             StackPanel folders = new StackPanel { Spacing = 6 };
             folders.Children.Add(Label("Docks folder"));
             ToolTip.SetTip(_DocksDirectory, "Folder where Harbor creates a git worktree (dock) for each mission, as <vessel>/<mission>. Leave empty for the default shown. Keep it outside your code folders so tools do not index the docks.");
             ToolTip.SetTip(_ReposDirectory, "Folder where Harbor keeps its own bare clone of a vessel it has no checkout of. Leave empty for the default shown.");
+            AutomationProperties.SetName(_DocksDirectory, "Docks folder");
+            AutomationProperties.SetName(_ReposDirectory, "Clones folder");
             folders.Children.Add(PathRow(_DocksDirectory));
             folders.Children.Add(HarborUi.Help("Mission docks are created here as <vessel>/<mission>. Keep it outside your code folders."));
             folders.Children.Add(Label("Clones folder"));
@@ -165,8 +168,10 @@ namespace Armada.Harbor
         private void AddMapping(string vessel, string path)
         {
             TextBox vesselBox = new TextBox { Text = vessel, PlaceholderText = "Vessel name or ID" };
+            AutomationProperties.SetName(vesselBox, "Vessel name or ID");
             ToolTip.SetTip(vesselBox, "The vessel, by its name or its vsl_ ID, whose checkout is the folder on the right");
             TextBox pathBox = new TextBox { Text = path, PlaceholderText = "/path/to/checkout" };
+            AutomationProperties.SetName(pathBox, "Checkout folder");
             ToolTip.SetTip(pathBox, "The folder of your own git checkout of that vessel on this computer. Harbor runs checks and local merges there.");
             MappingRow row = new MappingRow(vesselBox, pathBox);
 
@@ -192,6 +197,7 @@ namespace Armada.Harbor
         private void AddRoot(string folder)
         {
             TextBox box = new TextBox { Text = folder, PlaceholderText = "/path/to/your/code" };
+            AutomationProperties.SetName(box, "Root folder");
             ToolTip.SetTip(box, "A folder that holds your code. Harbor looks up to three levels deep for checkouts of vessels not listed above.");
             Grid grid = PathRow(box);
             Button remove = HarborUi.Button("Remove", () =>

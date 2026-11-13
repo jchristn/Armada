@@ -53,9 +53,13 @@ import type { OperationsDetailProps } from './listTypes';
 import { AssignmentBlockerCard, LandingPreviewCard, PullRequestCard } from './mission/MissionCards';
 import { MissionFormSheet, type MissionFormValues } from './mission/MissionFormSheet';
 import { MissionDiffTab, MissionInstructionsTab, MissionLogTab } from './mission/MissionTabs';
+import { CaptainSelectionSection } from './mission/CaptainSelectionSection';
+import { MissionChildrenSection, MissionWaitsSection } from './mission/MissionWaitsSection';
 import { ReviewSheet } from './mission/ReviewSheet';
 import { TransitionSheet } from './mission/TransitionSheet';
 import { externalUrl, openExternalUrl } from '../../lib/externalLinks';
+import { BlackBoxPanel } from '../blackbox/BlackBoxPanel';
+import { missionMayHaveBlackBox } from '../blackbox/blackBoxModel';
 
 export const MISSION_DETAIL_TABS = ['overview', 'diff', 'log', 'instructions'] as const;
 export type MissionDetailTab = (typeof MISSION_DETAIL_TABS)[number];
@@ -78,7 +82,9 @@ export interface MissionDetailProps extends OperationsDetailProps {
  * landing preview, GitHub pull request evidence, every field and link, linked checks and deployments, description,
  * playbooks, and the diff, log, and instructions (as tabs, each with its own scroll). Actions: resolve review,
  * mark complete, land / retry landing, manual merge (Landing Mode None), run check, transition, edit, restart,
- * purge, delete, and View JSON. Follows the mission live over the socket.
+ * purge, delete, and View JSON. A failed, landing-failed or cancelled mission shows its black box (summary, recovery,
+ * Resolve, Share, Copy FIX THIS, Ask Armada) in place of the bare failure reason. Follows the mission live over the
+ * socket.
  */
 export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted }: MissionDetailProps) {
   const { t, formatDateTime, formatRelativeTime } = useLocale();
@@ -279,6 +285,12 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
   );
   const preferredFellBack = !!mission.requestedCaptainId && !!mission.captainId && mission.captainId !== mission.requestedCaptainId;
 
+  const failureReason = mission.failureReason ? (
+    <Section title={t('Failure Reason')}>
+      <View style={styles.pad}><CodeBlock wrap text={mission.failureReason} testID="mission-failure-reason" /></View>
+    </Section>
+  ) : null;
+
   const overview = (
     <ScrollView
       testID="mission-overview"
@@ -286,7 +298,9 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
       refreshControl={<RefreshControl refreshing={missionQuery.refreshing} onRefresh={() => void missionQuery.refresh()} tintColor={colors.primary} />}
     >
       <View style={styles.primaryActions}>
-        {state.canResolveReview ? <Button label={t('Resolve Review')} onPress={() => setReviewOpen(true)} testID="mission-action-review" /> : null}
+        <CaptainSelectionSection missionId={mission.id} status={mission.status} revision={mission.lastUpdateUtc} onOpen={open} />
+
+      {state.canResolveReview ? <Button label={t('Resolve Review')} onPress={() => setReviewOpen(true)} testID="mission-action-review" /> : null}
         {state.canMarkComplete ? <Button label={t('Mark Complete')} onPress={markComplete} testID="mission-action-complete" /> : null}
         {state.showLand ? (
           <Button
@@ -316,6 +330,9 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
         <PullRequestCard prUrl={mission.prUrl} evidence={prQuery.data ?? null} loading={prQuery.loading || prQuery.refreshing} onRefresh={() => void prQuery.refresh()} />
       ) : null}
 
+      <MissionWaitsSection mission={mission} />
+      <MissionChildrenSection missionId={mission.id} />
+
       <Section title={t('Details')}>
         <KeyValueRow label={t('ID')} value={mission.id} mono testID="mission-detail-id" />
         <KeyValueRow label={t('Tenant ID')} value={mission.tenantId} mono />
@@ -341,6 +358,7 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
           onPress={mission.requestedCaptainId ? () => open(`/captains/${mission.requestedCaptainId}`) : undefined}
         />
         <KeyValueRow label={t('Actual Captain')} value={mission.captainId ? names.captainName(mission.captainId) : null} onPress={mission.captainId ? () => open(`/captains/${mission.captainId}`) : undefined} />
+        {mission.rescueOfMissionId ? <KeyValueRow label={t('Rescue of')} value={mission.rescueOfMissionId} mono onPress={() => open(`/missions/${mission.rescueOfMissionId}`)} /> : null}
         <KeyValueRow label={t('Parent Mission')} value={mission.parentMissionId} mono onPress={mission.parentMissionId ? () => open(`/missions/${mission.parentMissionId}`) : undefined} />
         <KeyValueRow label={t('Persona')} value={mission.persona || t('Worker')} />
         {mission.dependsOnMissionId ? (
@@ -363,11 +381,9 @@ export function MissionDetail({ id, embedded, initialTab = 'overview', onDeleted
         <KeyValueRow label={t('Linked Deployments')} value={linked.deployments.length} />
       </Section>
 
-      {mission.failureReason ? (
-        <Section title={t('Failure Reason')}>
-          <View style={styles.pad}><CodeBlock wrap text={mission.failureReason} testID="mission-failure-reason" /></View>
-        </Section>
-      ) : null}
+      {missionMayHaveBlackBox(mission.status, mission.failureReason) ? (
+        <BlackBoxPanel source={{ kind: 'mission', id: mission.id }} fallback={failureReason} />
+      ) : failureReason}
       {mission.reviewComment ? (
         <Section title={t('Review Comment')}>
           <View style={styles.pad}><CodeBlock wrap text={mission.reviewComment} /></View>

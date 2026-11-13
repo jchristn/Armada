@@ -8,6 +8,7 @@ namespace Test.Shared.Suites.Services
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
+    using Armada.Core.Services;
     using Armada.Core.Services.Push;
     using Armada.Core.Settings;
     using SyslogLogging;
@@ -492,6 +493,19 @@ namespace Test.Shared.Suites.Services
 
                 List<PushMessage> tooMany = Enumerable.Range(0, 101).Select(i => message).ToList();
                 await AssertThrowsAsync<ArgumentException>(() => transport.SendAsync(tooMany, null), "more than 100").ConfigureAwait(false);
+            }));
+
+            cases.Add(CaseAsync("category_bounds_cover_every_category", "Push settings and device category bounds admit every defined category, so a settings GET can be PUT back", () =>
+            {
+                int defined = PushSettings.AllCategories().Count;
+                AssertTrue(CollectionBounds.BoundOf(typeof(PushSettings).GetProperty(nameof(PushSettings.Categories))!)!.Limit >= defined, "settings bound admits every category");
+                AssertTrue(CollectionBounds.BoundOf(typeof(PushDevice).GetProperty(nameof(PushDevice.Categories))!)!.Limit >= defined, "device bound admits every category");
+                ArmadaSettings settings = new ArmadaSettings();
+                CollectionBounds.Validate(settings.Push);
+                PushDevice device = new PushDevice();
+                device.Categories = PushSettings.AllCategories();
+                CollectionBounds.Validate(device);
+                return Task.CompletedTask;
             }));
 
             return new TestSuiteDescriptor(

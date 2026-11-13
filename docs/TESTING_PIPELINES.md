@@ -159,6 +159,23 @@ Wire into the request pipeline for all GET routes.
 Files: src/Middleware/CacheMiddleware.cs, src/Startup.cs
 ```
 
+The current plan contract is v4. To test the hierarchy, have the Architect make the middleware a child of the
+service, with disjoint owned paths:
+
+```json
+{ "contractVersion": 4, "missions": [
+  { "title": "Add CacheService with TTL support", "ownedPaths": ["src/Services/CacheService.cs", "src/Services/Interfaces/ICacheService.cs"] },
+  { "title": "Add caching middleware to GET endpoints", "parent": 1, "ownedPaths": ["src/Middleware/CacheMiddleware.cs", "src/Startup.cs"] }
+] }
+```
+
+(Other plan fields such as requirements and acceptance criteria are omitted here; see
+[PIPELINES.md](PIPELINES.md#9-architect-special-handling).) Then also verify: the second Worker has `parentMissionId`
+set to the first slice's Worker, waits with `ParentNotFinished` until that slice finishes, continues its branch
+(`BranchStrategy` `ContinueParent`), and `GET /api/v1/voyages/{id}/tree` shows it under the first slice. Without
+`parent` the two slices are siblings and can run in parallel. A v4 plan whose parallel missions own the same path is
+rejected and repaired ("Missions 1 and 2 can run in parallel but both own ...").
+
 3. The original Worker mission is updated with the first parsed mission's title and description (title
    `"Add CacheService with TTL support [Worker]"`)
 4. A second Worker mission is created for the second parsed mission
@@ -379,7 +396,10 @@ enumerate({
   `AssignmentBlocker` on `GET /api/v1/missions/{id}`)
 - Check `dependsOnMissionId` -- the dependency mission may not have completed yet, or may be waiting in `Review` for
   its review gate to be approved
-- Check if any idle captains are available
+- Check that an eligible captain has a free slot (`ActiveMissionCount` below `MaxConcurrency`) and that the vessel's
+  `MaxParallelVoyages` and `MaxParallelMissionsPerVoyage` are not full (`vessel_concurrency` or
+  `GET /api/v1/vessels/{id}/concurrency`); see [SCHEDULING.md](SCHEDULING.md#capacity)
+- A child mission (`parentMissionId` set) waits with `ParentNotFinished` until its parent finishes
 - If `AllowedPersonas` is set on all captains, verify at least one can fill the required persona
 
 **Architect didn't produce multiple missions:**

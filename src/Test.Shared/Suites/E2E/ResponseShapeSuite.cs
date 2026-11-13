@@ -45,22 +45,32 @@ namespace Test.Shared.Suites.E2E
         {
             ["GET /api/v1/ask/quick-actions"] = 10,
             ["MCP list_ask_quick_actions"] = 10,
-            ["GET /api/v1/doctor"] = 11,
+            ["GET /api/v1/doctor"] = 12,
         };
 
         // Models in Armada.Core.Models that no REST route, MCP tool or WebSocket command returns, with why. They are not
         // roots of the declared-bounds check, but a response model that reaches one makes it checked again.
         private static readonly Dictionary<string, string> _InternalModels = new Dictionary<string, string>(StringComparer.Ordinal)
         {
+            ["CaptainSelectionRecordSet"] = "Internal atomic ledger write aggregate; APIs return bounded redacted decision/candidate DTOs",
+            ["UsageSelectionCandidateResult"] = "Internal per-candidate pure-policy result; transports map to redacted paginated candidate views",
+            ["UsageSelectionCandidate"] = "Internal pure-policy input with normalized window evidence; never returned by transports",
+            ["UsageSelectionEvaluation"] = "Internal complete policy evaluation; API comparison results are authorized and paginated",
             ["CaptainChatTurnResult"] = "In-process result of an Ask turn; its tool calls are stored and read through the paged Ask tool-call enumerations",
             ["DockLeaseState"] = "Landing's view of which missions hold a dock, used inside the landing pipeline",
             ["LandingDeferral"] = "Landing pipeline decision to defer a landing, recorded in-process",
+            ["BlackBoxEvictionQuery"] = "Black box garbage collection's quota query, used inside the collector",
+            ["BlackBoxScanQuery"] = "Black box keyset scan used by storage migration, expiry recompute and backup manifests",
+            ["BlackBoxBackupInventory"] = "Black box section of the backup manifest file and restore report, written into the ZIP",
+            ["BlackBoxExternalEntryRef"] = "External-target entry listed in the backup manifest file",
             ["DetectedEcosystem"] = "Workflow-profile provisioning input built from a repository scan",
             ["EcosystemCommand"] = "Workflow-profile provisioning input built from a repository scan",
             ["ResolvedEcosystemCommand"] = "Workflow-profile provisioning input built from a repository scan",
             ["RepositoryLayout"] = "Repository file list used by provisioning on the server",
             ["GitAnchorsSnapshot"] = "Git evidence collected for prompt rendering",
             ["GitCommitMergeResult"] = "Result of the git integration barrier, consumed by the landing pipeline",
+            ["MergeQueueMergeResult"] = "Result of merging a merge queue entry's branch, consumed by the merge queue",
+            ["MergeQueueFailure"] = "Merge queue failure facts, stored as mission.landing_failed event Payload JSON (an event string field)",
             ["RemoteTunnelHandshakePayload"] = "Remote tunnel protocol frame (proxy link), not a REST or MCP response",
             ["RemoteTunnelHandshakeResponse"] = "Remote tunnel protocol frame (proxy link), not a REST or MCP response",
             ["RemoteTunnelHttpRelayRequest"] = "Remote tunnel protocol frame (proxy link), not a REST or MCP response",
@@ -258,6 +268,9 @@ namespace Test.Shared.Suites.E2E
                         string text;
                         try
                         {
+                            // This is a contract crawl, not a load test. Stay below the real default 100 calls/s
+                            // so later assertions exercise their handler instead of a transport throttle reply.
+                            await Task.Delay(20).ConfigureAwait(false);
                             string rpc = await McpTestCalls.CallToolAsync(mcp, tool.Name, arguments).ConfigureAwait(false);
                             E2eMcpToolEnvelope envelope = JsonHelper.Deserialize<E2eMcpToolEnvelope>(rpc);
                             text = envelope.Result?.Content.FirstOrDefault()?.Text ?? "";
@@ -268,6 +281,8 @@ namespace Test.Shared.Suites.E2E
                         }
 
                         string trimmed = text.TrimStart();
+                        AssertFalse(trimmed.StartsWith("Tool '" + tool.Name + "' was not run: the rate limit", StringComparison.Ordinal),
+                            "the contract crawl must not silently skip throttled tool responses");
                         if (!(trimmed.StartsWith("{", StringComparison.Ordinal) || trimmed.StartsWith("[", StringComparison.Ordinal))) continue;
                         if (trimmed.Contains("\"ErrorCode\"", StringComparison.Ordinal) && !trimmed.Contains("\"Objects\"", StringComparison.Ordinal)) continue;
                         exercised++;
@@ -304,7 +319,9 @@ namespace Test.Shared.Suites.E2E
                     string rpc = await McpTestCalls.CallToolAsync(mcp, "delete_missions", new { ids = ids }).ConfigureAwait(false);
                     E2eMcpToolEnvelope envelope = JsonHelper.Deserialize<E2eMcpToolEnvelope>(rpc);
                     string text = envelope.Result?.Content.FirstOrDefault()?.Text ?? "";
-                    McpToolError error = JsonHelper.Deserialize<McpToolError>(text);
+                    McpToolError error;
+                    try { error = JsonHelper.Deserialize<McpToolError>(text); }
+                    catch (System.Text.Json.JsonException) { throw new AssertionException("MCP oversized-request reply was not structured JSON: " + (text.Length > 500 ? text.Substring(0, 500) : text)); }
                     AssertEqual(McpToolErrorCodeEnum.InvalidArgument, error.ErrorCode, text);
                     AssertEqual(CollectionLimitExceededException.ErrorCode, error.Code, text);
                 }

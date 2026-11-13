@@ -4,7 +4,7 @@
 #
 # Seeds a throwaway data directory with src/Armada.PerfSeed (default: 500
 # vessels with health rows, 10,000 missions, 1,000 voyages, 50 captains,
-# 2,000 jobs, 300 Ask threads), starts a Release build of the Admiral on
+# 2,000 jobs, 300 Ask threads, 2,000 captain-selection decisions), starts a Release build of the Admiral on
 # 127.0.0.1 with that data (ARMADA_DATA_DIR; ~/.armada is never touched),
 # measures p50/p95 of the endpoints in scripts/common/perf-measure.py, then
 # stops the server and deletes the data unless --keep is given.
@@ -95,5 +95,5 @@ done
 
 echo "[perf] machine: $(uname -sm), $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo '?') cpus, load: $(uptime | sed 's/.*load average[s]*: //')"
 echo "[perf] measuring: ${WARMUP} warmup + ${RUNS} measured requests per endpoint"
-python3 "${SCRIPT_DIR}/perf-measure.py" "http://127.0.0.1:${PORT}" "$TOKEN" "$RUNS" "$WARMUP" "$OUTPUT"
+python3 "${SCRIPT_DIR}/perf-measure.py" "http://127.0.0.1:${PORT}" "$TOKEN" "$RUNS" "$WARMUP" "$OUTPUT" "${DATA_DIR}/perf-ids.json"
 echo "[perf] TSV results: ${OUTPUT}"

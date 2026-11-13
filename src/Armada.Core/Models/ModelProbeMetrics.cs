@@ -134,12 +134,12 @@ namespace Armada.Core.Models
         public int? SuggestedStallTimeoutSeconds { get; set; } = null;
 
         /// <summary>
-        /// Determinism: distinct normalized answers across the repeats.
+        /// Determinism: distinct complete outputs after case and whitespace normalization, including explanations.
         /// </summary>
         public int? DistinctOutputs { get; set; } = null;
 
         /// <summary>
-        /// Determinism: every repeat gave the same ANSWER line.
+        /// Determinism: every repeat contained the same valid five-integer answer, ignoring explanatory wording.
         /// </summary>
         public bool? AnswerAgreement { get; set; } = null;
 

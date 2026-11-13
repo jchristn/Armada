@@ -104,6 +104,8 @@ export async function withWorkRows(threadId: string, workId: string, snapshot: A
       const page = await enumerateAskWorkTargets(threadId, workId, { pageNumber: 1, pageSize: WORK_ROW_PAGE_SIZE });
       return { ...snapshot, targets: page?.objects ?? [], rowTotal: page?.totalRecords ?? 0 };
     }
+    // A black box card has no rows; empty lists mark it loaded so it is not fetched again.
+    if (type === 'BlackBox') return { ...snapshot, missions: [], targets: [] };
     if (type === 'Voyage' || type === 'Mission') {
       const page = await enumerateAskWorkMissions(threadId, workId, { pageNumber: 1, pageSize: WORK_ROW_PAGE_SIZE, order: 'CreatedAscending' });
       return { ...snapshot, missions: page?.objects ?? [], rowTotal: page?.totalRecords ?? 0 };

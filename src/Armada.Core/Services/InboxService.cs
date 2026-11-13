@@ -104,7 +104,10 @@ namespace Armada.Core.Services
             InboxItemKinds.AskProposal,
             InboxItemKinds.CliPermission,
             InboxItemKinds.Failed,
-            InboxItemKinds.StalledCaptain
+            InboxItemKinds.StalledCaptain,
+            InboxItemKinds.SelectionBlocked,
+            InboxItemKinds.BackgroundJobFailed,
+            InboxItemKinds.ModelAlert
         };
 
         /// <summary>
@@ -181,6 +184,15 @@ namespace Armada.Core.Services
                     case InboxItemKinds.CliPermission:
                         sections.Add(MemorySection(kind, async t => (await PendingCliPermissionsAsync(auth, t).ConfigureAwait(false)).Select(r => CliPermissionItem(auth, r)).ToList()));
                         break;
+                    case InboxItemKinds.BackgroundJobFailed:
+                        sections.Add(BackgroundJobSection(auth));
+                        break;
+                    case InboxItemKinds.ModelAlert:
+                        sections.Add(ModelAlertSection(auth));
+                        break;
+                    case InboxItemKinds.SelectionBlocked:
+                        sections.Add(SelectionBlockedSection(auth));
+                        break;
                     case InboxItemKinds.StalledCaptain:
                         // Captains are a registered set (not operational rows that accumulate), so the stalled ones are read
                         // together and paged here.
@@ -253,6 +265,111 @@ namespace Armada.Core.Services
                 List<InboxItem> items = page.Objects.Select(d => status == DeploymentStatusEnum.PendingApproval ? DeploymentApprovalItem(d) : DeploymentFailedItem(d)).ToList();
                 return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, items, page.TotalRecords);
             });
+        }
+
+        private PagedSection<InboxItem> BackgroundJobSection(AuthContext auth)
+        {
+            return Guarded(InboxItemKinds.BackgroundJobFailed, async (pageNumber, pageSize, token) =>
+            {
+                JobQuery query = new JobQuery { PageNumber = pageNumber, PageSize = pageSize, NeedsAttentionOnly = true };
+                if (!auth.IsAdmin)
+                {
+                    query.TenantId = auth.TenantId;
+                    if (!auth.IsTenantAdmin) query.UserId = auth.UserId;
+                    if (String.IsNullOrEmpty(query.TenantId) || (!auth.IsTenantAdmin && String.IsNullOrEmpty(query.UserId)))
+                        return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, new List<InboxItem>(), 0);
+                }
+                EnumerationResult<Job> page = await _Database.Jobs.EnumeratePageAsync(query, token).ConfigureAwait(false);
+                List<InboxItem> items = page.Objects.Select(job => new InboxItem
+                {
+                    Kind = InboxItemKinds.BackgroundJobFailed, Severity = InboxSeverityEnum.Warning,
+                    Title = "Background task failed: " + JobActivity.DisplayName(job),
+                    EntityName = job.Name, EntityType = "job", EntityId = job.Id,
+                    Detail = (job.ErrorReason ?? "The task could not finish.") + " Open the related view to investigate and retry. A new attempt replaces this item.",
+                    Href = JobActivity.Href(job)
+                }).ToList();
+                return EnumerationResult<InboxItem>.Create(new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize }, items, page.TotalRecords);
+            });
+        }
+
+        /// <summary>Minutes an operator-actionable selection wait lasts before it becomes a Needs You item.</summary>
+        public const int SelectionBlockedMinutes = 15;
+
+        private PagedSection<InboxItem> SelectionBlockedSection(AuthContext auth)
+        {
+            return Guarded(InboxItemKinds.SelectionBlocked, async (pageNumber, pageSize, token) =>
+            {
+                EnumerationQuery paging = new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize };
+                string? tenant = auth.IsAdmin ? null : auth.TenantId;
+                string? user = auth.IsAdmin || auth.IsTenantAdmin ? null : auth.UserId;
+                if (!auth.IsAdmin && (String.IsNullOrEmpty(tenant) || (!auth.IsTenantAdmin && String.IsNullOrEmpty(user))))
+                    return EnumerationResult<InboxItem>.Create(paging, new List<InboxItem>(), 0);
+                EnumerationResult<CaptainSelectionWaitingItem> page = await _Database.CaptainSelections.EnumerateActionableWaitsAsync(tenant, user,
+                    UsageSelectionReasonCodes.OperatorActionable, DateTime.UtcNow.AddMinutes(-SelectionBlockedMinutes), pageNumber, pageSize, token).ConfigureAwait(false);
+                List<InboxItem> items = page.Objects.Select(SelectionBlockedItem).ToList();
+                return EnumerationResult<InboxItem>.Create(paging, items, page.TotalRecords);
+            });
+        }
+
+        private static InboxItem SelectionBlockedItem(CaptainSelectionWaitingItem wait)
+        {
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.SelectionBlocked,
+                Severity = InboxSeverityEnum.Warning,
+                Title = "Captain selection is waiting: " + wait.MissionTitle,
+                EntityName = wait.MissionTitle,
+                EntityType = "mission",
+                EntityId = wait.MissionId,
+                Detail = UsageSelectionText.ForReason(wait.ReasonCode) + " Open the mission's Captain selection section for the evidence and the permitted next step.",
+                Href = "/missions/" + Uri.EscapeDataString(wait.MissionId)
+            };
+        }
+
+        private PagedSection<InboxItem> ModelAlertSection(AuthContext auth)
+        {
+            // Model alerts are advisory and only an admin can apply their suggested actions, so only admins see them.
+            return Guarded(InboxItemKinds.ModelAlert, async (pageNumber, pageSize, token) =>
+            {
+                EnumerationQuery paging = new EnumerationQuery { PageNumber = pageNumber, PageSize = pageSize };
+                if (!auth.IsAdmin && !(auth.IsTenantAdmin && !String.IsNullOrEmpty(auth.TenantId)))
+                    return EnumerationResult<InboxItem>.Create(paging, new List<InboxItem>(), 0);
+                DateTime now = DateTime.UtcNow;
+                ModelAlertQuery query = new ModelAlertQuery
+                {
+                    TenantId = auth.IsAdmin ? null : auth.TenantId,
+                    Status = ModelAlertStatusEnum.Open,
+                    NotIgnoredAtUtc = now,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
+                EnumerationResult<ModelAlert> page = await _Database.ModelAlerts.EnumerateAsync(query, token).ConfigureAwait(false);
+                ModelAlertActionPlanner planner = new ModelAlertActionPlanner(_Database);
+                int ignoreDays = _Settings?.ModelAlerts.DefaultIgnoreDays ?? 7;
+                List<InboxItem> items = new List<InboxItem>();
+                foreach (ModelAlert alert in page.Objects)
+                {
+                    alert.SuggestedActions = (await planner.PlanAsync(alert, auth, ignoreDays, token).ConfigureAwait(false)).Actions;
+                    items.Add(ModelAlertItem(alert));
+                }
+                return EnumerationResult<InboxItem>.Create(paging, items, page.TotalRecords);
+            });
+        }
+
+        private static InboxItem ModelAlertItem(ModelAlert alert)
+        {
+            return new InboxItem
+            {
+                Kind = InboxItemKinds.ModelAlert,
+                Severity = InboxSeverityEnum.Info,
+                Title = alert.Title,
+                EntityName = String.IsNullOrWhiteSpace(alert.Model) ? alert.ProfileId : alert.Model,
+                Detail = alert.Detail,
+                EntityType = "model_alert",
+                EntityId = alert.Id,
+                Href = "/inbox?modelAlert=" + alert.Id,
+                ModelAlert = alert
+            };
         }
 
         private PagedSection<InboxItem> MemorySection(string kind, Func<CancellationToken, Task<List<InboxItem>>> load)

@@ -3,6 +3,7 @@ import type { AskMissionSnapshot, AskTargetSnapshot, AskTrackedWork, AskWorkSnap
 import { useLocale } from '../../context/LocaleContext';
 import StatusBadge from '../shared/StatusBadge';
 import { entityTypeLabel, isFailedChildStatus, isWorkActive, statusCounts, workProgress, workRoute } from '../../lib/askWork';
+import AskBlackBoxCard from './AskBlackBoxCard';
 
 /** Localized label for a tracked entity type; unknown types render as-is. */
 export function useEntityTypeLabel(): (entityType: string | null | undefined) => string {
@@ -118,7 +119,7 @@ function TargetRow({ target }: { target: AskTargetSnapshot }) {
 /**
  * The live card for one tracked item (voyage, mission, fleet action run, job, import batch): status, a progress
  * bar, counts by status, and per-mission / per-target rows linking to the normal detail pages. Updated in place
- * from `ask.work` events.
+ * from `ask.work` events. A black box entry shows its summary, conflicts, recovery paths and follow-ups instead.
  */
 export default function AskWorkCard({ work, snapshot, highlighted }: AskWorkCardProps) {
   const { t, formatRelativeTime } = useLocale();
@@ -134,6 +135,7 @@ export default function AskWorkCard({ work, snapshot, highlighted }: AskWorkCard
   const targets = snapshot?.targets ?? [];
   const route = entityId ? workRoute(entityType, entityId) : null;
   const updated = snapshot?.capturedUtc ?? work?.lastChangeUtc ?? null;
+  const blackBox = snapshot?.blackBox ?? null;
 
   return (
     <section
@@ -154,7 +156,9 @@ export default function AskWorkCard({ work, snapshot, highlighted }: AskWorkCard
         </div>
       </header>
 
-      {progress && (
+      {blackBox && <AskBlackBoxCard card={blackBox} />}
+
+      {!blackBox && progress && (
         <div className="ask-work-progress">
           <div
             title={t('Share of child items finished: green succeeded, red failed.')}

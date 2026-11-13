@@ -31,8 +31,12 @@ const localeValue = {
   formatRelativeTime: (v: string | null | undefined) => v ?? '',
 };
 vi.mock('../context/LocaleContext', () => ({ useLocale: () => localeValue }));
-vi.mock('../context/NotificationContext', () => ({ useNotifications: () => ({ pushToast: vi.fn() }) }));
+vi.mock('../context/NotificationContext', () => ({
+  useNotifications: () => ({ pushToast: vi.fn() }),
+  useOptionalNotifications: () => ({ pushToast: vi.fn() }),
+}));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isAdmin: true, isTenantAdmin: true }) }));
+vi.mock('../components/usage/CaptainUsageCard', () => ({ default: () => null }));
 
 interface Deferred<T> { promise: Promise<T>; resolve: (value: T) => void }
 
@@ -43,7 +47,7 @@ function deferred<T>(): Deferred<T> {
 }
 
 function captain(id: string, name: string, missionId: string): Captain {
-  return { id, name, state: 'Idle', runtime: 'ClaudeCode', currentMissionId: missionId } as unknown as Captain;
+  return { id, name, state: 'Idle', runtime: 'ClaudeCode', activeMissionIds: [missionId] } as unknown as Captain;
 }
 
 function mission(id: string, title: string): Mission {

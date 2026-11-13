@@ -5,6 +5,9 @@ namespace Armada.Server.Mcp
     /// </summary>
     public class CaptainUpdateArgs
     {
+        /// <summary>New-work eligibility; omitted values preserve defaults or existing settings.</summary>
+        public bool? Active { get; set; }
+
         /// <summary>
         /// Captain ID (cpt_ prefix).
         /// </summary>
@@ -13,6 +16,10 @@ namespace Armada.Server.Mcp
         /// <summary>
         /// New display name.
         /// </summary>
+        /// <summary>Maximum simultaneous missions, clamped to 1..the server ceiling.</summary>
+        public int? MaxConcurrency { get; set; }
+
+        /// <summary>Captain name.</summary>
         public string? Name { get; set; }
 
         /// <summary>

@@ -155,6 +155,7 @@ namespace Armada.Core.Services.Ask
             {
                 Captain? captain = await ReadVisibleCaptainAsync(auth, request.CaptainId!, token).ConfigureAwait(false);
                 if (captain == null) throw new ArgumentException("Captain not found: " + request.CaptainId, nameof(request));
+                CaptainEligibility.RequireActive(captain);
                 thread.CaptainId = captain.Id;
             }
 
@@ -364,6 +365,7 @@ namespace Armada.Core.Services.Ask
                 {
                     Captain? captain = await ReadVisibleCaptainAsync(auth, request.CaptainId!, token).ConfigureAwait(false);
                     if (captain == null) throw new ArgumentException("Captain not found: " + request.CaptainId, nameof(request));
+                    CaptainEligibility.RequireActive(captain);
                     thread.CaptainId = captain.Id;
                 }
             }

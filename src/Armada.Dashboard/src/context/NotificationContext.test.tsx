@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
 import type { WebSocketMessage } from '../types/models';
-import { NotificationProvider, useNotifications, type Notification } from './NotificationContext';
+import { NotificationProvider, useNotifications, useOptionalNotifications, type Notification } from './NotificationContext';
 
 const listeners: Array<(msg: WebSocketMessage) => void> = [];
 
@@ -52,5 +52,34 @@ describe('NotificationProvider severity', () => {
     });
     expect(latest).toHaveLength(1);
     expect(latest[0].message).toBe('Deployment "Deploy to production: Release 2.3 hotfix" - PendingApproval / NotStarted');
+  });
+});
+
+describe('NotificationProvider toast links', () => {
+  it('keeps a pushed toast link (for example View results of a started evaluation) and omits it otherwise', () => {
+    let state: ReturnType<typeof useNotifications> | null = null;
+    function ToastProbe() {
+      state = useNotifications();
+      return null;
+    }
+    render(<NotificationProvider><ToastProbe /></NotificationProvider>);
+    act(() => {
+      state!.pushToast('success', 'Evaluation started.', { label: 'View results', to: '/evaluations/mpr_1' });
+      state!.pushToast('info', 'Plain');
+    });
+    expect(state!.toasts.map(t => [t.message, t.link])).toEqual([
+      ['Evaluation started.', { label: 'View results', to: '/evaluations/mpr_1' }],
+      ['Plain', undefined],
+    ]);
+  });
+
+  it('is optional outside the provider', () => {
+    let optional: unknown = 'unset';
+    function OptionalProbe() {
+      optional = useOptionalNotifications();
+      return null;
+    }
+    render(<OptionalProbe />);
+    expect(optional).toBeNull();
   });
 });

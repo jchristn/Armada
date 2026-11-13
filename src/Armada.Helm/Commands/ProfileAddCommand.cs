@@ -48,7 +48,7 @@ namespace Armada.Helm.Commands
             prefs.Current.ActiveProfile = settings.Use ? profile.Name : previousActive;
             if (!prefs.Save())
             {
-                AnsiConsole.MarkupLine("[red]Could not save[/] " + Markup.Escape(prefs.FilePath) + ": " + Markup.Escape(prefs.LastError ?? "unknown error"));
+                HelmConsole.Error.MarkupLine("[red]Could not save[/] " + Markup.Escape(prefs.FilePath) + ": " + Markup.Escape(prefs.LastError ?? "unknown error"));
                 return 1;
             }
 
@@ -57,7 +57,7 @@ namespace Armada.Helm.Commands
                 bool stored = await credentials.SetAsync(SessionService.CredentialKey(profile), token, cancellationToken).ConfigureAwait(false);
                 if (!stored)
                 {
-                    AnsiConsole.MarkupLine("[red]Could not store the token[/] in the " + Markup.Escape(credentials.Name) + " credential store.");
+                    HelmConsole.Error.MarkupLine("[red]Could not store the token[/] in the " + Markup.Escape(credentials.Name) + " credential store.");
                     return 1;
                 }
             }

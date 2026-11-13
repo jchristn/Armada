@@ -28,6 +28,9 @@ namespace Armada.Server.Routes
     /// </summary>
     public class MissionRoutes
     {
+        /// <summary>Response header on a created mission no captain could take yet; the body is still the Mission.</summary>
+        public const string MissionWaitingHeader = "X-Armada-Warning";
+
         private readonly DatabaseDriver _database;
         private readonly IAdmiralService _admiral;
         private readonly IMissionService _missionService;
@@ -55,8 +58,19 @@ namespace Armada.Server.Routes
         /// </summary>
         public Func<string, RuntimeActivity?>? MissionActivityLookup { get; set; } = null;
 
+        /// <summary>
+        /// Black box capture for manual transitions to Failed, LandingFailed, Cancelled or Blocked (step
+        /// OperatorTransition), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxCapture? BlackBox { get; set; } = null;
+
         /// <summary>Resolve file and git operations on the dock's owning host.</summary>
         public DockHostResolver? DockHosts { get; set; } = null;
+
+        /// <summary>
+        /// Black box lifecycle hooks (retention cascades and expiry recomputes after deletes and updates), or null.
+        /// </summary>
+        public Armada.Core.BlackBox.IBlackBoxLifecycleHooks? BlackBoxHooks { get; set; } = null;
 
         /// <summary>
         /// Instantiate.
@@ -139,16 +153,7 @@ namespace Armada.Server.Routes
                         : await _database.Captains.ReadAsync(ctx.TenantId!, ctx.UserId!, mission.CaptainId).ConfigureAwait(false);
             }
 
-            Dock? dock = null;
-            string? dockId = mission.DockId ?? captain?.CurrentDockId;
-            if (!String.IsNullOrEmpty(dockId))
-            {
-                dock = ctx.IsAdmin
-                    ? await _database.Docks.ReadAsync(dockId).ConfigureAwait(false)
-                    : ctx.IsTenantAdmin
-                        ? await _database.Docks.ReadAsync(ctx.TenantId!, dockId).ConfigureAwait(false)
-                        : await _database.Docks.ReadAsync(ctx.TenantId!, ctx.UserId!, dockId).ConfigureAwait(false);
-            }
+            Dock? dock = await MissionDockResolver.ReadAsync(_database, mission, caller: ctx).ConfigureAwait(false);
 
             if (dock == null || String.IsNullOrEmpty(dock.WorktreePath) || !Directory.Exists(dock.WorktreePath))
                 return null;
@@ -368,22 +373,30 @@ namespace Armada.Server.Routes
                     ?? throw new InvalidOperationException("Request body could not be deserialized as Mission.");
                 mission.TenantId = ctx.TenantId;
                 mission.UserId = ctx.UserId;
-                mission = await _admiral.DispatchMissionAsync(mission).ConfigureAwait(false);
-                req.Http.Response.StatusCode = 201;
-                if (mission.Status == MissionStatusEnum.Pending)
+                EntityUpdateMerger.ResetMissionConcurrencyMetadata(mission);
+                if (mission.WorkerEnvelope != null)
                 {
-                    return (object)new
-                    {
-                        Mission = mission,
-                        Warning = "Mission created but could not be assigned to any captain. It will be retried on the next health check cycle."
-                    };
+                    // A mission may only tighten its vessel's Worker envelope; a looser or invalid one is a 400 with the reason.
+                    Vessel? envelopeVessel = String.IsNullOrEmpty(mission.VesselId) ? null
+                        : ctx.IsAdmin || String.IsNullOrEmpty(ctx.TenantId)
+                            ? await _database.Vessels.ReadAsync(mission.VesselId).ConfigureAwait(false)
+                            : await _database.Vessels.ReadAsync(ctx.TenantId!, mission.VesselId).ConfigureAwait(false);
+                    try { mission.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelope(envelopeVessel?.WorkerEnvelope, mission.WorkerEnvelope); }
+                    catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
                 }
+                try { mission = await _admiral.DispatchMissionAsync(mission).ConfigureAwait(false); }
+                catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
+                req.Http.Response.StatusCode = 201;
+                // Always the documented Mission body. The mission is saved even when no captain can take it yet, so this
+                // stays a 2xx (an error would invite a duplicate retry); the header and the Pending status say it waits.
+                if (mission.Status == MissionStatusEnum.Pending)
+                    req.Http.Response.Headers.Add(MissionWaitingHeader, UsageSelectionText.Get("usageSelection.missionWaiting"));
                 return mission;
             },
             api => api
                 .WithTag("Missions")
                 .WithSummary("Create a mission")
-                .WithDescription("Creates and dispatches a new mission. If a vesselId is provided, the Admiral will assign a captain and set up a worktree.")
+                .WithDescription("Creates and dispatches a new mission and always returns 201 with the Mission. If a vesselId is provided, the Admiral admits it to a captain (status Assigned) and sets up the worktree and launches the agent in the background; poll for InProgress. A mission no captain can take yet stays Pending, is retried automatically and carries an X-Armada-Warning header; GET /api/v1/missions/{id}/captain-selection explains a captain-selection wait.")
                 .WithRequestBody(OpenApiJson.BodyFor<Mission>("Mission data", true))
                 .WithResponse(201, OpenApiJson.For<Mission>("Created mission"))
                 .WithSecurity("ApiKey"));
@@ -405,7 +418,7 @@ namespace Armada.Server.Routes
                 if (mission == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
                 mission.DiffSnapshot = null;
                 mission.PlaybookSnapshots = await _database.Playbooks.GetMissionSnapshotsAsync(id).ConfigureAwait(false);
-                mission.AssignmentBlocker = await ComputeAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                mission.AssignmentBlocker = await ComputeAssignmentBlockerAsync(mission, ctx.IsAdmin).ConfigureAwait(false);
                 mission.Activity = MissionActivityLookup?.Invoke(mission.Id);
                 return (object)mission;
             },
@@ -689,18 +702,35 @@ namespace Armada.Server.Routes
 
                 // Merge only metadata fields onto the existing record; operational, ownership, and timestamp fields
                 // are preserved (shared with the WebSocket update_mission command).
+                string? previousParent = existing.ParentMissionId;
                 existing = EntityUpdateMerger.MergeMission(existing, incoming);
+                try { await new MissionHierarchyValidator(_database, _settings).NormalizeAsync(existing, true, previousParent).ConfigureAwait(false); }
+                catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
+                if (incoming.WorkerEnvelope != null)
+                {
+                    // Omitted or null keeps the stored envelope; {} clears it. A change is validated like dispatch (400)
+                    // and refused once the mission has started (409).
+                    Vessel? envelopeVessel = String.IsNullOrEmpty(existing.VesselId) ? null
+                        : ctx.IsAdmin || String.IsNullOrEmpty(ctx.TenantId)
+                            ? await _database.Vessels.ReadAsync(existing.VesselId).ConfigureAwait(false)
+                            : await _database.Vessels.ReadAsync(ctx.TenantId!, existing.VesselId).ConfigureAwait(false);
+                    try { existing.WorkerEnvelope = WorkerEnvelopeRules.ValidateMissionEnvelopeUpdate(existing, envelopeVessel?.WorkerEnvelope, incoming.WorkerEnvelope); }
+                    catch (ArgumentException ex) { return RouteErrorMapper.ToResponse(req, ex); }
+                    catch (InvalidOperationException ex) { return RouteErrorMapper.ToResponse(req, ex, 409); }
+                }
                 existing = await _database.Missions.UpdateAsync(existing).ConfigureAwait(false);
                 return (object)existing;
             },
             api => api
                 .WithTag("Missions")
                 .WithSummary("Update a mission")
-                .WithDescription("Updates an existing mission by ID.")
+                .WithDescription("Updates an existing mission by ID. workerEnvelope: omitted or null keeps the stored envelope, {} clears it; a changed envelope may only tighten the vessel default (400 otherwise) and only while the mission is Pending or Assigned and not started (409 otherwise).")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<Mission>("Updated mission data", true))
                 .WithResponse(200, OpenApiJson.For<Mission>("Updated mission"))
+                .WithResponse(400, OpenApiResponseMetadata.BadRequest())
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
+                .WithResponse(409, OpenApiJson.For<ApiErrorResponse>("workerEnvelope changed on a mission that has started"))
                 .WithSecurity("ApiKey"));
 
             app.Put<StatusTransitionRequest>("/api/v1/missions/{id}/status", async (ApiRequest req) =>
@@ -761,6 +791,7 @@ namespace Armada.Server.Routes
                 }
 
                 await _database.Missions.UpdateAsync(mission).ConfigureAwait(false);
+                await BlackBoxOperatorCapture.RecordTransitionAsync(BlackBox, mission, previousStatus, "REST").ConfigureAwait(false);
 
                 // Audit event: manual Complete without an active dock bypasses the landing pipeline.
                 // This is allowed (operators may need it after restarts/cleanup) but should be visible.
@@ -776,7 +807,9 @@ namespace Armada.Server.Routes
                 if (!String.IsNullOrEmpty(mission.CaptainId)) signal.FromCaptainId = mission.CaptainId;
                 await _database.Signals.CreateAsync(signal).ConfigureAwait(false);
 
-                await _emitMissionStatusChanged(mission, previousStatus, "Mission " + id + " transitioned to " + newStatus).ConfigureAwait(false);
+                // The black box capture already emitted mission.status_changed for a transition it captured.
+                if (!BlackBoxOperatorCapture.EmitsStatusChanged(BlackBox, mission.Status))
+                    await _emitMissionStatusChanged(mission, previousStatus, "Mission " + id + " transitioned to " + newStatus).ConfigureAwait(false);
 
                 // Broadcast specific mission change for dashboard toast notifications
                 if (_webSocketHub != null)
@@ -947,6 +980,29 @@ namespace Armada.Server.Routes
                         : await _database.Missions.ReadAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
                 if (mission == null) { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "Mission not found" }; }
 
+                // D17: a parent with unfinished descendants is purged only with cascade=true, which purges the subtree too.
+                MissionHierarchyValidator hierarchy = new MissionHierarchyValidator(_database, _settings);
+                bool cascade = String.Equals(req.Query.GetValueOrDefault("cascade"), "true", StringComparison.OrdinalIgnoreCase);
+                List<Mission> unfinished = await hierarchy.UnfinishedDescendantsAsync(mission).ConfigureAwait(false);
+                if (unfinished.Count > 0 && !cascade)
+                {
+                    req.Http.Response.StatusCode = 409;
+                    return new ApiErrorResponse { Error = ApiResultEnum.Conflict, Message = "Mission " + id + " has " + unfinished.Count
+                        + " unfinished descendant mission(s), for example '" + unfinished[0].Title + "'. Finish or cancel them, or purge with cascade=true to delete the subtree.",
+                        Data = new { Code = "HierarchyHasUnfinishedDescendants", Count = unfinished.Count } };
+                }
+                if (cascade)
+                {
+                    List<Mission> subtree = await hierarchy.AllDescendantsAsync(mission).ConfigureAwait(false);
+                    subtree.Reverse();
+                    foreach (Mission descendant in subtree)
+                    {
+                        await _database.Missions.DeleteAsync(descendant.Id).ConfigureAwait(false);
+                        await CascadeCleanup.RemoveEventsForMissionAsync(_database, descendant.Id).ConfigureAwait(false);
+                        if (BlackBoxHooks != null) await BlackBoxHooks.OnMissionDeletedAsync(descendant.Id).ConfigureAwait(false);
+                    }
+                }
+
                 if (ctx.IsAdmin)
                     await _database.Missions.DeleteAsync(id).ConfigureAwait(false);
                 else if (ctx.IsTenantAdmin)
@@ -956,6 +1012,7 @@ namespace Armada.Server.Routes
 
                 // Remove telemetry events that referenced this mission so they do not dangle.
                 await CascadeCleanup.RemoveEventsForMissionAsync(_database, id).ConfigureAwait(false);
+                if (BlackBoxHooks != null) await BlackBoxHooks.OnMissionDeletedAsync(id).ConfigureAwait(false);
 
                 await _emitEvent("mission.deleted", "Mission " + id + " permanently deleted",
                     "mission", id, null, null, null, null).ConfigureAwait(false);
@@ -965,8 +1022,9 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Permanently delete a mission")
-                .WithDescription("Permanently deletes a mission from the database. This cannot be undone.")
+                .WithDescription("Permanently deletes a mission from the database. This cannot be undone. A hierarchy parent with unfinished descendants returns 409 unless cascade=true, which also deletes its subtree.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
+                .WithParameter(OpenApiParameterMetadata.Query("cascade", "true also deletes the mission's descendants", false))
                 .WithResponse(200, OpenApiJson.For<object>("Deleted mission"))
                 .WithResponse(404, OpenApiResponseMetadata.NotFound())
                 .WithSecurity("ApiKey"));
@@ -1009,6 +1067,7 @@ namespace Armada.Server.Routes
                         await _database.Missions.DeleteAsync(ctx.TenantId!, id).ConfigureAwait(false);
                     else
                         await _database.Missions.DeleteAsync(ctx.TenantId!, ctx.UserId!, id).ConfigureAwait(false);
+                    if (BlackBoxHooks != null) await BlackBoxHooks.OnMissionDeletedAsync(id).ConfigureAwait(false);
                     result.Deleted++;
                 }
 
@@ -1083,7 +1142,7 @@ namespace Armada.Server.Routes
             api => api
                 .WithTag("Missions")
                 .WithSummary("Restart a failed or cancelled mission, or start a pending one")
-                .WithDescription("Resets a Failed, LandingFailed, or Cancelled mission back to Pending (clearing captain assignment, branch, PR URL, and timing fields), or keeps a Pending mission as it is, then dispatches it at once when a captain is available. When no captain is available the mission stays Pending and the regular dispatcher picks it up later. Optionally update the title and description (instructions) before restarting. Any other status returns 409.")
+                .WithDescription("Resets a Failed, LandingFailed, or Cancelled mission back to Pending (clearing captain assignment, branch, PR URL, and timing fields), or keeps a Pending mission as it is, then dispatches it at once when a captain is available. When no captain is available the mission stays Pending and the regular dispatcher picks it up later. Optionally update the title and description (instructions) before restarting. RestoredMissionIds lists the other missions the restart returned to Pending: later stages and dependents cancelled because this one failed, and descendants cancelled with ParentFailed. Any other status returns 409.")
                 .WithParameter(OpenApiParameterMetadata.Path("id", "Mission ID (msn_ prefix)"))
                 .WithRequestBody(OpenApiJson.BodyFor<MissionRestartRequest>("Optional updated instructions", false))
                 .WithResponse(200, OpenApiJson.For<Mission>("Restarted mission (Pending, Assigned, or InProgress)"))
@@ -1206,40 +1265,7 @@ namespace Armada.Server.Routes
                 }
 
                 // Fall back to live worktree diff
-                Dock? dock = null;
-                if (!String.IsNullOrEmpty(mission.DockId))
-                {
-                    dock = ctx.IsAdmin
-                        ? await _database.Docks.ReadAsync(mission.DockId).ConfigureAwait(false)
-                        : ctx.IsTenantAdmin
-                            ? await _database.Docks.ReadAsync(ctx.TenantId!, mission.DockId).ConfigureAwait(false)
-                            : await _database.Docks.ReadAsync(ctx.TenantId!, ctx.UserId!, mission.DockId).ConfigureAwait(false);
-                }
-
-                if (dock == null && !String.IsNullOrEmpty(mission.CaptainId))
-                {
-                    Captain? captain = ctx.IsAdmin
-                        ? await _database.Captains.ReadAsync(mission.CaptainId).ConfigureAwait(false)
-                        : ctx.IsTenantAdmin
-                            ? await _database.Captains.ReadAsync(ctx.TenantId!, mission.CaptainId).ConfigureAwait(false)
-                            : await _database.Captains.ReadAsync(ctx.TenantId!, ctx.UserId!, mission.CaptainId).ConfigureAwait(false);
-                    if (captain != null && !String.IsNullOrEmpty(captain.CurrentDockId))
-                    {
-                        dock = ctx.IsAdmin
-                            ? await _database.Docks.ReadAsync(captain.CurrentDockId).ConfigureAwait(false)
-                            : ctx.IsTenantAdmin
-                                ? await _database.Docks.ReadAsync(ctx.TenantId!, captain.CurrentDockId).ConfigureAwait(false)
-                                : await _database.Docks.ReadAsync(ctx.TenantId!, ctx.UserId!, captain.CurrentDockId).ConfigureAwait(false);
-                    }
-                }
-
-                if (dock == null && !String.IsNullOrEmpty(mission.BranchName) && !String.IsNullOrEmpty(mission.VesselId))
-                {
-                    List<Dock> docks = ctx.IsAdmin
-                        ? await _database.Docks.EnumerateByVesselAsync(mission.VesselId).ConfigureAwait(false)
-                        : await _database.Docks.EnumerateByVesselAsync(ctx.TenantId!, mission.VesselId).ConfigureAwait(false);
-                    dock = docks.FirstOrDefault(d => d.BranchName == mission.BranchName && d.Active);
-                }
+                Dock? dock = await MissionDockResolver.ReadAsync(_database, mission, caller: ctx).ConfigureAwait(false);
 
                 if (dock == null || String.IsNullOrEmpty(dock.WorktreePath))
                     { req.Http.Response.StatusCode = 404; return new ApiErrorResponse { Error = ApiResultEnum.NotFound, Message = "No diff available: no mission worktree or saved diff exists" }; }
@@ -1419,11 +1445,14 @@ namespace Armada.Server.Routes
                 .WithSecurity("ApiKey"));
         }
 
-        private async Task<MissionAssignmentBlocker?> ComputeAssignmentBlockerAsync(Mission mission)
+        private async Task<MissionAssignmentBlocker?> ComputeAssignmentBlockerAsync(Mission mission, bool canConfigure)
         {
             try
             {
-                return await _missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                MissionAssignmentBlocker? blocker = await _missionService.GetAssignmentBlockerAsync(mission).ConfigureAwait(false);
+                if (!canConfigure && blocker != null)
+                    foreach (AssignmentBlockerAdvice advice in blocker.Advice) advice.Action = null;
+                return blocker;
             }
             catch (Exception ex)
             {

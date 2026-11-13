@@ -7,6 +7,6 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
-          - armada-server:9464
+          - otel-collector:9465
         labels:
           service: armada

@@ -34,6 +34,13 @@ namespace Armada.Core.Services
         /// </summary>
         public List<RuntimeActivity> Activities { get; set; } = new List<RuntimeActivity>();
 
+        /// <summary>
+        /// Passive account-usage observations the line carried (for example a Claude Code
+        /// <c>rate_limit_event</c>), already parsed and sanitized. They are protocol, never output or
+        /// transcript text, and they carry the time the line was read rather than a manufactured capture time.
+        /// </summary>
+        public List<UsageProbeResult> UsageObservations { get; set; } = new List<UsageProbeResult>();
+
         #endregion
 
         #region Public-Methods

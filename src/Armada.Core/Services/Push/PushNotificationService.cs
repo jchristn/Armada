@@ -289,6 +289,17 @@ namespace Armada.Core.Services.Push
         }
 
         /// <summary>
+        /// Hook for a model alert raised or reopened: announced to the tenant's admins. The caller decides whether model
+        /// alert pushes are enabled (ModelAlerts.PushEnabled, default false).
+        /// </summary>
+        /// <param name="alert">Alert.</param>
+        public void OnModelAlertRaised(ModelAlert? alert)
+        {
+            if (alert == null || alert.Status != ModelAlertStatusEnum.Open) return;
+            Enqueue(FromModelAlert(alert));
+        }
+
+        /// <summary>
         /// Hook for a new Ask proposal: a pending proposal is announced to the thread owner.
         /// </summary>
         /// <param name="proposal">Proposal.</param>
@@ -734,6 +745,25 @@ namespace Armada.Core.Services.Push
             }
 
             occurrence.CliPermission = request;
+            return occurrence;
+        }
+
+        /// <summary>
+        /// Occurrence for a model alert (announced to the tenant's admins).
+        /// </summary>
+        /// <param name="alert">Alert.</param>
+        /// <returns>The occurrence.</returns>
+        public static PushOccurrence FromModelAlert(ModelAlert alert)
+        {
+            if (alert == null) throw new ArgumentNullException(nameof(alert));
+            PushOccurrence occurrence = new PushOccurrence();
+            occurrence.Category = PushCategoryEnum.ModelAlert;
+            occurrence.Kind = PushNotificationKinds.ModelAlert;
+            occurrence.Title = "Model alert";
+            occurrence.Body = PushContentFormatter.Clean(alert.Title, 200);
+            occurrence.EntityId = alert.Id;
+            occurrence.TenantId = alert.TenantId;
+            occurrence.Url = "/inbox?modelAlert=" + alert.Id;
             return occurrence;
         }
 

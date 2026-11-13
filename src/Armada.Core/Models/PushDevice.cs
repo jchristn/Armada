@@ -66,7 +66,7 @@ namespace Armada.Core.Models
         /// <summary>
         /// Categories this device receives. An empty list mutes the device. Never null.
         /// </summary>
-        [CollectionBound(8, Reason = "Distinct defined PushCategoryEnum values")]
+        [CollectionBound(32, Reason = "Distinct defined PushCategoryEnum values (the setter drops duplicates and undefined values); headroom for new categories")]
         public List<PushCategoryEnum> Categories
         {
             get => _Categories;

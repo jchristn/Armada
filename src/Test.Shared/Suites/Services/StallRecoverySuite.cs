@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites.Services
 {
+    using System.Linq;
     using System;
     using System.Collections.Generic;
     using System.IO;
@@ -68,7 +69,7 @@ namespace Test.Shared.Suites.Services
                     settings.MaxRecoveryAttempts = 1;
                     StallTestFixture fixture = await StallTestFixture.CreateAsync(testDb.Driver, settings, DateTime.UtcNow.AddMinutes(-(settings.StallThresholdMinutes + 5))).ConfigureAwait(false);
                     fixture.Captain.RecoveryAttempts = 1;
-                    await testDb.Driver.Captains.UpdateAsync(fixture.Captain).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, fixture.Captain).ConfigureAwait(false);
 
                     await fixture.Admiral.HealthCheckAsync().ConfigureAwait(false);
 
@@ -84,7 +85,7 @@ namespace Test.Shared.Suites.Services
                     AssertEqual(1, fixture.Stopped.Count, "stalled process is stopped");
                     AssertEqual(0, fixture.Launched.Count, "no relaunch after exhaustion");
                     AssertEqual(CaptainStateEnum.Idle, captain!.State, "captain released for new work");
-                    AssertNull(captain.CurrentMissionId);
+                    AssertNull(captain.ActiveMissionIds.SingleOrDefault());
 
                     List<ArmadaEvent> events = await testDb.Driver.Events.EnumerateByMissionAsync(fixture.Mission.Id).ConfigureAwait(false);
                     AssertTrue(events.Exists(e => e.EventType == "mission.failed"), "mission.failed event emitted");
@@ -211,10 +212,10 @@ namespace Test.Shared.Suites.Services
                     await testDb.Driver.Missions.UpdateAsync(mission);
                     Captain captain = (await testDb.Driver.Captains.ReadAsync(mission.CaptainId!))!;
                     captain.State = CaptainStateEnum.Idle;
-                    captain.CurrentMissionId = null;
-                    captain.CurrentDockId = null;
+                    captain.Assignment = null;
+
                     captain.ProcessId = null;
-                    await testDb.Driver.Captains.UpdateAsync(captain);
+                    await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain);
                     Dock dock = (await testDb.Driver.Docks.ReadAsync(mission.DockId!))!;
                     Directory.CreateDirectory(dock.WorktreePath!);
                     string sentinel = Path.Combine(dock.WorktreePath!, "unlanded.txt");

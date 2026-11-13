@@ -30,6 +30,7 @@ import JsonViewer from '../components/shared/JsonViewer';
 import DataTable from '../components/shared/DataTable';
 import FilterBar from '../components/shared/FilterBar';
 import MissionHistoryChart from '../components/MissionHistoryChart';
+import UsageObservabilityCard from '../components/usage/UsageObservabilityCard';
 import HealthKpiCards from '../components/vessels/health/HealthKpiCards';
 import { useLocale } from '../context/LocaleContext';
 import {
@@ -338,11 +339,15 @@ export default function Dashboard() {
           <div className="card-value">{totalMissions}</div>
           <div className="card-detail">
             {status?.missionsByStatus &&
-              Object.entries(status.missionsByStatus).map(([key, val]) => (
-                <span key={key} className={`tag ${key.toLowerCase()}`} title={t('Missions currently in the {{status}} status.', { status: key })}>
-                  {val} {key}
-                </span>
-              ))}
+              Object.entries(status.missionsByStatus).map(([key, val]) => {
+                // Keys arrive camelCased (landingFailed); show the status name the rest of the dashboard uses (LandingFailed).
+                const statusName = key.charAt(0).toUpperCase() + key.slice(1);
+                return (
+                  <span key={key} className={`tag ${key.toLowerCase()}`} title={t('Missions currently in the {{status}} status.', { status: t(statusName) })}>
+                    {val} {t(statusName)}
+                  </span>
+                );
+              })}
           </div>
         </div>
         <div
@@ -614,6 +619,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {isTenantAdmin && <UsageObservabilityCard />}
 
       {/* JSON Viewer Modal */}
       {jsonViewer.open && (

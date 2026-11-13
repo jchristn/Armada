@@ -31,6 +31,12 @@ namespace Armada.Core.Enums
         /// The run stopped before every probe had a result (for example the Admiral restarted).
         /// </summary>
         [EnumMember(Value = "Failed")]
-        Failed
+        Failed,
+
+        /// <summary>
+        /// Stopped before it finished (cancelled, timed out or out of budget); what finished is kept.
+        /// </summary>
+        [EnumMember(Value = "Cancelled")]
+        Cancelled
     }
 }

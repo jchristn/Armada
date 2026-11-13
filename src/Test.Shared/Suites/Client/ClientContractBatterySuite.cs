@@ -37,6 +37,32 @@ namespace Test.Shared.Suites.Client
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(Case("pack_management", "Create, inspect, edit, validate and delete an on-disk pack through the client", async (c, fx) =>
+            {
+                string? original = fx.Settings.Evaluation.BatteryDirectory;
+                string directory = Path.Combine(fx.TempDir, "client-battery");
+                Directory.CreateDirectory(directory);
+                fx.Settings.Evaluation.BatteryDirectory = directory;
+                try
+                {
+                    BatteryPackDetail pack = (await c.CreateBatteryPackAsync(new BatteryPackEditRequest { PackId = "client-demo", ManifestJson = "{}" }))!;
+                    AssertFalse(pack.Info.Valid);
+                    pack = (await c.GetBatteryPackAsync("client-demo"))!;
+                    AssertEqual("{}", pack.ManifestJson);
+                    pack = (await c.WriteBatteryPackFileAsync("client-demo", "fixture/demo.txt", "hello"))!;
+                    AssertTrue(pack.Files.Any(f => f.Path == "fixture/demo.txt"));
+                    BatteryPackTextFile text = (await c.ReadBatteryPackFileAsync("client-demo", "fixture/demo.txt"))!;
+                    AssertEqual("hello", text.Content);
+                    pack = (await c.UpdateBatteryPackManifestAsync("client-demo", "{ \"id\": \"client-demo\" }"))!;
+                    AssertFalse(pack.Info.Valid);
+                    AssertFalse((await c.ValidateBatteryPackAsync("client-demo"))!.Valid);
+                    await c.DeleteBatteryPackFileAsync("client-demo", "fixture/demo.txt");
+                    await c.DeleteBatteryPackAsync("client-demo");
+                    await ClientContract.ExpectErrorAsync(() => c.GetBatteryPackAsync("client-demo"), "deleted pack", 404, 404);
+                }
+                finally { fx.Settings.Evaluation.BatteryDirectory = original; }
+            }));
+
             cases.Add(Case("battery", "List packs, run the C# pack, get the run; unknown packs and runs fail", async (c, fx) =>
             {
                 Captain captain;

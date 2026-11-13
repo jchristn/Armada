@@ -6,6 +6,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Show the git diff of a mission's changes.
@@ -20,7 +21,7 @@ namespace Armada.Helm.Commands
 
             if (string.IsNullOrEmpty(missionId))
             {
-                AnsiConsole.MarkupLine("[red]No mission specified.[/] Usage: [green]armada diff <mission>[/]");
+                HelmConsole.Error.MarkupLine("[red]No mission specified.[/] Usage: [green]armada diff <mission>[/]");
                 return 1;
             }
 
@@ -37,7 +38,7 @@ namespace Armada.Helm.Commands
 
             if (result == null)
             {
-                AnsiConsole.MarkupLine($"[red]Could not get diff for mission[/] [dim]{Markup.Escape(missionId)}[/]");
+                HelmConsole.Error.MarkupLine($"[red]Could not get diff for mission[/] [dim]{Markup.Escape(missionId)}[/]");
                 AnsiConsole.MarkupLine("[dim]The worktree may have already been reclaimed after completion.[/]");
                 AnsiConsole.MarkupLine("[dim]If using PRs, review the diff on GitHub instead.[/]");
                 return 1;
@@ -81,7 +82,7 @@ namespace Armada.Helm.Commands
                         AnsiConsole.MarkupLine("[green]" + Markup.Escape(line) + "[/]");
                         break;
                     case UnifiedDiffLineKindEnum.Deleted:
-                        AnsiConsole.MarkupLine("[red]" + Markup.Escape(line) + "[/]");
+                        HelmConsole.Error.MarkupLine("[red]" + Markup.Escape(line) + "[/]");
                         break;
                     default:
                         AnsiConsole.WriteLine(line);

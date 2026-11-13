@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   createEnvironment,
   deleteEnvironment,
@@ -23,6 +23,7 @@ import CopyButton from '../components/shared/CopyButton';
 import ErrorModal from '../components/shared/ErrorModal';
 import JsonViewer from '../components/shared/JsonViewer';
 import PageHeader from '../components/shared/PageHeader';
+import { ErrorState } from '../components/shared/StateBlocks';
 import { buildEnvironmentDuplicatePayload } from '../lib/duplicates';
 import { createVerificationDefinition, ENVIRONMENT_KINDS, parseHeaderLines, serializeHeaderLines } from '../lib/environmentForm';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
@@ -86,6 +87,8 @@ export default function EnvironmentDetail() {
   const [loading, setLoading] = useState(!createMode);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // A failed entity load (for example a stale link) renders an error state instead of an empty editor.
+  const [loadFailure, setLoadFailure] = useState<{ id: string | undefined; message: string } | null>(null);
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({
     open: false,
@@ -137,7 +140,7 @@ export default function EnvironmentDetail() {
         setActive(result.active);
         setError('');
       } catch (err: unknown) {
-        if (mounted) setError(err instanceof Error ? err.message : t('Failed to load environment.'));
+        if (mounted) setLoadFailure({ id, message: err instanceof Error ? err.message : t('Failed to load environment.') });
       } finally {
         if (mounted) setLoading(false);
       }
@@ -256,14 +259,22 @@ export default function EnvironmentDetail() {
 
   if (loading) return <p className="text-dim">{t('Loading...')}</p>;
 
+  if (!createMode && loadFailure && loadFailure.id === id) {
+    return (
+      <div>
+        <PageHeader breadcrumb={[{ label: t('Environments'), to: '/environments' }, { label: id || '' }]} title={id || ''} />
+        <ErrorState message={loadFailure.message} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/environments">{t('Environments')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('New Environment') : name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Environments'), to: '/environments' },
+          { label: createMode ? t('New Environment') : name },
+        ]}
         title={createMode ? t('Create Environment') : name}
         actions={
           <>

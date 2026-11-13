@@ -1,5 +1,7 @@
 namespace Armada.Server.Mcp
 {
+    using Armada.Core.Models;
+
     /// <summary>
     /// MCP tool arguments for updating a vessel.
     /// </summary>
@@ -40,10 +42,17 @@ namespace Armada.Server.Mcp
         /// </summary>
         public string? WorkingDirectory { get; set; }
 
+
+        /// <summary>Maximum admitted voyage groups; zero is unlimited.</summary>
+        public int? MaxParallelVoyages { get; set; }
+
+        /// <summary>Maximum running missions per voyage; zero is unlimited.</summary>
+        public int? MaxParallelMissionsPerVoyage { get; set; }
+
         /// <summary>
-        /// Whether to allow multiple concurrent missions on this vessel.
+        /// Whether to chain a dispatched mission after an overlapping active mission (DependsOnMissionId), or null to leave the setting unchanged.
         /// </summary>
-        public bool? AllowConcurrentMissions { get; set; }
+        public bool? SerializeOverlappingMissions { get; set; }
 
         /// <summary>
         /// Per-vessel auto-approve override for missions on this vessel: true or false wins over the captain's setting;
@@ -135,5 +144,16 @@ namespace Armada.Server.Mcp
         /// Per-vessel override for the Audit intent (beats a repo script and the ecosystem default).
         /// </summary>
         public string? AuditCommand { get; set; }
+
+        /// <summary>
+        /// Landing mode override for this vessel (MergeAndPush, LocalMerge, PullRequest, MergeQueue, None), or Default to
+        /// clear it so the global setting applies.
+        /// </summary>
+        public string? LandingMode { get; set; }
+
+        /// <summary>
+        /// Replacement Worker eligibility envelope for the vessel; an empty object clears it and null keeps the stored value.
+        /// </summary>
+        public WorkerEnvelope? WorkerEnvelope { get; set; }
     }
 }

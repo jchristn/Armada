@@ -41,6 +41,8 @@ import { MIN_TOUCH, spacing } from '../../theme/typography';
 import type { OperationsListProps } from './listTypes';
 import type { MissionDetailTab } from './MissionDetail';
 import { MissionFormSheet, type MissionFormValues } from './mission/MissionFormSheet';
+import { DispatchWarningsSheet } from '../blackbox/DispatchWarnings';
+import { dispatchWarningsOf, warningCount, type DispatchWarnings } from '../blackbox/insightModel';
 import { TransitionSheet } from './mission/TransitionSheet';
 import { useHardwareBack } from '../../navigation/useHardwareBack';
 
@@ -88,6 +90,7 @@ export function MissionsList({ onSelect, selectedId, onOpenTab }: MissionsListPr
   const [jsonFor, setJsonFor] = useState<MissionSummary | null>(null);
   const [selection, setSelection] = useState<string[] | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createdWarnings, setCreatedWarnings] = useState<{ missionId: string; warnings: DispatchWarnings } | null>(null);
   const [creating, setCreating] = useState(false);
   const [confirmElement, confirm] = useConfirm('missions-confirm');
   const canScope = isAdmin || isTenantAdmin;
@@ -226,9 +229,11 @@ export function MissionsList({ onSelect, selectedId, onOpenTab }: MissionsListPr
   async function submitCreate(values: MissionFormValues) {
     setCreating(true);
     try {
-      await createMission({ title: values.title, description: values.description, vesselId: values.vesselId, priority: values.priority, mode: values.mode });
+      const mission = await createMission({ title: values.title, description: values.description, vesselId: values.vesselId, priority: values.priority, mode: values.mode });
       setCreateOpen(false);
       pushToast('success', t('Mission "{{title}}" created.', { title: values.title }));
+      const warnings = dispatchWarningsOf(mission);
+      if (mission?.id && warningCount(warnings) > 0) setCreatedWarnings({ missionId: mission.id, warnings });
       void reload();
     } catch (e) {
       pushToast('error', errorMessage(e, t('Create failed.')));
@@ -383,6 +388,13 @@ export function MissionsList({ onSelect, selectedId, onOpenTab }: MissionsListPr
         busy={creating}
         onClose={() => setCreateOpen(false)}
         onSubmit={(values) => void submitCreate(values)}
+      />
+      <DispatchWarningsSheet
+        warnings={createdWarnings?.warnings ?? null}
+        continueLabel={t('Open Mission')}
+        onContinue={() => { const id = createdWarnings?.missionId; setCreatedWarnings(null); if (id) onSelect(id); }}
+        onClose={() => setCreatedWarnings(null)}
+        testID="mission-create-warnings"
       />
       {confirmElement}
     </View>

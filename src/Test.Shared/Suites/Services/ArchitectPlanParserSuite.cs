@@ -2,6 +2,7 @@ namespace Test.Shared.Suites.Services
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -39,8 +40,8 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(ArchitectPlanParser.TryParse(output, out ArchitectPlan? plan), "plan found");
                 AssertEqual(3, plan!.Missions.Count);
                 AssertEqual("A", plan.Missions[0].Title);
-                AssertNull(plan.Missions[0].DependsOn);
-                AssertEqual(1, plan.Missions[1].DependsOn);
+                AssertNull(plan.Missions[0].Parent);
+                AssertEqual(1, plan.Missions[1].Parent, "a legacy dependsOn is read as the parent");
                 AssertTrue(plan.Missions[2].WaitForOtherMissions, "wait flag");
                 AssertEqual("C", plan.Missions[2].Description, "a missing description falls back to the title");
             }));
@@ -64,7 +65,7 @@ namespace Test.Shared.Suites.Services
                 AssertTrue(ArchitectPlanParser.TryParse(output, out ArchitectPlan? plan));
                 AssertEqual(2, plan!.Missions.Count);
                 AssertEqual("Core", plan.Missions[0].Title);
-                AssertEqual(1, plan.Missions[1].DependsOn, "original mission 2 (Core) is now mission 1");
+                AssertEqual(1, plan.Missions[1].Parent, "original mission 2 (Core) is now mission 1");
             }));
 
             cases.Add(Case("invalid_dependencies_are_cleared", "Self, forward, and out-of-range dependencies are cleared", TestTags.Negative, () =>
@@ -75,9 +76,9 @@ namespace Test.Shared.Suites.Services
                     "```";
                 AssertTrue(ArchitectPlanParser.TryParse(output, out ArchitectPlan? plan));
                 AssertEqual(3, plan!.Missions.Count, "a repeated title is dropped");
-                AssertNull(plan.Missions[0].DependsOn, "self dependency");
-                AssertNull(plan.Missions[1].DependsOn, "forward dependency");
-                AssertNull(plan.Missions[2].DependsOn, "zero index");
+                AssertNull(plan.Missions[0].Parent, "self dependency");
+                AssertNull(plan.Missions[1].Parent, "forward dependency");
+                AssertNull(plan.Missions[2].Parent, "zero index");
             }));
 
             cases.Add(Case("no_plan_without_valid_block", "Malformed JSON, unfenced JSON, other fences, and placeholder-only examples yield no plan", TestTags.Negative, () =>
@@ -95,7 +96,9 @@ namespace Test.Shared.Suites.Services
             {
                 string text = ArchitectPlanParser.FormatInstructions();
                 AssertContains("armada-plan", text);
-                AssertContains("dependsOn", text);
+                AssertContains("contractVersion:4", text);
+                AssertContains("parent:earlier 1-based index", text);
+                AssertContains("ownedPaths", text);
                 AssertContains("waitForOtherMissions", text);
             }));
 
@@ -151,6 +154,91 @@ namespace Test.Shared.Suites.Services
                 description = ArchitectPlanParser.DescribeMission(plan, plan.Missions[0]);
                 AssertFalse(description.Contains("explicit false is retained"));
                 AssertContains("AC-READ", description);
+            }));
+
+            cases.Add(Case("v4_rejects_parallel_ownership_overlap", "A v4 plan whose parallel siblings own the same file is rejected and the message names both missions", TestTags.Negative, () =>
+            {
+                ArchitectPlan plan = OwnershipPlan();
+                plan.Missions[1].OwnedPaths = new List<string> { "src/Foo.cs" };
+                plan.Missions[2].OwnedPaths = new List<string> { "./src/Foo.cs" };
+                AssertFalse(ArchitectPlanParser.TryParse(Fence(plan), out ArchitectPlan? parsed, out string? error));
+                AssertNull(parsed);
+                AssertContains("Missions 2 and 3 can run in parallel but both own src/Foo.cs", error!);
+                AssertContains("make one the parent of the other", error!);
+
+                ArchitectPlan prefix = OwnershipPlan();
+                prefix.Missions[1].OwnedPaths = new List<string> { "src/" };
+                prefix.Missions[2].OwnedPaths = new List<string> { "src/Bar/*.cs" };
+                AssertFalse(ArchitectPlanParser.TryParse(Fence(prefix), out _, out error), "a directory prefix overlaps a pattern below it");
+                AssertContains("src/ and src/Bar/*.cs", error!);
+            }));
+
+            cases.Add(Case("v4_parent_child_overlap_and_disjoint_siblings_accepted", "A parent and its child may own the same file; disjoint siblings and the final integration mission are accepted", TestTags.Positive, () =>
+            {
+                ArchitectPlan plan = OwnershipPlan();
+                plan.Missions[1].Parent = 1;
+                plan.Missions[1].BranchStrategy = "fork";
+                plan.Missions[1].OwnedPaths = new List<string> { "src/Core/" };
+                plan.Missions[3].OwnedPaths = new List<string> { "src/Core/Shared.cs", "CHANGELOG.md" };
+                AssertTrue(ArchitectPlanParser.TryParse(Fence(plan), out ArchitectPlan? parsed, out string? error), error ?? "");
+                AssertEqual(1, parsed!.Missions[1].Parent);
+                AssertEqual("fork", parsed.Missions[1].BranchStrategy);
+                AssertContains("## Owned paths (change only these)\n- src/Core/", ArchitectPlanParser.DescribeMission(parsed, parsed.Missions[1]));
+            }));
+
+            cases.Add(Case("v4_parent_rules", "Self, forward and too-deep parents and an unknown or parentless branchStrategy are rejected", TestTags.Negative, () =>
+            {
+                List<Action<ArchitectPlan>> defects = new List<Action<ArchitectPlan>>
+                {
+                    p => p.Missions[1].Parent = 2,
+                    p => p.Missions[1].Parent = 3,
+                    p => p.Missions[1].Parent = 0,
+                    p => { p.Missions[1].Parent = 1; p.Missions[1].BranchStrategy = "sideways"; },
+                    p => p.Missions[2].BranchStrategy = "continue",
+                    p => { p.Missions[1].Parent = 1; p.Missions[1].DependsOn = 2; }
+                };
+                foreach (Action<ArchitectPlan> defect in defects)
+                {
+                    ArchitectPlan plan = OwnershipPlan();
+                    defect(plan);
+                    AssertFalse(ArchitectPlanParser.TryParse(Fence(plan), out ArchitectPlan? parsed, out string? error), "defect accepted");
+                    AssertNull(parsed);
+                }
+                ArchitectPlan deep = OwnershipPlan();
+                deep.Missions[1].Parent = 1;
+                deep.Missions[2].Parent = 2;
+                AssertTrue(ArchitectPlanParser.TryParse(Fence(deep), out _, out _, 2), "depth 2 within a maximum of 2");
+                AssertFalse(ArchitectPlanParser.TryParse(Fence(deep), out _, out string? depthError, 1), "depth 2 over a maximum of 1");
+                AssertContains("the maximum is 1", depthError!);
+            }));
+
+            cases.Add(Case("v3_dependsOn_maps_to_parent_with_warning", "A v3 dependsOn is read as the parent with a warning, and a v3 ownership overlap only warns", TestTags.Positive, () =>
+            {
+                ArchitectPlan plan = OwnershipPlan();
+                plan.ContractVersion = 3;
+                plan.Missions[1].DependsOn = 1;
+                plan.Missions[2].OwnedPaths = new List<string> { "src/Foo.cs" };
+                plan.Missions[0].OwnedPaths = new List<string> { "src/Foo.cs" };
+                AssertTrue(ArchitectPlanParser.TryParse(Fence(plan), out ArchitectPlan? parsed, out string? error), error ?? "");
+                AssertEqual(1, parsed!.Missions[1].Parent);
+                AssertNull(parsed.Missions[1].DependsOn);
+                AssertTrue(parsed.Warnings.Any(w => w.Contains("dependsOn 1 was read as parent 1")), "mapping warning");
+                AssertTrue(parsed.Warnings.Any(w => w.Contains("Missions 1 and 3 can run in parallel")), "v3 overlap is a warning");
+            }));
+
+            cases.Add(Case("owned_path_matching", "Owned paths overlap on equal files, directory prefixes and patterns, and not otherwise", TestTags.Positive, () =>
+            {
+                AssertTrue(OwnedPathMatcher.Overlaps("src/a.cs", "src/a.cs"));
+                AssertTrue(OwnedPathMatcher.Overlaps("src/", "src/a.cs"));
+                AssertTrue(OwnedPathMatcher.Overlaps("src", "src/a.cs"), "a bare directory name covers its files");
+                AssertTrue(OwnedPathMatcher.Overlaps("src\\a.cs", "./src/a.cs"), "slashes and ./ are normalized");
+                AssertTrue(OwnedPathMatcher.Overlaps("src/*.cs", "src/a.cs"));
+                AssertFalse(OwnedPathMatcher.Overlaps("src/*.cs", "src/sub/a.cs"), "* stays within one segment");
+                AssertTrue(OwnedPathMatcher.Overlaps("src/**", "src/sub/a.cs"));
+                AssertTrue(OwnedPathMatcher.Overlaps("src/*.cs", "src/*.ts"), "two patterns with a shared literal prefix overlap conservatively");
+                AssertFalse(OwnedPathMatcher.Overlaps("src/a.cs", "src/ab.cs"));
+                AssertFalse(OwnedPathMatcher.Overlaps("docs/", "src/docs/a.md"));
+                AssertFalse(OwnedPathMatcher.Overlaps("", "src/a.cs"));
             }));
 
             cases.Add(Case("versioned_contract_rejects_unsafe_plans", "Incomplete coverage, vacuous checks, invalid dependencies and missing integration never dispatch", TestTags.Negative, () =>
@@ -261,6 +349,30 @@ namespace Test.Shared.Suites.Services
         #region Private-Methods
 
         private static string Fence(ArchitectPlan plan) => "```armada-plan\n" + JsonSerializer.Serialize(plan) + "\n```";
+
+        // v4: an implementation root, two parallel siblings and the final integration mission, all with disjoint paths.
+        private static ArchitectPlan OwnershipPlan()
+        {
+            ArchitectPlan plan = ValidDecisionContract();
+            plan.ContractVersion = 4;
+            ArchitectPlanMission integration = plan.Missions[1];
+            integration.DependsOn = null;
+            ArchitectPlanMission template = plan.Missions[0];
+            plan.Missions.Clear();
+            string[] titles = { "Core", "Sibling A", "Sibling B" };
+            for (int i = 0; i < titles.Length; i++)
+            {
+                ArchitectPlanMission mission = JsonSerializer.Deserialize<ArchitectPlanMission>(JsonSerializer.Serialize(template))!;
+                mission.Title = titles[i];
+                mission.DependsOn = null;
+                mission.OwnedPaths = new List<string> { "src/" + titles[i].Replace(" ", "") + ".cs" };
+                mission.AcceptanceCriteria[0].Id = "AC-" + i;
+                plan.Missions.Add(mission);
+            }
+            integration.OwnedPaths = new List<string> { "CHANGELOG.md" };
+            plan.Missions.Add(integration);
+            return plan;
+        }
 
         private static ArchitectPlan ValidDecisionContract()
         {

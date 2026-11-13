@@ -18,7 +18,7 @@ namespace Armada.Helm.Commands
         /// Optional status filter.
         /// </summary>
         [Description("Filter by voyage status")]
-        [CommandOption("--status|-s")]
+        [CommandOption("--status|-s <STATUS>")]
         public string? Status { get; set; }
     }
 }

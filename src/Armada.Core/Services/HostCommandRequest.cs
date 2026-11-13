@@ -63,10 +63,18 @@ namespace Armada.Core.Services
         }
 
         /// <summary>
-        /// What the command is for: routine git work (the default), a check run, or an operator's command. A Harbor
-        /// collapses routine work in its activity log and shows the others.
+        /// What the command is for: routine git work (the default), a check run, an operator's command, or
+        /// a usage capture probe. A Harbor collapses routine work in its activity log and shows the others.
         /// </summary>
         public HostCommandKindEnum Kind { get; set; } = HostCommandKindEnum.Routine;
+
+        /// <summary>
+        /// Serialized <see cref="UsageProbeHost"/> (safe profile reference and probe configuration, never
+        /// credential contents), set only when <see cref="Kind"/> is
+        /// <see cref="HostCommandKindEnum.UsageProbe"/>. The host that runs the request deserializes it and
+        /// invokes the host-side usage helper rather than an executable.
+        /// </summary>
+        public string? UsageProbeJson { get; set; } = null;
 
         /// <summary>
         /// Optional short name for the command in a Harbor's activity log (for example the check's name), or null.

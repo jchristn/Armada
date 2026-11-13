@@ -6,6 +6,7 @@ namespace Armada.Core.Services
     using System.Threading;
     using System.Threading.Tasks;
     using SyslogLogging;
+    using Armada.Core.BlackBox;
     using Armada.Core.Database;
     using Armada.Core.Enums;
     using Armada.Core.Models;
@@ -20,6 +21,15 @@ namespace Armada.Core.Services
     /// </summary>
     public class MissionRecoveryCoordinator
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Black box capture for an original mission whose rescue budget is used up, or null.
+        /// </summary>
+        public IBlackBoxCapture? BlackBox { get; set; } = null;
+
+        #endregion
+
         #region Private-Members
 
         private readonly string _Header = "[MissionRecoveryCoordinator] ";
@@ -190,6 +200,14 @@ namespace Armada.Core.Services
                 incident.RecoveryNotes = ExhaustedNote;
                 await UpdateIncidentAsync(auth, incident, token).ConfigureAwait(false);
                 _Logging.Warn(_Header + "incident " + incident.Id + " exhausted its rescue budget; left open for a human");
+                Mission? lastRescue = rescues.LastOrDefault();
+                await BlackBox.RecordMissionFailureAsync(original, original.Status, BlackBoxStepEnum.RescueFailed, context =>
+                {
+                    context.IncidentId = incident.Id;
+                    context.Note = "Incident " + incident.Id + " used " + incident.RecoveryAttempts + " of " + maxAttempts + " rescue attempt(s); rescues: "
+                        + String.Join(", ", rescues.Select(r => r.Id + " (" + r.Status + ")"))
+                        + (lastRescue?.LastBlackBoxEntryId != null ? "; last rescue entry " + lastRescue.LastBlackBoxEntryId : "") + ".";
+                }, token).ConfigureAwait(false);
             }
         }
 
@@ -251,9 +269,9 @@ namespace Armada.Core.Services
             if (!String.IsNullOrEmpty(mission.Persona) && !PersonaCatalog.Matches(mission.Persona, PersonaCatalog.Worker)) return false;
 
             // A rescue's failure belongs to the incident that dispatched it, which retries within its budget. If that
-            // incident is gone (purging the original mission removes it and clears ParentMissionId), rescuing the rescue
+            // incident is gone (purging the original mission removes it and clears RescueOfMissionId), rescuing the rescue
             // would restart the chain without a cap.
-            if (mission.IsRescue || !String.IsNullOrEmpty(mission.ParentMissionId)) return false;
+            if (mission.IsRescue || !String.IsNullOrEmpty(mission.RescueOfMissionId)) return false;
             if (!String.IsNullOrEmpty(mission.DependsOnMissionId)) return false;
             if (String.IsNullOrEmpty(mission.VoyageId)) return true;
 
@@ -264,12 +282,12 @@ namespace Armada.Core.Services
         private async Task<Mission?> DispatchRescueAsync(Mission original, Incident incident, CancellationToken token)
         {
             // The rescue is a fresh, standalone Worker mission (no voyage attachment, so it never re-opens a
-            // terminal voyage) linked back through ParentMissionId and the incident. The normal pending-dispatch
+            // terminal voyage) linked back through RescueOfMissionId and the incident. The normal pending-dispatch
             // sweep assigns it on the next health cycle.
             List<Mission> peers = await _Database.Missions.EnumerateByVesselAsync(original.VesselId!, token).ConfigureAwait(false);
             Mission? existing = peers.FirstOrDefault(m => m.Id != original.Id && m.TenantId == original.TenantId
                 && _ActiveStatuses.Contains(m.Status)
-                && (m.ParentMissionId == original.Id || String.Equals(m.Title, original.Title, StringComparison.OrdinalIgnoreCase)
+                && (m.RescueOfMissionId == original.Id || String.Equals(m.Title, original.Title, StringComparison.OrdinalIgnoreCase)
                     || String.Equals(m.Title, "[Rescue] " + original.Title, StringComparison.OrdinalIgnoreCase)
                     || ReferencesOriginal(m, original)));
             if (existing != null)
@@ -289,7 +307,8 @@ namespace Armada.Core.Services
             rescue.UserId = original.UserId;
             rescue.VesselId = original.VesselId;
             rescue.IsEvaluation = original.IsEvaluation;
-            rescue.ParentMissionId = original.Id;
+            rescue.WorkerEnvelope = original.WorkerEnvelope;
+            rescue.RescueOfMissionId = original.Id;
             rescue.IsRescue = true;
             rescue.Persona = PersonaCatalog.Worker;
             rescue.Mode = MissionModeEnum.Implementation;

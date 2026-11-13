@@ -48,7 +48,7 @@ namespace Armada.Tui.Screens.Operations
             string? initial = OpsHandoff.Get(route, "status");
             if (initial != null && statuses.Any(o => o.Value == initial)) StatusFilter.SetValue(initial);
 
-            Column("action", "Action", r => r.ActionName + (r.ActionId == null ? "  [" + Tr("Ad hoc") + "]" : ""), 3);
+            Column("action", "Action", r => r.ActionName + (FleetActionLabels.IsReportOnly(r.Kind, r.MissionMode) ? "  [" + Tr("Report-only") + "]" : "") + (r.ActionId == null ? "  [" + Tr("Ad hoc") + "]" : ""), 3);
             Column("id", "ID", r => r.Id, 0, 24).DefaultVisible = false;
             Column("kind", "Kind", r => Tr(r.Kind.ToString()), 0, 9);
             Column("status", "Status", r => StatusBadge.Marker(FleetActionLabels.RunTone(r.Status)) + " " + Tr(FleetActionLabels.RunStatusLabel(r.Status)), 0, 18, null, (r, t) => StatusBadge.Style(FleetActionLabels.RunTone(r.Status), t));

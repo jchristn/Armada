@@ -13,7 +13,7 @@ namespace Armada.Harbor
 
     /// <summary>
     /// One row of the Running now list: a status dot, what the job is and its runtime, where it belongs and how long it
-    /// has run, who runs it, its branch and IDs (copyable), its latest activity, and Open in Dashboard and View output.
+    /// has run, who runs it, its branch and IDs (copyable), its latest activity, and Open in Dashboard and View Output.
     /// A click (or Enter or Space) expands it to show the job's last output lines.
     /// </summary>
     public class JobListRow : Border
@@ -50,7 +50,7 @@ namespace Armada.Harbor
         public event Action<string>? OpenLink;
 
         /// <summary>
-        /// Raised when View output is clicked.
+        /// Raised when View Output is clicked.
         /// </summary>
         public event Action<HarborRunningJobView>? ViewOutput;
 
@@ -148,7 +148,7 @@ namespace Armada.Harbor
                 if (_View?.DashboardLink != null) OpenLink?.Invoke(_View.DashboardLink);
             }, "Open this job's page in the Armada dashboard");
             _OpenDashboard.Classes.Add("subtle");
-            _ViewOutput = HarborUi.Button("View output", () =>
+            _ViewOutput = HarborUi.Button("View Output", () =>
             {
                 if (_View != null) ViewOutput?.Invoke(_View);
             }, "Open this job's log in Status > Logs");

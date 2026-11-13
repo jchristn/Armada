@@ -160,7 +160,7 @@ namespace Armada.Helm.Commands
                     }
                     catch (InvalidDataException ex)
                     {
-                        AnsiConsole.MarkupLine($"[red]{target.ClientName}[/]: not changed: {Markup.Escape(target.FilePath)}: {Markup.Escape(ex.Message)}");
+                        HelmConsole.Error.MarkupLine($"[red]{target.ClientName}[/]: not changed: {Markup.Escape(target.FilePath)}: {Markup.Escape(ex.Message)}");
                     }
                 }
                 else

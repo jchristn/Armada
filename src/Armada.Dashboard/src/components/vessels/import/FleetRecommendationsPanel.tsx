@@ -18,7 +18,7 @@ import CodeStatusBadge from '../../shared/CodeStatusBadge';
 import ConfirmDialog from '../../shared/ConfirmDialog';
 import { categorizationBadge, importErrorLabel } from '../../../lib/vesselImportLabels';
 import { UNCATEGORIZED_FLEET, buildApplyPayload, newFleetDraft, toDrafts, moveVessel, validateDrafts, type FleetDraft } from '../../../lib/vesselImport';
-import { JOBS_PATH } from '../../../lib/navTargets';
+import { BACKGROUND_ACTIVITY_PATH } from '../../../lib/navTargets';
 
 export { UNCATEGORIZED_FLEET, toDrafts, moveVessel, validateDrafts, buildApplyPayload, type FleetDraft } from '../../../lib/vesselImport';
 
@@ -152,7 +152,7 @@ export default function FleetRecommendationsPanel({ batch, items, recommendation
               {t('You can close this dialog; the header shows the task while it runs and you are notified when it finishes. Reopen this batch from the import history to review the fleets.')}
             </p>
             <div className="fleet-recs-actions">
-              {batch.categorizationJobId && <Link to={JOBS_PATH} className="btn btn-sm" title={t('See the background job running the fleet recommendations.')}>{t('Open the Jobs page')}</Link>}
+              {batch.categorizationJobId && <Link to={BACKGROUND_ACTIVITY_PATH} className="btn btn-sm" title={t('View recorded background task outcomes in Events.')}>{t('View activity')}</Link>}
               {batch.categorizationJobId && status === 'Running' && (
                 <button type="button" className="btn btn-sm" onClick={() => void stop()} disabled={busy} title={t('Cancel the fleet recommendation job and stop the captain. The imported vessels stay; you can retry later.')}>{t('Stop the captain')}</button>
               )}

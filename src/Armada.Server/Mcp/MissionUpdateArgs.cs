@@ -60,5 +60,10 @@ namespace Armada.Server.Mcp
         /// written report instead of a commit.
         /// </summary>
         public string? Mode { get; set; }
+
+        /// <summary>
+        /// Worker eligibility envelope to replace the mission's; {} clears it, null keeps the stored value.
+        /// </summary>
+        public Armada.Core.Models.WorkerEnvelope? WorkerEnvelope { get; set; }
     }
 }

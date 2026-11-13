@@ -1,3 +1,4 @@
+import type { BlackBoxConflictingMission, BlackBoxFinding, BlackBoxProposedChange, BlackBoxRecoveryPath, BriefLintFinding, MissionOverlapWarning } from './blackbox';
 export interface RunApprovalOptions {
   approveAll: boolean;
   timeoutSeconds: number;
@@ -154,6 +155,21 @@ export interface FleetDetailResponse {
   vesselCount: number;
 }
 
+/**
+ * Worker eligibility envelope (docs/MODEL_HETEROGENEITY.md 3.3): the size a Worker mission is sliced for and the model
+ * profile a captain needs to run it. Every field is optional.
+ */
+export interface WorkerEnvelope {
+  /** Most files one Worker mission should change (1 to 1000), or null for no limit. */
+  maxFiles?: number | null;
+  /** Most steps one Worker mission should take (1 to 1000), or null for no limit. */
+  maxSteps?: number | null;
+  /** Smallest served context in tokens a captain's model profile must record, or null for no minimum. */
+  minServedContextTokens?: number | null;
+  /** Capabilities the profile must record as available: 'tools' (tool calls) and 'mcp' (MCP tools). */
+  requiredTools?: string[];
+}
+
 export interface Vessel {
   id: string;
   tenantId: string | null;
@@ -195,7 +211,12 @@ export interface Vessel {
   lintCommand?: string | null;
   /** Per-vessel override for the Audit intent. */
   auditCommand?: string | null;
-  allowConcurrentMissions: boolean;
+  /** Default Worker eligibility envelope for missions on this vessel; null or absent means none (routing unchanged). */
+  workerEnvelope?: WorkerEnvelope | null;
+  maxParallelVoyages?: number;
+  maxParallelMissionsPerVoyage?: number;
+  /** Chain a mission that overlaps an active one after it (DependsOnMissionId) at dispatch. */
+  serializeOverlappingMissions?: boolean;
   /** Per-vessel auto-approve override for missions; null or absent uses the captain setting. */
   autoApprove?: boolean | null;
   defaultPipelineId: string | null;
@@ -227,6 +248,12 @@ export type VoyageStatus = 'Open' | 'InProgress' | 'Complete' | 'Failed' | 'Canc
 export type CaptainState = 'Idle' | 'Working' | 'Planning' | 'Refining' | 'Stalled' | 'Stopping' | 'Quarantined' | 'Analyzing';
 
 export interface Captain {
+  maxConcurrency?: number;
+  activeMissionCount?: number;
+  activeMissionIds?: string[];
+  currentSessionId?: string | null;
+  /** New-work eligibility; absent on older servers means active. */
+  active?: boolean;
   id: string;
   tenantId: string | null;
   name: string;
@@ -245,9 +272,19 @@ export interface Captain {
   runtimeOptionsJson?: string | null;
   /** CLI tool permission policy for this captain's CLI sessions; null or absent inherits (see CliPermissionPolicy). */
   cliPermissionPolicy?: CliPermissionPolicy | null;
+  /** Account usage capture switch; absent on older servers means off. */
+  usageCaptureEnabled?: boolean | null;
+  /** Requested capture interval in seconds (60..86400, default 300). */
+  usageCaptureIntervalSeconds?: number;
+  /** Auto, Disabled or Custom. */
+  usageCaptureMode?: UsageCaptureMode;
+  /** Custom executable/argument-list JSON; null outside Custom mode. */
+  usageCaptureCommand?: string | null;
+  /** Credential Harbor retained while idle; null follows the dock or standalone Admiral. */
+  usageCaptureHarborId?: string | null;
+  /** True when capture is enabled and the mode is not Disabled. */
+  usageCaptureActive?: boolean;
   state: string;
-  currentMissionId: string | null;
-  currentDockId: string | null;
   processId: number | null;
   recoveryAttempts: number;
   lastHeartbeatUtc: string | null;
@@ -327,6 +364,10 @@ export interface CaptainToolsQuery {
 export type MissionMode = 'Implementation' | 'Audit' | 'Research';
 
 export interface Mission {
+  /** Overlap warnings dispatch returned for this mission (transient; only on the create response). */
+  overlapWarnings?: MissionOverlapWarning[] | null;
+  /** Brief lint findings dispatch returned for this mission (transient; only on the create response). */
+  briefLintWarnings?: BriefLintFinding[] | null;
   id: string;
   tenantId: string | null;
   userId?: string | null;
@@ -342,6 +383,16 @@ export interface Mission {
   mode: MissionMode;
   priority: number;
   parentMissionId: string | null;
+  rescueOfMissionId?: string | null;
+  branchStrategy?: 'New' | 'ContinueParent' | 'ForkFromParent';
+  baseBranchName?: string | null;
+  depth?: number;
+  readyUtc?: string | null;
+  assignedUtc?: string | null;
+  /** Other missions a restart returned to Pending (only on a restart response). */
+  restoredMissionIds?: string[] | null;
+  ownedPathsJson?: string | null;
+  readsPathsJson?: string | null;
   persona: string | null;
   dependsOnMissionId: string | null;
   requiresReview: boolean;
@@ -356,6 +407,8 @@ export interface Mission {
   processId: number | null;
   prUrl: string | null;
   commitHash: string | null;
+  /** Current black box entry (bbx_...) when the mission failed; null otherwise. Absent on older servers. */
+  lastBlackBoxEntryId?: string | null;
   failureReason: string | null;
   /** Category of the failure (MissionFailureKindEnum), for example 'Infra' when the host blocked landing. */
   failureKind?: string | null;
@@ -383,9 +436,20 @@ export type MissionAssignmentBlockerReason =
   | 'VesselBroadScopeMissionActive'
   | 'BroadScopeWaitingForVessel'
   | 'VesselConcurrencyLimit'
+  | 'VesselVoyageLimit'
+  | 'VoyageMissionLimit'
+  | 'GlobalMissionLimit'
+  | 'CaptainConcurrencyLimit'
+  | 'RuntimeMissionLimit'
+  | 'EndpointMissionLimit'
+  | 'EndpointUnavailable'
   | 'NoCaptains'
   | 'NoIdleCaptain'
-  | 'NoEligibleCaptain';
+  | 'NoEligibleCaptain'
+  | 'LaunchFailing'
+  | 'PlacementWaiting'
+  | 'BranchInUse'
+  | 'ParentNotFinished';
 
 export interface MissionAssignmentCaptainStatus {
   captainId: string;
@@ -401,7 +465,20 @@ export interface MissionAssignmentCaptainStatus {
   eligibleForMission?: boolean | null;
 }
 
+export interface AssignmentBlockerAdvice {
+  text: string;
+  action?: 'EditVessel' | 'EditCaptain' | 'AddCaptain' | 'EditSettings' | 'EditEndpoint' | 'OpenMission' | 'OpenVoyage' | null;
+  targetType?: string | null;
+  targetId?: string | null;
+  setting?: string | null;
+  currentValue?: number | null;
+  suggestedValue?: number | null;
+}
+
 export interface MissionAssignmentBlocker {
+  selectionReasonCode?: string | null;
+  selectionNextReconsiderUtc?: string | null;
+  advice?: AssignmentBlockerAdvice[];
   reason: MissionAssignmentBlockerReason;
   summary: string;
   untilUtc: string | null;
@@ -426,6 +503,15 @@ export interface MissionSummary {
   status: string;
   priority: number;
   parentMissionId: string | null;
+  /** Branch relationship to the parent, as recorded at assignment. */
+  branchStrategy?: 'New' | 'ContinueParent' | 'ForkFromParent';
+  /** Depth in the mission hierarchy (0 for a top-level logical mission). */
+  depth?: number;
+  /** First held back only by capacity (or assignment time when admitted on first sight). */
+  readyUtc?: string | null;
+  assignedUtc?: string | null;
+  /** True for an integration mission that waits for every other pipeline. */
+  waitForVoyageWorkers?: boolean;
   persona: string | null;
   dependsOnMissionId: string | null;
   branchName: string | null;
@@ -451,6 +537,124 @@ export interface MissionSummary {
   lastUpdateUtc: string;
   /** True for evaluation work (fixture battery, model evaluation); its stage outcomes never count as production data. */
   isEvaluation?: boolean;
+}
+
+/** Scheduling gate a Pending mission waits on (MissionWaitGateEnum). */
+export type MissionWaitGate =
+  | 'Dependency' | 'Parent' | 'IntegrationBarrier' | 'BroadScope' | 'BranchLock' | 'VesselVoyageSlot'
+  | 'VoyageMissionSlot' | 'CaptainSlot' | 'EndpointSlot' | 'RuntimeSlot' | 'GlobalSlot' | 'Placement'
+  | 'LaunchBackoff' | 'Other';
+
+/** One recorded scheduling wait (GET /api/v1/missions/{id}/waits). endedUtc is null while the mission still waits. */
+export interface MissionWaitInterval {
+  id: string;
+  tenantId: string | null;
+  missionId: string;
+  vesselId: string | null;
+  voyageId: string | null;
+  captainId: string | null;
+  gate: MissionWaitGate;
+  startedUtc: string;
+  endedUtc: string | null;
+  detail: string | null;
+}
+
+/** A logical mission in a voyage tree: its root, later pipeline stages, and child logical missions. */
+export interface MissionTreeNode {
+  mission: MissionSummary;
+  stages: MissionSummary[];
+  children: MissionTreeNode[];
+}
+
+/** GET /api/v1/voyages/{id}/tree */
+export interface VoyageTree {
+  voyageId: string;
+  title: string;
+  totalMissions: number;
+  /** True when the voyage has more missions than the tree holds (1000, oldest first). */
+  truncated: boolean;
+  maxDepth: number;
+  roots: MissionTreeNode[];
+}
+
+/** Slot wait over a window, per mission; null percentiles mean no samples. */
+export interface SlotWaitStatistics {
+  windowHours: number;
+  missions: number;
+  p50Seconds: number | null;
+  p95Seconds: number | null;
+  maxSeconds: number | null;
+}
+
+export interface VesselVoyageSlotUsage {
+  voyageId: string | null;
+  missionId: string | null;
+  title: string;
+  runningMissions: number;
+  pendingMissions: number;
+}
+
+export interface WaitingMissionInfo {
+  missionId: string;
+  title: string;
+  voyageId: string | null;
+  gate: MissionWaitGate;
+  detail: string | null;
+  waitingSinceUtc: string;
+  waitedSeconds: number;
+}
+
+/** GET /api/v1/vessels/{id}/concurrency */
+export interface VesselConcurrency {
+  vesselId: string;
+  name: string;
+  maxParallelVoyages: number;
+  maxParallelMissionsPerVoyage: number;
+  voyageSlotsInUse: number;
+  runningMissions: number;
+  holdingVoyages: VesselVoyageSlotUsage[];
+  waiting: WaitingMissionInfo[];
+  waitingCount: number;
+  slotWait24h: SlotWaitStatistics;
+  slotWait7d: SlotWaitStatistics;
+  computedUtc: string;
+}
+
+export interface GateWaitTotal {
+  gate: MissionWaitGate;
+  seconds: number;
+  missions: number;
+}
+
+export interface ConcurrencyMetricsBucket {
+  startUtc: string;
+  missionsWaiting: number;
+  byGate: GateWaitTotal[];
+}
+
+/** GET /api/v1/metrics/concurrency */
+export interface ConcurrencyMetrics {
+  fromUtc: string;
+  toUtc: string;
+  vesselId: string | null;
+  captainId: string | null;
+  bucketSeconds: number;
+  slotWait: SlotWaitStatistics;
+  byGate: GateWaitTotal[];
+  buckets: ConcurrencyMetricsBucket[];
+  truncated: boolean;
+}
+
+/** WebSocket mission.waiting_gate_changed payload. */
+export interface MissionWaitGateChange {
+  tenantId: string | null;
+  missionId: string;
+  voyageId: string | null;
+  vesselId: string | null;
+  gate: MissionWaitGate;
+  previousGate: MissionWaitGate | null;
+  detail: string | null;
+  sinceUtc: string;
 }
 
 export interface MissionHistoryBucket {
@@ -522,6 +726,10 @@ export interface TokenUsageSummaryResult {
 
 export interface Voyage {
   approvalOptions?: RunApprovalOptions | null;
+  /** Overlap warnings dispatch returned for the voyage's missions (transient; only on the create response). */
+  overlapWarnings?: MissionOverlapWarning[] | null;
+  /** Brief lint findings dispatch returned for the voyage's missions (transient; only on the create response). */
+  briefLintWarnings?: BriefLintFinding[] | null;
   id: string;
   tenantId: string | null;
   title: string;
@@ -539,6 +747,8 @@ export interface Voyage {
   selectedPlaybooks?: SelectedPlaybook[];
   captainOverridesJson?: string | null;
   /** True for evaluation work (fixture battery, model evaluation); its stage outcomes never count as production data. */
+  /** Current black box entry when the voyage failed. Absent on older servers. */
+  lastBlackBoxEntryId?: string | null;
   isEvaluation?: boolean;
 }
 
@@ -1503,7 +1713,71 @@ export interface InboxItem {
   cliPermission?: CliPermissionRequest | null;
   /** cli_permission items: when the pending request expires (UTC). */
   expiresUtc?: string | null;
+  /** model_alert items: the scorecard alert with its suggested actions (Armada.Core.Models.ModelAlert). */
+  modelAlert?: ModelAlert | null;
   href: string;
+}
+
+/** Scorecard threshold a model alert crossed (Armada.Core.Enums.ModelAlertRuleEnum). */
+export type ModelAlertRule = 'FirstPassSuccess' | 'EscalationsInARow' | 'ProtocolRepairRate' | 'CostPerAcceptedResult';
+
+/** Whether a model alert still holds (Armada.Core.Enums.ModelAlertStatusEnum). */
+export type ModelAlertStatus = 'Open' | 'Resolved';
+
+/** Suggested action an operator can apply to a model alert (Armada.Core.Enums.ModelAlertActionEnum). */
+export type ModelAlertAction = 'MoveDown' | 'RemoveFromPersona' | 'CompactTemplate' | 'Reevaluate' | 'Ignore';
+
+/** One suggested action of a model alert; nothing changes until the operator applies it. */
+export interface ModelAlertSuggestedAction {
+  action: ModelAlertAction;
+  label: string;
+  description: string;
+  available: boolean;
+  unavailableReason?: string | null;
+  recommended: boolean;
+}
+
+/** A suggested action the operator applied, as recorded on the alert. */
+export interface ModelAlertActionRecord {
+  action: ModelAlertAction;
+  appliedUtc: string;
+  userId?: string | null;
+  changed: boolean;
+  result: string;
+  targetId?: string | null;
+}
+
+/** An advisory alert raised when a (profile, persona) scorecard crosses a threshold. */
+export interface ModelAlert {
+  id: string;
+  tenantId?: string | null;
+  profileId: string;
+  model?: string | null;
+  revisionGroup: string;
+  persona: string;
+  vesselId?: string | null;
+  vesselName?: string | null;
+  rule: ModelAlertRule;
+  status: ModelAlertStatus;
+  title: string;
+  detail: string;
+  count?: number | null;
+  of?: number | null;
+  value?: number | null;
+  threshold?: number | null;
+  createdUtc: string;
+  lastRaisedUtc: string;
+  lastEvaluatedUtc: string;
+  resolvedUtc?: string | null;
+  ignoredUntilUtc?: string | null;
+  actions?: ModelAlertActionRecord[] | null;
+  suggestedActions?: ModelAlertSuggestedAction[] | null;
+}
+
+/** Result of applying a model alert's suggested action. */
+export interface ModelAlertApplyResult {
+  record: ModelAlertActionRecord;
+  alert: ModelAlert;
 }
 
 export type WorkflowProfileResolutionMode = 'Explicit' | 'Vessel' | 'Fleet' | 'Global';
@@ -2598,6 +2872,13 @@ export interface DispatchRequest {
   title: string;
   description?: string;
   priority?: number;
+  /** Names this mission so a later one in the same voyage request can build on it. */
+  key?: string;
+  /** Key of an earlier mission in the request that this one builds on. */
+  parentKey?: string;
+  branchStrategy?: 'New' | 'ContinueParent' | 'ForkFromParent';
+  /** Files or directories this mission may change. */
+  ownedPaths?: string[];
 }
 
 export interface PlanningSessionCreateRequest {
@@ -2647,8 +2928,38 @@ export interface SendSignalRequest {
   payload?: string;
 }
 
+export type CaptainSelectionStrategy = 'FirstAvailable' | 'MostRemainingAllowance' | 'MostUsedAllowance';
+export interface UsageSelectionSettings {
+  mode: 'Disabled' | 'Observe' | 'Enforce';
+  strategy: CaptainSelectionStrategy;
+  unknownUsageBehavior: 'AllowDeprioritized' | 'Wait';
+  reservePercent: number;
+  comfortableHeadroomPercent: number;
+  perAttemptReservationPercent: number;
+  maximumFreshnessSeconds: number;
+  unknownRetrySeconds: number;
+  providerCooldownSeconds: number;
+  settlementLagSeconds: number;
+  maximumUnsettledSeconds: number;
+  decisionRetentionDays: number;
+  maximumCandidates: number;
+}
+export interface UsageSelectionCapabilities {
+  strategies: CaptainSelectionStrategy[];
+  observeAvailable: boolean;
+  enforcementAvailable: boolean;
+  appliedLive: boolean;
+  environmentOverride: boolean;
+  source: string;
+}
 export interface SettingsData {
+  usageSelection?: UsageSelectionSettings;
+  usageSelectionRevision?: number;
+  expectedUsageSelectionRevision?: number;
+  usageSelectionCapabilities?: UsageSelectionCapabilities;
   storage?: import('./storage').StorageSettings;
+  /** Server-wide account usage capture group (GlobalAdmin edits it; disabled by default). */
+  usageCapture?: UsageCaptureSettings;
   dataRetentionDays?: number;
   requestHistoryRetentionDays?: number;
   [key: string]: unknown;
@@ -3290,10 +3601,12 @@ export interface VesselImportErrorDetail {
 export type FleetActionKind = 'Command' | 'Mission';
 export type FleetActionRunStatus = 'Pending' | 'Running' | 'Completed' | 'CompletedWithFailures' | 'Cancelled' | 'Failed';
 export type FleetActionTargetStatus = 'Pending' | 'Skipped' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'TimedOut' | 'Findings';
+/** Typed run-time input kinds; `package` is a shell-safe package identifier such as Newtonsoft.Json or @scope/name. */
+export type FleetActionInputType = 'string' | 'semver' | 'enum' | 'package';
 
 export interface FleetActionInput {
   name: string;
-  type: 'string' | 'semver' | 'enum';
+  type: FleetActionInputType;
   required: boolean;
   default?: string | null;
   allowedValues: string[];
@@ -3301,7 +3614,7 @@ export interface FleetActionInput {
 }
 export interface FleetActionInputRequest {
   Name: string;
-  Type: 'string' | 'semver' | 'enum';
+  Type: FleetActionInputType;
   Required?: boolean;
   Default?: string | null;
   AllowedValues?: string[];
@@ -3314,6 +3627,11 @@ export interface FleetAction {
   commandWindows?: string | null;
   outputParser?: string | null;
   scanSourceActionKey?: string | null;
+  /** Optional shell check run in each vessel working directory first; a non-zero exit skips it as NotApplicable. */
+  applicabilityCommand?: string | null;
+  applicabilityCommandWindows?: string | null;
+  /** Mission kind only. Audit and Research are report-only: nothing lands and each target keeps the captain report. */
+  missionMode?: MissionMode;
   id: string;
   tenantId: string | null;
   userId: string | null;
@@ -3342,6 +3660,11 @@ export interface FleetActionUpsertRequest {
   CommandWindows?: string | null;
   OutputParser?: string | null;
   ScanSourceActionKey?: string | null;
+  /** Empty string clears it on update. Creating or editing an action with one requires tenant admin. */
+  ApplicabilityCommand?: string | null;
+  ApplicabilityCommandWindows?: string | null;
+  /** Mission kind only; the server rejects a non-Implementation mode for Command actions. */
+  MissionMode?: MissionMode | null;
   Name?: string;
   Description?: string | null;
   Kind?: FleetActionKind;
@@ -3363,7 +3686,12 @@ export interface FleetActionRunOverrides {
 
 export interface FleetActionRunRequest {
   InputValues?: Record<string, string>;
+  /** Empty when FromRunId is set. */
   VesselIds: string[];
+  /** Follow-up run: target the vessels of this earlier run whose target status is in FromTargetStatuses. */
+  FromRunId?: string | null;
+  /** Statuses to pick from FromRunId (server default Findings and Failed). */
+  FromTargetStatuses?: FleetActionTargetStatus[] | null;
   Concurrency?: number | null;
   Overrides?: FleetActionRunOverrides | null;
   Definition?: FleetActionUpsertRequest | null;
@@ -3386,6 +3714,9 @@ export interface FleetActionRun {
   commandWindows?: string | null;
   outputParser?: string | null;
   scanSourceActionKey?: string | null;
+  applicabilityCommand?: string | null;
+  applicabilityCommandWindows?: string | null;
+  missionMode?: MissionMode;
   inputValues?: Record<string, string>;
   approvalOptions?: RunApprovalOptions | null;
   id: string;
@@ -3415,6 +3746,8 @@ export interface FleetActionRun {
 
 export interface FleetActionRunTargetSummary {
   scanSummary?: string | null;
+  /** Present only when the enumerate request asked for output (IncludeOutput). */
+  outputText?: string | null;
   id: string;
   runId: string | null;
   vesselId: string;
@@ -3526,7 +3859,7 @@ export type AskMessageRole = 'User' | 'Assistant' | 'System';
 export type AskMessageKind = 'Text' | 'ActionProposal' | 'ActionResult' | 'WorkUpdate' | 'Summary' | 'Error' | 'CliPermission' | 'WorkReport';
 export type AskProposalStatus = 'Pending' | 'Approved' | 'Rejected' | 'Expired' | 'Executed' | 'Failed';
 export type AskProposalSource = 'Captain' | 'QuickAction';
-export type AskTrackedEntityType = 'Voyage' | 'Mission' | 'FleetActionRun' | 'Job' | 'VesselImportBatch';
+export type AskTrackedEntityType = 'Voyage' | 'Mission' | 'FleetActionRun' | 'Job' | 'VesselImportBatch' | 'BlackBox';
 export type AskWorkState = 'Active' | 'Succeeded' | 'Failed' | 'Cancelled';
 export type AskTurnState = 'started' | 'completed' | 'failed' | 'cancelled';
 
@@ -3652,6 +3985,86 @@ export interface AskWorkSnapshot {
   startedUtc?: string | null;
   completedUtc?: string | null;
   capturedUtc?: string | null;
+  /** The black box card of BlackBox work; null for every other kind. */
+  blackBox?: AskBlackBoxCard | null;
+}
+
+/** The black box summary on an Ask card (server BlackBoxDigest, MCP get_blackbox format summary). */
+export interface AskBlackBoxDigest {
+  entryId: string;
+  subjectType?: string;
+  missionId?: string | null;
+  voyageId?: string | null;
+  title?: string | null;
+  vesselName?: string | null;
+  attempt?: number;
+  captureMode?: string;
+  state?: string;
+  phase?: string;
+  step?: string;
+  host?: string | null;
+  sourceFile?: string | null;
+  sourceLine?: number | null;
+  method?: string | null;
+  kind?: string | null;
+  reason?: string | null;
+  mechanism?: string | null;
+  statusBefore?: string | null;
+  statusAfter?: string | null;
+  triage?: string;
+  triageConfidence?: string | null;
+  triageSuspected?: boolean;
+  resilienceInScope?: boolean;
+  selfHealable?: string;
+  selfHealingProposal?: string | null;
+  detectionGap?: string | null;
+  resilienceSeverity?: string;
+  topProposedChange?: BlackBoxProposedChange | null;
+  summary?: string | null;
+  why?: BlackBoxFinding[];
+  recoveryPaths?: BlackBoxRecoveryPath[];
+  conflictedFileTotal?: number;
+  objectCount?: number;
+  resolution?: string;
+  createdUtc?: string;
+}
+
+/** One configuration recommendation on the Ask black box card. */
+export interface AskBlackBoxRecommendation {
+  id: string;
+  setting: string;
+  scope?: string;
+  currentValue?: string | null;
+  suggestedValue?: string | null;
+  rationale?: string | null;
+  ruleId?: string | null;
+  /** Armada can apply it (proposed as apply_blackbox_recommendation); otherwise howToApply says how. */
+  canApply?: boolean;
+  howToApply?: string | null;
+}
+
+/** A follow-up the card offers: a tool becomes a proposal the user approves; a prompt is sent to the captain. */
+export interface AskBlackBoxFollowUp {
+  /** fix, apply, armada-fix or compare. */
+  name: string;
+  /** English key rendered through t. */
+  label: string;
+  description?: string | null;
+  toolName?: string | null;
+  /** The tool's arguments as JSON object text. */
+  argumentsText?: string | null;
+  prompt?: string | null;
+}
+
+/** The Ask black box card (MISSION_BLACKBOX_PLAN.md 10.3). */
+export interface AskBlackBoxCard {
+  digest: AskBlackBoxDigest;
+  fingerprint?: string | null;
+  conflictingMissions?: BlackBoxConflictingMission[];
+  conflictedFiles?: string[];
+  recommendations?: AskBlackBoxRecommendation[];
+  followUps?: AskBlackBoxFollowUp[];
+  noteCount?: number;
 }
 
 export interface AskTrackedWork {
@@ -4011,7 +4424,7 @@ export interface TokenUsageSyntheticResult { batchId: string; sourceId: string; 
 // ==================== Stage outcomes and failure-cause rules ====================
 
 /** Suspected cause of a stage attempt that fell short (FailureCauseEnum). */
-export type FailureCause = 'None' | 'Protocol' | 'InstructionFollowing' | 'ToolUse' | 'Context' | 'Capability' | 'NotTheModel' | 'Unknown' | 'Mixed';
+export type FailureCause = 'None' | 'Protocol' | 'InstructionFollowing' | 'ToolUse' | 'Context' | 'Capability' | 'NotTheModel' | 'Unknown' | 'Mixed' | 'OwnershipViolation';
 
 /** Where a stage outcome's cause came from (FailureCauseSourceEnum). */
 export type FailureCauseSource = 'None' | 'Rule' | 'Judge' | 'Manual';
@@ -4153,7 +4566,7 @@ export type ModelProbeKind = 'ServedContext' | 'OutputContract' | 'AsciiFormat' 
 export type ModelProbeOutcome = 'Passed' | 'Failed' | 'CouldNotRun';
 
 /** Lifecycle of a probe run. */
-export type ModelProbeRunStatus = 'Queued' | 'Running' | 'Completed' | 'Failed';
+export type ModelProbeRunStatus = 'Queued' | 'Running' | 'Completed' | 'Failed' | 'Cancelled';
 
 /** What an evaluation targets. */
 export type ModelProbeTarget = 'Captain' | 'ModelEndpoint';
@@ -4240,8 +4653,129 @@ export interface ModelProbeRun {
   startedUtc?: string | null;
   completedUtc?: string | null;
   lastUpdateUtc: string;
+  /** Battery run a Full Evaluate started (bat_ prefix), or null. */
+  batteryRunId?: string | null;
+  profileRevision?: Record<string, unknown>;
+  profileError?: string;
+  batteryError?: string;
+  /** Client-enriched battery snapshot, requested by the evaluation progress panel. */
+  batteryProgress?: {
+    status: string;
+    totalTasks: number;
+    passedCount: number;
+    failedCount: number;
+    couldNotRunCount: number;
+    pendingEvaluationCount: number;
+    failureReason?: string | null;
+  };
+  /** Full Evaluate report, or null for Quick; a cancelled or timed-out Full run keeps a partial report (complete false). */
+  report?: ModelEvaluationReport | null;
   /** Filled by getModelProbeRun; empty in list rows. */
   results: ModelProbeResult[];
+}
+
+/** Optional parameters of a Full Evaluate; every value has a server default. */
+/** One task of a fixture battery pack. */
+export interface BatteryTaskInfo {
+  id: string;
+  title?: string | null;
+  persona?: string | null;
+}
+
+/** An installed fixture battery pack (GET /api/v1/battery/packs). */
+export interface BatteryPackInfo {
+  id: string;
+  name?: string | null;
+  version: number;
+  domain?: string | null;
+  description?: string | null;
+  valid: boolean;
+  errors: string[];
+  tasks: BatteryTaskInfo[];
+  taskCount: number;
+}
+
+export interface ModelEvaluationOptions {
+  evaluatorCaptainId?: string | null;
+  packs?: string[] | null;
+  personas?: string[] | null;
+  runCount?: number | null;
+}
+
+/** One mechanical count of a Full Evaluate report (the source of truth the narrative may cite). */
+export interface ModelEvaluationCount {
+  key: string;
+  label: string;
+  persona?: string | null;
+  passed: number;
+  failed: number;
+  couldNotRun: number;
+  pendingEvaluation: number;
+  graded: number;
+}
+
+/** Per-persona battery outcomes: the total and one count per task. */
+export interface ModelEvaluationPersonaOutcome {
+  persona: string;
+  totals: ModelEvaluationCount;
+  tasks: ModelEvaluationCount[];
+}
+
+/** A strength or weakness the evaluator wrote; its numbers equal the cited count. */
+export interface ModelEvaluationFinding {
+  text: string;
+  key: string;
+  passed: number;
+  total: number;
+}
+
+/** The evaluator's grade of one battery attempt that needed subjective grading. */
+export interface ModelEvaluationSubjectiveGrade {
+  resultId: string;
+  taskKey?: string | null;
+  passed: boolean;
+  note?: string | null;
+}
+
+/** Whether the evaluator's narrative was skipped, accepted after validation, or rejected. */
+export type ModelEvaluationNarrativeStatus = 'Skipped' | 'Accepted' | 'Rejected';
+
+/** The evaluator's narrative (only from the counts) and subjective grades. */
+export interface ModelEvaluationNarrative {
+  status: ModelEvaluationNarrativeStatus;
+  reason?: string | null;
+  strengths: ModelEvaluationFinding[];
+  weaknesses: ModelEvaluationFinding[];
+  observedProblems: string[];
+  howToWork?: string | null;
+  subjectiveGrades: ModelEvaluationSubjectiveGrade[];
+  rejectedOutput?: string | null;
+}
+
+/** The report of a Full Evaluate. Advisory: nothing changes routing, persona captain lists or prompts. */
+export interface ModelEvaluationReport {
+  runId: string;
+  complete: boolean;
+  incompleteReason?: string | null;
+  candidateFamily?: string | null;
+  batteryRunId?: string | null;
+  batteryCaptainId?: string | null;
+  batteryStatus?: string | null;
+  batteryTokensUsed: number;
+  packs: string[];
+  personas: string[];
+  evaluatorCaptainId?: string | null;
+  evaluatorCaptainName?: string | null;
+  evaluatorFamily?: string | null;
+  evaluatorExplicit: boolean;
+  warnings: string[];
+  notes: string[];
+  probes: ModelEvaluationCount[];
+  personaOutcomes: ModelEvaluationPersonaOutcome[];
+  narrative: ModelEvaluationNarrative;
+  profileId?: string | null;
+  profileRevisionId?: string | null;
+  createdUtc: string;
 }
 
 /** Filters for listModelProbeRuns. */
@@ -4249,6 +4783,331 @@ export interface ModelProbeRunQuery {
   captainId?: string | null;
   modelEndpointId?: string | null;
   status?: ModelProbeRunStatus | null;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+/** Pack management returns raw JSON so invalid manifests remain editable. */
+export interface BatteryPackDetail {
+  id: string;
+  manifestJson: string;
+  info: BatteryPackInfo;
+  files: { path: string; size: number }[];
+}
+export interface BatteryPackTextFile { path: string; content: string; }
+
+/** One per-task battery result of a Full Evaluate (GET /api/v1/battery/runs/{id}/results), with its mission and voyage. */
+export interface BatteryTaskResultInfo {
+  output?: string | null;
+  details?: Record<string, unknown> | null;
+  id: string;
+  runId: string;
+  packId: string;
+  packVersion: number;
+  taskId: string;
+  taskTitle?: string | null;
+  persona?: string | null;
+  attempt: number;
+  outcome: 'Passed' | 'Failed' | 'CouldNotRun' | 'PendingEvaluation' | string;
+  score?: number | null;
+  summary?: string | null;
+  reason?: string | null;
+  vesselId?: string | null;
+  voyageId?: string | null;
+  missionId?: string | null;
+  missionStatus?: string | null;
+  durationMs: number;
+  createdUtc: string;
+  completedUtc?: string | null;
+}
+
+/** A model probe run with its battery task results, as the Evaluations detail page reads it. */
+export interface ModelProbeRunWithBattery extends ModelProbeRun {
+  batteryResults?: BatteryTaskResultInfo[];
+  batteryResultsPage?: EnumerationResult<BatteryTaskResultInfo>;
+  batteryResultsError?: string;
+}
+
+// ==================== Account usage capture ====================
+
+export type UsageCaptureMode = 'Auto' | 'Disabled' | 'Custom';
+export type UsageSnapshotStatus = 'Ok' | 'Unsupported' | 'AuthMissing' | 'Failed' | 'Estimated';
+
+/** One provider limit window. Null numbers mean unknown, never zero. */
+export interface UsageWindow {
+  name: string;
+  usedPercent: number | null;
+  used: number | null;
+  limit: number | null;
+  unit: string | null;
+  windowMinutes: number | null;
+  resetsUtc: string | null;
+  /** Adapter-declared reset semantics; absent or Unknown keeps continuous reservation accounting. */
+  resetKind?: 'Unknown' | 'Rolling' | 'Fixed' | null;
+  model: string | null;
+  scope: string | null;
+  configurationRevision?: string | null;
+  coverageNote: string | null;
+}
+
+/** Sanitized latest or historical account observation, shared by every member captain. */
+export interface UsageSnapshotView {
+  accountId?: string | null;
+  id: string | null;
+  tenantId: string | null;
+  hostId: string | null;
+  harborId: string | null;
+  runtime: string;
+  provider: string | null;
+  accountKey: string | null;
+  captainIds: string[];
+  /** Names of captainIds in the same order; null when a captain no longer exists. */
+  captainNames?: (string | null)[] | null;
+  capturedUtc: string;
+  status: UsageSnapshotStatus;
+  errorCode: string | null;
+  windows: UsageWindow[];
+  stale: boolean;
+  observedUtc: string | null;
+  requestedIntervalSeconds: number;
+  effectiveIntervalSeconds: number;
+  capabilityReason: string | null;
+  /** Armada's estimated reservations per observed window (latest reads); never part of observed usage. */
+  reservationEstimates?: UsageReservationEstimate[];
+  /** Estimated consumption could not be settled or attributed yet; selection treats the account as uncertain. */
+  reservationUncertain?: boolean;
+}
+
+/** Armada's estimated reservation against one observed window (UsageReservationEstimate.cs). */
+export interface UsageReservationEstimate {
+  windowName: string;
+  windowMinutes?: number | null;
+  model?: string | null;
+  activePercent: number;
+  unsettledPercent: number;
+}
+
+export interface UsageCaptureReceipt {
+  jobId: string | null;
+  status: string;
+  joinedExisting: boolean;
+  nextEligibleUtc: string | null;
+}
+
+export interface UsageSeriesPoint {
+  bucketStartUtc: string;
+  bucketEndUtc: string;
+  lastPercent: number | null;
+  minPercent: number | null;
+  maxPercent: number | null;
+  meanPercent: number | null;
+  lastResetUtc: string | null;
+  observedUtc: string | null;
+  observationAgeSeconds: number | null;
+  observationCount: number;
+  status: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  totalTokens: number;
+  reportedCost: number | null;
+  costCurrency: string | null;
+  estimated: boolean;
+}
+
+export interface UsageSeries {
+  provider: string | null;
+  accountKey: string | null;
+  hostId: string | null;
+  runtime: string | null;
+  window: string | null;
+  model: string | null;
+  costCurrency: string | null;
+  points: UsageSeriesPoint[];
+}
+
+export interface UsageCoverage {
+  unattributedRecords: number;
+  excludedUnattributedRecords: number;
+  nonMissionRecords: number;
+  missionRecords: number;
+  knownCostRecords: number;
+  seriesTruncated: boolean;
+  warning: string | null;
+}
+
+export interface UsageSeriesResult {
+  fromUtc: string;
+  toUtc: string;
+  bucketMinutes: number;
+  resolution: string;
+  groupBy: string;
+  series: UsageSeries[];
+  coverage: UsageCoverage;
+}
+
+export interface UsageMissionRow {
+  missionId: string;
+  title: string | null;
+  status: string | null;
+  vesselId: string | null;
+  vesselName: string | null;
+  captainId: string | null;
+  captainName: string | null;
+  accountKey: string | null;
+  hostId: string | null;
+  missionUrl: string | null;
+  completedUtc: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  totalTokens: number;
+  reportedCost: number | null;
+  costCurrency: string | null;
+  estimated: boolean;
+  costCoverage: number;
+}
+
+export interface UsageMissionResult extends EnumerationResult<UsageMissionRow> {
+  coverage: UsageCoverage;
+}
+
+/** Identity filters shared by the usage reads; ranges are UTC ISO-8601 [from,to). */
+export interface UsageFilter {
+  sortBy?: string;
+  sortDirection?: 'ascending' | 'descending';
+  captainId?: string;
+  harborId?: string;
+  hostId?: string;
+  runtime?: string;
+  provider?: string;
+  accountKey?: string;
+  from?: string;
+  to?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+export interface UsageSeriesFilter extends UsageFilter {
+  from: string;
+  to: string;
+  metric: 'limits' | 'tokens';
+  groupBy: 'account' | 'provider';
+  bucketMinutes: 5 | 60 | 360;
+  window?: string;
+  model?: string;
+}
+
+export interface UsageMissionFilter extends UsageFilter {
+  from: string;
+  to: string;
+  provider: string;
+  window?: string;
+  model?: string;
+  sortBy?: string;
+  sortDirection?: 'ascending' | 'descending';
+}
+
+/** Server-wide capture settings (GET/PUT /api/v1/settings usageCapture group). */
+export interface UsageCaptureSettings {
+  enabled: boolean | null;
+  effectiveEnabled?: boolean;
+  defaultsRevision?: number;
+  minimumIntervalSeconds: number;
+  allowPtyFallback: boolean | null;
+  probeTimeoutSeconds: number;
+  maximumConcurrentProbes: number;
+  maximumConcurrentProbesPerHost: number;
+  maximumBackoffSeconds: number;
+  maximumExcerptBytes: number;
+  rawSnapshotRetentionDays: number;
+  rollupRetentionDays: number;
+}
+
+/** Authorized selection projection; internal account identities are never included. */
+export interface CaptainSelectionCandidateView {
+  captainId: string;
+  captainName: string;
+  captainAvailable: boolean;
+  model?: string | null;
+  band: 'Comfortable' | 'Constrained' | 'Unknown' | 'Blocked';
+  reasonCode: string;
+  canSelect: boolean;
+  availablePercent?: number | null;
+  capturedUtc?: string | null;
+  nextReconsiderUtc?: string | null;
+  rank: number;
+  actualSelection: boolean;
+  hypotheticalSelection: boolean;
+}
+export interface CaptainSelectionDecisionView {
+  id: string;
+  tenantId: string;
+  missionId: string;
+  executionAttemptId?: string | null;
+  trigger: string;
+  outcome: string;
+  mode: UsageSelectionSettings['mode'];
+  strategy: CaptainSelectionStrategy;
+  selectedCaptainId?: string | null;
+  selectedCaptainName?: string | null;
+  selectedCaptainAvailable: boolean;
+  intendedModel?: string | null;
+  reportedModel?: string | null;
+  modelReportingSource?: string | null;
+  hypotheticalCaptainId?: string | null;
+  reasonCode: string;
+  algorithmVersion: string;
+  policyRevisionId: string;
+  evaluatedUtc: string;
+  nextReconsiderUtc?: string | null;
+}
+export interface UsageSelectionRecovery {
+  id: string; missionId: string; actorUserId: string; reason: string; allowFallback: boolean; reserveException: boolean; revision: number; createdUtc: string;
+}
+export interface UsageSelectionRecoveryRequest {
+  expectedRevision: number; allowFallback: boolean; reserveException: boolean; reason: string;
+}
+export interface CaptainSelectionSummary {
+  recovery?: UsageSelectionRecovery | null;
+  canManageRecovery?: boolean;
+  missionId: string;
+  currentMode: UsageSelectionSettings['mode'];
+  currentStrategy: CaptainSelectionStrategy;
+  historyAvailable: boolean;
+  currentAttempt?: CaptainSelectionDecisionView | null;
+  latestDecision?: CaptainSelectionDecisionView | null;
+}
+export interface CaptainSelectionDecisionDetail {
+  recovery?: UsageSelectionRecovery | null;
+  decision: CaptainSelectionDecisionView;
+  policy: UsageSelectionSettings;
+  candidates: EnumerationResult<CaptainSelectionCandidateView>;
+  executionEvents: EnumerationResult<{ eventKind: string; actualModel?: string | null; reportingSource?: string | null; occurredUtc: string }>;
+  /** Visible evaluated candidates counted by reason instead of stored individually, largest first. */
+  omittedCandidates?: CaptainSelectionOmittedReason[];
+}
+export interface CaptainSelectionOmittedReason {
+  reasonCode: string;
+  count: number;
+}
+export interface CaptainSelectionPreview {
+  isPreview?: boolean;
+  algorithmVersion?: string;
+  missionId: string;
+  mode: UsageSelectionSettings['mode'];
+  strategy: CaptainSelectionStrategy;
+  evaluatedUtc: string;
+  reasonCode: string;
+  actualCaptainId?: string | null;
+  hypotheticalCaptainId?: string | null;
+  candidates: EnumerationResult<CaptainSelectionCandidateView>;
+}
+export interface CaptainSelectionHistoryQuery {
+  outcome?: string;
+  trigger?: string;
+  from?: string;
+  to?: string;
   pageNumber?: number;
   pageSize?: number;
 }

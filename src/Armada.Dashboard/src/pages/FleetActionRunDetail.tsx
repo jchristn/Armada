@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   cancelFleetActionRun,
   enumerateFleetActionRunTargets,
+  enumerateFleetActions,
   getFleetAction,
   getFleetActionRun,
 } from '../api/client';
 import type {
+  FleetAction,
   FleetActionRun,
   FleetActionRunTargetSummary,
   FleetActionTargetStatus,
   FleetActionUpsertRequest,
 } from '../types/models';
-import { fetchAllPages } from '../api/paging';
+import { fetchAllPages, listAll } from '../api/paging';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
@@ -26,20 +28,24 @@ import { EmptyState, ErrorState, LoadingState } from '../components/shared/State
 import RunProgress from '../components/fleetActions/RunProgress';
 import TargetDetailDrawer from '../components/fleetActions/TargetDetailDrawer';
 import RunActionModal from '../components/fleetActions/RunActionModal';
+import RunReport from '../components/fleetActions/RunReport';
+import FollowUpPickerModal from '../components/fleetActions/FollowUpPickerModal';
 import { useAutoRefresh } from '../lib/useAutoRefresh';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 import {
   KIND_LABELS,
+  MISSION_MODE_LABELS,
   TARGET_STATUSES,
   TARGET_STATUS_META,
   durationBetween,
   formatDurationMs,
+  isReportOnly,
   isRunActive,
   reasonLabel,
   runStatusBadge,
   targetStatusBadge,
 } from '../lib/fleetActionLabels';
-import { definitionFromRun } from '../lib/fleetActionForm';
+import { definitionFromRun, orderFollowUpActions } from '../lib/fleetActionForm';
 
 /** Refresh cadence while a run is active, in seconds. */
 export const RUN_DETAIL_REFRESH_SECONDS = 5;
@@ -60,6 +66,7 @@ export default function FleetActionRunDetail() {
   const statusParam = searchParams.get('status') ?? '';
   const targetStatus = (TARGET_STATUSES as string[]).includes(statusParam) ? (statusParam as FleetActionTargetStatus) : '';
   const pageNumber = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1);
+  const viewParam = searchParams.get('view');
   const [pageSize, setPageSize] = usePersistedPageSize('fleet-action-run-targets', 25);
 
   const [run, setRun] = useState<FleetActionRun | null>(null);
@@ -77,6 +84,10 @@ export default function FleetActionRunDetail() {
   const [showJson, setShowJson] = useState(false);
   const [rerun, setRerun] = useState<{ vesselIds: string[]; actionId: string | null; definition: FleetActionUpsertRequest | null } | null>(null);
   const [rerunLoading, setRerunLoading] = useState(false);
+  const [actions, setActions] = useState<FleetAction[] | null>(null);
+  const [sourceBuiltInKey, setSourceBuiltInKey] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [followUpActionId, setFollowUpActionId] = useState<string | null>(null);
 
   const requestSeq = useRef(0);
 
@@ -125,8 +136,26 @@ export default function FleetActionRunDetail() {
     void refresh();
   }, [refresh]);
 
+  // Saved actions and the run's own built-in key, for the Follow up picker and the suggested-fix call to action.
+  const runActionId = run?.actionId ?? null;
+  const runLoaded = run !== null;
+  useEffect(() => {
+    if (!runLoaded || !isTenantAdmin) return;
+    let cancelled = false;
+    listAll(enumerateFleetActions).then((r) => { if (!cancelled) setActions(r.objects || []); }).catch(() => { if (!cancelled) setActions([]); });
+    if (runActionId) {
+      getFleetAction(runActionId).then((a) => { if (!cancelled) setSourceBuiltInKey(a.builtInKey); }).catch(() => undefined);
+    }
+    return () => { cancelled = true; };
+  }, [runLoaded, runActionId, isTenantAdmin]);
+
+  const followUpActions = useMemo(
+    () => orderFollowUpActions(actions ?? [], { actionId: runActionId, builtInKey: sourceBuiltInKey }),
+    [actions, runActionId, sourceBuiltInKey],
+  );
+
   const active = isRunActive(run?.status);
-  const overlayOpen = drawerTargetId !== null || confirmCancel || showJson || rerun !== null;
+  const overlayOpen = drawerTargetId !== null || confirmCancel || showJson || rerun !== null || pickerOpen || followUpActionId !== null;
   const { active: autoRefreshing } = useAutoRefresh('fleet-action-run-detail', () => { void refresh(); }, {
     intervalSeconds: RUN_DETAIL_REFRESH_SECONDS,
     paused: !active || overlayOpen,
@@ -193,7 +222,11 @@ export default function FleetActionRunDetail() {
       <div>
         <PageHeader
           title={t('Fleet action run')}
-          breadcrumb={<><Link to="/fleet-actions?tab=runs">{t('Fleet Actions')}</Link> / <span className="mono">{id}</span></>}
+          breadcrumb={[
+            { label: t('Fleet Actions'), to: '/fleet-actions' },
+            { label: t('Runs'), to: '/fleet-actions?tab=runs' },
+            { label: id },
+          ]}
         />
         <ErrorState message={runError || t('Run not found.')} onRetry={() => void refresh()} />
       </div>
@@ -201,6 +234,10 @@ export default function FleetActionRunDetail() {
   }
 
   const badge = runStatusBadge(t, run.status);
+  const reportOnly = isReportOnly(run);
+  const view: 'targets' | 'report' = run.kind !== 'Mission' ? 'targets' : viewParam === 'report' || viewParam === 'targets' ? viewParam : (reportOnly ? 'report' : 'targets');
+  const fixCount = (run.findingsCount ?? 0) + run.failedCount;
+  const suggestedFix = !active && fixCount > 0 ? followUpActions.suggested[0] ?? null : null;
   const duration = durationBetween(run.startedUtc, run.completedUtc, active);
   const refreshState = !active
     ? t('Run finished; auto-refresh stopped.')
@@ -211,11 +248,16 @@ export default function FleetActionRunDetail() {
   return (
     <div className="fleet-run-detail">
       <PageHeader
-        breadcrumb={<><Link to="/fleet-actions?tab=runs">{t('Fleet Actions')}</Link> / <Link to="/fleet-actions?tab=runs">{t('Runs')}</Link> / <span className="mono">{run.id}</span></>}
+        breadcrumb={[
+          { label: t('Fleet Actions'), to: '/fleet-actions' },
+          { label: t('Runs'), to: '/fleet-actions?tab=runs' },
+          { label: run.id },
+        ]}
         title={(
           <span className="fleet-run-title">
             <span>{run.actionName}</span>
             <CodeStatusBadge {...badge} />
+            {reportOnly && <CodeStatusBadge label={t('Report-only')} tone="info" icon="info" title={t('Audit or Research run: captains change nothing, and each vessel report is kept on the run.')} />}
           </span>
         )}
         subtitle={(
@@ -233,6 +275,16 @@ export default function FleetActionRunDetail() {
               {refreshState}
             </span>
             <button type="button" className="btn btn-sm" onClick={() => setShowJson(true)} title={t('Show the raw run record as returned by the API.')}>{t('View JSON')}</button>
+            {suggestedFix && isTenantAdmin && (
+              <button type="button" className="btn btn-sm btn-primary" onClick={() => setFollowUpActionId(suggestedFix.id)} title={t('Run {{name}} on the vessels with findings or failures from this run. You review it before it starts.', { name: suggestedFix.name })}>
+                {t('{count, plural, one {Fix # vessel with {{name}}} other {Fix # vessels with {{name}}}}', { count: fixCount, name: suggestedFix.name })}
+              </button>
+            )}
+            {isTenantAdmin && (
+              <button type="button" className="btn btn-sm" onClick={() => setPickerOpen(true)} disabled={run.targetCount === 0} title={t('Run another action on vessels from this run, chosen by their result.')}>
+                {t('Follow up...')}
+              </button>
+            )}
             {!active && run.failedCount > 0 && isTenantAdmin && (
               <button type="button" className="btn btn-sm" onClick={() => void startRerunFailed()} disabled={rerunLoading} title={t('Start a new run of the same action on only the vessels that failed or timed out. You review it before it starts.')}>
                 {rerunLoading ? t('Loading...') : t('Re-run failed targets')}
@@ -265,13 +317,34 @@ export default function FleetActionRunDetail() {
           <dt>{t('Completed')}</dt><dd title={formatDateTime(run.completedUtc)}>{run.completedUtc ? formatRelativeTime(run.completedUtc) : '-'}</dd>
           {run.kind === 'Command' && <><dt title={t('Seconds the command may run on each vessel before it is killed.')}>{t('Timeout')}</dt><dd>{t('{{value}} s', { value: run.timeoutSeconds.toLocaleString() })}</dd></>}
           {run.kind === 'Command' && <><dt title={t('On means vessels with uncommitted or untracked changes were skipped.')}>{t('Clean-tree check')}</dt><dd>{run.requiresCleanWorkingTree ? t('On') : t('Off')}</dd></>}
+          {run.kind === 'Mission' && <><dt title={t('Audit and Research are report-only: nothing lands, and the report appears on the run.')}>{t('Mission mode')}</dt><dd>{t(MISSION_MODE_LABELS[run.missionMode ?? 'Implementation'])}</dd></>}
         </dl>
+        {run.applicabilityCommand && (
+          <details className="fleet-run-definition">
+            <summary title={t('Shell check run in each vessel first. A non-zero exit skipped the vessel as Not applicable.')}>{t('Applicability check (snapshot)')}</summary>
+            <pre className="code-block" data-i18n-skip="true">{run.applicabilityCommand}</pre>
+          </details>
+        )}
         <details className="fleet-run-definition">
           <summary title={t('The definition as it was when this run started. Later edits to the action do not change it.')}>{run.kind === 'Command' ? t('Command (snapshot)') : t('Prompt template (snapshot)')}</summary>
           <pre className="code-block" data-i18n-skip="true">{(run.kind === 'Command' ? run.commandText : run.promptTemplate) ?? ''}</pre>
         </details>
       </div>
 
+      {run.kind === 'Mission' && (
+        <div className="segmented" role="radiogroup" aria-label={t('View')}>
+          <label className={`segmented-option${view === 'targets' ? ' active' : ''}`} title={t('One row per vessel with its status and voyage.')}>
+            <input type="radio" name="run-view" checked={view === 'targets'} onChange={() => updateParams({ view: 'targets' })} />
+            <span>{t('Targets')}</span>
+          </label>
+          <label className={`segmented-option${view === 'report' ? ' active' : ''}`} title={t('Each vessel\'s final captain report, rendered as Markdown.')}>
+            <input type="radio" name="run-view" checked={view === 'report'} onChange={() => updateParams({ view: 'report' })} />
+            <span>{t('Report')}</span>
+          </label>
+        </div>
+      )}
+
+      {view === 'report' ? <RunReport run={run} /> : (<>
       <div className="table-toolbar">
         <div className="table-toolbar-left">
           <h3 className="table-toolbar-title">{t('Targets')}</h3>
@@ -354,6 +427,7 @@ export default function FleetActionRunDetail() {
           }] : []),
         ]}
       />
+      </>)}
 
       <TargetDetailDrawer runId={run.id} targetId={drawerTargetId} onClose={() => setDrawerTargetId(null)} />
       <JsonViewer open={showJson} title={t('Fleet action run: {{name}}', { name: run.actionName })} id={run.id} data={run} onClose={() => setShowJson(false)} />
@@ -367,6 +441,25 @@ export default function FleetActionRunDetail() {
         onConfirm={() => void handleCancel()}
         onCancel={() => setConfirmCancel(false)}
       />
+      <FollowUpPickerModal
+        open={pickerOpen}
+        runId={run.id}
+        suggested={followUpActions.suggested}
+        others={followUpActions.others}
+        loading={actions === null}
+        onClose={() => setPickerOpen(false)}
+        onPick={(actionId) => { setPickerOpen(false); setFollowUpActionId(actionId); }}
+      />
+      {followUpActionId && (
+        <RunActionModal
+          open
+          vesselIds={[]}
+          initialActionId={followUpActionId}
+          followUp={{ runId: run.id }}
+          previewVesselId={targets[0]?.vesselId ?? null}
+          onClose={() => setFollowUpActionId(null)}
+        />
+      )}
       {rerun && (
         <RunActionModal
           open

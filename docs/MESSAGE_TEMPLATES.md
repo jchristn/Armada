@@ -33,6 +33,19 @@ Placeholders that cannot be resolved (e.g., no voyage assigned) are replaced wit
 
 These are the message-template placeholders only. Prompt templates (Configuration > Prompts) use their own set; see [PERSONAS_GUIDE.md](PERSONAS_GUIDE.md#available-placeholders).
 
+### Concurrency and Ownership Prompt Placeholders
+
+v1.3.0 adds four prompt-template placeholders for mission hierarchy and path ownership. They are filled when mission instructions are generated and do not resolve in commit, PR or merge templates (they are left as-is there).
+
+| Placeholder | Filled from | Contains | Used by |
+|-------------|-------------|----------|---------|
+| `{OwnedPaths}` | The mission's stored owned paths (`OwnedPathsJson`) | The paths in backticks, comma-separated, or `the files named in your mission description` when none are recorded | `mission.merge_conflict_avoidance` |
+| `{ConcurrentSiblingPaths}` | Active missions in the same voyage that can run alongside this one (not its ancestors, descendants or an integration mission waiting for all others) | One line per mission: its owned paths and title, with any overlap with this mission's paths called out; at most 50 lines; `none recorded` when there are none | `mission.merge_conflict_avoidance` |
+| `{ParentSummary}` | The parent mission's terminal stage | One line naming the parent, whether it finished, its branch, commit and owned paths; empty when the mission has no parent | `mission.merge_conflict_avoidance` |
+| `{MaxParallelMissionsPerVoyage}` | The vessel's `MaxParallelMissionsPerVoyage` | The limit as a number, or `none (captain capacity still applies)` when it is 0 (unlimited) | Built-in Architect templates |
+
+Capacity itself is explained in [SCHEDULING.md](SCHEDULING.md#capacity).
+
 ## Commit Message Template
 
 **Setting:** `messageTemplates.commitMessageTemplate`

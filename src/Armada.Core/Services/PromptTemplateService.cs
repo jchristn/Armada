@@ -47,6 +47,7 @@ namespace Armada.Core.Services
 
         #region Private-Members
 
+        private const string WorkerEnvelopePlaceholder = "{WorkerEnvelope}";
         private string _Header = "[PromptTemplateService] ";
         private DatabaseDriver _Database;
         private LoggingModule _Logging;
@@ -73,10 +74,9 @@ namespace Armada.Core.Services
                 _PreviousPersonaContents[entry.Key] = entry.Value.Content;
                 // The architect brief already states this index rule earlier; remove the repetition to keep
                 // the shared long-command reminder within the existing concise persona budget.
-                entry.Value.Content = PersonaPromptImprovements.Briefs[entry.Key]
-                    .Replace("Use decisionIndexes for the 1-based indexes of only this slice's relevant decisions ([] if none).", String.Empty)
-                    + "\nPrint progress before long commands; skip the full test suite when Armada runs post-stage checks.\n";
+                entry.Value.Content = BriefContent(PersonaPromptImprovements.Briefs[entry.Key]);
             }
+            AddWorkerEnvelopePlaceholder(_EmbeddedDefaults);
         }
 
         #endregion
@@ -132,6 +132,8 @@ namespace Armada.Core.Services
                 }
             }
 
+            // A caller that does not supply the Worker envelope (planning, previews) renders it as no envelope.
+            result = result.Replace(WorkerEnvelopePlaceholder, String.Empty);
             return result;
         }
 
@@ -155,9 +157,25 @@ namespace Armada.Core.Services
         /// <summary>
         /// Current default content for the Ask Armada system prompt. Instructs the model to use only the
         /// tools actually provided, and to say so honestly (and point to the right surface) when it has no
-        /// tool for what the operator asked -- rather than hallucinating tool access.
+        /// tool for what the operator asked -- rather than hallucinating tool access -- and how to answer from a
+        /// mission's black box (<see cref="Armada.Core.Services.Ask.AskBlackBoxGuidance.Section"/>).
         /// </summary>
-        private const string _AskSystemDefault =
+        private const string _AskSystemDefault = _AskSystemOwnershipRecap + "\n" + Armada.Core.Services.Ask.AskBlackBoxGuidance.Section;
+
+        /// <summary>The Ask Armada system prompt before the v1.3 mission-splitting guidance. Upgraded in place when untouched.</summary>
+        private const string _AskSystemSplitDefault = _AskSystemRecapDefault + "\n" + Armada.Core.Services.Ask.AskBlackBoxGuidance.Section;
+
+        /// <summary>
+        /// The Ask Armada system prompt with the black box guidance as it shipped before the resilience bias. Used to
+        /// upgrade an untouched built-in template in place.
+        /// </summary>
+        private const string _AskSystemBlackBoxDefault = _AskSystemRecapDefault + "\n" + Armada.Core.Services.Ask.AskBlackBoxGuidance.PreviousSection;
+
+        /// <summary>
+        /// The Ask Armada system prompt before the black box guidance was added. Used to upgrade an untouched built-in
+        /// template in place.
+        /// </summary>
+        private const string _AskSystemRecapDefault =
             "You are an AI captain in Armada's \"Ask Armada\" chat.\n" +
             "\n" +
             "## What you can do\n" +
@@ -186,6 +204,46 @@ namespace Armada.Core.Services
             "- Strongly favor creating and dispatching missions over doing the work yourself. When the operator asks for a change, fix, feature, test, refactor, investigation, or anything that edits a repository, dispatch it as a mission (or a voyage of missions) on the right vessel with the dispatch or create_mission tool, rather than editing files, running builds, or committing and pushing from this chat.\n" +
             "- Missions run in isolated docks, go through the vessel's pipeline and merge queue, and are tracked and reviewable; work done directly in this chat skips all of that and can collide with other work in progress.\n" +
             "- Write a self-contained mission description: the goal, the files or areas involved, the choices you made, and how to verify the result. Split large requests into several focused missions.\n" +
+            "- Do the work directly only for read-only lookups (status, diffs, logs, reading files to answer a question), when the operator explicitly asks you to do it yourself rather than dispatch it, or when no dispatch tool is available -- and then say that you are doing it directly.\n" +
+            "\n" +
+            "## Style\n" +
+            "- Prefer short, direct answers. Use lists and code blocks only where they genuinely help.\n" +
+            "- This is a conversational chat, not a mission: do not modify files or run destructive commands yourself. When the operator asks for work, dispatch it as described above.\n" +
+            "- When work completes, reiterate what was done to remind the operator of what you were asked to do. Be specific about what finished and what is remaining.\n";
+
+        /// <summary>
+        /// The recap-era Ask Armada body with v1.3 mission-splitting guidance: small missions, ParentKey only for real
+        /// dependencies, disjoint files for parallel missions and the vessel's concurrency limits.
+        /// </summary>
+        private const string _AskSystemOwnershipRecap =
+            "You are an AI captain in Armada's \"Ask Armada\" chat.\n" +
+            "\n" +
+            "## What you can do\n" +
+            "- Only use tools that are actually provided to you in this session. Never claim to have tools, MCP access, or the ability to inspect or change Armada state unless those tools are present and you can call them.\n" +
+            "- When tools ARE available, use them to look up live state (for example status and enumerate) or to take an action the operator requested, rather than guessing or describing what you would do.\n" +
+            "- Questions are usually about Armada operations -- fleets, vessels, captains, missions, voyages, docks, and the merge queue -- unless the operator clearly means something else.\n" +
+            "\n" +
+            "## When you cannot do something\n" +
+            "- If the operator asks you to do or look up something and you have no tool for it, say so in one sentence -- do not ask for irrelevant details or invent a process. For example, if asked to create a vessel, dispatch a mission, or change fleet state and you have no such tool, reply that you cannot do it from this chat and tell them how instead: use a captain connected to Armada over MCP, or the Armada dashboard (Vessels / Dispatch) or the armada CLI.\n" +
+            "- Never fabricate ids, results, fields, or capabilities. If you are unsure or lack the context, say so plainly.\n" +
+            "\n" +
+            "## Conversation scope\n" +
+            "- Keep track of what this conversation is about: the vessels, fleets, voyages, and missions the operator named, and any work started here (listed under \"Conversation focus\" when present).\n" +
+            "- Follow-up questions without an explicit target (\"what's running?\", \"any failures?\", \"how is it going?\", \"is it done?\") refer to that focus. Scope your lookups to it -- pass the vessel, fleet, or voyage filters to enumerate, or use voyage_status / mission_status -- and answer for those items, not for the whole fleet.\n" +
+            "- Answer fleet-wide when the operator asks about everything (\"across the fleet\", \"all vessels\", \"overall\", \"anything else\"), names a different target, or the conversation has no focus yet.\n" +
+            "- Start a scoped answer by naming the scope in a few words (for example \"On TUIKit: ...\"). If something notable is happening outside the focus (for example a failure on another vessel), you may add one short line about it.\n" +
+            "- If the focus is ambiguous (several vessels were discussed), use the most recently discussed one and say so, or ask a one-line question.\n" +
+            "- \"Failures\" include missions in Failed and LandingFailed status and failed merge-queue entries; check all of them before saying nothing failed.\n" +
+            "\n" +
+            "## Making decisions\n" +
+            "- When a request has a sensible default or a low-stakes choice, decide yourself, say what you chose in one line, and carry on. Examples: the target framework for a multi-targeted .NET project (the newest one the project targets whose SDK is installed; `dotnet --list-sdks` shows them), the test project or solution when one clearly matches, and ordinary build and test flags.\n" +
+            "- When you dispatch work, write those choices into the mission description so the captain doing the work does not have to ask either.\n" +
+            "- Ask the operator only when the choice is costly or hard to undo, changes shared state (pushing, merging, deleting, deploying), or the request could mean materially different things. Then ask one short question and offer your recommended answer.\n" +
+            "\n" +
+            "## Prefer dispatching work\n" +
+            "- Strongly favor creating and dispatching missions over doing the work yourself. When the operator asks for a change, fix, feature, test, refactor, investigation, or anything that edits a repository, dispatch it as a mission (or a voyage of missions) on the right vessel with the dispatch or create_mission tool, rather than editing files, running builds, or committing and pushing from this chat.\n" +
+            "- Missions run in isolated docks, go through the vessel's pipeline and merge queue, and are tracked and reviewable; work done directly in this chat skips all of that and can collide with other work in progress.\n" +
+            "- Write a self-contained mission description: the goal, the files or areas involved, the choices you made, and how to verify the result. Split large requests into small missions (one coherent change each). Use ParentKey only where a mission needs another mission's code; give missions that can run in parallel disjoint files and list those files in each description. Check the vessel's limits with vessel_concurrency so a request is not split into more parallel missions than can run.\n" +
             "- Do the work directly only for read-only lookups (status, diffs, logs, reading files to answer a question), when the operator explicitly asks you to do it yourself rather than dispatch it, or when no dispatch tool is available -- and then say that you are doing it directly.\n" +
             "\n" +
             "## Style\n" +
@@ -411,6 +469,100 @@ namespace Armada.Core.Services
             await UpgradeBuiltInMissionRulesAsync(token).ConfigureAwait(false);
             await UpgradeBuiltInContextCompletionAsync(token).ConfigureAwait(false);
             await UpgradeBuiltInProgressSignalsAsync(token).ConfigureAwait(false);
+            await UpgradeBuiltInWorkerEnvelopeAsync(token).ConfigureAwait(false);
+            await UpgradeBuiltInMergeConflictAvoidanceAsync(token).ConfigureAwait(false);
+            await UpgradeBuiltInPersonaVariantsAsync(token).ConfigureAwait(false);
+        }
+
+        private async Task UpgradeBuiltInPersonaVariantsAsync(CancellationToken token)
+        {
+            // Lean and Compact variants are stored like any built-in template; an untouched copy of an earlier variant
+            // upgrades to the current one, an edited copy is kept.
+            foreach (string personaTemplateName in PersonaPromptVariants.PersonaTemplateNames)
+            {
+                foreach (PromptVariantEnum variant in new[] { PromptVariantEnum.Lean, PromptVariantEnum.Compact })
+                {
+                    token.ThrowIfCancellationRequested();
+                    IReadOnlyList<string> previous = PersonaPromptVariants.GetPreviousContents(personaTemplateName, variant);
+                    string? current = PersonaPromptVariants.GetContent(personaTemplateName, variant);
+                    if (previous.Count == 0 || current == null) continue;
+                    string name = MissionPromptBuilder.GetPersonaVariantTemplateName(personaTemplateName, variant);
+                    PromptTemplate? existing = await _Database.PromptTemplates.ReadByNameAsync(name, token).ConfigureAwait(false);
+                    if (existing == null || !existing.IsBuiltIn) continue;
+                    string stored = NormalizeLineEndings(existing.Content);
+                    if (!previous.Any(p => NormalizeLineEndings(p) == stored)) continue;
+                    existing.Content = current;
+                    existing.LastUpdateUtc = DateTime.UtcNow;
+                    await _Database.PromptTemplates.UpdateAsync(existing, token).ConfigureAwait(false);
+                    _Logging.Debug(_Header + "upgraded built-in variant template '" + name + "'");
+                }
+            }
+        }
+
+        private async Task UpgradeBuiltInMergeConflictAvoidanceAsync(CancellationToken token)
+        {
+            // v1.3.0 names owned and concurrently owned paths; an untouched built-in copy upgrades, an edited one is kept.
+            const string name = "mission.merge_conflict_avoidance";
+            PromptTemplate? existing = await _Database.PromptTemplates.ReadByNameAsync(name, token).ConfigureAwait(false);
+            if (existing == null || !existing.IsBuiltIn) return;
+            if (NormalizeLineEndings(existing.Content) != NormalizeLineEndings(MergeConflictPrompt.LegacyDefault)) return;
+            existing.Content = MergeConflictPrompt.Default;
+            existing.LastUpdateUtc = DateTime.UtcNow;
+            await _Database.PromptTemplates.UpdateAsync(existing, token).ConfigureAwait(false);
+            _Logging.Debug(_Header + "upgraded built-in mission.merge_conflict_avoidance with owned and concurrent paths");
+        }
+
+        // The persona default built from a brief: the architect's repeated index rule is removed to stay within the
+        // persona budget, and the shared long-command reminder is appended.
+        private static string BriefContent(string brief)
+            => brief.Replace("Use decisionIndexes for the 1-based indexes of only this slice's relevant decisions ([] if none).", String.Empty)
+                + "\nPrint progress before long commands; skip the full test suite when Armada runs post-stage checks.\n";
+
+        // What a seeded install stored for a brief, so an untouched copy of an earlier brief is recognized.
+        internal static string ShippedPersonaContent(string name, string brief)
+        {
+            Dictionary<string, EmbeddedTemplate> one = new Dictionary<string, EmbeddedTemplate>
+            {
+                [name] = new EmbeddedTemplate { Name = name, Content = BriefContent(brief) }
+            };
+            AddWorkerEnvelopePlaceholder(one);
+            return one[name].Content;
+        }
+
+        private static void AddWorkerEnvelopePlaceholder(Dictionary<string, EmbeddedTemplate> defaults)
+        {
+            // The Architect and Judge get the Worker eligibility envelope (docs/MODEL_HETEROGENEITY.md, 3.3). The value is
+            // empty when no envelope is set, so the rendered prompt is unchanged. The Lean and Compact variants carry the
+            // placeholder in PersonaPromptVariants.
+            foreach (string name in new[] { "persona.architect", "persona.judge" })
+            {
+                if (!defaults.TryGetValue(name, out EmbeddedTemplate? embedded) || embedded.Content.Contains(WorkerEnvelopePlaceholder, StringComparison.Ordinal)) continue;
+                const string judgeEvidence = "\n\n## Prior stage evidence";
+                if (embedded.Content.Contains(judgeEvidence, StringComparison.Ordinal))
+                    embedded.Content = embedded.Content.Replace(judgeEvidence, WorkerEnvelopePlaceholder + judgeEvidence);
+                else
+                    embedded.Content = embedded.Content.TrimEnd('\n') + WorkerEnvelopePlaceholder + "\n";
+            }
+        }
+
+        private async Task UpgradeBuiltInWorkerEnvelopeAsync(CancellationToken token)
+        {
+            // An untouched built-in copy picks up the {WorkerEnvelope} placeholder; an edited one is kept as is.
+            foreach (KeyValuePair<string, EmbeddedTemplate> entry in _EmbeddedDefaults)
+            {
+                token.ThrowIfCancellationRequested();
+                string current = entry.Value.Content;
+                if (!current.Contains(WorkerEnvelopePlaceholder, StringComparison.Ordinal)) continue;
+                PromptTemplate? existing = await _Database.PromptTemplates.ReadByNameAsync(entry.Key, token).ConfigureAwait(false);
+                if (existing == null || !existing.IsBuiltIn) continue;
+                string previous = NormalizeLineEndings(current.Replace(WorkerEnvelopePlaceholder, String.Empty));
+                string stored = NormalizeLineEndings(existing.Content);
+                if (stored != previous) continue;
+                existing.Content = current;
+                existing.LastUpdateUtc = DateTime.UtcNow;
+                await _Database.PromptTemplates.UpdateAsync(existing, token).ConfigureAwait(false);
+                _Logging.Debug(_Header + "added the Worker envelope placeholder to built-in template '" + entry.Key + "'");
+            }
         }
 
         private async Task UpgradeBuiltInProgressSignalsAsync(CancellationToken token)
@@ -451,8 +603,17 @@ namespace Armada.Core.Services
                 string recall = previous.Key == "persona.recorder" ? String.Empty : _MemoryRecallGuidance;
                 string improved = PersonaPromptImprovements.Apply(previous.Key, previous.Value);
                 string recallBeforeImprovement = PersonaPromptImprovements.Apply(previous.Key, previous.Value + recall);
-                if (!new[] { previous.Value, previous.Value + recall, improved, improved + recall, recallBeforeImprovement, PersonaPromptImprovements.PreviousBriefs[previous.Key], PersonaPromptImprovements.RecentBriefs[previous.Key], PersonaPromptImprovements.EvidenceBriefs[previous.Key], PersonaPromptImprovements.ScopedBriefs[previous.Key], PersonaPromptImprovements.DecisionBriefs[previous.Key], PersonaPromptImprovements.Briefs[previous.Key] }
-                    .Any(shipped => NormalizeLineEndings(existing.Content) == NormalizeLineEndings(shipped))) continue;
+                List<string> shippedVersions = new List<string> { previous.Value, previous.Value + recall, improved, improved + recall, recallBeforeImprovement };
+                foreach (IReadOnlyDictionary<string, string> snapshot in new[] { PersonaPromptImprovements.PreviousBriefs, PersonaPromptImprovements.RecentBriefs, PersonaPromptImprovements.EvidenceBriefs, PersonaPromptImprovements.ScopedBriefs, PersonaPromptImprovements.DecisionBriefs, PersonaPromptImprovements.ConcurrencyBriefs, PersonaPromptImprovements.Briefs })
+                {
+                    if (!snapshot.TryGetValue(previous.Key, out string? brief)) continue;
+                    // Both the brief as written and the content a seeded install stored from it count as untouched.
+                    shippedVersions.Add(brief);
+                    shippedVersions.Add(ShippedPersonaContent(previous.Key, brief));
+                }
+                string stored = NormalizeLineEndings(existing.Content);
+                if (stored == NormalizeLineEndings(_EmbeddedDefaults[previous.Key].Content)) continue;
+                if (!shippedVersions.Any(shipped => stored == NormalizeLineEndings(shipped))) continue;
                 existing.Content = _EmbeddedDefaults[previous.Key].Content;
                 existing.LastUpdateUtc = DateTime.UtcNow;
                 await _Database.PromptTemplates.UpdateAsync(existing, token).ConfigureAwait(false);
@@ -512,7 +673,10 @@ namespace Armada.Core.Services
                 && !String.Equals(existing.Content, _AskSystemPreviousDefault, StringComparison.Ordinal)
                 && !String.Equals(existing.Content, _AskSystemScopeDefault, StringComparison.Ordinal)
                 && !String.Equals(existing.Content, _AskSystemDecisionsDefault, StringComparison.Ordinal)
-                && !String.Equals(existing.Content, _AskSystemDispatchDefault, StringComparison.Ordinal)) return;
+                && !String.Equals(existing.Content, _AskSystemDispatchDefault, StringComparison.Ordinal)
+                && !String.Equals(existing.Content, _AskSystemRecapDefault, StringComparison.Ordinal)
+                && !String.Equals(existing.Content, _AskSystemBlackBoxDefault, StringComparison.Ordinal)
+                && !String.Equals(existing.Content, _AskSystemSplitDefault, StringComparison.Ordinal)) return;
 
             existing.Content = _AskSystemDefault;
             existing.LastUpdateUtc = DateTime.UtcNow;
@@ -747,38 +911,9 @@ namespace Armada.Core.Services
             defaults["mission.merge_conflict_avoidance"] = new EmbeddedTemplate
             {
                 Name = "mission.merge_conflict_avoidance",
-                Description = "Rules for avoiding merge conflicts when multiple captains work in parallel.",
+                Description = "Rules for avoiding merge conflicts when multiple captains work in parallel: owned paths, paths owned by concurrent missions and the parent's result.",
                 Category = "mission",
-                Content =
-                    "## Avoiding Merge Conflicts (CRITICAL)\n" +
-                    "\n" +
-                    "You are one of several captains working on this repository. Other captains may be working on " +
-                    "other missions in parallel on separate branches. To prevent merge conflicts and landing failures, " +
-                    "you MUST follow these rules:\n" +
-                    "\n" +
-                    "1. **Only modify files explicitly mentioned in your mission description.** If the description says " +
-                    "to edit `src/routes/users.ts`, do NOT also refactor `src/routes/orders.ts` even if you notice " +
-                    "improvements. Another captain may be working on that file.\n" +
-                    "\n" +
-                    "2. **Do not make \"helpful\" changes outside your scope.** Do not rename shared variables, " +
-                    "reorganize imports in files you were not asked to touch, reformat code in unrelated files, " +
-                    "update documentation files unless instructed, or modify configuration/project files " +
-                    "(e.g., .csproj, package.json, tsconfig.json) unless your mission specifically requires it.\n" +
-                    "\n" +
-                    "3. **Do not modify barrel/index export files** (e.g., index.ts, mod.rs) unless your mission " +
-                    "explicitly requires it. These are high-conflict files that many missions may need to touch.\n" +
-                    "\n" +
-                    "4. **Keep changes minimal and focused.** The fewer files you touch, the lower the risk of " +
-                    "conflicts. If your mission can be completed by editing 2 files, do not edit 5.\n" +
-                    "\n" +
-                    "5. **If you must create new files**, prefer names that are specific to your mission's feature " +
-                    "rather than generic names that another captain might also choose.\n" +
-                    "\n" +
-                    "6. **Do not modify or delete files created by another mission's branch.** You are working in " +
-                    "an isolated worktree -- if you see files that seem unrelated to your mission, leave them alone.\n" +
-                    "\n" +
-                    "Violating these rules will cause your branch to conflict with other captains' branches during " +
-                    "landing, resulting in a LandingFailed status and wasted work.\n"
+                Content = MergeConflictPrompt.Default
             };
 
             defaults["mission.progress_signals"] = new EmbeddedTemplate

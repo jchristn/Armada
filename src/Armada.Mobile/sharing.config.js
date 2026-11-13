@@ -8,12 +8,15 @@
 const path = require('path');
 
 const dashboardSrc = path.resolve(__dirname, '..', 'Armada.Dashboard', 'src');
+const usageMessagesDir = path.resolve(__dirname, '..', 'Armada.Core', 'Resources');
 const i18nDir = path.resolve(__dirname, '..', 'Armada.Server', 'wwwroot', 'i18n');
 
 const sharedDirs = ['api', 'types', 'lib'];
 const sharedFiles = ['i18n/catalog.ts'];
 
 const dashboardOnly = [
+  'lib/dashboardNavigation.ts', // React Router web breadcrumbs and route audit; native navigation uses navModel
+
   'lib/useDuplicateRequest.ts', // dashboard route/query state; native screens open their own forms
   'lib/chartImage.ts', // canvas and clipboard export of charts
   'lib/dialogA11y.ts', // DOM focus management for HTML dialogs
@@ -21,12 +24,14 @@ const dashboardOnly = [
   'lib/useAutoRefresh.ts', // per-table interval persisted in localStorage
   'lib/useTablePrefs.ts', // table preferences persisted in localStorage
   'lib/useColumnVisibility.ts', // table column choice persisted in localStorage
+  'lib/askListResize.ts', // HTML element sizing and localStorage; native layouts do not use the web sidebar
+  'lib/useAskUnreadCount.ts', // dashboard WebSocketContext and window timers; native uses its own unread state
   'lib/useInboxCount.ts', // bound to the dashboard WebSocketContext; mobile uses lib/inboxSummary.ts
   'lib/useLiveRefresh.ts', // bound to the dashboard WebSocketContext
 ];
 
 module.exports = {
-  sharedRoots: { dashboardSrc, i18nDir },
+  sharedRoots: { dashboardSrc, i18nDir, usageMessagesDir },
   sharedDirs,
   sharedFiles,
   dashboardOnly,

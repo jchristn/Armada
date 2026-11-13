@@ -115,14 +115,14 @@ namespace Armada.Core.Services
         /// <param name="token">Cancellation token.</param>
         /// <returns>The created action.</returns>
         /// <exception cref="ArgumentException">Thrown for invalid input.</exception>
-        /// <exception cref="UnauthorizedAccessException">Thrown when a non-admin creates a Command action.</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown when a non-admin creates a Command action or one with an applicability command.</exception>
         public async Task<FleetAction> CreateActionAsync(AuthContext auth, FleetActionUpsertRequest request, CancellationToken token = default)
         {
             string tenantId = RequireTenant(auth);
             if (request == null) throw new ArgumentException("A request body is required.", nameof(request));
 
             FleetAction action = BuildDefinition(request, null);
-            RequireKindPermission(auth, action.Kind);
+            RequireExecutionPermission(auth, action);
             action.TenantId = tenantId;
             action.UserId = auth.UserId;
             action.IsBuiltIn = false;
@@ -146,15 +146,15 @@ namespace Armada.Core.Services
         /// <returns>The updated action.</returns>
         /// <exception cref="ArgumentException">Thrown for invalid input.</exception>
         /// <exception cref="KeyNotFoundException">Thrown when not found.</exception>
-        /// <exception cref="UnauthorizedAccessException">Thrown when a non-admin edits a Command action.</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown when a non-admin edits a Command action or one with an applicability command.</exception>
         public async Task<FleetAction> UpdateActionAsync(AuthContext auth, string actionId, FleetActionUpsertRequest request, CancellationToken token = default)
         {
             if (request == null) throw new ArgumentException("A request body is required.", nameof(request));
             FleetAction existing = await ReadActionAsync(auth, actionId, token).ConfigureAwait(false);
-            RequireKindPermission(auth, existing.Kind);
+            RequireExecutionPermission(auth, existing);
 
             FleetAction updated = BuildDefinition(request, existing);
-            RequireKindPermission(auth, updated.Kind);
+            RequireExecutionPermission(auth, updated);
             updated.LastUpdateUtc = DateTime.UtcNow;
             return await _Database.FleetActions.UpdateAsync(updated, token).ConfigureAwait(false);
         }
@@ -168,12 +168,12 @@ namespace Armada.Core.Services
         /// <param name="token">Cancellation token.</param>
         /// <returns>Task.</returns>
         /// <exception cref="KeyNotFoundException">Thrown when not found.</exception>
-        /// <exception cref="UnauthorizedAccessException">Thrown when a non-admin deletes a Command action.</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown when a non-admin deletes a Command action or one with an applicability command.</exception>
         public async Task DeleteActionAsync(AuthContext auth, string actionId, CancellationToken token = default)
         {
             string tenantId = RequireTenant(auth);
             FleetAction existing = await ReadActionAsync(auth, actionId, token).ConfigureAwait(false);
-            RequireKindPermission(auth, existing.Kind);
+            RequireExecutionPermission(auth, existing);
             await _Database.FleetActions.DeleteAsync(tenantId, existing.Id, token).ConfigureAwait(false);
             _Logging.Info(_Header + "deleted action " + existing.Id + " in tenant " + tenantId);
         }
@@ -190,7 +190,7 @@ namespace Armada.Core.Services
         /// <returns>The created run (status Pending).</returns>
         /// <exception cref="ArgumentException">Thrown for invalid input.</exception>
         /// <exception cref="KeyNotFoundException">Thrown when the action or any vessel is not found in the tenant.</exception>
-        /// <exception cref="UnauthorizedAccessException">Thrown when a non-admin runs a Command action.</exception>
+        /// <exception cref="UnauthorizedAccessException">Thrown when a non-admin runs a Command action or one with an applicability command.</exception>
         public async Task<FleetActionRun> StartRunAsync(AuthContext auth, string? actionId, FleetActionRunRequest request, CancellationToken token = default)
         {
             string tenantId = RequireTenant(auth);
@@ -210,7 +210,7 @@ namespace Armada.Core.Services
                 definition = BuildDefinition(request.Definition, null);
             }
 
-            RequireKindPermission(auth, definition.Kind);
+            RequireExecutionPermission(auth, definition);
             request.Overrides?.ApprovalOptions?.ValidateFor(auth);
             CollectionLimits.RequireRequestItems(request.VesselIds, "VesselIds");
             Dictionary<string, string> inputValues = FleetActionInputValidator.Resolve(definition.Inputs, request.InputValues);
@@ -220,6 +220,17 @@ namespace Armada.Core.Services
                 .Select(v => v.Trim())
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
+            if (!String.IsNullOrWhiteSpace(request.FromRunId))
+            {
+                if (vesselIds.Count > 0) throw new ArgumentException("Set either VesselIds or FromRunId, not both.", nameof(request));
+                vesselIds = await ReadFollowUpVesselIdsAsync(auth, request.FromRunId!.Trim(), request.FromTargetStatuses, token).ConfigureAwait(false);
+                if (vesselIds.Count == 0) throw new ArgumentException("No target of run " + request.FromRunId!.Trim() + " has a selected status.", nameof(request));
+            }
+            else if (request.FromTargetStatuses != null && request.FromTargetStatuses.Count > 0)
+            {
+                throw new ArgumentException("FromTargetStatuses requires FromRunId.", nameof(request));
+            }
+
             if (vesselIds.Count == 0) throw new ArgumentException("At least one vessel id is required.", nameof(request));
             if (vesselIds.Count > MaxTargetsPerRun) throw new ArgumentException("A run may target at most " + MaxTargetsPerRun + " vessels.", nameof(request));
 
@@ -242,6 +253,9 @@ namespace Armada.Core.Services
                 RequiredTools = definition.RequiredTools,
                 RequiresNetwork = definition.RequiresNetwork,
                 ScanSourceActionKey = definition.ScanSourceActionKey,
+                ApplicabilityCommand = definition.ApplicabilityCommand,
+                ApplicabilityCommandWindows = definition.ApplicabilityCommandWindows,
+                MissionMode = definition.Kind == FleetActionKindEnum.Mission ? definition.MissionMode : MissionModeEnum.Implementation,
                 Inputs = definition.Inputs,
                 InputValues = inputValues,
                 Kind = definition.Kind,
@@ -445,6 +459,32 @@ namespace Armada.Core.Services
                 throw new UnauthorizedAccessException("Command fleet actions require tenant admin permission.");
         }
 
+        private static void RequireExecutionPermission(AuthContext auth, FleetAction action)
+        {
+            // Command actions and applicability checks execute arbitrary code on the host: tenant admin, matching workspace exec.
+            if (auth.IsAdmin || auth.IsTenantAdmin) return;
+            if (action.Kind == FleetActionKindEnum.Command)
+                throw new UnauthorizedAccessException("Command fleet actions require tenant admin permission.");
+            if (!String.IsNullOrWhiteSpace(action.ApplicabilityCommand) || !String.IsNullOrWhiteSpace(action.ApplicabilityCommandWindows))
+                throw new UnauthorizedAccessException("Fleet actions with an applicability command require tenant admin permission.");
+        }
+
+        private async Task<List<string>> ReadFollowUpVesselIdsAsync(AuthContext auth, string fromRunId, List<FleetActionTargetStatusEnum>? statuses, CancellationToken token)
+        {
+            FleetActionRun source = await ReadRunOnlyAsync(auth, fromRunId, token).ConfigureAwait(false);
+            CollectionLimits.RequireConfigItems(statuses, "FromTargetStatuses");
+            List<FleetActionTargetStatusEnum> wanted = statuses != null && statuses.Count > 0
+                ? statuses.Distinct().ToList()
+                : new List<FleetActionTargetStatusEnum> { FleetActionTargetStatusEnum.Findings, FleetActionTargetStatusEnum.Failed };
+            List<string> vesselIds = new List<string>();
+            foreach (FleetActionRunTarget target in await _Database.FleetActionRunTargets.ReadAllByRunAsync(source.Id, token).ConfigureAwait(false))
+            {
+                if (wanted.Contains(target.Status) && !vesselIds.Contains(target.VesselId, StringComparer.Ordinal)) vesselIds.Add(target.VesselId);
+            }
+
+            return vesselIds;
+        }
+
         private FleetAction BuildDefinition(FleetActionUpsertRequest request, FleetAction? existing)
         {
             FleetAction action = existing ?? new FleetAction
@@ -464,14 +504,17 @@ namespace Armada.Core.Services
 
             if (request.CommandWindows != null) action.CommandWindows = request.CommandWindows;
             if (request.OutputParser != null) action.OutputParser = String.IsNullOrWhiteSpace(request.OutputParser) ? null : request.OutputParser.Trim();
-            if (request.ScanSourceActionKey != null) action.ScanSourceActionKey = request.ScanSourceActionKey;
+            if (request.ScanSourceActionKey != null) action.ScanSourceActionKey = String.IsNullOrWhiteSpace(request.ScanSourceActionKey) ? null : request.ScanSourceActionKey.Trim();
+            if (request.ApplicabilityCommand != null) action.ApplicabilityCommand = String.IsNullOrWhiteSpace(request.ApplicabilityCommand) ? null : request.ApplicabilityCommand;
+            if (request.ApplicabilityCommandWindows != null) action.ApplicabilityCommandWindows = String.IsNullOrWhiteSpace(request.ApplicabilityCommandWindows) ? null : request.ApplicabilityCommandWindows;
+            if (request.MissionMode.HasValue) action.MissionMode = request.MissionMode.Value;
             CollectionLimits.RequireConfigItems(request.RequiredTools, "RequiredTools");
             CollectionLimits.RequireConfigItems(request.Inputs, "Inputs");
             if (request.RequiredTools != null) action.RequiredTools = request.RequiredTools;
             if (request.RequiresNetwork.HasValue) action.RequiresNetwork = request.RequiresNetwork.Value;
             if (request.Inputs != null) action.Inputs = request.Inputs;
             FleetActionInputValidator.ValidateDefinitions(action.Inputs);
-            if (action.OutputParser != null && FleetActionOutputParsers.FleetActionParserRegistry.Get(action.OutputParser) == null) throw new ArgumentException("Unknown output parser: " + action.OutputParser);
+            if (action.OutputParser != null && !FleetActionOutputParsers.FleetActionParserRegistry.IsKnown(action.OutputParser)) throw new ArgumentException("Unknown output parser: " + action.OutputParser);
             foreach (string tool in action.RequiredTools)
                 if (String.IsNullOrWhiteSpace(tool) || !System.Text.RegularExpressions.Regex.IsMatch(tool, @"^[A-Za-z0-9_][A-Za-z0-9_.+-]*\z")) throw new ArgumentException("RequiredTools must contain executable names, not paths or shell commands.");
             if (request.Name != null) action.Name = request.Name.Trim();
@@ -488,10 +531,13 @@ namespace Armada.Core.Services
             if (action.Name.Length > 200) throw new ArgumentException("Name must be 200 characters or fewer.", nameof(request));
 
             CollectionBounds.Validate(action);
+            FleetActionTemplateRenderer.Validate(action.ApplicabilityCommand, action.Inputs.Select(i => i.Name));
+            FleetActionTemplateRenderer.Validate(action.ApplicabilityCommandWindows, action.Inputs.Select(i => i.Name));
 
             if (action.Kind == FleetActionKindEnum.Command)
             {
                 if (String.IsNullOrWhiteSpace(action.CommandText)) throw new ArgumentException("CommandText is required for a Command action.", nameof(request));
+                if (action.MissionMode != MissionModeEnum.Implementation) throw new ArgumentException("MissionMode applies to Mission actions only.", nameof(request));
                 FleetActionTemplateRenderer.Validate(action.CommandText, action.Inputs.Select(i => i.Name));
                 FleetActionTemplateRenderer.Validate(action.CommandWindows, action.Inputs.Select(i => i.Name));
             }

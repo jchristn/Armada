@@ -46,7 +46,7 @@ namespace Armada.Helm.Commands
             prefs.Current.ActiveProfile = chosen.Name;
             if (!prefs.Save())
             {
-                AnsiConsole.MarkupLine("[red]Could not save[/] " + Markup.Escape(prefs.FilePath) + ": " + Markup.Escape(prefs.LastError ?? "unknown error"));
+                HelmConsole.Error.MarkupLine("[red]Could not save[/] " + Markup.Escape(prefs.FilePath) + ": " + Markup.Escape(prefs.LastError ?? "unknown error"));
                 return 1;
             }
 

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "status": "Ok",
+  "accountKey": "host-hmac-placeholder",
+  "provider": "anthropic",
+  "capturedUtc": "2026-10-27T13:00:00Z",
+  "source": "Custom",
+  "windows": [
+    {
+      "name": "five_hour",
+      "usedPercent": 62,
+      "used": null,
+      "limit": null,
+      "unit": "percent",
+      "windowMinutes": 300,
+      "resetsUtc": "2026-10-27T14:05:00Z"
+    }
+  ]
+}

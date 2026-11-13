@@ -451,7 +451,7 @@ namespace Armada.Harbor
         }
 
         /// <summary>
-        /// Open Status &gt; Logs on a job's log (View output in the Running now list).
+        /// Open Status &gt; Logs on a job's log (View Output in the Running now list).
         /// </summary>
         /// <param name="path">The job's log file.</param>
         /// <param name="entityId">The mission the job runs, or null.</param>

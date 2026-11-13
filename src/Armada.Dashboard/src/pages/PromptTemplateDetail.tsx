@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNotifications } from '../context/NotificationContext';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { createPromptTemplate, getPromptTemplate, updatePromptTemplate, resetPromptTemplate } from '../api/client';
 import { PROMPT_TEMPLATE_CATEGORIES, PROMPT_TEMPLATE_PARAMETER_GROUPS } from '../lib/configuration';
 import type { PromptTemplate } from '../types/models';
@@ -237,11 +237,10 @@ export default function PromptTemplateDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/prompt-templates">{t('Prompt Templates')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{createMode ? t('Create') : templateName}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Prompt Templates'), to: '/prompt-templates' },
+          { label: createMode ? t('Create') : templateName },
+        ]}
         title={createMode ? t('Create Prompt Template') : templateName}
         actions={
           <>

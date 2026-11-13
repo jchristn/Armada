@@ -11,6 +11,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Enums;
     using Armada.Core.Models;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Show the vessel health table, optionally filtered by status and fleet, and optionally start an evaluation.
@@ -46,7 +47,7 @@ namespace Armada.Helm.Commands
             {
                 if (!Enum.TryParse(settings.Status.Trim(), true, out VesselHealthStatusEnum status) || Char.IsDigit(settings.Status.Trim()[0]))
                 {
-                    AnsiConsole.MarkupLine("[red]Unknown status[/] " + Markup.Escape(settings.Status) + ". Use Pass, Warn, Fail, NotApplicable, or Unknown.");
+                    HelmConsole.Error.MarkupLine("[red]Unknown status[/] " + Markup.Escape(settings.Status) + ". Use Pass, Warn, Fail, NotApplicable, or Unknown.");
                     return 1;
                 }
 

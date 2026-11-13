@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Armada Proxy</title>
   <link rel="icon" type="image/x-icon" href="/img/logo.ico">
   <link rel="stylesheet" href="/app.css">
@@ -11,7 +12,10 @@
   <main class="portal-shell">
     <section class="portal-card portal-card-hero portal-card-compact">
       <div class="portal-brand">
-        <img src="/img/logo-dark-grey.png" alt="Armada" class="portal-logo">
+        <picture>
+          <source srcset="/img/logo-light-grey.png" media="(prefers-color-scheme: dark)">
+          <img src="/img/logo-dark-grey.png" alt="Armada" class="portal-logo">
+        </picture>
         <div>
           <h1>Remote access</h1>
           <p class="portal-copy">Sign in to the proxy and connect to a deployment.</p>
@@ -23,20 +27,20 @@
       <div class="section-head">
         <div>
           <p class="portal-eyebrow">Step 1</p>
-          <h2>Unlock proxy</h2>
+          <h2>Sign in</h2>
         </div>
       </div>
 
       <form id="loginForm" class="portal-form">
         <label class="field">
           <span>Shared password</span>
-          <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Shared password" required>
+          <input id="passwordInput" type="password" autocomplete="current-password" required>
         </label>
         <div class="form-actions">
-          <button id="loginButton" type="submit" class="button button-primary">Continue</button>
+          <button id="loginButton" type="submit" class="button button-primary">Sign in</button>
         </div>
       </form>
-      <p id="loginStatus" class="form-status"></p>
+      <p id="loginStatus" class="form-status" role="status" aria-live="polite"></p>
     </section>
 
     <section id="portalCard" class="portal-card portal-card-wide hidden">
@@ -44,7 +48,22 @@
         <div>
           <p class="portal-eyebrow">Step 2</p>
           <h2>Deployments</h2>
-          <p class="section-copy">Use the row menu to connect.</p>
+          <p class="section-copy">Open a deployment's actions menu to connect to its dashboard.</p>
+        </div>
+        <div class="portal-toolbar">
+          <button id="refreshButton" type="button" class="icon-button" title="Refresh deployments" aria-label="Refresh deployments">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <path d="M21 3v6h-6" />
+            </svg>
+          </button>
+          <button id="logoutButton" type="button" class="icon-button" title="Sign out" aria-label="Sign out">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17l5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -63,23 +82,7 @@
           <tbody id="instanceList"></tbody>
         </table>
       </div>
-
-      <div class="portal-toolbar">
-        <button id="refreshButton" type="button" class="icon-button" title="Refresh deployments" aria-label="Refresh deployments">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <path d="M21 3v6h-6" />
-          </svg>
-        </button>
-        <button id="logoutButton" type="button" class="icon-button" title="Logout" aria-label="Logout">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <path d="M16 17l5-5-5-5" />
-            <path d="M21 12H9" />
-          </svg>
-        </button>
-      </div>
-      <p id="portalStatus" class="form-status"></p>
+      <p id="portalStatus" class="form-status" role="status" aria-live="polite"></p>
     </section>
   </main>
 

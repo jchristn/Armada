@@ -1,20 +1,20 @@
 import { readFileSync } from 'node:fs';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { CliPermissionsRedirect, PlanningRedirect } from './LegacyNavRedirects';
-import { cliPermissionsHref, planningHref } from '../lib/navTargets';
+import { BlackBoxRedirect, CliPermissionsRedirect, PlanningRedirect, LegacyPageRedirect } from './LegacyNavRedirects';
+import { blackBoxHref, cliPermissionsHref, planningHref } from '../lib/navTargets';
 
 function Probe() {
   const location = useLocation();
   return (
     <>
-      <div data-testid="location">{location.pathname + location.search}</div>
+      <div data-testid="location">{location.pathname + location.search + location.hash}</div>
       <div data-testid="state">{JSON.stringify(location.state ?? null)}</div>
     </>
   );
 }
 
-function renderAt(entry: string | { pathname: string; search?: string; state?: unknown }) {
+function renderAt(entry: string | { pathname: string; search?: string; hash?: string; state?: unknown }) {
   cleanup();
   render(
     <MemoryRouter initialEntries={[entry]}>
@@ -22,8 +22,12 @@ function renderAt(entry: string | { pathname: string; search?: string; state?: u
         <Route path="/cli-permissions" element={<CliPermissionsRedirect />} />
         <Route path="/planning" element={<PlanningRedirect />} />
         <Route path="/planning/:id" element={<PlanningRedirect />} />
+        <Route path="/events" element={<LegacyPageRedirect to="/activity?source=events" />} />
+        <Route path="/activity" element={<Probe />} />
         <Route path="/server" element={<Probe />} />
         <Route path="/dispatch" element={<Probe />} />
+        <Route path="/blackbox" element={<BlackBoxRedirect />} />
+        <Route path="/missions" element={<Probe />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -50,21 +54,37 @@ describe('legacy nav redirects (v1.2.0 consolidation)', () => {
     expect(renderAt('/planning/psn_7?from=workspace')).toBe('/dispatch?tab=planning&session=psn_7&from=workspace');
   });
 
+  it('/blackbox lands on the Missions Black Box tab; the old tab becomes bbtab and filters are kept', () => {
+    expect(renderAt('/blackbox')).toBe('/missions?tab=blackbox');
+    expect(renderAt('/blackbox?tab=entries&fingerprint=fp_1')).toBe('/missions?tab=blackbox&bbtab=entries&fingerprint=fp_1');
+    expect(renderAt('/blackbox?vesselId=vsl_1&triage=ArmadaDefect')).toBe('/missions?tab=blackbox&vesselId=vsl_1&triage=ArmadaDefect');
+  });
+
+  it('keeps list filters, hashes and router state when opening a retired collection URL', () => {
+    expect(renderAt({ pathname: '/events', search: '?source=signals&page=3&vesselId=vsl_1', hash: '#filters', state: { from: 'inbox' } }))
+      .toBe('/activity?source=events&page=3&vesselId=vsl_1#filters');
+    expect(screen.getByTestId('state').textContent).toBe('{"from":"inbox"}');
+  });
+
   it('link helpers build the new tab URLs', () => {
     expect(cliPermissionsHref()).toBe('/server?tab=cli-permissions');
     expect(cliPermissionsHref({ requestId: 'cpr_1', section: 'rules' })).toBe('/server?tab=cli-permissions&section=rules&request=cpr_1');
     expect(planningHref()).toBe('/dispatch?tab=planning');
     expect(planningHref('psn_1')).toBe('/dispatch?tab=planning&session=psn_1');
+    expect(blackBoxHref()).toBe('/missions?tab=blackbox');
+    expect(blackBoxHref('entries', { path: 'src/a b', vesselId: null, tab: 'x' })).toBe('/missions?tab=blackbox&bbtab=entries&path=src%2Fa+b');
   });
 
   it('App.tsx redirects every folded route instead of rendering the old pages (no 404s)', () => {
     const app = readFileSync('./src/App.tsx', 'utf8');
-    expect(app).toContain('<Route path="jobs" element={<Navigate to="/activity?source=jobs" replace />} />');
-    expect(app).toContain('<Route path="storage" element={<Navigate to="/server?tab=storage" replace />} />');
+    expect(app).toContain('<Route path="jobs" element={<LegacyPageRedirect to="/activity?source=events" />} />');
+    expect(app).toContain('<Route path="storage" element={<LegacyPageRedirect to="/server?tab=storage" />} />');
     expect(app).toContain('<Route path="cli-permissions" element={<CliPermissionsRedirect />} />');
     expect(app).toContain('<Route path="planning" element={<PlanningRedirect />} />');
     expect(app).toContain('<Route path="planning/:id" element={<PlanningRedirect />} />');
-    for (const page of ['Jobs', 'Storage', 'Planning', 'CliPermissions']) {
+    expect(app).toContain('<Route path="blackbox" element={<BlackBoxRedirect />} />');
+    expect(app).toContain('<Route path="blackbox/:id" element={<BlackBoxEntry />} />');
+    for (const page of ['Jobs', 'Storage', 'Planning', 'CliPermissions', 'BlackBox']) {
       expect(app).not.toContain(`import('./pages/${page}')`);
     }
   });

@@ -163,7 +163,7 @@ describe('ImportWizard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import 2 repositories' }));
 
     expect(await screen.findByText('Importing 2 repositories in the background.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open the Jobs page' })).toHaveAttribute('href', '/activity?source=jobs');
+    expect(screen.getByRole('link', { name: 'View activity' })).toHaveAttribute('href', '/activity?source=events');
 
     await act(async () => { await vi.advanceTimersByTimeAsync(IMPORT_POLL_MS); });
     await waitFor(() => expect(getVesselImportBatch).toHaveBeenCalledTimes(1));
@@ -351,7 +351,7 @@ describe('ImportWizard', () => {
 function captain(id: string, name: string, state: string): Captain {
   return {
     id, tenantId: 'ten', name, runtime: 'ClaudeCode', supportsPlanningSessions: true, planningSessionSupportReason: null, systemInstructions: null,
-    model: null, allowedPersonas: null, preferredPersona: null, state, currentMissionId: null, currentDockId: null, processId: null,
+    model: null, allowedPersonas: null, preferredPersona: null, state, processId: null,
     recoveryAttempts: 0, lastHeartbeatUtc: null, createdUtc: '', lastUpdateUtc: '',
   };
 }

@@ -50,6 +50,11 @@ namespace Armada.Tui.Screens.Operations
         /// </summary>
         public const string FromVessel = "vessel";
 
+        /// <summary>
+        /// Source: a black box entry's proposed Armada change (Draft Armada fix mission).
+        /// </summary>
+        public const string FromBlackBox = "blackbox";
+
         #endregion
 
         #region Public-Methods

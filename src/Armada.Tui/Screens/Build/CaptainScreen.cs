@@ -1,6 +1,7 @@
 namespace Armada.Tui.Screens.Build
 {
     using System;
+    using System.Linq;
     using System.Collections.Generic;
     using Armada.Client;
     using Armada.Client.Models;
@@ -8,6 +9,7 @@ namespace Armada.Tui.Screens.Build
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Tui.Routing;
+    using Armada.Tui.Screens.Activity;
     using Armada.Tui.Screens.Kit;
     using Armada.Tui.Screens.Operations;
     using Armada.Tui.Services;
@@ -19,7 +21,7 @@ namespace Armada.Tui.Screens.Build
     /// endpoint settings, system instructions, allowed and preferred personas, model, state, quarantine with Lift
     /// Quarantine, current mission and dock links, process id, recovery attempts, heartbeat, created and updated; the
     /// current mission card; the captain log (log viewer with the server's Readable formatting, 500 lines first); and
-    /// recent missions. Actions: Edit, Duplicate, View Tools, View Log, View JSON, Recall and Stop (while working,
+    /// recent missions. Actions: Edit, Duplicate, View Tools, Evaluate (CaptainEvaluate), View Log, View JSON, Recall and Stop (while working,
     /// stalled, or planning), and Remove. Reloads on <c>captain.changed</c>. Not thread-safe.
     /// </summary>
     public class CaptainScreen : OpsDetailScreen
@@ -30,6 +32,12 @@ namespace Armada.Tui.Screens.Build
         /// Captain id from the route.
         /// </summary>
         public string CaptainId { get; }
+
+        private readonly OpsDocumentView _Usage = new OpsDocumentView();
+        private List<UsageSnapshotView>? _UsageViews;
+        private string? _UsageError;
+        private bool _UsageCapturing;
+        private DateTime _UsageNextEligible;
 
         /// <summary>
         /// The captain once loaded.
@@ -91,19 +99,27 @@ namespace Armada.Tui.Screens.Build
             Action("edit", "Edit", () => CaptainForm.Open(this, Captain!, true, c => Load()), "e", () => Captain != null, true);
             Action("duplicate", "Duplicate", Duplicate, "u", () => Captain != null);
             Action("tools", "View Tools", () => CaptainTools.Show(this, CaptainId, Captain!.Name), "t", () => Captain != null, true);
+            Action("evaluate", "Evaluate", () => CaptainEvaluate.Open(this, Captain!), "v", () => Captain != null, true);
             Action("log", "View Log", () => ViewLog(), "l", () => Captain != null, true);
             Action("json", "View JSON", () => ShowJson(Tr("Captain: {{name}}", LocalizationArgs.Of("name", Captain!.Name)), Captain), "j", () => Captain != null, true);
             Action("unquarantine", "Lift Quarantine", Unquarantine, "q", () => Captain != null && Captain.State == CaptainStateEnum.Quarantined, true);
             Action("recall", "Recall Captain", Recall, "R", () => Captain != null && (Captain.State == CaptainStateEnum.Working || Captain.State == CaptainStateEnum.Stalled));
             Action("stop", "Stop Captain", Stop, "x", () => Captain != null && (Captain.State == CaptainStateEnum.Working || Captain.State == CaptainStateEnum.Stalled || Captain.State == CaptainStateEnum.Planning), false, true);
             Action("remove", "Remove", Remove, "del", () => Captain != null, false, true);
-            Action("mission", "View Mission", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Captain!.CurrentMissionId!)), "m", () => !String.IsNullOrEmpty(Captain?.CurrentMissionId));
-            Action("dock", "Open Dock", () => Context.Navigate("/docks/" + Uri.EscapeDataString(Captain!.CurrentDockId!)), "k", () => !String.IsNullOrEmpty(Captain?.CurrentDockId));
+            Action("mission", "View Mission", () => Context.Navigate("/missions/" + Uri.EscapeDataString(Captain!.ActiveMissionIds[0])), "m", () => Captain?.ActiveMissionIds.Count == 1);
             Action("copy-id", "Copy ID", () => Copy(CaptainId, "Captain ID"), "y");
 
+            Action("usage", "View Usage", () => SelectPanel("usage"), "U", () => Captain != null, true);
+            OpsScreenAction captureAction = Action("capture-usage", "Capture now", CaptureUsage, "C", () => Captain != null && (Context.Session.IsGlobalAdmin || Context.Session.IsTenantAdmin), true);
+            captureAction.EnabledWhen = () => Captain?.UsageCaptureActive == true && !_UsageCapturing && Context.Clock.UtcNow >= _UsageNextEligible;
+            captureAction.DynamicLabel = () => Captain?.UsageCaptureActive == false ? "Capture disabled" : Context.Clock.UtcNow < _UsageNextEligible ? "Capture cooldown" : "Capture now";
+            _Usage.Builder = doc => UsagePresentation.Build(Captain?.UsageCaptureActive == false ? doc.Field("Usage", Tr("Capture disabled")) : doc, _UsageViews, _UsageError, Context.Clock.UtcNow);
+            SubscribeCoalesced("usage.snapshot", Load);
             Overview.Builder = BuildOverview;
             AddPanel("overview", "Overview", Overview);
             AddPanel("missions", "Recent Missions", MissionGrid);
+            AddPanel("usage", "Usage", _Usage);
+            if (route.Query.TryGetValue("section", out string? section) && section == "usage") SelectPanel("usage");
             SubscribeCoalesced("captain.changed", Load);
             Load();
         }
@@ -115,14 +131,15 @@ namespace Armada.Tui.Screens.Build
         /// <inheritdoc />
         public override void Load()
         {
+            Call((client, token) => client.GetUsageLatestAsync(new UsageQuery { CaptainId = CaptainId }, token), result => { _UsageViews = result?.Objects ?? new List<UsageSnapshotView>(); _UsageError = null; _Usage.Invalidate(); }, null, error => { _UsageError = Tr("Usage could not be loaded."); _Usage.Invalidate(); });
             bool initial = !Loaded;
             Call(async (c, t) =>
             {
                 CaptainLoad result = new CaptainLoad();
                 result.Captain = await c.GetCaptainAsync(CaptainId, t).ConfigureAwait(false);
-                if (result.Captain != null && !String.IsNullOrEmpty(result.Captain.CurrentMissionId))
+                if (result.Captain != null && !String.IsNullOrEmpty(result.Captain.ActiveMissionIds.FirstOrDefault()))
                 {
-                    try { result.CurrentMission = await c.GetMissionAsync(result.Captain.CurrentMissionId!, t).ConfigureAwait(false); }
+                    try { result.CurrentMission = await c.GetMissionAsync(result.Captain.ActiveMissionIds.FirstOrDefault()!, t).ConfigureAwait(false); }
                     catch (ArmadaApiException) { result.CurrentMission = null; }
                 }
 
@@ -256,6 +273,25 @@ namespace Armada.Tui.Screens.Build
             }, "Remove");
         }
 
+        private void CaptureUsage()
+        {
+            if (_UsageCapturing || Captain?.UsageCaptureActive != true || Context.Clock.UtcNow < _UsageNextEligible) return;
+            _UsageCapturing = true;
+            Call((client, token) => client.CaptureCaptainUsageAsync(CaptainId, null, token), receipt =>
+            {
+                _UsageCapturing = false;
+                _UsageNextEligible = receipt?.NextEligibleUtc ?? (receipt?.Status == "Passive" ? DateTime.MinValue : Context.Clock.UtcNow.AddSeconds(60));
+                _UsageError = Tr(receipt?.Status == "Passive" ? "Fresh" : "Capture queued");
+                _Usage.Invalidate();
+            }, null, error =>
+            {
+                _UsageCapturing = false;
+                if (error is ArmadaApiException api && api.StatusCode == 429) { _UsageNextEligible = UsageCooldown.Resolve(api, Context.Clock.UtcNow); _UsageError = Tr("Capture cooldown"); }
+                else _UsageError = Tr("Capture failed") + ": " + error.Message;
+                _Usage.Invalidate();
+            });
+        }
+
         private OpsDocument BuildOverview(OpsDocument doc)
         {
             Captain? c = Captain;
@@ -284,6 +320,8 @@ namespace Armada.Tui.Screens.Build
             doc.Field("Preferred Persona", String.IsNullOrEmpty(c.PreferredPersona) ? Tr("None") : c.PreferredPersona);
             doc.Field("Reasoning effort", c.ReasoningEffort?.ToString() ?? Tr("Runtime default"));
             doc.Field("Capability tier", c.Tier.HasValue ? Tr(c.Tier.Value.ToString()) : Tr("Auto (classify from model)"));
+            doc.Field("Active", c.Active ? "Yes" : "No");
+            doc.Field("Running Missions", c.ActiveMissionCount + " / " + c.MaxConcurrency);
             doc.Field("State", StatusBadge.Label(c.State), StatusBadge.Style(c.State, doc.Theme));
             if (c.State == CaptainStateEnum.Quarantined)
             {
@@ -292,10 +330,12 @@ namespace Armada.Tui.Screens.Build
                 doc.Field("Quarantine", q + "   q " + Tr("Lift Quarantine"), doc.Theme.Warning);
             }
 
-            doc.Field("Current Mission", String.IsNullOrEmpty(c.CurrentMissionId) ? "-" : c.CurrentMissionId + "   (m)");
-            doc.Field("Current Dock", String.IsNullOrEmpty(c.CurrentDockId) ? "-" : c.CurrentDockId + "   (k)");
+            doc.Field(c.ActiveMissionIds.Count > 1 ? "Active Missions" : "Current Mission", c.ActiveMissionIds.Count == 0 ? "-" : String.Join(", ", c.ActiveMissionIds) + (c.ActiveMissionIds.Count == 1 ? "   (m)" : ""));
+            if (c.CurrentSessionId != null)
+            {
             doc.Field("Process ID", c.ProcessId.HasValue && c.ProcessId.Value != 0 ? c.ProcessId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "-");
             doc.Field("Recovery Attempts", c.RecoveryAttempts.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
             doc.Field("Last Heartbeat", c.LastHeartbeatUtc.HasValue ? Context.Loc.FormatRelative(c.LastHeartbeatUtc.Value, now) + " (" + Context.Loc.FormatDateTime(c.LastHeartbeatUtc.Value) + ")" : "-");
             doc.Field("Created", Context.Loc.FormatRelative(c.CreatedUtc, now) + " (" + Context.Loc.FormatDateTime(c.CreatedUtc) + ")");
             doc.Field("Last Updated", Context.Loc.FormatRelative(c.LastUpdateUtc, now) + " (" + Context.Loc.FormatDateTime(c.LastUpdateUtc) + ")");

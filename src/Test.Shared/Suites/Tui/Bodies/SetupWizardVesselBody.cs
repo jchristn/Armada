@@ -45,7 +45,10 @@ namespace Test.Shared.Suites.Tui.Bodies
         /// <summary>
         /// Concurrency flag.
         /// </summary>
-        public bool? AllowConcurrentMissions { get; set; } = null;
+        public int? MaxParallelVoyages { get; set; } = null;
+
+        /// <summary>Running mission limit.</summary>
+        public int? MaxParallelMissionsPerVoyage { get; set; } = null;
 
         #endregion
     }

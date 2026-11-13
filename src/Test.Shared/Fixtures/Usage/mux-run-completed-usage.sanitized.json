@@ -1,0 +1,9 @@
+{
+  "inputTokens": 1200,
+  "outputTokens": 340,
+  "cachedTokens": 800,
+  "reasoningTokens": 0,
+  "totalTokens": 1540,
+  "estimatedTokens": null,
+  "costUsd": 0.0042
+}

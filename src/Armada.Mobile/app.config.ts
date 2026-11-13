@@ -11,7 +11,7 @@ const BUNDLE_ID = process.env.ARMADA_MOBILE_BUNDLE_ID ?? 'com.armada.mobile';
 const EAS_PROJECT_ID: string | undefined = process.env.ARMADA_MOBILE_EAS_PROJECT_ID;
 
 // Kept in step with the Armada release (no independent app versioning).
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const SPLASH_BACKGROUND = '#111827';
 // One Face ID purpose string for the app lock (expo-local-authentication) and saved passwords (expo-secure-store).
 const FACE_ID_USAGE = 'Armada uses Face ID to unlock the app and to sign in with the password you saved on this device.';

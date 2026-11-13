@@ -41,7 +41,7 @@ import { planningHref } from '../../navigation/legacyRedirects';
 import { useLayout } from '../../navigation/useLayout';
 import { useNotifications } from '../../notifications/NotificationContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { MIN_TOUCH, radius, spacing, typography } from '../../theme/typography';
+import { MIN_TOUCH, radius, spacing, touchSlop, typography } from '../../theme/typography';
 import { dispatchHref } from '../operations/w24/dispatchLink';
 import { PathPromptSheet } from './PathPromptSheet';
 import { rememberWorkspaceVessel } from './recentVessels';
@@ -345,8 +345,10 @@ export function WorkspaceScreen({ vesselId, initialPanel = 'files' }: { vesselId
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
           {openPaths.map((p) => (
             <View key={p} style={[styles.tab, { borderColor: p === activePath ? colors.primary : colors.border }]}>
-              <AppText variant="caption" accessibilityRole="button" onPress={() => setActivePath(p)}>{`${getWorkspaceName(p)}${isDirty(p) ? ' *' : ''}`}</AppText>
-              <Pressable accessibilityRole="button" accessibilityLabel={t('Close {{name}}', { name: getWorkspaceName(p) })} onPress={() => closeFile(p)} hitSlop={8}>
+              <Pressable accessibilityRole="button" accessibilityState={{ selected: p === activePath }} onPress={() => setActivePath(p)} hitSlop={touchSlop(36)} style={styles.tabLabel}>
+                <AppText variant="caption" color={p === activePath ? 'primary' : 'text'}>{`${getWorkspaceName(p)}${isDirty(p) ? ' *' : ''}`}</AppText>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('Close {{name}}', { name: getWorkspaceName(p) })} onPress={() => closeFile(p)} hitSlop={{ ...touchSlop(36), left: 4, right: 8 }} style={styles.tabClose}>
                 <Icon name="close" size={16} color="textMuted" />
               </Pressable>
             </View>
@@ -539,7 +541,9 @@ const styles = StyleSheet.create({
   crumbs: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.sm },
   entry: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, minHeight: MIN_TOUCH, borderBottomWidth: StyleSheet.hairlineWidth },
   tabs: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  tab: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: spacing.md, minHeight: 36 },
+  tab: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderWidth: 1, borderRadius: radius.pill, paddingLeft: spacing.md, paddingRight: spacing.xs, minHeight: 36 },
+  tabLabel: { minHeight: 36, justifyContent: 'center' },
+  tabClose: { minWidth: 32, minHeight: 36, alignItems: 'center', justifyContent: 'center' },
   editor: { marginHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: spacing.md, minHeight: 240 },
   selection: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, marginHorizontal: spacing.md, marginVertical: spacing.sm, gap: spacing.xs },
   tabBar: { marginVertical: spacing.md },

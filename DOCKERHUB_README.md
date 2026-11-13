@@ -23,6 +23,10 @@ Define an ordered hierarchy of preferred captain classes on each persona, matchi
 
 The dashboard persona editor uses a wide, responsive two-column form with draggable priority cards, keyboard/arrow reordering, direct position selection, and visible save actions. Persona prompts provide evidence and validation guidance for downstream captains. Existing untouched defaults upgrade automatically; operator-edited templates remain intact. The [prompt improvement plan](PROMPT_AND_HANDOFF_IMPROVEMENTS.md) includes live-template replication and rollback commands.
 
+## Usage-based captain selection
+
+v1.3.0 can choose among qualified captains using captured account allowance, and records why each captain was chosen or why a mission waits. Observe is the default: it records what the configured strategy would have chosen without changing routing. Enforce is an explicit opt-in that commits the assignment, captain slot, decision and usage reservations atomically before launch. See the [operator guide](https://github.com/jchristn/armada/blob/main/docs/usage-selection/OPERATIONS.md) and the [enforcement and mission inspection guide](https://github.com/jchristn/armada/blob/main/docs/usage-selection/ENFORCEMENT_AND_MISSION_INSPECTION.md).
+
 ## What Armada is
 
 Armada coordinates AI coding agents (Claude Code, Codex, Gemini, Cursor, Mux, OpenCode, pi, or a hosted model endpoint)
@@ -47,7 +51,7 @@ and a **dock** is the worktree a captain works in.
 | [`jchristn77/armada-dashboard`](https://hub.docker.com/r/jchristn77/armada-dashboard) | Standalone React dashboard served by nginx (unprivileged) | 8080 |
 | [`jchristn77/armada-proxy`](https://hub.docker.com/r/jchristn77/armada-proxy) | Armada.Proxy, a relay for reaching an Admiral that is not directly exposed | 7893 |
 
-Tags: `v1.2.0` and `latest`, multi-arch (`linux/amd64`, `linux/arm64/v8`). All three images run as non-root users
+Published release tags: `v1.2.0` and `latest`, multi-arch (`linux/amd64`, `linux/arm64/v8`). All three images run as non-root users
 (UID 1654 for the Admiral and proxy, 101 for the dashboard).
 
 Every image that serves HTTP includes `curl`, and the compose files define healthchecks that probe

@@ -1,0 +1,182 @@
+[
+  {
+    "name": "handoff",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "reason": "DependencyNotFinished",
+    "text": "Why This Mission Is WaitingWaiting for an earlier missionPendingWaiting for mission 'Implement independent worker' (Failed) to finish.Depends on msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 1170
+  },
+  {
+    "name": "integration",
+    "theme": "light",
+    "width": 1440,
+    "overflow": false,
+    "reason": "WaitingForVoyageWorkers",
+    "text": "Why This Mission Is WaitingWaiting for the other missions in this voyagePendingMission 'Implement independent worker' in another slice ended Failed; this integration will not run without it and is blocked on the next dispatch pass. Restart that mission to continue.Held by msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 1170
+  },
+  {
+    "name": "handoff",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "reason": "DependencyNotFinished",
+    "text": "Why This Mission Is WaitingWaiting for an earlier missionPendingWaiting for mission 'Implement independent worker' (Failed) to finish.Depends on msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 718
+  },
+  {
+    "name": "integration",
+    "theme": "light",
+    "width": 768,
+    "overflow": false,
+    "reason": "WaitingForVoyageWorkers",
+    "text": "Why This Mission Is WaitingWaiting for the other missions in this voyagePendingMission 'Implement independent worker' in another slice ended Failed; this integration will not run without it and is blocked on the next dispatch pass. Restart that mission to continue.Held by msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 718
+  },
+  {
+    "name": "handoff",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "reason": "DependencyNotFinished",
+    "text": "Why This Mission Is WaitingWaiting for an earlier missionPendingWaiting for mission 'Implement independent worker' (Failed) to finish.Depends on msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 340
+  },
+  {
+    "name": "integration",
+    "theme": "light",
+    "width": 390,
+    "overflow": false,
+    "reason": "WaitingForVoyageWorkers",
+    "text": "Why This Mission Is WaitingWaiting for the other missions in this voyagePendingMission 'Implement independent worker' in another slice ended Failed; this integration will not run without it and is blocked on the next dispatch pass. Restart that mission to continue.Held by msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 340
+  },
+  {
+    "name": "handoff",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "reason": "DependencyNotFinished",
+    "text": "Why This Mission Is WaitingWaiting for an earlier missionPendingWaiting for mission 'Implement independent worker' (Failed) to finish.Depends on msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 1170
+  },
+  {
+    "name": "integration",
+    "theme": "dark",
+    "width": 1440,
+    "overflow": false,
+    "reason": "WaitingForVoyageWorkers",
+    "text": "Why This Mission Is WaitingWaiting for the other missions in this voyagePendingMission 'Implement independent worker' in another slice ended Failed; this integration will not run without it and is blocked on the next dispatch pass. Restart that mission to continue.Held by msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 1170
+  },
+  {
+    "name": "handoff",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "reason": "DependencyNotFinished",
+    "text": "Why This Mission Is WaitingWaiting for an earlier missionPendingWaiting for mission 'Implement independent worker' (Failed) to finish.Depends on msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 718
+  },
+  {
+    "name": "integration",
+    "theme": "dark",
+    "width": 768,
+    "overflow": false,
+    "reason": "WaitingForVoyageWorkers",
+    "text": "Why This Mission Is WaitingWaiting for the other missions in this voyagePendingMission 'Implement independent worker' in another slice ended Failed; this integration will not run without it and is blocked on the next dispatch pass. Restart that mission to continue.Held by msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 718
+  },
+  {
+    "name": "handoff",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "reason": "DependencyNotFinished",
+    "text": "Why This Mission Is WaitingWaiting for an earlier missionPendingWaiting for mission 'Implement independent worker' (Failed) to finish.Depends on msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 340
+  },
+  {
+    "name": "integration",
+    "theme": "dark",
+    "width": 390,
+    "overflow": false,
+    "reason": "WaitingForVoyageWorkers",
+    "text": "Why This Mission Is WaitingWaiting for the other missions in this voyagePendingMission 'Implement independent worker' in another slice ended Failed; this integration will not run without it and is blocked on the next dispatch pass. Restart that mission to continue.Held by msn_readiness_failed",
+    "links": [
+      {
+        "label": "msn_readiness_failed",
+        "href": "/dashboard/missions/msn_readiness_failed"
+      }
+    ],
+    "cardWidth": 340
+  }
+]

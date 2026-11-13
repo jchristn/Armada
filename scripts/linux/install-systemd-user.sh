@@ -1,46 +1,16 @@
 #!/usr/bin/env bash
+# Deprecated name, kept so existing docs, notes and habits keep working: install-systemd-user.sh is now install-startup.sh,
+# the start-at-login script name used on every OS (scripts/{macos,linux,wsl,wsl2}/install-startup.sh,
+# scripts\windows\install-startup.bat). The old script could be run again to republish and restart, so this
+# forwards to scripts/linux/update-startup.sh when Armada is already registered and to install-startup.sh otherwise,
+# with all arguments; run those with -h for usage.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-UNIT_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
-UNIT_NAME="armada.service"
-UNIT_PATH="${UNIT_DIR}/${UNIT_NAME}"
-ARMADA_HOME="${HOME}/.armada"
-SERVER_EXE="${ARMADA_HOME}/bin/Armada.Server"
-
-if ! command -v systemctl >/dev/null 2>&1; then
-    echo "ERROR: systemctl is required to install the systemd user service." >&2
-    exit 1
+UNIT_PATH="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user/armada.service"
+if { [ -f "$UNIT_PATH" ] && ! grep -q -- '--run-service' "$UNIT_PATH"; } || [ -f "${XDG_CONFIG_HOME:-${HOME}/.config}/autostart/armada.desktop" ]; then
+    echo "[install-systemd-user] Note: this script is now scripts/linux/install-startup.sh; Armada is registered, so running update-startup.sh." >&2
+    exec "${SCRIPT_DIR}/update-startup.sh" "$@"
 fi
-
-echo
-echo "[install-systemd-user] Publishing Armada.Server..."
-"${SCRIPT_DIR}/publish-server.sh" "$@"
-
-mkdir -p "${UNIT_DIR}"
-
-cat >"${UNIT_PATH}" <<EOF
-[Unit]
-Description=Armada Admiral Server
-
-[Service]
-Type=simple
-ExecStart=${SERVER_EXE}
-WorkingDirectory=${ARMADA_HOME}
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-EOF
-
-echo
-echo "[install-systemd-user] Reloading systemd user units..."
-systemctl --user daemon-reload
-systemctl --user enable --now "${UNIT_NAME}" >/dev/null
-
-"${SCRIPT_DIR}/healthcheck-server.sh"
-
-echo
-echo "[install-systemd-user] Completed."
-echo "[install-systemd-user] Unit file: ${UNIT_PATH}"
+echo "[install-systemd-user] Note: this script is now scripts/linux/install-startup.sh; running that." >&2
+exec "${SCRIPT_DIR}/install-startup.sh" "$@"

@@ -2,6 +2,7 @@ namespace Test.Shared.Suites.E2E
 {
     using System;
     using System.Collections.Generic;
+    using System.Net.Http;
     using System.Threading;
     using System.Threading.Tasks;
     using Armada.Core.Models;
@@ -38,6 +39,17 @@ namespace Test.Shared.Suites.E2E
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
 
+            cases.Add(CaseAsync("test_helper_closes_owned_session_and_rejects_failed_initialize", "The MCP helper releases its session budget and never calls a tool after failed initialization", TestTags.Positive, async () =>
+            {
+                using OwnedMcpSessionHandler handler = new OwnedMcpSessionHandler();
+                using HttpClient client = new HttpClient(handler) { BaseAddress = new Uri("http://fixture.invalid") };
+                for (int index = 0; index < 3; index++)
+                    AssertContains("result", await McpTestCalls.CallToolAsync(client, "fixture", new { }).ConfigureAwait(false));
+                AssertEqual(0, handler.ActiveSessions); AssertEqual(3, handler.ClosedSessions); AssertEqual(3, handler.ToolCalls);
+                handler.RejectInitialization = true;
+                await AssertThrowsAsync<AssertionException>(() => McpTestCalls.CallToolAsync(client, "fixture", new { })).ConfigureAwait(false);
+                AssertEqual(3, handler.ToolCalls, "failed initialization must not dispatch the tool");
+            }));
             cases.Add(CaseAsync("client_discovers_armada_tools", "The MCP client initializes and discovers Armada's tools", TestTags.Positive, async () =>
             {
                 E2EServerFixture fx = await E2EServerFixture.AcquireAsync(this).ConfigureAwait(false);

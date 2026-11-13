@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites.Services
 {
+    using System.Linq;
     using System;
     using System.Collections.Generic;
     using System.IO;
@@ -76,28 +77,50 @@ namespace Test.Shared.Suites.Services
                     Voyage voyage = await db.Voyages.CreateAsync(new Voyage("cancel-release") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
                     Voyage otherVoyage = await db.Voyages.CreateAsync(new Voyage("other") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
 
-                    Captain solo = await db.Captains.CreateAsync(new Captain("solo-" + Guid.NewGuid().ToString("N")) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                    Captain solo = await CaptainAssignmentFixture.CreateAsync(db, new Captain("solo-" + Guid.NewGuid().ToString("N")) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
                     Mission soloMission = await CreateMissionAsync(db, voyage.Id, MissionStatusEnum.Assigned, solo.Id).ConfigureAwait(false);
-                    solo.CurrentMissionId = soloMission.Id;
+                    solo.Assignment = soloMission;
                     solo.ProcessId = 4242;
-                    await db.Captains.UpdateAsync(solo).ConfigureAwait(false);
+                    await CaptainAssignmentFixture.UpdateAsync(db, solo).ConfigureAwait(false);
 
-                    Captain busy = await db.Captains.CreateAsync(new Captain("busy-" + Guid.NewGuid().ToString("N")) { State = CaptainStateEnum.Working }).ConfigureAwait(false);
+                    Captain busy = await CaptainAssignmentFixture.CreateAsync(db, new Captain("busy-" + Guid.NewGuid().ToString("N")) { State = CaptainStateEnum.Working, MaxConcurrency = 2 }).ConfigureAwait(false);
                     Mission busyMission = await CreateMissionAsync(db, voyage.Id, MissionStatusEnum.Assigned, busy.Id).ConfigureAwait(false);
-                    await CreateMissionAsync(db, otherVoyage.Id, MissionStatusEnum.InProgress, busy.Id).ConfigureAwait(false);
-                    busy.CurrentMissionId = busyMission.Id;
-                    await db.Captains.UpdateAsync(busy).ConfigureAwait(false);
+                    Mission otherMission = await CreateMissionAsync(db, otherVoyage.Id, MissionStatusEnum.InProgress, busy.Id).ConfigureAwait(false);
+                    busy.Assignment = busyMission;
+                    await CaptainAssignmentFixture.UpdateAsync(db, busy).ConfigureAwait(false);
+                    busy.Assignment = otherMission;
+                    await CaptainAssignmentFixture.UpdateAsync(db, busy).ConfigureAwait(false);
 
                     await dispatcher.CancelVoyageAsync(voyage.Id).ConfigureAwait(false);
 
                     Captain? soloAfter = await db.Captains.ReadAsync(solo.Id).ConfigureAwait(false);
                     AssertEqual(CaptainStateEnum.Idle, soloAfter!.State, "captain with no other work released");
-                    AssertNull(soloAfter.CurrentMissionId);
+                    AssertNull(soloAfter.ActiveMissionIds.SingleOrDefault());
                     AssertNull(soloAfter.ProcessId);
                     Captain? busyAfter = await db.Captains.ReadAsync(busy.Id).ConfigureAwait(false);
                     AssertEqual(CaptainStateEnum.Working, busyAfter!.State, "captain still working another voyage keeps working");
                     AssertEqual(MissionStatusEnum.Cancelled, (await db.Missions.ReadAsync(busyMission.Id).ConfigureAwait(false))!.Status);
                 }
+            }));
+
+            cases.Add(CaseAsync("cancel_nonprimary_slot_preserves_sibling", "Voyage cancellation releases only its own non-primary captain slot", TestTags.Positive, async () =>
+            {
+                using TestDatabase fixture = await TestDatabaseHelper.CreateDatabaseAsync();
+                DatabaseDriver db = fixture.Driver;
+                Captain owner = await CaptainAssignmentFixture.CreateAsync(db, new Captain("shared") { MaxConcurrency = 3 });
+                Voyage firstVoyage = await db.Voyages.CreateAsync(new Voyage("first") { Status = VoyageStatusEnum.InProgress });
+                Voyage secondVoyage = await db.Voyages.CreateAsync(new Voyage("second") { Status = VoyageStatusEnum.InProgress });
+                Mission first = await CreateMissionAsync(db, firstVoyage.Id, MissionStatusEnum.Pending, null);
+                Mission second = await CreateMissionAsync(db, secondVoyage.Id, MissionStatusEnum.Pending, null);
+                AssertTrue(await db.Captains.TryClaimAsync(owner.Id, first.Id, null));
+                AssertTrue(await db.Captains.TryClaimAsync(owner.Id, second.Id, null));
+                await CreateDispatcher(db).CancelVoyageAsync(secondVoyage.Id);
+                Captain after = (await db.Captains.ReadAsync(owner.Id))!;
+                AssertEqual(1, after.ActiveMissionCount);
+                AssertTrue(after.HoldsMission(first.Id));
+                AssertFalse(after.ActiveMissionIds.Contains(second.Id));
+                AssertEqual(CaptainStateEnum.Working, after.State);
+                AssertEqual(MissionStatusEnum.Assigned, (await db.Missions.ReadAsync(first.Id))!.Status);
             }));
 
             cases.Add(CaseAsync("cancel_finished_voyage_is_noop", "Cancelling a finished voyage changes nothing", TestTags.Negative, async () =>

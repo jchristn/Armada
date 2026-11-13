@@ -165,7 +165,7 @@ namespace Test.Shared.Suites.Services
                     await File.WriteAllTextAsync(tempFile, original).ConfigureAwait(false);
 
                     ArmadaSettings loaded = await ArmadaSettings.LoadAsync(tempFile).ConfigureAwait(false);
-                    AssertTrue(loaded.WriteBack(), "an older file is rewritten");
+                    AssertFalse(loaded.WriteBack(), "load already persisted the revision and complete defaults; write-back is idempotent");
 
                     string written = await File.ReadAllTextAsync(tempFile).ConfigureAwait(false);
                     AssertContains("\"advertisedMcpBaseUrl\": \"http://localhost:" + Constants.DefaultMcpPort + "/mcp\"", written, "derived MCP URL is written");
@@ -542,6 +542,18 @@ namespace Test.Shared.Suites.Services
                 AssertNotNull(ArmadaMetrics.MergeEntriesProcessed);
                 AssertNotNull(ArmadaMetrics.MissionsFailed);
                 AssertNotNull(ArmadaMetrics.MissionRuntimeExceeded);
+                AssertNotNull(ArmadaMetrics.SlotWaitSeconds);
+                AssertNotNull(ArmadaMetrics.QueueSeconds);
+                AssertNotNull(ArmadaMetrics.GateWaitSeconds);
+                AssertNotNull(ArmadaMetrics.AdmissionLockWaitSeconds);
+                AssertNotNull(ArmadaMetrics.MissionsStarving);
+                AssertNotNull(ArmadaMetrics.MissionsWaiting);
+                AssertNotNull(ArmadaMetrics.MissionsActive);
+                AssertNotNull(ArmadaMetrics.CaptainSlotsInUse);
+                AssertNotNull(ArmadaMetrics.CaptainSlotsTotal);
+                AssertNotNull(ArmadaMetrics.VesselVoyageSlotsInUse);
+                AssertNotNull(ArmadaMetrics.VesselVoyageSlotsTotal);
+                AssertNotNull(ArmadaMetrics.VesselsUnlimited);
                 // Emitting must be safe with no subscriber attached.
                 ArmadaMetrics.CaptainStalls.Add(1);
                 ArmadaMetrics.HandoffsRedriven.Add(2);

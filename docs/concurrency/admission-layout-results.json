@@ -1,0 +1,234 @@
+[
+  {
+    "name": "captains",
+    "width": 1440,
+    "overflow": false,
+    "headings": [
+      "Armada",
+      "Missions"
+    ],
+    "breadcrumbs": [
+      "Dashboard>Missions"
+    ],
+    "headers": [
+      "",
+      "ID",
+      "Title\u21c5",
+      "Status\u21c5",
+      "Priority\u21c5",
+      "Vessel",
+      "Captain",
+      "Voyage",
+      "Branch",
+      "Actions"
+    ],
+    "missionLinks": []
+  },
+  {
+    "name": "captain",
+    "width": 1440,
+    "overflow": false,
+    "headings": [
+      "Armada",
+      "Parallel worker",
+      "Usage",
+      "Evaluation",
+      "Active Missions",
+      "Recent Missions"
+    ],
+    "breadcrumbs": [
+      "Dashboard>Captains>Parallel worker"
+    ],
+    "headers": [
+      "ID",
+      "Mission",
+      "Status",
+      "Branch",
+      "Date",
+      "Actions"
+    ],
+    "missionLinks": [
+      "/dashboard/missions/msn_mvzt17hj_2b2xHLBiNjX",
+      "/dashboard/missions/msn_mvzt17hd_sAn0Q8JpxJK",
+      "/dashboard/missions/msn_mvzt17gt_5NFvRJtpsF2",
+      "/dashboard/missions/msn_mvzt17hj_2b2xHLBiNjX"
+    ]
+  },
+  {
+    "name": "waiting",
+    "width": 1440,
+    "overflow": false,
+    "headings": [
+      "Armada",
+      "Prepare schema ",
+      "Why This Mission Is Waiting",
+      "Landing Preview",
+      "Description"
+    ],
+    "breadcrumbs": [
+      "Dashboard>Missions>Prepare schema"
+    ],
+    "headers": [],
+    "missionLinks": [
+      "/dashboard/missions/msn_mvzt17gt_5NFvRJtpsF2",
+      "/dashboard/missions/msn_mvzt17hd_sAn0Q8JpxJK",
+      "/dashboard/missions/msn_mvzt17hj_2b2xHLBiNjX"
+    ]
+  },
+  {
+    "name": "captains",
+    "width": 768,
+    "overflow": false,
+    "headings": [
+      "Armada",
+      "Captains"
+    ],
+    "breadcrumbs": [
+      "Dashboard>Captains"
+    ],
+    "headers": [
+      "",
+      "ID",
+      "Name\u25b2",
+      "Runtime\u21c5",
+      "State\u21c5",
+      "Current Mission",
+      "Usage",
+      "Missions",
+      "Evaluations",
+      "Heartbeat",
+      "Created\u21c5",
+      "Actions"
+    ],
+    "missionLinks": []
+  },
+  {
+    "name": "captain",
+    "width": 768,
+    "overflow": false,
+    "headings": [
+      "Armada",
+      "Parallel worker",
+      "Usage",
+      "Evaluation",
+      "Active Missions",
+      "Recent Missions"
+    ],
+    "breadcrumbs": [
+      "Dashboard>Captains>Parallel worker"
+    ],
+    "headers": [
+      "ID",
+      "Mission",
+      "Status",
+      "Branch",
+      "Date",
+      "Actions"
+    ],
+    "missionLinks": [
+      "/dashboard/missions/msn_mvzt17hj_2b2xHLBiNjX",
+      "/dashboard/missions/msn_mvzt17hd_sAn0Q8JpxJK",
+      "/dashboard/missions/msn_mvzt17gt_5NFvRJtpsF2",
+      "/dashboard/missions/msn_mvzt17hj_2b2xHLBiNjX"
+    ]
+  },
+  {
+    "name": "waiting",
+    "width": 768,
+    "overflow": false,
+    "headings": [
+      "Armada",
+      "Prepare schema ",
+      "Why This Mission Is Waiting",
+      "Landing Preview",
+      "Description"
+    ],
+    "breadcrumbs": [
+      "Dashboard>Missions>Prepare schema"
+    ],
+    "headers": [],
+    "missionLinks": [
+      "/dashboard/missions/msn_mvzt17gt_5NFvRJtpsF2",
+      "/dashboard/missions/msn_mvzt17hd_sAn0Q8JpxJK",
+      "/dashboard/missions/msn_mvzt17hj_2b2xHLBiNjX"
+    ]
+  },
+  {
+    "name": "captains",
+    "width": 390,
+    "overflow": false,
+    "headings": [
+      "Armada",
+      "Captains"
+    ],
+    "breadcrumbs": [
+      "Dashboard>Captains"
+    ],
+    "headers": [
+      "",
+      "ID",
+      "Name\u25b2",
+      "Runtime\u21c5",
+      "State\u21c5",
+      "Current Mission",
+      "Usage",
+      "Missions",
+      "Evaluations",
+      "Heartbeat",
+      "Created\u21c5",
+      "Actions"
+    ],
+    "missionLinks": []
+  },
+  {
+    "name": "captain",
+    "width": 390,
+    "overflow": false,
+    "headings": [
+      "Armada",
+      "Parallel worker",
+      "Usage",
+      "Evaluation",
+      "Active Missions",
+      "Recent Missions"
+    ],
+    "breadcrumbs": [
+      "Dashboard>Captains>Parallel worker"
+    ],
+    "headers": [
+      "ID",
+      "Mission",
+      "Status",
+      "Branch",
+      "Date",
+      "Actions"
+    ],
+    "missionLinks": [
+      "/dashboard/missions/msn_mvzt17hj_2b2xHLBiNjX",
+      "/dashboard/missions/msn_mvzt17hd_sAn0Q8JpxJK",
+      "/dashboard/missions/msn_mvzt17gt_5NFvRJtpsF2",
+      "/dashboard/missions/msn_mvzt17hj_2b2xHLBiNjX"
+    ]
+  },
+  {
+    "name": "waiting",
+    "width": 390,
+    "overflow": false,
+    "headings": [
+      "Armada",
+      "Prepare schema ",
+      "Why This Mission Is Waiting",
+      "Landing Preview",
+      "Description"
+    ],
+    "breadcrumbs": [
+      "Dashboard>Missions>Prepare schema"
+    ],
+    "headers": [],
+    "missionLinks": [
+      "/dashboard/missions/msn_mvzt17gt_5NFvRJtpsF2",
+      "/dashboard/missions/msn_mvzt17hd_sAn0Q8JpxJK",
+      "/dashboard/missions/msn_mvzt17hj_2b2xHLBiNjX"
+    ]
+  }
+]

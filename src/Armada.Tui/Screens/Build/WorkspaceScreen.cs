@@ -468,7 +468,7 @@ namespace Armada.Tui.Screens.Build
             if (width < 20 || height < 8) return;
             Vessel? vessel = CurrentVessel;
             int y = 0;
-            string title = vessel?.Name ?? (Vessels.Count == 0 ? Tr("Loading...") : VesselId);
+            string title = vessel?.Name ?? (Vessels.Count == 0 && Error == null ? Tr("Loading...") : VesselId);
             int x = SurfaceText.Draw(surface, 0, y, title, Theme.Accent.WithAttribute(CellAttributes.Bold, true), width);
             SurfaceText.Draw(surface, x + 2, y, Tr("Workspace") + "  (" + Tr("Workspace") + " > " + title + ")", Theme.Muted, Math.Max(0, width - x - 2));
             y++;
@@ -497,7 +497,7 @@ namespace Armada.Tui.Screens.Build
             int editorTop = RenderEditorPane(surface, new Rect(treeWidth + 1, bodyTop, Math.Max(1, width - treeWidth - 1), bodyHeight));
             // Above the boxes the column between the panes is a plain divider.
             int boxesTop = Math.Min(treeTop, editorTop) - 1;
-            for (int r = bodyTop; r < Math.Min(boxesTop, height); r++) SurfaceText.Draw(surface, treeWidth, r, "|", Theme.Border, 1);
+            for (int r = bodyTop; r < Math.Min(boxesTop, height); r++) SurfaceText.Draw(surface, treeWidth, r, "\u2502", Theme.Border, 1);
         }
 
         #endregion
@@ -533,6 +533,8 @@ namespace Armada.Tui.Screens.Build
         {
             int y = rect.Y;
             string head = Tr("Files") + "  n " + Tr("New File") + "  N " + Tr("New Folder");
+            // A narrow tree keeps both keys readable rather than cutting the folder key off.
+            if (TextCells.Width(head) > rect.Width) head = Tr("Files") + "  n " + Tr("File") + "  N " + Tr("Folder");
             SurfaceText.Draw(surface, rect.X, y++, head, ReferenceEquals(Scope.Focused, Tree) ? Theme.Accent : Theme.Muted, rect.Width);
             y++;
             List<string> selection = Tree.Selected.ToList();

@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Models;
     using Armada.Core.Services;
     using Armada.Helm.Rendering;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Stop a captain by name or ID.
@@ -34,7 +35,7 @@ namespace Armada.Helm.Commands
                     }
                     else
                     {
-                        AnsiConsole.MarkupLine($"[red]Captain not found:[/] {Markup.Escape(settings.Id)}");
+                        HelmConsole.Error.MarkupLine($"[red]Captain not found:[/] {Markup.Escape(settings.Id)}");
                         if (captains.Count > 0)
                         {
                             AnsiConsole.MarkupLine("[dim]Available captains:[/]");

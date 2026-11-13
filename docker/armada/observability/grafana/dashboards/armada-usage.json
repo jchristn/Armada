@@ -1,0 +1,179 @@
+{
+  "title": "Armada Usage",
+  "uid": "armada-usage",
+  "tags": [
+    "armada",
+    "usage"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Capture outcomes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(armada_usage_operations_total{operation=\"capture\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "{{operation}} {{runtime}} {{outcome}} {{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Operation latency (p95)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le,operation) (rate(armada_usage_duration_seconds_bucket[5m])))",
+          "refId": "A",
+          "legendFormat": "{{operation}} {{runtime}} {{outcome}} {{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Active probes and queued work",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation) (armada_usage_active)",
+          "refId": "A",
+          "legendFormat": "{{operation}} {{runtime}} {{outcome}} {{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Scheduling decisions",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(armada_usage_operations_total{operation=\"schedule\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "{{operation}} {{runtime}} {{outcome}} {{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Retention rows removed",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "sum by (kind) (increase(armada_usage_retention_deleted_total[1h]))",
+          "refId": "A",
+          "legendFormat": "{{operation}} {{runtime}} {{outcome}} {{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Latest observed age",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "armada_usage_observation_age_seconds",
+          "refId": "A",
+          "legendFormat": "{{operation}} {{runtime}} {{outcome}} {{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Parser and host failures",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "armada-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation,runtime) (rate(armada_usage_operations_total{operation=~\"parse|host|provider\",outcome=\"Failed\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "{{operation}} {{runtime}} {{outcome}} {{kind}}"
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "title": "Usage traces",
+      "type": "link",
+      "url": "/explore?left=%7B%22datasource%22%3A%22armada-tempo%22%7D"
+    }
+  ]
+}

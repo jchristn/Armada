@@ -658,7 +658,7 @@ namespace Test.Shared.Suites.Services
 
                 Captain captain = new Captain("Mux", AgentRuntimeEnum.Mux);
                 captain.State = CaptainStateEnum.Working;
-                captain = await testDb.Driver.Captains.CreateAsync(captain).ConfigureAwait(false);
+                captain = await CaptainAssignmentFixture.CreateAsync(testDb.Driver, captain).ConfigureAwait(false);
                 Voyage voyage = await testDb.Driver.Voyages.CreateAsync(new Voyage("repair") { Status = VoyageStatusEnum.InProgress }).ConfigureAwait(false);
 
                 Mission mission = new Mission("[" + persona + "] Task", "Do the task");
@@ -682,9 +682,9 @@ namespace Test.Shared.Suites.Services
 
                 mission.DockId = dock.Id;
                 await testDb.Driver.Missions.UpdateAsync(mission).ConfigureAwait(false);
-                captain.CurrentMissionId = mission.Id;
-                captain.CurrentDockId = dock.Id;
-                await testDb.Driver.Captains.UpdateAsync(captain).ConfigureAwait(false);
+                captain.Assignment = mission;
+                captain.Assignment ??= new Mission("fixture assignment"); captain.Assignment.DockId = dock.Id;
+                await CaptainAssignmentFixture.UpdateAsync(testDb.Driver, captain).ConfigureAwait(false);
 
                 // The dock started from the repository's current head, as a real dock does.
                 string start = (await GitAsync(repo, "rev-parse", "HEAD").ConfigureAwait(false)).Trim();

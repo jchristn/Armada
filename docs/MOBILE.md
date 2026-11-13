@@ -20,7 +20,7 @@ Developer setup, the code layout, and the test tooling are in
 |---|---|
 | **Ask** | Ask Armada conversations: streaming replies with thinking and tool steps, `/` commands (quick actions and forms, `/new`, `/rename`, and more), the captain picker, confirm cards, CLI permission cards, live work cards, and the captain's report when work finishes (tagged "Report") |
 | **Approvals** | Everything that needs you, decided in place: Ask proposals, CLI permission requests, mission reviews, deployment approvals, failed landings (retry), failed missions (restart), and stalled captains (stop); recent alerts below |
-| **Work** | Home (status, KPIs, health, mission history, voyage progress, recent missions and signals), Missions, Voyages and Create Voyage, Dispatch, Merge Queue, and the Build, Delivery, Configuration, Activity, and Server sections |
+| **Work** | Home (status, KPIs, health, mission history, voyage progress, recent missions and signals), Missions, Voyages and Create Voyage, Dispatch, Merge Queue, the Black Box (a Missions tab), and the Build, Delivery, Configuration, Activity, and Server sections |
 | **More** | Server profiles, preferences (theme, language, Face ID unlock and saved password, notifications), the notification center, and sign-out |
 
 In Ask, typing `/` opens the command menu: the quick actions plus `/new` (also `/clear`), `/help`, `/summarize`,
@@ -29,6 +29,28 @@ In Ask, typing `/` opens the command menu: the quick actions plus `/new` (also `
 Return or **Send** runs it, or runs the command you typed with its arguments (`/rename Billing retry fix`). An unknown
 command shows a short hint under the message box and keeps your text. **New conversation**, `/new`, and `/clear`
 always start with an empty message box; each conversation keeps its own unsent draft while the app runs.
+
+The black box of a failed mission or voyage (its detail page and the entry screen) puts an **Armada resilience**
+section right after the summary: whether Armada's own handoff and landing could have healed the failure (and what it
+could have done), the detection gap, severity and recurrence, the recoveries Armada already attempted, code pointers
+at the Armada build, the proposed Armada changes with their acceptance tests, and the regression test. An entry
+triaged ArmadaDefect carries a **Suspected Armada defect** badge. **Draft Armada fix mission** opens Ask Armada with
+the top proposed change filled in (nothing is sent until you press Send), and **Copy fix brief** copies one change as
+a mission brief. Outside handoff and landing the section is one line saying why no Armada change is suggested. See
+"Resilience bias" in [BLACKBOX.md](BLACKBOX.md).
+
+Concurrency and mission hierarchy (v1.3.0) appear on the detail screens. A voyage with parent links or pipeline
+stages has a **Mission Tree** section: one row per logical mission, indented under its parent, with its pipeline
+stages and a continues parent, forks from parent or integration marker on the caption line, and the running count
+against the vessel's per-voyage limit; rows open the mission and the section refreshes on mission and voyage events.
+A mission has a **Wait Time** section (the summary line, the slot wait, and the last 5 waits with readable reasons)
+and a **Children (N)** section listing its child missions with branch markers (the first 50). A vessel has a
+**Concurrency** section: voyage slots in use against the limit (a **Full** badge when full), running missions, slot
+wait over 24 hours and 7 days, and up to 10 waiting missions. The vessel form has **Parallel voyages** and **Parallel
+missions per voyage** (0 means unlimited), and the captain form has **Maximum concurrent missions**. The setup
+wizard's captain step asks **How many missions should run at once?**: a CLI runtime creates that many single-slot
+captains and a Mux runtime creates one captain with that many slots (the button reads **Create N
+Captains**). See [SCHEDULING.md](SCHEDULING.md#capacity).
 
 On a tablet (768 dp and wider) the tabs become the dashboard's sidebar and lists open their detail side by side.
 Links work both ways: `armada://` links and pasted dashboard URLs (`https://admiral.example.com/dashboard/missions/msn_...`)

@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { apiErrorMessage, listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, enumerateModelEndpoints, setCaptainCliPermissionPolicy } from '../api/client';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { apiErrorMessage, listCaptains, createCaptain, updateCaptain, deleteCaptain, stopCaptain, recallCaptain, stopAllCaptains, restartCaptain, getCaptainTools, enumerateModelEndpoints, evaluateCaptain, setCaptainCliPermissionPolicy } from '../api/client';
 import { listAll } from '../api/paging';
-import type { ModelEndpoint } from '../types/models';
+import type { ModelEndpoint, ModelEvaluationOptions, ModelProbeDepth } from '../types/models';
 import type { Captain, CaptainToolAccessResult } from '../types/models';
 import DataTable, { type DataTableColumn } from '../components/shared/DataTable';
 import ActionMenu from '../components/shared/ActionMenu';
@@ -11,6 +11,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import MuxRuntimeFields from '../components/captains/MuxRuntimeFields';
 import CaptainTierBadge from '../components/shared/CaptainTierBadge';
 import CaptainToolViewer from '../components/captains/CaptainToolViewer';
+import ModelEvaluateDialog from '../components/ModelEvaluateDialog';
 import JsonViewer from '../components/shared/JsonViewer';
 import CopyButton from '../components/shared/CopyButton';
 import UserScopeFilter from '../components/shared/UserScopeFilter';
@@ -19,6 +20,7 @@ import PageHeader from '../components/shared/PageHeader';
 import ErrorModal from '../components/shared/ErrorModal';
 import { useLocale } from '../context/LocaleContext';
 import { useNotifications } from '../context/NotificationContext';
+import { evaluationResultsPath, evaluationsListPath } from '../lib/evaluationLinks';
 import { useAuth } from '../context/AuthContext';
 import CliPermissionPolicySelect from '../components/cliPermissions/CliPermissionPolicySelect';
 import { canCaptainStartPlanning } from '../lib/captains';
@@ -29,17 +31,23 @@ import { buildCaptainDuplicatePayload } from '../lib/duplicates';
 import { usePersistedPageSize } from '../lib/usePersistedPageSize';
 import { PLANNING_PATH } from '../lib/navTargets';
 import { useDeleteProgress } from '../lib/useDeleteProgress';
+import { useLatestUsageForCaptains } from '../lib/useUsage';
+import CaptainUsageCell from '../components/usage/CaptainUsageCell';
+import UsageState from '../components/usage/UsageState';
 
 type SortDir = 'asc' | 'desc';
 type SortField = 'name' | 'runtime' | 'state' | 'createdUtc';
 
 export default function Captains() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t, formatRelativeTime, formatDateTime } = useLocale();
   const { pushToast } = useNotifications();
   const deletion = useDeleteProgress();
   const { isAdmin, isTenantAdmin } = useAuth();
   const canManageCliPolicy = !!isAdmin || !!isTenantAdmin;
+  // POST /captains/{id}/evaluate needs a tenant admin (or global admin), so only they see Evaluate
+  const canEvaluate = !!isAdmin || !!isTenantAdmin;
   const [captains, setCaptains] = useState<Captain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -52,6 +60,8 @@ export default function Captains() {
   const [inferenceEndpoints, setInferenceEndpoints] = useState<ModelEndpoint[]>([]);
 
   // JSON viewer
+  const [evaluateTarget, setEvaluateTarget] = useState<Captain | null>(null);
+  const [evaluating, setEvaluating] = useState(false);
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [toolViewer, setToolViewer] = useState<{ open: boolean; captainName: string; loading: boolean; error: string; data: CaptainToolAccessResult | null }>({
     open: false,
@@ -131,6 +141,10 @@ export default function Captains() {
     return sorted.slice(start, start + pageSize);
   }, [sorted, currentPage, pageSize]);
 
+  // One batch latest request (per 100 ids) hydrates the visible page; never one request per row.
+  const visibleCaptainIds = useMemo(() => paginated.map((c) => c.id), [paginated]);
+  const usage = useLatestUsageForCaptains(visibleCaptainIds);
+
   function handleSort(field: SortField) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('asc'); }
@@ -153,6 +167,12 @@ export default function Captains() {
   }, []);
 
   // CRUD
+  useEffect(() => {
+    if (!isAdmin || searchParams.get('create') !== '1') return;
+    openCreate();
+    setSearchParams(current => { const next = new URLSearchParams(current); next.delete('create'); return next; }, { replace: true });
+  }, [isAdmin, searchParams, setSearchParams]);
+
   function openCreate() {
     setForm(emptyCaptainForm());
     setEditing(null);
@@ -317,6 +337,21 @@ export default function Captains() {
     }
   }
 
+  async function handleEvaluate(captain: Captain, depth: ModelProbeDepth, options: ModelEvaluationOptions) {
+    setEvaluating(true);
+    try {
+      const run = await evaluateCaptain(captain.id, depth, options);
+      setEvaluateTarget(null);
+      pushToast('success', t('Evaluation {{runId}} started for captain "{{name}}".', { runId: run.id, name: captain.name }),
+        { label: t('View results'), to: evaluationResultsPath(run.id) });
+      navigate(evaluationResultsPath(run.id));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('Evaluate failed.'));
+    } finally {
+      setEvaluating(false);
+    }
+  }
+
   async function handleViewTools(captain: Captain) {
     setToolViewer({
       open: true,
@@ -386,24 +421,38 @@ export default function Captains() {
       clearFilter: () => setColFilter('state', ''),
       filter: <input type="text" className="col-filter" aria-label={t('State')} title={t('Show only captains whose state contains this text, for example idle or working.')} value={colFilters.state} onChange={e => setColFilter('state', e.target.value)} placeholder={t('Filter...')} />,
       render: (c) => (
-        <>
-          <StatusBadge status={c.state} />
+        <span className="captain-state-cell">
+          <StatusBadge status={c.state} />{' '}
+          <span>{t(c.active === false ? 'Inactive' : 'Active')}</span>
           {c.state === 'Quarantined' && (
-            <span className="tag stalled" title={c.quarantineReason ? t('Quarantined: dispatch skips this captain until the time shown. Reason: {{reason}}', { reason: c.quarantineReason }) : t('Quarantined: dispatch skips this captain until the time shown, then it returns to Idle.')} style={{ marginLeft: '0.35rem' }}>
+            <span className="tag stalled" title={c.quarantineReason ? t('Quarantined: dispatch skips this captain until the time shown. Reason: {{reason}}', { reason: c.quarantineReason }) : t('Quarantined: dispatch skips this captain until the time shown, then it returns to Idle.')}>
               {c.quarantineUntilUtc ? t('until {{time}}', { time: formatRelativeTime(c.quarantineUntilUtc) }) : t('quarantined')}
             </span>
           )}
-        </>
+        </span>
       ),
     },
     {
-      key: 'currentMission', label: t('Current Mission'), headerTitle: t('The mission this captain is running now. Click the ID to open it; a dash means it has no mission.'), cellClassName: 'mono text-dim cell-nowrap', interactive: true,
-      cellTitle: (c) => c.currentMissionId ?? undefined,
-      render: (c) => c.currentMissionId ? (
-        <a href="#" onClick={e => { e.preventDefault(); navigate(`/missions/${c.currentMissionId}`); }}>
-          {c.currentMissionId.substring(0, 8)}...
-        </a>
+      key: 'activeMissions', label: t('Active Missions'), headerTitle: t('Missions currently holding this captain’s capacity. Open a mission to see its dock, process and progress.'), cellClassName: 'mono text-dim', interactive: true,
+      cellTitle: c => c.activeMissionIds?.join(', '),
+      render: c => (c.activeMissionIds?.length ?? 0) > 0 ? (
+        <span style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          {(c.activeMissionIds ?? []).slice(0, 3).map(id => <Link key={id} to={`/missions/${encodeURIComponent(id)}`}>{id.substring(0, 12)}…</Link>)}
+          {(c.activeMissionIds?.length ?? 0) > 3 && <Link to={`/captains/${encodeURIComponent(c.id)}`}>+{(c.activeMissionIds?.length ?? 0) - 3}</Link>}
+        </span>
       ) : '-',
+    },
+    {
+      key: 'usage', label: t('Usage'), headerTitle: t('Highest applicable account limit window for this captain, with its name and freshness. 75% and above is a warning, 90% and above is near the limit. A dash state never means zero usage.'), cellClassName: 'cell-nowrap', interactive: true,
+      render: (c) => <CaptainUsageCell captain={c} views={usage.byCaptain.get(c.id)} status={usage.status} />,
+    },
+    {
+      key: 'slots', label: t('Missions'), headerTitle: t('Running missions / captain limit'), cellClassName: 'cell-nowrap',
+      render: c => `${c.activeMissionCount ?? 0} / ${c.maxConcurrency ?? 1}`,
+    },
+    {
+      key: 'evaluations', label: t('Evaluations'), headerTitle: t('All evaluations of this captain'), interactive: true,
+      render: (c) => <Link to={evaluationsListPath(c.id)}>{t('Evaluations')}</Link>,
     },
     {
       key: 'heartbeat', label: t('Heartbeat'), headerTitle: t('When the captain last produced agent output. If it stops advancing while the captain is Working, the captain may be stalled. Hover a value for the exact time.'), cellClassName: 'text-dim cell-nowrap', cellTitle: (c) => formatDateTime(c.lastHeartbeatUtc),
@@ -419,10 +468,13 @@ export default function Captains() {
       render: (c) => (
         <ActionMenu id={`captain-${c.id}`} items={[
           { label: 'View Detail', title: 'Open this captain\'s page with its state, settings, missions and log.', onClick: () => navigate(`/captains/${c.id}`) },
+          { label: 'View Usage', title: 'Open Activity > Captain Usage to view usage over time.', onClick: () => navigate('/activity?source=usage-overview') },
+          { label: 'Evaluations', title: 'All evaluations of this captain', onClick: () => navigate(evaluationsListPath(c.id)) },
           ...(canCaptainStartPlanning(c) ? [{ label: 'Start Planning', title: 'Open a planning session with this captain to break work into missions before dispatching. Reserves the captain while the session runs.', onClick: () => handleStartPlanning(c) }] : []),
           { label: 'Edit', title: 'Change this captain\'s name, runtime, model, tier, permissions and instructions.', onClick: () => openEdit(c) },
           { label: 'Duplicate', title: 'Create a new idle captain with a copy of this one\'s name, runtime, model, instructions, personas and runtime options, then open it.', onClick: () => void handleDuplicate(c) },
           { label: 'View Tools', title: 'Show the MCP servers and tools this captain\'s runtime can reach, checked live where Armada can.', onClick: () => void handleViewTools(c) },
+          ...(canEvaluate ? [{ label: 'Evaluate', title: 'Start evaluation', onClick: () => setEvaluateTarget(c) }] : []),
           { label: 'View JSON', title: 'Show this captain\'s full record as JSON, as the API returns it.', onClick: () => setJsonData({ open: true, title: `${t('Captain')}: ${c.name}`, data: c }) },
           { label: 'View Notifications', title: 'Open the inbox of items waiting on a person, such as reviews, failures and stalled captains.', onClick: () => navigate('/inbox') },
           { label: 'Stop', title: 'Kill the captain\'s process and return it to Idle. A mission it is running is marked Failed and its dock is reclaimed. You confirm first.', onClick: () => handleStop(c.id, c.name) },
@@ -518,10 +570,21 @@ export default function Captains() {
                 </select>
               </label>
             </div>
+            <label>
+              {t('Maximum concurrent missions')}
+              <input aria-label={t('Maximum concurrent missions')} type="number" min="1" max="256" step="1" value={form.maxConcurrency ?? ''}
+                placeholder={form.runtime === 'ApiEndpoint' || form.runtime === 'Mux' ? '4' : '1'}
+                onChange={event => setForm({ ...form, maxConcurrency: event.target.value })}
+                title={t('Most missions this captain can run at once. Blank uses the server default on create. Lowering the limit leaves running missions alone. Planning sessions remain exclusive.')} />
+            </label>
+            <label className="checkbox-row captain-active-field">
+              <input type="checkbox" checked={form.active ?? true} onChange={e => setForm({ ...form, active: e.target.checked })} />
+              <span>{t('Active')}</span>
+            </label>
             {supportsAutoApproveSwitch(form.runtime) && (
-              <label className="captain-auto-approve-field" title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)}>
+              <label className="checkbox-row captain-auto-approve-field" title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)}>
                 <input type="checkbox" checked={form.autoApprove} onChange={e => setForm({ ...form, autoApprove: e.target.checked })} title={t(CAPTAIN_AUTO_APPROVE_TOOLTIP)} />
-                {' '}{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}
+                <span>{t('Auto-approve agent tool use (runs the CLI with its permission-bypass flag)')}</span>
               </label>
             )}
             <div className="captain-cli-policy-field">
@@ -573,7 +636,22 @@ export default function Captains() {
       <ConfirmDialog open={confirm.open} title={confirm.title} message={confirm.message}
         onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />
       {deletion.dialog}
+      {evaluateTarget && (
+        <ModelEvaluateDialog
+          open
+          captainId={evaluateTarget.id}
+          submitting={evaluating}
+          onClose={() => setEvaluateTarget(null)}
+          onSubmit={(depth, options) => void handleEvaluate(evaluateTarget, depth, options)}
+        />
+      )}
 
+      {usage.status === 'error' && (
+        <div className="usage-table-notice"><UsageState kind="error" onRetry={usage.retry} /></div>
+      )}
+      {usage.truncated && (
+        <p className="text-dim usage-table-notice">{t('Usage shows the first account pages for these captains. Open a captain\'s usage section for every account.')}</p>
+      )}
       <DataTable
         tableKey="captains"
         columns={columns}

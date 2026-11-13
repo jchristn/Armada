@@ -4,7 +4,8 @@ namespace Armada.Core.Models
     using System.Collections.Generic;
 
     /// <summary>
-    /// Wrapper returned when POST /api/v1/missions creates a mission that stays Pending.
+    /// Wrapper that servers before v1.3.0 returned when POST /api/v1/missions created a mission that stayed Pending.
+    /// Current servers return the Mission with an X-Armada-Warning header instead; clients read both shapes.
     /// </summary>
     public class MissionCreateResponse
     {

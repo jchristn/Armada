@@ -9,6 +9,7 @@ namespace Armada.Helm.Commands
     using Armada.Core.Hosting;
     using Armada.Core.Models;
     using Armada.Core.Services;
+    using Armada.Helm.Infrastructure;
 
     /// <summary>
     /// Quick dispatch: create a voyage with one or more missions.
@@ -27,7 +28,7 @@ namespace Armada.Helm.Commands
                 if (!Enum.TryParse<LandingModeEnum>(settings.LandingMode.Trim(), true, out LandingModeEnum parsedMode)
                     || !Enum.IsDefined(typeof(LandingModeEnum), parsedMode))
                 {
-                    AnsiConsole.MarkupLine("[red]Invalid --landing-mode:[/] " + Markup.Escape(settings.LandingMode)
+                    HelmConsole.Error.MarkupLine("[red]Invalid --landing-mode:[/] " + Markup.Escape(settings.LandingMode)
                         + ". Use one of: " + String.Join(", ", Enum.GetNames(typeof(LandingModeEnum))) + ".");
                     return 1;
                 }
@@ -43,7 +44,7 @@ namespace Armada.Helm.Commands
             List<Captain> captains = await EnsureCaptainsAsync().ConfigureAwait(false);
             if (captains.Count == 0)
             {
-                if (IsLocalTarget()) AnsiConsole.MarkupLine("[red]No captains available and auto-creation failed.[/]");
+                if (IsLocalTarget()) HelmConsole.Error.MarkupLine("[red]No captains available and auto-creation failed.[/]");
                 return 1;
             }
 
@@ -51,7 +52,7 @@ namespace Armada.Helm.Commands
             List<string> tasks = GoTaskList.Build(settings.Prompt, settings.Tasks);
             if (tasks.Count == 0)
             {
-                AnsiConsole.MarkupLine("[red]Provide a prompt, or one or more --task values.[/]");
+                HelmConsole.Error.MarkupLine("[red]Provide a prompt, or one or more --task values.[/]");
                 return 1;
             }
 
@@ -119,7 +120,7 @@ namespace Armada.Helm.Commands
 
                 if (vessels == null || vessels.Count == 0)
                 {
-                    AnsiConsole.MarkupLine("[red]No vessels registered.[/]");
+                    HelmConsole.Error.MarkupLine("[red]No vessels registered.[/]");
                     AnsiConsole.MarkupLine("Register one with [green]armada vessel add <name> <repoUrl>[/] or use [green]--repo[/].");
                     return null;
                 }
@@ -127,7 +128,7 @@ namespace Armada.Helm.Commands
                 Vessel? match = EntityResolver.ResolveVessel(vessels, settings.Vessel);
                 if (match != null) return match.Id;
 
-                AnsiConsole.MarkupLine($"[red]Vessel not found:[/] {Markup.Escape(settings.Vessel)}");
+                HelmConsole.Error.MarkupLine($"[red]Vessel not found:[/] {Markup.Escape(settings.Vessel)}");
                 AnsiConsole.MarkupLine("[dim]Available vessels:[/]");
                 foreach (Vessel v in vessels)
                 {
@@ -167,7 +168,7 @@ namespace Armada.Helm.Commands
                 AgentRuntimeEnum runtimeValue = AgentRuntimeEnum.ClaudeCode;
                 if (!String.IsNullOrEmpty(armadaSettings.DefaultRuntime) && !AgentRuntimeParser.TryParse(armadaSettings.DefaultRuntime, out runtimeValue))
                 {
-                    AnsiConsole.MarkupLine("[red]DefaultRuntime setting: " + Markup.Escape(AgentRuntimeParser.DescribeInvalid(armadaSettings.DefaultRuntime)) + "[/]");
+                    HelmConsole.Error.MarkupLine("[red]DefaultRuntime setting: " + Markup.Escape(AgentRuntimeParser.DescribeInvalid(armadaSettings.DefaultRuntime)) + "[/]");
                     break;
                 }
 

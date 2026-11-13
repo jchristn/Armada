@@ -1,0 +1,22 @@
+[
+  {
+    "gate": "endpoint",
+    "status": 404,
+    "expected": 404
+  },
+  {
+    "gate": "runtime",
+    "status": 404,
+    "expected": 404
+  },
+  {
+    "gate": "global",
+    "status": 404,
+    "expected": 404
+  },
+  {
+    "gate": "owned_stuck",
+    "status": 200,
+    "expected": 200
+  }
+]

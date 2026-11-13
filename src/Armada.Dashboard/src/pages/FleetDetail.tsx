@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { getFleet, listVessels, listPipelines, createFleet, updateFleet, deleteFleet, apiErrorMessage } from '../api/client';
 import { listAll } from '../api/paging';
 import type { Fleet, Vessel, Pipeline } from '../types/models';
@@ -127,11 +127,10 @@ export default function FleetDetail() {
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/fleets" title={t('Back to the list of all fleets.')}>{t('Fleets')}</Link> <span className="breadcrumb-sep">&gt;</span> <span>{fleet.name}</span>
-          </>
-        }
+        breadcrumb={[
+          { label: t('Fleets'), to: '/fleets', title: t('Back to the list of all fleets.') },
+          { label: fleet.name },
+        ]}
         title={fleet.name}
         actions={
           <>

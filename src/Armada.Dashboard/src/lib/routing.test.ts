@@ -15,6 +15,7 @@ describe('entityRoute', () => {
     expect(entityRoute('merge_entry', 'm1')).toBe('/merge-queue/m1');
     expect(entityRoute('check-run', 'c1')).toBe('/checks/c1');
     expect(entityRoute('CheckRun', 'c1')).toBe('/checks/c1');
+    expect(entityRoute('model_endpoint', 'mep/a')).toBe('/configuration?tab=endpoints&editEndpoint=mep%2Fa');
   });
 
   it('returns null without a known type', () => {

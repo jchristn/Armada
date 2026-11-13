@@ -1,6 +1,7 @@
+import Breadcrumbs from '../components/shared/Breadcrumbs';
 import ActionMenu from '../components/shared/ActionMenu';
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import {
   getVoyage,
   getMission,
@@ -16,6 +17,11 @@ import {
 import { listAll } from '../api/paging';
 import type { Voyage, VoyageProgress, Mission, Vessel, Captain, MissionPlaybookSnapshot, SelectedPlaybook, CaptainAssignmentOverride } from '../types/models';
 import CaptainRef from '../components/shared/CaptainRef';
+import BlackBoxPanel from '../components/blackbox/BlackBoxPanel';
+import VoyageMissionTree from '../components/missions/VoyageMissionTree';
+import VoyageCascadeGraph from '../components/blackbox/VoyageCascadeGraph';
+import { DispatchWarningsBanner } from '../components/blackbox/DispatchWarnings';
+import { dispatchWarningsFromState } from '../lib/dispatchPreview';
 import StatusBadge from '../components/shared/StatusBadge';
 import EvaluationBadge from '../components/shared/EvaluationBadge';
 import ErrorModal from '../components/shared/ErrorModal';
@@ -40,6 +46,9 @@ export default function VoyageDetail() {
   const { pushToast } = useNotifications();
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
+  const location = useLocation();
+  // Warnings the create response carried (Dispatch and Create Voyage pass them in the navigation state).
+  const [dispatchWarnings, setDispatchWarnings] = useState(() => dispatchWarningsFromState(location.state));
 
   const [voyage, setVoyage] = useState<Voyage | null>(null);
   const [detail, setDetail] = useState<VoyageProgress | null>(null);
@@ -53,7 +62,7 @@ export default function VoyageDetail() {
   const [error, setError] = useState('');
 
   // Modals
-  const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean }>({ open: false, title: '', rawDiff: '', loading: false });
+  const [diffModal, setDiffModal] = useState<{ open: boolean; title: string; rawDiff: string; loading: boolean; error?: string }>({ open: false, title: '', rawDiff: '', loading: false });
   const [logModal, setLogModal] = useState<{ open: boolean; title: string; missionId: string; content: string; totalLines: number; lineCount: number }>({ open: false, title: '', missionId: '', content: '', totalLines: 0, lineCount: 200 });
   const [jsonData, setJsonData] = useState<{ open: boolean; title: string; data: unknown }>({ open: false, title: '', data: null });
   const [confirm, setConfirm] = useState<{ open: boolean; title: string; message: string; danger: boolean; onConfirm: () => void }>({ open: false, title: '', message: '', danger: false, onConfirm: () => {} });
@@ -211,8 +220,8 @@ export default function VoyageDetail() {
     try {
       const result = await getMissionDiff(missionId);
       setDiffModal(d => ({ ...d, rawDiff: result?.diff || '', loading: false }));
-    } catch {
-      setDiffModal(d => ({ ...d, rawDiff: '', loading: false }));
+    } catch (e) {
+      setDiffModal(d => ({ ...d, rawDiff: '', loading: false, error: e instanceof Error ? e.message : String(e) }));
     }
   }
 
@@ -247,11 +256,10 @@ export default function VoyageDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, fontSize: 13 }}>
-        <Link to="/voyages">{t('Voyages')}</Link>
-        <span style={{ color: 'var(--text-muted)' }}>/</span>
-        <span>{voyage.title || voyage.id}</span>
-      </div>
+      <Breadcrumbs items={[
+        { label: t('Voyages'), to: '/voyages' },
+        { label: voyage.title || voyage.id },
+      ]} />
 
       <ErrorModal error={error} onClose={() => setError('')} />
 
@@ -259,6 +267,10 @@ export default function VoyageDetail() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <h2>{voyage.title || voyage.id} <EvaluationBadge isEvaluation={voyage.isEvaluation} /></h2>
       </div>
+
+      {dispatchWarnings && (
+        <DispatchWarningsBanner overlapWarnings={dispatchWarnings.overlapWarnings} briefLintWarnings={dispatchWarnings.briefLintWarnings} onDismiss={() => setDispatchWarnings(null)} />
+      )}
 
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
@@ -357,11 +369,24 @@ export default function VoyageDetail() {
         </div>
       </div>
 
+      {(voyage.lastBlackBoxEntryId || voyage.status === 'Failed') && (
+        <div style={{ marginBottom: 20 }}>
+          <BlackBoxPanel voyageId={voyage.id} onChanged={() => { void loadVoyage(); }} />
+        </div>
+      )}
+
+      {(voyage.lastBlackBoxEntryId || voyage.status === 'Failed' || failedCount > 0) && (
+        <details className="card" style={{ marginBottom: 20 }} data-testid="voyage-cascade-card" open={voyage.status === 'Failed' || undefined}>
+          <summary title={t('Which failure took the others down: the voyage\'s missions and the dependency, cancellation, blocking and sibling edges between them.')}><strong>{t('Cascade graph')}</strong></summary>
+          <div style={{ marginTop: '0.6rem' }}><VoyageCascadeGraph voyageId={voyage.id} /></div>
+        </details>
+      )}
+
       {/* Progress bar */}
       {totalMissions > 0 && (
         <div style={{ marginBottom: 20 }}>
-          <div style={{ height: 10, background: '#e0e0e8', borderRadius: 5, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${progressPct}%`, background: 'var(--primary)', transition: 'width 0.3s' }} />
+          <div style={{ height: 10, background: 'var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${progressPct}%`, background: 'var(--accent)', transition: 'width 0.3s' }} />
           </div>
           <span className="text-muted" style={{ fontSize: 12, marginTop: 4, display: 'inline-block' }} title={t('The bar fills as missions finish successfully. Failed missions count toward the total but not toward complete.')}>
             {t('{{completed}}/{{total}} complete, {{failed}} failed', { completed: completedCount, total: totalMissions, failed: failedCount })}
@@ -408,6 +433,11 @@ export default function VoyageDetail() {
           </div>
         </div>
       )}
+
+      <VoyageMissionTree
+        voyageId={voyage.id}
+        missionLimit={detail?.vesselId ? vessels.find(v => v.id === detail.vesselId)?.maxParallelMissionsPerVoyage : undefined}
+      />
 
       {/* Missions table */}
       <h3 style={{ marginBottom: 12 }}>{t('Missions')}</h3>
@@ -492,6 +522,7 @@ export default function VoyageDetail() {
         open={diffModal.open}
         title={diffModal.title}
         rawDiff={diffModal.rawDiff}
+        error={diffModal.error}
         loading={diffModal.loading}
         onClose={() => setDiffModal({ open: false, title: '', rawDiff: '', loading: false })}
       />

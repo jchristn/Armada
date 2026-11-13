@@ -68,7 +68,8 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertEqual("main", vesselBody.DefaultBranch, "default branch");
                     AssertEqual("None", vesselBody.LandingMode, "landing mode");
                     AssertEqual(true, vesselBody.EnableModelContext, "model context toggle");
-                    AssertEqual(false, vesselBody.AllowConcurrentMissions, "concurrency toggle");
+                    AssertEqual(1, vesselBody.MaxParallelVoyages, "voyage limit");
+                    AssertEqual(4, vesselBody.MaxParallelMissionsPerVoyage, "mission limit");
 
                     TuiScreenDump.Write("setup-captain", host.Screen());
                     host.Press("ctrl+s");
@@ -138,8 +139,8 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 5), "handoff");
                     AssertEqual("msn_wait1", screen.DispatchedMission?.Id, "mission id read from the wrapped reply");
-                    AssertEqual("Mission created but could not be assigned to any captain.", screen.DispatchWarning, "warning kept");
-                    AssertTrue(host.WaitForText("could not be assigned to any captain"), "warning shown\n" + host.Screen());
+                    AssertEqual(Armada.Core.Services.UsageSelectionText.Get("usageSelection.missionWaiting"), screen.DispatchWarning, "a Pending mission shows the shared waiting message");
+                    AssertTrue(host.WaitForText("not assigned to a captain yet"), "warning shown\n" + host.Screen());
                     TuiCase.Contains(host.Screen(), "msn_wait1", "mission id shown");
                 }
             }));
@@ -245,7 +246,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     screen.LandingMode.Choose(screen.LandingMode.Options.First(o => o.Value == "LocalMerge"));
                     AssertTrue(host.WaitForText("Finished work is merged into the working directory. Nothing is pushed."), "LocalMerge hint says nothing is pushed\n" + host.Screen());
                     screen.LandingMode.Choose(screen.LandingMode.Options.First(o => o.Value == "MergeAndPush"));
-                    AssertTrue(host.WaitForText("pushed to the target branch"), "MergeAndPush hint\n" + host.Screen());
+                    AssertTrue(host.WaitForText("then pushed to the target"), "MergeAndPush hint\n" + host.Screen());
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 3), "advanced to captain");
                     AssertEqual(1, stub.CountFor("POST", "/api/v1/vessels"), "one vessel post");
@@ -295,7 +296,7 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
 
                     host.Press("ctrl+s");
                     AssertTrue(host.PumpUntil(() => screen.Current == 5), "dispatched");
-                    AssertTrue(host.WaitForText("could not be assigned"), "dispatch warning shown");
+                    AssertTrue(host.WaitForText("not assigned to a captain yet"), "dispatch warning shown");
                     AssertEqual(SetupWizardResultKindEnum.Info, screen.ResultKind, "info result");
                     AssertEqual("msn_wrapped", screen.DispatchedMission!.Id, "wrapped mission parsed");
                     AssertTrue(host.WaitForText("Open Workflow Profiles"), "profiles exist");
@@ -334,6 +335,39 @@ namespace Test.Shared.Suites.Tui.ActivitySystem
                     AssertNull(SetupWizardScreen.BuildMuxRuntimeOptionsJson(AgentRuntimeEnum.ClaudeCode, "", "x", "", "", "", "", "", ""), "not mux");
                     AssertEqual(100, SetupWizardScreen.ParsePriority("abc"), "invalid priority");
                     AssertEqual(7, SetupWizardScreen.ParsePriority("7days"), "parseInt prefix");
+                }
+            }));
+
+            cases.Add(TuiCase.Sync(Suite, "missions_at_once", "Missions At Once creates that many single-slot captains for a CLI runtime and one multi-slot captain for an endpoint runtime", () =>
+            {
+                StubHttpHandler stub = EmptyServer();
+                using (TuiTestHost host = TuiCase.SignedIn(140, 50, "/setup", stub))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "loaded");
+                    screen.GoTo(3);
+                    AssertTrue(host.WaitForText("Missions At Once"), "field shown\n" + host.Screen());
+                    TuiCase.Contains(host.Screen(), "CLI runtimes run one mission each", "rule hint");
+                    screen.Parallelism.Value = "3";
+                    screen.SubmitCaptain();
+                    AssertTrue(host.PumpUntil(() => stub.CountFor("POST", "/api/v1/captains") == 3), "three captains posted");
+                    List<string?> names = stub.RequestsFor("POST", "/api/v1/captains").Select(r => JsonHelper.Deserialize<SetupWizardCaptainBody>(r.Body).Name).ToList();
+                    AssertEqual("Setup Captain,Setup Captain 2,Setup Captain 3", String.Join(",", names));
+                    AssertTrue(stub.RequestsFor("POST", "/api/v1/captains").All(r => JsonHelper.Deserialize<SetupWizardCaptainBody>(r.Body).MaxConcurrency == 1), "single-slot CLI captains");
+                    AssertTrue(host.WaitForText("Created 3 captains"), "summary\n" + host.Screen());
+                }
+                StubHttpHandler endpointStub = EmptyServer();
+                using (TuiTestHost host = TuiCase.SignedIn(140, 50, "/setup", endpointStub))
+                {
+                    SetupWizardScreen screen = Current(host);
+                    AssertTrue(host.PumpUntil(() => !screen.Loading), "loaded");
+                    screen.GoTo(3);
+                    screen.Runtime.Choose(screen.Runtime.Options.First(o => o.Value == AgentRuntimeEnum.Mux));
+                    screen.MuxEndpoint.Value = "local";
+                    screen.Parallelism.Value = "40";
+                    screen.SubmitCaptain();
+                    AssertTrue(host.PumpUntil(() => endpointStub.CountFor("POST", "/api/v1/captains") == 1), "one captain posted");
+                    AssertEqual(16, endpointStub.LastBody<SetupWizardCaptainBody>("POST", "/api/v1/captains").MaxConcurrency, "slots clamped to 16");
                 }
             }));
 

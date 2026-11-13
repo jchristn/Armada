@@ -25,6 +25,14 @@ namespace Armada.Core.Services
         /// A command an operator asked for (a fleet action, a Workspace command).
         /// </summary>
         [EnumMember(Value = "Command")]
-        Command
+        Command,
+
+        /// <summary>
+        /// A usage capture probe: the host-side helper reads account limits on the credential host. It is
+        /// shown as its own activity on a Harbor and never borrows a captain mission launch slot or changes
+        /// a captain's Working/Idle state.
+        /// </summary>
+        [EnumMember(Value = "UsageProbe")]
+        UsageProbe
     }
 }

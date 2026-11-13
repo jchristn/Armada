@@ -1,0 +1,2 @@
+{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":1793468700,"rateLimitType":"five_hour","utilization":0.62}}
+{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1794073500,"rateLimitType":"seven_day","utilization":0.31}}
