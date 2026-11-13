@@ -4,6 +4,13 @@ All notable changes to Armada are documented in this file.
 
 ---
 
+## Unreleased
+
+### Dashboard delete wording
+
+- Mission delete confirmations and success messages now explain that the action cancels the mission and keeps its record.
+- Merge queue delete confirmations predict whether the entry will be deleted or cancelled from its current status. Bulk results report expected outcomes and failed requests separately.
+
 ## v1.3.0 (2026-11-06)
 
 v1.3.0 has two marquee features: **parallelization and concurrency**, and **out-of-the-box fleet actions for common repository tasks**. Concurrency improvements keep more independent work in flight with bounded capacity: vessels limit parallel voyages and missions per voyage, captains run several missions in slots, architects split work into a hierarchy of small missions with owned files, every wait is recorded with its reason, and usage-based captain selection routes work by account headroom. The release removes the single-mission captain and vessel fields with no deprecation period; read **Breaking changes** below and back up before upgrading. The default fleet action catalog provides ready-to-run performance reviews and fixes, code cleanliness and cleanup, security and vulnerability checks, and license compliance checks, alongside build, test, lint, dependency, and documentation tasks.
